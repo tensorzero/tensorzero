@@ -2,5 +2,5 @@
 
 export type TogetherTrainingMethod = {
   method: "sft";
-  train_on_inputs: string | null;
+  train_on_inputs?: string | null;
 };

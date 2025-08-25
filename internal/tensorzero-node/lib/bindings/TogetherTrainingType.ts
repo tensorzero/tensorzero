@@ -4,8 +4,8 @@ export type TogetherTrainingType =
   | { type: "Full" }
   | {
       type: "Lora";
-      lora_r: number | null;
-      lora_alpha: number | null;
-      lora_dropout: number | null;
-      lora_trainable_modules: string | null;
+      lora_r?: number | null;
+      lora_alpha?: number | null;
+      lora_dropout?: number | null;
+      lora_trainable_modules?: string | null;
     };

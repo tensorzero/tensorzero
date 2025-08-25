@@ -1,7 +1,10 @@
 use crate::common::OptimizationTestCase;
 use tensorzero_core::optimization::{
-    together_sft::UninitializedTogetherSFTConfig, UninitializedOptimizerConfig,
-    UninitializedOptimizerInfo,
+    together_sft::{
+        TogetherLRScheduler, TogetherTrainingMethod, TogetherTrainingType,
+        UninitializedTogetherSFTConfig,
+    },
+    UninitializedOptimizerConfig, UninitializedOptimizerInfo,
 };
 
 pub struct TogetherSFTTestCase();
@@ -37,16 +40,16 @@ impl OptimizationTestCase for TogetherSFTTestCase {
                     weight_decay: None,
                     suffix: None,
                     // Learning rate scheduler
-                    lr_scheduler: None,
+                    lr_scheduler: TogetherLRScheduler::default(),
                     // Weights & Biases integration
                     wandb_api_key: None,
                     wandb_base_url: None,
                     wandb_project_name: None,
                     wandb_name: None,
                     // Training method
-                    training_method: None,
+                    training_method: TogetherTrainingMethod::default(),
                     // Training type - use defaults
-                    training_type: None,
+                    training_type: TogetherTrainingType::default(),
                     // Advanced options
                     from_checkpoint: None,
                     from_hf_model: None,

@@ -16,13 +16,13 @@ export type TogetherSFTConfig = {
   max_grad_norm: number | null;
   weight_decay: number | null;
   suffix: string | null;
-  lr_scheduler: TogetherLRScheduler | null;
+  lr_scheduler: TogetherLRScheduler;
   wandb_api_key: string | null;
   wandb_base_url: string | null;
   wandb_project_name: string | null;
   wandb_name: string | null;
   training_method: TogetherTrainingMethod;
-  training_type: TogetherTrainingType | null;
+  training_type: TogetherTrainingType;
   from_checkpoint: string | null;
   from_hf_model: string | null;
   hf_model_revision: string | null;

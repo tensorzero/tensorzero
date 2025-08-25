@@ -56,7 +56,7 @@ pub struct TogetherSFTConfig {
     pub weight_decay: Option<f64>,
     pub suffix: Option<String>,
     // Learning rate scheduler
-    pub lr_scheduler: Option<TogetherLRScheduler>,
+    pub lr_scheduler: TogetherLRScheduler,
     // Weights & Biases integration
     pub wandb_api_key: Option<String>,
     pub wandb_base_url: Option<String>,
@@ -65,7 +65,7 @@ pub struct TogetherSFTConfig {
     // Training method
     pub training_method: TogetherTrainingMethod,
     // Training type
-    pub training_type: Option<TogetherTrainingType>,
+    pub training_type: TogetherTrainingType,
     // Advanced options
     pub from_checkpoint: Option<String>,
     pub from_hf_model: Option<String>,
@@ -114,16 +114,19 @@ pub struct UninitializedTogetherSFTConfig {
     pub weight_decay: Option<f64>,
     pub suffix: Option<String>,
     // Learning rate scheduler - nested like Together API
-    pub lr_scheduler: Option<TogetherLRScheduler>,
+    #[serde(default)]
+    pub lr_scheduler: TogetherLRScheduler,
     // Weights & Biases integration
     pub wandb_api_key: Option<String>,
     pub wandb_base_url: Option<String>,
     pub wandb_project_name: Option<String>,
     pub wandb_name: Option<String>,
     // Training method - nested like Together API
-    pub training_method: Option<TogetherTrainingMethod>,
+    #[serde(default)]
+    pub training_method: TogetherTrainingMethod,
     // Training type - nested like Together API
-    pub training_type: Option<TogetherTrainingType>,
+    #[serde(default)]
+    pub training_type: TogetherTrainingType,
     // Advanced options
     pub from_checkpoint: Option<String>,
     pub from_hf_model: Option<String>,
@@ -237,42 +240,42 @@ impl UninitializedTogetherSFTConfig {
             })
             .transpose()?;
         // Deserialize lr_scheduler from Python dict to Rust TogetherLRScheduler
-        let lr_scheduler: Option<TogetherLRScheduler> = if let Some(ls) = lr_scheduler {
+        let lr_scheduler: TogetherLRScheduler = if let Some(ls) = lr_scheduler {
             if let Ok(lr_scheduler) = ls.extract::<TogetherLRScheduler>() {
                 // If it's already a TogetherLRScheduler object, use it directly
-                Some(lr_scheduler)
+                lr_scheduler
             } else {
                 // Otherwise, try to deserialize from a Python dict
-                Some(deserialize_from_pyobj(py, ls)?)
+                deserialize_from_pyobj(py, ls)?
             }
         } else {
-            None
+            TogetherLRScheduler::default()
         };
 
         // Deserialize training_method from Python dict to Rust TogetherTrainingMethod
-        let training_method: Option<TogetherTrainingMethod> = if let Some(tm) = training_method {
+        let training_method: TogetherTrainingMethod = if let Some(tm) = training_method {
             if let Ok(training_method) = tm.extract::<TogetherTrainingMethod>() {
                 // If it's already a TogetherTrainingMethod object, use it directly
-                Some(training_method)
+                training_method
             } else {
                 // Otherwise, try to deserialize from a Python dict
-                Some(deserialize_from_pyobj(py, tm)?)
+                deserialize_from_pyobj(py, tm)?
             }
         } else {
-            None
+            TogetherTrainingMethod::default()
         };
 
         // Deserialize training_type from Python dict to Rust TogetherTrainingType
-        let training_type: Option<TogetherTrainingType> = if let Some(tt) = training_type {
+        let training_type: TogetherTrainingType = if let Some(tt) = training_type {
             if let Ok(training_type) = tt.extract::<TogetherTrainingType>() {
                 // If it's already a TogetherTrainingType object, use it directly
-                Some(training_type)
+                training_type
             } else {
                 // Otherwise, try to deserialize from a Python dict
-                Some(deserialize_from_pyobj(py, tt)?)
+                deserialize_from_pyobj(py, tt)?
             }
         } else {
-            None
+            TogetherTrainingType::default()
         };
 
         Ok(Self {
@@ -394,9 +397,7 @@ impl UninitializedTogetherSFTConfig {
             wandb_project_name: self.wandb_project_name,
             wandb_name: self.wandb_name,
             // Training method
-            training_method: self.training_method.unwrap_or(TogetherTrainingMethod::Sft {
-                train_on_inputs: None,
-            }),
+            training_method: self.training_method,
             // Training type
             training_type: self.training_type,
             // Advanced options
@@ -518,10 +519,10 @@ struct TogetherCreateJobRequest {
     pub suffix: Option<String>,
     // Together claims that this is optional, but errors if it's not provided
     pub batch_size: u32,
-    lr_scheduler: TogetherLRScheduler,
-    learning_rate: f64,
-    training_method: TogetherTrainingMethod,
-    training_type: TogetherTrainingType,
+    pub lr_scheduler: TogetherLRScheduler,
+    pub learning_rate: f64,
+    pub training_method: TogetherTrainingMethod,
+    pub training_type: TogetherTrainingType,
     // Weights & Biases integration
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wandb_api_key: Option<String>,
@@ -551,8 +552,22 @@ struct TogetherCreateJobRequest {
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(tag = "lr_scheduler_type", rename_all = "snake_case")]
 pub enum TogetherLRScheduler {
-    Linear { min_lr_ratio: f64 },
-    Cosine { min_lr_ratio: f64, num_cycles: f64 },
+    Linear {
+        #[serde(default)]
+        min_lr_ratio: f64,
+    },
+    Cosine {
+        #[serde(default)]
+        min_lr_ratio: f64,
+        #[serde(default)]
+        num_cycles: f64,
+    },
+}
+
+impl Default for TogetherLRScheduler {
+    fn default() -> Self {
+        Self::Linear { min_lr_ratio: 0.0 }
+    }
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -563,15 +578,26 @@ pub enum TogetherLRScheduler {
 pub enum TogetherTrainingType {
     Full {},
     Lora {
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "Option::is_none", default)]
         lora_r: Option<u32>,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "Option::is_none", default)]
         lora_alpha: Option<u32>,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "Option::is_none", default)]
         lora_dropout: Option<f64>,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "Option::is_none", default)]
         lora_trainable_modules: Option<String>,
     },
+}
+
+impl Default for TogetherTrainingType {
+    fn default() -> Self {
+        Self::Lora {
+            lora_r: Some(8),
+            lora_alpha: Some(16),
+            lora_dropout: Some(0.0),
+            lora_trainable_modules: Some("all-linear".to_string()),
+        }
+    }
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -582,9 +608,17 @@ pub enum TogetherTrainingType {
 pub enum TogetherTrainingMethod {
     #[serde(rename = "sft")]
     Sft {
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "Option::is_none", default)]
         train_on_inputs: Option<String>,
     },
+}
+
+impl Default for TogetherTrainingMethod {
+    fn default() -> Self {
+        Self::Sft {
+            train_on_inputs: Some("auto".to_string()),
+        }
+    }
 }
 
 impl Optimizer for TogetherSFTConfig {
@@ -634,10 +668,7 @@ impl Optimizer for TogetherSFTConfig {
         };
 
         // Build API configurations with defaults
-        let lr_scheduler = self
-            .lr_scheduler
-            .clone()
-            .unwrap_or(TogetherLRScheduler::Linear { min_lr_ratio: 0.0 });
+        let lr_scheduler = self.lr_scheduler.clone();
 
         let training_method = match &self.training_method {
             TogetherTrainingMethod::Sft { train_on_inputs } => TogetherTrainingMethod::Sft {
@@ -646,27 +677,21 @@ impl Optimizer for TogetherSFTConfig {
         };
 
         let training_type = match &self.training_type {
-            Some(TogetherTrainingType::Full {}) => TogetherTrainingType::Full {},
-            Some(TogetherTrainingType::Lora {
+            TogetherTrainingType::Full {} => TogetherTrainingType::Full {},
+            TogetherTrainingType::Lora {
                 lora_r,
                 lora_alpha,
                 lora_dropout,
                 lora_trainable_modules,
-            }) => TogetherTrainingType::Lora {
+            } => TogetherTrainingType::Lora {
                 lora_r: lora_r.or(Some(8)),
-                lora_alpha: lora_alpha.or(Some(32)),
+                lora_alpha: lora_alpha.or(Some(16)),
                 lora_dropout: lora_dropout.or(Some(0.0)),
                 lora_trainable_modules: Some(
                     lora_trainable_modules
                         .clone()
                         .unwrap_or_else(|| "all-linear".to_string()),
                 ),
-            },
-            None => TogetherTrainingType::Lora {
-                lora_r: Some(8),
-                lora_alpha: Some(32),
-                lora_dropout: Some(0.0),
-                lora_trainable_modules: Some("all-linear".to_string()),
             },
         };
 
