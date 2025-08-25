@@ -53,7 +53,7 @@ impl Tracer for TracerWrapper {
 
     fn build_with_context(
         &self,
-        builder: opentelemetry::trace::SpanBuilder,
+        mut builder: opentelemetry::trace::SpanBuilder,
         parent_cx: &opentelemetry::Context,
     ) -> Self::Span {
         for attr in builder.attributes.iter().flatten() {
@@ -63,6 +63,7 @@ impl Tracer for TracerWrapper {
                     let tracer =
                         self.custom_tracers.get_with_by_ref(&key, || {
                             let mut headers = HeaderMap::new();
+                            println!("Deserialized key: {:?}", key);
                             for (name, value) in &key.extra_headers {
                                 headers.insert(
                                     HeaderName::from_str(name).unwrap(),
@@ -83,12 +84,20 @@ impl Tracer for TracerWrapper {
                                         "tensorzero-gateway",
                                     ))
                                     .build(),
-                            ).with_simple_exporter(exporter).build();
+                            ).with_batch_exporter(exporter).build();
 
                             let tracer = provider.tracer("tensorzero");
 
+                            eprintln!("Created custom tracer");
+
                             CustomTracer { inner: tracer }
                         });
+
+                    builder
+                        .attributes
+                        .as_mut()
+                        .unwrap()
+                        .retain(|attr| attr.key.as_str() != CUSTOM_TRACER_KEY_ATTR_NAME);
 
                     return tracer.inner.build_with_context(builder, parent_cx);
                 }
@@ -326,10 +335,12 @@ impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
             );
             if let Some(custom_tracer_key) = extract_tensorzero_headers(req.headers()) {
                 let serialized = serde_json::to_string(&custom_tracer_key).unwrap();
+                eprintln!("Setting custom tracer key: {serialized}");
                 span.set_attribute(
                     CUSTOM_TRACER_KEY_ATTR_NAME,
                     opentelemetry::Value::String(serialized.into()),
                 );
+                eprintln!("Finished setting custom tracer key");
             }
             span
         }

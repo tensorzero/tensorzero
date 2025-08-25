@@ -1537,6 +1537,10 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
     let inference_id = if stream {
         let mut event_source = Client::new()
             .post(get_gateway_endpoint("/inference"))
+            .header(
+                "x-tensorzero-otlp-headers",
+                serde_json::json!([["x-dummy-tensorzero", "dummy-value"]]).to_string(),
+            )
             .json(&payload)
             .eventsource()
             .unwrap();

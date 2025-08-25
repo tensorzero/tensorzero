@@ -130,7 +130,7 @@ enum-map = "2.7.3"
 tokio-util = "0.7.15"
 tempfile = "3.20.0"
 ts-rs = { workspace = true }
-moka = "0.12.10"
+moka = { version = "0.12.10", features = ["sync"] }
 
 
 [dev-dependencies]
