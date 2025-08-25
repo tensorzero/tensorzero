@@ -15,6 +15,11 @@ curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorz
 curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--sglang-inference-sglang-inference.modal.run/ > sglang_modal_logs.txt &
 
 # ------------------------------------------------------------------------------
+# Set the short commit hash
+# ------------------------------------------------------------------------------
+SHORT_HASH=${BUILDKITE_COMMIT:0:7}
+export TENSORZERO_GATEWAY_TAG=sha-$SHORT_HASH
+# ------------------------------------------------------------------------------
 # Setup Rust
 # ------------------------------------------------------------------------------
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
