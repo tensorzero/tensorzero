@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euxo pipefail
+set -euo pipefail
 
 # Get the short hash from the buildkite environment variable
 SHORT_HASH=${BUILDKITE_COMMIT:0:7}
