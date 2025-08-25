@@ -21,14 +21,13 @@ services:
       timeout: 1s
 
   gateway:
-    image: tensorzero/gateway-dev:${TENSORZERO_GATEWAY_TAG:-latest}
+    image: tensorzero/gateway-dev:${TENSORZERO_GATEWAY_TAG}
     build:
       context: ../..
       dockerfile: gateway/Dockerfile
       target: gateway
     volumes:
       - ./config:/app/config:ro
-    command: --config-file ${TENSORZERO_GATEWAY_CONFIG:-/app/config/tensorzero.e2e.toml}
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
     env_file:
@@ -82,7 +81,7 @@ services:
       start_period: 300s # Give the script time to start
 
   node-unit-tests:
-    image: tensorzero/node-unit-tests:${TENSORZERO_NODE_UNIT_TESTS_TAG:-latest}
+    image: tensorzero/node-unit-tests:${TENSORZERO_NODE_UNIT_TESTS_TAG}
     build:
       context: ../.. # Same context as gateway since you need access to the whole monorepo
       dockerfile: ui/fixtures/Dockerfile.unit # Or wherever you put the test Dockerfile
