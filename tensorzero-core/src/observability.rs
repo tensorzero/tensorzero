@@ -275,6 +275,26 @@ pub trait RouterExt<S> {
     fn apply_otel_http_trace_layer(self) -> Self;
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(transparent)]
+struct TensorZeroOtlpHeaders {
+    headers: Vec<(String, String)>,
+}
+
+fn extract_tensorzero_headers(headers: &HeaderMap) -> Option<CustomTracerKey> {
+    for (name, value) in headers.iter() {
+        if name.as_str() == "x-tensorzero-otlp-headers" {
+            let headers =
+                serde_json::from_str::<TensorZeroOtlpHeaders>(value.to_str().unwrap()).unwrap();
+
+            return Some(CustomTracerKey {
+                extra_headers: headers.headers,
+            });
+        }
+    }
+    None
+}
+
 impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
     /// Makes a `TraceLayer` specialized for OpenTelemetry traces.
     /// This is only applied to certain routes (e.g. `/inference`), and
@@ -294,6 +314,7 @@ impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
             if let Some(route) = route {
                 span.record("http.route", route);
             }
+
             let method = tracing_opentelemetry_instrumentation_sdk::http::http_method(req.method());
             span.record(
                 "otel.name",
