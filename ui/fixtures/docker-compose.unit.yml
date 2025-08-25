@@ -124,3 +124,5 @@ services:
         condition: service_healthy
       clickhouse:
         condition: service_healthy
+      mock-inference-provider:
+        condition: service_healthy
