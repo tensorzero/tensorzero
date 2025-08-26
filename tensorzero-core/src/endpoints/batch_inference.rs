@@ -616,7 +616,11 @@ async fn write_start_batch_inference<'a>(
             variant_name: metadata.variant_name.into(),
             episode_id: metadata.episode_ids[rows.len()],
             input: row.input.into_stored_input(),
-            input_messages: row.input_messages,
+            input_messages: row
+                .input_messages
+                .into_iter()
+                .map(RequestMessage::into_stored_message)
+                .collect(),
             system: row.system.map(Cow::Borrowed),
             tool_params,
             inference_params: Cow::Borrowed(row.inference_params),

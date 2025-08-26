@@ -31,6 +31,7 @@ use crate::inference::types::extra_headers::{
     FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders,
 };
 use crate::inference::types::ResolvedInput;
+use crate::inference::types::StoredRequestMessage;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage,
@@ -190,7 +191,7 @@ pub struct ModelUsedInfo {
     pub raw_request: String,
     pub raw_response: Option<String>,
     pub system: Option<String>,
-    pub input_messages: Vec<RequestMessage>,
+    pub input_messages: Vec<StoredRequestMessage>,
     pub inference_params: InferenceParams,
     pub cached: bool,
     // These responses will get added into the final inference result (after `collect_chunks` finishes)
@@ -742,7 +743,10 @@ async fn infer_model_request_stream<'request>(
         inference_params,
         previous_model_inference_results: vec![],
         system,
-        input_messages,
+        input_messages: input_messages
+            .into_iter()
+            .map(RequestMessage::into_stored_message)
+            .collect(),
         cached,
     };
     let config_type = function.config_type();

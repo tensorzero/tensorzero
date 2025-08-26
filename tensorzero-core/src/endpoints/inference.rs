@@ -33,6 +33,7 @@ use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::storage::StoragePath;
+use crate::inference::types::StoredRequestMessage;
 use crate::inference::types::{
     collect_chunks, Base64File, ChatInferenceDatabaseInsert, ChatInferenceResultChunk,
     CollectChunksArgs, ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason,
@@ -129,7 +130,7 @@ struct InferenceMetadata {
     pub raw_request: String,
     pub raw_response: Option<String>,
     pub system: Option<String>,
-    pub input_messages: Vec<RequestMessage>,
+    pub input_messages: Vec<StoredRequestMessage>,
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub tags: HashMap<String, String>,
     pub tool_config: Option<ToolCallConfig>,

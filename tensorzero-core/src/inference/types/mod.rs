@@ -490,6 +490,7 @@ impl RequestMessage {
 /// Only the object-storage path is actually stored in clickhouse
 /// The `RequestMessage/StoredRequestMessage` pair is the model-level equivalent
 /// of `ResolvedInput/StoredInput`
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct StoredRequestMessage {
     pub role: Role,
     pub content: Vec<StoredContentBlock>,
@@ -629,7 +630,7 @@ pub struct ProviderInferenceResponse {
     pub created: u64,
     pub output: Vec<ContentBlockOutput>,
     pub system: Option<String>,
-    pub input_messages: Vec<RequestMessage>,
+    pub input_messages: Vec<StoredRequestMessage>,
     pub raw_request: String,
     pub raw_response: String,
     pub usage: Usage,
@@ -665,7 +666,7 @@ pub struct ModelInferenceResponse {
     pub created: u64,
     pub output: Vec<ContentBlockOutput>,
     pub system: Option<String>,
-    pub input_messages: Vec<RequestMessage>,
+    pub input_messages: Vec<StoredRequestMessage>,
     pub raw_request: String,
     pub raw_response: String,
     pub usage: Usage,
@@ -683,7 +684,7 @@ pub struct ModelInferenceResponseWithMetadata {
     pub created: u64,
     pub output: Vec<ContentBlockOutput>,
     pub system: Option<String>,
-    pub input_messages: Vec<RequestMessage>,
+    pub input_messages: Vec<StoredRequestMessage>,
     pub raw_request: String,
     pub raw_response: String,
     pub usage: Usage,
@@ -1030,7 +1031,12 @@ impl ModelInferenceResponse {
             created: current_timestamp(),
             output: cache_lookup.output.blocks,
             system: request.system.clone(),
-            input_messages: request.messages.clone(), // maybe we can clean this up
+            input_messages: request
+                .messages
+                .iter()
+                .cloned()
+                .map(RequestMessage::into_stored_message)
+                .collect(),
             raw_request: cache_lookup.raw_request,
             raw_response: cache_lookup.raw_response,
             usage: Usage {
@@ -1123,7 +1129,7 @@ impl ModelInferenceDatabaseInsert {
 pub struct ProviderInferenceResponseArgs {
     pub output: Vec<ContentBlockOutput>,
     pub system: Option<String>,
-    pub input_messages: Vec<RequestMessage>,
+    pub input_messages: Vec<StoredRequestMessage>,
     pub raw_request: String,
     pub raw_response: String,
     pub usage: Usage,
@@ -1561,7 +1567,7 @@ pub struct CollectChunksArgs<'a, 'b> {
     pub raw_response: Option<String>,
     pub inference_params: InferenceParams,
     pub system: Option<String>,
-    pub input_messages: Vec<RequestMessage>,
+    pub input_messages: Vec<StoredRequestMessage>,
     pub function_name: &'b str,
     pub variant_name: &'b str,
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
