@@ -27,7 +27,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
 use crate::inference::types::{
-    ContentBlock, FinishReason, ProviderInferenceResponseStreamInner, RequestMessage,
+    ContentBlock, FinishReason, ProviderInferenceResponseStreamInner,
 };
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
 use crate::model::{CredentialLocation, ModelProvider};
