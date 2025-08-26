@@ -22,49 +22,6 @@ services:
       start_interval: 1s
       timeout: 1s
 
-  mock-inference-provider:
-    image: tensorzero/mock-inference-provider:${TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG:-latest}
-    build:
-      context: ../../../
-      dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
-    environment:
-      RUST_LOG: debug
-    ports:
-      - "3030:3030"
-    healthcheck:
-      test: wget --spider --tries 1 http://localhost:3030/status
-      start_period: 30s
-      start_interval: 1s
-      timeout: 1s
-
-  minio:
-    image: bitnami/minio:2025.4.22
-    ports:
-      - "8000:9000" # API port
-      - "9001:9001" # Console port
-    environment:
-      MINIO_ROOT_USER: tensorzero-root
-      MINIO_ROOT_PASSWORD: tensorzero-root
-      MINIO_DEFAULT_BUCKETS: tensorzero-e2e-tests
-    healthcheck:
-      test: "mc ls local/tensorzero-e2e-tests || exit 1"
-      start_period: 30s
-      start_interval: 1s
-      timeout: 1s
-
-  jaeger:
-    image: jaegertracing/jaeger:2.5.0
-    volumes:
-      - ./jaeger-config.yaml:/jaeger/config.yaml
-    #command: --set=extensions.jaeger_storage.backends.some_store.memory.max_traces=1
-    command: --config /jaeger/config.yaml
-    ports:
-      - "16686:16686" # Browser UI
-      - "4317:4317"
-      - "4318:4318"
-      - "5778:5778"
-      - "9411:9411"
-
   gateway:
     image: tensorzero/gateway-e2e:${TENSORZERO_GATEWAY_TAG:-latest}
     build:
@@ -98,24 +55,6 @@ services:
       start_interval: 1s
       timeout: 1s
 
-  clickhouse-tests:
-    image: tensorzero/clickhouse-tests:${TENSORZERO_CLICKHOUSE_TESTS_TAG:-latest}
-    build:
-      context: ../../..
-      dockerfile: tensorzero-core/tests/e2e/Dockerfile.clickhouse
-    environment:
-      # Test environment variables
-      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
-      BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
-    depends_on:
-      gateway:
-        condition: service_healthy
-      fixtures:
-        condition: service_completed_successfully
-      clickhouse:
-        condition: service_healthy
-      mock-inference-provider:
-        condition: service_healthy
   fixtures:
     build:
       dockerfile: ../../../ui/fixtures/Dockerfile
@@ -144,3 +83,22 @@ services:
       timeout: 1s
       retries: 48 # Retry for up to 4 minutes
       start_period: 5s # Give the script time to start
+
+  clickhouse-tests:
+    image: tensorzero/clickhouse-tests:${TENSORZERO_CLICKHOUSE_TESTS_TAG:-latest}
+    build:
+      context: ../../..
+      dockerfile: tensorzero-core/tests/e2e/Dockerfile.clickhouse
+    environment:
+      # Test environment variables
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
+      BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
+    depends_on:
+      gateway:
+        condition: service_healthy
+      fixtures:
+        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+      mock-inference-provider:
+        condition: service_healthy
