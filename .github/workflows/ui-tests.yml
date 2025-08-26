@@ -5,7 +5,7 @@ on:
 
 jobs:
   ui-tests:
-    runs-on: namespace-profile-tensorzero-32x64
+    runs-on: namespace-profile-tensorzero-8x16
 
     strategy:
       matrix:
