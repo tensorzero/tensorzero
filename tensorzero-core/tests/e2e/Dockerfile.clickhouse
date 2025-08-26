@@ -29,8 +29,8 @@ COPY . .
 # Install cargo-nextest using binstall
 RUN cargo binstall -y cargo-nextest --secure
 
-# Build the tests (not just the binary)
-RUN cargo test-e2e-no-creds --no-run
+# Build and archive tests instead of copying entire target directory
+RUN cargo nextest archive --features e2e_tests --profile clickhouse --archive-file tests.tar.zst
 
 # ========== test-env ==========
 
@@ -38,8 +38,12 @@ FROM base AS test-env
 
 WORKDIR /app
 
-# Copy the built test artifacts from build stage
-COPY --from=build-env /build/target /app/target
+# Copy workspace structure but exclude target directory
+COPY . ./
+RUN rm -rf target
+
+# Copy only the test archive instead of entire target directory
+COPY --from=build-env /build/tests.tar.zst /app/tests.tar.zst
 
 # Install cargo-nextest in this stage too (for running tests)
 RUN cargo binstall -y cargo-nextest --secure
@@ -47,5 +51,5 @@ RUN cargo binstall -y cargo-nextest --secure
 # Set CI environment variable
 ENV CI=true
 
-# Set the entrypoint to run the tests
-ENTRYPOINT ["cargo", "test-e2e-no-creds"]
+# Set the entrypoint to run tests from archive with workspace remap and clickhouse profile
+ENTRYPOINT ["cargo", "nextest", "run", "--archive-file", "tests.tar.zst", "--workspace-remap", "/app", "--profile", "clickhouse"]
