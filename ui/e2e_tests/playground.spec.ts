@@ -25,7 +25,9 @@ test("playground should work for a chat function that sets 2 variants", async ({
 
   // Verify the selections are visible
   await expect(page.getByText("write_haiku")).toBeVisible();
-  await expect(page.getByText("foo")).toBeVisible();
+  await expect(
+    page.getByRole("combobox").filter({ hasText: "foo" }),
+  ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "initial_prompt_gpt4o_mini" }),
   ).toBeVisible();
@@ -75,7 +77,9 @@ test("playground should work for extract_entities JSON function with 2 variants"
 
   // Verify the selections are visible
   await expect(page.getByText("extract_entities")).toBeVisible();
-  await expect(page.getByText("foo")).toBeVisible();
+  await expect(
+    page.getByRole("combobox").filter({ hasText: "foo" }),
+  ).toBeVisible();
   await expect(page.getByRole("link", { name: "baseline" })).toBeVisible();
   await expect(
     page.getByRole("link", { name: "gpt4o_mini_initial_prompt" }),
@@ -126,7 +130,9 @@ test("playground should work for image_judger function with images in input", as
 
   // Verify the selections are visible
   await expect(page.getByText("image_judger")).toBeVisible();
-  await expect(page.getByText("baz")).toBeVisible();
+  await expect(
+    page.getByRole("combobox").filter({ hasText: "baz" }),
+  ).toBeVisible();
   await expect(page.getByRole("link", { name: "honest_answer" })).toBeVisible();
 
   // Verify that there is 1 input and 1 reference output
@@ -156,7 +162,9 @@ test("playground should work for data with tools", async ({ page }) => {
 
   // Verify the selections are visible
   await expect(page.getByText("multi_hop_rag_agent")).toBeVisible();
-  await expect(page.getByText("tool_call_examples")).toBeVisible();
+  await expect(
+    page.getByRole("combobox").filter({ hasText: "tool_call_examples" }),
+  ).toBeVisible();
   await expect(page.getByRole("link", { name: "baseline" })).toBeVisible();
 
   // Verify that there is 1 input and 1 reference output
