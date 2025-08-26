@@ -78,7 +78,7 @@ mkdir -p ui/fixtures/test-results ui/fixtures/playwright-report
 docker compose -f ui/fixtures/docker-compose.e2e.ci.yml run \
   --rm \
   -e TENSORZERO_CI=1 \
-  e2e-tests \
+  ui-e2e-tests \
   --grep-invert "@credentials"
 
 # Create a comprehensive Playwright artifacts zip
