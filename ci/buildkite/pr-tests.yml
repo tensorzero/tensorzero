@@ -21,6 +21,10 @@ steps:
     command: bash ./ci/buildkite/build-ui-e2e-tests-container.sh
     key: "build-ui-e2e-tests-container"
 
+  - label: "Build ClickHouse Tests Container"
+    command: bash ./ci/buildkite/build-clickhouse-tests.sh
+    key: "build-clickhouse-tests-container"
+
   - label: ":rust: Rust Unit Tests"
     command: bash ./ci/buildkite/rust-unit-tests.sh
     plugins:
