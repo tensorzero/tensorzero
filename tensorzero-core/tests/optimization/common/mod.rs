@@ -462,8 +462,9 @@ pub async fn make_embedded_gateway() -> Client {
 
 #[allow(clippy::allow_attributes, dead_code)]
 pub async fn make_http_gateway() -> Client {
+    let gateway_url = std::env::var("GATEWAY_URL").unwrap_or("http://localhost:3000".to_string());
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::HTTPGateway {
-        url: "http://localhost:3000".parse().unwrap(),
+        url: gateway_url.parse().unwrap(),
     })
     .with_verbose_errors(true)
     .build()
