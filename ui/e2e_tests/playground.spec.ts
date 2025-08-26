@@ -166,11 +166,13 @@ test("playground should work for data with tools", async ({ page }) => {
   ).toHaveCount(1);
 
   // Verify that tool calls are displayed correctly
+  // Give the inference lots of time to run - assert at least one tool call since apparently sometimes the model outputs 2
   await expect(
-    page.getByTestId("datapoint-playground-output").getByText("Tool Call"),
-  )
-    // Give the inference lots of time to run
-    .toHaveCount(1, { timeout: 15_000 });
+    page
+      .getByTestId("datapoint-playground-output")
+      .getByText("Tool Call")
+      .first(),
+  ).toBeVisible({ timeout: 15_000 });
 
   // Verify that at least one tool call has the expected fields
   await expect(page.getByText("Name").first()).toBeVisible();
@@ -182,19 +184,35 @@ test("playground should work for data with tools", async ({ page }) => {
     page.getByRole("heading", { name: "Inference Error" }),
   ).toHaveCount(0);
 
+  // TODO - clicking the refresh button immediately after the inference loads doesn't seem to work
+  // We should figure out what event to wait for, and remove this sleep
+  await page.waitForTimeout(1000);
+
   // Click the refresh button to reload inference
   // Find the refresh button in the output area
-  const refreshButton = page
-    .getByRole("button")
-    .filter({ has: page.locator("svg") });
+  const refreshButton = page.getByTestId(
+    "datapoint-playground-output-refresh-button",
+  );
   await refreshButton.first().click();
 
-  // Verify tool calls are still displayed after refresh
+  // Wait for the refresh to start
   await expect(
-    page.getByTestId("datapoint-playground-output").getByText("Tool Call"),
-  )
-    // Give the inference lots of time to run
-    .toHaveCount(1, { timeout: 15_000 });
+    page.getByTestId("datapoint-playground-output-loading"),
+  ).toBeVisible();
+
+  // Verify tool calls are still displayed after refresh
+  // 'datapoint-playground-output' will show up after the refresh completes
+  await expect(
+    page
+      .getByTestId("datapoint-playground-output")
+      .getByText("Tool Call")
+      .first(),
+  ).toBeVisible({ timeout: 15_000 });
+
+  // Verify that at least one tool call has the expected fields
+  await expect(page.getByText("Name").first()).toBeVisible();
+  await expect(page.getByText("ID").first()).toBeVisible();
+  await expect(page.getByText("Arguments").first()).toBeVisible();
 
   // Verify that there are no errors after refresh
   await expect(

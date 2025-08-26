@@ -20,7 +20,8 @@ use uuid::Uuid;
 use crate::cache::ModelProviderRequest;
 use crate::embeddings::EmbeddingEncodingFormat;
 use crate::embeddings::{
-    Embedding, EmbeddingInput, EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest,
+    Embedding, EmbeddingInput, EmbeddingProvider, EmbeddingProviderRequestInfo,
+    EmbeddingProviderResponse, EmbeddingRequest,
 };
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
@@ -28,6 +29,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
+use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::file::{mime_type_to_ext, require_image};
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
@@ -586,6 +588,7 @@ impl EmbeddingProvider for OpenAIProvider {
         request: &EmbeddingRequest,
         client: &reqwest::Client,
         dynamic_api_keys: &InferenceCredentials,
+        model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let request_body = OpenAIEmbeddingRequest::new(
@@ -601,22 +604,26 @@ impl EmbeddingProvider for OpenAIProvider {
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
-        let res = request_builder
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!(
-                        "Error sending request to OpenAI: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                })
-            })?;
+
+        let request_body_value = serde_json::to_value(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing OpenAI embedding request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
+
+        let (res, raw_request) = inject_extra_request_data_and_send(
+            PROVIDER_TYPE,
+            &FullExtraBodyConfig::default(), // No overrides supported
+            &Default::default(),             // No extra headers for embeddings yet
+            model_provider_data,
+            &self.model_name,
+            request_body_value,
+            request_builder,
+        )
+        .await?;
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
@@ -624,7 +631,7 @@ impl EmbeddingProvider for OpenAIProvider {
                         "Error parsing text response: {}",
                         DisplayOrDebugGateway::new(e)
                     ),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
@@ -637,7 +644,7 @@ impl EmbeddingProvider for OpenAIProvider {
                             "Error parsing JSON response: {}",
                             DisplayOrDebugGateway::new(e)
                         ),
-                        raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                        raw_request: Some(raw_request.clone()),
                         raw_response: Some(raw_response.clone()),
                         provider_type: PROVIDER_TYPE.to_string(),
                     })
@@ -655,7 +662,7 @@ impl EmbeddingProvider for OpenAIProvider {
             .try_into()?)
         } else {
             Err(handle_openai_error(
-                &serde_json::to_string(&request_body).unwrap_or_default(),
+                &raw_request,
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
@@ -663,7 +670,7 @@ impl EmbeddingProvider for OpenAIProvider {
                             "Error parsing error response: {}",
                             DisplayOrDebugGateway::new(e)
                         ),
-                        raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                        raw_request: Some(raw_request.clone()),
                         raw_response: None,
                         provider_type: PROVIDER_TYPE.to_string(),
                     })
@@ -1872,6 +1879,7 @@ impl<'a> OpenAIBatchRequest<'a> {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub(super) struct OpenAIUsage {
+    #[serde(default)]
     pub prompt_tokens: u32,
     #[serde(default)]
     pub completion_tokens: u32,
