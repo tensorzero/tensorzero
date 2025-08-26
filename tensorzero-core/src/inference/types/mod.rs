@@ -1129,7 +1129,7 @@ impl ModelInferenceDatabaseInsert {
 pub struct ProviderInferenceResponseArgs {
     pub output: Vec<ContentBlockOutput>,
     pub system: Option<String>,
-    pub input_messages: Vec<StoredRequestMessage>,
+    pub input_messages: Vec<RequestMessage>,
     pub raw_request: String,
     pub raw_response: String,
     pub usage: Usage,
@@ -1145,7 +1145,11 @@ impl ProviderInferenceResponse {
             created: current_timestamp(),
             output: args.output,
             system: args.system,
-            input_messages: args.input_messages,
+            input_messages: args
+                .input_messages
+                .into_iter()
+                .map(RequestMessage::into_stored_message)
+                .collect(),
             raw_request: sanitized_raw_request,
             raw_response: args.raw_response,
             usage: args.usage,
@@ -1567,7 +1571,7 @@ pub struct CollectChunksArgs<'a, 'b> {
     pub raw_response: Option<String>,
     pub inference_params: InferenceParams,
     pub system: Option<String>,
-    pub input_messages: Vec<StoredRequestMessage>,
+    pub input_messages: Vec<RequestMessage>,
     pub function_name: &'b str,
     pub variant_name: &'b str,
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
