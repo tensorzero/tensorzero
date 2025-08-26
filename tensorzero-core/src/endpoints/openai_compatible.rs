@@ -76,7 +76,7 @@ pub async fn inference_handler(
             let unknown_field_names = unknown_field_names.join(", ");
 
             return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                message: format!("`tensorzero::deny_unknown_fields` is set to true, but found unknown fields in the request: [{unknown_field_names}]")
+                message: format!("`tensorzero::deny_unknown_fields` is set to true, but found unknown fields in the request: [{unknown_field_names}]`")
             }));
         }
         tracing::warn!(
@@ -897,7 +897,7 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
                                 }));
                             }
                         }
-                        tracing::warn!(r#"Deprecation Warning: Content block `{val}` was not a valid OpenAI content block. Please use `{{"type": "text", "tensorzero::arguments": {{"custom": "data"}}` to pass arbitrary JSON values to TensorZero: {e}"#);
+                        tracing::warn!(r#"Deprecation Warning: Content block `{val}` was not a valid OpenAI content block. Please use `{{"type": "text", "tensorzero::arguments": {{"custom": "data"}}}}` to pass arbitrary JSON values to TensorZero: {e}"#);
                         if let Value::Object(obj) = val {
                             InputMessageContent::Text(TextKind::Arguments { arguments: obj })
                         } else {
@@ -1073,7 +1073,7 @@ impl From<Usage> for OpenAICompatibleUsage {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-struct OpenAICompatibleResponseChunk {
+pub struct OpenAICompatibleResponseChunk {
     id: String,
     episode_id: String,
     choices: Vec<OpenAICompatibleChoiceChunk>,
@@ -1086,20 +1086,19 @@ struct OpenAICompatibleResponseChunk {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-struct OpenAICompatibleChoiceChunk {
+pub struct OpenAICompatibleChoiceChunk {
     index: u32,
     finish_reason: Option<OpenAICompatibleFinishReason>,
-    logprobs: Option<()>, // This is always set to None for now
+    logprobs: Option<()>,
     delta: OpenAICompatibleDelta,
 }
 
 fn is_none_or_empty<T>(v: &Option<Vec<T>>) -> bool {
-    // if it’s None → skip, or if the Vec is empty → skip
     v.as_ref().is_none_or(Vec::is_empty)
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-struct OpenAICompatibleDelta {
+pub struct OpenAICompatibleDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
     #[serde(skip_serializing_if = "is_none_or_empty")]
@@ -1131,7 +1130,6 @@ fn convert_inference_response_chunk_to_openai_compatible(
                 model: format!("{response_model_prefix}{}", c.variant_name),
                 system_fingerprint: String::new(),
                 object: "chat.completion.chunk".to_string(),
-                // We emit a single chunk containing 'usage' at the end of the stream
                 usage: None,
             }
         }
@@ -1152,7 +1150,6 @@ fn convert_inference_response_chunk_to_openai_compatible(
             model: format!("{response_model_prefix}{}", c.variant_name),
             system_fingerprint: String::new(),
             object: "chat.completion.chunk".to_string(),
-            // We emit a single chunk containing 'usage' at the end of the stream
             usage: None,
         },
     };
@@ -1187,8 +1184,6 @@ fn process_chat_content_chunk(
                 });
             }
             ContentBlockChunk::Thought(_thought) => {
-                // OpenAI compatible endpoint does not support thought blocks
-                // Users of this endpoint will need to check observability to see them
                 tracing::warn!(
                     "Ignoring 'thought' content block chunk when constructing OpenAI-compatible response"
                 );
@@ -1217,8 +1212,6 @@ fn prepare_serialized_openai_compatible_events(
         let mut episode_id = None;
         let mut variant_name = None;
         while let Some(chunk) = stream.next().await {
-            // NOTE - in the future, we may want to end the stream early if we get an error
-            // For now, we just ignore the error and try to get more chunks
             let Ok(chunk) = chunk else {
                 continue;
             };
@@ -1246,7 +1239,6 @@ fn prepare_serialized_openai_compatible_events(
                     })
                 })?;
                 if is_first_chunk {
-                    // OpenAI includes "assistant" role in the first chunk but not in the subsequent chunks
                     chunk_json["choices"][0]["delta"]["role"] = Value::String("assistant".to_string());
                     is_first_chunk = false;
                 }
@@ -1397,7 +1389,6 @@ mod tests {
                 text: "Hello, world!".to_string(),
             })
         );
-        // Now try a system message and a user message
         let messages = vec![
             OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
                 content: Value::String("You are a helpful assistant".to_string()),
@@ -1413,7 +1404,6 @@ mod tests {
             input.system,
             Some(Value::String("You are a helpful assistant".to_string()))
         );
-        // Now try some messages with structured content
         let messages = vec![
             OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
                 content: Value::String("You are a helpful assistant".to_string()),
@@ -1434,7 +1424,6 @@ mod tests {
             }
         );
 
-        // Try 2 system messages
         let messages = vec![
             OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
                 content: Value::String("You are a helpful assistant 1.".to_string()),
@@ -1450,13 +1439,14 @@ mod tests {
         );
         assert_eq!(input.messages.len(), 0);
 
-        // Try an assistant message with structured content
         let messages = vec![OpenAICompatibleMessage::Assistant(
             OpenAICompatibleAssistantMessage {
-                content: Some(json!([{
-                    "country": "Japan",
-                    "city": "Tokyo",
-                }])),
+                content: Some(json!([
+                    {
+                        "country": "Japan",
+                        "city": "Tokyo",
+                    }
+                ])),
                 tool_calls: None,
             },
         )];
@@ -1476,7 +1466,6 @@ mod tests {
             })
         );
 
-        // Try an assistant message with text and tool calls
         let messages = vec![OpenAICompatibleMessage::Assistant(
             OpenAICompatibleAssistantMessage {
                 content: Some(Value::String("Hello, world!".to_string())),
@@ -1539,18 +1528,18 @@ mod tests {
 
     #[test]
     fn test_convert_openai_message_content() {
-        // text content
         let content = "Hello, world!".to_string();
         let value = convert_openai_message_content(Value::String(content.clone())).unwrap();
         assert_eq!(
             value,
             vec![InputMessageContent::Text(TextKind::Text { text: content })]
         );
-        // tensorzero::raw_text
-        let content = json!([{
-            "type": "tensorzero::raw_text",
-            "value": "This is raw text"
-        }]);
+        let content = json!([
+            {
+                "type": "tensorzero::raw_text",
+                "value": "This is raw text"
+            }
+        ]);
         let value = convert_openai_message_content(content.clone()).unwrap();
         assert_eq!(
             value,
@@ -1558,11 +1547,12 @@ mod tests {
                 value: "This is raw text".to_string()
             }]
         );
-        // tensorzero::arguments
-        let content = json!([{
-            "country": "Japan",
-            "city": "Tokyo",
-        }]);
+        let content = json!([
+            {
+                "country": "Japan",
+                "city": "Tokyo",
+            }
+        ]);
         let value = convert_openai_message_content(content.clone()).unwrap();
         assert_eq!(
             value,
@@ -1592,12 +1582,14 @@ mod tests {
         let messages = convert_openai_message_content(content).unwrap();
         assert_eq!(messages, vec![]);
 
-        let arguments_block = json!([{
-            "type": "text",
-            "tensorzero::arguments": {
-                "custom_key": "custom_val"
+        let arguments_block = json!([
+            {
+                "type": "text",
+                "tensorzero::arguments": {
+                    "custom_key": "custom_val"
+                }
             }
-        }]);
+        ]);
         let value = convert_openai_message_content(arguments_block).unwrap();
         assert_eq!(
             value,
@@ -1615,10 +1607,12 @@ mod tests {
     #[test]
     #[traced_test]
     fn test_deprecated_custom_block() {
-        let content = json!([{
-            "country": "Japan",
-            "city": "Tokyo",
-        }]);
+        let content = json!([
+            {
+                "country": "Japan",
+                "city": "Tokyo",
+            }
+        ]);
         let value = convert_openai_message_content(content.clone()).unwrap();
         assert_eq!(
             value,
@@ -1636,10 +1630,12 @@ mod tests {
             r#"Content block `{"country":"Japan","city":"Tokyo"}` was not a valid OpenAI content block."#
         ));
 
-        let other_content = json!([{
-            "type": "text",
-            "my_custom_arg": 123
-        }]);
+        let other_content = json!([
+            {
+                "type": "text",
+                "my_custom_arg": 123
+            }
+        ]);
         let err = convert_openai_message_content(other_content.clone())
             .expect_err("Should not accept invalid block");
         assert_eq!(err.to_string(), "Invalid request to OpenAI-compatible endpoint: Invalid content block: Either `text` or `tensorzero::arguments` must be set when using `\"type\": \"text\"`");
@@ -1805,7 +1801,6 @@ mod tests {
     fn test_cache_options() {
         let headers = HeaderMap::new();
 
-        // Test default cache options (should be write-only)
         let params = Params::try_from_openai(
             headers.clone(),
             OpenAICompatibleParams {
@@ -1843,7 +1838,6 @@ mod tests {
         .unwrap();
         assert_eq!(params.cache_options, CacheParamsOptions::default());
 
-        // Test explicit cache options
         let params = Params::try_from_openai(
             headers.clone(),
             OpenAICompatibleParams {
@@ -1890,7 +1884,6 @@ mod tests {
             }
         );
 
-        // Test interaction with dryrun
         let params = Params::try_from_openai(
             headers.clone(),
             OpenAICompatibleParams {
@@ -1937,7 +1930,6 @@ mod tests {
             }
         );
 
-        // Test write-only with dryrun (should become Off)
         let params = Params::try_from_openai(
             headers,
             OpenAICompatibleParams {
