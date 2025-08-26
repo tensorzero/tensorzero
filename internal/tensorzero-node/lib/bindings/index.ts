@@ -126,6 +126,7 @@ export * from "./StaticJSONSchema";
 export * from "./StaticToolConfig";
 export * from "./StorageKind";
 export * from "./StoragePath";
+export * from "./StoredContentBlock";
 export * from "./StoredFile";
 export * from "./StoredInput";
 export * from "./StoredInputMessage";
