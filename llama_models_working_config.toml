@@ -1,0 +1,90 @@
+# Working Llama Models Configuration for TensorZero
+# All models configured to use LlamaAPIProvider directly
+
+[gateway]
+debug = true
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                              LLAMA MODELS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+# ==============================================================================
+# LLAMA 4 MODELS (Confirmed Working)
+# ==============================================================================
+
+[models."llama-4-scout-17b-instruct"]
+routing = ["llama_api"]
+
+[models."llama-4-scout-17b-instruct".providers.llama_api]
+type = "llama_api"
+model_name = "Llama-4-Scout-17B-16E-Instruct-FP8"
+api_key_location = "env::LLAMA_API_KEY"
+
+[models."llama-4-maverick-17b-instruct"]
+routing = ["llama_api"]
+
+[models."llama-4-maverick-17b-instruct".providers.llama_api]
+type = "llama_api"
+model_name = "Llama-4-Maverick-17B-128E-Instruct-FP8"
+api_key_location = "env::LLAMA_API_KEY"
+
+# ==============================================================================
+# TESTING OTHER MODEL NAMES
+# ==============================================================================
+
+# Let's test some common model name patterns
+[models."llama-3.1-8b-instruct-test"]
+routing = ["llama_api"]
+
+[models."llama-3.1-8b-instruct-test".providers.llama_api]
+type = "llama_api"
+model_name = "llama-3.1-8b-instruct"
+api_key_location = "env::LLAMA_API_KEY"
+
+[models."llama-3.1-8b-instruct-test2"]
+routing = ["llama_api"]
+
+[models."llama-3.1-8b-instruct-test2".providers.llama_api]
+type = "llama_api"
+model_name = "llama-3.1-8b"
+api_key_location = "env::LLAMA_API_KEY"
+
+[models."llama-3.1-8b-instruct-test3"]
+routing = ["llama_api"]
+
+[models."llama-3.1-8b-instruct-test3".providers.llama_api]
+type = "llama_api"
+model_name = "Llama-3.1-8B"
+api_key_location = "env::LLAMA_API_KEY"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+# Working chat function using confirmed Llama models
+[functions.llama_chat_test]
+type = "chat"
+
+[functions.llama_chat_test.variants.llama_4_scout]
+type = "chat_completion"
+model = "llama-4-scout-17b-instruct"
+
+[functions.llama_chat_test.variants.llama_4_maverick]
+type = "chat_completion"
+model = "llama-4-maverick-17b-instruct"
+
+# Test function for other models
+[functions.llama_test_other_models]
+type = "chat"
+
+[functions.llama_test_other_models.variants.llama_3_1_8b_test1]
+type = "chat_completion"
+model = "llama-3.1-8b-instruct-test"
+
+[functions.llama_test_other_models.variants.llama_3_1_8b_test2]
+type = "chat_completion"
+model = "llama-3.1-8b-instruct-test2"
+
+[functions.llama_test_other_models.variants.llama_3_1_8b_test3]
+type = "chat_completion"
+model = "llama-3.1-8b-instruct-test3"
