@@ -2,14 +2,14 @@ use super::check_table_exists;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
-use crate::serde_util::deserialize_u64;
 use async_trait::async_trait;
-use serde::Deserialize;
 use std::time::Duration;
 
 /// This migration adds a `CumulativeUsage` table and `CumulativeUsageView` materialized view
 /// This will allow the sum of tokens in the ModelInference table to be amortized and
 /// looked up as needed.
+/// NOTE: this migration is subsumed by migration_0035.rs
+/// We will not BAN it but rather rely on migration manager handling.
 pub struct Migration0034<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
@@ -29,6 +29,16 @@ impl Migration for Migration0034<'_> {
     }
 
     async fn should_apply(&self) -> Result<bool, Error> {
+        // NOTE: this migration is subsumed by migration_0035.rs
+        // so if those tables are in place we should not apply this migration either
+        let cumulative_usage_table_v2_exists =
+            check_table_exists(self.clickhouse, "CumulativeUsageV2", MIGRATION_ID).await?;
+        let cumulative_usage_view_v2_exists =
+            check_table_exists(self.clickhouse, "CumulativeUsageViewV2", MIGRATION_ID).await?;
+        if cumulative_usage_table_v2_exists && cumulative_usage_view_v2_exists {
+            return Ok(false);
+        }
+
         // If either the CumulativeUsage table or CumulativeUsageView view doesn't exist, we need to create it
         if !check_table_exists(self.clickhouse, "CumulativeUsage", MIGRATION_ID).await? {
             return Ok(true);
@@ -104,6 +114,8 @@ impl Migration for Migration0034<'_> {
             .run_query_synchronous_no_params(query)
             .await?;
 
+        // NOTE: this migration is subsumed by 0035 so we do not need to run the backfill for this table any more
+        /*
         // If we are not clean starting, we must backfill this table
         if !clean_start {
             tokio::time::sleep(view_offset).await;
@@ -164,7 +176,7 @@ impl Migration for Migration0034<'_> {
             self.clickhouse
                 .run_query_synchronous_no_params(write_query)
                 .await?;
-        }
+        } */
 
         Ok(())
     }
@@ -182,14 +194,4 @@ impl Migration for Migration0034<'_> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct CountResponse {
-    #[serde(deserialize_with = "deserialize_u64")]
-    total_input_tokens: u64,
-    #[serde(deserialize_with = "deserialize_u64")]
-    total_output_tokens: u64,
-    #[serde(deserialize_with = "deserialize_u64")]
-    total_count: u64,
 }

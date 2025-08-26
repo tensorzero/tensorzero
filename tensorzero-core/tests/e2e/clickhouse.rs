@@ -779,7 +779,7 @@ async fn test_clickhouse_migration_manager() {
 
     let response = clickhouse
         .run_query_synchronous_no_params(
-            "SELECT count FROM CumulativeUsage FINAL WHERE type='input_tokens'".to_string(),
+            "SELECT count FROM CumulativeUsageV2 FINAL WHERE type='input_tokens'".to_string(),
         )
         .await
         .unwrap();
@@ -787,7 +787,7 @@ async fn test_clickhouse_migration_manager() {
     assert_eq!(input_token_total, 200000000);
     let response = clickhouse
         .run_query_synchronous_no_params(
-            "SELECT count FROM CumulativeUsage FINAL WHERE type='output_tokens'".to_string(),
+            "SELECT count FROM CumulativeUsageV2 FINAL WHERE type='output_tokens'".to_string(),
         )
         .await
         .unwrap();

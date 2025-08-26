@@ -242,8 +242,8 @@ async fn get_token_totals(
         .run_query_synchronous_no_params(
             r"
             SELECT
-                (SELECT count FROM CumulativeUsage FINAL WHERE type = 'input_tokens') as input_tokens,
-                (SELECT count FROM CumulativeUsage FINAL WHERE type = 'output_tokens') as output_tokens
+                (SELECT count FROM CumulativeUsageV2 FINAL WHERE type = 'input_tokens') as input_tokens,
+                (SELECT count FROM CumulativeUsageV2 FINAL WHERE type = 'output_tokens') as output_tokens
             Format JSONEachRow
             "
             .to_string(),
