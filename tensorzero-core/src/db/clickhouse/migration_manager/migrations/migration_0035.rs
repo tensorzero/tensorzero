@@ -26,11 +26,11 @@ impl Migration for Migration0035<'_> {
             }));
         }
         let cumulative_usage_table_exists =
-            check_table_exists(self.clickhouse, "CumulativeUsageTable", MIGRATION_ID).await?;
+            check_table_exists(self.clickhouse, "CumulativeUsage", MIGRATION_ID).await?;
         if !cumulative_usage_table_exists {
             return Err(Error::new(ErrorDetails::ClickHouseMigration {
                 id: MIGRATION_ID.to_string(),
-                message: "CumulativeUsageTable table does not exist".to_string(),
+                message: "CumulativeUsage table does not exist".to_string(),
             }));
         }
         let cumulative_usage_view_exists =
