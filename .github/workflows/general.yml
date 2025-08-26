@@ -567,6 +567,7 @@ jobs:
       OPENAI_API_KEY: not_used
       FIREWORKS_API_KEY: not_used
       FIREWORKS_ACCOUNT_ID: not_used
+      GCP_VERTEX_CREDENTIALS_PATH: ${{ github.workspace }}/tensorzero-core/tests/mock-inference-provider/fixtures/gcp-vertex-gemini/fake_credentials.json
       TOGETHER_API_KEY: not_used
       TENSORZERO_USE_MOCK_INFERENCE_PROVIDER: 1
       TENSORZERO_SKIP_LARGE_FIXTURES: 1
