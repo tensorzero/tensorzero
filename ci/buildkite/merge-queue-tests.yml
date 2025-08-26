@@ -53,8 +53,7 @@ steps:
 
   - label: ":playwright: UI E2E Tests (without LLM credentials)"
     command: |
-      ./ci/buildkite/ui-e2e-tests.sh
-      cd ui/fixtures && zip -r ui-e2e-artifacts.zip test-results playwright-report
+      bash ./ci/buildkite/ui-e2e-tests.sh
     depends_on:
       - "build-gateway-container"
       - "build-mock-inference-provider-container"
@@ -74,7 +73,6 @@ steps:
       TENSORZERO_CLICKHOUSE_VERSION: "{{matrix.clickhouse_version}}"
     depends_on:
       - "build-gateway-e2e-container"
-      - "build-mock-inference-provider-container"
       - "build-clickhouse-tests-container"
 
   - label: "Live Tests"
@@ -82,4 +80,5 @@ steps:
     depends_on:
       - "build-gateway-container"
       - "build-mock-inference-provider-container"
+      - "build-provider-proxy-cache-container"
       - "modal-warmup"

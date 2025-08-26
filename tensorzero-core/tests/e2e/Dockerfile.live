@@ -1,0 +1,51 @@
+# ========== base ==========
+
+FROM rust:1.88.0-bookworm AS base
+
+# Install required system dependencies
+RUN apt-get update && \
+    apt-get install -y \
+        curl \
+        ca-certificates \
+        build-essential \
+        pkg-config \
+        libssl-dev \
+        git && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install cargo-binstall for faster tool installation
+RUN curl -L --proto '=https' --tlsv1.2 -sSf \
+    https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+
+# ========== build-env ==========
+
+FROM base AS build-env
+
+WORKDIR /build
+
+# Copy the entire project
+COPY . .
+
+# Install cargo-nextest using binstall
+RUN cargo binstall -y cargo-nextest --secure
+
+# Build the tests (not just the binary)
+RUN cargo test-e2e --no-run
+
+# ========== test-env ==========
+
+FROM base AS test-env
+
+WORKDIR /app
+
+# Copy the built test artifacts from build stage
+COPY --from=build-env /build/target /app/target
+
+# Install cargo-nextest in this stage too (for running tests)
+RUN cargo binstall -y cargo-nextest --secure
+
+# Set CI environment variable
+ENV CI=true
+
+# Set the entrypoint to run the tests
+ENTRYPOINT ["cargo", "test-e2e"]
