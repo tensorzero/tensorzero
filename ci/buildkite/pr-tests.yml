@@ -44,15 +44,16 @@ steps:
       - "build-node-unit-tests-container"
 
   - label: ":playwright: UI E2E Tests"
-    command: ./ci/buildkite/ui-e2e-tests.sh
+    command: |
+      ./ci/buildkite/ui-e2e-tests.sh
+      cd ui/fixtures && zip -r ui-e2e-artifacts.zip test-results playwright-report
     depends_on:
       - "build-gateway-container"
       - "build-mock-inference-provider-container"
       - "build-ui-container"
       - "build-ui-e2e-tests-container"
     artifact_paths:
-      - "ui/fixtures/test-results/**/*"
-      - "ui/fixtures/playwright-report/**/*"
+      - "ui/fixtures/ui-e2e-artifacts.zip"
 
   - label: "ClickHouse Tests (version {{matrix.clickhouse_version}})"
     command: ./ci/buildkite/clickhouse-tests.sh
