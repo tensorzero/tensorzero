@@ -2,16 +2,19 @@ import { stringify } from "smol-toml";
 import type { OptimizerOutput } from "tensorzero-node";
 
 export function dump_optimizer_output(optimizerOutput: OptimizerOutput) {
-  /// Drop type key from the optimizer output
-  const { type, ...rest } = optimizerOutput;
-  if (type !== "model") {
-    throw new Error(`Only model type is supported, got ${type}`);
+  if (optimizerOutput.type !== "model") {
+    throw new Error(
+      `Only model type is supported, got ${optimizerOutput.type}`,
+    );
   }
-  if (rest.routing.length !== 1) {
-    throw new Error(`Expected 1 routing entry, got ${rest.routing.length}`);
+  const modelConfig = optimizerOutput.content;
+  if (modelConfig.routing.length !== 1) {
+    throw new Error(
+      `Expected 1 routing entry, got ${modelConfig.routing.length}`,
+    );
   }
-  const modelName = rest.routing[0];
-  const providerConfig = rest.providers[modelName];
+  const modelName = modelConfig.routing[0];
+  const providerConfig = modelConfig.providers[modelName];
   // drop the timeout config
   // allow it to be unused
   if (!providerConfig) {
