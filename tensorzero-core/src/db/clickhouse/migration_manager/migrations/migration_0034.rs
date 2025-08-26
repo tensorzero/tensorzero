@@ -10,6 +10,8 @@ use std::time::Duration;
 /// This migration adds a `CumulativeUsage` table and `CumulativeUsageView` materialized view
 /// This will allow the sum of tokens in the ModelInference table to be amortized and
 /// looked up as needed.
+/// NOTE: this migration is subsumed by migration_0035.rs
+/// We will not BAN it but rather rely on migration manager handling.
 pub struct Migration0034<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
@@ -104,6 +106,7 @@ impl Migration for Migration0034<'_> {
             .run_query_synchronous_no_params(query)
             .await?;
 
+        // NOTE: this migration is subsumed by 0035 so we do not need to run the backfill for this table any more
         // If we are not clean starting, we must backfill this table
         if !clean_start {
             tokio::time::sleep(view_offset).await;
