@@ -12,4 +12,7 @@ source ci/buildkite/utils/docker-hub-credentials.sh
 echo "$DOCKER_HUB_ACCESS_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin
 
 # Push to Docker Hub
-docker push tensorzero/node-unit-tests:ci-sha-$SHORT_HASH
+
+TAG=tensorzero/node-unit-tests:ci-sha-$SHORT_HASH
+echo "Pushing $TAG"
+docker push $TAG
