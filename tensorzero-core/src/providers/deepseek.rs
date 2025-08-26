@@ -608,6 +608,7 @@ pub(super) fn prepare_deepseek_messages<'a>(
         request.system.as_deref(),
         Some(&request.json_mode),
         &messages,
+        OpenAIRequestMessage::System,
     ) {
         messages.insert(0, system_msg);
     }
