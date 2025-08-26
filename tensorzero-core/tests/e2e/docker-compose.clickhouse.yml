@@ -77,6 +77,8 @@ services:
     volumes:
       # Mount the e2e directory so the config path exists inside the container
       - ./:/app/tensorzero-core/tests/e2e:ro
+      # Mount the fixtures directory so template paths can be resolved
+      - ../../fixtures:/app/tensorzero-core/fixtures:ro
     depends_on:
       clickhouse:
         condition: service_healthy
