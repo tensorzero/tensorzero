@@ -92,6 +92,8 @@ services:
     volumes:
       - ./tensorzero.toml:/app/tensorzero-core/tests/e2e/tensorzero.toml:ro
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
+      - .cargo/:/app/.cargo/
+      - .config/:/app/.config/
     depends_on:
       gateway:
         condition: service_healthy
