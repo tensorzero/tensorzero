@@ -1,7 +1,7 @@
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
 #[cfg(feature = "pyo3")]
-use pyo3::{conversion::FromPyObject, exceptions::PyValueError, prelude::*, pybacked::PyBackedStr};
+use pyo3::{exceptions::PyValueError, prelude::*};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -61,6 +61,7 @@ fn default_weight_decay() -> f64 {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(rename_all = "lowercase")]
 pub enum TogetherBatchSizeDescription {
     Max,
@@ -69,6 +70,7 @@ pub enum TogetherBatchSizeDescription {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(untagged)]
 pub enum TogetherBatchSize {
     Number(u32),
@@ -78,42 +80,6 @@ pub enum TogetherBatchSize {
 impl Default for TogetherBatchSize {
     fn default() -> Self {
         Self::Description(TogetherBatchSizeDescription::Max)
-    }
-}
-
-#[cfg(feature = "pyo3")]
-impl<'py> FromPyObject<'py> for TogetherBatchSize {
-    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
-        // Try integer first
-        if let Ok(v) = ob.extract::<i128>() {
-            if v < 0 {
-                return Err(PyValueError::new_err(
-                    "Expected non-negative integer or 'max'",
-                ));
-            }
-            if v > u32::MAX as i128 {
-                return Err(PyValueError::new_err("Integer too large for u32"));
-            }
-            return Ok(TogetherBatchSize::Number(v as u32));
-        }
-
-        // Then try string via PyBackedStr
-        if let Ok(s) = ob.extract::<PyBackedStr>() {
-            let s_ref: &str = s.as_ref(); // <-- explicit type fixes E0282
-            if s_ref.eq_ignore_ascii_case("max") {
-                Ok(TogetherBatchSize::Description(
-                    TogetherBatchSizeDescription::Max,
-                ))
-            } else {
-                Err(PyValueError::new_err(
-                    "Expected non-negative integer or 'max'",
-                ))
-            }
-        } else {
-            Err(PyValueError::new_err(
-                "Expected non-negative integer or 'max'",
-            ))
-        }
     }
 }
 
@@ -297,7 +263,7 @@ impl UninitializedTogetherSFTConfig {
         n_epochs: Option<u32>,
         n_checkpoints: Option<u32>,
         n_evals: Option<u32>,
-        batch_size: Option<TogetherBatchSize>,
+        batch_size: Option<&Bound<'_, PyAny>>,
         learning_rate: Option<f64>,
         warmup_ratio: Option<f64>,
         max_grad_norm: Option<f64>,
@@ -367,6 +333,16 @@ impl UninitializedTogetherSFTConfig {
             TogetherTrainingType::default()
         };
 
+        let batch_size: TogetherBatchSize = if let Some(bs) = batch_size {
+            if let Ok(batch_size) = bs.extract::<TogetherBatchSize>() {
+                batch_size
+            } else {
+                deserialize_from_pyobj(py, bs)?
+            }
+        } else {
+            TogetherBatchSize::default()
+        };
+
         Ok(Self {
             model,
             credentials,
@@ -374,7 +350,7 @@ impl UninitializedTogetherSFTConfig {
             n_epochs: n_epochs.unwrap_or_else(default_n_epochs),
             n_checkpoints: n_checkpoints.unwrap_or_else(default_n_checkpoints),
             n_evals,
-            batch_size: batch_size.unwrap_or_default(),
+            batch_size,
             learning_rate: learning_rate.unwrap_or_else(default_learning_rate),
             warmup_ratio: warmup_ratio.unwrap_or_else(default_warmup_ratio),
             max_grad_norm: max_grad_norm.unwrap_or_else(default_max_grad_norm),
@@ -433,7 +409,7 @@ impl UninitializedTogetherSFTConfig {
         n_epochs: Option<u32>,
         n_checkpoints: Option<u32>,
         n_evals: Option<u32>,
-        batch_size: Option<TogetherBatchSize>,
+        batch_size: Option<&Bound<'_, PyAny>>,
         learning_rate: Option<f64>,
         warmup_ratio: Option<f64>,
         max_grad_norm: Option<f64>,
