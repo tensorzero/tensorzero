@@ -49,6 +49,23 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     let use_mock = use_mock_inference_provider();
     let optimizer_info_uninitialized = test_case.get_optimizer_info(use_mock);
 
+    // For GCP Vertex Gemini SFT tests, check if credentials are available when using mock
+    if use_mock {
+        if let UninitializedOptimizerInfo {
+            inner:
+                tensorzero_core::optimization::UninitializedOptimizerConfig::GCPVertexGeminiSFT(_),
+        } = &optimizer_info_uninitialized
+        {
+            let has_credentials = std::env::var("GCP_VERTEX_CREDENTIALS_PATH").is_ok()
+                || std::env::var("GOOGLE_APPLICATION_CREDENTIALS").is_ok();
+
+            if !has_credentials {
+                println!("Skipping GCP Vertex Gemini test: No credentials found");
+                return;
+            }
+        }
+    }
+
     let optimizer_info = optimizer_info_uninitialized.load().await.unwrap();
     let client = reqwest::Client::new();
     let test_examples = get_examples(test_case, 10);
