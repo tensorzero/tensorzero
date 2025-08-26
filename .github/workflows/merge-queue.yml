@@ -54,7 +54,9 @@ jobs:
   batch-tests:
     uses: ./.github/workflows/batch-test.yml
     secrets: inherit
+
   live-tests:
+    name: "live-tests (batch_writes: ${{ matrix.batch_writes }})"
     runs-on: namespace-profile-tensorzero-32x64
     permissions:
       # Permission to checkout the repository

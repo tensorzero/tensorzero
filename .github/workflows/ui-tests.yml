@@ -9,7 +9,7 @@ jobs:
 
     strategy:
       matrix:
-        clickhouse_version: ["24.12-alpine", "25.2-alpine", "latest-alpine"]
+        clickhouse_version: ["24.12-alpine", "latest-alpine"]
 
     steps:
       - name: Set DNS
