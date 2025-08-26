@@ -195,13 +195,19 @@ test("playground should work for data with tools", async ({ page }) => {
   );
   await refreshButton.first().click();
 
-  // Wait for the refresh to start
-  await expect(
-    page.getByTestId("datapoint-playground-output-loading"),
-  ).toBeVisible();
+  // Instead of waiting for loading indicator, wait for the output to be refreshed
+  // by waiting for the output container to be detached and reattached
+  await page.getByTestId("datapoint-playground-output").waitFor({
+    state: "detached",
+    timeout: 5000,
+  });
+
+  await page.getByTestId("datapoint-playground-output").waitFor({
+    state: "attached",
+    timeout: 15000,
+  });
 
   // Verify tool calls are still displayed after refresh
-  // 'datapoint-playground-output' will show up after the refresh completes
   await expect(
     page
       .getByTestId("datapoint-playground-output")
