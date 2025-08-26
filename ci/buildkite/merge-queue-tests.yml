@@ -29,6 +29,10 @@ steps:
     command: bash ./ci/buildkite/build-clickhouse-tests.sh
     key: "build-clickhouse-tests-container"
 
+  - label: "Build Provider Proxy Cache Container"
+    command: bash ./ci/buildkite/build-provider-proxy-cache-container.sh
+    key: "build-provider-proxy-cache-container"
+
   - label: ":rust: Rust Unit Tests"
     command: bash ./ci/buildkite/rust-unit-tests.sh
     plugins:

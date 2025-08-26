@@ -10,7 +10,7 @@ source ci/buildkite/utils/docker-hub-credentials.sh
 echo "$DOCKER_HUB_ACCESS_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin
 
 # Pull latest image for caching (ignore errors if image doesn't exist)
-docker pull tensorzero/clickhouse-tests:latest || true
+# docker pull tensorzero/clickhouse-tests:latest || true
 
 # Build container from the ClickHouse tests Dockerfile with cache
 docker build --load --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 \
