@@ -38,9 +38,6 @@ FROM base AS test-env
 
 WORKDIR /app
 
-# Copy the entire project (needed for tests and configs)
-COPY . .
-
 # Copy the built test artifacts from build stage
 COPY --from=build-env /build/target /app/target
 

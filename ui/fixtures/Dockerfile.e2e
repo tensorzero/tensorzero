@@ -3,9 +3,6 @@ FROM mcr.microsoft.com/playwright:v1.55.0-noble
 # Use the official Playwright image; just install pnpm and run tests.
 RUN npm install -g pnpm
 
-# Install zip utility
-RUN apt-get update && apt-get install -y zip && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
 # Copy workspace configuration and minimal package.json

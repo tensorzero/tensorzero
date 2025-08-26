@@ -13,6 +13,11 @@ if [ -z "$BUILDKITE_ANALYTICS_TOKEN" ]; then
     exit 1
 fi
 
+# Install zip utility if not available
+if ! command -v zip &> /dev/null; then
+    apt-get update && apt-get install -y zip
+fi
+
 # ------------------------------------------------------------------------------
 # Set the short commit hash
 # ------------------------------------------------------------------------------
@@ -76,6 +81,15 @@ docker compose -f ui/fixtures/docker-compose.e2e.ci.yml run \
   e2e-tests \
   --grep-invert "@credentials"
 
-echo "E2E test artifacts (if generated) are available at:"
-echo " - ui/fixtures/test-results/"
-echo " - ui/fixtures/playwright-report/"
+# Create a comprehensive Playwright artifacts zip
+cd ui/fixtures
+zip -r ui-e2e-artifacts.zip \
+  test-results/ \
+  playwright-report/ \
+  -x "*.log" "*.tmp"
+cd ../..
+
+echo "E2E test artifacts packaged into ui/fixtures/ui-e2e-artifacts.zip"
+echo "Contents include:"
+echo " - test-results/ (screenshots, videos, traces)"
+echo " - playwright-report/ (HTML report)"

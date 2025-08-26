@@ -72,11 +72,7 @@ services:
         condition: service_healthy
     # Keep this running to make 'check-docker-compose.sh' detect that all containers are healthy
     command:
-      [
-        "bash",
-        "-c",
-        "cd /fixtures && ./load_fixtures.sh tensorzero_e2e_tests && sleep infinity",
-      ]
+      ["bash", "-c", "cd /fixtures && ./load_fixtures.sh tensorzero_e2e_tests"]
     healthcheck:
       test: ["CMD", "test", "-f", "/load_complete.marker"]
       interval: 5s
@@ -93,12 +89,13 @@ services:
       # Test environment variables
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
+    volumes:
+      - ./tensorzero.toml:/app/tensorzero-core/tests/e2e/tensorzero.toml:ro
+      - ../../fixtures:/app/tensorzero-core/fixtures:ro
     depends_on:
       gateway:
         condition: service_healthy
       fixtures:
         condition: service_completed_successfully
       clickhouse:
-        condition: service_healthy
-      mock-inference-provider:
         condition: service_healthy

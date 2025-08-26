@@ -11,7 +11,7 @@ source ci/buildkite/utils/docker-hub-credentials.sh
 echo "$DOCKER_HUB_ACCESS_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin
 
 # Pull latest image for caching (ignore errors if image doesn't exist)
-# docker pull tensorzero/gateway-dev:latest || true
+docker pull tensorzero/gateway-dev:latest || true
 
 # Build the container with cache
 docker build --load --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 \
