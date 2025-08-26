@@ -42,6 +42,9 @@ WORKDIR /app
 COPY . ./
 RUN rm -rf target
 
+# Ensure nextest config is available (may not be copied with COPY . ./)
+COPY .config/nextest.toml .config/nextest.toml
+
 # Copy only the test archive instead of entire target directory
 COPY --from=build-env /build/tests.tar.zst /app/tests.tar.zst
 
