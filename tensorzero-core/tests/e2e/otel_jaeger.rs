@@ -76,7 +76,8 @@ async fn test_jaeger_trace_export(existing_trace_parent: Option<ExistingTraceDat
         .as_str()
         .expect("inference_id should be a string");
 
-    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    // We flush spans every 10 seconds, so wait for twice that to be safe
+    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
     let now = Utc::now();
     let one_minute_ago = now - Duration::minutes(1);
