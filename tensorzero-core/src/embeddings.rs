@@ -9,7 +9,7 @@ use crate::cache::{
 use crate::config::{ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
 use crate::inference::types::extra_body::ExtraBodyConfig;
-use crate::inference::types::{StoredContentBlock, StoredRequestMessage, Text};
+use crate::inference::types::{ContentBlock, StoredContentBlock, StoredRequestMessage, Text};
 use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
 use crate::model_table::BaseModelTable;
 use crate::model_table::ShorthandModelConfig;
@@ -378,9 +378,9 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
             output: vec![],
             created: response.created,
             system: None,
-            input_messages: vec![StoredRequestMessage {
+            input_messages: vec![RequestMessage {
                 role: Role::User,
-                content: vec![StoredContentBlock::Text(Text {
+                content: vec![ContentBlock::Text(Text {
                     text: input.clone(),
                 })],
             }], // TODO (#399): Store this information in a more appropriate way for this kind of request

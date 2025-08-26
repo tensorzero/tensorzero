@@ -26,7 +26,9 @@ use crate::inference::types::{
     ContentBlockOutput, Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
-use crate::inference::types::{ContentBlock, FinishReason, ProviderInferenceResponseStreamInner, RequestMessage};
+use crate::inference::types::{
+    ContentBlock, FinishReason, ProviderInferenceResponseStreamInner, RequestMessage,
+};
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
 use crate::model::{CredentialLocation, ModelProvider};
 use crate::providers::helpers::inject_extra_request_data;
@@ -550,10 +552,7 @@ impl InferenceProvider for DummyProvider {
             usage,
             latency,
             system,
-            input_messages: input_messages
-                .into_iter()
-                .map(RequestMessage::into_stored_message)
-                .collect(),
+            input_messages,
             finish_reason,
         })
     }

@@ -630,7 +630,7 @@ pub struct ProviderInferenceResponse {
     pub created: u64,
     pub output: Vec<ContentBlockOutput>,
     pub system: Option<String>,
-    pub input_messages: Vec<StoredRequestMessage>,
+    pub input_messages: Vec<RequestMessage>,
     pub raw_request: String,
     pub raw_response: String,
     pub usage: Usage,
@@ -660,13 +660,13 @@ pub enum Latency {
 
 /// After a ProviderInferenceResponse is returned to the Model,
 /// it is converted into a ModelInferenceResponse that includes additional metadata (such as the model provider name).
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ModelInferenceResponse {
     pub id: Uuid,
     pub created: u64,
     pub output: Vec<ContentBlockOutput>,
     pub system: Option<String>,
-    pub input_messages: Vec<StoredRequestMessage>,
+    pub input_messages: Vec<RequestMessage>,
     pub raw_request: String,
     pub raw_response: String,
     pub usage: Usage,
@@ -678,13 +678,13 @@ pub struct ModelInferenceResponse {
 
 /// Finally, in the Variant we convert the ModelInferenceResponse into a ModelInferenceResponseWithMetadata
 /// that includes additional metadata (such as the model name).
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ModelInferenceResponseWithMetadata {
     pub id: Uuid,
     pub created: u64,
     pub output: Vec<ContentBlockOutput>,
     pub system: Option<String>,
-    pub input_messages: Vec<StoredRequestMessage>,
+    pub input_messages: Vec<RequestMessage>,
     pub raw_request: String,
     pub raw_response: String,
     pub usage: Usage,
@@ -1031,12 +1031,7 @@ impl ModelInferenceResponse {
             created: current_timestamp(),
             output: cache_lookup.output.blocks,
             system: request.system.clone(),
-            input_messages: request
-                .messages
-                .iter()
-                .cloned()
-                .map(RequestMessage::into_stored_message)
-                .collect(),
+            input_messages: request.messages.clone(),
             raw_request: cache_lookup.raw_request,
             raw_response: cache_lookup.raw_response,
             usage: Usage {
@@ -1145,11 +1140,7 @@ impl ProviderInferenceResponse {
             created: current_timestamp(),
             output: args.output,
             system: args.system,
-            input_messages: args
-                .input_messages
-                .into_iter()
-                .map(RequestMessage::into_stored_message)
-                .collect(),
+            input_messages: args.input_messages,
             raw_request: sanitized_raw_request,
             raw_response: args.raw_response,
             usage: args.usage,
