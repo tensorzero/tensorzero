@@ -7,6 +7,7 @@ from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGat
 from .tensorzero import (
     BestOfNSamplingConfig,
     ChainOfThoughtConfig,
+    FirstOfNConfig,
     ChatCompletionConfig,
     Config,
     Datapoint,
@@ -127,6 +128,7 @@ __all__ = [
     "DiclConfig",
     "MixtureOfNConfig",
     "ChainOfThoughtConfig",
+    "FirstOfNConfig",
     "ImageBase64",
     "ImageUrl",
     "InferenceChunk",

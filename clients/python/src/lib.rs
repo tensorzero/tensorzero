@@ -45,7 +45,7 @@ use tensorzero_core::{
     },
     variant::{
         BestOfNSamplingConfigPyClass, ChainOfThoughtConfigPyClass, ChatCompletionConfigPyClass,
-        DiclConfigPyClass, MixtureOfNConfigPyClass,
+        DiclConfigPyClass, FirstOfNConfigPyClass, MixtureOfNConfigPyClass,
     },
 };
 use tensorzero_core::{
@@ -110,6 +110,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<DiclConfigPyClass>()?;
     m.add_class::<MixtureOfNConfigPyClass>()?;
     m.add_class::<ChainOfThoughtConfigPyClass>()?;
+    m.add_class::<FirstOfNConfigPyClass>()?;
     m.add_class::<OptimizationJobHandle>()?;
     m.add_class::<OptimizationJobInfoPyClass>()?;
     m.add_class::<OptimizationJobStatus>()?;

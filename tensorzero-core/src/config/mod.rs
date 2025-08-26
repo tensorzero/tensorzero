@@ -38,6 +38,7 @@ use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
 use crate::variant::chain_of_thought::UninitializedChainOfThoughtConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dicl::UninitializedDiclConfig;
+use crate::variant::first_of_n::UninitializedFirstOfNConfig;
 use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
@@ -1254,6 +1255,9 @@ impl UninitializedFunctionConfig {
                                 warn_variant = Some(name.clone());
                             }
                         }
+                        VariantConfig::FirstOfN(_first_of_n_config) => {
+                            // Since FirstOfN lacks an inner ChatCompletionConfig, nothing happens here.
+                        }
                     }
                     if let Some(warn_variant) = warn_variant {
                         tracing::warn!("Deprecation Warning: `json_mode` is not specified for `[functions.{function_name}.variants.{warn_variant}]` (parent function `{function_name}` is a JSON function), defaulting to `strict`. This field will become required in a future release - see https://github.com/tensorzero/tensorzero/issues/1043 on GitHub for details.");
@@ -1298,6 +1302,8 @@ pub enum UninitializedVariantConfig {
     MixtureOfN(UninitializedMixtureOfNConfig),
     #[serde(rename = "experimental_chain_of_thought")]
     ChainOfThought(UninitializedChainOfThoughtConfig),
+    #[serde(rename = "experimental_first_of_n")]
+    FirstOfN(UninitializedFirstOfNConfig),
 }
 
 /// Holds extra information used for enriching error messages
@@ -1326,6 +1332,7 @@ impl UninitializedVariantInfo {
             UninitializedVariantConfig::ChainOfThought(params) => {
                 VariantConfig::ChainOfThought(params.load(schemas, error_context)?)
             }
+            UninitializedVariantConfig::FirstOfN(params) => VariantConfig::FirstOfN(params.load()?),
         };
         Ok(VariantInfo {
             inner,
