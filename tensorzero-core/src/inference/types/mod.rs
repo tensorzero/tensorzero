@@ -684,7 +684,7 @@ pub struct ModelInferenceResponseWithMetadata {
     pub created: u64,
     pub output: Vec<ContentBlockOutput>,
     pub system: Option<String>,
-    pub input_messages: MessageOrStoredMessage,
+    pub input_messages: RequestMessagesOrBatch,
     pub raw_request: String,
     pub raw_response: String,
     pub usage: Usage,
@@ -696,9 +696,12 @@ pub struct ModelInferenceResponseWithMetadata {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum MessageOrStoredMessage {
+pub enum RequestMessagesOrBatch {
+    /// The typical case - we have normal `RequestMessages` from client input
     Message(Vec<RequestMessage>),
-    StoredMessage(Vec<StoredRequestMessage>),
+    /// We've deserialized `StoredRequestMessage` from a batch inference row in the databsae
+    /// This is only used when constructing our final result in `write_completed_batch_inference`
+    BatchInput(Vec<StoredRequestMessage>),
 }
 
 impl ModelInferenceResponseWithMetadata {
@@ -1061,7 +1064,7 @@ impl ModelInferenceResponseWithMetadata {
             created: model_inference_response.created,
             output: model_inference_response.output,
             system: model_inference_response.system,
-            input_messages: MessageOrStoredMessage::Message(
+            input_messages: RequestMessagesOrBatch::Message(
                 model_inference_response.input_messages,
             ),
             raw_request: model_inference_response.raw_request,
@@ -1124,11 +1127,11 @@ impl ModelInferenceDatabaseInsert {
             cached: result.cached,
             finish_reason: result.finish_reason,
             input_messages: serialize_or_log(&match result.input_messages {
-                MessageOrStoredMessage::Message(input_messages) => input_messages
+                RequestMessagesOrBatch::Message(input_messages) => input_messages
                     .into_iter()
                     .map(RequestMessage::into_stored_message)
                     .collect(),
-                MessageOrStoredMessage::StoredMessage(stored) => stored,
+                RequestMessagesOrBatch::BatchInput(stored) => stored,
             }),
         }
     }

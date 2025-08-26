@@ -24,7 +24,7 @@ use uuid::Uuid;
 use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::config::{Config, ObjectStoreInfo, SchemaData, UninitializedVariantInfo};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
-use crate::inference::types::MessageOrStoredMessage;
+use crate::inference::types::RequestMessagesOrBatch;
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;

@@ -30,7 +30,7 @@ use crate::inference::types::extra_body::{FullExtraBodyConfig, UnfilteredInferen
 use crate::inference::types::extra_headers::{
     FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders,
 };
-use crate::inference::types::MessageOrStoredMessage;
+use crate::inference::types::RequestMessagesOrBatch;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::StoredRequestMessage;
 use crate::inference::types::{

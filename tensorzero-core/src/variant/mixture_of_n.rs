@@ -17,7 +17,7 @@ use crate::inference::types::{
 };
 use crate::inference::types::{
     ChatInferenceResultChunk, ContentBlockChatOutput, ContentBlockChunk, InferenceResultChunk,
-    JsonInferenceResultChunk, MessageOrStoredMessage, ResolvedInput, TextChunk, ThoughtChunk,
+    JsonInferenceResultChunk, RequestMessagesOrBatch, ResolvedInput, TextChunk, ThoughtChunk,
     Usage,
 };
 use crate::model::ModelTable;
@@ -294,8 +294,8 @@ pub fn stream_inference_from_non_stream(
         previous_model_inference_results: inference_result.model_inference_results()[1..].to_vec(),
         system: model_inference_result.system.clone(),
         input_messages: match model_inference_result.input_messages.clone() {
-            MessageOrStoredMessage::Message(input_messages) => input_messages,
-            MessageOrStoredMessage::StoredMessage(_) => {
+            RequestMessagesOrBatch::Message(input_messages) => input_messages,
+            RequestMessagesOrBatch::BatchInput(_) => {
                 return Err(Error::new(ErrorDetails::InternalError {
                     message: "Unexpected non-streaming inference result with stored input messages"
                         .to_string(),

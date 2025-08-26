@@ -31,7 +31,7 @@ use crate::inference::types::batch::{
 };
 use crate::inference::types::{batch::StartBatchModelInferenceWithMetadata, Input};
 use crate::inference::types::{
-    current_timestamp, ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, FinishReason, InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput, Latency, MessageOrStoredMessage, ModelInferenceResponseWithMetadata, Usage
+    current_timestamp, ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, FinishReason, InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput, Latency, RequestMessagesOrBatch, ModelInferenceResponseWithMetadata, Usage
 };
 use crate::inference::types::{RequestMessage, ResolvedInput};
 use crate::jsonschema_util::DynamicJSONSchema;
@@ -838,7 +838,7 @@ pub async fn write_completed_batch_inference<'a>(
             created: current_timestamp(),
             output: output.clone(),
             system: system.map(Cow::into_owned),
-            input_messages: MessageOrStoredMessage::StoredMessage(input_messages),
+            input_messages: RequestMessagesOrBatch::BatchInput(input_messages),
             raw_request: raw_request.into_owned(),
             raw_response,
             usage,
