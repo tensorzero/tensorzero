@@ -39,8 +39,6 @@ echo "BUILDKITE_ANALYTICS_TOKEN=$BUILDKITE_ANALYTICS_TOKEN" >> ui/fixtures/.env
   echo "TENSORZERO_E2E_TESTS_TAG=ci-sha-$SHORT_HASH"
   echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=ci-sha-$SHORT_HASH"
   # UI container env vars for optimizer config
-  echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/"
-  echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/"
   echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account"
   echo "VITE_TENSORZERO_FORCE_CACHE_ON=1"
 } >> ui/fixtures/.env
