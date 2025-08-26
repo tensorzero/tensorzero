@@ -12,3 +12,7 @@ dependencies = [
     "toml",
     "dotenv"
 ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

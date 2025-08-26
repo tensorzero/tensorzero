@@ -1,23 +1,53 @@
 [project]
-name = "tensorzero-recipes"
+name = "tensorzero-recipes-workspace"
 version = "0.0.0"
 requires-python = ">=3.9"
-dependencies = [
-    "clickhouse-connect",
-    "pandas",
-    "tensorzero",
-    "tiktoken",
-    "pydantic",
-    "toml",
-]
 
 [tool.uv.workspace]
-members = ["tensorzero-recipes"]
-
-[dependency-groups]
-dev = [
-    "pandas-stubs",
-    "pyright",
-    "pytest-asyncio",
-    "pytest",
+members = [
+    "dicl",
+    "mipro", 
+    "dpo/openai",
+    "supervised_fine_tuning/openai",
+    "supervised_fine_tuning/together",
+    "supervised_fine_tuning/fireworks",
+    "supervised_fine_tuning/gcp-vertex-gemini",
+    "supervised_fine_tuning/unsloth",
 ]
+
+# Shared dependencies across all recipes
+[tool.uv.dependencies]
+tensorzero = "2025.8.3"
+clickhouse-connect = "*"
+pandas = "*"
+ipykernel = "*"
+toml = "*"
+pydantic = "*"
+tiktoken = "*"
+openai = "*"
+numpy = "*"
+minijinja = "*"
+notebook = "*"
+tqdm = "*"
+optuna = "*"
+seaborn = "*"
+exceptiongroup = "*"
+requests = "*"
+together = "*"
+dotenv = "*"
+google-cloud-aiplatform = "*"
+ipywidgets = "*"
+unsloth = "2025.8.1"
+
+# Development dependencies
+[tool.uv.dependencies.pandas-stubs]
+optional = true
+
+[tool.uv.dependencies.pyright]
+optional = true
+
+[tool.uv.dependencies.pytest-asyncio]
+optional = true
+
+[tool.uv.dependencies.pytest]
+optional = true

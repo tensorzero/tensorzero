@@ -5,10 +5,14 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "clickhouse-connect",
-    "ipykernel",
+    "ipykernel", 
     "openai",
     "pandas",
     "tensorzero",
     "toml",
     "tqdm",
 ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

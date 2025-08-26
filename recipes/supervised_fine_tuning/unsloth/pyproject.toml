@@ -15,3 +15,7 @@ dependencies = [
     "unsloth==2025.8.1",
     "tensorzero>=2025.8.0",
 ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
