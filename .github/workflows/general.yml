@@ -105,25 +105,17 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          version: latest
+          run_install: false
+          
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
           node-version: "22.9.0"
           cache: "pnpm"
-
-      - name: Install pnpm
-        run: |
-          for attempt in 1 2 3; do
-            if npm install -g pnpm@latest; then
-              break
-            fi
-            if [ $attempt -eq 3 ]; then
-              echo "Failed to install pnpm after 3 attempts"
-              exit 1
-            fi
-            sleep $((10 * attempt))
-          done
-        shell: bash
 
       - name: Install dependencies
         working-directory: internal/tensorzero-node

@@ -77,25 +77,18 @@ jobs:
       - name: Set DNS
         run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          version: latest
+          run_install: false
+
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "22.9.0"
           cache: "pnpm"
-
-      - name: Setup `pnpm`
-        run: |
-          for attempt in 1 2 3; do
-            if npm install -g pnpm@latest; then
-              break
-            fi
-            if [ $attempt -eq 3 ]; then
-              echo "Failed to install pnpm after 3 attempts"
-              exit 1
-            fi
-            sleep $((10 * attempt))
-          done
-        shell: bash
 
       - name: Install `pnpm` dependencies
         run: pnpm install --frozen-lockfile
