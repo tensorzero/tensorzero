@@ -1,15 +1,21 @@
-FROM mcr.microsoft.com/playwright:v1.50.0-noble
+FROM mcr.microsoft.com/playwright:v1.55.0-noble
 
 # Use the official Playwright image; just install pnpm and run tests.
 RUN npm install -g pnpm
 
 WORKDIR /app
 
-# Copy repository contents (simple and reliable for e2e tests)
-COPY . .
+# Copy workspace configuration
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 
-# Install workspace dependencies
-RUN pnpm install --frozen-lockfile
+# Copy only UI package (tests and playwright config)
+COPY ui/ ui/
+
+# Install only devDependencies needed for testing
+RUN cd ui && pnpm install --frozen-lockfile --dev --ignore-scripts
+
+# Install Playwright browsers
+RUN cd ui && pnpm exec playwright install chromium
 
 # Default command: run UI e2e tests
 ENTRYPOINT ["pnpm", "ui:test:e2e"]
