@@ -297,7 +297,7 @@ pub fn stream_inference_from_non_stream(
             RequestMessagesOrBatch::Message(input_messages) => input_messages,
             RequestMessagesOrBatch::BatchInput(_) => {
                 return Err(Error::new(ErrorDetails::InternalError {
-                    message: "Unexpected non-streaming inference result with stored input messages"
+                    message: format!("Unexpected RequestMessagesOrBatch::BatchInput in model inference result. {IMPOSSIBLE_ERROR_MESSAGE}")
                         .to_string(),
                 }));
             }
@@ -1028,7 +1028,7 @@ mod tests {
             created: 200u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
             usage: Usage {
@@ -1061,7 +1061,7 @@ mod tests {
             created: 201u64,
             output: vec!["Candidate answer 2".to_string().into()],
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Example response 2\"}".to_string(),
             usage: Usage {
@@ -1113,7 +1113,7 @@ mod tests {
             created: 200u64,
             output: vec!["{\"response\": \"Valid JSON response\"}".to_string().into()],
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Valid JSON response\"}".to_string(),
             usage: Usage {
@@ -1148,7 +1148,7 @@ mod tests {
                 .to_string()
                 .into()], // missing closing brace
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Malformed JSON response\"".to_string(), // malformed
             usage: Usage {
@@ -1223,7 +1223,7 @@ mod tests {
             created: 200u64,
             output: vec!["Candidate answer 0".to_string().into()],
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
             usage: Usage {
@@ -1256,7 +1256,7 @@ mod tests {
             created: 201u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt 1\"}".to_string(),
             raw_response: "{\"response\": \"Example response 1\"}".to_string(),
             usage: Usage {
