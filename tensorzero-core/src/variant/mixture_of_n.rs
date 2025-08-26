@@ -17,7 +17,8 @@ use crate::inference::types::{
 };
 use crate::inference::types::{
     ChatInferenceResultChunk, ContentBlockChatOutput, ContentBlockChunk, InferenceResultChunk,
-    JsonInferenceResultChunk, ResolvedInput, TextChunk, ThoughtChunk, Usage,
+    JsonInferenceResultChunk, MessageOrStoredMessage, ResolvedInput, TextChunk, ThoughtChunk,
+    Usage,
 };
 use crate::model::ModelTable;
 use crate::tool::ToolCallChunk;

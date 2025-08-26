@@ -24,6 +24,7 @@ use uuid::Uuid;
 use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::config::{Config, ObjectStoreInfo, SchemaData, UninitializedVariantInfo};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
+use crate::inference::types::MessageOrStoredMessage;
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -130,7 +131,7 @@ struct InferenceMetadata {
     pub raw_request: String,
     pub raw_response: Option<String>,
     pub system: Option<String>,
-    pub input_messages: Vec<RequestMessage>,
+    pub input_messages: MessageOrStoredMessage,
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub tags: HashMap<String, String>,
     pub tool_config: Option<ToolCallConfig>,

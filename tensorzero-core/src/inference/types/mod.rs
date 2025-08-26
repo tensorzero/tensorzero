@@ -684,7 +684,7 @@ pub struct ModelInferenceResponseWithMetadata {
     pub created: u64,
     pub output: Vec<ContentBlockOutput>,
     pub system: Option<String>,
-    pub input_messages: Vec<RequestMessage>,
+    pub input_messages: MessageOrStoredMessage,
     pub raw_request: String,
     pub raw_response: String,
     pub usage: Usage,
@@ -693,6 +693,12 @@ pub struct ModelInferenceResponseWithMetadata {
     pub model_name: Arc<str>,
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum MessageOrStoredMessage {
+    Message(Vec<RequestMessage>),
+    StoredMessage(Vec<StoredRequestMessage>),
 }
 
 impl ModelInferenceResponseWithMetadata {
@@ -1055,7 +1061,9 @@ impl ModelInferenceResponseWithMetadata {
             created: model_inference_response.created,
             output: model_inference_response.output,
             system: model_inference_response.system,
-            input_messages: model_inference_response.input_messages,
+            input_messages: MessageOrStoredMessage::Message(
+                model_inference_response.input_messages,
+            ),
             raw_request: model_inference_response.raw_request,
             raw_response: model_inference_response.raw_response,
             usage: model_inference_response.usage,
@@ -1562,7 +1570,7 @@ pub struct CollectChunksArgs<'a, 'b> {
     pub raw_response: Option<String>,
     pub inference_params: InferenceParams,
     pub system: Option<String>,
-    pub input_messages: Vec<RequestMessage>,
+    pub input_messages: MessageOrStoredMessage,
     pub function_name: &'b str,
     pub variant_name: &'b str,
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
