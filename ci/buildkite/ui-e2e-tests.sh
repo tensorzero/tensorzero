@@ -1,18 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-# Cleanup function (always runs on exit)
-cleanup() {
-  echo "==============================================================================="
-  echo "Running cleanup and debug steps..."
-  echo "==============================================================================="
-
-  echo "Printing Docker Compose logs..."
-  docker compose -f ui/fixtures/docker-compose.e2e.ci.yml logs -t || true
-}
-
-# Set trap to run cleanup on any exit (success or failure)
-trap cleanup EXIT
+# Common CI trap helper
+source ci/buildkite/utils/trap-helpers.sh
+# Print logs from the E2E compose stack on exit
+tz_setup_compose_logs_trap ui/fixtures/docker-compose.e2e.ci.yml
 
 # Set up Buildkite test analytics collection
 export BUILDKITE_ANALYTICS_TOKEN=$(buildkite-agent secret get UI_E2E_ANALYTICS_ACCESS_TOKEN)
@@ -76,9 +68,16 @@ echo "Pulled Docker images"
 # ------------------------------------------------------------------------------
 # Run e2e tests
 # ------------------------------------------------------------------------------
+# Ensure artifact output directories exist on host (mounted into container)
+mkdir -p ui/fixtures/test-results ui/fixtures/playwright-report
+
 # The --grep-invert "@credentials" excludes tests that require real credentials
 docker compose -f ui/fixtures/docker-compose.e2e.ci.yml run \
   --rm \
   -e TENSORZERO_CI=1 \
   e2e-tests \
   --grep-invert "@credentials"
+
+echo "E2E test artifacts (if generated) are available at:"
+echo " - ui/fixtures/test-results/"
+echo " - ui/fixtures/playwright-report/"

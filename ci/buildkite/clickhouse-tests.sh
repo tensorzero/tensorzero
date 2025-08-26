@@ -1,18 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-# Cleanup function (always runs on exit)
-cleanup() {
-  echo "==============================================================================="
-  echo "Running cleanup and debug steps..."
-  echo "==============================================================================="
-
-  echo "Printing Docker Compose logs..."
-  docker compose -f tensorzero-core/tests/e2e/docker-compose.clickhouse.yml logs -t || true
-}
-
-# Set trap to run cleanup on any exit (success or failure)
-trap cleanup EXIT
+# Common CI trap helper
+source ci/buildkite/utils/trap-helpers.sh
+# Print logs from the ClickHouse compose stack on exit
+tz_setup_compose_logs_trap tensorzero-core/tests/e2e/docker-compose.clickhouse.yml
 
 # Ensure required ClickHouse version variable is set
 if [ -z "${TENSORZERO_CLICKHOUSE_VERSION:-}" ]; then

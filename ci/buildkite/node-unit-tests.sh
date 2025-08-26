@@ -1,18 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-# Cleanup function (always runs on exit)
-cleanup() {
-  echo "==============================================================================="
-  echo "Running cleanup and debug steps..."
-  echo "==============================================================================="
-
-  echo "Printing Docker Compose logs..."
-  docker compose -f ui/fixtures/docker-compose.unit.yml logs -t || true
-}
-
-# Set trap to run cleanup on any exit (success or failure)
-trap cleanup EXIT
+# Common CI trap helper
+source ci/buildkite/utils/trap-helpers.sh
+# Print logs from the unit test compose stack on exit
+tz_setup_compose_logs_trap ui/fixtures/docker-compose.unit.yml
 
 # Set up Buildkite test analytics collection
 export BUILDKITE_ANALYTICS_TOKEN=$(buildkite-agent secret get NODE_UNIT_ANALYTICS_ACCESS_TOKEN)

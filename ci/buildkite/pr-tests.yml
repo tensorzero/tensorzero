@@ -46,6 +46,9 @@ steps:
       - "build-mock-inference-provider-container"
       - "build-ui-container"
       - "build-ui-e2e-tests-container"
+    artifact_paths:
+      - "ui/fixtures/test-results/**/*"
+      - "ui/fixtures/playwright-report/**/*"
 
   - label: "ClickHouse Tests (version {{matrix.clickhouse_version}})"
     command: ./ci/buildkite/clickhouse-tests.sh
