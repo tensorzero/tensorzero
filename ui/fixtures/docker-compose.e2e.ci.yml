@@ -99,7 +99,7 @@ services:
       start_period: 300s # Give the script time to start
 
   ui:
-    image: tensorzero/ui:${TENSORZERO_UI_TAG:-latest}
+    image: tensorzero/ui-dev:${TENSORZERO_UI_TAG:-latest}
     build:
       context: ../..
       dockerfile: ui/Dockerfile
