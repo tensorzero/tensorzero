@@ -411,13 +411,7 @@ jobs:
       matrix:
         # Only include replicated: true when running in merge queue
         replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
-        clickhouse_version:
-          - tag: "24.12-alpine"
-            prefix: "24.12"
-            allow_failure: false
-          - tag: "latest-alpine"
-            prefix: ""
-            allow_failure: false
+        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"24.12-alpine","prefix":"24.12","allow_failure":false},{"tag":"latest-alpine","prefix":"","allow_failure":false}]') || fromJSON('[{"tag":"latest-alpine","prefix":"","allow_failure":false}]') }}
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
