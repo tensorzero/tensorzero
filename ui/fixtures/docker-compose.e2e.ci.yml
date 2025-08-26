@@ -127,6 +127,8 @@ services:
         condition: service_healthy
       clickhouse:
         condition: service_healthy
+      mock-inference-provider:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--spider", "--tries=1", "http://localhost:4000"]
       start_period: 30s
