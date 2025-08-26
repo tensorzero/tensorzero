@@ -42,9 +42,6 @@ WORKDIR /app
 COPY . ./
 RUN rm -rf target
 
-# Ensure nextest config is available (may not be copied with COPY . ./)
-COPY .config/nextest.toml .config/nextest.toml
-
 # Copy only the test archive instead of entire target directory
 COPY --from=build-env /build/tests.tar.zst /app/tests.tar.zst
 
@@ -54,5 +51,5 @@ RUN cargo binstall -y cargo-nextest --secure
 # Set CI environment variable
 ENV CI=true
 
-# Set the entrypoint to run tests from archive with explicit config file and clickhouse profile
-ENTRYPOINT ["cargo", "nextest", "run", "--archive-file", "tests.tar.zst", "--workspace-remap", "/app", "--config-file", ".config/nextest.toml", "--profile", "clickhouse"]
+# Set the entrypoint to run tests from archive with absolute config file path and clickhouse profile
+ENTRYPOINT ["cargo", "nextest", "run", "--archive-file", "tests.tar.zst", "--workspace-remap", "/app", "--config-file", "/app/.config/nextest.toml", "--profile", "clickhouse"]
