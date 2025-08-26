@@ -165,9 +165,9 @@ services:
       # Mount config if tests need to read it at runtime
       - ./config:/app/ui/fixtures/config:ro
       # Optional: mount test results output
-      - ./test-results:/app/test-results
+      - ./test-results:/app/ui/test-results
       # Mount playwright report output
-      - ./playwright-report:/app/playwright-report
+      - ./playwright-report:/app/ui/playwright-report
     depends_on:
       ui:
         condition: service_healthy

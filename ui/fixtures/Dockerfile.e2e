@@ -1,64 +1,15 @@
-# ========== base ==========
+FROM mcr.microsoft.com/playwright:v1.50.0-noble
 
-FROM node:22-bookworm-slim AS base
-
+# Use the official Playwright image; just install pnpm and run tests.
 RUN npm install -g pnpm
-
-# ========== package-jsons-layer ==========
-
-FROM base AS package-jsons-layer
-WORKDIR /src
-COPY . .
-
-# Archive only package.json and pnpm-lock.yaml recursively, skipping .venv/ and node_modules and .vite
-# pnpm needs these files for the workspace to work
-RUN find . -type d \( -name .venv -o -name node_modules -o -name .vite \) -prune -false -o \
-    -type f \( -name package.json -o -name pnpm-lock.yaml -o -name pnpm-workspace.yaml \) \
-    -exec tar --transform='s|^\./||' --no-recursion -rf /tmp/packages.tar {} \;
-
-# ========== tensorzero-node-build-env ==========
-
-FROM rust:1.88.0 AS tensorzero-node-build-env
-
-RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
-RUN npm install -g pnpm
-
-COPY . /build
-WORKDIR /build/internal/tensorzero-node
-
-RUN pnpm install --frozen-lockfile && pnpm run build
-
-# ========== test-env ==========
-
-FROM base AS test-env
-
-# Install playwright dependencies for chromium
-RUN apt-get update && \
-    npx playwright install-deps chromium && \
-    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy package files first for better caching
-COPY --from=package-jsons-layer /tmp/packages.tar /tmp/packages.tar
-RUN tar -vxf /tmp/packages.tar -C .
-
-# Install all dependencies (including dev dependencies for testing)
-RUN pnpm install --frozen-lockfile
-
-# Copy tensorzero-node binding
-COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/dist /app/internal/tensorzero-node/dist
-COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/index.cjs /app/internal/tensorzero-node/index.cjs
-COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/*linux*.node /app/internal/tensorzero-node/
-
-# Copy the rest of the code
+# Copy repository contents (simple and reliable for e2e tests)
 COPY . .
 
-# Install playwright browsers (chromium only for e2e tests)
-RUN pnpm --filter=tensorzero-ui exec playwright install chromium
+# Install workspace dependencies
+RUN pnpm install --frozen-lockfile
 
-# Install buildkite-test-collector for test reporting
-RUN pnpm add -D -w buildkite-test-collector
-
-# Set the entrypoint to run UI e2e tests
+# Default command: run UI e2e tests
 ENTRYPOINT ["pnpm", "ui:test:e2e"]
