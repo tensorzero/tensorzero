@@ -33,6 +33,10 @@ steps:
     command: bash ./ci/buildkite/build-provider-proxy-cache-container.sh
     key: "build-provider-proxy-cache-container"
 
+  - label: "Modal Service Warmup"
+    command: bash ./ci/buildkite/modal-warmup.sh
+    key: "modal-warmup"
+
   - label: ":rust: Rust Unit Tests"
     command: bash ./ci/buildkite/rust-unit-tests.sh
     plugins:
@@ -78,3 +82,4 @@ steps:
     depends_on:
       - "build-gateway-container"
       - "build-mock-inference-provider-container"
+      - "modal-warmup"
