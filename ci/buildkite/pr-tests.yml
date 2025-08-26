@@ -3,6 +3,10 @@ steps:
     command: bash ./ci/buildkite/build-gateway-container.sh
     key: "build-gateway-container"
 
+  - label: "Build Gateway E2E Container"
+    command: bash ./ci/buildkite/build-gateway-e2e-container.sh
+    key: "build-gateway-e2e-container"
+
   - label: "Build Mock Inference Provider Container"
     command: bash ./ci/buildkite/build-mock-inference-provider-container.sh
     key: "build-mock-inference-provider-container"

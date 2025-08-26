@@ -65,19 +65,21 @@ services:
       - "5778:5778"
       - "9411:9411"
 
-  # This is not a gateway to use but rather one that just sets up migrations for the ClickHouse db
   gateway:
-    image: tensorzero/gateway-dev:${TENSORZERO_GATEWAY_TAG:-latest}
+    image: tensorzero/gateway-e2e:${TENSORZERO_GATEWAY_TAG:-latest}
     build:
       context: ../../..
-      dockerfile: gateway/Dockerfile
+      dockerfile: tensorzero-core/tests/e2e/Dockerfile.gateway.e2e
       target: gateway
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
+    command: [--config-file, tensorzero-core/tests/e2e/tensorzero.toml]
+    volumes:
+      # Mount the e2e directory so the config path exists inside the container
+      - ./:/app/tensorzero-core/tests/e2e:ro
     depends_on:
       clickhouse:
         condition: service_healthy
-    command: ["--default-config"]
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
     healthcheck:
@@ -97,7 +99,7 @@ services:
   clickhouse-tests:
     image: tensorzero/clickhouse-tests:${TENSORZERO_CLICKHOUSE_TESTS_TAG:-latest}
     build:
-      context: ../../.. # monorepo root
+      context: ../../..
       dockerfile: tensorzero-core/tests/e2e/Dockerfile.clickhouse
     environment:
       # Test environment variables
