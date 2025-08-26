@@ -21,6 +21,13 @@ steps:
     command: bash ./ci/buildkite/build-ui-e2e-tests-container.sh
     key: "build-ui-e2e-tests-container"
 
+  - label: ":rust: Rust Unit Tests"
+    command: bash ./ci/buildkite/rust-unit-tests.sh
+    plugins:
+      - docker:
+          image: "rust"
+          mount-buildkite-agent: true
+
   - label: ":node: Node.js Tests"
     command: ./ci/buildkite/node-unit-tests.sh
     depends_on:
