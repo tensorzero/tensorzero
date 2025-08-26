@@ -92,7 +92,7 @@ impl Migration for Migration0035<'_> {
             ))
             .await?;
         // Create the materialized view for the CumulativeUsage table from ModelInference
-        // If we are not doing a clean start, we need to add a where clause ot the view to only include rows that have been created
+        // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created
         // after the view_timestamp
         let view_where_clause = if clean_start {
             String::new()
