@@ -22,20 +22,20 @@ Please let us know and we'll try to tackle it — not just for the specific case
 You can use the `extra_body` field to override the request body that TensorZero sends to model providers.
 
 You can set `extra_body` on a variant configuration block, a model provider configuration block, or at inference time.
-See [Configuration Reference](/docs/gateway/configuration-reference/) and [Inference API Reference](/docs/gateway/api-reference/inference/) for more details.
+See [Configuration Reference](/gateway/configuration-reference/) and [Inference API Reference](/gateway/api-reference/inference/) for more details.
 
 ### `extra_headers`
 
 You can use the `extra_headers` field to override the request headers that TensorZero sends to model providers.
 
 You can set `extra_headers` on a variant configuration block, a model provider configuration block, or at inference time.
-See [Configuration Reference](/docs/gateway/configuration-reference/) and [Inference API Reference](/docs/gateway/api-reference/inference/) for more details.
+See [Configuration Reference](/gateway/configuration-reference/) and [Inference API Reference](/gateway/api-reference/inference/) for more details.
 
 ### `include_original_response`
 
 If you enable this feature while running inference, the gateway will return the original response from the model provider along with the TensorZero response.
 
-See [Inference API Reference](/docs/gateway/api-reference/inference/) for more details.
+See [Inference API Reference](/gateway/api-reference/inference/) for more details.
 
 ### TensorZero Data
 
@@ -44,7 +44,7 @@ TensorZero stores all its data on your own ClickHouse database.
 You can query this data directly by running SQL queries against your ClickHouse instance.
 If you're feeling particularly adventurous, you can also write to ClickHouse directly (though you should be careful when upgrading your TensorZero deployment to account for any database migrations).
 
-See [Data model](/docs/gateway/data-model/) for more details.
+See [Data model](/gateway/data-model/) for more details.
 
 ## Example: Anthropic Computer Use
 
