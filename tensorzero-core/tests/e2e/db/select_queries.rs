@@ -18,12 +18,77 @@ async fn test_clickhouse_query_model_usage() {
     for usage in &model_usage {
         println!("{usage:?}");
     }
-
     // Basic structure assertions
     assert!(
         !model_usage.is_empty(),
         "Model usage data should not be empty"
     );
+
+    // Test specific data points from May 2025
+    let may_gemini = model_usage.iter().find(|u| {
+        u.period_start.format("%Y-%m-%d").to_string() == "2025-05-01"
+            && u.model_name == "google_ai_studio_gemini::gemini-2.5-flash-preview-04-17"
+    });
+    assert!(
+        may_gemini.is_some(),
+        "Should have gemini-2.5-flash data for May 2025"
+    );
+    let may_gemini = may_gemini.unwrap();
+    assert_eq!(may_gemini.input_tokens, Some(2041389));
+    assert_eq!(may_gemini.output_tokens, Some(6788));
+    assert_eq!(may_gemini.count, Some(120));
+
+    let may_gpt4o_mini = model_usage.iter().find(|u| {
+        u.period_start.format("%Y-%m-%d").to_string() == "2025-05-01"
+            && u.model_name == "openai::gpt-4o-mini-2024-07-18"
+    });
+    assert!(
+        may_gpt4o_mini.is_some(),
+        "Should have gpt-4o-mini data for May 2025"
+    );
+    let may_gpt4o_mini = may_gpt4o_mini.unwrap();
+    assert_eq!(may_gpt4o_mini.input_tokens, Some(983420));
+    assert_eq!(may_gpt4o_mini.output_tokens, Some(149656));
+    assert_eq!(may_gpt4o_mini.count, Some(2933));
+
+    // Test data from April 2025
+    let april_claude = model_usage.iter().find(|u| {
+        u.period_start.format("%Y-%m-%d").to_string() == "2025-04-01"
+            && u.model_name == "anthropic::claude-3-5-haiku-20241022"
+    });
+    assert!(
+        april_claude.is_some(),
+        "Should have claude-3-5-haiku data for April 2025"
+    );
+    let april_claude = april_claude.unwrap();
+    assert_eq!(april_claude.input_tokens, Some(29859));
+    assert_eq!(april_claude.output_tokens, Some(44380));
+    assert_eq!(april_claude.count, Some(310));
+
+    // Test data from March 2025
+    let march_llama = model_usage.iter().find(|u| {
+        u.period_start.format("%Y-%m-%d").to_string() == "2025-03-01"
+            && u.model_name == "llama-3.1-8b-instruct"
+    });
+    assert!(
+        march_llama.is_some(),
+        "Should have llama-3.1-8b data for March 2025"
+    );
+    let march_llama = march_llama.unwrap();
+    assert_eq!(march_llama.input_tokens, Some(6363));
+    assert_eq!(march_llama.output_tokens, Some(1349));
+    assert_eq!(march_llama.count, Some(42));
+
+    // Test edge case from February 2025 (missing token data)
+    let feb_data = model_usage.iter().find(|u| {
+        u.period_start.format("%Y-%m-%d").to_string() == "2025-02-01"
+            && u.model_name == "openai::gpt-4o-mini-2024-07-18"
+    });
+    if let Some(feb_entry) = feb_data {
+        assert_eq!(feb_entry.input_tokens, None);
+        assert_eq!(feb_entry.output_tokens, None);
+        assert_eq!(feb_entry.count, Some(1));
+    }
 
     // Should have data for 3 (or 4, from rollover) months as requested
     let unique_periods: std::collections::HashSet<_> =
@@ -174,12 +239,25 @@ async fn test_clickhouse_query_model_usage_daily() {
     for usage in &model_usage {
         println!("{usage:?}");
     }
-
     // Basic structure assertions
     assert!(
         !model_usage.is_empty(),
         "Daily model usage data should not be empty"
     );
+
+    // Test specific daily data point
+    let may_23_data = model_usage.iter().find(|u| {
+        u.period_start.format("%Y-%m-%d").to_string() == "2025-05-23"
+            && u.model_name == "openai::gpt-4o-mini"
+    });
+    assert!(
+        may_23_data.is_some(),
+        "Should have gpt-4o-mini data for May 23, 2025"
+    );
+    let may_23_data = may_23_data.unwrap();
+    assert_eq!(may_23_data.input_tokens, Some(17015));
+    assert_eq!(may_23_data.output_tokens, Some(113));
+    assert_eq!(may_23_data.count, Some(1));
 
     // Should have data for up to 7 days as requested
     let unique_periods: std::collections::HashSet<_> =
@@ -294,11 +372,37 @@ async fn test_clickhouse_model_latency_day() {
     for latency in &model_latency_data {
         println!("Model latency datapoint: {latency:?}");
     }
-
     // Basic structure assertions
     assert!(
         !model_latency_data.is_empty(),
         "Model latency data should not be empty"
+    );
+
+    // Test specific latency data point
+    let gpt4o_mini_latency = model_latency_data
+        .iter()
+        .find(|l| l.model_name == "openai::gpt-4o-mini");
+    assert!(
+        gpt4o_mini_latency.is_some(),
+        "Should have latency data for gpt-4o-mini"
+    );
+    let gpt4o_mini_latency = gpt4o_mini_latency.unwrap();
+    assert_eq!(gpt4o_mini_latency.count, 1);
+    // Check that all response time quantiles are 3866.0 for this single data point
+    assert!(
+        gpt4o_mini_latency
+            .response_time_ms_quantiles
+            .iter()
+            .all(|&q| q == Some(3866.0)),
+        "All quantiles should be 3866.0 for single data point"
+    );
+    // Check that TTFT quantiles are None (not available for this model/request)
+    assert!(
+        gpt4o_mini_latency
+            .ttft_ms_quantiles
+            .iter()
+            .all(|&q| q.is_none()),
+        "All TTFT quantiles should be None"
     );
 
     // Helper function to find quantile indices
@@ -501,12 +605,47 @@ async fn test_clickhouse_model_latency_cumulative() {
     for latency in &model_latency_data {
         println!("Model latency cumulative datapoint: {latency:?}");
     }
-
     // Basic structure assertions
     assert!(
         !model_latency_data.is_empty(),
         "Cumulative model latency data should not be empty"
     );
+
+    // Test specific cumulative latency data
+    let claude_haiku_latency = model_latency_data
+        .iter()
+        .find(|l| l.model_name == "anthropic::claude-3-5-haiku-20241022");
+    assert!(
+        claude_haiku_latency.is_some(),
+        "Should have cumulative latency data for claude-3-5-haiku"
+    );
+    let claude_haiku_latency = claude_haiku_latency.unwrap();
+    assert_eq!(claude_haiku_latency.count, 461);
+    // Check P50 response time (index 35 based on QUANTILES array)
+    assert_eq!(
+        claude_haiku_latency.response_time_ms_quantiles[35],
+        Some(2825.6714)
+    );
+
+    let llama_latency = model_latency_data
+        .iter()
+        .find(|l| l.model_name == "llama-3.1-8b-instruct");
+    assert!(
+        llama_latency.is_some(),
+        "Should have cumulative latency data for llama"
+    );
+    let llama_latency = llama_latency.unwrap();
+    assert_eq!(llama_latency.count, 122);
+
+    let gemini_latency = model_latency_data
+        .iter()
+        .find(|l| l.model_name == "google_ai_studio_gemini::gemini-2.5-flash-preview-04-17");
+    assert!(
+        gemini_latency.is_some(),
+        "Should have cumulative latency data for gemini"
+    );
+    let gemini_latency = gemini_latency.unwrap();
+    assert_eq!(gemini_latency.count, 120);
 
     // Helper function to find quantile indices
     // P50 = 0.50, P90 = 0.90, P99 = 0.99
