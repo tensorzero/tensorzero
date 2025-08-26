@@ -295,7 +295,7 @@ pub fn stream_inference_from_non_stream(
         system: model_inference_result.system.clone(),
         input_messages: match model_inference_result.input_messages.clone() {
             MessageOrStoredMessage::Message(input_messages) => input_messages,
-            MessageOrStoredMessage::StoredMessage(input_messages) => {
+            MessageOrStoredMessage::StoredMessage(_) => {
                 return Err(Error::new(ErrorDetails::InternalError {
                     message: "Unexpected non-streaming inference result with stored input messages"
                         .to_string(),

@@ -1091,7 +1091,6 @@ impl ModelInferenceDatabaseInsert {
             }
             Latency::Batch => (None, None),
         };
-        let serialized_input_messages = serialize_or_log(&result.input_messages);
         let serialized_output = serialize_or_log(&result.output);
 
         // A usage of 0 indicates that something went wrong, since a model
@@ -1115,7 +1114,6 @@ impl ModelInferenceDatabaseInsert {
             raw_request: result.raw_request,
             raw_response: result.raw_response,
             system: result.system,
-            input_messages: serialized_input_messages,
             output: serialized_output,
             input_tokens,
             output_tokens,
@@ -1125,6 +1123,13 @@ impl ModelInferenceDatabaseInsert {
             model_name: result.model_name.to_string(),
             cached: result.cached,
             finish_reason: result.finish_reason,
+            input_messages: serialize_or_log(&match result.input_messages {
+                MessageOrStoredMessage::Message(input_messages) => input_messages
+                    .into_iter()
+                    .map(RequestMessage::into_stored_message)
+                    .collect(),
+                MessageOrStoredMessage::StoredMessage(stored) => stored,
+            }),
         }
     }
 }
