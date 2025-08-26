@@ -766,7 +766,8 @@ mod tests {
         db::clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::{InferenceCredentials, InferenceIds},
         inference::types::{
-            ChatInferenceResult, FinishReason, JsonInferenceResult, Latency, RequestMessagesOrBatch, Usage
+            ChatInferenceResult, FinishReason, JsonInferenceResult, Latency,
+            RequestMessagesOrBatch, Usage,
         },
         minijinja_util::tests::get_test_template_config,
         model::{ModelConfig, ModelProvider, ProviderConfig},

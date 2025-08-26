@@ -31,7 +31,10 @@ use crate::inference::types::batch::{
 };
 use crate::inference::types::{batch::StartBatchModelInferenceWithMetadata, Input};
 use crate::inference::types::{
-    current_timestamp, ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, FinishReason, InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput, Latency, RequestMessagesOrBatch, ModelInferenceResponseWithMetadata, Usage
+    current_timestamp, ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext,
+    FinishReason, InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert,
+    JsonInferenceOutput, Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch,
+    Usage,
 };
 use crate::inference::types::{RequestMessage, ResolvedInput};
 use crate::jsonschema_util::DynamicJSONSchema;
