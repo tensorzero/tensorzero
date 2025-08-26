@@ -1,3 +1,4 @@
+use crate::inference::types::stored_input::StoredFile;
 use crate::serde_util::{
     deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
 };
@@ -359,6 +360,56 @@ pub enum ContentBlock {
     },
 }
 
+impl ContentBlock {
+    pub fn into_stored_content_block(self) -> StoredContentBlock {
+        match self {
+            ContentBlock::Text(text) => StoredContentBlock::Text(text),
+            ContentBlock::ToolCall(tool_call) => StoredContentBlock::ToolCall(tool_call),
+            ContentBlock::ToolResult(tool_result) => StoredContentBlock::ToolResult(tool_result),
+            ContentBlock::File(file) => StoredContentBlock::File(Box::new(file.into_stored_file())),
+            ContentBlock::Thought(thought) => StoredContentBlock::Thought(thought),
+            ContentBlock::Unknown {
+                data,
+                model_provider_name,
+            } => StoredContentBlock::Unknown {
+                data,
+                model_provider_name,
+            },
+        }
+    }
+}
+
+/// The version of `ContentBlock` that is stored in ClickHouse.
+/// This is almost identical to `ContentBlock`, but without `File` data.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum StoredContentBlock {
+    Text(Text),
+    ToolCall(ToolCall),
+    ToolResult(ToolResult),
+    #[serde(alias = "image")]
+    File(Box<StoredFile>),
+    Thought(Thought),
+    /// Represents an unknown provider-specific content block.
+    /// We pass this along as-is without any validation or transformation.
+    Unknown {
+        /// The underlying content block to be passed to the model provider.
+        data: Value,
+        /// A fully-qualified name specifying when this content block should
+        /// be included in the model provider input.
+        /// E.g `tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body`
+        ///
+        /// If set to `Some`, this is compared against the output of `fully_qualified_name` before invoking
+        /// a model provider, and stripped from the input if it doesn't match.
+        /// If set to `None, then this is passed to all model providers.
+        /// Individual model provider implementation never need to check this field themselves -
+        /// they only need to produce it with the proper `fully_qualified_name` set.
+        model_provider_name: Option<String>,
+    },
+}
+
 /// A helper type for dealing with `ContentBlock::Unknown` in model providers.
 /// This flattens the wrapped `Value` when serializing and deserializing.
 ///
@@ -419,6 +470,29 @@ pub enum ContentBlockChatOutput {
 pub struct RequestMessage {
     pub role: Role,
     pub content: Vec<ContentBlock>,
+}
+
+impl RequestMessage {
+    pub fn into_stored_message(self) -> StoredRequestMessage {
+        StoredRequestMessage {
+            role: self.role,
+            content: self
+                .content
+                .into_iter()
+                .map(ContentBlock::into_stored_content_block)
+                .collect(),
+        }
+    }
+}
+
+/// The message type that we directly store in ClickHouse.
+/// This is almost identical to `RequestMessage`, but without `File` data.
+/// Only the object-storage path is actually stored in clickhouse
+/// The `RequestMessage/StoredRequestMessage` pair is the model-level equivalent
+/// of `ResolvedInput/StoredInput`
+pub struct StoredRequestMessage {
+    pub role: Role,
+    pub content: Vec<StoredContentBlock>,
 }
 
 impl std::fmt::Display for RequestMessage {

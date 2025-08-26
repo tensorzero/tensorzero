@@ -168,13 +168,7 @@ impl ResolvedInputMessageContent {
                 StoredInputMessageContent::Thought(thought)
             }
             ResolvedInputMessageContent::File(file) => {
-                StoredInputMessageContent::File(Box::new(StoredFile {
-                    file: Base64FileMetadata {
-                        url: file.file.url.clone(),
-                        mime_type: file.file.mime_type.clone(),
-                    },
-                    storage_path: file.storage_path.clone(),
-                }))
+                StoredInputMessageContent::File(Box::new(file.into_stored_file()))
             }
             ResolvedInputMessageContent::Unknown {
                 data,
@@ -195,6 +189,24 @@ pub struct FileWithPath {
     #[serde(alias = "image")]
     pub file: Base64File,
     pub storage_path: StoragePath,
+}
+
+impl FileWithPath {
+    pub fn into_stored_file(self) -> StoredFile {
+        let FileWithPath {
+            file:
+                Base64File {
+                    url,
+                    mime_type,
+                    data: _,
+                },
+            storage_path,
+        } = self;
+        StoredFile {
+            file: Base64FileMetadata { url, mime_type },
+            storage_path,
+        }
+    }
 }
 
 impl std::fmt::Display for FileWithPath {
