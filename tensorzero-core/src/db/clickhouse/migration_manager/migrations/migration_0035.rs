@@ -11,11 +11,9 @@ use tokio::time::Duration;
 /// the input tokens would be null iff the output tokens were null.
 /// This caused some extra clickhouse errors to occur when output_tokens were null but the input tokens were not.
 /// We want to make sure that the columns are handled independently.
-/// This PR tears down the old MV and in it's stead initializes a new one that handles the columns independently
+/// This PR tears down the old MV and in its stead initializes a new one that handles the columns independently
 /// with ifNull(.., 0).
-/// We don't need a cutoff since we already backfilled the data here. However, we may lose a small amount of data
-/// for cumulative usage in between the drop and the recreation.
-/// This is acceptable since the CumulativeUsage table is not used by the frontend.
+/// We also drop the underlying table and backfill it to ensure the data is consistent.
 pub struct Migration0035<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
