@@ -24,7 +24,10 @@ const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
     });
 
     const loadingIndicator = (
-      <div className="flex min-h-[8rem] items-center justify-center">
+      <div
+        className="flex min-h-[8rem] items-center justify-center"
+        data-testid="datapoint-playground-output-loading"
+      >
         <Loader2 className="h-8 w-8 animate-spin" aria-hidden />
       </div>
     );
@@ -35,6 +38,7 @@ const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
         variant="ghost"
         size="icon"
         className="absolute top-1 right-1 z-5 cursor-pointer opacity-25 transition-opacity hover:opacity-100"
+        data-testid="datapoint-playground-output-refresh-button"
         onClick={() => query.refetch()}
       >
         <Refresh />
