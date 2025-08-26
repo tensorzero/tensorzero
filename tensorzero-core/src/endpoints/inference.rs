@@ -131,7 +131,7 @@ struct InferenceMetadata {
     pub raw_request: String,
     pub raw_response: Option<String>,
     pub system: Option<String>,
-    pub input_messages: MessageOrStoredMessage,
+    pub input_messages: Vec<RequestMessage>,
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub tags: HashMap<String, String>,
     pub tool_config: Option<ToolCallConfig>,

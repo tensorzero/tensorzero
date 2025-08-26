@@ -293,7 +293,15 @@ pub fn stream_inference_from_non_stream(
         // in case we're doing something like chained best-of-n/mixture-of-n variants.
         previous_model_inference_results: inference_result.model_inference_results()[1..].to_vec(),
         system: model_inference_result.system.clone(),
-        input_messages: model_inference_result.input_messages.clone(),
+        input_messages: match model_inference_result.input_messages.clone() {
+            MessageOrStoredMessage::Message(input_messages) => input_messages,
+            MessageOrStoredMessage::StoredMessage(input_messages) => {
+                return Err(Error::new(ErrorDetails::InternalError {
+                    message: "Unexpected non-streaming inference result with stored input messages"
+                        .to_string(),
+                }));
+            }
+        },
         cached: model_inference_result.cached,
     };
     let stream = make_stream_from_non_stream(inference_result, Some(usage))?;

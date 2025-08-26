@@ -1570,7 +1570,7 @@ pub struct CollectChunksArgs<'a, 'b> {
     pub raw_response: Option<String>,
     pub inference_params: InferenceParams,
     pub system: Option<String>,
-    pub input_messages: MessageOrStoredMessage,
+    pub input_messages: Vec<RequestMessage>,
     pub function_name: &'b str,
     pub variant_name: &'b str,
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
