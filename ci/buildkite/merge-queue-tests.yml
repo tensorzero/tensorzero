@@ -2,14 +2,10 @@ steps:
   - label: "Build Gateway Container"
     command: bash ./ci/buildkite/build-gateway-container.sh
     key: "build-gateway-container"
-    artifact_paths:
-      - gateway-container.tar
 
-  - label: "Build UI Container"
-    command: bash ./ci/buildkite/build-ui-container.sh
-    key: "build-ui-container"
-    artifact_paths:
-      - ui-container.tar
+  - label: "Build Gateway E2E Container"
+    command: bash ./ci/buildkite/build-gateway-e2e-container.sh
+    key: "build-gateway-e2e-container"
 
   - label: "Build Mock Inference Provider Container"
     command: bash ./ci/buildkite/build-mock-inference-provider-container.sh
@@ -17,11 +13,21 @@ steps:
     artifact_paths:
       - mock-inference-provider-container.tar
 
-  - label: "Download S3 Fixtures"
-    command: bash ./ci/buildkite/download-fixtures.sh
-    key: "download-fixtures"
-    artifact_paths:
-      - fixtures.tar.gz
+  - label: "Build Node Unit Tests Container"
+    command: bash ./ci/buildkite/build-node-unit-tests-container.sh
+    key: "build-node-unit-tests-container"
+
+  - label: "Build UI Container"
+    command: bash ./ci/buildkite/build-ui-container.sh
+    key: "build-ui-container"
+
+  - label: "Build UI E2E Tests Container"
+    command: bash ./ci/buildkite/build-ui-e2e-tests-container.sh
+    key: "build-ui-e2e-tests-container"
+
+  - label: "Build ClickHouse Tests Container"
+    command: bash ./ci/buildkite/build-clickhouse-tests.sh
+    key: "build-clickhouse-tests-container"
 
   - label: ":rust: Rust Unit Tests"
     command: bash ./ci/buildkite/rust-unit-tests.sh
@@ -32,31 +38,36 @@ steps:
           propagate-environment: true
 
   - label: ":node: Node.js Tests"
-    # command: bash ./ci/buildkite/node-unit-tests.sh
-    command: bash ./ci/buildkite/node-unit-tests.sh
-    depends_on: "build-gateway-container"
-
-  - label: "UI E2E Tests (without LLM credentials)"
-    command: bash ./ci/buildkite/ui-e2e-tests.sh
+    command: ./ci/buildkite/node-unit-tests.sh
     depends_on:
-      - "build-ui-container"
+      - "build-gateway-container"
+      - "build-node-unit-tests-container"
+
+  - label: ":playwright: UI E2E Tests (without LLM credentials)"
+    command: |
+      ./ci/buildkite/ui-e2e-tests.sh
+      cd ui/fixtures && zip -r ui-e2e-artifacts.zip test-results playwright-report
+    depends_on:
       - "build-gateway-container"
       - "build-mock-inference-provider-container"
+      - "build-ui-container"
+      - "build-ui-e2e-tests-container"
+    artifact_paths:
+      - "ui/fixtures/ui-e2e-artifacts.zip"
 
   - label: "ClickHouse Tests (version {{matrix.clickhouse_version}})"
-    command: bash ./ci/buildkite/clickhouse-tests.sh
+    command: ./ci/buildkite/clickhouse-tests.sh
     matrix:
       setup:
-        # TODO: do replicated & Cloud (latter will need some thought bc concurrency limit
         clickhouse_version:
           - "24.12-alpine"
           - "latest-alpine"
     env:
       TENSORZERO_CLICKHOUSE_VERSION: "{{matrix.clickhouse_version}}"
     depends_on:
-      - "download-fixtures"
-      - "build-gateway-container"
+      - "build-gateway-e2e-container"
       - "build-mock-inference-provider-container"
+      - "build-clickhouse-tests-container"
 
   - label: "Live Tests"
     command: bash ./ci/buildkite/live-tests.sh
