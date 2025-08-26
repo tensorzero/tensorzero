@@ -165,6 +165,7 @@ export * from "./UninitializedInputWrappers";
 export * from "./UninitializedMixtureOfNConfig";
 export * from "./UninitializedModelConfig";
 export * from "./UninitializedModelProvider";
+export * from "./UninitializedObservabilityConfig";
 export * from "./UninitializedOpenAISFTConfig";
 export * from "./UninitializedOptimizerConfig";
 export * from "./UninitializedOptimizerInfo";

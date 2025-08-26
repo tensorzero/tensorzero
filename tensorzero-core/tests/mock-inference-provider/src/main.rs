@@ -404,7 +404,6 @@ async fn completions_handler(Json(params): Json<serde_json::Value>) -> Response<
             .keep_alive(axum::response::sse::KeepAlive::new())
             .into_response()
     } else {
-        // TODO (#82): map fixtures to functions in config
         let response = if function_call {
             include_str!("../fixtures/openai/chat_completions_function_example.json")
         } else if json_mode {
@@ -424,7 +423,6 @@ fn create_stream(
     function_call: bool,
 ) -> impl Stream<Item = Result<Event, axum::Error>> {
     try_stream! {
-        // TODO (#82): map fixtures to functions in config
         let lines = if function_call {
             include_str!("../fixtures/openai/chat_completions_streaming_function_example.jsonl")
         } else if json_mode {
