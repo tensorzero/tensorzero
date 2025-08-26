@@ -699,7 +699,7 @@ pub struct ModelInferenceResponseWithMetadata {
 /// that are used by batch inferences (where we read `StoredRequestMessage` from the database)
 /// and normal inference code (where we pass around `RequestMessage`s in order to strip out image data
 /// from our `raw_request` before writing to ClickHouse).
-/// 
+///
 /// This is separate from any 're-resolution' logic (converting from a `StoredRequestMessage`
 /// back to a `RequestMessage` by looking up image data from the object store).
 /// We don't currently have re-resolution implemented in Rust, but we'll need to do so when
