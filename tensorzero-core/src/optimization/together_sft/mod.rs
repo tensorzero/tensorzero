@@ -1,9 +1,7 @@
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
 #[cfg(feature = "pyo3")]
-use pyo3::exceptions::PyValueError;
-#[cfg(feature = "pyo3")]
-use pyo3::prelude::*;
+use pyo3::{conversion::FromPyObject, exceptions::PyValueError, prelude::*, pybacked::PyBackedStr};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -35,6 +33,90 @@ use url::Url;
 
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 
+// Default functions for hyperparameters
+fn default_n_epochs() -> u32 {
+    1
+}
+
+fn default_n_checkpoints() -> u32 {
+    1
+}
+
+fn default_learning_rate() -> f64 {
+    0.00001
+}
+
+fn default_warmup_ratio() -> f64 {
+    0.0
+}
+
+fn default_max_grad_norm() -> f64 {
+    1.0
+}
+
+fn default_weight_decay() -> f64 {
+    0.0
+}
+
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(test, ts(export))]
+#[serde(rename_all = "lowercase")]
+pub enum TogetherBatchSizeDescription {
+    Max,
+}
+
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(test, ts(export))]
+#[serde(untagged)]
+pub enum TogetherBatchSize {
+    Number(u32),
+    Description(TogetherBatchSizeDescription),
+}
+
+impl Default for TogetherBatchSize {
+    fn default() -> Self {
+        Self::Description(TogetherBatchSizeDescription::Max)
+    }
+}
+
+#[cfg(feature = "pyo3")]
+impl<'py> FromPyObject<'py> for TogetherBatchSize {
+    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+        // Try integer first
+        if let Ok(v) = ob.extract::<i128>() {
+            if v < 0 {
+                return Err(PyValueError::new_err(
+                    "Expected non-negative integer or 'max'",
+                ));
+            }
+            if v > u32::MAX as i128 {
+                return Err(PyValueError::new_err("Integer too large for u32"));
+            }
+            return Ok(TogetherBatchSize::Number(v as u32));
+        }
+
+        // Then try string via PyBackedStr
+        if let Ok(s) = ob.extract::<PyBackedStr>() {
+            let s_ref: &str = s.as_ref(); // <-- explicit type fixes E0282
+            if s_ref.eq_ignore_ascii_case("max") {
+                Ok(TogetherBatchSize::Description(
+                    TogetherBatchSizeDescription::Max,
+                ))
+            } else {
+                Err(PyValueError::new_err(
+                    "Expected non-negative integer or 'max'",
+                ))
+            }
+        } else {
+            Err(PyValueError::new_err(
+                "Expected non-negative integer or 'max'",
+            ))
+        }
+    }
+}
+
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(test, ts(export))]
@@ -46,14 +128,14 @@ pub struct TogetherSFTConfig {
     pub credential_location: Option<CredentialLocation>,
     pub api_base: Url,
     // Hyperparameters
-    pub n_epochs: Option<u32>,
-    pub n_checkpoints: Option<u32>,
-    pub n_evals: Option<u32>,
-    pub batch_size: Option<u32>,
-    pub learning_rate: Option<f64>,
-    pub warmup_ratio: Option<f64>,
-    pub max_grad_norm: Option<f64>,
-    pub weight_decay: Option<f64>,
+    pub n_epochs: u32,
+    pub n_checkpoints: u32,
+    pub n_evals: Option<u32>, // Keep as Option due to conditional logic
+    pub batch_size: TogetherBatchSize,
+    pub learning_rate: f64,
+    pub warmup_ratio: f64,
+    pub max_grad_norm: f64,
+    pub weight_decay: f64,
     pub suffix: Option<String>,
     // Learning rate scheduler
     pub lr_scheduler: TogetherLRScheduler,
@@ -104,14 +186,21 @@ pub struct UninitializedTogetherSFTConfig {
     pub credentials: Option<CredentialLocation>,
     pub api_base: Option<Url>,
     // Hyperparameters
-    pub n_epochs: Option<u32>,
-    pub n_checkpoints: Option<u32>,
-    pub n_evals: Option<u32>,
-    pub batch_size: Option<u32>,
-    pub learning_rate: Option<f64>,
-    pub warmup_ratio: Option<f64>,
-    pub max_grad_norm: Option<f64>,
-    pub weight_decay: Option<f64>,
+    #[serde(default = "default_n_epochs")]
+    pub n_epochs: u32,
+    #[serde(default = "default_n_checkpoints")]
+    pub n_checkpoints: u32,
+    pub n_evals: Option<u32>, // Keep as Option due to conditional logic
+    #[serde(default)]
+    pub batch_size: TogetherBatchSize,
+    #[serde(default = "default_learning_rate")]
+    pub learning_rate: f64,
+    #[serde(default = "default_warmup_ratio")]
+    pub warmup_ratio: f64,
+    #[serde(default = "default_max_grad_norm")]
+    pub max_grad_norm: f64,
+    #[serde(default = "default_weight_decay")]
+    pub weight_decay: f64,
     pub suffix: Option<String>,
     // Learning rate scheduler - nested like Together API
     #[serde(default)]
@@ -208,7 +297,7 @@ impl UninitializedTogetherSFTConfig {
         n_epochs: Option<u32>,
         n_checkpoints: Option<u32>,
         n_evals: Option<u32>,
-        batch_size: Option<u32>,
+        batch_size: Option<TogetherBatchSize>,
         learning_rate: Option<f64>,
         warmup_ratio: Option<f64>,
         max_grad_norm: Option<f64>,
@@ -282,14 +371,14 @@ impl UninitializedTogetherSFTConfig {
             model,
             credentials,
             api_base,
-            n_epochs,
-            n_checkpoints,
+            n_epochs: n_epochs.unwrap_or_else(default_n_epochs),
+            n_checkpoints: n_checkpoints.unwrap_or_else(default_n_checkpoints),
             n_evals,
-            batch_size,
-            learning_rate,
-            warmup_ratio,
-            max_grad_norm,
-            weight_decay,
+            batch_size: batch_size.unwrap_or_default(),
+            learning_rate: learning_rate.unwrap_or_else(default_learning_rate),
+            warmup_ratio: warmup_ratio.unwrap_or_else(default_warmup_ratio),
+            max_grad_norm: max_grad_norm.unwrap_or_else(default_max_grad_norm),
+            weight_decay: weight_decay.unwrap_or_else(default_weight_decay),
             suffix,
             lr_scheduler,
             wandb_api_key,
@@ -316,7 +405,7 @@ impl UninitializedTogetherSFTConfig {
     /// :param n_epochs: Number of complete passes through the training dataset. Default: 1. Higher values may improve results but increase cost and overfitting risk.
     /// :param n_checkpoints: Number of intermediate model versions saved during training. Default: 1.
     /// :param n_evals: Number of evaluations to be run on a given validation set during training. Default: 0.
-    /// :param batch_size: Number of training examples processed together. Default: 8. Larger batches use more memory but may train faster.
+    /// :param batch_size: Number of training examples processed together (larger batches use more memory but may train faster). Defaults to "max". Together uses training optimizations like packing, so the effective batch size may be different than the value you set.
     /// :param learning_rate: Controls how quickly the model adapts to new information. Default: 0.00001. Too high may cause instability, too low may slow convergence.
     /// :param warmup_ratio: Percent of steps at the start of training to linearly increase learning rate. Default: 0.
     /// :param max_grad_norm: Max gradient norm for gradient clipping. Default: 1. Set to 0 to disable.
@@ -344,7 +433,7 @@ impl UninitializedTogetherSFTConfig {
         n_epochs: Option<u32>,
         n_checkpoints: Option<u32>,
         n_evals: Option<u32>,
-        batch_size: Option<u32>,
+        batch_size: Option<TogetherBatchSize>,
         learning_rate: Option<f64>,
         warmup_ratio: Option<f64>,
         max_grad_norm: Option<f64>,
@@ -518,7 +607,7 @@ struct TogetherCreateJobRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suffix: Option<String>,
     // Together claims that this is optional, but errors if it's not provided
-    pub batch_size: u32,
+    pub batch_size: TogetherBatchSize,
     pub lr_scheduler: TogetherLRScheduler,
     pub learning_rate: f64,
     pub training_method: TogetherTrainingMethod,
@@ -702,17 +791,17 @@ impl Optimizer for TogetherSFTConfig {
                 training_file: train_file_id,
                 validation_file: val_file_id,
                 model: self.model.clone(),
-                n_epochs: self.n_epochs.or(Some(1)),
-                n_checkpoints: self.n_checkpoints.or(Some(1)),
+                n_epochs: Some(self.n_epochs),
+                n_checkpoints: Some(self.n_checkpoints),
                 n_evals,
-                learning_rate: self.learning_rate.unwrap_or(0.00001),
-                batch_size: self.batch_size.unwrap_or(8),
+                learning_rate: self.learning_rate,
+                batch_size: self.batch_size.clone(),
                 lr_scheduler,
                 training_method,
                 training_type,
-                warmup_ratio: self.warmup_ratio.or(Some(0.0)),
-                max_grad_norm: self.max_grad_norm.or(Some(1.0)),
-                weight_decay: self.weight_decay.or(Some(0.0)),
+                warmup_ratio: Some(self.warmup_ratio),
+                max_grad_norm: Some(self.max_grad_norm),
+                weight_decay: Some(self.weight_decay),
                 suffix: self.suffix.clone(),
                 // Weights & Biases integration
                 wandb_api_key: self.wandb_api_key.clone(),

@@ -137,6 +137,8 @@ export * from "./Thought";
 export * from "./TimeComparisonOperator";
 export * from "./TimeNode";
 export * from "./TimeoutsConfig";
+export * from "./TogetherBatchSize";
+export * from "./TogetherBatchSizeDescription";
 export * from "./TogetherLRScheduler";
 export * from "./TogetherProvider";
 export * from "./TogetherSFTConfig";

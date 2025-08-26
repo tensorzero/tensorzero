@@ -218,7 +218,7 @@ class TogetherSFTConfig:
         n_epochs: Optional[int] = None,
         n_checkpoints: Optional[int] = None,
         n_evals: Optional[int] = None,
-        batch_size: Optional[int] = None,
+        batch_size: Optional[Union[int, str]] = None,
         learning_rate: Optional[float] = None,
         warmup_ratio: Optional[float] = None,
         max_grad_norm: Optional[float] = None,

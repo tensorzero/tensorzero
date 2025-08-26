@@ -1,7 +1,7 @@
 use crate::common::OptimizationTestCase;
 use tensorzero_core::optimization::{
     together_sft::{
-        TogetherLRScheduler, TogetherTrainingMethod, TogetherTrainingType,
+        TogetherBatchSize, TogetherLRScheduler, TogetherTrainingMethod, TogetherTrainingType,
         UninitializedTogetherSFTConfig,
     },
     UninitializedOptimizerConfig, UninitializedOptimizerInfo,
@@ -30,14 +30,14 @@ impl OptimizationTestCase for TogetherSFTTestCase {
                         None
                     },
                     // Minimal hyperparameters for economical testing
-                    n_epochs: Some(1),
-                    n_checkpoints: None,
+                    n_epochs: 1,
+                    n_checkpoints: 1,
                     n_evals: None,
-                    batch_size: None,
-                    learning_rate: None,
-                    warmup_ratio: None,
-                    max_grad_norm: None,
-                    weight_decay: None,
+                    batch_size: TogetherBatchSize::default(),
+                    learning_rate: 0.00001,
+                    warmup_ratio: 0.0,
+                    max_grad_norm: 1.0,
+                    weight_decay: 0.0,
                     suffix: None,
                     // Learning rate scheduler
                     lr_scheduler: TogetherLRScheduler::default(),
