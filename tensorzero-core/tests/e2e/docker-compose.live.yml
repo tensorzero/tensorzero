@@ -234,7 +234,7 @@ services:
       # Buildkite analytics
       BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
     volumes:
-      - ./gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
+      - ../../../gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
       - ./tensorzero.toml:/app/tensorzero-core/tests/e2e/tensorzero.toml:ro
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       - .cargo/:/app/.cargo/
