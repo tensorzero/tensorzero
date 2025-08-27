@@ -394,7 +394,7 @@ fn generate_image_example() -> RenderedSample {
                         file: Base64File {
                             url: None,
                             mime_type: mime::IMAGE_PNG,
-                            data: Some(base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG)),
+                            data: base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG),
                         },
                         storage_path: StoragePath {
                             kind: StorageKind::Disabled,
@@ -418,7 +418,7 @@ fn generate_image_example() -> RenderedSample {
                         file: Base64File {
                             url: None,
                             mime_type: mime::IMAGE_PNG,
-                            data: Some(base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG)),
+                            data: base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG),
                         },
                         storage_path: StoragePath {
                             kind: StorageKind::Disabled,

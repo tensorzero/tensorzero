@@ -3,5 +3,5 @@
 export type Base64File = {
   url: string | null;
   mime_type: string;
-  data?: string | null;
+  data: string;
 };
