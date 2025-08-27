@@ -19,6 +19,7 @@ SHORT_HASH=${BUILDKITE_COMMIT:0:7}
 
 # Get the fixtures
 buildkite-agent artifact download fixtures.tar.gz ui/fixtures
+test ui/fixtures/fixtures.tar.gz
 tar -xzvf ui/fixtures/fixtures.tar.gz
 
 sleep infinity

@@ -73,6 +73,6 @@ steps:
       - "download-fixtures"
 
   - label: "ClickHouse Tests (version {{matrix.clickhouse_version}})"
-    command: sleep infinity
+    command: bash ./ci/buildkite/clickhouse-tests.sh
     depends_on:
       - "download-fixtures"
