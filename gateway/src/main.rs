@@ -398,6 +398,14 @@ async fn main() {
         .with_graceful_shutdown(shutdown_signal())
         .await
         .expect_pretty("Failed to start server");
+
+    if let Some(sdk_tracer_provider) = delayed_log_config.sdk_tracer_provider {
+        tracing::info!("Shutting down OpenTelemetry exporter");
+        observability::shutdown_otel(sdk_tracer_provider)
+            .await
+            .expect_pretty("Failed to shutdown OpenTelemetry");
+        tracing::info!("OpenTelemetry exporter shut down");
+    }
 }
 
 pub async fn shutdown_signal() {
