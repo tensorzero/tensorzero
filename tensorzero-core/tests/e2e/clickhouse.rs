@@ -255,7 +255,7 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
                     "--database",
                     database,
                     "--query",
-                    &format!("INSERT INTO {table} SELECT * FROM file('{s3_fixtures_path}/{file}', 'Parquet')"),
+                    &format!("INSERT INTO {table} SELECT * FROM file('{file}', 'Parquet')"),
                 ]);
                 cmd
             } else {

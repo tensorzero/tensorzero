@@ -9,6 +9,7 @@ services:
       # If the directory doesn't exist locally (i.e. we haven't defined a version-specific config),
       # an empty dir will get mounted in the container
       - ./clickhouse-configs/${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}/users.xml:/etc/clickhouse-server/users.d/users.xml
+      - ../../../ui/fixtures/s3-fixtures:/var/lib/clickhouse/user_files:ro
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
@@ -98,7 +99,7 @@ services:
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       - .cargo/:/app/.cargo/
       - ./target/nextest/clickhouse:/app/target/nextest/clickhouse
-      - ../../../ui/fixtures:/app/ui/fixtures:ro
+
     depends_on:
       gateway:
         condition: service_healthy
