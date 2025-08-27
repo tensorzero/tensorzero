@@ -99,7 +99,7 @@ services:
       - ./tensorzero.toml:/app/tensorzero-core/tests/e2e/tensorzero.toml:ro
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       - .cargo/:/app/.cargo/
-      - ./target:/app/target
+      - ../../../target:/app/target
 
     depends_on:
       gateway:

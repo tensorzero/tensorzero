@@ -239,7 +239,7 @@ services:
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       - .cargo/:/app/.cargo/
       - .config/:/app/.config/
-      - ./target:/app/target
+      - ../../../target:/app/target
     depends_on:
       gateway:
         condition: service_healthy
