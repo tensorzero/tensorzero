@@ -2,7 +2,7 @@
 use tensorzero::TimeWindow;
 use tensorzero_core::db::{
     clickhouse::{
-        migration_manager::migrations::migration_0035::QUANTILES, test_helpers::get_clickhouse,
+        migration_manager::migrations::migration_0036::QUANTILES, test_helpers::get_clickhouse,
     },
     SelectQueries,
 };

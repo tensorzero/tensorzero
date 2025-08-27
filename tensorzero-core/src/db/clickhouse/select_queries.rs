@@ -1,4 +1,4 @@
-use crate::db::clickhouse::migration_manager::migrations::migration_0035::quantiles_sql_args;
+use crate::db::clickhouse::migration_manager::migrations::migration_0036::quantiles_sql_args;
 use async_trait::async_trait;
 
 use crate::{
