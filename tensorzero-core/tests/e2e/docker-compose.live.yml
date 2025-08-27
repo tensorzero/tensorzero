@@ -92,7 +92,7 @@ services:
       ]
     healthcheck:
       test:
-        ["CMD", "wget", "--spider", "--tries=1", "http://localhost:3000/health"]
+        ["CMD", "wget", "--spider", "--tries=1", "http://localhost:3003/health"]
       start_period: 10s
       start_interval: 1s
       timeout: 1s
