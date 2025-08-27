@@ -42,6 +42,11 @@ WORKDIR /app
 COPY . ./
 RUN rm -rf target
 
+# Copy over just the evaluations and gateway binaries
+# they live in /build/target/debug/evaluations and /build/target/debug/gateway
+COPY --from=build-env /build/target/debug/evaluations /build/target/debug/evaluations
+COPY --from=build-env /build/target/debug/gateway /build/target/debug/gateway
+
 # Copy only the test archive instead of entire target directory
 COPY --from=build-env /build/tests.tar.zst /app/tests.tar.zst
 
