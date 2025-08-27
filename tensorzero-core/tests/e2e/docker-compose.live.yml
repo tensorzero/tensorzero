@@ -138,7 +138,7 @@ services:
       # Mount the fixtures directory so template paths can be resolved
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       # Mount GCP JWT key file
-      - ~/gcp_jwt_key.json:~/gcp_jwt_key.json:ro
+      - ../../../gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
     depends_on:
       clickhouse:
         condition: service_healthy

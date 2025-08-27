@@ -35,7 +35,7 @@ buildkite-agent artifact download provider-proxy-cache.tar.gz ci
 tar -xzvf ci/provider-proxy-cache.tar.gz
 
 # Write the GCP JWT key to a file
-echo $(buildkite-agent secret get MISTRAL_API_KEY) > gcp-jwt-key.json
+echo $(buildkite-agent secret get MISTRAL_API_KEY) > gcp_jwt_key.json
 
 # ------------------------------------------------------------------------------
 # Docker Hub auth (for pulling built images)
@@ -59,7 +59,6 @@ docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml run --rm \
 TEST_EXIT_CODE=$?
 set -e
 
-echo "tests passed"
 
 # Upload the test JUnit XML files (regardless of test results)
 if [ -f "target/nextest/e2e/junit.xml" ]; then

@@ -68,7 +68,6 @@ docker compose -f tensorzero-core/tests/e2e/docker-compose.clickhouse.yml run --
 TEST_EXIT_CODE=$?
 set -e
 
-echo "tests passed"
 
 # Upload the test JUnit XML files (regardless of test results)
 if [ -f "target/nextest/clickhouse/junit.xml" ]; then
