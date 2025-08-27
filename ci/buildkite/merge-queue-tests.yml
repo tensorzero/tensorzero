@@ -94,7 +94,7 @@ steps:
   - label: "Live Tests"
     command: bash ./ci/buildkite/live-tests.sh
     depends_on:
-      - "build-gateway-container"
+      - "build-gateway-e2e-container"
       - "build-mock-inference-provider-container"
       - "build-provider-proxy-container"
       - "modal-warmup"
