@@ -71,8 +71,3 @@ steps:
       - "build-gateway-e2e-container"
       - "build-clickhouse-tests-container"
       - "download-fixtures"
-
-  - label: "ClickHouse Tests (version {{matrix.clickhouse_version}})"
-    command: bash ./ci/buildkite/clickhouse-tests.sh
-    depends_on:
-      - "download-fixtures"

@@ -12,12 +12,12 @@ tz_setup_compose_logs_trap tensorzero-core/tests/e2e/docker-compose.clickhouse.y
 # ------------------------------------------------------------------------------
 SHORT_HASH=${BUILDKITE_COMMIT:0:7}
 
+pwd
 # Get the fixtures
 buildkite-agent artifact download fixtures.tar.gz ui/fixtures
 test ui/fixtures/fixtures.tar.gz
 tar -xzvf ui/fixtures/fixtures.tar.gz
 
-sleep infinity
 
 # Ensure required ClickHouse version variable is set
 if [ -z "${TENSORZERO_CLICKHOUSE_VERSION:-}" ]; then

@@ -11,6 +11,7 @@ target-rust-analyzer
 **/.claude
 /recipes
 /examples
+/docs
 !/examples/integrations/cursor/feedback
 !/examples/quickstart/package.json
 !/examples/integrations/helicone/package.json
