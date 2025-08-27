@@ -121,6 +121,9 @@ def test_sync_together_sft(
     optimization_config = TogetherSFTConfig(
         model="meta-llama/Meta-Llama-3.1-8B-Instruct-Reference",
         api_base="http://localhost:3030/together/",
+        n_epochs=1,
+        training_type={"type": "Lora", "lora_r": 8, "lora_alpha": 16},
+        batch_size="max",
     )
     optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
         train_samples=mixed_rendered_samples,
@@ -252,6 +255,9 @@ async def test_async_together_sft(
     optimization_config = TogetherSFTConfig(
         model="meta-llama/Meta-Llama-3.1-8B-Instruct-Reference",
         api_base="http://localhost:3030/together/",
+        n_epochs=1,
+        training_type={"type": "Lora", "lora_r": 8, "lora_alpha": 16},
+        batch_size="max",
     )
     optimization_job_handle = (
         await embedded_async_client.experimental_launch_optimization(

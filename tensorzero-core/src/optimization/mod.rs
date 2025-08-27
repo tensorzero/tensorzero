@@ -57,7 +57,7 @@ enum OptimizerConfig {
     OpenAIRFT(Box<OpenAIRFTConfig>),
     FireworksSFT(FireworksSFTConfig),
     GCPVertexGeminiSFT(Box<GCPVertexGeminiSFTConfig>),
-    TogetherSFT(TogetherSFTConfig),
+    TogetherSFT(Box<TogetherSFTConfig>),
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -329,7 +329,7 @@ pub enum UninitializedOptimizerConfig {
     #[serde(rename = "gcp_vertex_gemini_sft")]
     GCPVertexGeminiSFT(UninitializedGCPVertexGeminiSFTConfig),
     #[serde(rename = "together_sft")]
-    TogetherSFT(UninitializedTogetherSFTConfig),
+    TogetherSFT(Box<UninitializedTogetherSFTConfig>),
 }
 
 impl UninitializedOptimizerConfig {
@@ -349,7 +349,7 @@ impl UninitializedOptimizerConfig {
                 OptimizerConfig::GCPVertexGeminiSFT(Box::new(config.load().await?))
             }
             UninitializedOptimizerConfig::TogetherSFT(config) => {
-                OptimizerConfig::TogetherSFT(config.load()?)
+                OptimizerConfig::TogetherSFT(Box::new(config.load()?))
             }
         })
     }

@@ -227,12 +227,38 @@ class GCPVertexGeminiSFTConfig:
 
 @final
 class TogetherSFTConfig:
+    """
+    Configuration for Together supervised fine-tuning.
+
+    For detailed API documentation, see: https://docs.together.ai/reference/post-fine-tunes
+    """
     def __init__(
         self,
         *,
         model: str,
         credentials: Optional[str] = None,
         api_base: Optional[str] = None,
+        n_epochs: Optional[int] = None,
+        n_checkpoints: Optional[int] = None,
+        n_evals: Optional[int] = None,
+        batch_size: Optional[Union[int, str]] = None,
+        learning_rate: Optional[float] = None,
+        warmup_ratio: Optional[float] = None,
+        max_grad_norm: Optional[float] = None,
+        weight_decay: Optional[float] = None,
+        suffix: Optional[str] = None,
+        lr_scheduler: Optional[Dict[str, Any]] = None,
+        wandb_api_key: Optional[str] = None,
+        wandb_base_url: Optional[str] = None,
+        wandb_project_name: Optional[str] = None,
+        wandb_name: Optional[str] = None,
+        training_method: Optional[Dict[str, Any]] = None,
+        training_type: Optional[Dict[str, Any]] = None,
+        from_checkpoint: Optional[str] = None,
+        from_hf_model: Optional[str] = None,
+        hf_model_revision: Optional[str] = None,
+        hf_api_token: Optional[str] = None,
+        hf_output_repo_name: Optional[str] = None,
     ) -> None: ...
 
 @final
