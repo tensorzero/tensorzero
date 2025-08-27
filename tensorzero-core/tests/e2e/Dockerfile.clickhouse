@@ -10,7 +10,8 @@ RUN apt-get update && \
         build-essential \
         pkg-config \
         libssl-dev \
-        git && \
+        git  \
+        clickhouse-client && \
     rm -rf /var/lib/apt/lists/*
 
 # Install cargo-binstall for faster tool installation

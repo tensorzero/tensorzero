@@ -241,29 +241,55 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     .map(|(file, table)| {
         let password = password.clone();
         async move {
-            let mut command = tokio::process::Command::new("docker");
-            command.args([
-                "run",
-                "--add-host=host.docker.internal:host-gateway",
-                "-v",
-                &format!("{s3_fixtures_path}:/s3-fixtures"),
-                "clickhouse/clickhouse-server:25.4-alpine",
-                "clickhouse-client",
-                "--host",
-                host,
-                "--user",
-                username,
-                "--password",
-                &password,
-                "--database",
-                database,
-                "--query",
-                &format!(
-                    r"
+            // If we are running in CI (TENSORZERO_CI=1), we should have the clickhouse client installed locally
+            // so we should not use Docker
+            let mut command = if std::env::var("TENSORZERO_CI").is_ok() {
+                let mut cmd = tokio::process::Command::new("clickhouse-client");
+                cmd.args([
+                    "--host",
+                    host,
+                    "--user",
+                    username,
+                    "--password",
+                    &password,
+                    "--database",
+                    database,
+                    "--query",
+                    &format!(
+                        r"
+        INSERT INTO {table} FROM INFILE '{s3_fixtures_path}/{file}' FORMAT Parquet
+    "
+                    ),
+                ]);
+                cmd
+            } else {
+                // If we are running locally, we should use docker so that we can
+                // be platform independent in how we insert these files into ClickHouse.
+                let mut cmd = tokio::process::Command::new("docker");
+                cmd.args([
+                    "run",
+                    "--add-host=host.docker.internal:host-gateway",
+                    "-v",
+                    &format!("{s3_fixtures_path}:/s3-fixtures"),
+                    "clickhouse/clickhouse-server:25.4-alpine",
+                    "clickhouse-client",
+                    "--host",
+                    host,
+                    "--user",
+                    username,
+                    "--password",
+                    &password,
+                    "--database",
+                    database,
+                    "--query",
+                    &format!(
+                        r"
         INSERT INTO {table} FROM INFILE '/s3-fixtures/{file}' FORMAT Parquet
     "
-                ),
-            ]);
+                    ),
+                ]);
+                cmd
+            };
             assert!(
                 command.spawn().unwrap().wait().await.unwrap().success(),
                 "Failed to insert {table}"

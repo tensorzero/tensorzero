@@ -92,6 +92,7 @@ services:
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       TENSORZERO_GATEWAY_URL: http://gateway:3000
       TENSORZERO_S3_FIXTURES_PATH: /app/ui/fixtures/s3-fixtures
+      TENSORZERO_CI: 1
     volumes:
       - ./tensorzero.toml:/app/tensorzero-core/tests/e2e/tensorzero.toml:ro
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
