@@ -344,7 +344,7 @@ async fn run_health_server(port: u16) -> Result<(), Box<dyn std::error::Error + 
     use hyper::server::conn::http1;
     use tokio::net::TcpListener;
 
-    let addr = format!("127.0.0.1:{port}");
+    let addr = format!("0.0.0.0:{port}");
     let listener = TcpListener::bind(&addr).await?;
     tracing::info!("Health check server listening on http://{}", addr);
 
@@ -406,7 +406,7 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
     let args_clone = args.clone();
     let (server_addr, server) = proxy
         .bind(
-            ("127.0.0.1", args.port),
+            ("0.0.0.0", args.port),
             service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
                 let client = client.clone();
                 let args = args_clone.clone();
