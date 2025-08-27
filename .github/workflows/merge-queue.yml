@@ -55,8 +55,10 @@ jobs:
   batch-tests:
     uses: ./.github/workflows/batch-test.yml
     secrets: inherit
+
   live-tests:
-    runs-on: namespace-profile-tensorzero-8x16
+    name: "live-tests (batch_writes: ${{ matrix.batch_writes }})"
+    runs-on: namespace-profile-tensorzero-32x64
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -83,15 +85,39 @@ jobs:
       - name: Install Namespace CLI
         uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
 
-      - name: Update rust
+      - name: Cleanup disk space
+        run: ./ci/free-disk-space.sh
+
+      - name: Update Rust
         run: |
-          rustup update stable
-          rustup default stable
+          for attempt in 1 2 3; do
+            if rustup update stable && rustup default stable; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to update Rust after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain
+        run: |
+          for attempt in 1 2 3; do
+            if rustup toolchain install stable && rustup default stable; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust toolchain after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
       # Start testing workload identity federation credentials once the SDK adds support: https://github.com/googleapis/google-cloud-rust/issues/1342
 
       # - uses: 'google-github-actions/auth@v2'
@@ -103,13 +129,24 @@ jobs:
         run: rustc --version
 
       - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/0.6.4/install.sh | sh
+        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
 
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
 
       - name: Install pnpm
-        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@latest; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Configure Namespace cache for Python (uv), and pnpm
         uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
@@ -159,8 +196,7 @@ jobs:
 
       - name: Launch ClickHouse container for E2E tests
         run: |
-          # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --build -d --wait || true
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --build -d --wait
 
       - name: Print ClickHouse container logs
         if: always()
@@ -357,5 +393,5 @@ jobs:
       ]
     runs-on: ubuntu-latest
     steps:
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
         run: exit 1

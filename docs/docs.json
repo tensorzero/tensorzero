@@ -22,7 +22,7 @@
             "pages": [
               "index",
               "quickstart",
-              "vision-roadmap",
+              "vision-and-roadmap",
               "faq",
               {
                 "group": "Comparison",
@@ -42,6 +42,7 @@
             "group": "Gateway",
             "pages": [
               "gateway/index",
+              "gateway/call-an-llm",
               "gateway/tutorial",
               {
                 "group": "Guides",
@@ -184,5 +185,11 @@
       "slack": "https://www.tensorzero.com/slack",
       "discord": "https://www.tensorzero.com/discord"
     }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/vision-roadmap",
+      "destination": "/vision-and-roadmap"
+    }
+  ]
 }
