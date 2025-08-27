@@ -841,7 +841,7 @@ mod tests {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_PNG,
-                                    data: Some("ABC".to_string()),
+                                    data: "ABC".to_string(),
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,

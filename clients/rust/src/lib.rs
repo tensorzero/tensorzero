@@ -14,6 +14,7 @@ pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 use tensorzero_core::endpoints::stored_inference::render_samples;
+use tensorzero_core::inference::types::stored_input::StoragePathResolver;
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
@@ -418,6 +419,20 @@ pub struct Client {
     verbose_errors: bool,
     #[cfg(feature = "e2e_tests")]
     pub last_body: Mutex<Option<String>>,
+}
+
+impl StoragePathResolver for Client {
+    async fn resolve(&self, storage_path: StoragePath) -> Result<String, Error> {
+        Ok(self
+            .get_object(storage_path.clone())
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!("Error resolving object {storage_path}: {e}"),
+                })
+            })?
+            .data)
+    }
 }
 
 impl Client {
