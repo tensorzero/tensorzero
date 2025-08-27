@@ -393,5 +393,7 @@ jobs:
       ]
     runs-on: ubuntu-latest
     steps:
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+      # When running in the merge queue, jobs should never be skipped.
+      # In a scheduled run, some jobs may be intentionally skipped, as we only care about regenerating the model inference cache.
+      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped')) }}
         run: exit 1

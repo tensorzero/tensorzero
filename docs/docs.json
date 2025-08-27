@@ -42,7 +42,7 @@
             "group": "Gateway",
             "pages": [
               "gateway/index",
-              "gateway/call-an-llm",
+              "gateway/call-any-llm",
               "gateway/tutorial",
               {
                 "group": "Guides",
@@ -187,6 +187,50 @@
     }
   },
   "redirects": [
+    {
+      "source": "/evaluations/cli-reference",
+      "destination": "/evaluations/static-evaluations/cli-reference"
+    },
+    {
+      "source": "/evaluations/cli-reference/",
+      "destination": "/evaluations/static-evaluations/cli-reference"
+    },
+    {
+      "source": "/evaluations/configuration-reference",
+      "destination": "/evaluations/static-evaluations/configuration-reference"
+    },
+    {
+      "source": "/evaluations/configuration-reference/",
+      "destination": "/evaluations/static-evaluations/configuration-reference"
+    },
+    {
+      "source": "/evaluations/tutorial",
+      "destination": "/evaluations/static-evaluations/tutorial"
+    },
+    {
+      "source": "/evaluations/tutorial/",
+      "destination": "/evaluations/static-evaluations/tutorial"
+    },
+    {
+      "source": "/gateway/api-reference",
+      "destination": "/gateway/api-reference/inference"
+    },
+    {
+      "source": "/gateway/api-reference/",
+      "destination": "/gateway/api-reference/inference"
+    },
+    {
+      "source": "/gateway/call-an-llm",
+      "destination": "/gateway/call-any-llm"
+    },
+    {
+      "source": "/gateway/quickstart",
+      "destination": "/quickstart"
+    },
+    {
+      "source": "/gateway/quickstart/",
+      "destination": "/quickstart"
+    },
     {
       "source": "/vision-roadmap",
       "destination": "/vision-and-roadmap"
