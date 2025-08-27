@@ -66,6 +66,11 @@ services:
       - "4318:4318"
       - "5778:5778"
       - "9411:9411"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--tries=1", "http://localhost:16686/"]
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
 
   provider-proxy:
     image: tensorzero/provider-proxy:${TENSORZERO_PROVIDER_PROXY_TAG:-latest}
