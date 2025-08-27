@@ -326,7 +326,9 @@ pub fn deserialize_optimization_config(
     } else if obj.is_instance_of::<UninitializedFireworksSFTConfig>() {
         Ok(UninitializedOptimizerConfig::FireworksSFT(obj.extract()?))
     } else if obj.is_instance_of::<UninitializedTogetherSFTConfig>() {
-        Ok(UninitializedOptimizerConfig::TogetherSFT(obj.extract()?))
+        Ok(UninitializedOptimizerConfig::TogetherSFT(Box::new(
+            obj.extract()?,
+        )))
     } else if obj.is_instance_of::<UninitializedGCPVertexGeminiSFTConfig>() {
         Ok(UninitializedOptimizerConfig::GCPVertexGeminiSFT(
             obj.extract()?,
