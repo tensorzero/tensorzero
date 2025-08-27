@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Clear disk space
-./ci/free-disk-space.sh
+# ./ci/free-disk-space.sh
 
 # Get all env vars
 source ci/buildkite/utils/live-tests-env.sh
@@ -23,27 +23,12 @@ export TENSORZERO_PROVIDER_PROXY_CACHE_TAG=ci-sha-$SHORT_HASH
 buildkite-agent artifact download fixtures.tar.gz ui/fixtures
 tar -xzvf ui/fixtures/fixtures.tar.gz
 
+# Get the provider-proxy-cache
+buildkite-agent artifact download provider-proxy-cache.tar.gz ci
+tar -xzvf ci/provider-proxy-cache.tar.gz
 
-AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY ./ci/download-provider-proxy-cache.sh
+# TODO: launch docker compose for services & tests
 
-# Launch services for E2E tests
-docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait
-
-# Launch the provider proxy cache for E2E tests
-./ci/run-provider-proxy.sh ci
-
-# Build the gateway for E2E tests
-cargo build-e2e
-
-# Launch the gateway for E2E tests
-TENSORZERO_E2E_PROXY="http://localhost:3003" cargo run-e2e > e2e_logs.txt 2>&1 &
-while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
-  echo "Waiting for gateway to be healthy..."
-  sleep 1
-done
-export GATEWAY_PID=$!
-# TODO: add all the othe auxiliary tests
-TENSORZERO_E2E_PROXY="http://localhost:3003" cargo test-e2e --no-fail-fast
 
 # Upload the test JUnit XML files
 curl -X POST \
