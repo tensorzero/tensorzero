@@ -33,9 +33,9 @@ steps:
     command: bash ./ci/buildkite/build-clickhouse-tests.sh
     key: "build-clickhouse-tests-container"
 
-  - label: "Build Provider Proxy Cache Container"
-    command: bash ./ci/buildkite/build-provider-proxy-cache-container.sh
-    key: "build-provider-proxy-cache-container"
+  - label: "Build Provider Proxy Container"
+    command: bash ./ci/buildkite/build-provider-proxy-container.sh
+    key: "build-provider-proxy-container"
 
   - label: "Download Provider Proxy Cache"
     command: bash ./ci/buildkite/download-provider-proxy-cache.sh
@@ -91,6 +91,6 @@ steps:
     depends_on:
       - "build-gateway-container"
       - "build-mock-inference-provider-container"
-      - "build-provider-proxy-cache-container"
+      - "build-provider-proxy-container"
       - "modal-warmup"
       - "download-provider-proxy-cache"
