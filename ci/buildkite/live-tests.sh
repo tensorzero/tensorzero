@@ -22,7 +22,8 @@ fi
 SHORT_HASH=${BUILDKITE_COMMIT:0:7}
 export TENSORZERO_GATEWAY_TAG=ci-sha-$SHORT_HASH
 export TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=ci-sha-$SHORT_HASH
-export TENSORZERO_PROVIDER_PROXY_CACHE_TAG=ci-sha-$SHORT_HASH
+export TENSORZERO_PROVIDER_PROXY_TAG=ci-sha-$SHORT_HASH
+export TENSORZERO_LIVE_TESTS_TAG=ci-sha-$SHORT_HASH
 
 
 # Get the fixtures
@@ -35,6 +36,18 @@ tar -xzvf ci/provider-proxy-cache.tar.gz
 
 # Write the GCP JWT key to a file
 echo $(buildkite-agent secret get MISTRAL_API_KEY) > gcp-jwt-key.json
+
+# ------------------------------------------------------------------------------
+# Docker Hub auth (for pulling built images)
+# ------------------------------------------------------------------------------
+source ci/buildkite/utils/docker-hub-credentials.sh
+echo "$DOCKER_HUB_ACCESS_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin
+echo "Logged in to Docker Hub"
+
+# ------------------------------------------------------------------------------
+# Pull images referenced by the compose file
+# ------------------------------------------------------------------------------
+docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml pull
 
 # ------------------------------------------------------------------------------
 # Run live tests container via Docker Compose and capture exit code
