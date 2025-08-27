@@ -79,7 +79,7 @@ services:
       dockerfile: provider-proxy/Dockerfile
       target: provider-proxy
     ports:
-      - "3003:3000"
+      - "3003:3003"
     volumes:
       # Mount cache directory for downloading cache files separately
       - ../../../ci/provider-proxy-cache:/app/ci/provider-proxy-cache
@@ -202,7 +202,7 @@ services:
       # Test environment variables
       GATEWAY_URL: http://gateway:3000
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
-      TENSORZERO_E2E_PROXY: http://provider-proxy:3000
+      TENSORZERO_E2E_PROXY: http://provider-proxy:3003
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       # API Keys
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
