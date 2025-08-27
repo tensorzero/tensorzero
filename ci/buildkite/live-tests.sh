@@ -27,7 +27,15 @@ tar -xzvf ui/fixtures/fixtures.tar.gz
 buildkite-agent artifact download provider-proxy-cache.tar.gz ci
 tar -xzvf ci/provider-proxy-cache.tar.gz
 
-# TODO: launch docker compose for services & tests
+# ------------------------------------------------------------------------------
+# Run live tests container via Docker Compose and capture exit code
+# ------------------------------------------------------------------------------
+set +e
+docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml run --rm \
+  -e TENSORZERO_CI=1 \
+  live-tests
+TEST_EXIT_CODE=$?
+set -e
 
 
 # Upload the test JUnit XML files
