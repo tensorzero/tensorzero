@@ -12,7 +12,6 @@ tz_setup_compose_logs_trap tensorzero-core/tests/e2e/docker-compose.clickhouse.y
 # ------------------------------------------------------------------------------
 SHORT_HASH=${BUILDKITE_COMMIT:0:7}
 
-pwd
 # Get the fixtures
 buildkite-agent artifact download fixtures.tar.gz ui/fixtures
 test ui/fixtures/fixtures.tar.gz
@@ -45,6 +44,11 @@ export TENSORZERO_SKIP_LARGE_FIXTURES=1
 # Pull images referenced by the compose file
 # ------------------------------------------------------------------------------
 docker compose -f tensorzero-core/tests/e2e/docker-compose.clickhouse.yml pull
+
+echo "For test purposes: let's make sure the fixtures dir is populated"
+pwd
+ls ui/fixtures
+ls ui/fixtures/s3-fixtures
 
 # ------------------------------------------------------------------------------
 # Run ClickHouse tests container via Docker Compose
