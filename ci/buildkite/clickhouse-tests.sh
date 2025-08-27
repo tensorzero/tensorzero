@@ -68,6 +68,8 @@ docker compose -f tensorzero-core/tests/e2e/docker-compose.clickhouse.yml run --
 TEST_EXIT_CODE=$?
 set -e
 
+echo "tests passed"
+
 # Upload the test JUnit XML files (regardless of test results)
 if [ -f "target/nextest/clickhouse/junit.xml" ]; then
     curl -X POST \
@@ -83,6 +85,7 @@ if [ -f "target/nextest/clickhouse/junit.xml" ]; then
       -F "run_env[message]=$BUILDKITE_MESSAGE" \
       -F "run_env[url]=$BUILDKITE_BUILD_URL" \
       https://analytics-api.buildkite.com/v1/uploads
+    echo "analytics uploaded"
 else
     echo "Warning: JUnit XML file not found at target/nextest/clickhouse/junit.xml"
 fi
