@@ -5,6 +5,8 @@ on:
   merge_group:
   workflow_dispatch:
   # Temporarily enabled on PR
+  pull_request:
+    branches: ["main"]
 
 jobs:
   merge-queue-tests:
