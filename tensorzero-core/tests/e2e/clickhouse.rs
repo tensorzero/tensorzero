@@ -173,7 +173,8 @@ async fn count_table_rows(clickhouse: &ClickHouseConnectionInfo, table: &str) ->
 
 async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     // Insert data so that we test the migration re-creates the tables properly.
-    let s3_fixtures_path = format!("{MANIFEST_PATH}/../ui/fixtures/s3-fixtures");
+    let s3_fixtures_path = std::env::var("TENSORZERO_S3_FIXTURES_PATH")
+        .unwrap_or_else(|_| format!("{MANIFEST_PATH}/../ui/fixtures/s3-fixtures"));
     let s3_fixtures_path = &s3_fixtures_path;
     println!("Inserting large fixtures from S3 at {}", s3_fixtures_path);
     // Print all items in the s3_fixtures_path directory
