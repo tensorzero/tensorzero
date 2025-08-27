@@ -34,7 +34,7 @@ COPY --from=builder /release/provider-proxy /usr/local/bin/provider-proxy
 
 WORKDIR /app
 
-EXPOSE 3003
+EXPOSE 3003 3004
 
 ENTRYPOINT ["provider-proxy"]
 
