@@ -43,7 +43,7 @@ fn create_test_rendered_sample(input: &str, output: &str) -> RenderedSample {
 }
 
 #[tokio::test]
-async fn test_insert_dicl_examples_with_batching_success() {
+async fn test_insert_dicl_examples_success() {
     let clickhouse = get_clickhouse().await;
 
     let samples = vec![
@@ -81,7 +81,7 @@ async fn test_insert_dicl_examples_with_batching_success() {
 }
 
 #[tokio::test]
-async fn test_insert_dicl_examples_batching_logic() {
+async fn test_insert_dicl_examples_multiple_chunks() {
     let clickhouse = get_clickhouse().await;
 
     // Create 5 examples with batch size of 2, should create 3 batches (2+2+1)
@@ -99,17 +99,17 @@ async fn test_insert_dicl_examples_batching_logic() {
     let result = insert_dicl_examples_with_batching(
         &clickhouse,
         examples_with_embeddings,
-        "test_function_batching_e2e",
-        "test_variant_batching_e2e",
+        "test_function_chunks_e2e",
+        "test_variant_chunks_e2e",
         2, // Small batch size to force multiple batches
     )
     .await;
 
     assert!(result.is_ok());
 
-    // Verify the batching logic worked correctly by checking that all 5 examples were inserted
-    // This test specifically validates that the batching with size 2 creates 3 batches (2+2+1) and all data is preserved
-    let query = "SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = 'test_function_batching_e2e' AND variant_name = 'test_variant_batching_e2e'";
+    // Verify the chunking logic worked correctly by checking that all 5 examples were inserted
+    // This test specifically validates that the chunking with size 2 creates 3 chunks (2+2+1) and all data is preserved
+    let query = "SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = 'test_function_chunks_e2e' AND variant_name = 'test_variant_chunks_e2e'";
     let count_result = clickhouse
         .run_query_synchronous_no_params(query.to_string())
         .await
@@ -118,12 +118,12 @@ async fn test_insert_dicl_examples_batching_logic() {
     let count: u32 = count_str.trim().parse().unwrap();
     assert_eq!(
         count, 5,
-        "Expected 5 DICL examples to be inserted across 3 batches, but found {count}"
+        "Expected 5 DICL examples to be inserted across 3 chunks, but found {count}"
     );
 }
 
 #[tokio::test]
-async fn test_insert_dicl_examples_with_empty_batch() {
+async fn test_insert_dicl_examples_with_empty_input() {
     let clickhouse = get_clickhouse().await;
 
     let examples_with_embeddings: Vec<(RenderedSample, Vec<f64>)> = vec![];
@@ -140,8 +140,8 @@ async fn test_insert_dicl_examples_with_empty_batch() {
     // Should handle empty batch gracefully
     assert!(result.is_ok());
 
-    // Verify that no data was written to ClickHouse for empty batch
-    // This confirms that empty batches are handled properly without creating spurious database entries
+    // Verify that no data was written to ClickHouse for empty input
+    // This confirms that empty inputs are handled properly without creating spurious database entries
     let query = "SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = 'test_function_empty_e2e' AND variant_name = 'test_variant_empty_e2e'";
     let count_result = clickhouse
         .run_query_synchronous_no_params(query.to_string())
@@ -151,7 +151,7 @@ async fn test_insert_dicl_examples_with_empty_batch() {
     let count: u32 = count_str.trim().parse().unwrap();
     assert_eq!(
         count, 0,
-        "Expected 0 DICL examples for empty batch, but found {count}"
+        "Expected 0 DICL examples for empty input, but found {count}"
     );
 }
 
