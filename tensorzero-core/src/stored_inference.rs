@@ -89,7 +89,7 @@ impl StoredInference {
         tags: Option<Bound<'py, PyAny>>,
         timestamp: Bound<'py, PyAny>,
     ) -> PyResult<Self> {
-        let input: ResolvedInput = deserialize_from_pyobj(py, &input)?;
+        let input: StoredInput = deserialize_from_pyobj(py, &input)?;
         let episode_id: Uuid = deserialize_from_pyobj(py, &episode_id)?;
         let inference_id: Uuid = deserialize_from_pyobj(py, &inference_id)?;
         let timestamp: DateTime<Utc> = deserialize_from_pyobj(py, &timestamp)?;
@@ -114,7 +114,7 @@ impl StoredInference {
                 Ok(Self::Chat(StoredChatInference {
                     function_name,
                     variant_name,
-                    input: input.into_stored_input(),
+                    input,
                     output,
                     dispreferred_outputs: dispreferred_outputs.unwrap_or_default(),
                     episode_id,
@@ -139,7 +139,7 @@ impl StoredInference {
                 Ok(Self::Json(StoredJsonInference {
                     function_name,
                     variant_name,
-                    input: input.into_stored_input(),
+                    input,
                     output,
                     dispreferred_outputs: dispreferred_outputs.unwrap_or_default(),
                     episode_id,
