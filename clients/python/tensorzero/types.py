@@ -26,11 +26,13 @@ class HasTypeField(Protocol):
 class ContentBlock(ABC, HasTypeField):
     pass
 
+
 @dataclass
 class Template(ContentBlock):
     name: str
     arguments: Any
     type: str = "template"
+
 
 @dataclass
 class Text(ContentBlock):
