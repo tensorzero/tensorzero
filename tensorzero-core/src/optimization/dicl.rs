@@ -1,4 +1,3 @@
-use backon::Retryable;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -53,7 +52,6 @@ pub struct DiclOptimizationConfig {
     pub dimensions: Option<u32>,
     pub batch_size: usize,
     pub max_concurrency: usize,
-    pub retries: RetryConfig,
     pub k: usize,
     pub model: String,
     #[serde(skip)]
@@ -75,8 +73,6 @@ pub struct UninitializedDiclOptimizationConfig {
     pub batch_size: usize,
     #[serde(default = "default_max_concurrency")]
     pub max_concurrency: usize,
-    #[serde(default)]
-    pub retries: RetryConfig,
     #[serde(default = "default_k")]
     pub k: usize,
     #[serde(default = "default_model")]
@@ -94,7 +90,6 @@ impl Default for UninitializedDiclOptimizationConfig {
             dimensions: None,
             batch_size: default_batch_size(),
             max_concurrency: default_max_concurrency(),
-            retries: RetryConfig::default(),
             k: default_k(),
             model: default_model(),
             credentials: None,
@@ -141,7 +136,6 @@ impl UninitializedDiclOptimizationConfig {
             dimensions,
             batch_size: batch_size.unwrap_or_else(default_batch_size),
             max_concurrency: max_concurrency.unwrap_or_else(default_max_concurrency),
-            retries: RetryConfig::default(),
             k: k.unwrap_or_else(default_k),
             model: model.unwrap_or_else(default_model),
             credentials,
@@ -186,7 +180,6 @@ impl UninitializedDiclOptimizationConfig {
             dimensions: self.dimensions,
             batch_size: self.batch_size,
             max_concurrency: self.max_concurrency,
-            retries: self.retries,
             k: self.k,
             model: self.model,
             credentials: build_creds_caching_default(
@@ -323,7 +316,6 @@ impl Optimizer for DiclOptimizationConfig {
             input_texts,
             self.batch_size,
             self.max_concurrency,
-            &self.retries,
             self.dimensions,
         )
         .await?;
@@ -411,8 +403,7 @@ impl JobHandle for DiclOptimizationJobHandle {
     }
 }
 
-/// Processes a batch of input texts to get embeddings with retry logic
-#[expect(clippy::too_many_arguments)]
+/// Processes a batch of input texts to get embeddings
 async fn process_embedding_batch(
     embedding_model_config: &EmbeddingModelConfig,
     model_name: &str,
@@ -420,7 +411,6 @@ async fn process_embedding_batch(
     credentials: &InferenceCredentials,
     batch_texts: Vec<String>,
     batch_index: usize,
-    retry_config: &RetryConfig,
     dimensions: Option<u32>,
 ) -> Result<Vec<Vec<f64>>, Error> {
     let embedding_request = EmbeddingRequest {
@@ -438,13 +428,9 @@ async fn process_embedding_batch(
         cache_options: &cache_options,
     };
 
-    let response = (|| async {
-        embedding_model_config
-            .embed(&embedding_request, model_name, &clients)
-            .await
-    })
-    .retry(retry_config.get_backoff())
-    .await?;
+    let response = embedding_model_config
+        .embed(&embedding_request, model_name, &clients)
+        .await?;
 
     tracing::debug!("Successfully processed embedding batch {}", batch_index);
 
@@ -473,7 +459,6 @@ async fn process_embeddings_with_batching(
     input_texts: Vec<String>,
     batch_size: usize,
     max_concurrency: usize,
-    retry_config: &RetryConfig,
     dimensions: Option<u32>,
 ) -> Result<Vec<Vec<f64>>, Error> {
     let batches: Vec<Vec<String>> = input_texts
@@ -513,7 +498,6 @@ async fn process_embeddings_with_batching(
                     credentials,
                     batch,
                     batch_index,
-                    retry_config,
                     dimensions,
                 )
                 .await;
@@ -667,7 +651,6 @@ mod tests {
         config::TimeoutsConfig,
         embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo},
         endpoints::inference::InferenceCredentials,
-        variant::RetryConfig,
     };
     use std::collections::HashMap;
 
@@ -717,7 +700,6 @@ mod tests {
         let client = reqwest::Client::new();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["hello".to_string(), "world".to_string()];
-        let retry_config = RetryConfig::default();
 
         let result = process_embedding_batch(
             &embedding_model,
@@ -726,7 +708,6 @@ mod tests {
             &credentials,
             batch_texts,
             0,
-            &retry_config,
             None,
         )
         .await;
@@ -746,7 +727,6 @@ mod tests {
         let client = reqwest::Client::new();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["hello".to_string()];
-        let retry_config = RetryConfig::default();
         let dimensions = Some(512);
 
         let result = process_embedding_batch(
@@ -756,7 +736,6 @@ mod tests {
             &credentials,
             batch_texts,
             0,
-            &retry_config,
             dimensions,
         )
         .await;
@@ -768,16 +747,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_process_embedding_batch_retry_exhausted() {
+    async fn test_process_embedding_batch_failure() {
         let embedding_model = create_test_embedding_model_with_failure();
 
         let client = reqwest::Client::new();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["test".to_string()];
-        let retry_config = RetryConfig {
-            num_retries: 0, // No retries, should fail immediately
-            max_delay_s: 1.0,
-        };
 
         let result = process_embedding_batch(
             &embedding_model,
@@ -786,7 +761,6 @@ mod tests {
             &credentials,
             batch_texts,
             0,
-            &retry_config,
             None,
         )
         .await;
@@ -805,7 +779,6 @@ mod tests {
             "text2".to_string(),
             "text3".to_string(),
         ];
-        let retry_config = RetryConfig::default();
 
         let result = process_embeddings_with_batching(
             &embedding_model,
@@ -815,7 +788,6 @@ mod tests {
             input_texts,
             2, // batch_size
             1, // max_concurrency
-            &retry_config,
             None,
         )
         .await;
@@ -836,7 +808,6 @@ mod tests {
         let client = reqwest::Client::new();
         let credentials = InferenceCredentials::default();
         let input_texts = vec!["1".to_string(), "2".to_string(), "3".to_string()];
-        let retry_config = RetryConfig::default();
 
         let result = process_embeddings_with_batching(
             &embedding_model,
@@ -846,7 +817,6 @@ mod tests {
             input_texts,
             1, // batch_size: each text is its own batch
             2, // max_concurrency: process 2 batches at a time
-            &retry_config,
             None,
         )
         .await;
