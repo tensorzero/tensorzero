@@ -6,6 +6,14 @@ source ci/buildkite/utils/trap-helpers.sh
 # Print logs from the ClickHouse compose stack on exit
 tz_setup_compose_logs_trap tensorzero-core/tests/e2e/docker-compose.clickhouse.yml
 
+# Set BUILDKITE_ANALYTICS_TOKEN
+export BUILDKITE_ANALYTICS_TOKEN=$(buildkite-agent secret get CLICKHOUSE_TESTS_ANALYTICS_ACCESS_TOKEN)
+
+if [ -z "$BUILDKITE_ANALYTICS_TOKEN" ]; then
+    echo "Error: BUILDKITE_ANALYTICS_TOKEN is not set"
+    exit 1
+fi
+
 
 # ------------------------------------------------------------------------------
 # Set the short commit hash
