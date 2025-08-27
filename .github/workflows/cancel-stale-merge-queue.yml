@@ -27,9 +27,12 @@ jobs:
           workflow_runs=$(curl -s -H "Authorization: Bearer ${{ github.token }}" \
             "https://api.github.com/repos/${{ github.repository }}/actions/runs?head_sha=${{ github.sha }}")
           
-          # Extract run IDs and cancel them
+          # Extract run IDs and cancel them (except current workflow)
+          current_run_id="${{ github.run_id }}"
+          echo "Current Run ID: $current_run_id"
           echo "$workflow_runs" | jq -r '.workflow_runs[] | select(.status != "completed") | .id' | while read -r run_id; do
-            if [ -n "$run_id" ]; then
+            echo "Run ID: $run_id"
+            if [ -n "$run_id" ] && [ "$run_id" != "$current_run_id" ]; then
               echo "Cancelling workflow run $run_id"
               curl -X POST -H "Authorization: Bearer ${{ github.token }}" \
                 "https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id/cancel"
