@@ -59,25 +59,33 @@ ls ui/fixtures
 ls ui/fixtures/s3-fixtures
 
 # ------------------------------------------------------------------------------
-# Run ClickHouse tests container via Docker Compose
+# Run ClickHouse tests container via Docker Compose and capture exit code
 # ------------------------------------------------------------------------------
+set +e
 docker compose -f tensorzero-core/tests/e2e/docker-compose.clickhouse.yml run --rm \
   -e TENSORZERO_CI=1 \
   clickhouse-tests
+TEST_EXIT_CODE=$?
+set -e
 
-sleep infinity
+# Upload the test JUnit XML files (regardless of test results)
+if [ -f "target/nextest/clickhouse/junit.xml" ]; then
+    curl -X POST \
+      -H "Authorization: Token token=$BUILDKITE_ANALYTICS_TOKEN" \
+      -F "format=junit" \
+      -F "data=@target/nextest/clickhouse/junit.xml" \
+      -F "run_env[CI]=buildkite" \
+      -F "run_env[key]=$BUILDKITE_BUILD_ID" \
+      -F "run_env[number]=$BUILDKITE_BUILD_NUMBER" \
+      -F "run_env[job_id]=$BUILDKITE_JOB_ID" \
+      -F "run_env[branch]=$BUILDKITE_BRANCH" \
+      -F "run_env[commit_sha]=$BUILDKITE_COMMIT" \
+      -F "run_env[message]=$BUILDKITE_MESSAGE" \
+      -F "run_env[url]=$BUILDKITE_BUILD_URL" \
+      https://analytics-api.buildkite.com/v1/uploads
+else
+    echo "Warning: JUnit XML file not found at target/nextest/clickhouse/junit.xml"
+fi
 
-# Upload the test JUnit XML files
-curl -X POST \
-  -H "Authorization: Token token=$BUILDKITE_ANALYTICS_TOKEN" \
-  -F "format=junit" \
-  -F "data=@target/nextest/clickhouse/junit.xml" \
-  -F "run_env[CI]=buildkite" \
-  -F "run_env[key]=$BUILDKITE_BUILD_ID" \
-  -F "run_env[number]=$BUILDKITE_BUILD_NUMBER" \
-  -F "run_env[job_id]=$BUILDKITE_JOB_ID" \
-  -F "run_env[branch]=$BUILDKITE_BRANCH" \
-  -F "run_env[commit_sha]=$BUILDKITE_COMMIT" \
-  -F "run_env[message]=$BUILDKITE_MESSAGE" \
-  -F "run_env[url]=$BUILDKITE_BUILD_URL" \
-  https://analytics-api.buildkite.com/v1/uploads
+# Exit with the original test exit code
+exit $TEST_EXIT_CODE
