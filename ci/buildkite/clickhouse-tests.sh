@@ -17,6 +17,10 @@ fi
 # ------------------------------------------------------------------------------
 SHORT_HASH=${BUILDKITE_COMMIT:0:7}
 
+# Get the fixtures
+buildkite-agent artifact download fixtures.tar.gz ui/fixtures
+tar -xzvf ui/fixtures/fixtures.tar.gz
+
 # ------------------------------------------------------------------------------
 # Docker Hub auth (for pulling built images)
 # ------------------------------------------------------------------------------

@@ -96,6 +96,7 @@ services:
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       - .cargo/:/app/.cargo/
       - ./target/nextest/clickhouse:/app/target/nextest/clickhouse
+      - ../../../ui/fixtures:/app/ui/fixtures:ro
     depends_on:
       gateway:
         condition: service_healthy
