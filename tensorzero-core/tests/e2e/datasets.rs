@@ -10,8 +10,9 @@ use tensorzero_core::{
         select_chat_dataset_clickhouse, select_json_dataset_clickhouse, stale_datapoint_clickhouse,
     },
     endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
-    inference::types::{ContentBlockChatOutput, ResolvedInputMessageContent},
+    inference::types::{ContentBlockChatOutput, StoredInputMessageContent},
 };
+
 use uuid::Uuid;
 
 use crate::{
@@ -279,11 +280,11 @@ async fn test_create_delete_datapoint_chat() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { .. }
+            StoredInputMessageContent::Text { .. }
         ));
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { value: _, .. }
+            StoredInputMessageContent::Text { value: _, .. }
         ));
 
         // Verify the list datapoint input structure and content
@@ -302,7 +303,7 @@ async fn test_create_delete_datapoint_chat() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { .. }
+            StoredInputMessageContent::Text { .. }
         ));
 
         // Verify output if present
@@ -1084,11 +1085,11 @@ async fn test_create_delete_datapoint_json() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { .. }
+            StoredInputMessageContent::Text { .. }
         ));
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { value: _, .. }
+            StoredInputMessageContent::Text { value: _, .. }
         ));
 
         // Verify the list datapoint input structure and content
@@ -1107,7 +1108,7 @@ async fn test_create_delete_datapoint_json() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { .. }
+            StoredInputMessageContent::Text { .. }
         ));
 
         // Get the output schema
