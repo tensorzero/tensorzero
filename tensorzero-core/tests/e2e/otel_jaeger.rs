@@ -56,6 +56,10 @@ async fn test_jaeger_trace_export(existing_trace_parent: Option<ExistingTraceDat
 
     let mut builder = client
         .post(get_gateway_endpoint("/inference"))
+        .header(
+            "x-tensorzero-otlp-headers",
+            serde_json::json!([["x-dummy-tensorzero", "my-new-tenant"]]).to_string(),
+        )
         .json(&payload);
 
     let existing_trace_header = existing_trace_parent
@@ -85,7 +89,11 @@ async fn test_jaeger_trace_export(existing_trace_parent: Option<ExistingTraceDat
     let now_str = now.to_rfc3339_opts(SecondsFormat::Secs, true);
     let one_minute_ago_str = one_minute_ago.to_rfc3339_opts(SecondsFormat::Secs, true);
 
-    let jaeger_result = client.get(format!("http://localhost:16686/api/v3/traces?&query.start_time_min={one_minute_ago_str}&query.start_time_max={now_str}&query.service_name=tensorzero-gateway")).send().await.unwrap();
+    let jaeger_result = client
+        .get(format!("http://localhost:16686/api/v3/traces?&query.start_time_min={one_minute_ago_str}&query.start_time_max={now_str}&query.service_name=tensorzero-gateway&query.num_traces=100"))
+        .send()
+        .await
+        .unwrap();
     let jaeger_traces = jaeger_result.json::<Value>().await.unwrap();
     println!("Response: {jaeger_traces}");
     let mut target_span = None;
@@ -140,6 +148,17 @@ async fn test_jaeger_trace_export(existing_trace_parent: Option<ExistingTraceDat
 
     assert_eq!(parent_span["name"], "POST /inference");
     assert_eq!(attrs["level"]["stringValue"], "INFO");
+
+    let parent_attrs: HashMap<&str, serde_json::Value> = parent_span["attributes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| (a["key"].as_str().unwrap(), a["value"].clone()))
+        .collect();
+    assert_eq!(
+        parent_attrs["tensorzero.custom_key"]["stringValue"],
+        "my-new-tenant"
+    );
 
     if let Some(existing_trace_parent) = existing_trace_parent {
         assert_eq!(
