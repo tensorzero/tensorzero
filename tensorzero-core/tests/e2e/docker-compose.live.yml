@@ -9,6 +9,8 @@ services:
       # If the directory doesn't exist locally (i.e. we haven't defined a version-specific config),
       # an empty dir will get mounted in the container
       - ./clickhouse-configs/${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}/users.xml:/etc/clickhouse-server/users.d/users.xml
+      # For S3 fixtures using file()
+      # - ../../../ui/fixtures/s3-fixtures:/var/lib/clickhouse/user_files
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
@@ -66,16 +68,16 @@ services:
       - "9411:9411"
 
   provider-proxy:
-    image: tensorzero/provider-proxy-cache:${TENSORZERO_PROVIDER_PROXY_TAG:-latest}
+    image: tensorzero/provider-proxy:${TENSORZERO_PROVIDER_PROXY_TAG:-latest}
     build:
       context: ../../..
-      dockerfile: ci/provider-proxy-cache/Dockerfile
+      dockerfile: provider-proxy/Dockerfile
       target: provider-proxy
     ports:
       - "3003:3000"
     volumes:
       # Mount cache directory for downloading cache files separately
-      - provider-proxy-cache:/app/ci/provider-proxy-cache
+      - ../../../ci/provider-proxy-cache:/app/ci/provider-proxy-cache
     command:
       [
         "--cache-path",
@@ -141,6 +143,10 @@ services:
       clickhouse:
         condition: service_healthy
       provider-proxy:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      jaeger:
         condition: service_healthy
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"

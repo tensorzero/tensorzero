@@ -33,6 +33,10 @@ steps:
     command: bash ./ci/buildkite/build-clickhouse-tests.sh
     key: "build-clickhouse-tests-container"
 
+  - label: "Build Live Tests Container"
+    command: bash ./ci/buildkite/build-live-tests.sh
+    key: "build-live-tests-container"
+
   - label: "Build Provider Proxy Container"
     command: bash ./ci/buildkite/build-provider-proxy-container.sh
     key: "build-provider-proxy-container"
@@ -77,7 +81,8 @@ steps:
     matrix:
       setup:
         clickhouse_version:
-          - "24.12-alpine"
+          # Temporary
+          # - "24.12-alpine"
           - "latest-alpine"
     env:
       TENSORZERO_CLICKHOUSE_VERSION: "{{matrix.clickhouse_version}}"
@@ -94,3 +99,4 @@ steps:
       - "build-provider-proxy-container"
       - "modal-warmup"
       - "download-provider-proxy-cache"
+      - "build-live-tests-container"

@@ -65,6 +65,8 @@ docker compose -f tensorzero-core/tests/e2e/docker-compose.clickhouse.yml run --
   -e TENSORZERO_CI=1 \
   clickhouse-tests
 
+sleep infinity
+
 # Upload the test JUnit XML files
 curl -X POST \
   -H "Authorization: Token token=$BUILDKITE_ANALYTICS_TOKEN" \
