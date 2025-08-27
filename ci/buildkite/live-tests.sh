@@ -10,73 +10,19 @@ source ci/buildkite/utils/live-tests-env.sh
 # Install `gdb`
 sudo apt-get update && sudo apt-get install -y gdb
 
-# Warm up modal instances
-curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-inference-vllm-inference.modal.run/docs > vllm_modal_logs.txt &
-curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--sglang-inference-sglang-inference.modal.run/ > sglang_modal_logs.txt &
-
 # ------------------------------------------------------------------------------
 # Set the short commit hash
 # ------------------------------------------------------------------------------
 SHORT_HASH=${BUILDKITE_COMMIT:0:7}
-export TENSORZERO_GATEWAY_TAG=sha-$SHORT_HASH
-export TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-$SHORT_HASH
-# ------------------------------------------------------------------------------
-# Setup Rust
-# ------------------------------------------------------------------------------
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-source "$HOME/.cargo/env"
-rustc --version
+export TENSORZERO_GATEWAY_TAG=ci-sha-$SHORT_HASH
+export TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=ci-sha-$SHORT_HASH
+export TENSORZERO_PROVIDER_PROXY_CACHE_TAG=ci-sha-$SHORT_HASH
 
-# Install `uv`
-curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
-source $HOME/.local/bin/env
 
 # Get the fixtures
 buildkite-agent artifact download fixtures.tar.gz ui/fixtures
 tar -xzvf ui/fixtures/fixtures.tar.gz
 
-# ------------------------------------------------------------------------------
-# Docker: download & load gateway container
-# ------------------------------------------------------------------------------
-buildkite-agent artifact download gateway-container.tar .
-docker load < gateway-container.tar
-
-# ------------------------------------------------------------------------------
-# Docker: download & load mock-inference-provider container
-# ------------------------------------------------------------------------------
-buildkite-agent artifact download mock-inference-provider-container.tar .
-docker load < mock-inference-provider-container.tar
-
-echo "Loaded all containers"
-
-# ------------------------------------------------------------------------------
-# Setup Node.js and pnpm using shared utility
-# ------------------------------------------------------------------------------
-# source "$(dirname "$0")/utils/setup-node.sh"
-# pnpm install --frozen-lockfile
-
-# Install cargo-binstall
-curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
-
-# Install cargo-nextest
-# TODO: install the pre-built package instead of building from source
-cargo binstall -y cargo-nextest --secure
-
-# Write GCP JWT key to file
-buildkite-agent secret get GCP_JWT_KEY > ~/gcp_jwt_key.json
-
-# Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
-export TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests"
-
-# TODO: handle batch writes
-# echo "TENSORZERO_CLICKHOUSE_BATCH_WRITES=${{ matrix.batch_writes }}" >> $GITHUB_ENV
-# - name: Configure batch writes in tensorzero.toml
-#   if: matrix.batch_writes == true
-#   run: |
-#     echo "[gateway.observability.batch_writes]" >> tensorzero-core/tests/e2e/tensorzero.toml
-#     echo "enabled = true" >> tensorzero-core/tests/e2e/tensorzero.toml
-#     echo "flush_interval_ms = 80" >> tensorzero-core/tests/e2e/tensorzero.toml
-#     echo "__force_allow_embedded_batch_writes = true" >> tensorzero-core/tests/e2e/tensorzero.toml
 
 AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY ./ci/download-provider-proxy-cache.sh
 

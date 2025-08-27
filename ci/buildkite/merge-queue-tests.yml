@@ -37,6 +37,12 @@ steps:
     command: bash ./ci/buildkite/build-provider-proxy-cache-container.sh
     key: "build-provider-proxy-cache-container"
 
+  - label: "Download Provider Proxy Cache"
+    command: bash ./ci/buildkite/download-provider-proxy-cache.sh
+    key: "download-provider-proxy-cache"
+    artifact_paths:
+      - provider-proxy-cache.tar.gz
+
   - label: "Modal Service Warmup"
     command: bash ./ci/buildkite/modal-warmup.sh
     key: "modal-warmup"
@@ -87,3 +93,4 @@ steps:
       - "build-mock-inference-provider-container"
       - "build-provider-proxy-cache-container"
       - "modal-warmup"
+      - "download-provider-proxy-cache"
