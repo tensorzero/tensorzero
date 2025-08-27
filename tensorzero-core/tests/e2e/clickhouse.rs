@@ -175,6 +175,18 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     // Insert data so that we test the migration re-creates the tables properly.
     let s3_fixtures_path = format!("{MANIFEST_PATH}/../ui/fixtures/s3-fixtures");
     let s3_fixtures_path = &s3_fixtures_path;
+    println!("Inserting large fixtures from S3 at {}", s3_fixtures_path);
+    // Print all items in the s3_fixtures_path directory
+    if let Ok(entries) = std::fs::read_dir(s3_fixtures_path) {
+        println!("Contents of {}:", s3_fixtures_path);
+        for entry in entries {
+            if let Ok(entry) = entry {
+                println!("  - {}", entry.file_name().to_string_lossy());
+            }
+        }
+    } else {
+        println!("Failed to read directory: {}", s3_fixtures_path);
+    }
 
     let ClickHouseConnectionInfo::Production {
         database_url,
