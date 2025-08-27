@@ -8,6 +8,11 @@ import type { JsonValue } from "./serde_json/JsonValue";
 
 export type ClientInputMessageContent =
   | ({ type: "text" } & TextKind)
+  | {
+      type: "template";
+      name: string;
+      arguments: { [key in string]?: JsonValue };
+    }
   | ({ type: "tool_call" } & ToolCallInput)
   | ({ type: "tool_result" } & ToolResult)
   | { type: "raw_text"; value: string }

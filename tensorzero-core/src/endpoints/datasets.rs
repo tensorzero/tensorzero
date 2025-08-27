@@ -29,8 +29,8 @@ use crate::{
     function::FunctionConfig,
     gateway_util::{AppState, StructuredJson},
     inference::types::{
-        ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
-        JsonInferenceDatabaseInsert, JsonInferenceOutput,
+        ChatInferenceDatabaseInsert, ContentBlockChatOutput, Input, JsonInferenceDatabaseInsert,
+        JsonInferenceOutput, ResolveContext,
     },
     serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
     tool::{DynamicToolParams, ToolCallConfigDatabaseInsert},
@@ -337,7 +337,7 @@ pub async fn update_datapoint_handler(
 ) -> Result<Json<InsertDatapointResponse>, Error> {
     validate_tensorzero_uuid(path_params.datapoint_id, "Datapoint")?;
     validate_dataset_name(&path_params.dataset_name)?;
-    let fetch_context = FetchContext {
+    let fetch_context = ResolveContext {
         client: &app_state.http_client,
         object_store_info: &app_state.config.object_store_info,
     };
@@ -531,7 +531,7 @@ pub async fn insert_datapoint(
     validate_dataset_name(&dataset_name)?;
     let mut chat_datapoints = Vec::with_capacity(params.datapoints.len());
     let mut json_datapoints = Vec::with_capacity(params.datapoints.len());
-    let fetch_context = FetchContext {
+    let fetch_context = ResolveContext {
         client: http_client,
         object_store_info: &config.object_store_info,
     };

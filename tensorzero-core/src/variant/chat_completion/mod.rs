@@ -7,6 +7,7 @@ use crate::config::path::TomlRelativePath;
 use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
@@ -110,50 +111,19 @@ impl UninitializedChatCompletionConfig {
         schemas: &SchemaData,
         error_context: &ErrorContext,
     ) -> Result<ChatCompletionConfig, Error> {
+        let templates = ChatTemplates::build(
+            &self,
+            schemas,
+            format!(
+                "functions.{}.variants.{}",
+                error_context.function_name, error_context.variant_name
+            )
+            .as_str(),
+        )?;
         Ok(ChatCompletionConfig {
             weight: self.weight,
             model: self.model,
-            // If we have a schema but not template, we'll produce `None` here.
-            // We check for this case (by looking at the `FunctionConfig` schemas)
-            // in `validate_template_and_schema`
-            templates: ChatTemplates {
-                system: self
-                    .system_template
-                    .map(|x| {
-                        Ok::<_, Error>(TemplateWithSchema {
-                            template: PathWithContents::from_path(x)?,
-                            schema: schemas.system.clone(),
-                        })
-                    })
-                    .transpose()?,
-                user: self
-                    .user_template
-                    .map(|x| {
-                        Ok::<_, Error>(TemplateWithSchema {
-                            template: PathWithContents::from_path(x)?,
-                            schema: schemas.user.clone(),
-                        })
-                    })
-                    .transpose()?,
-                assistant: self
-                    .assistant_template
-                    .map(|x| {
-                        Ok::<_, Error>(TemplateWithSchema {
-                            template: PathWithContents::from_path(x)?,
-                            schema: schemas.assistant.clone(),
-                        })
-                    })
-                    .transpose()?,
-            }
-            .apply_wrappers(
-                self.input_wrappers,
-                schemas,
-                format!(
-                    "functions.{}.variants.{}",
-                    error_context.function_name, error_context.variant_name
-                )
-                .as_str(),
-            )?,
+            templates,
             temperature: self.temperature,
             top_p: self.top_p,
             max_tokens: self.max_tokens,
@@ -172,15 +142,10 @@ impl UninitializedChatCompletionConfig {
 impl ChatCompletionConfig {
     pub fn prepare_request_message(
         &self,
-        templates: &TemplateConfig,
+        template_config: &TemplateConfig,
         message: &ResolvedInputMessage,
     ) -> Result<RequestMessage, Error> {
-        let template = match message.role {
-            Role::User => self.templates.user.as_ref(),
-            Role::Assistant => self.templates.assistant.as_ref(),
-        };
-
-        prepare_request_message(message, templates, template)
+        prepare_request_message(message, template_config, &self.templates)
     }
 
     pub fn prepare_system_message(
@@ -188,8 +153,13 @@ impl ChatCompletionConfig {
         templates: &TemplateConfig,
         system: Option<&Value>,
     ) -> Result<Option<String>, Error> {
-        let template = self.templates.system.as_ref();
-        prepare_system_message(system, templates, template)
+        prepare_system_message(
+            system,
+            templates,
+            self.templates
+                .get_implicit_system_template()
+                .map(std::convert::AsRef::as_ref),
+        )
     }
 
     fn prepare_request<'a, 'request>(
@@ -261,19 +231,21 @@ pub fn prepare_model_input(
     system: Option<&Value>,
     messages: &[ResolvedInputMessage],
     templates_config: &TemplateConfig,
-    templates: &ChatTemplates,
+    chat_templates: &ChatTemplates,
 ) -> Result<ModelInput, Error> {
-    let system = prepare_system_message(system, templates_config, templates.system.as_ref())?;
+    let system = prepare_system_message(
+        system,
+        templates_config,
+        chat_templates
+            .get_implicit_system_template()
+            .map(std::convert::AsRef::as_ref),
+    )?;
     let mut templated_messages = Vec::with_capacity(messages.len());
     for message in messages {
-        let template = match message.role {
-            Role::Assistant => templates.assistant.as_ref(),
-            Role::User => templates.user.as_ref(),
-        };
         templated_messages.push(prepare_request_message(
             message,
             templates_config,
-            template,
+            chat_templates,
         )?);
     }
     Ok(ModelInput {
@@ -318,54 +290,55 @@ fn prepare_system_message(
 
 fn prepare_request_message(
     message: &ResolvedInputMessage,
-    templates: &TemplateConfig,
-    template: Option<&TemplateWithSchema>,
+    template_config: &TemplateConfig,
+    chat_templates: &ChatTemplates,
 ) -> Result<RequestMessage, Error> {
     let mut content = Vec::new();
-    // If a schema is provided, or we have no template/schema at all, then we'll just use the `ResolvedInputMessageContent::Text`
-    // value as-is when applying the template.
-    // If a schema is not provided, then we create a single variable (based on the template kind),
-    // and set it to the string contents of the 'ResolvedInputMessageContent::Text
-    let template_var = match message.role {
-        Role::User => {
-            if template.is_none_or(|t| t.schema.is_some()) {
-                None
-            } else {
-                Some(USER_TEXT_TEMPLATE_VAR)
-            }
-        }
-        Role::Assistant => {
-            if template.is_none_or(|t| t.schema.is_some()) {
-                None
-            } else {
-                Some(ASSISTANT_TEXT_TEMPLATE_VAR)
-            }
-        }
-    };
     for block in &message.content {
         match block {
-            ResolvedInputMessageContent::Text { value } => {
-                let text_content= match template {
+            ResolvedInputMessageContent::Text { text } => {
+                let template = chat_templates.get_implicit_template(message.role);
+                // If a schema is provided, or we have no template/schema at all, then we'll just use the `ResolvedInputMessageContent::Text`
+                // value as-is when applying the template.
+                // If a schema is not provided, then we create a single variable (based on the template kind),
+                // and set it to the string contents of the 'ResolvedInputMessageContent::Text
+                let template_var = if template.is_none_or(|t| t.schema.is_some()) {
+                    None
+                } else {
+                    Some(message.role.implicit_template_var())
+                };
+
+                // TODO: add a test for passing in a plain string to a template with schema
+                let text_content = match template {
                     Some(template) => {
-                        let context =if let Some(template_var) = template_var {
-                            let message_text = value.as_str().ok_or_else(|| {
-                                Error::new(ErrorDetails::InvalidMessage { message: format!("Request message content {} is not a string but template (without schema) is provided for Role {}", value, message.role) })
-                            })?;
+                        let context = if let Some(template_var) = template_var {
                             Cow::Owned(serde_json::json!({
-                                template_var: message_text
+                                template_var: text
                             }))
                         } else {
-                            Cow::Borrowed(value)
+                            Cow::Owned(text.clone().into())
                         };
-                        templates.template_message(
-                        &template.template.path.get_template_key(),
-                        &context)?
+                        template_config.template_message(
+                            &template.template.path.get_template_key(),
+                            &context,
+                        )?
                     }
-                    None => value.as_str().ok_or_else(|| {
-                        Error::new(ErrorDetails::InvalidMessage { message: format!("Request message content {} is not a string but there is no variant template for Role {}", value, message.role) })
-                    })?.to_string()
+                    None => text.clone(),
                 };
                 content.push(text_content.into());
+            }
+            ResolvedInputMessageContent::Template { name, arguments } => {
+                // We already checked that the template exists during input validation
+                let template = chat_templates.get_named_template(name).ok_or_else(|| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: format!("Template `{name}` not found. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                    })
+                })?;
+                let output = template_config.template_message(
+                    &template.template.path.get_template_key(),
+                    &arguments.clone().into(),
+                )?;
+                content.push(output.into());
             }
             ResolvedInputMessageContent::RawText { value: text } => {
                 content.push(text.clone().into());
@@ -502,7 +475,9 @@ impl Variant for ChatCompletionConfig {
         validate_template_and_schema(
             TemplateKind::System,
             function.system_schema(),
-            self.templates.system.as_ref().map(|t| &t.template.path),
+            self.templates
+                .get_implicit_system_template()
+                .map(|t| &t.template.path),
             templates,
         )
         .map_err(|e| {
@@ -517,7 +492,9 @@ impl Variant for ChatCompletionConfig {
         validate_template_and_schema(
             TemplateKind::User,
             function.user_schema(),
-            self.templates.user.as_ref().map(|t| &t.template.path),
+            self.templates
+                .get_implicit_template(Role::User)
+                .map(|t| &t.template.path),
             templates,
         )
         .map_err(|e| {
@@ -532,7 +509,9 @@ impl Variant for ChatCompletionConfig {
         validate_template_and_schema(
             TemplateKind::Assistant,
             function.assistant_schema(),
-            self.templates.assistant.as_ref().map(|t| &t.template.path),
+            self.templates
+                .get_implicit_template(Role::Assistant)
+                .map(|t| &t.template.path),
             templates,
         )
         .map_err(|e| {
@@ -546,17 +525,7 @@ impl Variant for ChatCompletionConfig {
     }
 
     fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
-        let mut templates = Vec::new();
-        if let Some(system_template) = &self.templates.system {
-            templates.push(&system_template.template);
-        }
-        if let Some(user_template) = &self.templates.user {
-            templates.push(&user_template.template);
-        }
-        if let Some(assistant_template) = &self.templates.assistant {
-            templates.push(&assistant_template.template);
-        }
-        templates
+        self.templates.get_all_template_paths()
     }
 
     async fn start_batch_inference<'a>(
@@ -605,9 +574,9 @@ impl Variant for ChatCompletionConfig {
 
 /// The template variable names used when applying a template with no schema
 /// Only one of these variables is used per template, based on the `TemplateKind`
-const SYSTEM_TEXT_TEMPLATE_VAR: &str = "system_text";
-const USER_TEXT_TEMPLATE_VAR: &str = "user_text";
-const ASSISTANT_TEXT_TEMPLATE_VAR: &str = "assistant_text";
+pub const SYSTEM_TEXT_TEMPLATE_VAR: &str = "system_text";
+pub const USER_TEXT_TEMPLATE_VAR: &str = "user_text";
+pub const ASSISTANT_TEXT_TEMPLATE_VAR: &str = "assistant_text";
 
 #[derive(Copy, Clone, Debug)]
 pub enum TemplateKind {
@@ -683,8 +652,9 @@ mod tests {
     };
     use crate::jsonschema_util::{DynamicJSONSchema, StaticJSONSchema};
     use crate::minijinja_util::tests::{
-        get_test_template_config, test_assistant_template_schema, test_system_template_schema,
-        test_user_template_schema,
+        get_assistant_template, get_greeting_with_age_template, get_system_filled_template,
+        get_system_template, get_test_template_config, test_assistant_template_schema,
+        test_system_template_schema, test_user_template_schema,
     };
     use crate::model::{ModelConfig, ModelProvider, ProviderConfig};
     use crate::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
@@ -703,11 +673,7 @@ mod tests {
         let chat_completion_config = ChatCompletionConfig {
             model: "dummy".into(),
             weight: Some(1.0),
-            templates: ChatTemplates {
-                system: None,
-                user: None,
-                assistant: None,
-            },
+            templates: ChatTemplates::empty(),
             json_mode: Some(JsonMode::On),
             temperature: None,
             top_p: None,
@@ -759,55 +725,46 @@ mod tests {
             }
             _ => panic!("Expected Assistant message"),
         }
-        // Test case 3: Invalid JSON input
-        let input_message = ResolvedInputMessage {
-            role: Role::User,
-            content: vec![json!({"invalid": "json"}).into()],
-        };
-        let result = chat_completion_config
-            .prepare_request_message(&templates, &input_message)
-            .unwrap_err();
-        assert_eq!(result, ErrorDetails::InvalidMessage { message: "Request message content {\"invalid\":\"json\"} is not a string but there is no variant template for Role user".to_string()}.into());
 
         // Part 2: test with templates
-        let system_template_name = "system";
-        let user_template_name = "greeting_with_age";
-        let assistant_template_name = "assistant";
+        let system_template = get_system_template();
+        let user_template = get_greeting_with_age_template();
+        let assistant_template = get_assistant_template();
 
-        let chat_completion_config = ChatCompletionConfig {
+        let chat_completion_config = UninitializedChatCompletionConfig {
             model: "dummy".into(),
             weight: Some(1.0),
-            templates: ChatTemplates {
-                system: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: system_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_system_template_schema()),
-                }),
-                user: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: user_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_user_template_schema()),
-                }),
-                assistant: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: assistant_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_assistant_template_schema()),
-                }),
-            },
+            system_template: Some(system_template),
+            user_template: Some(user_template),
+            assistant_template: Some(assistant_template),
+            input_wrappers: None,
+
             json_mode: Some(JsonMode::On),
             ..Default::default()
-        };
+        }
+        .load(
+            &SchemaData {
+                user: Some(test_user_template_schema()),
+                assistant: Some(test_assistant_template_schema()),
+                system: Some(test_system_template_schema()),
+            },
+            &ErrorContext {
+                function_name: "test".to_string(),
+                variant_name: "test".to_string(),
+            },
+        )
+        .unwrap();
 
         // Test case 4: Assistant message with template
         let input_message = ResolvedInputMessage {
             role: Role::Assistant,
-            content: vec![json!({"reason": "it's against my ethical guidelines"}).into()],
+            content: vec![ResolvedInputMessageContent::Template {
+                name: "assistant".to_string(),
+                arguments: json!({"reason": "it's against my ethical guidelines"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            }],
         };
         let prepared_message = chat_completion_config
             .prepare_request_message(&templates, &input_message)
@@ -828,7 +785,13 @@ mod tests {
         // Test case 5: User message with template
         let input_message = ResolvedInputMessage {
             role: Role::User,
-            content: vec![json!({"name": "John", "age": 30}).into()],
+            content: vec![ResolvedInputMessageContent::Template {
+                name: "user".to_string(),
+                arguments: json!({"name": "John", "age": 30})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            }],
         };
         let result = chat_completion_config.prepare_request_message(&templates, &input_message);
         assert!(result.is_ok());
@@ -849,7 +812,10 @@ mod tests {
         // Test case 6: User message with bad input (missing required field)
         let input_message = ResolvedInputMessage {
             role: Role::User,
-            content: vec![json!({"name": "Alice"}).into()], // Missing "age" field
+            content: vec![ResolvedInputMessageContent::Template {
+                name: "user".to_string(),
+                arguments: json!({"name": "Alice"}).as_object().unwrap().clone(),
+            }], // Missing "age" field
         };
         let result = chat_completion_config.prepare_request_message(&templates, &input_message);
         assert!(result.is_err());
@@ -871,82 +837,6 @@ mod tests {
                 assert!(message.contains("undefined value"), "{}", message);
             }
             _ => panic!("Expected MiniJinjaTemplateRender error"),
-        }
-        // Part 3: test with filled out templates
-        let system_template_name = "system";
-        let user_template_name = "user_filled";
-        let assistant_template_name = "assistant_filled";
-
-        let chat_completion_config = ChatCompletionConfig {
-            model: "dummy".into(),
-            weight: Some(1.0),
-            templates: ChatTemplates {
-                system: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: system_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_system_template_schema()),
-                }),
-                user: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: user_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_user_template_schema()),
-                }),
-                assistant: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: assistant_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_assistant_template_schema()),
-                }),
-            },
-            json_mode: Some(JsonMode::On),
-            ..Default::default()
-        };
-
-        // Test case 8: assistant message with null input and filled out template
-        let input_message = ResolvedInputMessage {
-            role: Role::Assistant,
-            content: vec![Value::Null.into()],
-        };
-        let prepared_message = chat_completion_config
-            .prepare_request_message(&templates, &input_message)
-            .unwrap();
-        match prepared_message {
-            RequestMessage {
-                role: Role::Assistant,
-                content: assistant_message,
-            } => {
-                assert_eq!(
-                    assistant_message,
-                    vec!["I'm sorry but I can't help you with that because of it's against my ethical guidelines".to_string().into()]
-                );
-            }
-            _ => panic!("Expected Assistant message"),
-        }
-
-        // Test case 9: User message with null input and filled out template
-        let input_message = ResolvedInputMessage {
-            role: Role::User,
-            content: vec![Value::Null.into()],
-        };
-        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
-        assert!(result.is_ok());
-        let prepared_message = result.unwrap();
-        match prepared_message {
-            RequestMessage {
-                role: Role::User,
-                content: user_message,
-            } => {
-                assert_eq!(
-                    user_message,
-                    vec!["What's the capital of Japan?".to_string().into()]
-                );
-            }
-            _ => panic!("Expected User message"),
         }
     }
 
@@ -998,24 +888,29 @@ mod tests {
         assert_eq!(prepared_message, None);
 
         // Test with templates that need new info
-        let system_template_name = "system";
+        let system_template = get_system_template();
 
-        let chat_completion_config = ChatCompletionConfig {
+        let chat_completion_config = UninitializedChatCompletionConfig {
             model: "dummy".into(),
             weight: Some(1.0),
-            templates: ChatTemplates {
-                system: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: system_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_system_template_schema()),
-                }),
+            system_template: Some(system_template),
+            user_template: None,
+            assistant_template: None,
+            input_wrappers: None,
+            ..Default::default()
+        }
+        .load(
+            &SchemaData {
+                system: Some(test_system_template_schema()),
                 user: None,
                 assistant: None,
             },
-            ..Default::default()
-        };
+            &ErrorContext {
+                function_name: "test".to_string(),
+                variant_name: "test".to_string(),
+            },
+        )
+        .unwrap();
 
         let input_message = serde_json::json!({"assistant_name": "ChatGPT"});
         let prepared_message = chat_completion_config
@@ -1027,24 +922,22 @@ mod tests {
         );
 
         // Test with template that is complete as is (string)
-        let system_template_name = "system_filled";
+        let system_template = get_system_filled_template();
 
-        let chat_completion_config = ChatCompletionConfig {
+        let chat_completion_config = UninitializedChatCompletionConfig {
             model: "dummy".into(),
             weight: Some(1.0),
-            templates: ChatTemplates {
-                system: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: system_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: None,
-                }),
-                user: None,
-                assistant: None,
-            },
+            system_template: Some(system_template),
             ..Default::default()
-        };
+        }
+        .load(
+            &SchemaData::default(),
+            &ErrorContext {
+                function_name: "test".to_string(),
+                variant_name: "test".to_string(),
+            },
+        )
+        .unwrap();
 
         let result = chat_completion_config.prepare_system_message(&templates, None);
         assert!(result.is_ok());
@@ -1070,30 +963,30 @@ mod tests {
             },
         };
         let templates = get_test_template_config();
-        let system_template_name = "system";
-        let user_template_name = "greeting_with_age";
-        let chat_completion_config = ChatCompletionConfig {
+        let system_template = get_system_template();
+        let user_template = get_greeting_with_age_template();
+        let chat_completion_config = UninitializedChatCompletionConfig {
             model: "good".into(),
             weight: Some(1.0),
-            templates: ChatTemplates {
-                system: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: system_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_system_template_schema()),
-                }),
-                user: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: user_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_user_template_schema()),
-                }),
+            system_template: Some(system_template.clone()),
+            user_template: Some(user_template.clone()),
+            assistant_template: None,
+            input_wrappers: None,
+
+            ..Default::default()
+        }
+        .load(
+            &SchemaData {
+                system: Some(test_system_template_schema()),
+                user: Some(test_user_template_schema()),
                 assistant: None,
             },
-            ..Default::default()
-        };
+            &ErrorContext {
+                function_name: "test".to_string(),
+                variant_name: "test".to_string(),
+            },
+        )
+        .unwrap();
         let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
         let function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
@@ -1235,7 +1128,13 @@ mod tests {
         let inference_params = InferenceParams::default();
         let messages = vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![json!({"name": "Luke", "age": 20}).into()],
+            content: vec![ResolvedInputMessageContent::Template {
+                name: "user".to_string(),
+                arguments: json!({"name": "Luke", "age": 20})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            }],
         }];
         let input = ResolvedInput {
             system: Some(json!({"assistant_name": "R2-D2"})),
@@ -1280,28 +1179,27 @@ mod tests {
         );
         // Test case 3: Model inference fails because of model issues
 
-        let chat_completion_config = ChatCompletionConfig {
+        let chat_completion_config = UninitializedChatCompletionConfig {
             model: "error".into(),
             weight: Some(1.0),
-            templates: ChatTemplates {
-                system: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: system_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_system_template_schema()),
-                }),
-                user: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: user_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_user_template_schema()),
-                }),
-                assistant: None,
-            },
+            system_template: Some(system_template.clone()),
+            user_template: Some(user_template.clone()),
+            assistant_template: None,
+            input_wrappers: None,
             ..Default::default()
-        };
+        }
+        .load(
+            &SchemaData {
+                user: Some(test_user_template_schema()),
+                assistant: None,
+                system: Some(test_system_template_schema()),
+            },
+            &ErrorContext {
+                function_name: "test".to_string(),
+                variant_name: "test".to_string(),
+            },
+        )
+        .unwrap();
         let inference_params = InferenceParams::default();
         let models = HashMap::from([("error".into(), error_model_config)]);
         let models = models.try_into().unwrap();
@@ -1354,28 +1252,27 @@ mod tests {
 
         // Test case 4: Model inference succeeds
         let inference_params = InferenceParams::default();
-        let chat_completion_config = ChatCompletionConfig {
+        let chat_completion_config = UninitializedChatCompletionConfig {
             model: "good".into(),
             weight: Some(1.0),
-            templates: ChatTemplates {
-                system: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: system_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_system_template_schema()),
-                }),
-                user: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: user_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_user_template_schema()),
-                }),
-                assistant: None,
-            },
+            system_template: Some(system_template.clone()),
+            user_template: Some(user_template.clone()),
+            assistant_template: None,
+            input_wrappers: None,
             ..Default::default()
-        };
+        }
+        .load(
+            &SchemaData {
+                user: Some(test_user_template_schema()),
+                assistant: None,
+                system: Some(test_system_template_schema()),
+            },
+            &ErrorContext {
+                function_name: "test".to_string(),
+                variant_name: "test".to_string(),
+            },
+        )
+        .unwrap();
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".into(),
             ..Default::default()
@@ -1619,7 +1516,13 @@ mod tests {
         }
         let messages = vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![json!({"name": "Luke", "age": 20}).into()],
+            content: vec![ResolvedInputMessageContent::Template {
+                name: "user".to_string(),
+                arguments: json!({"name": "Luke", "age": 20})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            }],
         }];
         let input = ResolvedInput {
             system: Some(json!({"assistant_name": "R2-D2"})),
@@ -1648,29 +1551,28 @@ mod tests {
             extra_headers: Default::default(),
             extra_cache_key: None,
         };
-        let chat_completion_config = ChatCompletionConfig {
+        let chat_completion_config = UninitializedChatCompletionConfig {
             model: "json".into(),
             weight: Some(1.0),
-            templates: ChatTemplates {
-                system: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: system_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_system_template_schema()),
-                }),
-                user: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: user_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_user_template_schema()),
-                }),
-                assistant: None,
-            },
+            system_template: Some(system_template.clone()),
+            user_template: Some(user_template.clone()),
+            assistant_template: None,
+            input_wrappers: None,
             extra_body: Default::default(),
             ..Default::default()
-        };
+        }
+        .load(
+            &SchemaData {
+                system: Some(test_system_template_schema()),
+                user: Some(test_user_template_schema()),
+                assistant: None,
+            },
+            &ErrorContext {
+                function_name: "test".to_string(),
+                variant_name: "test".to_string(),
+            },
+        )
+        .unwrap();
         let result = chat_completion_config
             .infer(
                 &input,
@@ -1772,28 +1674,28 @@ mod tests {
             extra_headers: Default::default(),
             extra_cache_key: None,
         };
-        let chat_completion_config = ChatCompletionConfig {
+        let chat_completion_config = UninitializedChatCompletionConfig {
             model: "json".into(),
             weight: Some(1.0),
-            templates: ChatTemplates {
-                system: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: system_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_system_template_schema()),
-                }),
-                user: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: user_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_user_template_schema()),
-                }),
+            system_template: Some(system_template.clone()),
+            user_template: Some(user_template.clone()),
+            assistant_template: None,
+            input_wrappers: None,
+
+            ..Default::default()
+        }
+        .load(
+            &SchemaData {
+                system: Some(test_system_template_schema()),
+                user: Some(test_user_template_schema()),
                 assistant: None,
             },
-            ..Default::default()
-        };
+            &ErrorContext {
+                function_name: "test".to_string(),
+                variant_name: "test".to_string(),
+            },
+        )
+        .unwrap();
         let result = chat_completion_config
             .infer(
                 &input,
@@ -1884,26 +1786,13 @@ mod tests {
             extra_headers: Default::default(),
             extra_cache_key: None,
         };
-        let chat_completion_config = ChatCompletionConfig {
+        let chat_completion_config = UninitializedChatCompletionConfig {
             model: "json".into(),
             weight: Some(1.0),
-            templates: ChatTemplates {
-                system: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: system_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_system_template_schema()),
-                }),
-                user: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: user_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_user_template_schema()),
-                }),
-                assistant: None,
-            },
+            system_template: Some(system_template),
+            user_template: Some(user_template),
+            assistant_template: None,
+            input_wrappers: None,
             temperature: Some(0.5),
             top_p: Some(0.9),
             presence_penalty: Some(0.1),
@@ -1911,7 +1800,19 @@ mod tests {
             max_tokens: Some(100),
             seed: Some(42),
             ..Default::default()
-        };
+        }
+        .load(
+            &SchemaData {
+                user: Some(test_user_template_schema()),
+                assistant: None,
+                system: Some(test_system_template_schema()),
+            },
+            &ErrorContext {
+                function_name: "test".to_string(),
+                variant_name: "test".to_string(),
+            },
+        )
+        .unwrap();
         let result = chat_completion_config
             .infer(
                 &input,
@@ -1993,8 +1894,8 @@ mod tests {
             description: None,
         })));
 
-        let system_template_name = "system";
-        let user_template_name = "greeting_with_age";
+        let system_template = get_system_template();
+        let user_template = get_greeting_with_age_template();
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".into(),
             ..Default::default()
@@ -2037,34 +1938,42 @@ mod tests {
         let inference_params = InferenceParams::default();
         let messages = vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![json!({"name": "Luke", "age": 20}).into()],
+            content: vec![ResolvedInputMessageContent::Template {
+                name: "user".to_string(),
+                arguments: json!({"name": "Luke", "age": 20})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            }],
         }];
         let input = ResolvedInput {
             system: Some(json!({"assistant_name": "R2-D2"})),
             messages,
         };
-        let chat_completion_config = Box::leak(Box::new(ChatCompletionConfig {
-            model: "error".into(),
-            weight: Some(1.0),
-            templates: ChatTemplates {
-                system: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: system_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_system_template_schema()),
-                }),
-                user: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: user_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_user_template_schema()),
-                }),
-                assistant: None,
-            },
-            ..Default::default()
-        }));
+        let chat_completion_config = Box::leak(Box::new(
+            UninitializedChatCompletionConfig {
+                model: "error".into(),
+                weight: Some(1.0),
+                system_template: Some(system_template.clone()),
+                user_template: Some(user_template.clone()),
+                assistant_template: None,
+                input_wrappers: None,
+
+                ..Default::default()
+            }
+            .load(
+                &SchemaData {
+                    user: Some(test_user_template_schema()),
+                    assistant: None,
+                    system: Some(test_system_template_schema()),
+                },
+                &ErrorContext {
+                    function_name: "test".to_string(),
+                    variant_name: "test".to_string(),
+                },
+            )
+            .unwrap(),
+        ));
         let models = Box::leak(Box::new(
             HashMap::from([("error".into(), error_model_config)])
                 .try_into()
@@ -2118,28 +2027,28 @@ mod tests {
 
         // Test case 2: Model inference succeeds
         let inference_params = InferenceParams::default();
-        let chat_completion_config = Box::leak(Box::new(ChatCompletionConfig {
+        let chat_completion_config = UninitializedChatCompletionConfig {
             model: "good".into(),
             weight: Some(1.0),
-            templates: ChatTemplates {
-                system: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: system_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_system_template_schema()),
-                }),
-                user: Some(TemplateWithSchema {
-                    template: PathWithContents {
-                        path: user_template_name.into(),
-                        contents: String::new(),
-                    },
-                    schema: Some(test_user_template_schema()),
-                }),
-                assistant: None,
-            },
+            system_template: Some(system_template),
+            user_template: Some(user_template),
+            assistant_template: None,
+            input_wrappers: None,
+
             ..Default::default()
-        }));
+        }
+        .load(
+            &SchemaData {
+                user: Some(test_user_template_schema()),
+                assistant: None,
+                system: Some(test_system_template_schema()),
+            },
+            &ErrorContext {
+                function_name: "test".to_string(),
+                variant_name: "test".to_string(),
+            },
+        )
+        .unwrap();
         let models = Box::leak(Box::new(
             HashMap::from([("good".into(), text_model_config)])
                 .try_into()

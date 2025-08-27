@@ -938,7 +938,7 @@ async fn check_invalid_image_evaluation() {
             InferenceResponse::Chat(chat_response) => chat_response,
             InferenceResponse::Json(..) => panic!("Json response not supported"),
         };
-        // Check the input to the inference parses as StoreInput
+        // Check the input to the inference parses as StoredInput
         let _clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // assert_eq!(&clickhouse_input, parsed.datapoint.input());
@@ -1302,6 +1302,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
     };
+
     let input = resolved_input_to_client_input(
         datapoint
             .input()
@@ -1309,8 +1310,7 @@ async fn test_run_llm_judge_evaluator_chat() {
             .reresolve(&clients.tensorzero_client)
             .await
             .unwrap(),
-    )
-    .unwrap();
+    );
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
@@ -1475,6 +1475,7 @@ async fn test_run_llm_judge_evaluator_json() {
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
     };
+
     let input = resolved_input_to_client_input(
         datapoint
             .input()
@@ -1482,8 +1483,7 @@ async fn test_run_llm_judge_evaluator_json() {
             .reresolve(&clients.tensorzero_client)
             .await
             .unwrap(),
-    )
-    .unwrap();
+    );
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,

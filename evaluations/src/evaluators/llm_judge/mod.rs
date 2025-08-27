@@ -272,7 +272,8 @@ fn prepare_serialized_input(input: &ClientInput) -> Result<String> {
                 | ClientInputMessageContent::ToolCall { .. }
                 | ClientInputMessageContent::ToolResult { .. }
                 | ClientInputMessageContent::RawText { .. }
-                | ClientInputMessageContent::Thought(_) => {}
+                | ClientInputMessageContent::Thought(_)
+                | ClientInputMessageContent::Template { .. } => {}
             }
         }
     }
@@ -336,6 +337,14 @@ fn serialize_content_for_messages_input(
             | ClientInputMessageContent::RawText { .. }
             | ClientInputMessageContent::Thought(_) => {
                 serialized_content.push(content_block.clone());
+            }
+            ClientInputMessageContent::Template { name: _, arguments } => {
+                // Since the LLM Judge does not have the template of the original function,
+                // we instead serialize the arguments and send them as a TextKind::Text block.
+                let arguments_string = serde_json::to_string(arguments)?;
+                serialized_content.push(ClientInputMessageContent::Text(TextKind::Text {
+                    text: arguments_string,
+                }));
             }
             ClientInputMessageContent::Text(text) => match text {
                 TextKind::Text { text } => {

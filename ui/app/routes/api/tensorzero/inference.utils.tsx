@@ -59,20 +59,20 @@ type InferenceActionContext =
   | { state: "init"; data: null; error: null }
   | { state: "idle"; data: InferenceActionResponse | null; error: null }
   | {
-      state: "submitting";
-      data: InferenceActionResponse | null;
-      error: null | InferenceActionError;
-    }
+    state: "submitting";
+    data: InferenceActionResponse | null;
+    error: null | InferenceActionError;
+  }
   | {
-      state: "loading";
-      data: InferenceActionResponse | null;
-      error: null | InferenceActionError;
-    }
+    state: "loading";
+    data: InferenceActionResponse | null;
+    error: null | InferenceActionError;
+  }
   | {
-      state: "error";
-      data: (Pick<InferenceActionResponse, "raw"> & { info?: never }) | null;
-      error: InferenceActionError;
-    };
+    state: "error";
+    data: (Pick<InferenceActionResponse, "raw"> & { info?: never }) | null;
+    error: InferenceActionError;
+  };
 
 const ENDPOINT = "/api/tensorzero/inference";
 
@@ -214,6 +214,12 @@ function tensorZeroStoredContentToInputContent(
   switch (content.type) {
     case "text":
       return content;
+    case "template":
+      return {
+        type: "template",
+        name: content.name,
+        arguments: content.arguments,
+      };
     case "tool_call":
       return {
         type: "tool_call",
@@ -361,9 +367,9 @@ export function prepareInferenceActionRequest(
       : null;
     const additional_tools = args.tool_params?.tools_available
       ? subtractStaticToolsFromInferenceInput(
-          args.tool_params?.tools_available,
-          args.functionConfig,
-        )
+        args.tool_params?.tools_available,
+        args.functionConfig,
+      )
       : null;
 
     return {

@@ -35,10 +35,10 @@ use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{
     collect_chunks, Base64File, ChatInferenceDatabaseInsert, ChatInferenceResultChunk,
-    CollectChunksArgs, ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason,
-    InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
-    InternalJsonInferenceOutput, JsonInferenceDatabaseInsert, JsonInferenceOutput,
-    JsonInferenceResultChunk, ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput,
+    CollectChunksArgs, ContentBlockChatOutput, ContentBlockChunk, FinishReason, InferenceResult,
+    InferenceResultChunk, InferenceResultStream, Input, InternalJsonInferenceOutput,
+    JsonInferenceDatabaseInsert, JsonInferenceOutput, JsonInferenceResultChunk,
+    ModelInferenceResponseWithMetadata, RequestMessage, ResolveContext, ResolvedInput,
     ResolvedInputMessageContent, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
@@ -325,7 +325,7 @@ pub async fn inference<T: Send + 'static>(
     };
     let resolved_input = params
         .input
-        .resolve(&FetchContext {
+        .resolve(&ResolveContext {
             client: http_client,
             object_store_info: &config.object_store_info,
         })

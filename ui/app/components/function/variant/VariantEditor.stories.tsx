@@ -58,9 +58,9 @@ const VariantEditorWrapper = ({
 export const FullyPopulated: Story = {
   args: {
     variantInfo: {} as VariantInfo,
-    confirmVariantInfo: () => {},
+    confirmVariantInfo: () => { },
     isOpen: false,
-    onClose: () => {},
+    onClose: () => { },
     variantName: "fully-populated",
   },
   render: () => (
@@ -124,9 +124,9 @@ export const FullyPopulated: Story = {
 export const MinimalConfig: Story = {
   args: {
     variantInfo: {} as VariantInfo,
-    confirmVariantInfo: () => {},
+    confirmVariantInfo: () => { },
     isOpen: false,
-    onClose: () => {},
+    onClose: () => { },
     variantName: "minimal-config",
   },
   render: () => (
@@ -136,11 +136,7 @@ export const MinimalConfig: Story = {
           type: "chat_completion",
           weight: null,
           model: "gpt-3.5-turbo",
-          templates: {
-            system: null,
-            user: null,
-            assistant: null,
-          },
+          templates: {},
           temperature: null,
           top_p: null,
           max_tokens: null,
@@ -170,9 +166,9 @@ export const MinimalConfig: Story = {
 export const WithJsonMode: Story = {
   args: {
     variantInfo: {} as VariantInfo,
-    confirmVariantInfo: () => {},
+    confirmVariantInfo: () => { },
     isOpen: false,
-    onClose: () => {},
+    onClose: () => { },
     variantName: "json-mode-variant",
   },
   render: () => (
@@ -199,7 +195,6 @@ export const WithJsonMode: Story = {
               },
               schema: null,
             },
-            assistant: null,
           },
           temperature: 0.3,
           top_p: 0.95,
@@ -230,9 +225,9 @@ export const WithJsonMode: Story = {
 export const WithTemplatesOnly: Story = {
   args: {
     variantInfo: {} as VariantInfo,
-    confirmVariantInfo: () => {},
+    confirmVariantInfo: () => { },
     isOpen: false,
-    onClose: () => {},
+    onClose: () => { },
     variantName: "templates-only",
   },
   render: () => (
@@ -304,9 +299,9 @@ export const WithTemplatesOnly: Story = {
 export const UnsupportedVariantType: Story = {
   args: {
     variantInfo: {} as VariantInfo,
-    confirmVariantInfo: () => {},
+    confirmVariantInfo: () => { },
     isOpen: false,
-    onClose: () => {},
+    onClose: () => { },
     variantName: "unsupported-type",
   },
   render: () => (

@@ -6,7 +6,12 @@ import type { ToolResult } from "./ToolResult";
 import type { JsonValue } from "./serde_json/JsonValue";
 
 export type ResolvedInputMessageContent =
-  | { type: "text"; value: JsonValue }
+  | { type: "text"; text: string }
+  | {
+      type: "template";
+      name: string;
+      arguments: { [key in string]?: JsonValue };
+    }
   | ({ type: "tool_call" } & ToolCall)
   | ({ type: "tool_result" } & ToolResult)
   | { type: "raw_text"; value: string }

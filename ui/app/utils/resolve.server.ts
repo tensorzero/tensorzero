@@ -93,6 +93,12 @@ async function resolveContent(
     case "thought":
     case "unknown":
       return content;
+    // TODO - do we need to use the template name here?
+    case "template":
+      return {
+        type: "structured_text",
+        arguments: content.arguments,
+      };
     case "text":
       return prepareDisplayText(content, role, functionConfig);
     case "image":
