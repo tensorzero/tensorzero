@@ -7,8 +7,6 @@ set -euo pipefail
 # Get all env vars
 source ci/buildkite/utils/live-tests-env.sh
 
-# Install `gdb`
-sudo apt-get update && sudo apt-get install -y gdb
 
 # ------------------------------------------------------------------------------
 # Set the short commit hash
