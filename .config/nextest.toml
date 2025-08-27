@@ -11,6 +11,10 @@ slow-timeout = { period = "10s", terminate-after = 3 }
 # On CI, we use the 'ci' profile, which runs all tests.
 default-filter = "not test(no_aws_credentials)"
 
+[[profile.default.overrides]]
+filter = 'test(evaluations)'
+slow-timeout = { period = "20s", terminate-after = 3 }
+
 # Profiles config
 # We use these profiles to define our major test groups.
 # By using `default-filter` to specify our tests, we can further restrict the tests

@@ -5,7 +5,7 @@ on:
 
 jobs:
   build-gateway-container:
-    runs-on: namespace-profile-tensorzero-8x16;overrides.cache-tag=build-gateway-cache
+    runs-on: namespace-profile-tensorzero-32x64;overrides.cache-tag=build-gateway-cache
 
     steps:
       # TODO - investigate why using the Namespace checkout action causes
