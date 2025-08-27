@@ -2,7 +2,7 @@ steps:
   - label: "Build Gateway Container"
     command: bash ./ci/buildkite/build-gateway-container.sh
     key: "build-gateway-container"
-    retries:
+    retry:
       automatic:
         - exit_status: "*"
           limit: 3
@@ -10,7 +10,7 @@ steps:
   - label: "Build Gateway E2E Container"
     command: bash ./ci/buildkite/build-gateway-e2e-container.sh
     key: "build-gateway-e2e-container"
-    retries:
+    retry:
       automatic:
         - exit_status: "*"
           limit: 3
@@ -18,7 +18,7 @@ steps:
   - label: "Build Mock Inference Provider Container"
     command: bash ./ci/buildkite/build-mock-inference-provider-container.sh
     key: "build-mock-inference-provider-container"
-    retries:
+    retry:
       automatic:
         - exit_status: "*"
           limit: 3
@@ -28,7 +28,7 @@ steps:
     key: "download-fixtures"
     artifact_paths:
       - fixtures.tar.gz
-    retries:
+    retry:
       automatic:
         - exit_status: "*"
           limit: 3
@@ -36,7 +36,7 @@ steps:
   - label: "Build Node Unit Tests Container"
     command: bash ./ci/buildkite/build-node-unit-tests-container.sh
     key: "build-node-unit-tests-container"
-    retries:
+    retry:
       automatic:
         - exit_status: "*"
           limit: 3
@@ -44,7 +44,7 @@ steps:
   - label: "Build UI Container"
     command: bash ./ci/buildkite/build-ui-container.sh
     key: "build-ui-container"
-    retries:
+    retry:
       automatic:
         - exit_status: "*"
           limit: 3
@@ -52,7 +52,7 @@ steps:
   - label: "Build UI E2E Tests Container"
     command: bash ./ci/buildkite/build-ui-e2e-tests-container.sh
     key: "build-ui-e2e-tests-container"
-    retries:
+    retry:
       automatic:
         - exit_status: "*"
           limit: 3
@@ -60,7 +60,7 @@ steps:
   - label: "Build ClickHouse Tests Container"
     command: bash ./ci/buildkite/build-clickhouse-tests.sh
     key: "build-clickhouse-tests-container"
-    retries:
+    retry:
       automatic:
         - exit_status: "*"
           limit: 3
@@ -68,7 +68,7 @@ steps:
   - label: "Build Live Tests Container"
     command: bash ./ci/buildkite/build-live-tests.sh
     key: "build-live-tests-container"
-    retries:
+    retry:
       automatic:
         - exit_status: "*"
           limit: 3
@@ -76,7 +76,7 @@ steps:
   - label: "Build Provider Proxy Container"
     command: bash ./ci/buildkite/build-provider-proxy-container.sh
     key: "build-provider-proxy-container"
-    retries:
+    retry:
       automatic:
         - exit_status: "*"
           limit: 3
@@ -86,7 +86,7 @@ steps:
     key: "download-provider-proxy-cache"
     artifact_paths:
       - provider-proxy-cache.tar.gz
-    retries:
+    retry:
       automatic:
         - exit_status: "*"
           limit: 3
