@@ -64,10 +64,6 @@ fi
 
 export FORCE_COLOR=1
 
-export GCP_VERTEX_CREDENTIALS_PATH=~/gcp_jwt_key.json
-
-export GOOGLE_APPLICATION_CREDENTIALS=~/gcp_jwt_key.json
-
 export GCP_STORAGE_ACCESS_KEY_ID=$(buildkite-agent secret get GCP_STORAGE_ACCESS_KEY_ID)
 if [ -z "$GCP_STORAGE_ACCESS_KEY_ID" ]; then
     echo "Error: GCP_STORAGE_ACCESS_KEY_ID is not set"

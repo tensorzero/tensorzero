@@ -25,6 +25,9 @@ tar -xzvf ui/fixtures/fixtures.tar.gz
 buildkite-agent artifact download provider-proxy-cache.tar.gz ci
 tar -xzvf ci/provider-proxy-cache.tar.gz
 
+# Write the GCP JWT key to a file
+echo $(buildkite-agent secret get MISTRAL_API_KEY) > tensorzero-core/tests/e2e/gcp-jwt-key.json
+
 # ------------------------------------------------------------------------------
 # Run live tests container via Docker Compose and capture exit code
 # ------------------------------------------------------------------------------

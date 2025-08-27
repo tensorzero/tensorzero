@@ -211,8 +211,8 @@ services:
       FIREWORKS_API_KEY: ${FIREWORKS_API_KEY:-}
       FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-}
       FORCE_COLOR: ${FORCE_COLOR:-1}
-      GCP_VERTEX_CREDENTIALS_PATH: ${GCP_VERTEX_CREDENTIALS_PATH:-}
-      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      GCP_VERTEX_CREDENTIALS_PATH: /app/gcp_jwt_key.json
+      GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
       GCP_STORAGE_ACCESS_KEY_ID: ${GCP_STORAGE_ACCESS_KEY_ID:-}
       GCP_STORAGE_SECRET_ACCESS_KEY: ${GCP_STORAGE_SECRET_ACCESS_KEY:-}
       GOOGLE_AI_STUDIO_API_KEY: ${GOOGLE_AI_STUDIO_API_KEY:-}
@@ -234,7 +234,7 @@ services:
       # Buildkite analytics
       BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
     volumes:
-      - ~/gcp_jwt_key.json:~/gcp_jwt_key.json:ro
+      - ./gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
       - ./tensorzero.toml:/app/tensorzero-core/tests/e2e/tensorzero.toml:ro
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       - .cargo/:/app/.cargo/
