@@ -45,8 +45,13 @@ use tensorzero_core::{
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
+pub fn init_tracing_for_tests() {
+    tracing_subscriber::fmt().init();
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_json() {
+    init_tracing_for_tests();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     let tensorzero_client = get_tensorzero_client().await;
@@ -320,6 +325,7 @@ async fn run_evaluations_json() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_exact_match_evaluation_chat() {
+    init_tracing_for_tests();
     let dataset_name = format!("good-haiku-data-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_chat_fixture_to_dataset(
@@ -441,6 +447,7 @@ async fn run_exact_match_evaluation_chat() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_llm_judge_evaluation_chat() {
+    init_tracing_for_tests();
     let dataset_name = format!("good-haikus-no-output-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_chat_fixture_to_dataset(
@@ -660,6 +667,7 @@ async fn run_llm_judge_evaluation_chat() {
 /// However, it takes an image and we verify that the image is actually used in the inference.
 #[tokio::test(flavor = "multi_thread")]
 async fn run_image_evaluation() {
+    init_tracing_for_tests();
     let dataset_name = format!("baz-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_chat_fixture_to_dataset(
@@ -873,6 +881,7 @@ async fn run_image_evaluation() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn check_invalid_image_evaluation() {
+    init_tracing_for_tests();
     let dataset_name = format!("baz-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_chat_fixture_to_dataset(
@@ -973,6 +982,7 @@ async fn check_invalid_image_evaluation() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_llm_judge_evaluation_chat_pretty() {
+    init_tracing_for_tests();
     let dataset_name = format!("good-haikus-no-output-{}", Uuid::now_v7());
     write_chat_fixture_to_dataset(
         &PathBuf::from(&format!(
@@ -1015,6 +1025,7 @@ async fn run_llm_judge_evaluation_chat_pretty() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_llm_judge_evaluation_json_pretty() {
+    init_tracing_for_tests();
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     write_json_fixture_to_dataset(
         &PathBuf::from(&format!(
@@ -1169,6 +1180,7 @@ async fn test_run_evaluation_binary() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_errors() {
+    init_tracing_for_tests();
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_json_fixture_to_dataset(
@@ -1221,6 +1233,7 @@ async fn run_evaluations_errors() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_llm_judge_evaluator_chat() {
+    init_tracing_for_tests();
     let tensorzero_client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(PathBuf::from(&format!(
             "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
@@ -1400,6 +1413,7 @@ async fn test_run_llm_judge_evaluator_chat() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_llm_judge_evaluator_json() {
+    init_tracing_for_tests();
     let tensorzero_client = get_tensorzero_client().await;
     let tensorzero_client = ThrottledTensorZeroClient::new(tensorzero_client, Semaphore::new(1));
     let clients = Arc::new(Clients {
@@ -1569,6 +1583,7 @@ async fn test_run_llm_judge_evaluator_json() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_best_of_3() {
+    init_tracing_for_tests();
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_json_fixture_to_dataset(
@@ -1755,6 +1770,7 @@ async fn run_evaluations_best_of_3() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_mixture_of_3() {
+    init_tracing_for_tests();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     write_json_fixture_to_dataset(
@@ -1944,6 +1960,7 @@ async fn run_evaluations_mixture_of_3() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_dicl() {
+    init_tracing_for_tests();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     write_json_fixture_to_dataset(
@@ -2136,6 +2153,7 @@ async fn run_evaluations_dicl() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_query_skips_staled_datapoints() {
+    init_tracing_for_tests();
     let dataset_name = format!("exact_matches_empty-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_json_fixture_to_dataset(
