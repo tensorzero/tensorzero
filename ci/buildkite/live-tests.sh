@@ -1,8 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-# Clear disk space
-# ./ci/free-disk-space.sh
+# Common CI trap helper
+source ci/buildkite/utils/trap-helpers.sh
+# Print logs from the ClickHouse compose stack on exit
+tz_setup_compose_logs_trap tensorzero-core/tests/e2e/docker-compose.clickhouse.yml
 
 # Get all env vars
 source ci/buildkite/utils/live-tests-env.sh
@@ -35,7 +37,7 @@ buildkite-agent artifact download provider-proxy-cache.tar.gz ci
 tar -xzvf ci/provider-proxy-cache.tar.gz
 
 # Write the GCP JWT key to a file
-echo $(buildkite-agent secret get MISTRAL_API_KEY) > gcp_jwt_key.json
+echo $(buildkite-agent secret get GCP_JWT_KEY) > gcp_jwt_key.json
 
 # ------------------------------------------------------------------------------
 # Docker Hub auth (for pulling built images)
