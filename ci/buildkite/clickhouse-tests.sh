@@ -6,11 +6,6 @@ source ci/buildkite/utils/trap-helpers.sh
 # Print logs from the ClickHouse compose stack on exit
 tz_setup_compose_logs_trap tensorzero-core/tests/e2e/docker-compose.clickhouse.yml
 
-# Ensure required ClickHouse version variable is set
-if [ -z "${TENSORZERO_CLICKHOUSE_VERSION:-}" ]; then
-  echo "Error: TENSORZERO_CLICKHOUSE_VERSION environment variable is required"
-  exit 1
-fi
 
 # ------------------------------------------------------------------------------
 # Set the short commit hash
@@ -23,6 +18,13 @@ test ui/fixtures/fixtures.tar.gz
 tar -xzvf ui/fixtures/fixtures.tar.gz
 
 sleep infinity
+
+# Ensure required ClickHouse version variable is set
+if [ -z "${TENSORZERO_CLICKHOUSE_VERSION:-}" ]; then
+  echo "Error: TENSORZERO_CLICKHOUSE_VERSION environment variable is required"
+  exit 1
+fi
+
 
 # ------------------------------------------------------------------------------
 # Docker Hub auth (for pulling built images)
