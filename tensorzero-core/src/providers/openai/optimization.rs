@@ -326,7 +326,7 @@ impl<'a> TryFrom<&'a RenderedSample> for OpenAISupervisedRow<'a> {
                 .input
                 .system
                 .as_deref()
-                .map(super::SystemOrDeveloperMessage::System),
+                .map(super::SystemOrDeveloper::System),
             messages: &inference.input.messages,
             json_mode: None,
             provider_type: PROVIDER_TYPE,
@@ -391,7 +391,7 @@ impl<'a> TryFrom<&'a RenderedSample> for OpenAIReinforcementRow<'a> {
                 .input
                 .system
                 .as_deref()
-                .map(super::SystemOrDeveloperMessage::Developer),
+                .map(super::SystemOrDeveloper::Developer),
             messages: &inference.input.messages,
             json_mode: None,
             provider_type: PROVIDER_TYPE,

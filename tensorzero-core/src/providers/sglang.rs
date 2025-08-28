@@ -34,7 +34,7 @@ use crate::tool::ToolCallChunk;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
-    OpenAIUsage, PrepareOpenAIMessagesArgs, StreamOptions, SystemOrDeveloperMessage,
+    OpenAIUsage, PrepareOpenAIMessagesArgs, StreamOptions, SystemOrDeveloper,
 };
 
 fn default_api_key_location() -> CredentialLocation {
@@ -561,10 +561,7 @@ impl<'a> SGLangRequest<'a> {
             None
         };
         let messages = prepare_openai_messages(PrepareOpenAIMessagesArgs {
-            system_or_developer: request
-                .system
-                .as_deref()
-                .map(SystemOrDeveloperMessage::System),
+            system_or_developer: request.system.as_deref().map(SystemOrDeveloper::System),
             messages: &request.messages,
             json_mode: Some(&request.json_mode),
             provider_type: PROVIDER_TYPE,

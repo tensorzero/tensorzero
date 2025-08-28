@@ -35,7 +35,7 @@ use super::openai::{
     prepare_system_or_developer_message, tensorzero_to_openai_messages,
     OpenAIAssistantRequestMessage, OpenAIContentBlock, OpenAIFinishReason, OpenAIRequestMessage,
     OpenAIResponseToolCall, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIUsage,
-    OpenAIUserRequestMessage, StreamOptions, SystemOrDeveloperMessage,
+    OpenAIUserRequestMessage, StreamOptions, SystemOrDeveloper,
 };
 
 lazy_static! {
@@ -605,10 +605,7 @@ pub(super) fn prepare_deepseek_messages<'a>(
             );
         }
     } else if let Some(system_msg) = prepare_system_or_developer_message(
-        request
-            .system
-            .as_deref()
-            .map(SystemOrDeveloperMessage::System),
+        request.system.as_deref().map(SystemOrDeveloper::System),
         Some(&request.json_mode),
         &messages,
     ) {

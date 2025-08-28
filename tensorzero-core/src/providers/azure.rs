@@ -33,7 +33,7 @@ use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
     OpenAIToolChoiceString, OpenAIUsage, PrepareOpenAIMessagesArgs, SpecificToolChoice,
-    SystemOrDeveloperMessage,
+    SystemOrDeveloper,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 
@@ -537,10 +537,7 @@ impl<'a> AzureRequest<'a> {
     pub fn new(request: &'a ModelInferenceRequest<'_>) -> Result<AzureRequest<'a>, Error> {
         let response_format = AzureResponseFormat::new(request.json_mode, request.output_schema);
         let messages = prepare_openai_messages(PrepareOpenAIMessagesArgs {
-            system_or_developer: request
-                .system
-                .as_deref()
-                .map(SystemOrDeveloperMessage::System),
+            system_or_developer: request.system.as_deref().map(SystemOrDeveloper::System),
             messages: &request.messages,
             json_mode: Some(&request.json_mode),
             provider_type: PROVIDER_TYPE,

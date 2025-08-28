@@ -26,7 +26,7 @@ use url::Url;
 use super::openai::{
     convert_stream_error, get_chat_url, prepare_openai_messages, prepare_openai_tools,
     OpenAIRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIToolType, PrepareOpenAIMessagesArgs,
-    StreamOptions, SystemOrDeveloperMessage,
+    StreamOptions, SystemOrDeveloper,
 };
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
@@ -448,10 +448,7 @@ impl<'a> TGIRequest<'a> {
         };
 
         let messages = prepare_openai_messages(PrepareOpenAIMessagesArgs {
-            system_or_developer: request
-                .system
-                .as_deref()
-                .map(SystemOrDeveloperMessage::System),
+            system_or_developer: request.system.as_deref().map(SystemOrDeveloper::System),
             messages: &request.messages,
             json_mode: Some(&request.json_mode),
             provider_type: PROVIDER_TYPE,

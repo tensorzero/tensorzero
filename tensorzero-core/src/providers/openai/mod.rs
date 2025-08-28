@@ -1156,13 +1156,13 @@ impl OpenAIRequestMessage<'_> {
     }
 }
 
-pub enum SystemOrDeveloperMessage<'a> {
+pub enum SystemOrDeveloper<'a> {
     System(&'a str),
     Developer(&'a str),
 }
 
 pub struct PrepareOpenAIMessagesArgs<'a> {
-    pub system_or_developer: Option<SystemOrDeveloperMessage<'a>>,
+    pub system_or_developer: Option<SystemOrDeveloper<'a>>,
     pub messages: &'a [RequestMessage],
     pub json_mode: Option<&'a ModelInferenceRequestJsonMode>,
     pub provider_type: &'a str,
@@ -1217,17 +1217,17 @@ pub(super) fn prepare_openai_tools<'a>(
 /// the request will return an error.
 /// So, we need to format the instructions to include "Respond using JSON." if it doesn't already.
 pub(super) fn prepare_system_or_developer_message<'a>(
-    system_or_developer: Option<SystemOrDeveloperMessage<'a>>,
+    system_or_developer: Option<SystemOrDeveloper<'a>>,
     json_mode: Option<&'_ ModelInferenceRequestJsonMode>,
     messages: &[OpenAIRequestMessage<'a>],
 ) -> Option<OpenAIRequestMessage<'a>> {
     match system_or_developer {
-        Some(SystemOrDeveloperMessage::System(content)) => Some(
-            format_system_or_developer_content(content, json_mode, messages, true),
-        ),
-        Some(SystemOrDeveloperMessage::Developer(content)) => Some(
-            format_system_or_developer_content(content, json_mode, messages, false),
-        ),
+        Some(SystemOrDeveloper::System(content)) => Some(format_system_or_developer_content(
+            content, json_mode, messages, true,
+        )),
+        Some(SystemOrDeveloper::Developer(content)) => Some(format_system_or_developer_content(
+            content, json_mode, messages, false,
+        )),
         None => {
             // Handle JSON mode when no system/developer message is provided
             match json_mode {
@@ -1739,10 +1739,7 @@ impl<'a> OpenAIRequest<'a> {
             None
         };
         let mut messages = prepare_openai_messages(PrepareOpenAIMessagesArgs {
-            system_or_developer: request
-                .system
-                .as_deref()
-                .map(SystemOrDeveloperMessage::System),
+            system_or_developer: request.system.as_deref().map(SystemOrDeveloper::System),
             messages: &request.messages,
             json_mode: Some(&request.json_mode),
             provider_type: PROVIDER_TYPE,
@@ -3459,7 +3456,7 @@ mod tests {
         assert_eq!(result, None);
 
         // Test Case 2: system is Some, json_mode is On, messages contain "json"
-        let system_or_developer = Some(SystemOrDeveloperMessage::System("System instructions"));
+        let system_or_developer = Some(SystemOrDeveloper::System("System instructions"));
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
@@ -3482,7 +3479,7 @@ mod tests {
         assert_eq!(result, expected);
 
         // Test Case 3: system is Some, json_mode is On, messages do not contain "json"
-        let system_or_developer = Some(SystemOrDeveloperMessage::System("System instructions"));
+        let system_or_developer = Some(SystemOrDeveloper::System("System instructions"));
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
@@ -3506,9 +3503,7 @@ mod tests {
         assert_eq!(result, expected);
 
         // Test Case 4: developer is Some, json_mode is Off
-        let system_or_developer = Some(SystemOrDeveloperMessage::Developer(
-            "Developer instructions",
-        ));
+        let system_or_developer = Some(SystemOrDeveloper::Developer("Developer instructions"));
         let json_mode = ModelInferenceRequestJsonMode::Off;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
@@ -3533,9 +3528,7 @@ mod tests {
         assert_eq!(result, expected);
 
         // Test Case 5: developer is Some, json_mode is On, messages do not contain "json"
-        let system_or_developer = Some(SystemOrDeveloperMessage::Developer(
-            "Developer instructions",
-        ));
+        let system_or_developer = Some(SystemOrDeveloper::Developer("Developer instructions"));
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![OpenAIRequestMessage::User(OpenAIUserRequestMessage {
             content: vec![OpenAIContentBlock::Text {
