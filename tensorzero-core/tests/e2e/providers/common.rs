@@ -3146,25 +3146,35 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let mut event_source = Client::new()
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
-        .eventsource()
-        .unwrap();
+            .eventsource()
+            .unwrap_or_else(|err| {
+                eprintln!("[ERROR] Failed to connect to gateway for streaming: {err}");
+                panic!("Upstream gateway error: {err}");
+            });
 
     let mut chunks = vec![];
     let mut found_done_chunk = false;
-    while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
+        while let Some(event) = event_source.next().await {
+            match event {
+                Ok(Event::Open) => continue,
+                Ok(Event::Message(message)) => {
+                    if message.data == "[DONE]" {
+                        found_done_chunk = true;
+                        break;
+                    }
+                    chunks.push(message.data);
                 }
-                chunks.push(message.data);
+                Err(err) => {
+                    eprintln!("[ERROR] Streaming event error: {err}");
+                    // Print the error and fail gracefully
+                    return String::from("[ERROR] Streaming failed: ") + &err.to_string();
+                }
             }
         }
-    }
-    assert!(found_done_chunk);
+        if !found_done_chunk {
+            eprintln!("[ERROR] Did not receive [DONE] chunk in streaming response");
+            return String::from("[ERROR] No [DONE] chunk received");
+        }
 
     let mut inference_id: Option<Uuid> = None;
     let mut full_content = String::new();

@@ -253,10 +253,6 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
 pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Llama.com API has fundamental streaming incompatibilities
-    if provider.model_provider_name == "llama_api" {
-        return;
-    }
     use reqwest_eventsource::{Event, RequestBuilderExt};
     use serde_json::Value;
 

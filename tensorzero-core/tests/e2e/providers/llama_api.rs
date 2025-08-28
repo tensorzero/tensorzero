@@ -17,7 +17,10 @@ async fn get_providers() -> E2ETestProviders {
         variant_name: "llama_api".to_string(),
         model_name: "llama-scout-llama".into(),
         model_provider_name: "llama_api".into(),
-        credentials: HashMap::new(),
+            credentials: HashMap::from([
+                ("temperature".to_string(), "1.0".to_string()),
+                ("top_p".to_string(), "0.95".to_string()),
+            ]),
     }];
 
     let extra_body_providers = vec![E2ETestProvider {
@@ -25,7 +28,10 @@ async fn get_providers() -> E2ETestProviders {
         variant_name: "llama_api-extra-body".to_string(),
         model_name: "llama-scout-llama".into(),
         model_provider_name: "llama_api".into(),
-        credentials: HashMap::new(),
+            credentials: HashMap::from([
+                ("temperature".to_string(), "1.0".to_string()),
+                ("top_p".to_string(), "0.95".to_string()),
+            ]),
     }];
 
     let bad_auth_extra_headers = vec![E2ETestProvider {
@@ -33,7 +39,10 @@ async fn get_providers() -> E2ETestProviders {
         variant_name: "llama_api-extra-headers".to_string(),
         model_name: "llama-scout-llama".into(),
         model_provider_name: "llama_api".into(),
-        credentials: HashMap::new(),
+            credentials: HashMap::from([
+                ("temperature".to_string(), "1.0".to_string()),
+                ("top_p".to_string(), "0.95".to_string()),
+            ]),
     }];
 
     let inference_params_providers = vec![E2ETestProvider {
@@ -41,7 +50,12 @@ async fn get_providers() -> E2ETestProviders {
         variant_name: "llama_api".to_string(),
         model_name: "llama-scout-llama".into(),
         model_provider_name: "llama_api".into(),
-        credentials: credentials.clone(),
+            credentials: {
+                let mut creds = credentials.clone();
+                creds.insert("temperature".to_string(), "1.0".to_string());
+                creds.insert("top_p".to_string(), "0.95".to_string());
+                creds
+            },
     }];
 
     let inference_params_dynamic_providers = vec![E2ETestProvider {
@@ -49,7 +63,12 @@ async fn get_providers() -> E2ETestProviders {
         variant_name: "llama_api-dynamic".to_string(),
         model_name: "llama-scout-llama-dynamic".into(),
         model_provider_name: "llama_api".into(),
-        credentials: credentials.clone(),
+            credentials: {
+                let mut creds = credentials.clone();
+                creds.insert("temperature".to_string(), "1.0".to_string());
+                creds.insert("top_p".to_string(), "0.95".to_string());
+                creds
+            },
     }];
 
     let shorthand_providers = vec![E2ETestProvider {
@@ -57,7 +76,10 @@ async fn get_providers() -> E2ETestProviders {
         variant_name: "llama_api-shorthand".to_string(),
         model_name: "llama-scout-llama".into(),
         model_provider_name: "llama_api".into(),
-        credentials: HashMap::new(),
+            credentials: HashMap::from([
+                ("temperature".to_string(), "1.0".to_string()),
+                ("top_p".to_string(), "0.95".to_string()),
+            ]),
     }];
 
     let json_providers = vec![
@@ -66,14 +88,20 @@ async fn get_providers() -> E2ETestProviders {
             variant_name: "llama_api".to_string(),
             model_name: "llama-scout-llama".into(),
             model_provider_name: "llama_api".into(),
-            credentials: HashMap::new(),
+                credentials: HashMap::from([
+                    ("temperature".to_string(), "1.0".to_string()),
+                    ("top_p".to_string(), "0.95".to_string()),
+                ]),
         },
         E2ETestProvider {
             supports_batch_inference: true,
             variant_name: "llama_api-strict".to_string(),
             model_name: "llama-scout-llama".into(),
             model_provider_name: "llama_api".into(),
-            credentials: HashMap::new(),
+                credentials: HashMap::from([
+                    ("temperature".to_string(), "1.0".to_string()),
+                    ("top_p".to_string(), "0.95".to_string()),
+                ]),
         },
     ];
 
