@@ -25,8 +25,8 @@ use python_helpers::{
     python_uuid_to_uuid,
 };
 use tensorzero_core::{
-    clickhouse::{query_builder::OrderBy, ClickhouseFormat},
-    config_parser::{ConfigPyClass, FunctionsConfigPyClass},
+    config::{ConfigPyClass, FunctionsConfigPyClass},
+    db::clickhouse::{query_builder::OrderBy, ClickhouseFormat},
     function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
     inference::types::{
         pyo3_helpers::{
@@ -38,10 +38,10 @@ use tensorzero_core::{
         ResolvedInput, ResolvedInputMessage,
     },
     optimization::{
-        fireworks_sft::UninitializedFireworksSFTConfig,
+        dicl::UninitializedDiclOptimizationConfig, fireworks_sft::UninitializedFireworksSFTConfig,
         gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig,
-        openai_sft::UninitializedOpenAISFTConfig, OptimizationJobInfoPyClass,
-        OptimizationJobStatus, UninitializedOptimizerInfo,
+        openai_sft::UninitializedOpenAISFTConfig, together_sft::UninitializedTogetherSFTConfig,
+        OptimizationJobInfoPyClass, OptimizationJobStatus, UninitializedOptimizerInfo,
     },
     variant::{
         BestOfNSamplingConfigPyClass, ChainOfThoughtConfigPyClass, ChatCompletionConfigPyClass,
@@ -95,7 +95,9 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<StoredInference>()?;
     m.add_class::<UninitializedOpenAISFTConfig>()?;
     m.add_class::<UninitializedFireworksSFTConfig>()?;
+    m.add_class::<UninitializedDiclOptimizationConfig>()?;
     m.add_class::<UninitializedGCPVertexGeminiSFTConfig>()?;
+    m.add_class::<UninitializedTogetherSFTConfig>()?;
     m.add_class::<Datapoint>()?;
     m.add_class::<ResolvedInput>()?;
     m.add_class::<ResolvedInputMessage>()?;
@@ -651,6 +653,7 @@ impl TensorZeroGateway {
             clickhouse_url,
             timeout,
             verify_credentials: true,
+            allow_batch_writes: false,
         })
         .build();
         let client = tokio_block_on_without_gil(cls.py(), client_fut);
@@ -1298,6 +1301,7 @@ impl AsyncTensorZeroGateway {
             clickhouse_url,
             timeout,
             verify_credentials: true,
+            allow_batch_writes: false,
         })
         .build();
         let fut = async move {

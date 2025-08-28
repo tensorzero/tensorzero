@@ -1,3 +1,4 @@
+use crate::config::SchemaData;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
@@ -32,7 +33,6 @@ use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
-use crate::variant::chat_completion::TemplateSchemaInfo;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
 #[derive(Debug, Serialize)]
@@ -216,9 +216,7 @@ impl VariantsConfigPyClass {
 #[cfg_attr(test, ts(export))]
 pub struct FunctionConfigChat {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
-    pub system_schema: Option<StaticJSONSchema>,
-    pub user_schema: Option<StaticJSONSchema>,
-    pub assistant_schema: Option<StaticJSONSchema>,
+    pub schemas: SchemaData,
     pub tools: Vec<String>, // tool names
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
@@ -230,9 +228,7 @@ pub struct FunctionConfigChat {
 #[cfg_attr(test, ts(export))]
 pub struct FunctionConfigJson {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
-    pub system_schema: Option<StaticJSONSchema>,
-    pub user_schema: Option<StaticJSONSchema>,
-    pub assistant_schema: Option<StaticJSONSchema>,
+    pub schemas: SchemaData,
     pub output_schema: StaticJSONSchema, // schema is mandatory for JSON functions
     pub implicit_tool_call_config: ToolCallConfig,
     pub description: Option<String>,
@@ -271,17 +267,17 @@ impl FunctionConfig {
         match &self {
             FunctionConfig::Chat(params) => {
                 validate_all_text_input(
-                    params.system_schema.as_ref(),
-                    params.user_schema.as_ref(),
-                    params.assistant_schema.as_ref(),
+                    params.schemas.system.as_ref(),
+                    params.schemas.user.as_ref(),
+                    params.schemas.assistant.as_ref(),
                     input,
                 )?;
             }
             FunctionConfig::Json(params) => {
                 validate_all_text_input(
-                    params.system_schema.as_ref(),
-                    params.user_schema.as_ref(),
-                    params.assistant_schema.as_ref(),
+                    params.schemas.system.as_ref(),
+                    params.schemas.user.as_ref(),
+                    params.schemas.assistant.as_ref(),
                     input,
                 )?;
             }
@@ -407,32 +403,31 @@ impl FunctionConfig {
         }
     }
 
-    pub fn template_schema_info(&self) -> TemplateSchemaInfo {
-        TemplateSchemaInfo {
-            has_system_schema: self.system_schema().is_some(),
-            has_user_schema: self.user_schema().is_some(),
-            has_assistant_schema: self.assistant_schema().is_some(),
+    pub fn schemas(&self) -> &SchemaData {
+        match self {
+            FunctionConfig::Chat(params) => &params.schemas,
+            FunctionConfig::Json(params) => &params.schemas,
         }
     }
 
     pub fn system_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
-            FunctionConfig::Chat(params) => params.system_schema.as_ref(),
-            FunctionConfig::Json(params) => params.system_schema.as_ref(),
+            FunctionConfig::Chat(params) => params.schemas.system.as_ref(),
+            FunctionConfig::Json(params) => params.schemas.system.as_ref(),
         }
     }
 
     pub fn user_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
-            FunctionConfig::Chat(params) => params.user_schema.as_ref(),
-            FunctionConfig::Json(params) => params.user_schema.as_ref(),
+            FunctionConfig::Chat(params) => params.schemas.user.as_ref(),
+            FunctionConfig::Json(params) => params.schemas.user.as_ref(),
         }
     }
 
     pub fn assistant_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
-            FunctionConfig::Chat(params) => params.assistant_schema.as_ref(),
-            FunctionConfig::Json(params) => params.assistant_schema.as_ref(),
+            FunctionConfig::Chat(params) => params.schemas.assistant.as_ref(),
+            FunctionConfig::Json(params) => params.schemas.assistant.as_ref(),
         }
     }
 
@@ -694,6 +689,7 @@ mod tests {
     use crate::inference::types::FinishReason;
     use crate::inference::types::InputMessage;
     use crate::inference::types::Latency;
+    use crate::inference::types::RequestMessagesOrBatch;
     use crate::inference::types::Text;
     use crate::inference::types::Thought;
     use crate::inference::types::Usage;
@@ -704,7 +700,7 @@ mod tests {
     use crate::variant::VariantConfig;
 
     use super::*;
-    use crate::config_parser::path::TomlRelativePath;
+    use crate::config::path::TomlRelativePath;
     use serde_json::json;
     use std::io::Write;
     use std::time::Duration;
@@ -738,9 +734,7 @@ mod tests {
     fn test_validate_input_chat_no_schema() {
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec![],
             ..Default::default()
         };
@@ -821,9 +815,10 @@ mod tests {
         let system_value = system_schema.value.clone();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: Some(system_schema),
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData {
+                system: Some(system_schema),
+                ..Default::default()
+            },
             tools: vec![],
             ..Default::default()
         };
@@ -878,9 +873,10 @@ mod tests {
         let user_value = user_schema.value.clone();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: Some(user_schema),
-            assistant_schema: None,
+            schemas: SchemaData {
+                user: Some(user_schema),
+                ..Default::default()
+            },
             tools: vec![],
             ..Default::default()
         };
@@ -937,9 +933,10 @@ mod tests {
         let assistant_value = assistant_schema.value.clone();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: Some(assistant_schema),
+            schemas: SchemaData {
+                assistant: Some(assistant_schema),
+                ..Default::default()
+            },
             tools: vec![],
             ..Default::default()
         };
@@ -1001,9 +998,11 @@ mod tests {
         let system_value = system_schema.value.clone();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: Some(system_schema),
-            user_schema: Some(user_schema),
-            assistant_schema: Some(assistant_schema),
+            schemas: SchemaData {
+                system: Some(system_schema),
+                user: Some(user_schema),
+                assistant: Some(assistant_schema),
+            },
             tools: vec![],
             ..Default::default()
         };
@@ -1075,9 +1074,11 @@ mod tests {
         let assistant_schema = create_test_schema();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: Some(system_schema),
-            user_schema: Some(user_schema),
-            assistant_schema: Some(assistant_schema),
+            schemas: SchemaData {
+                system: Some(system_schema),
+                user: Some(user_schema),
+                assistant: Some(assistant_schema),
+            },
             tools: vec![],
             ..Default::default()
         };
@@ -1118,9 +1119,7 @@ mod tests {
         // We test that we allow multiple text blocks in a message as long as they pass the schema if present
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec![],
             ..Default::default()
         };
@@ -1156,9 +1155,11 @@ mod tests {
         let assistant_schema = create_test_schema();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: Some(user_schema),
-            assistant_schema: Some(assistant_schema),
+            schemas: SchemaData {
+                system: None,
+                user: Some(user_schema),
+                assistant: Some(assistant_schema),
+            },
             tools: vec![],
             ..Default::default()
         };
@@ -1204,9 +1205,7 @@ mod tests {
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
             implicit_tool_call_config,
             description: None,
@@ -1277,9 +1276,10 @@ mod tests {
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: Some(system_schema),
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData {
+                system: Some(system_schema),
+                ..Default::default()
+            },
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
@@ -1340,9 +1340,10 @@ mod tests {
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: Some(user_schema),
-            assistant_schema: None,
+            schemas: SchemaData {
+                user: Some(user_schema),
+                ..Default::default()
+            },
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
@@ -1404,9 +1405,10 @@ mod tests {
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: Some(assistant_schema),
+            schemas: SchemaData {
+                assistant: Some(assistant_schema),
+                ..Default::default()
+            },
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
@@ -1472,9 +1474,11 @@ mod tests {
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: Some(system_schema),
-            user_schema: Some(user_schema),
-            assistant_schema: Some(assistant_schema),
+            schemas: SchemaData {
+                system: Some(system_schema),
+                user: Some(user_schema),
+                assistant: Some(assistant_schema),
+            },
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
@@ -1661,9 +1665,7 @@ mod tests {
         // Test for Chat function with description
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
@@ -1680,9 +1682,7 @@ mod tests {
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&json!({}));
         let json_config = FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             output_schema,
             implicit_tool_call_config,
             description: Some("A JSON function description".to_string()),
@@ -1696,9 +1696,7 @@ mod tests {
         // Test for None description
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
@@ -1732,9 +1730,7 @@ mod tests {
         let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             output_schema,
             implicit_tool_call_config,
             description: None,
@@ -1755,7 +1751,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -1821,7 +1817,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -1874,7 +1870,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -1927,7 +1923,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -1980,7 +1976,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -2033,7 +2029,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -2106,7 +2102,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -2153,7 +2149,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -2205,7 +2201,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -2257,7 +2253,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -2298,9 +2294,7 @@ mod tests {
         let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             output_schema,
             implicit_tool_call_config,
             description: None,
@@ -2318,7 +2312,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),

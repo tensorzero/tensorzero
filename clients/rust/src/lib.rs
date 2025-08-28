@@ -8,16 +8,18 @@ use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
-use tensorzero_core::config_parser::ConfigFileGlob;
+use tensorzero_core::config::ConfigFileGlob;
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 use tensorzero_core::endpoints::stored_inference::render_samples;
+use tensorzero_core::inference::types::stored_input::StoragePathResolver;
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
-    config_parser::Config,
+    config::Config,
+    db::DatabaseConnection,
     endpoints::{
         datasets::InsertDatapointParams,
         dynamic_evaluation_run::{
@@ -45,7 +47,7 @@ pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 
 pub use tensorzero_core::cache::CacheParamsOptions;
-pub use tensorzero_core::clickhouse::query_builder::{
+pub use tensorzero_core::db::clickhouse::query_builder::{
     BooleanMetricNode, FloatComparisonOperator, FloatMetricNode, InferenceFilterTreeNode,
     InferenceOutputSource, ListInferencesParams, TagComparisonOperator, TagNode,
     TimeComparisonOperator, TimeNode,
@@ -220,6 +222,10 @@ pub enum ClientBuilderMode {
         /// If this timeout is hit, any in-progress LLM requests may be aborted.
         timeout: Option<std::time::Duration>,
         verify_credentials: bool,
+        // Allow turning on batch writes - used in e2e tests.
+        // We don't expose this through the Python client, since we're having deadlock issues
+        // there.
+        allow_batch_writes: bool,
     },
 }
 
@@ -267,6 +273,7 @@ impl ClientBuilder {
                 clickhouse_url,
                 timeout,
                 verify_credentials,
+                allow_batch_writes,
             } => {
                 let config = if let Some(config_file) = config_file {
                     let glob = ConfigFileGlob::new(config_file.to_string_lossy().to_string())
@@ -292,6 +299,21 @@ impl ClientBuilder {
                     tracing::info!("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`");
                     Arc::new(Config::default())
                 };
+                if !allow_batch_writes
+                    && config.gateway.observability.batch_writes.enabled
+                    && !config
+                        .gateway
+                        .observability
+                        .batch_writes
+                        .__force_allow_embedded_batch_writes
+                {
+                    return Err(ClientBuilderError::Clickhouse(TensorZeroError::Other {
+                        source: tensorzero_core::error::Error::new(ErrorDetails::Config {
+                            message: "[gateway.observability.batch_writes] is not yet supported in embedded gateway mode".to_string(),
+                        })
+                        .into(),
+                    }));
+                }
                 let clickhouse_connection_info =
                     setup_clickhouse(&config, clickhouse_url.clone(), true)
                         .await
@@ -333,7 +355,7 @@ impl ClientBuilder {
     /// This avoids logging any messages
     #[cfg(feature = "pyo3")]
     pub fn build_dummy() -> Client {
-        use tensorzero_core::clickhouse::ClickHouseConnectionInfo;
+        use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 
         Client {
             mode: Arc::new(ClientMode::EmbeddedGateway {
@@ -397,6 +419,20 @@ pub struct Client {
     verbose_errors: bool,
     #[cfg(feature = "e2e_tests")]
     pub last_body: Mutex<Option<String>>,
+}
+
+impl StoragePathResolver for Client {
+    async fn resolve(&self, storage_path: StoragePath) -> Result<String, Error> {
+        Ok(self
+            .get_object(storage_path.clone())
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!("Error resolving object {storage_path}: {e}"),
+                })
+            })?
+            .data)
+    }
 }
 
 impl Client {
@@ -925,9 +961,14 @@ impl Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 // TODO: do we want this?
                 Ok(with_embedded_timeout(*timeout, async {
-                    launch_optimization(&gateway.handle.app_state.http_client, params)
-                        .await
-                        .map_err(err_to_http)
+                    launch_optimization(
+                        &gateway.handle.app_state.http_client,
+                        params,
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        gateway.handle.app_state.config.clone(),
+                    )
+                    .await
+                    .map_err(err_to_http)
                 })
                 .await?)
             }
@@ -1383,6 +1424,7 @@ mod tests {
             clickhouse_url: None,
             timeout: None,
             verify_credentials: true,
+            allow_batch_writes: true,
         })
         .build()
         .await
@@ -1405,6 +1447,7 @@ mod tests {
             clickhouse_url: None,
             timeout: None,
             verify_credentials: true,
+            allow_batch_writes: true,
         })
         .build()
         .await
@@ -1423,6 +1466,7 @@ mod tests {
             clickhouse_url: None,
             timeout: None,
             verify_credentials: true,
+            allow_batch_writes: true,
         })
         .build()
         .await

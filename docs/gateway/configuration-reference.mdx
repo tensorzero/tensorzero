@@ -1,0 +1,3132 @@
+---
+title: Configuration Reference
+description: Learn how to configure the TensorZero Gateway.
+---
+
+The configuration file is the backbone of TensorZero.
+It defines the behavior of the gateway, including the models and their providers, functions and their variants, tools, metrics, and more.
+Developers express the behavior of LLM calls by defining the relevant prompt templates, schemas, and other parameters in this configuration file.
+
+You can see an example configuration file [here](https://github.com/tensorzero/tensorzero/blob/main/tensorzero-core/fixtures/config/tensorzero.toml).
+
+The configuration file is a <a href="https://toml.io/en/" target="_blank">TOML</a> file with a few major sections (TOML tables): `gateway`, `clickhouse`, `models`, `model_providers`, `functions`, `variants`, `tools`, and `metrics`.
+
+## `[gateway]`
+
+The `[gateway]` section defines the behavior of the TensorZero Gateway.
+
+### `base_path`
+
+- **Type:** string
+- **Required:** no (default: `/`)
+
+If set, the gateway will prefix its HTTP endpoints with this base path.
+
+For example, if `base_path` is set to `/custom/prefix`, the inference endpoint will become `/custom/prefix/inference` instead of `/inference`.
+
+### `bind_address`
+
+- **Type:** string
+- **Required:** no (default: `[::]:3000`)
+
+Defines the socket address to bind the TensorZero Gateway to.
+
+You can bind the gateway to IPv4 and/or IPv6 addresses.
+To bind to an IPv6 address, you can set this field to a value like `[::]:3000`.
+Depending on the operating system, this value binds only to IPv6 (e.g. Windows) or to both (e.g. Linux by default).
+
+```toml
+// tensorzero.toml
+[gateway]
+# ...
+bind_address = "0.0.0.0:3000"
+# ...
+```
+
+### `debug`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+Typically, TensorZero will not include inputs and outputs in logs or errors to avoid leaking sensitive data.
+It may be helpful during development to be able to see more information about requests and responses.
+When this field is set to `true`, the gateway will log more verbose errors to assist with debugging.
+
+### `disable_pseudonymous_usage_analytics`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+If set to `true`, TensorZero will not collect or share [pseudonymous usage analytics](/gateway/deployment/#disabling-pseudonymous-usage-analytics).
+
+### `enable_template_filesystem_access`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+Enabling this setting will allow MiniJinja templates to load sub-templates from the file system (using the `include` directive).
+Paths must be relative to `tensorzero.toml`, and can only access files in that directory or its sub-directories.
+
+<Warning>
+
+Make sure to sanitize all user-provided template data before using this setting.
+Otherwise, a malicious input could read unintended files in the file system.
+
+</Warning>
+
+### `export.otlp.traces.enabled`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+Enable [exporting traces to an external OpenTelemetry-compatible observability
+system](/gateway/guides/opentelemetry-otlp).
+
+<Warning>
+Note that you will still need to set the `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
+environment variable. See above linked guide for details.
+</Warning>
+
+### `observability.async_writes`
+
+- **Type:** boolean
+- **Required:** no (default: `true`)
+
+Enabling this setting will improve the latency of the gateway by offloading the responsibility of writing inference responses to ClickHouse to a background task, instead of waiting for ClickHouse to return the inference response.
+
+<Warning>
+
+If you enable this setting, make sure that the gateway lives long enough to complete the writes.
+This can be problematic in serverless environments that terminate the gateway instance after the response is returned but before the writes are completed.
+
+</Warning>
+
+### `observability.enabled`
+
+- **Type:** boolean
+- **Required:** no (default: `null`)
+
+Enable the observability features of the TensorZero Gateway.
+If `true`, the gateway will throw an error on startup if it fails to validate the ClickHouse connection.
+If `null`, the gateway will log a warning but continue if ClickHouse is not available, and it will use ClickHouse if available.
+If `false`, the gateway will not use ClickHouse.
+
+```toml
+// tensorzero.toml
+[gateway]
+# ...
+observability.enabled = true
+# ...
+```
+
+## `[models.model_name]`
+
+The `[models.model_name]` section defines the behavior of a model.
+You can define multiple models by including multiple `[models.model_name]` sections.
+
+A model is provider agnostic, and the relevant providers are defined in the `providers` sub-section (see below).
+
+If your `model_name` is not a basic string, it can be escaped with quotation marks.
+For example, periods are not allowed in basic strings, so you can define `llama-3.1-8b-instruct` as `[models."llama-3.1-8b-instruct"]`.
+
+```toml
+// tensorzero.toml
+[models.claude-3-haiku-20240307]
+# fieldA = ...
+# fieldB = ...
+# ...
+
+[models."llama-3.1-8b-instruct"]
+# fieldA = ...
+# fieldB = ...
+# ...
+```
+
+### `routing`
+
+- **Type:** array of strings
+- **Required:** yes
+
+A list of provider names to route requests to.
+The providers must be defined in the `providers` sub-section (see below).
+The TensorZero Gateway will attempt to route a request to the first provider in the list, and fallback to subsequent providers in order if the request is not successful.
+
+```toml mark="openai" mark="azure"
+// tensorzero.toml
+[models.gpt-4o]
+# ...
+routing = ["openai", "azure"]
+# ...
+
+[models.gpt-4o.providers.openai]
+# ...
+
+[models.gpt-4o.providers.azure]
+# ...
+```
+
+### `timeouts`
+
+- **Type:** object
+- **Required:** no
+
+The `timeouts` object allows you to set granular timeouts for requests to this model.
+
+You can define timeouts for non-streaming and streaming requests separately: `timeouts.non_streaming.total_ms` corresponds to the total request duration and `timeouts.streaming.ttft_ms` corresponds to the time to first token (TTFT).
+
+For example, the following configuration sets a 15-second timeout for non-streaming requests and a 3-second timeout for streaming requests (TTFT):
+
+```toml
+[models.model_name]
+# ...
+timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
+# ...
+```
+
+The specified timeouts apply to the scope of an entire model inference request, including all retries and fallbacks across its providers.
+You can also set timeouts at the variant level and provider level.
+Multiple timeouts can be active simultaneously.
+
+## `[models.model_name.providers.provider_name]`
+
+The `providers` sub-section defines the behavior of a specific provider for a model.
+You can define multiple providers by including multiple `[models.model_name.providers.provider_name]` sections.
+
+If your `provider_name` is not a basic string, it can be escaped with quotation marks.
+For example, periods are not allowed in basic strings, so you can define `vllm.internal` as `[models.model_name.providers."vllm.internal"]`.
+
+```toml mark="gpt-4o" mark="openai" mark="azure"
+// tensorzero.toml
+[models.gpt-4o]
+# ...
+routing = ["openai", "azure"]
+# ...
+
+[models.gpt-4o.providers.openai]
+# ...
+
+[models.gpt-4o.providers.azure]
+# ...
+```
+
+### `extra_body`
+
+- **Type:** array of objects (see below)
+- **Required:** no
+
+The `extra_body` field allows you to modify the request body that TensorZero sends to a model provider.
+This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
+
+Each object in the array must have two fields:
+
+- `pointer`: A [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) string specifying where to modify the request body
+- One of the following:
+  - `value`: The value to insert at that location; it can be of any type including nested types
+  - `delete = true`: Deletes the field at the specified location, if present.
+
+<Tip>
+
+You can also set `extra_body` for a variant entry.
+The model provider `extra_body` entries take priority over variant `extra_body` entries.
+
+Additionally, you can set `extra_body` at inference-time.
+The values provided at inference-time take priority over the values in the configuration file.
+
+</Tip>
+
+<Accordion title="
+
+Example: `extra_body`
+
+">
+
+If TensorZero would normally send this request body to the provider...
+
+```json
+{
+  "project": "tensorzero",
+  "safety_checks": {
+    "no_internet": false,
+    "no_agi": true
+  }
+}
+```
+
+...then the following `extra_body`...
+
+```toml
+extra_body = [
+  { pointer = "/agi", value = true},
+  { pointer = "/safety_checks/no_agi", value = { bypass = "on" }}
+]
+```
+
+...overrides the request body to:
+
+```json
+{
+  "agi": true,
+  "project": "tensorzero",
+  "safety_checks": {
+    "no_internet": false,
+    "no_agi": {
+      "bypass": "on"
+    }
+  }
+}
+```
+
+</Accordion>
+
+### `extra_headers`
+
+- **Type:** array of objects (see below)
+- **Required:** no
+
+The `extra_headers` field allows you to set or overwrite the request headers that TensorZero sends to a model provider.
+This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
+
+Each object in the array must have two fields:
+
+- `name` (string): The name of the header to modify (e.g. `anthropic-beta`)
+- One of the following:
+  - `value` (string): The value of the header (e.g. `token-efficient-tools-2025-02-19`)
+  - `delete = true`: Deletes the header from the request, if present
+
+<Tip>
+
+You can also set `extra_headers` for a variant entry.
+The model provider `extra_headers` entries take priority over variant `extra_headers` entries.
+
+</Tip>
+
+<Accordion title="
+
+Example: `extra_headers`
+
+">
+
+If TensorZero would normally send the following request headers to the provider...
+
+```text
+Safety-Checks: on
+```
+
+...then the following `extra_headers`...
+
+```toml
+extra_headers = [
+  { name = "Safety-Checks", value = "off"},
+  { name = "Intelligence-Level", value = "AGI"}
+]
+```
+
+...overrides the request headers to:
+
+```text
+Safety-Checks: off
+Intelligence-Level: AGI
+```
+
+</Accordion>
+
+### `timeouts`
+
+- **Type:** object
+- **Required:** no
+
+The `timeouts` object allows you to set granular timeouts for individual requests to a model provider.
+
+You can define timeouts for non-streaming and streaming requests separately: `timeouts.non_streaming.total_ms` corresponds to the total request duration and `timeouts.streaming.ttft_ms` corresponds to the time to first token (TTFT).
+
+For example, the following configuration sets a 15-second timeout for non-streaming requests and a 3-second timeout for streaming requests (TTFT):
+
+```toml
+[models.model_name.providers.provider_name]
+# ...
+timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
+# ...
+```
+
+This setting applies to individual requests to the model provider.
+If you're using an advanced variant type that performs multiple requests, the timeout will apply to each request separately.
+If you've defined retries and fallbacks, the timeout will apply to each retry and fallback separately.
+This setting is particularly useful if you'd like to retry or fallback on a request that's taking too long.
+
+You can also set timeouts at the model level and provider level.
+Multiple timeouts can be active simultaneously.
+
+Separately, you can set a global timeout for the entire inference request using the TensorZero client's `timeout` field (or simply killing the request if you're using a different client).
+
+### `type`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the types of the provider. See [Integrations &raquo; Model Providers](/gateway/api-reference/inference/#content-block) for details.
+
+The supported provider types are `anthropic`, `aws_bedrock`, `aws_sagemaker`, `azure`, `deepseek`, `fireworks`, `gcp_vertex_anthropic`, `gcp_vertex_gemini`, `google_ai_studio_gemini`, `groq`, `hyperbolic`, `mistral`, `openai`, `openrouter`, `sglang`, `tgi`, `together`, `vllm`, and `xai`.
+
+The other fields in the provider sub-section depend on the provider type.
+
+```toml
+// tensorzero.toml
+[models.gpt-4o.providers.azure]
+# ...
+type = "azure"
+# ...
+```
+
+<Accordion title='type: "anthropic"'>
+
+##### `model_name`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the model name to use with the Anthropic API.
+See <a href="https://docs.anthropic.com/en/docs/about-claude/models#model-names" target="_blank">Anthropic's documentation</a> for the list of available model names.
+
+```toml
+// tensorzero.toml
+[models.claude-3-haiku.providers.anthropic]
+# ...
+type = "anthropic"
+model_name = "claude-3-haiku-20240307"
+# ...
+```
+
+##### `api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::ANTHROPIC_API_KEY`)
+
+Defines the location of the API key for the Anthropic provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml
+// tensorzero.toml
+[models.claude-3-haiku.providers.anthropic]
+# ...
+type = "anthropic"
+api_key_location = "dynamic::anthropic_api_key"
+# api_key_location = "env::ALTERNATE_ANTHROPIC_API_KEY"
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "aws_bedrock"'>
+
+##### `allow_auto_detect_region`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+Defines whether to automatically detect the AWS region to use with the SageMaker API.
+Under the hood, the gateway will use the AWS SDK to try to detect the region.
+Alternatively, you can specify the region manually with the `region` field (recommended).
+
+##### `model_id`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the model ID to use with the AWS Bedrock API.
+See <a href="https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html" target="_blank">AWS Bedrock's documentation</a> for the list of available model IDs.
+
+```toml
+// tensorzero.toml
+[models.claude-3-haiku.providers.aws_bedrock]
+# ...
+type = "aws_bedrock"
+model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+# ...
+```
+
+<Tip>
+
+Many AWS Bedrock models are only available through cross-region inference profiles.
+For those models, the `model_id` requires special prefix (e.g. the `us.` prefix in `us.anthropic.claude-3-7-sonnet-20250219-v1:0`).
+See the [AWS documentation on inference profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html).
+
+</Tip>
+
+##### `region`
+
+- **Type:** string
+- **Required:** no (default: based on credentials if set, otherwise `us-east-1`)
+
+Defines the AWS region to use with the AWS Bedrock API.
+
+```toml
+// tensorzero.toml
+[models.claude-3-haiku.providers.aws_bedrock]
+# ...
+type = "aws_bedrock"
+region = "us-east-2"
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "aws_sagemaker"'>
+
+##### `allow_auto_detect_region`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+Defines whether to automatically detect the AWS region to use with the SageMaker API.
+Under the hood, the gateway will use the AWS SDK to try to detect the region.
+Alternatively, you can specify the region manually with the `region` field (recommended).
+
+##### `endpoint_name`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the endpoint name to use with the AWS SageMaker API.
+
+##### `hosted_provider`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the underlying model provider to use with the SageMaker API.
+The `aws_sagemaker` provider is a wrapper on other providers.
+
+Currently, the only supported `hosted_provider` options are:
+
+- `openai` (including any OpenAI-compatible server e.g. Ollama)
+- `tgi`
+
+For example, if you're using Ollama, you can set:
+
+```toml
+// tensorzero.toml
+[models.claude-3-haiku.providers.aws_sagemaker]
+# ...
+type = "aws_sagemaker"
+hosted_provider = "openai"
+# ...
+```
+
+##### `model_name`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the model name to use with the AWS SageMaker API.
+
+```toml
+// tensorzero.toml
+[models.claude-3-haiku.providers.aws_sagemaker]
+# ...
+type = "aws_sagemaker"
+model_name = "gemma3:1b"
+# ...
+```
+
+##### `region`
+
+- **Type:** string
+- **Required:** no (default: based on credentials if set, otherwise `us-east-1`)
+
+Defines the AWS region to use with the AWS Bedrock API.
+
+```toml
+// tensorzero.toml
+[models.claude-3-haiku.providers.aws_sagemaker]
+# ...
+type = "aws_sagemaker"
+region = "us-east-2"
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "azure"'>
+
+The TensorZero Gateway handles the API version under the hood (currently `2024-06-01`).
+You only need to set the `deployment_id` and `endpoint` fields.
+
+##### `deployment_id`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the deployment ID of the Azure OpenAI deployment.
+
+See <a href="https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models" target="_blank">Azure OpenAI's documentation</a> for the list of available models.
+
+```toml
+// tensorzero.toml
+[models.gpt-4o-mini.providers.azure]
+# ...
+type = "azure"
+deployment_id = "gpt4o-mini-20240718"
+# ...
+```
+
+##### `endpoint`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the endpoint of the Azure OpenAI deployment (protocol and hostname).
+
+```toml
+// tensorzero.toml
+[models.gpt-4o-mini.providers.azure]
+# ...
+type = "azure"
+endpoint = "https://<your-endpoint>.openai.azure.com"
+# ...
+```
+
+##### `api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::AZURE_OPENAI_API_KEY`)
+
+Defines the location of the API key for the Azure OpenAI provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml
+// tensorzero.toml
+[models.gpt-4o-mini.providers.azure]
+# ...
+type = "azure"
+api_key_location = "dynamic::azure_openai_api_key"
+# api_key_location = "env::ALTERNATE_AZURE_OPENAI_API_KEY"
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "deepseek"'>
+
+##### `model_name`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the model name to use with the DeepSeek API.
+Currently supported models are `deepseek-chat` (DeepSeek-v3) and `deepseek-reasoner` (R1).
+
+```toml
+// tensorzero.toml
+[models.deepseek_chat.providers.deepseek]
+# ...
+type = "deepseek"
+model_name = "deepseek-chat"
+# ...
+```
+
+##### `api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::DEEPSEEK_API_KEY`)
+
+Defines the location of the API key for the DeepSeek provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml
+// tensorzero.toml
+[models.deepseek_chat.providers.deepseek]
+# ...
+type = "deepseek"
+api_key_location = "dynamic::deepseek_api_key"
+# api_key_location = "env::ALTERNATE_DEEPSEEK_API_KEY"
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "fireworks"'>
+
+##### `model_name`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the model name to use with the Fireworks API.
+
+See <a href="https://fireworks.ai/models" target="_blank">Fireworks' documentation</a> for the list of available model names.
+You can also deploy your own models on Fireworks AI.
+
+```toml
+// tensorzero.toml
+[models."llama-3.1-8b-instruct".providers.fireworks]
+# ...
+type = "fireworks"
+model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
+# ...
+```
+
+##### `api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::FIREWORKS_API_KEY`)
+
+Defines the location of the API key for the Fireworks provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml
+// tensorzero.toml
+[models."llama-3.1-8b-instruct".providers.fireworks]
+# ...
+type = "fireworks"
+api_key_location = "dynamic::fireworks_api_key"
+# api_key_location = "env::ALTERNATE_FIREWORKS_API_KEY"
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "gcp_vertex_anthropic"'>
+
+##### `endpoint_id`
+
+- **Type:** string
+- **Required:** no (exactly one of `endpoint_id` or `model_id` must be set)
+
+Defines the endpoint ID of the GCP Vertex AI Anthropic model.
+
+Use `model_id` for off-the-shelf models and `endpoint_id` for fine-tuned models and custom endpoints.
+
+##### `location`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the location (region) of the GCP Vertex AI Anthropic model.
+
+```toml
+// tensorzero.toml
+[models.claude-3-haiku.providers.gcp_vertex]
+# ...
+type = "gcp_vertex_anthropic"
+location = "us-central1"
+# ...
+```
+
+##### `model_id`
+
+- **Type:** string
+- **Required:** no (exactly one of `model_id` or `endpoint_id` must be set)
+
+Defines the model ID of the GCP Vertex AI model.
+
+See <a href="https://docs.anthropic.com/en/api/claude-on-vertex-ai#api-model-names" target="_blank">Anthropic's GCP documentation</a> for the list of available model IDs.
+
+```toml
+// tensorzero.toml
+[models.claude-3-haiku.providers.gcp_vertex]
+# ...
+type = "gcp_vertex_anthropic"
+model_id = "claude-3-haiku@20240307"
+# ...
+```
+
+Use `model_id` for off-the-shelf models and `endpoint_id` for fine-tuned models and custom endpoints.
+
+##### `project_id`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the project ID of the GCP Vertex AI model.
+
+```toml
+// tensorzero.toml
+[models.claude-3-haiku-2024030.providers.gcp_vertex]
+# ...
+type = "gcp_vertex"
+project_id = "your-project-id"
+# ...
+```
+
+##### `credential_location`
+
+- **Type:** string
+- **Required:** no (default: `env::GCP_CREDENTIALS_PATH`)
+
+Defines the location of the credentials for the GCP Vertex Anthropic provider. The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIALS_ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details), and `file::PATH_TO_CREDENTIALS_FILE`.
+
+```toml
+// tensorzero.toml
+[models.claude-3-haiku.providers.gcp_vertex]
+# ...
+type = "gcp_vertex_anthropic"
+credential_location = "dynamic::gcp_credentials_path"
+# credential_location = "env::ALTERNATE_GCP_CREDENTIALS_PATH"
+# credential_location = "file::PATH_TO_CREDENTIALS_FILE"
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "gcp_vertex_gemini"'>
+
+##### `endpoint_id`
+
+- **Type:** string
+- **Required:** no (exactly one of `endpoint_id` or `model_id` must be set)
+
+Defines the endpoint ID of the GCP Vertex AI Gemini model.
+
+Use `model_id` for off-the-shelf models and `endpoint_id` for fine-tuned models and custom endpoints.
+
+##### `location`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the location (region) of the GCP Vertex Gemini model.
+
+```toml
+// tensorzero.toml
+[models."gemini-1.5-flash".providers.gcp_vertex]
+# ...
+type = "gcp_vertex_gemini"
+location = "us-central1"
+# ...
+```
+
+##### `model_id`
+
+- **Type:** string
+- **Required:** no (exactly one of `model_id` or `endpoint_id` must be set)
+
+Defines the model ID of the GCP Vertex AI model.
+
+See <a href="https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions" target="_blank">GCP Vertex AI's documentation</a> for the list of available model IDs.
+
+```toml
+// tensorzero.toml
+[models."gemini-1.5-flash".providers.gcp_vertex]
+# ...
+type = "gcp_vertex_gemini"
+model_id = "gemini-1.5-flash-001"
+# ...
+```
+
+##### `project_id`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the project ID of the GCP Vertex AI model.
+
+```toml
+// tensorzero.toml
+[models."gemini-1.5-flash".providers.gcp_vertex]
+# ...
+type = "gcp_vertex_gemini"
+project_id = "your-project-id"
+# ...
+```
+
+##### `credential_location`
+
+- **Type:** string
+- **Required:** no (default: `env::GCP_CREDENTIALS_PATH`)
+
+Defines the location of the credentials for the GCP Vertex Gemini provider. The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIALS_ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details), and `file::PATH_TO_CREDENTIALS_FILE`.
+
+```toml
+// tensorzero.toml
+[models."gemini-1.5-flash".providers.gcp_vertex]
+# ...
+type = "gcp_vertex_gemini"
+credential_location = "dynamic::gcp_credentials_path"
+# credential_location = "env::ALTERNATE_GCP_CREDENTIALS_PATH"
+# credential_location = "file::PATH_TO_CREDENTIALS_FILE"
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "google_ai_studio_gemini"'>
+
+##### `model_name`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the model name to use with the Google AI Studio Gemini API.
+See <a href="https://ai.google.dev/gemini-api/docs/models/gemini" target="_blank">Google AI Studio's documentation</a> for the list of available model names.
+
+```toml
+// tensorzero.toml
+[models."gemini-1.5-flash".providers.google_ai_studio_gemini]
+# ...
+type = "google_ai_studio_gemini"
+model_name = "gemini-1.5-flash-001"
+# ...
+```
+
+##### `api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::GOOGLE_AI_STUDIO_API_KEY`)
+
+Defines the location of the API key for the Google AI Studio Gemini provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml
+// tensorzero.toml
+[models."gemini-1.5-flash".providers.google_ai_studio_gemini]
+# ...
+type = "google_ai_studio_gemini"
+api_key_location = "dynamic::google_ai_studio_api_key"
+# api_key_location = "env::ALTERNATE_GOOGLE_AI_STUDIO_API_KEY"
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "groq"'>
+
+##### `model_name`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the model name to use with the Groq API.
+
+See <a href="https://groq.com/pricing" target="_blank">Groq's documentation</a> for the list of available model names.
+
+```toml
+// tensorzero.toml
+[models.llama4_scout_17b_16e_instruct.providers.groq]
+# ...
+type = "groq"
+model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
+# ...
+```
+
+##### `api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::GROQ_API_KEY`)
+
+Defines the location of the API key for the Groq provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml
+// tensorzero.toml
+[models.llama4_scout_17b_16e_instruct.providers.groq]
+# ...
+type = "groq"
+api_key_location = "dynamic::groq_api_key"
+# api_key_location = "env::ALTERNATE_GROQ_API_KEY"
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "hyperbolic"'>
+
+##### `model_name`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the model name to use with the Hyperbolic API.
+
+See <a href="https://app.hyperbolic.xyz/models" target="_blank">Hyperbolic's documentation</a> for the list of available model names.
+
+```toml
+// tensorzero.toml
+[models."meta-llama/Meta-Llama-3-70B-Instruct".providers.hyperbolic]
+# ...
+type = "hyperbolic"
+model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
+# ...
+```
+
+##### `api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::HYPERBOLIC_API_KEY`)
+
+Defines the location of the API key for the Hyperbolic provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml
+// tensorzero.toml
+[models."meta-llama/Meta-Llama-3-70B-Instruct".providers.hyperbolic]
+# ...
+type = "hyperbolic"
+api_key_location = "dynamic::hyperbolic_api_key"
+# api_key_location = "env::ALTERNATE_HYPERBOLIC_API_KEY"
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "mistral"'>
+
+##### `model_name`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the model name to use with the Mistral API.
+
+See <a href="https://docs.mistral.ai/getting-started/models/" target="_blank">Mistral's documentation</a> for the list of available model names.
+
+```toml
+// tensorzero.toml
+[models."open-mistral-nemo".providers.mistral]
+# ...
+type = "mistral"
+model_name = "open-mistral-nemo-2407"
+# ...
+```
+
+##### `api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::MISTRAL_API_KEY`)
+
+Defines the location of the API key for the Mistral provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml
+// tensorzero.toml
+[models."open-mistral-nemo".providers.mistral]
+# ...
+type = "mistral"
+api_key_location = "dynamic::mistral_api_key"
+# api_key_location = "env::ALTERNATE_MISTRAL_API_KEY"
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "openai"'>
+
+##### `api_base`
+
+- **Type:** string
+- **Required:** no (default: `https://api.openai.com/v1/`)
+
+Defines the base URL of the OpenAI API.
+
+You can use the `api_base` field to use an API provider that is compatible with the OpenAI API.
+However, many providers are only "approximately compatible" with the OpenAI API, so you might need to use a specialized model provider in those cases.
+
+```toml
+// tensorzero.toml
+[models."gpt-4o".providers.openai]
+# ...
+type = "openai"
+api_base = "https://api.openai.com/v1/"
+# ...
+```
+
+##### `model_name`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the model name to use with the OpenAI API.
+
+See <a href="https://platform.openai.com/docs/models" target="_blank">OpenAI's documentation</a> for the list of available model names.
+
+```toml
+// tensorzero.toml
+[models.gpt-4o-mini.providers.openai]
+# ...
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+# ...
+```
+
+##### `api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::OPENAI_API_KEY`)
+
+Defines the location of the API key for the OpenAI provider. The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml
+// tensorzero.toml
+[models.gpt-4o-mini.providers.openai]
+# ...
+type = "openai"
+api_key_location = "dynamic::openai_api_key"
+# api_key_location = "env::ALTERNATE_OPENAI_API_KEY"
+# api_key_location = "none"
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "openrouter"'>
+
+##### `model_name`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the model name to use with the OpenRouter API.
+
+See <a href="https://openrouter.ai/models" target="_blank">OpenRouter's documentation</a> for the list of available model names.
+
+```toml
+// tensorzero.toml
+[models.gpt4_turbo.providers.openrouter]
+# ...
+type = "openrouter"
+model_name = "openai/gpt4.1"
+# ...
+```
+
+##### `api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::OPENROUTER_API_KEY`)
+
+Defines the location of the API key for the OpenRouter provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml
+// tensorzero.toml
+[models.gpt4_turbo.providers.openrouter]
+# ...
+type = "openrouter"
+api_key_location = "dynamic::openrouter_api_key"
+# api_key_location = "env::ALTERNATE_OPENROUTER_API_KEY"
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "sglang"'>
+
+##### `api_base`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the base URL of the SGLang API.
+
+```toml
+// tensorzero.toml
+[models.llama.providers.sglang]
+# ...
+type = "sglang"
+api_base = "http://localhost:8080/v1/"
+# ...
+```
+
+##### `api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `none`)
+
+Defines the location of the API key for the SGLang provider. The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml
+// tensorzero.toml
+[models.llama.providers.sglang]
+# ...
+type = "sglang"
+api_key_location = "dynamic::sglang_api_key"
+# api_key_location = "env::ALTERNATE_SGLANG_API_KEY"
+# api_key_location = "none"  # if authentication is disabled
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "together"'>
+
+##### `model_name`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the model name to use with the Together API.
+
+See <a href="https://docs.together.ai/docs/chat-models" target="_blank">Together's documentation</a> for the list of available model names.
+You can also deploy your own models on Together AI.
+
+```toml
+// tensorzero.toml
+[models.llama3_1_8b_instruct_turbo.providers.together]
+# ...
+type = "together"
+model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+# ...
+```
+
+##### `api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::TOGETHER_API_KEY`)
+
+Defines the location of the API key for the Together AI provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml
+// tensorzero.toml
+[models.llama3_1_8b_instruct_turbo.providers.together]
+# ...
+type = "together"
+api_key_location = "dynamic::together_api_key"
+# api_key_location = "env::ALTERNATE_TOGETHER_API_KEY"
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "vllm"'>
+
+##### `api_base`
+
+- **Type:** string
+- **Required:** yes (default: `http://localhost:8000/v1/`)
+
+Defines the base URL of the VLLM API.
+
+```toml
+// tensorzero.toml
+[models."phi-3.5-mini-instruct".providers.vllm]
+# ...
+type = "vllm"
+api_base = "http://localhost:8000/v1/"
+# ...
+```
+
+##### `model_name`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the model name to use with the vLLM API.
+
+```toml
+// tensorzero.toml
+[models."phi-3.5-mini-instruct".providers.vllm]
+# ...
+type = "vllm"
+model_name = "microsoft/Phi-3.5-mini-instruct"
+# ...
+```
+
+##### `api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::VLLM_API_KEY`)
+
+Defines the location of the API key for the vLLM provider. The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml
+// tensorzero.toml
+[models."phi-3.5-mini-instruct".providers.vllm]
+# ...
+type = "vllm"
+api_key_location = "dynamic::vllm_api_key"
+# api_key_location = "env::ALTERNATE_VLLM_API_KEY"
+# api_key_location = "none"
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "xai"'>
+
+##### `model_name`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the model name to use with the xAI API.
+
+See <a href="https://docs.x.ai/docs/models" target="_blank">xAI's documentation</a> for the list of available model names.
+
+```toml
+// tensorzero.toml
+[models.grok_2_1212.providers.xai]
+# ...
+type = "xai"
+model_name = "grok-2-1212"
+# ...
+```
+
+##### `api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::XAI_API_KEY`)
+
+Defines the location of the API key for the xAI provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml
+// tensorzero.toml
+[models.grok_2_1212.providers.xai]
+# ...
+type = "xai"
+api_key_location = "dynamic::xai_api_key"
+# api_key_location = "env::ALTERNATE_XAI_API_KEY"
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "tgi"'>
+
+##### `api_base`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the base URL of the TGI API.
+
+```toml
+// tensorzero.toml
+[models.phi_4.providers.tgi]
+# ...
+type = "tgi"
+api_base = "http://localhost:8080/v1/"
+# ...
+```
+
+##### `api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `none`)
+
+Defines the location of the API key for the TGI provider. The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml
+// tensorzero.toml
+[models.phi_4.providers.tgi]
+# ...
+type = "tgi"
+api_key_location = "dynamic::tgi_api_key"
+# api_key_location = "env::ALTERNATE_TGI_API_KEY"
+# api_key_location = "none"  # if authentication is disabled
+# ...
+```
+
+</Accordion>
+
+## `[embedding_models.model_name]`
+
+The `[embedding_models.model_name]` section defines the behavior of an embedding model.
+You can define multiple models by including multiple `[embedding_models.model_name]` sections.
+
+A model is provider agnostic, and the relevant providers are defined in the `providers` sub-section (see below).
+
+If your `model_name` is not a basic string, it can be escaped with quotation marks.
+For example, periods are not allowed in basic strings, so you can define `embedding-0.1` as `[embedding_models."embedding-0.1"]`.
+
+```toml
+// tensorzero.toml
+[embedding_models.openai-text-embedding-3-small]
+# fieldA = ...
+# fieldB = ...
+# ...
+
+[embedding_models."t0-text-embedding-3.5-massive"]
+# fieldA = ...
+# fieldB = ...
+# ...
+```
+
+### `routing`
+
+- **Type:** array of strings
+- **Required:** yes
+
+A list of provider names to route requests to.
+The providers must be defined in the `providers` sub-section (see below).
+The TensorZero Gateway will attempt to route a request to the first provider in the list, and fallback to subsequent providers in order if the request is not successful.
+
+```toml mark="openai" mark="azure"
+// tensorzero.toml
+[embedding_models.model-name]
+# ...
+routing = ["openai", "alternative-provider"]
+# ...
+
+[embedding_models.model-name.providers.openai]
+# ...
+
+[embedding_models.model-name.providers.alternative-provider]
+# ...
+```
+
+## `[embedding_models.model_name.providers.provider_name]`
+
+The `providers` sub-section defines the behavior of a specific provider for a model.
+You can define multiple providers by including multiple `[embedding_models.model_name.providers.provider_name]` sections.
+
+If your `provider_name` is not a basic string, it can be escaped with quotation marks.
+For example, periods are not allowed in basic strings, so you can define `vllm.internal` as `[embedding_models.model_name.providers."vllm.internal"]`.
+
+```toml mark="openai" mark="azure"
+// tensorzero.toml
+[embedding_models.model-name]
+# ...
+routing = ["openai", "alternative-provider"]
+# ...
+
+[embedding_models.model-name.providers.openai]
+# ...
+
+[embedding_models.model-name.providers.alternative-provider]
+# ...
+```
+
+### `type`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the types of the provider. See [Integrations &raquo; Model Providers](/gateway/integrations/#model-providers) for details.
+
+TensorZero currently only supports `openai` as a provider for embedding models.
+More integrations are on the way.
+
+The other fields in the provider sub-section depend on the provider type.
+
+```toml
+// tensorzero.toml
+[embedding_models.model-name.providers.openai]
+# ...
+type = "openai"
+# ...
+```
+
+<Accordion title='type: "openai"'>
+
+##### `api_base`
+
+- **Type:** string
+- **Required:** no (default: `https://api.openai.com/v1/`)
+
+Defines the base URL of the OpenAI API.
+
+You can use the `api_base` field to use an API provider that is compatible with the OpenAI API.
+However, many providers are only "approximately compatible" with the OpenAI API, so you might need to use a specialized model provider in those cases.
+
+```toml
+// tensorzero.toml
+[embedding_models.openai-text-embedding-3-small.providers.openai]
+# ...
+type = "openai"
+api_base = "https://api.openai.com/v1/"
+# ...
+```
+
+##### `model_name`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the model name to use with the OpenAI API.
+
+See <a href="https://platform.openai.com/docs/models/embeddings" target="_blank">OpenAI's documentation</a> for the list of available model names.
+
+```toml
+// tensorzero.toml
+[embedding_models.openai-text-embedding-3-small.providers.openai]
+# ...
+type = "openai"
+model_name = "text-embedding-3-small"
+# ...
+```
+
+##### `api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::OPENAI_API_KEY`)
+
+Defines the location of the API key for the OpenAI provider. The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml
+// tensorzero.toml
+[embedding_models.openai-text-embedding-3-small.providers.openai]
+# ...
+type = "openai"
+api_key_location = "dynamic::openai_api_key"
+# api_key_location = "env::ALTERNATE_OPENAI_API_KEY"
+# api_key_location = "none"
+# ...
+```
+
+</Accordion>
+
+## `[functions.function_name]`
+
+The `[functions.function_name]` section defines the behavior of a function.
+You can define multiple functions by including multiple `[functions.function_name]` sections.
+
+A function can have multiple variants, and each variant is defined in the `variants` sub-section (see below).
+A function expresses the abstract behavior of an LLM call (e.g. the schemas for the messages), and its variants express concrete instantiations of that LLM call (e.g. specific templates and models).
+
+If your `function_name` is not a basic string, it can be escaped with quotation marks.
+For example, periods are not allowed in basic strings, so you can define `summarize-2.0` as `[functions."summarize-2.0"]`.
+
+```toml
+// tensorzero.toml
+[functions.draft-email]
+# fieldA = ...
+# fieldB = ...
+# ...
+
+[functions.summarize-email]
+# fieldA = ...
+# fieldB = ...
+# ...
+```
+
+### `assistant_schema`
+
+- **Type:** string (path)
+- **Required:** no
+
+Defines the path to the assistant schema file.
+The path is relative to the configuration file.
+
+If provided, the assistant schema file should contain a <a href="https://json-schema.org/" target="_blank">JSON Schema</a> for the assistant messages.
+The variables in the schema are used for templating the assistant messages.
+If a schema is provided, all function variants must also provide an assistant template (see below).
+
+```toml
+// tensorzero.toml
+[functions.draft-email]
+# ...
+assistant_schema = "./functions/draft-email/assistant_schema.json"
+# ...
+
+[functions.draft-email.variants.prompt-v1]
+# ...
+assistant_template = "./functions/draft-email/prompt-v1/assistant_template.minijinja"
+# ...
+```
+
+### `description`
+
+- **Type:** string
+- **Required:** no
+
+Defines a description of the function.
+
+In the future, this description will inform automated optimization recipes.
+
+```toml
+// tensorzero.toml
+[functions.extract_data]
+# ...
+description = "Extract the sender's name (e.g. 'John Doe'), email address (e.g. 'john.doe@example.com'), and phone number (e.g. '+1234567890') from a customer's email."
+# ...
+```
+
+### `system_schema`
+
+- **Type:** string (path)
+- **Required:** no
+
+Defines the path to the system schema file.
+The path is relative to the configuration file.
+
+If provided, the system schema file should contain a <a href="https://json-schema.org/" target="_blank">JSON Schema</a> for the system message.
+The variables in the schema are used for templating the system message.
+If a schema is provided, all function variants must also provide a system template (see below).
+
+```toml
+// tensorzero.toml
+[functions.draft-email]
+# ...
+system_schema = "./functions/draft-email/system_schema.json"
+# ...
+
+[functions.draft-email.variants.prompt-v1]
+# ...
+system_template = "./functions/draft-email/prompt-v1/system_template.minijinja"
+# ...
+```
+
+### `type`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the type of the function.
+
+The supported function types are `chat` and `json`.
+
+Most other fields in the function section depend on the function type.
+
+```toml
+// tensorzero.toml
+[functions.draft-email]
+# ...
+type = "chat"
+# ...
+```
+
+<Accordion title='type: "chat"'>
+
+##### `parallel_tool_calls`
+
+- **Type:** boolean
+- **Required:** no
+
+Determines whether the function should be allowed to call multiple tools in a single conversation turn.
+
+If not set, TensorZero will default to the model provider's default behavior.
+
+Most model providers do not support this feature. In those cases, this field will be ignored.
+
+```toml
+// tensorzero.toml
+[functions.draft-email]
+# ...
+type = "chat"
+parallel_tool_calls = true
+# ...
+```
+
+##### `tool_choice`
+
+- **Type:** string
+- **Required:** no (default: `auto`)
+
+Determines the tool choice strategy for the function.
+
+The supported tool choice strategies are:
+
+- `none`: The function should not use any tools.
+- `auto`: The model decides whether or not to use a tool. If it decides to use a tool, it also decides which tools to use.
+- `required`: The model should use a tool. If multiple tools are available, the model decides which tool to use.
+- `{ specific = "tool_name" }`: The model should use a specific tool. The tool must be defined in the `tools` field (see below).
+
+```toml mark="run-python"
+// tensorzero.toml
+[functions.solve-math-problem]
+# ...
+type = "chat"
+tool_choice = "auto"
+tools = [
+  # ...
+  "run-python"
+  # ...
+]
+# ...
+
+[tools.run-python]
+# ...
+
+```
+
+```toml mark="query-database"
+// tensorzero.toml
+[functions.generate-query]
+# ...
+type = "chat"
+tool_choice = { specific = "query-database" }
+tools = [
+  # ...
+  "query-database"
+  # ...
+]
+# ...
+
+[tools.query-database]
+# ...
+```
+
+##### `tools`
+
+- **Type:** array of strings
+- **Required:** no (default: `[]`)
+
+Determines the tools that the function can use.
+
+The supported tools are defined in `[tools.tool_name]` sections (see below).
+
+```toml mark="query-database"
+// tensorzero.toml
+[functions.draft-email]
+# ...
+type = "chat"
+tools = [
+  # ...
+  "query-database"
+  # ...
+]
+# ...
+
+[tools.query-database]
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "json"'>
+
+##### `output_schema`
+
+- **Type:** string (path)
+- **Required:** no (default: `{}`, the empty JSON schema that accepts any valid JSON output)
+
+Defines the path to the output schema file, which should contain a <a href="https://json-schema.org/" target="_blank">JSON Schema</a> for the output of the function.
+The path is relative to the configuration file.
+
+This schema is used for validating the output of the function.
+
+```toml
+// tensorzero.toml
+[functions.extract-customer-info]
+# ...
+type = "json"
+output_schema = "./functions/extract-customer-info/output_schema.json"
+# ...
+```
+
+</Accordion>
+
+### `user_schema`
+
+- **Type:** string (path)
+- **Required:** no
+
+Defines the path to the user schema file.
+The path is relative to the configuration file.
+
+If provided, the user schema file should contain a <a href="https://json-schema.org/" target="_blank">JSON Schema</a> for the user messages.
+The variables in the schema are used for templating the user messages.
+If a schema is provided, all function variants must also provide a user template (see below).
+
+```toml
+// tensorzero.toml
+[functions.draft-email]
+# ...
+user_schema = "./functions/draft-email/user_schema.json"
+# ...
+
+[functions.draft-email.variants.prompt-v1]
+# ...
+user_template = "./functions/draft-email/prompt-v1/user_template.minijinja"
+# ...
+```
+
+## `[functions.function_name.variants.variant_name]`
+
+The `variants` sub-section defines the behavior of a specific variant of a function.
+You can define multiple variants by including multiple `[functions.function_name.variants.variant_name]` sections.
+
+If your `variant_name` is not a basic string, it can be escaped with quotation marks.
+For example, periods are not allowed in basic strings, so you can define `llama-3.1-8b-instruct` as `[functions.function_name.variants."llama-3.1-8b-instruct"]`.
+
+```toml mark="draft-email"
+// tensorzero.toml
+[functions.draft-email]
+# ...
+
+[functions.draft-email.variants."llama-3.1-8b-instruct"]
+# ...
+
+[functions.draft-email.variants.claude-3-haiku]
+# ...
+```
+
+### `type`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the type of the variant.
+
+TensorZero currently supports the following variant types:
+
+| Type                                       | Description                                                                                                                                                                                                                                             |
+| :----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chat_completion`                          | Uses a chat completion model to generate responses by processing a series of messages in a conversational format. This is typically what you use out of the box with most LLMs.                                                                         |
+| `experimental_best_of_n`                   | Generates multiple response candidates with other variants, and selects the best one using an evaluator model.                                                                                                                                          |
+| `experimental_chain_of_thought`            | Encourages the model to reason step by step using a chain-of-thought prompting strategy, which is particularly useful for tasks requiring logical reasoning or multi-step problem-solving. Only available for non-streaming requests to JSON functions. |
+| `experimental_dynamic_in_context_learning` | Selects similar high-quality examples using an embedding of the input, and incorporates them into the prompt to enhance context and improve response quality.                                                                                           |
+| `experimental_mixture_of_n`                | Generates multiple response candidates with other variants, and combines the responses using a fuser model.                                                                                                                                             |
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.prompt-v1]
+# ...
+type = "chat_completion"
+# ...
+```
+
+<Accordion title='type: "chat_completion"'>
+
+##### `assistant_template`
+
+- **Type:** string (path)
+- **Required:** no
+
+Defines the path to the assistant template file.
+The path is relative to the configuration file.
+
+This file should contain a <a href="https://docs.rs/minijinja/latest/minijinja/syntax/index.html" target="_blank">MiniJinja</a> template for the assistant messages.
+If the template uses any variables, the variables should be defined in the function's `assistant_schema` field.
+
+```toml
+// tensorzero.toml
+[functions.draft-email]
+# ...
+assistant_schema = "./functions/draft-email/assistant_schema.json"
+# ...
+
+[functions.draft-email.variants.prompt-v1]
+# ...
+assistant_template = "./functions/draft-email/prompt-v1/assistant_template.minijinja"
+# ...
+```
+
+##### `extra_body`
+
+- **Type:** array of objects (see below)
+- **Required:** no
+
+The `extra_body` field allows you to modify the request body that TensorZero sends to a variant's model provider.
+This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
+
+Each object in the array must have two fields:
+
+- `pointer`: A [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) string specifying where to modify the request body
+- One of the following:
+  - `value`: The value to insert at that location; it can be of any type including nested types
+  - `delete = true`: Deletes the field at the specified location, if present.
+
+<Tip>
+
+You can also set `extra_body` for a model provider entry.
+The model provider `extra_body` entries take priority over variant `extra_body` entries.
+
+Additionally, you can set `extra_body` at inference-time.
+The values provided at inference-time take priority over the values in the configuration file.
+
+</Tip>
+
+<Accordion title="
+
+Example: `extra_body`
+
+">
+
+If TensorZero would normally send this request body to the provider...
+
+```json
+{
+  "project": "tensorzero",
+  "safety_checks": {
+    "no_internet": false,
+    "no_agi": true
+  }
+}
+```
+
+...then the following `extra_body`...
+
+```toml
+extra_body = [
+  { pointer = "/agi", value = true},
+  { pointer = "/safety_checks/no_agi", value = { bypass = "on" }}
+]
+```
+
+...overrides the request body to:
+
+```json
+{
+  "agi": true,
+  "project": "tensorzero",
+  "safety_checks": {
+    "no_internet": false,
+    "no_agi": {
+      "bypass": "on"
+    }
+  }
+}
+```
+
+</Accordion>
+
+##### `extra_headers`
+
+- **Type:** array of objects (see below)
+- **Required:** no
+
+The `extra_headers` field allows you to set or overwrite the request headers that TensorZero sends to a model provider.
+This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
+
+Each object in the array must have two fields:
+
+- `name` (string): The name of the header to modify (e.g. `anthropic-beta`)
+- One of the following:
+  - `value` (string): The value of the header (e.g. `token-efficient-tools-2025-02-19`)
+  - `delete = true`: Deletes the header from the request, if present
+
+<Tip>
+
+You can also set `extra_headers` for a model provider entry.
+The model provider `extra_headers` entries take priority over variant `extra_headers` entries.
+
+</Tip>
+
+<Accordion title="
+
+Example: `extra_headers`
+
+">
+
+If TensorZero would normally send the following request headers to the provider...
+
+```text
+Safety-Checks: on
+```
+
+...then the following `extra_headers`...
+
+```toml
+extra_headers = [
+  { name = "Safety-Checks", value = "off"},
+  { name = "Intelligence-Level", value = "AGI"}
+]
+```
+
+...overrides the request headers to:
+
+```text
+Safety-Checks: off
+Intelligence-Level: AGI
+```
+
+</Accordion>
+
+##### `frequency_penalty`
+
+- **Type:** float
+- **Required:** no (default: `null`)
+
+Penalizes new tokens based on their frequency in the text so far if positive, encourages them if negative.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.prompt-v1]
+# ...
+frequency_penalty = 0.2
+# ...
+```
+
+##### `json_mode`
+
+- **Type:** string
+- **Required:** no (default: `strict`)
+
+Defines the strategy for generating JSON outputs.
+
+This parameter is only supported for variants of functions with `type = "json"`.
+
+The supported modes are:
+
+- `off`: Make a chat completion request without any special JSON handling (not recommended).
+- `on`: Make a chat completion request with JSON mode (if supported by the provider).
+- `strict`: Make a chat completion request with strict JSON mode (if supported by the provider). For example, the TensorZero Gateway uses Structured Outputs for OpenAI.
+- `implicit_tool`: Make a special-purpose tool use request under the hood, and convert the tool call into a JSON response.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.prompt-v1]
+# ...
+json_mode = "strict"
+# ...
+```
+
+##### `max_tokens`
+
+- **Type:** integer
+- **Required:** no (default: `null`)
+
+Defines the maximum number of tokens to generate.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.prompt-v1]
+# ...
+max_tokens = 100
+# ...
+```
+
+##### `model`
+
+- **Type:** string
+- **Required:** yes
+
+The name of the model to call.
+
+<table>
+  <tbody>
+    <tr>
+      <td width="50%">
+        <b>To call...</b>
+      </td>
+      <td width="50%">
+        <b>Use this format...</b>
+      </td>
+    </tr>
+    <tr>
+      <td width="50%">
+        A model defined as <code>[models.my_model]</code> in your{" "}
+        <code>tensorzero.toml</code>
+        configuration file
+      </td>
+      <td width="50%">
+        <code>model_name="my_model"</code>
+      </td>
+    </tr>
+    <tr>
+      <td width="50%">
+        A model offered by a model provider, without defining it in your
+        <code>tensorzero.toml</code> configuration file (if supported, see
+        below)
+      </td>
+      <td width="50%">
+        `model_name="{provider_type}::{model_name}"`
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<Tip>
+
+The following model providers support short-hand model names: `anthropic`, `deepseek`, `fireworks`, `google_ai_studio_gemini`, `gcp_vertex_gemini`, `gcp_vertex_anthropic`, `hyperbolic`, `groq`, `mistral`, `openai`, `openrouter`, `together`, and `xai`.
+
+</Tip>
+
+For example, if you have the following configuration:
+
+```toml title="tensorzero.toml"
+[models.gpt-4o]
+routing = ["openai", "azure"]
+
+[models.gpt-4o.providers.openai]
+# ...
+
+[models.gpt-4o.providers.azure]
+# ...
+```
+
+Then:
+
+- `model = "gpt-4o"` calls the `gpt-4o` model in your configuration, which supports fallback from `openai` to `azure`. See [Retries & Fallbacks](/gateway/guides/retries-fallbacks/) for details.
+- `model = "openai::gpt-4o"` calls the OpenAI API directly for the `gpt-4o` model, ignoring the `gpt-4o` model defined above.
+
+##### `presence_penalty`
+
+- **Type:** float
+- **Required:** no (default: `null`)
+
+Penalizes new tokens based on that have already appeared in the text so far if positive, encourages them if negative.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.prompt-v1]
+# ...
+presence_penalty = 0.5
+# ...
+```
+
+##### `retries`
+
+- **Type:** object with optional keys `num_retries` and `max_delay_s`
+- **Required:** no (defaults to `num_retries = 0` and a `max_delay_s = 10`)
+
+TensorZero's retry strategy is truncated exponential backoff with jitter.
+The `num_retries` parameter defines the number of retries (not including the initial request).
+The `max_delay_s` parameter defines the maximum delay between retries.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.prompt-v1]
+# ...
+retries = { num_retries = 3, max_delay_s = 10 }
+# ...
+```
+
+##### `seed`
+
+- **Type:** integer
+- **Required:** no (default: `null`)
+
+Defines the seed to use for the variant.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.prompt-v1]
+# ...
+seed = 42
+```
+
+##### `system_template`
+
+- **Type:** string (path)
+- **Required:** no
+
+Defines the path to the system template file.
+The path is relative to the configuration file.
+
+This file should contain a <a href="https://docs.rs/minijinja/latest/minijinja/syntax/index.html" target="_blank">MiniJinja</a> template for the system messages.
+If the template uses any variables, the variables should be defined in the function's `system_schema` field.
+
+```toml
+// tensorzero.toml
+[functions.draft-email]
+# ...
+system_schema = "./functions/draft-email/system_schema.json"
+# ...
+
+[functions.draft-email.variants.prompt-v1]
+# ...
+system_template = "./functions/draft-email/prompt-v1/system_template.minijinja"
+# ...
+```
+
+##### `temperature`
+
+- **Type:** float
+- **Required:** no (default: `null`)
+
+Defines the temperature to use for the variant.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.prompt-v1]
+# ...
+temperature = 0.5
+# ...
+```
+
+##### `timeouts`
+
+- **Type:** object
+- **Required:** no
+
+The `timeouts` object allows you to set granular timeouts for requests using this variant.
+
+You can define timeouts for non-streaming and streaming requests separately: `timeouts.non_streaming.total_ms` corresponds to the total request duration and `timeouts.streaming.ttft_ms` corresponds to the time to first token (TTFT).
+
+For example, the following configuration sets a 15-second timeout for non-streaming requests and a 3-second timeout for streaming requests (TTFT):
+
+```toml
+[functions.function_name.variants.variant_name]
+# ...
+timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
+# ...
+```
+
+The specified timeouts apply to the scope of an entire variant inference request, including all retries and fallbacks across its model's providers.
+You can also set timeouts at the model level and provider level.
+Multiple timeouts can be active simultaneously.
+
+##### `top_p`
+
+- **Type:** float, between 0 and 1
+- **Required:** no (default: `null`)
+
+Defines the `top_p` to use for the variant during [nucleus sampling](https://en.wikipedia.org/wiki/Top-p_sampling).
+Typically at most one of `top_p` and `temperature` is set.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.prompt-v1]
+# ...
+top_p = 0.3
+# ...
+```
+
+##### `user_template`
+
+- **Type:** string (path)
+- **Required:** no
+
+Defines the path to the user template file.
+The path is relative to the configuration file.
+
+This file should contain a <a href="https://docs.rs/minijinja/latest/minijinja/syntax/index.html" target="_blank">MiniJinja</a> template for the user messages.
+If the template uses any variables, the variables should be defined in the function's `user_schema` field.
+
+```toml
+// tensorzero.toml
+[functions.draft-email]
+# ...
+user_schema = "./functions/draft-email/user_schema.json"
+# ...
+
+[functions.draft-email.variants.prompt-v1]
+# ...
+user_template = "./functions/draft-email/prompt-v1/user_template.minijinja"
+# ...
+```
+
+##### `weight`
+
+- **Type:** float
+- **Required:** no (default: 0)
+
+Defines the weight of the variant.
+When you call a function, the weight determines the relative importance of the variant when sampling.
+
+Variants will be sampled with a probability proportional to their weight.
+For example, if variant A has a weight of `1.0` and variant B has a weight of `3.0`, variant A will be sampled with probability `1.0 / (1.0 + 3.0) = 25%` and variant B will be sampled with probability `3.0 / (1.0 + 3.0) = 75%`.
+
+You can disable a variant by setting its weight to `0`.
+The variant will only be used if there are no other variants available for sampling or if the variant is requested explicitly in the request with `variant_name`.
+This is useful for defining fallback variants, which won't be used unless no other variants are available.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.prompt-v1]
+# ...
+weight = 1.0
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "experimental_best_of_n"'>
+
+##### `candidates`
+
+- **Type:** list of strings
+- **Required:** yes
+
+This inference strategy generates N candidate responses, and an evaluator model selects the best one.
+This approach allows you to leverage multiple prompts or variants to increase the likelihood of getting a high-quality response.
+
+The `candidates` parameter specifies a list of variant names used to generate candidate responses.
+For example, if you have two variants defined (`promptA` and `promptB`), you could set up the `candidates` list to generate two responses using `promptA` and one using `promptB` using the snippet below.
+The evaluator would then choose the best response from these three candidates.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.promptA]
+type = "chat_completion"
+# ...
+
+[functions.draft-email.variants.promptB]
+type = "chat_completion"
+# ...
+
+[functions.draft-email.variants.best-of-n]
+type = "experimental_best_of_n"
+candidates = ["promptA", "promptA", "promptB"] # 3 candidate generations
+# ...
+```
+
+##### `evaluator`
+
+- **Type:** object
+- **Required:** yes
+
+The `evaluator` parameter specifies the configuration for the model that will evaluate and select the best response from the generated candidates.
+
+The evaluator is configured similarly to a `chat_completion` variant, but without the `type` field.
+The prompts here should be prompts that you would use to solve the original problem, as the gateway has special-purpose handling and templates to convert them to an evaluator.
+
+```toml
+[functions.draft-email.variants.best-of-n]
+type = "experimental_best_of_n"
+# ...
+
+[functions.draft-email.variants.best-of-n.evaluator]
+# Same fields as a `chat_completion` variant (excl.`type`), e.g.:
+# user_template = "functions/draft-email/best-of-n/user.minijinja"
+# ...
+```
+
+##### `timeout_s`
+
+- **Type:** float
+- **Required:** no (default: 300s)
+
+The `timeout_s` parameter specifies the maximum time in seconds allowed for generating candidate responses.
+Any candidate that takes longer than this duration to generate a response will be dropped from consideration.
+
+```toml
+[functions.draft-email.variants.best-of-n]
+type = "experimental_best_of_n"
+timeout_s = 60
+# ...
+```
+
+##### `timeouts`
+
+- **Type:** object
+- **Required:** no
+
+The `timeouts` object allows you to set granular timeouts for requests using this variant.
+
+You can define timeouts for non-streaming and streaming requests separately: `timeouts.non_streaming.total_ms` corresponds to the total request duration and `timeouts.streaming.ttft_ms` corresponds to the time to first token (TTFT).
+
+For example, the following configuration sets a 15-second timeout for non-streaming requests and a 3-second timeout for streaming requests (TTFT):
+
+```toml
+[functions.function_name.variants.variant_name]
+# ...
+timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
+# ...
+```
+
+The specified timeouts apply to the scope of an entire variant inference request, including all inference requests to candidates and the evaluator.
+You can also set timeouts at the model level and provider level.
+Multiple timeouts can be active simultaneously.
+
+##### `weight`
+
+- **Type:** float
+- **Required:** no (default: 0)
+
+Defines the weight of the variant.
+When you call a function, the weight determines the relative importance of the variant when sampling.
+
+Variants will be sampled with a probability proportional to their weight.
+For example, if variant A has a weight of `1.0` and variant B has a weight of `3.0`, variant A will be sampled with probability `1.0 / (1.0 + 3.0) = 25%` and variant B will be sampled with probability `3.0 / (1.0 + 3.0) = 75%`.
+
+You can disable a variant by setting its weight to `0`.
+The variant will only be used if there are no other variants available for sampling or if the variant is requested explicitly in the request with `variant_name`.
+This is useful for defining fallback variants, which won't be used unless no other variants are available.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.prompt-v1]
+# ...
+weight = 1.0
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "experimental_chain_of_thought"'>
+
+The `experimental_chain_of_thought` variant type uses the same configuration as a `chat_completion` variant.
+
+<Warning>
+
+This variant type is only available for non-streaming requests to JSON functions.
+
+</Warning>
+
+</Accordion>
+
+<Accordion title='type: "experimental_mixture_of_n"'>
+
+##### `candidates`
+
+- **Type:** list of strings
+- **Required:** yes
+
+This inference strategy generates N candidate responses, and a fuser model combines them to produce a final answer.
+This approach allows you to leverage multiple prompts or variants to increase the likelihood of getting a high-quality response.
+
+The `candidates` parameter specifies a list of variant names used to generate candidate responses.
+For example, if you have two variants defined (`promptA` and `promptB`), you could set up the `candidates` list to generate two responses using `promptA` and one using `promptB` using the snippet below.
+The fuser would then combine the three responses.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.promptA]
+type = "chat_completion"
+# ...
+
+[functions.draft-email.variants.promptB]
+type = "chat_completion"
+# ...
+
+[functions.draft-email.variants.mixture-of-n]
+type = "experimental_mixture_of_n"
+candidates = ["promptA", "promptA", "promptB"] # 3 candidate generations
+# ...
+```
+
+##### `fuser`
+
+- **Type:** object
+- **Required:** yes
+
+The `fuser` parameter specifies the configuration for the model that will evaluate and combine the elements.
+
+The evaluator is configured similarly to a `chat_completion` variant, but without the `type` field.
+The prompts here should be prompts that you would use to solve the original problem, as the gateway has special-purpose handling and templates to convert them to a fuser.
+
+```toml
+[functions.draft-email.variants.mixture-of-n]
+type = "experimental_mixture_of_n"
+# ...
+
+[functions.draft-email.variants.mixture-of-n.fuser]
+# Same fields as a `chat_completion` variant (excl.`type`), e.g.:
+# user_template = "functions/draft-email/mixture-of-n/user.minijinja"
+# ...
+```
+
+##### `timeout_s`
+
+- **Type:** float
+- **Required:** no (default: 300s)
+
+The `timeout_s` parameter specifies the maximum time in seconds allowed for generating candidate responses.
+Any candidate that takes longer than this duration to generate a response will be dropped from consideration.
+
+```toml
+[functions.draft-email.variants.mixture-of-n]
+type = "experimental_mixture_of_n"
+timeout_s = 60
+# ...
+```
+
+##### `timeouts`
+
+- **Type:** object
+- **Required:** no
+
+The `timeouts` object allows you to set granular timeouts for requests using this variant.
+
+You can define timeouts for non-streaming and streaming requests separately: `timeouts.non_streaming.total_ms` corresponds to the total request duration and `timeouts.streaming.ttft_ms` corresponds to the time to first token (TTFT).
+
+For example, the following configuration sets a 15-second timeout for non-streaming requests and a 3-second timeout for streaming requests (TTFT):
+
+```toml
+[functions.function_name.variants.variant_name]
+# ...
+timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
+# ...
+```
+
+The specified timeouts apply to the scope of an entire variant inference request, including all inference requests to candidates and the fuser.
+You can also set timeouts at the model level and provider level.
+Multiple timeouts can be active simultaneously.
+
+##### `weight`
+
+- **Type:** float
+- **Required:** no (default: 0)
+
+Defines the weight of the variant.
+When you call a function, the weight determines the relative importance of the variant when sampling.
+
+Variants will be sampled with a probability proportional to their weight.
+For example, if variant A has a weight of `1.0` and variant B has a weight of `3.0`, variant A will be sampled with probability `1.0 / (1.0 + 3.0) = 25%` and variant B will be sampled with probability `3.0 / (1.0 + 3.0) = 75%`.
+
+You can disable a variant by setting its weight to `0`.
+The variant will only be used if there are no other variants available for sampling or if the variant is requested explicitly in the request with `variant_name`.
+This is useful for defining fallback variants, which won't be used unless no other variants are available.
+
+```toml
+[functions.draft-email.variants.mixture-of-n]
+# ...
+weight = 1.0
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "experimental_dynamic_in_context_learning"'>
+
+##### `embedding_model`
+
+- **Type:** string
+- **Required:** yes
+
+The name of the embedding model to call.
+
+<table>
+  <tbody>
+    <tr>
+      <td width="50%">
+        <b>To call...</b>
+      </td>
+      <td width="50%">
+        <b>Use this format...</b>
+      </td>
+    </tr>
+    <tr>
+      <td width="50%">
+        A model defined as <code>[models.my_model]</code> in your{" "}
+        <code>tensorzero.toml</code>
+        configuration file
+      </td>
+      <td width="50%">
+        <code>model_name="my_model"</code>
+      </td>
+    </tr>
+    <tr>
+      <td width="50%">
+        A model offered by a model provider, without defining it in your
+        <code>tensorzero.toml</code> configuration file (if supported, see
+        below)
+      </td>
+      <td width="50%">
+        `model_name="{provider_type}::{model_name}"`
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<Tip>
+
+The following model providers support short-hand model names: `anthropic`, `deepseek`, `fireworks`, `google_ai_studio_gemini`, `gcp_vertex_gemini`, `gcp_vertex_anthropic`, `hyperbolic`, `groq`, `mistral`, `openai`, `openrouter`, `together`, and `xai`.
+
+</Tip>
+
+For example, if you have the following configuration:
+
+```toml title="tensorzero.toml"
+[embedding_models.text-embedding-3-small]
+#...
+
+[embedding_models.text-embedding-3-small.providers.openai]
+# ...
+
+[embedding_models.text-embedding-3-small.providers.azure]
+# ...
+```
+
+Then:
+
+- `embedding_model = "text-embedding-3-small"` calls the `text-embedding-3-small` model in your configuration.
+- `embedding_model = "openai::text-embedding-3-small"` calls the OpenAI API directly for the `text-embedding-3-small` model, ignoring the `text-embedding-3-small` model defined above.
+
+##### `extra_body`
+
+- **Type:** array of objects (see below)
+- **Required:** no
+
+The `extra_body` field allows you to modify the request body that TensorZero sends to a variant's model provider.
+This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
+
+For `experimental_dynamic_in_context_learning` variants, `extra_body` only applies to the chat completion request.
+
+Each object in the array must have two fields:
+
+- `pointer`: A [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) string specifying where to modify the request body
+- One of the following:
+  - `value`: The value to insert at that location; it can be of any type including nested types
+  - `delete = true`: Deletes the field at the specified location, if present.
+
+<Tip>
+
+You can also set `extra_body` for a model provider entry.
+The model provider `extra_body` entries take priority over variant `extra_body` entries.
+
+Additionally, you can set `extra_body` at inference-time.
+The values provided at inference-time take priority over the values in the configuration file.
+
+</Tip>
+
+<Accordion title="
+
+Example: `extra_body`
+
+">
+
+If TensorZero would normally send this request body to the provider...
+
+```json
+{
+  "project": "tensorzero",
+  "safety_checks": {
+    "no_internet": false,
+    "no_agi": true
+  }
+}
+```
+
+...then the following `extra_body`...
+
+```toml
+extra_body = [
+  { pointer = "/agi", value = true},
+  { pointer = "/safety_checks/no_agi", value = { bypass = "on" }}
+]
+```
+
+...overrides the request body to:
+
+```json
+{
+  "agi": true,
+  "project": "tensorzero",
+  "safety_checks": {
+    "no_internet": false,
+    "no_agi": {
+      "bypass": "on"
+    }
+  }
+}
+```
+
+</Accordion>
+
+##### `extra_headers`
+
+- **Type:** array of objects (see below)
+- **Required:** no
+
+The `extra_headers` field allows you to set or overwrite the request headers that TensorZero sends to a model provider.
+This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
+
+Each object in the array must have two fields:
+
+- `name` (string): The name of the header to modify (e.g. `anthropic-beta`)
+- One of the following:
+  - `value` (string): The value of the header (e.g. `token-efficient-tools-2025-02-19`)
+  - `delete = true`: Deletes the header from the request, if present
+
+<Tip>
+
+You can also set `extra_headers` for a model provider entry.
+The model provider `extra_headers` entries take priority over variant `extra_headers` entries.
+
+</Tip>
+
+<Accordion title="
+
+Example: `extra_headers`
+
+">
+
+If TensorZero would normally send the following request headers to the provider...
+
+```text
+Safety-Checks: on
+```
+
+...then the following `extra_headers`...
+
+```toml
+extra_headers = [
+  { name = "Safety-Checks", value = "off"},
+  { name = "Intelligence-Level", value = "AGI"}
+]
+```
+
+...overrides the request headers to:
+
+```text
+Safety-Checks: off
+Intelligence-Level: AGI
+```
+
+</Accordion>
+
+##### `json_mode`
+
+- **Type:** string
+- **Required:** no (default: `strict`)
+
+Defines the strategy for generating JSON outputs.
+
+This parameter is only supported for variants of functions with `type = "json"`.
+
+The supported modes are:
+
+- `off`: Make a chat completion request without any special JSON handling (not recommended).
+- `on`: Make a chat completion request with JSON mode (if supported by the provider).
+- `strict`: Make a chat completion request with strict JSON mode (if supported by the provider). For example, the TensorZero Gateway uses Structured Outputs for OpenAI.
+- `implicit_tool`: Make a special-purpose tool use request under the hood, and convert the tool call into a JSON response.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.prompt-v1]
+# ...
+json_mode = "strict"
+# ...
+```
+
+##### `k`
+
+- **Type:** non-negative integer
+- **Required:** yes
+
+Defines the number of examples to retrieve for the inference.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.dicl]
+# ...
+k = 10
+# ...
+```
+
+##### `max_tokens`
+
+- **Type:** integer
+- **Required:** no (default: `null`)
+
+Defines the maximum number of tokens to generate.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.prompt-v1]
+# ...
+max_tokens = 100
+# ...
+```
+
+##### `model`
+
+- **Type:** string
+- **Required:** yes
+
+The name of the model to call.
+
+<table>
+  <tbody>
+    <tr>
+      <td width="50%">
+        <b>To call...</b>
+      </td>
+      <td width="50%">
+        <b>Use this format...</b>
+      </td>
+    </tr>
+    <tr>
+      <td width="50%">
+        A model defined as <code>[models.my_model]</code> in your{" "}
+        <code>tensorzero.toml</code>
+        configuration file
+      </td>
+      <td width="50%">
+        <code>model_name="my_model"</code>
+      </td>
+    </tr>
+    <tr>
+      <td width="50%">
+        A model offered by a model provider, without defining it in your
+        <code>tensorzero.toml</code> configuration file (if supported, see
+        below)
+      </td>
+      <td width="50%">
+        `model_name="{provider_type}::{model_name}"`
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<Tip>
+
+The following model providers support short-hand model names: `anthropic`, `deepseek`, `fireworks`, `google_ai_studio_gemini`, `gcp_vertex_gemini`, `gcp_vertex_anthropic`, `hyperbolic`, `groq`, `mistral`, `openai`, `openrouter`, `together`, and `xai`.
+
+</Tip>
+
+For example, if you have the following configuration:
+
+```toml title="tensorzero.toml"
+[models.gpt-4o]
+routing = ["openai", "azure"]
+
+[models.gpt-4o.providers.openai]
+# ...
+
+[models.gpt-4o.providers.azure]
+# ...
+```
+
+Then:
+
+- `model = "gpt-4o"` calls the `gpt-4o` model in your configuration, which supports fallback from `openai` to `azure`. See [Retries & Fallbacks](/gateway/guides/retries-fallbacks/) for details.
+- `model = "openai::gpt-4o"` calls the OpenAI API directly for the `gpt-4o` model, ignoring the `gpt-4o` model defined above.
+
+##### `retries`
+
+- **Type:** object with optional keys `num_retries` and `max_delay_s`
+- **Required:** no (defaults to `num_retries = 0` and a `max_delay_s = 10`)
+
+TensorZero's retry strategy is truncated exponential backoff with jitter.
+The `num_retries` parameter defines the number of retries (not including the initial request).
+The `max_delay_s` parameter defines the maximum delay between retries.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.prompt-v1]
+# ...
+retries = { num_retries = 3, max_delay_s = 10 }
+# ...
+```
+
+##### `seed`
+
+- **Type:** integer
+- **Required:** no (default: `null`)
+
+Defines the seed to use for the variant.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.prompt-v1]
+# ...
+seed = 42
+```
+
+##### `system_instructions`
+
+- **Type:** string (path)
+- **Required:** no
+
+Defines the path to the system instructions file.
+The path is relative to the configuration file.
+
+The system instruction is a text file that will be added to the evaluator's system prompt.
+Unlike `system_template`, it doesn't support variables.
+This file contains static instructions that define the behavior and role of the AI assistant for the specific function variant.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.dicl]
+# ...
+system_instructions = "./functions/draft-email/prompt-v1/system_template.txt"
+# ...
+```
+
+##### `temperature`
+
+- **Type:** float
+- **Required:** no (default: `null`)
+
+Defines the temperature to use for the variant.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.prompt-v1]
+# ...
+temperature = 0.5
+# ...
+```
+
+##### `timeouts`
+
+- **Type:** object
+- **Required:** no
+
+The `timeouts` object allows you to set granular timeouts for requests using this variant.
+
+You can define timeouts for non-streaming and streaming requests separately: `timeouts.non_streaming.total_ms` corresponds to the total request duration and `timeouts.streaming.ttft_ms` corresponds to the time to first token (TTFT).
+
+For example, the following configuration sets a 15-second timeout for non-streaming requests and a 3-second timeout for streaming requests (TTFT):
+
+```toml
+[functions.function_name.variants.variant_name]
+# ...
+timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
+# ...
+```
+
+The specified timeouts apply to the scope of an entire variant inference request, including both inference requests to the embedding model and the generation model.
+You can also set timeouts at the model level and provider level.
+Multiple timeouts can be active simultaneously.
+
+##### `weight`
+
+- **Type:** float
+- **Required:** no (default: 0)
+
+Defines the weight of the variant.
+When you call a function, the weight determines the relative importance of the variant when sampling.
+
+Variants will be sampled with a probability proportional to their weight.
+For example, if variant A has a weight of `1.0` and variant B has a weight of `3.0`, variant A will be sampled with probability `1.0 / (1.0 + 3.0) = 25%` and variant B will be sampled with probability `3.0 / (1.0 + 3.0) = 75%`.
+
+You can disable a variant by setting its weight to `0`.
+The variant will only be used if there are no other variants available for sampling or if the variant is requested explicitly in the request with `variant_name`.
+This is useful for defining fallback variants, which won't be used unless no other variants are available.
+
+```toml
+// tensorzero.toml
+[functions.draft-email.variants.prompt-v1]
+# ...
+weight = 1.0
+# ...
+```
+
+</Accordion>
+
+#### `type: "experimental_chain_of_thought"`
+
+Besides the type parameter, this variant has the same configuration options as the `chat_completion` variant type.
+Please refer to that documentation to see what options are available.
+
+## `[metrics]`
+
+The `[metrics]` section defines the behavior of a metric.
+You can define multiple metrics by including multiple `[metrics.metric_name]` sections.
+
+The metric name can't be `comment` or `demonstration`, as those names are reserved for internal use.
+
+If your `metric_name` is not a basic string, it can be escaped with quotation marks.
+For example, periods are not allowed in basic strings, so you can define `beats-gpt-3.5` as `[metrics."beats-gpt-3.5"]`.
+
+```toml
+// tensorzero.toml
+[metrics.task-completed]
+# fieldA = ...
+# fieldB = ...
+# ...
+
+[metrics.user-rating]
+# fieldA = ...
+# fieldB = ...
+# ...
+```
+
+### `level`
+
+- **Type:** string
+- **Required:** yes
+
+Defines whether the metric applies to individual inference or across entire episodes.
+
+The supported levels are `inference` and `episode`.
+
+```toml
+// tensorzero.toml
+[metrics.valid-output]
+# ...
+level = "inference"
+# ...
+
+[metrics.task-completed]
+# ...
+level = "episode"
+# ...
+```
+
+### `optimize`
+
+- **Type:** string
+- **Required:** yes
+
+Defines whether the metric should be maximized or minimized.
+
+The supported values are `max` and `min`.
+
+```toml
+// tensorzero.toml
+[metrics.mistakes-made]
+# ...
+optimize = "min"
+# ...
+
+[metrics.user-rating]
+# ...
+optimize = "max"
+# ...
+```
+
+### `type`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the type of the metric.
+
+The supported metric types are `boolean` and `float`.
+
+```toml
+// tensorzero.toml
+[metrics.user-rating]
+# ...
+type = "float"
+# ...
+
+[metrics.task-completed]
+# ...
+type = "boolean"
+# ...
+```
+
+## `[tools.tool_name]`
+
+The `[tools.tool_name]` section defines the behavior of a tool.
+You can define multiple tools by including multiple `[tools.tool_name]` sections.
+
+If your `tool_name` is not a basic string, it can be escaped with quotation marks.
+For example, periods are not allowed in basic strings, so you can define `run-python-3.10` as `[tools."run-python-3.10"]`.
+
+You can enable a tool for a function by adding it to the function's `tools` field.
+
+```toml mark="get-temperature"
+// tensorzero.toml
+[functions.weather-chatbot]
+# ...
+type = "chat"
+tools = [
+  # ...
+  "get-temperature"
+  # ...
+]
+# ...
+
+[tools.get-temperature]
+# ...
+```
+
+### `description`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the description of the tool provided to the model.
+
+You can typically materially improve the quality of responses by providing a detailed description of the tool.
+
+```toml
+// tensorzero.toml
+[tools.get-temperature]
+# ...
+description = "Get the current temperature in a given location (e.g. \"Tokyo\") using the specified unit (must be \"celsius\" or \"fahrenheit\")."
+# ...
+```
+
+### `parameters`
+
+- **Type:** string (path)
+- **Required:** yes
+
+Defines the path to the parameters file.
+The path is relative to the configuration file.
+
+This file should contain a <a href="https://json-schema.org/" target="_blank">JSON Schema</a> for the parameters of the tool.
+
+```toml
+// tensorzero.toml
+[tools.get-temperature]
+# ...
+parameters = "./tools/get-temperature.json"
+# ...
+```
+
+### `strict`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+If set to `true`, the TensorZero Gateway attempts to use strict JSON generation for the tool parameters.
+This typically improves the quality of responses.
+
+Only a few providers support strict JSON generation.
+For example, the TensorZero Gateway uses Structured Outputs for OpenAI.
+If the provider does not support strict mode, the TensorZero Gateway ignores this field.
+
+```toml
+// tensorzero.toml
+[tools.get-temperature]
+# ...
+strict = true
+# ...
+```
+
+### `name`
+
+- **Type:** string
+- **Required:** no (defaults to the tool ID)
+
+Defines the tool name to be sent to model providers.
+
+By default, TensorZero will use the tool ID in the configuration as the tool name sent to model providers.
+For example, if you define a tool as `[tools.my_tool]` but don't specify the `name`, the name will be `my_tool`.
+This field allows you to specify a different name to be sent.
+
+This field is particularly useful if you want to define multiple tools that share the same name (e.g. for different functions).
+At inference time, the gateway ensures that an inference request doesn't have multiple tools with the same name.
+
+## `[object_storage]`
+
+The `[object_storage]` section defines the behavior of object storage, which is used for storing images used during multimodal inference.
+
+### `type`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the type of object storage to use.
+
+The supported types are:
+
+- `s3_compatible`: Use an S3-compatible object storage service.
+- `filesystem`: Store images in a local directory.
+- `disabled`: Disable object storage.
+
+See the following sections for more details on each type.
+
+<Accordion title='type: "s3_compatible"'>
+
+If you set `type = "s3_compatible"`, TensorZero will use an S3-compatible object storage service to store and retrieve images.
+
+The TensorZero Gateway will attempt to retrieve credentials from the following resources in order of priority:
+
+1. `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` environment variables
+2. `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables
+3. Credentials from the AWS SDK (default profile)
+
+If you set `type = "s3_compatible"`, the following fields are available.
+
+##### `endpoint`
+
+- **Type:** string
+- **Required:** no (defaults to AWS S3)
+
+Defines the endpoint of the object storage service.
+You can use this field to specify a custom endpoint for the object storage service (e.g. GCP Cloud Storage, Cloudflare R2, and many more).
+
+##### `bucket_name`
+
+- **Type:** string
+- **Required:** no
+
+Defines the name of the bucket to use for object storage.
+You should provide a bucket name unless it's specified in the `endpoint` field.
+
+##### `region`
+
+- **Type:** string
+- **Required:** no
+
+Defines the region of the object storage service (if applicable).
+
+This is required for some providers (e.g. AWS S3).
+If the provider does not require a region, this field can be omitted.
+
+##### `allow_http`
+
+- **Type:** boolean
+- **Required:** no (defaults to `false`)
+
+Normally, the TensorZero Gateway will require HTTPS to access the object storage service.
+If set to `true`, the TensorZero Gateway will instead use HTTP to access the object storage service.
+This is useful for local development (e.g. a local MinIO deployment), but not recommended for production environments.
+
+<Warning>
+
+For production environments, we strongly recommend you disable the `allow_http` setting and use a secure method of authentication in combination with a production-grade object storage service.
+
+</Warning>
+
+</Accordion>
+
+<Accordion title='type: "filesystem"'>
+
+##### `path`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the path to the directory to use for object storage.
+
+</Accordion>
+
+<Accordion title='type: "disabled"'>
+
+If you set `type = "disabled"`, the TensorZero Gateway will not store or retrieve images.
+There are no additional fields available for this type.
+
+</Accordion>

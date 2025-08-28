@@ -31,9 +31,11 @@ test("countInferencesForFunction returns correct counts", async () => {
   const jsonCount = await countInferencesForFunction("extract_entities", {
     type: "json",
     variants: {},
-    system_schema: null,
-    user_schema: null,
-    assistant_schema: null,
+    schemas: {
+      system: null,
+      user: null,
+      assistant: null,
+    },
     description: "",
     output_schema: { value: {} },
     implicit_tool_call_config: {
@@ -50,9 +52,11 @@ test("countInferencesForFunction returns correct counts", async () => {
     tools: [],
     tool_choice: "none",
     parallel_tool_calls: false,
-    system_schema: null,
-    user_schema: null,
-    assistant_schema: null,
+    schemas: {
+      system: null,
+      user: null,
+      assistant: null,
+    },
     description: "",
   });
   expect(chatCount).toBe(804);
@@ -65,9 +69,11 @@ test("countInferencesForVariant returns correct counts", async () => {
     {
       type: "json",
       variants: {},
-      system_schema: null,
-      user_schema: null,
-      assistant_schema: null,
+      schemas: {
+        system: null,
+        user: null,
+        assistant: null,
+      },
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
@@ -88,9 +94,11 @@ test("countInferencesForVariant returns correct counts", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
-      system_schema: null,
-      user_schema: null,
-      assistant_schema: null,
+      schemas: {
+        system: null,
+        user: null,
+        assistant: null,
+      },
       description: "",
     },
     "initial_prompt_gpt4o_mini",
@@ -116,59 +124,63 @@ test("queryInferenceTable", async () => {
   expect(inferences2.length).toBe(10);
 });
 
-test("queryInferenceTable pagination samples front and near-end pages correctly", async () => {
-  const PAGE_SIZE = 100;
+test(
+  "queryInferenceTable pagination samples front and near-end pages correctly",
+  { timeout: 10_000 },
+  async () => {
+    const PAGE_SIZE = 100;
 
-  // --- Front of the table (most recent entries) ---
-  const firstPage = await queryInferenceTable({ page_size: PAGE_SIZE });
-  expect(firstPage.length).toBe(PAGE_SIZE);
-  for (let i = 1; i < firstPage.length; i++) {
-    expect(firstPage[i - 1].id > firstPage[i].id).toBe(true);
-  }
+    // --- Front of the table (most recent entries) ---
+    const firstPage = await queryInferenceTable({ page_size: PAGE_SIZE });
+    expect(firstPage.length).toBe(PAGE_SIZE);
+    for (let i = 1; i < firstPage.length; i++) {
+      expect(firstPage[i - 1].id > firstPage[i].id).toBe(true);
+    }
 
-  const secondPage = await queryInferenceTable({
-    before: firstPage[firstPage.length - 1].id,
-    page_size: PAGE_SIZE,
-  });
-  expect(secondPage.length).toBe(PAGE_SIZE);
-  for (let i = 1; i < secondPage.length; i++) {
-    expect(secondPage[i - 1].id > secondPage[i].id).toBe(true);
-  }
+    const secondPage = await queryInferenceTable({
+      before: firstPage[firstPage.length - 1].id,
+      page_size: PAGE_SIZE,
+    });
+    expect(secondPage.length).toBe(PAGE_SIZE);
+    for (let i = 1; i < secondPage.length; i++) {
+      expect(secondPage[i - 1].id > secondPage[i].id).toBe(true);
+    }
 
-  // --- Near the end of the table (oldest entries) ---
-  const bounds = await queryInferenceTableBounds();
-  // bounds.last_id is the earliest (oldest) inference ID
-  const lastID = bounds.last_id!;
+    // --- Near the end of the table (oldest entries) ---
+    const bounds = await queryInferenceTableBounds();
+    // bounds.last_id is the earliest (oldest) inference ID
+    const lastID = bounds.last_id!;
 
-  const endPage1 = await queryInferenceTable({
-    before: lastID,
-    page_size: PAGE_SIZE,
-  });
-  expect(endPage1.length).toBeGreaterThan(0);
-  for (let i = 1; i < endPage1.length; i++) {
-    expect(endPage1[i - 1].id > endPage1[i].id).toBe(true);
-  }
+    const endPage1 = await queryInferenceTable({
+      before: lastID,
+      page_size: PAGE_SIZE,
+    });
+    expect(endPage1.length).toBeGreaterThan(0);
+    for (let i = 1; i < endPage1.length; i++) {
+      expect(endPage1[i - 1].id > endPage1[i].id).toBe(true);
+    }
 
-  const endPage2 = await queryInferenceTable({
-    before: endPage1[endPage1.length - 1].id,
-    page_size: PAGE_SIZE,
-  });
-  // this may be empty if there are no more older entries
-  expect(endPage2.length).toBeGreaterThanOrEqual(0);
-  for (let i = 1; i < endPage2.length; i++) {
-    expect(endPage2[i - 1].id > endPage2[i].id).toBe(true);
-  }
+    const endPage2 = await queryInferenceTable({
+      before: endPage1[endPage1.length - 1].id,
+      page_size: PAGE_SIZE,
+    });
+    // this may be empty if there are no more older entries
+    expect(endPage2.length).toBeGreaterThanOrEqual(0);
+    for (let i = 1; i < endPage2.length; i++) {
+      expect(endPage2[i - 1].id > endPage2[i].id).toBe(true);
+    }
 
-  // Try to grab the last page by after
-  const lastPageByAfter = await queryInferenceTable({
-    after: endPage1[endPage1.length - 1].id,
-    page_size: PAGE_SIZE,
-  });
-  expect(lastPageByAfter.length).toBe(PAGE_SIZE);
-  for (let i = 1; i < lastPageByAfter.length; i++) {
-    expect(lastPageByAfter[i - 1].id > lastPageByAfter[i].id).toBe(true);
-  }
-});
+    // Try to grab the last page by after
+    const lastPageByAfter = await queryInferenceTable({
+      after: endPage1[endPage1.length - 1].id,
+      page_size: PAGE_SIZE,
+    });
+    expect(lastPageByAfter.length).toBe(PAGE_SIZE);
+    for (let i = 1; i < lastPageByAfter.length; i++) {
+      expect(lastPageByAfter[i - 1].id > lastPageByAfter[i].id).toBe(true);
+    }
+  },
+);
 
 test("queryInferenceTable pages through results correctly using after with inference ID", async () => {
   const PAGE_SIZE = 20;

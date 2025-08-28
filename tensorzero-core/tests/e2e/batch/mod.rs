@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use serde_json::json;
-use tensorzero_core::clickhouse::{ClickHouseConnectionInfo, TableName};
-use tensorzero_core::config_parser::Config;
+use tensorzero_core::config::Config;
+use tensorzero_core::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 /// End-to-end tests for particular internal functionality in the batch inference endpoint
 /// These are not tests of the public API (those should go in tests/e2e/providers/batch.rs)
 use tensorzero_core::endpoints::batch_inference::{
@@ -25,7 +25,7 @@ use tensorzero_core::jsonschema_util::StaticJSONSchema;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
     select_model_inferences_clickhouse,
 };
@@ -90,7 +90,7 @@ async fn test_get_batch_request() {
         function_name: function_name.into(),
         variant_name: variant_name.into(),
         episode_id,
-        input,
+        input: input.clone().into_stored_input(),
         input_messages: vec![],
         system: None,
         tool_params: None,
@@ -230,7 +230,7 @@ async fn write_2_batch_model_inference_rows(
         function_name: function_name.into(),
         variant_name: variant_name.into(),
         episode_id,
-        input: input.clone(),
+        input: input.clone().into_stored_input(),
         input_messages: vec![],
         system: None,
         tool_params: None,
@@ -248,7 +248,7 @@ async fn write_2_batch_model_inference_rows(
         function_name: function_name.into(),
         variant_name: variant_name.into(),
         episode_id,
-        input: input.clone(),
+        input: input.clone().into_stored_input(),
         input_messages: vec![],
         system: None,
         tool_params: None,

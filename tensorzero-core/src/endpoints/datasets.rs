@@ -1,9 +1,10 @@
-use crate::clickhouse::TableName;
+use crate::db::clickhouse::TableName;
 use crate::function::FunctionConfigType;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
     content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
 };
+use crate::inference::types::stored_input::StoredInput;
 use axum::extract::{Path, Query, State};
 use axum::Json;
 use futures::future;
@@ -22,14 +23,14 @@ use uuid::Uuid;
 use crate::inference::types::Text;
 use crate::stored_inference::{SimpleStoredSampleInfo, StoredSample};
 use crate::{
-    clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
-    config_parser::Config,
+    config::Config,
+    db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
     error::{Error, ErrorDetails},
     function::FunctionConfig,
     gateway_util::{AppState, StructuredJson},
     inference::types::{
         ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
-        JsonInferenceDatabaseInsert, JsonInferenceOutput, ResolvedInput,
+        JsonInferenceDatabaseInsert, JsonInferenceOutput,
     },
     serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
     tool::{DynamicToolParams, ToolCallConfigDatabaseInsert},
@@ -395,7 +396,7 @@ pub async fn update_datapoint_handler(
                 function_name: chat.function_name,
                 id: path_params.datapoint_id,
                 episode_id: None,
-                input: resolved_input,
+                input: resolved_input.into_stored_input(),
                 output,
                 tool_params: chat.tool_params,
                 tags: chat.tags,
@@ -458,7 +459,7 @@ pub async fn update_datapoint_handler(
                 function_name: json.function_name,
                 id: path_params.datapoint_id,
                 episode_id: None,
-                input: resolved_input,
+                input: resolved_input.into_stored_input(),
                 output,
                 output_schema: json.output_schema,
                 tags: json.tags,
@@ -610,7 +611,7 @@ pub async fn insert_datapoint(
                     function_name: chat.function_name,
                     id: datapoint_id,
                     episode_id: None,
-                    input: resolved_input,
+                    input: resolved_input.into_stored_input(),
                     output,
                     tool_params: tool_config.as_ref().map(|x| x.clone().into()),
                     tags: chat.tags,
@@ -686,7 +687,7 @@ pub async fn insert_datapoint(
                     function_name: json.function_name,
                     id: datapoint_id,
                     episode_id: None,
-                    input: resolved_input,
+                    input: resolved_input.into_stored_input(),
                     output,
                     output_schema,
                     tags: json.tags,
@@ -1120,7 +1121,7 @@ impl Datapoint {
         }
     }
 
-    pub fn input(&self) -> &ResolvedInput {
+    pub fn input(&self) -> &StoredInput {
         match self {
             Datapoint::Chat(datapoint) => &datapoint.input,
             Datapoint::Json(datapoint) => &datapoint.input,
@@ -1263,7 +1264,7 @@ pub struct ChatInferenceDatapoint {
     pub id: Uuid,
     pub episode_id: Option<Uuid>,
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
@@ -1305,7 +1306,7 @@ pub struct JsonInferenceDatapoint {
     pub id: Uuid,
     pub episode_id: Option<Uuid>,
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
@@ -1343,17 +1344,24 @@ impl StoredSample for Datapoint {
         }
     }
 
-    fn input(&self) -> &ResolvedInput {
+    fn input(&self) -> &StoredInput {
         match self {
             Datapoint::Chat(datapoint) => &datapoint.input,
             Datapoint::Json(datapoint) => &datapoint.input,
         }
     }
 
-    fn input_mut(&mut self) -> &mut ResolvedInput {
+    fn input_mut(&mut self) -> &mut StoredInput {
         match self {
             Datapoint::Chat(datapoint) => &mut datapoint.input,
             Datapoint::Json(datapoint) => &mut datapoint.input,
+        }
+    }
+
+    fn into_input(self) -> StoredInput {
+        match self {
+            Datapoint::Chat(datapoint) => datapoint.input,
+            Datapoint::Json(datapoint) => datapoint.input,
         }
     }
 
@@ -1361,6 +1369,7 @@ impl StoredSample for Datapoint {
         match self {
             Datapoint::Chat(datapoint) => SimpleStoredSampleInfo {
                 function_name: datapoint.function_name,
+                input: datapoint.input,
                 output: datapoint.output,
                 dispreferred_outputs: Vec::default(),
                 tool_params: datapoint.tool_params,
@@ -1376,6 +1385,7 @@ impl StoredSample for Datapoint {
                 });
                 SimpleStoredSampleInfo {
                     function_name: datapoint.function_name,
+                    input: datapoint.input,
                     output,
                     dispreferred_outputs: Vec::default(),
                     tool_params: None,

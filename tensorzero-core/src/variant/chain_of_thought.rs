@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::config_parser::PathWithContents;
+use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
@@ -14,14 +14,11 @@ use crate::inference::types::{
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
-use crate::{
-    config_parser::LoadableConfig,
-    variant::chat_completion::{ChatCompletionConfig, UninitializedChatCompletionConfig},
-};
+use crate::variant::chat_completion::{ChatCompletionConfig, UninitializedChatCompletionConfig};
 
 use super::{InferenceConfig, ModelUsedInfo, Variant};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct ChainOfThoughtConfig {
@@ -37,10 +34,14 @@ pub struct UninitializedChainOfThoughtConfig {
     pub inner: UninitializedChatCompletionConfig,
 }
 
-impl LoadableConfig<ChainOfThoughtConfig> for UninitializedChainOfThoughtConfig {
-    fn load(self) -> Result<ChainOfThoughtConfig, Error> {
+impl UninitializedChainOfThoughtConfig {
+    pub fn load(
+        self,
+        schemas: &SchemaData,
+        error_context: &ErrorContext,
+    ) -> Result<ChainOfThoughtConfig, Error> {
         Ok(ChainOfThoughtConfig {
-            inner: self.inner.load()?,
+            inner: self.inner.load(schemas, error_context)?,
         })
     }
 }

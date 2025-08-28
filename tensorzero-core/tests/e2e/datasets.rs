@@ -6,19 +6,20 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero::{ChatInferenceDatapoint, JsonInferenceDatapoint, Role};
 use tensorzero_core::{
-    clickhouse::test_helpers::{
+    db::clickhouse::test_helpers::{
         select_chat_dataset_clickhouse, select_json_dataset_clickhouse, stale_datapoint_clickhouse,
     },
     endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
-    inference::types::{ContentBlockChatOutput, ResolvedInputMessageContent},
+    inference::types::{ContentBlockChatOutput, StoredInputMessageContent},
 };
+
 use uuid::Uuid;
 
 use crate::{
     common::{delete_datapoint, get_gateway_endpoint},
     providers::common::make_embedded_gateway,
 };
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_datapoint_clickhouse, select_json_datapoint_clickhouse,
 };
 
@@ -279,11 +280,11 @@ async fn test_create_delete_datapoint_chat() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { .. }
+            StoredInputMessageContent::Text { .. }
         ));
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { value: _, .. }
+            StoredInputMessageContent::Text { value: _, .. }
         ));
 
         // Verify the list datapoint input structure and content
@@ -302,7 +303,7 @@ async fn test_create_delete_datapoint_chat() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { .. }
+            StoredInputMessageContent::Text { .. }
         ));
 
         // Verify output if present
@@ -1084,11 +1085,11 @@ async fn test_create_delete_datapoint_json() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { .. }
+            StoredInputMessageContent::Text { .. }
         ));
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { value: _, .. }
+            StoredInputMessageContent::Text { value: _, .. }
         ));
 
         // Verify the list datapoint input structure and content
@@ -1107,7 +1108,7 @@ async fn test_create_delete_datapoint_json() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { .. }
+            StoredInputMessageContent::Text { .. }
         ));
 
         // Get the output schema

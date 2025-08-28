@@ -1,23 +1,27 @@
 #![expect(clippy::unwrap_used, clippy::panic, clippy::print_stdout)]
 use base64::Engine;
+use serde_json::json;
 use std::collections::HashMap;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
+
+use tracing_subscriber::{self, EnvFilter};
 
 use tensorzero::{
     Client, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
 };
 use tensorzero_core::{
     cache::CacheOptions,
-    clickhouse::test_helpers::CLICKHOUSE_URL,
-    clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
-    config_parser::ProviderTypesConfig,
+    config::{Config, ConfigFileGlob, ProviderTypesConfig},
+    db::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL},
+    db::clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
     endpoints::inference::InferenceClients,
     inference::types::{
         resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
         Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
-        ModelInput, RequestMessage, Text,
+        ModelInput, RequestMessage, ResolvedInput, ResolvedInputMessage,
+        ResolvedInputMessageContent, Text,
     },
     optimization::JobHandle,
     optimization::{OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo},
@@ -25,6 +29,7 @@ use tensorzero_core::{
     variant::JsonMode,
 };
 
+pub mod dicl;
 pub mod fireworks_sft;
 pub mod gcp_vertex_gemini_sft;
 pub mod openai_sft;
@@ -44,6 +49,11 @@ pub trait OptimizationTestCase {
 
 #[allow(clippy::allow_attributes, dead_code)]
 pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
+    // Initialize tracing subscriber to capture progress logs
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
     let optimizer_info = test_case
         .get_optimizer_info(use_mock_inference_provider())
         .load()
@@ -53,8 +63,25 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     let test_examples = get_examples(test_case, 10);
     let val_examples = Some(get_examples(test_case, 10));
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
+    let clickhouse = get_clickhouse().await;
+    let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    config_path.push("tests/e2e/tensorzero.toml");
+    let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
+    let config = Config::load_from_path_optional_verify_credentials(
+        &config_glob,
+        false, // don't validate credentials in tests
+    )
+    .await
+    .unwrap();
     let job_handle = optimizer_info
-        .launch(&client, test_examples, val_examples, &credentials)
+        .launch(
+            &client,
+            test_examples,
+            val_examples,
+            &credentials,
+            &clickhouse,
+            &config,
+        )
         .await
         .unwrap();
     let mut status;
@@ -75,58 +102,71 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .await;
     }
     assert!(matches!(status, OptimizationJobInfo::Completed { .. }));
-    let OptimizationJobInfo::Completed {
-        output: OptimizerOutput::Model(model_config),
-    } = status
-    else {
-        panic!("Expected model config");
+    let OptimizationJobInfo::Completed { output } = status else {
+        panic!("Expected completed status");
     };
-    let model_config = model_config
-        .load("test-fine-tuned-model", &ProviderTypesConfig::default())
-        .await
-        .unwrap();
-    let system = "You are a helpful assistant named Dr. M.M. Patel.".to_string();
-    let messages = vec![RequestMessage {
-        role: Role::User,
-        content: vec![ContentBlock::Text(Text {
-            text: "What is the capital of France?".to_string(),
-        })],
-    }];
-    let request = ModelInferenceRequest {
-        system: Some(system),
-        messages,
-        inference_id: Uuid::now_v7(),
-        tool_config: None,
-        temperature: None,
-        top_p: None,
-        max_tokens: None,
-        presence_penalty: None,
-        frequency_penalty: None,
-        seed: None,
-        stop_sequences: None,
-        stream: false,
-        json_mode: JsonMode::Off.into(),
-        function_type: FunctionType::Chat,
-        output_schema: None,
-        extra_body: Default::default(),
-        extra_headers: Default::default(),
-        extra_cache_key: None,
+
+    // Handle both Model and Variant outputs
+    match output {
+        OptimizerOutput::Model(model_config) => {
+            let model_config = model_config
+                .load("test-fine-tuned-model", &ProviderTypesConfig::default())
+                .await
+                .unwrap();
+            // Test the model configuration
+            println!("Model configuration loaded successfully: {model_config:?}");
+
+            // Test inference with the fine-tuned model
+            let system = "You are a helpful assistant named Dr. M.M. Patel.".to_string();
+            let messages = vec![RequestMessage {
+                role: Role::User,
+                content: vec![ContentBlock::Text(Text {
+                    text: "What is the capital of France?".to_string(),
+                })],
+            }];
+            let request = ModelInferenceRequest {
+                system: Some(system),
+                messages,
+                inference_id: Uuid::now_v7(),
+                tool_config: None,
+                temperature: None,
+                top_p: None,
+                max_tokens: None,
+                presence_penalty: None,
+                frequency_penalty: None,
+                seed: None,
+                stop_sequences: None,
+                stream: false,
+                json_mode: JsonMode::Off.into(),
+                function_type: FunctionType::Chat,
+                output_schema: None,
+                extra_body: Default::default(),
+                extra_headers: Default::default(),
+                extra_cache_key: None,
+            };
+            let clients = InferenceClients {
+                http_client: &client,
+                clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
+                credentials: &HashMap::new(),
+                cache_options: &CacheOptions::default(),
+            };
+            // We didn't produce a real model, so there's nothing to test
+            if use_mock_inference_provider() {
+                return;
+            }
+            let response = model_config
+                .infer(&request, &clients, "test")
+                .await
+                .unwrap();
+            println!("Response: {response:?}");
+        }
+        OptimizerOutput::Variant(variant_config) => {
+            // Test the variant configuration
+            println!("Variant configuration created successfully: {variant_config:?}");
+            // For DICL variants, we don't need to test inference like we do for models
+            // since DICL variants work by retrieving examples at inference time
+        }
     };
-    let clients = InferenceClients {
-        http_client: &client,
-        clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
-        credentials: &HashMap::new(),
-        cache_options: &CacheOptions::default(),
-    };
-    // We didn't produce a real model, so there's nothing to test
-    if use_mock_inference_provider() {
-        return;
-    }
-    let response = model_config
-        .infer(&request, &clients, "test")
-        .await
-        .unwrap();
-    println!("Response: {response:?}");
 }
 
 /// Runs launch_optimization_workflow and then polls for the workflow using the Rust client
@@ -190,17 +230,26 @@ fn get_examples(test_case: &impl OptimizationTestCase, num_examples: usize) -> V
 fn generate_text_example() -> RenderedSample {
     // So the examples are different
     let id = Uuid::now_v7().to_string();
+    let system_prompt =
+        format!("You are a helpful assistant named Dr. M.M. Patel with id number {id}.");
     RenderedSample {
         function_name: "test".to_string(),
         input: ModelInput {
-            system: Some(format!(
-                "You are a helpful assistant named Dr. M.M. Patel with id number {id}."
-            )),
+            system: Some(system_prompt.clone()),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec![ContentBlock::Text(Text {
                     text: "What is the capital of France?".to_string(),
                 })],
+            }],
+        },
+        stored_input: ResolvedInput {
+            system: Some(json!(system_prompt)),
+            messages: vec![ResolvedInputMessage {
+                role: Role::User,
+                content: vec![ResolvedInputMessageContent::Text {
+                    value: json!("What is the capital of France?"),
+                }],
             }],
         },
         output: Some(vec![ContentBlockChatOutput::Text(Text {
@@ -220,12 +269,12 @@ fn generate_text_example() -> RenderedSample {
 fn generate_tool_call_example() -> RenderedSample {
     // So the examples are different
     let id = Uuid::now_v7().to_string();
+    let system_prompt =
+        format!("You are a helpful assistant named Dr. M.M. Patel with id number {id}.");
     RenderedSample {
         function_name: "test".to_string(),
         input: ModelInput {
-            system: Some(format!(
-                "You are a helpful assistant named Dr. M.M. Patel with id number {id}."
-            )),
+            system: Some(system_prompt.clone()),
             messages: vec![
                 RequestMessage {
                     role: Role::User,
@@ -274,6 +323,56 @@ fn generate_tool_call_example() -> RenderedSample {
                 },
             ],
         },
+        stored_input: ResolvedInput {
+            system: Some(json!(system_prompt)),
+            messages: vec![
+                ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!("What is the weather in Paris?"),
+                    }],
+                },
+                ResolvedInputMessage {
+                    role: Role::Assistant,
+                    content: vec![
+                        ResolvedInputMessageContent::Text {
+                            value: json!("Let me look that up for you."),
+                        },
+                        ResolvedInputMessageContent::ToolCall(ToolCall {
+                            name: "get_weather".to_string(),
+                            arguments: serde_json::json!({
+                                "location": "Paris"
+                            })
+                            .to_string(),
+                            id: "call_1".to_string(),
+                        }),
+                    ],
+                },
+                ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::ToolResult(ToolResult {
+                        name: "get_weather".to_string(),
+                        result: serde_json::json!({
+                            "weather": "sunny, 25 degrees Celsius",
+                        })
+                        .to_string(),
+                        id: "call_1".to_string(),
+                    })],
+                },
+                ResolvedInputMessage {
+                    role: Role::Assistant,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!("The weather in Paris is sunny, 25 degrees Celsius."),
+                    }],
+                },
+                ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!("What is the weather in London?"),
+                    }],
+                },
+            ],
+        },
         output: Some(vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
             name: Some("get_weather".to_string()),
             arguments: Some(serde_json::json!({
@@ -316,12 +415,12 @@ fn generate_tool_call_example() -> RenderedSample {
 fn generate_image_example() -> RenderedSample {
     // So the examples are different
     let id = Uuid::now_v7().to_string();
+    let system_prompt =
+        format!("You are a helpful assistant named Dr. M.M. Patel with id number {id}.");
     RenderedSample {
         function_name: "test".to_string(),
         input: ModelInput {
-            system: Some(format!(
-                "You are a helpful assistant named Dr. M.M. Patel with id number {id}."
-            )),
+            system: Some(system_prompt.clone()),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec![
@@ -332,7 +431,31 @@ fn generate_image_example() -> RenderedSample {
                         file: Base64File {
                             url: None,
                             mime_type: mime::IMAGE_PNG,
-                            data: Some(base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG)),
+                            data: base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG),
+                        },
+                        storage_path: StoragePath {
+                            kind: StorageKind::Disabled,
+                            path: object_store::path::Path::parse(
+                                "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                            ).unwrap(),
+                        },
+                    })),
+                ],
+            }],
+        },
+        stored_input: ResolvedInput {
+            system: Some(json!(system_prompt)),
+            messages: vec![ResolvedInputMessage {
+                role: Role::User,
+                content: vec![
+                    ResolvedInputMessageContent::Text {
+                        value: json!("What is the main color of this image?"),
+                    },
+                    ResolvedInputMessageContent::File(Box::new(FileWithPath {
+                        file: Base64File {
+                            url: None,
+                            mime_type: mime::IMAGE_PNG,
+                            data: base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG),
                         },
                         storage_path: StoragePath {
                             kind: StorageKind::Disabled,
@@ -367,7 +490,9 @@ pub async fn make_embedded_gateway() -> Client {
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
         verify_credentials: true,
+        allow_batch_writes: true,
     })
+    .with_verbose_errors(true)
     .build()
     .await
     .unwrap()
@@ -378,6 +503,7 @@ pub async fn make_http_gateway() -> Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::HTTPGateway {
         url: "http://localhost:3000".parse().unwrap(),
     })
+    .with_verbose_errors(true)
     .build()
     .await
     .unwrap()

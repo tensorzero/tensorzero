@@ -2,8 +2,8 @@ use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use crate::endpoints::openai_compatible::RouterExt;
 use axum::extract::{rejection::JsonRejection, FromRequest, Json, Request};
-use axum::routing::post;
 use axum::Router;
 use reqwest::{Client, Proxy};
 use serde::de::DeserializeOwned;
@@ -12,9 +12,9 @@ use tokio::sync::oneshot::Sender;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
-use crate::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
-use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::{Config, ConfigFileGlob};
+use crate::config::{Config, ConfigFileGlob};
+use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
+use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
@@ -198,7 +198,7 @@ pub async fn setup_clickhouse(
     if let ClickHouseConnectionInfo::Production { .. } = &clickhouse_connection_info {
         migration_manager::run(RunMigrationManagerArgs {
             clickhouse: &clickhouse_connection_info,
-            skip_completed_migrations: config.gateway.observability.skip_completed_migrations,
+            skip_completed_migrations: true,
             manual_run: false,
         })
         .await?;
@@ -317,10 +317,7 @@ pub async fn start_openai_compatible_gateway(
     let gateway_handle = GatewayHandle::new_with_clickhouse(config, clickhouse_url).await?;
 
     let router = Router::new()
-        .route(
-            "/openai/v1/chat/completions",
-            post(endpoints::openai_compatible::inference_handler),
-        )
+        .register_openai_compatible_routes()
         .fallback(endpoints::fallback::handle_404)
         .with_state(gateway_handle.app_state.clone());
 
@@ -348,7 +345,7 @@ mod tests {
     use tracing_test::traced_test;
 
     use super::*;
-    use crate::config_parser::{gateway::GatewayConfig, ObservabilityConfig};
+    use crate::config::{gateway::GatewayConfig, ObservabilityConfig};
 
     #[tokio::test]
     #[traced_test]
@@ -359,7 +356,6 @@ mod tests {
                 enabled: Some(false),
                 async_writes: false,
                 batch_writes: Default::default(),
-                skip_completed_migrations: false,
             },
             bind_address: None,
             debug: false,
@@ -391,7 +387,6 @@ mod tests {
                 enabled: None,
                 async_writes: false,
                 batch_writes: Default::default(),
-                skip_completed_migrations: false,
             },
             unstable_error_json: false,
             ..Default::default()
@@ -419,7 +414,6 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
-                skip_completed_migrations: false,
             },
             bind_address: None,
             debug: false,
@@ -447,7 +441,6 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
-                skip_completed_migrations: false,
             },
             bind_address: None,
             debug: false,
@@ -477,7 +470,6 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
-                skip_completed_migrations: false,
             },
             bind_address: None,
             debug: false,
