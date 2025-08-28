@@ -310,7 +310,7 @@ pub async fn test_basic_embedding_timeout() {
 }
 
 pub async fn test_embedding_cache_with_provider(provider: EmbeddingTestProvider) {
-    let input_text = "This is a cache test for embeddings";
+    let input_text = "This is a cache test for embeddings (test_embedding_cache_with_provider).";
 
     // First request with cache enabled to populate cache
     let payload = json!({
@@ -380,7 +380,8 @@ pub async fn test_embedding_cache_with_provider(provider: EmbeddingTestProvider)
 }
 
 pub async fn test_embedding_cache_options_with_provider(provider: EmbeddingTestProvider) {
-    let input_text = "This is a cache options test for embeddings";
+    let input_text =
+        "This is a cache options test for embeddings (test_embedding_cache_options_with_provider).";
 
     // First, make a request that will be cached
     let payload_initial = json!({
@@ -388,7 +389,6 @@ pub async fn test_embedding_cache_options_with_provider(provider: EmbeddingTestP
         "model": provider.model_name,
         "tensorzero::cache_options": {
             "enabled": "on",
-            "max_age_s": 5
         }
     });
     let response_initial = Client::new()
@@ -407,7 +407,7 @@ pub async fn test_embedding_cache_options_with_provider(provider: EmbeddingTestP
     );
 
     // Wait for cache write to complete
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
     // Test with cache disabled - should not use cache
     let payload_disabled = json!({
@@ -438,7 +438,7 @@ pub async fn test_embedding_cache_options_with_provider(provider: EmbeddingTestP
         "model": provider.model_name,
         "tensorzero::cache_options": {
             "enabled": "on",
-            "max_age_s": 10
+            "max_age_s": 60
         }
     });
     let response_enabled = Client::new()
@@ -462,16 +462,13 @@ pub async fn test_embedding_cache_options_with_provider(provider: EmbeddingTestP
         0
     );
 
-    // Wait for cache entry to expire
-    tokio::time::sleep(std::time::Duration::from_secs(6)).await;
-
     // Test with cache enabled but expired max_age - should miss cache
     let payload_expired = json!({
         "input": input_text,
         "model": provider.model_name,
         "tensorzero::cache_options": {
             "enabled": "on",
-            "max_age_s": 2
+            "max_age_s": 1
         }
     });
     let response_expired = Client::new()
@@ -497,7 +494,7 @@ pub async fn test_embedding_cache_options_with_provider(provider: EmbeddingTestP
 }
 
 pub async fn test_embedding_dryrun_with_provider(provider: EmbeddingTestProvider) {
-    let input_text = "This is a dryrun test for embeddings";
+    let input_text = "This is a dryrun test for embeddings (test_embedding_dryrun_with_provider).";
 
     // Test with dryrun enabled (should not store to database)
     let payload = json!({
