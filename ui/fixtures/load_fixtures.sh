@@ -15,20 +15,14 @@ if command -v buildkite-agent >/dev/null 2>&1; then
   else
     CLICKHOUSE_HOST_VAR=$(buildkite-agent secret get CLICKHOUSE_HOST)
   fi
-  CLICKHOUSE_USER_VAR=$(buildkite-agent secret get clickhouse_username)
-  CLICKHOUSE_PASSWORD_VAR=$(buildkite-agent secret get clickhouse_password)
+  CLICKHOUSE_USER_VAR_URLENCODED=$(buildkite-agent secret get clickhouse_username)
+  CLICKHOUSE_PASSWORD_VAR_URLENCODED=$(buildkite-agent secret get clickhouse_password)
   CLICKHOUSE_SECURE_FLAG="--secure"
-  
-  # Debug: Check if password appears to be URL-encoded
-  if echo "$CLICKHOUSE_PASSWORD_VAR" | grep -qE '%[0-9A-Fa-f]{2}'; then
-    echo "Password appears to be URL-encoded (contains %XX patterns)"
-    echo "PANIC: Stopping job to investigate URL encoding issue"
-    exit 1
-  else
-    echo "Password does not appear to be URL-encoded"
-    echo "PANIC: Stopping job to investigate authentication issue"
-    exit 1
-  fi
+
+  # URL decode the variables
+  CLICKHOUSE_USER_VAR=$(uv run python -c "import urllib.parse; print(urllib.parse.unquote('$CLICKHOUSE_USER_VAR_URLENCODED'))")
+  CLICKHOUSE_PASSWORD_VAR=$(uv run python -c "import urllib.parse; print(urllib.parse.unquote('$CLICKHOUSE_PASSWORD_VAR_URLENCODED'))")
+
 else
   # Not on Buildkite - use environment variables with defaults
   CLICKHOUSE_HOST_VAR="${CLICKHOUSE_HOST}"
