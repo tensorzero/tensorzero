@@ -55,7 +55,6 @@ sudo apt-get install -y clickhouse-client
 export CLICKHOUSE_HOST=$(echo $TENSORZERO_CLICKHOUSE_URL | sed 's|https://[^@]*@||' | sed 's|:[0-9]*||')
 export CLICKHOUSE_USER="$CLICKHOUSE_USERNAME"
 export CLICKHOUSE_PASSWORD="$CLICKHOUSE_PASSWORD"
-export TENSORZERO_SKIP_LARGE_FIXTURES=1
 cd ui/fixtures && ./load_fixtures.sh tensorzero_e2e_tests && cd ../..
 
 cargo test-e2e-no-creds -- --skip test_concurrent_clickhouse_migrations
