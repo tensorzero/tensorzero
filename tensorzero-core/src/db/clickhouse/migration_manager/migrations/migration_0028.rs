@@ -5,7 +5,7 @@ use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEng
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
 
-use super::check_table_exists;
+use super::{check_detached_table_exists, check_table_exists};
 
 /// NOTE: This migration supersedes migration_0023.
 /// Migration 0023 was inefficient due to its use of joins.
@@ -70,15 +70,28 @@ impl Migration for Migration0028<'_> {
             MIGRATION_ID,
         )
         .await?;
+        let detached_float_materialized_view_exists = check_detached_table_exists(
+            self.clickhouse,
+            "StaticEvaluationFloatHumanFeedbackView",
+            MIGRATION_ID,
+        )
+        .await?;
         let boolean_materialized_view_exists = check_table_exists(
             self.clickhouse,
             "StaticEvaluationBooleanHumanFeedbackView",
             MIGRATION_ID,
         )
         .await?;
+        let detached_boolean_materialized_view_exists = check_detached_table_exists(
+            self.clickhouse,
+            "StaticEvaluationBooleanHumanFeedbackView",
+            MIGRATION_ID,
+        )
+        .await?;
         Ok(!human_feedback_table_exists
-            || !float_materialized_view_exists
-            || !boolean_materialized_view_exists)
+            // if the views exist in either the active or detached state that is fine for the purposes of 0028
+            || !(float_materialized_view_exists || detached_float_materialized_view_exists)
+            || !(boolean_materialized_view_exists || detached_boolean_materialized_view_exists))
     }
 
     async fn apply(&self, clean_start: bool) -> Result<(), Error> {
