@@ -255,11 +255,12 @@ function ChatInferenceOutputComponent({
                   />
                 );
               case "unknown":
+                // TODO: code editor should format as JSON by default
                 return (
                   <TextMessage
                     key={index}
                     label="Unknown Content"
-                    content="Unknown content type"
+                    content={JSON.stringify(block.data)}
                   />
                 );
               case "thought":
@@ -270,8 +271,6 @@ function ChatInferenceOutputComponent({
                     content={block.text || ""}
                   />
                 );
-              default:
-                return null;
             }
           })}
         </SnippetMessage>
