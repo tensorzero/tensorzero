@@ -143,20 +143,14 @@ if tensorzero_path not in sys.path:
 import json
 import subprocess
 import tempfile
-import warnings
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
-import numpy as np
-import pandas as pd
 import toml
 import yaml
-from clickhouse_connect import get_client
 from tensorzero import (
     FloatMetricFilter,
     TensorZeroGateway,
 )
-from tensorzero.internal import OutputMessage
 from tensorzero.util import uuid7
 
 from recipes.util import tensorzero_rendered_samples_to_conversations, train_val_split
@@ -394,34 +388,6 @@ model_config = {
 }
 
 print(toml.dumps(model_config))
-
-# %% [markdown]
-# Finally, add a new variant to your function to use the fine-tuned model.
-
-# %%
-variant_config = {
-    "type": "chat_completion",
-    "weight": 0,
-    "model": model_identifier,
-}
-
-system_template = variant.get("system_template")
-if system_template:
-    variant_config["system_template"] = system_template
-
-user_template = variant.get("user_template")
-if user_template:
-    variant_config["user_template"] = user_template
-
-assistant_template = variant.get("assistant_template")
-if assistant_template:
-    variant_config["assistant_template"] = assistant_template
-
-full_variant_config = {
-    "functions": {FUNCTION_NAME: {"variants": {model_identifier: variant_config}}}
-}
-
-print(toml.dumps(full_variant_config))
 
 # %% [markdown]
 # You're all set!
