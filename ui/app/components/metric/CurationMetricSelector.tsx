@@ -19,7 +19,7 @@ import {
   PopoverTrigger,
 } from "~/components/ui/popover";
 import { Button } from "~/components/ui/button";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Loader2 } from "lucide-react";
 import {
   Command,
   CommandEmpty,
@@ -45,6 +45,9 @@ type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
   addDemonstrations: boolean;
   feedbackCount: number | null;
   curatedInferenceCount: number | null;
+  isLoading?: boolean;
+  // Notifies parent when this component's internal fetcher is loading
+  onMetricsLoadingChange?: (loading: boolean) => void;
 };
 
 /**
@@ -67,6 +70,8 @@ export default function CurationMetricSelector<
   addDemonstrations,
   feedbackCount,
   curatedInferenceCount,
+  isLoading = false,
+  onMetricsLoadingChange,
 }: CurationMetricSelectorProps<T>) {
   const metricsFetcher = useFetcher<MetricsWithFeedbackData>();
   const { getValues, setValue } = useFormContext<T>();
@@ -112,7 +117,13 @@ export default function CurationMetricSelector<
     );
   }, [metricsFetcher.data, addDemonstrations]);
 
-  const isLoading = metricsFetcher.state === "loading";
+  const metricsLoading = metricsFetcher.state === "loading";
+
+  // Inform parent when the internal metrics fetcher loading state changes
+  useEffect(() => {
+    onMetricsLoadingChange?.(metricsLoading);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metricsLoading]);
 
   // Reset metric value if the selected function does not have the previously selected metric
   useEffect(() => {
@@ -145,10 +156,17 @@ export default function CurationMetricSelector<
                     variant="outline"
                     role="combobox"
                     aria-expanded={open}
+                    aria-busy={metricsLoading}
                     className="group border-border hover:border-border-accent hover:bg-bg-primary w-full justify-between border font-normal hover:cursor-pointer"
-                    disabled={!functionValue || isLoading}
+                    disabled={!functionValue || metricsLoading}
                   >
-                    <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      {metricsLoading && (
+                        <Loader2
+                          className="text-fg-tertiary h-4 w-4 shrink-0 animate-spin"
+                          aria-hidden
+                        />
+                      )}
                       {(() => {
                         const currentMetricName = field.value as string | null;
                         const selectedMetricDetails = currentMetricName
@@ -175,7 +193,7 @@ export default function CurationMetricSelector<
                           return (
                             <div className="text-fg-muted flex items-center gap-x-2">
                               <span className="text-fg-secondary flex text-sm">
-                                {isLoading
+                                {metricsLoading
                                   ? "Loading metrics..."
                                   : !functionValue ||
                                       (functionValue && validMetrics.size === 0)
@@ -346,29 +364,37 @@ export default function CurationMetricSelector<
 
             <div className="text-muted-foreground space-y-1 text-sm">
               <div>
-                Feedbacks:{" "}
-                {/* If field.value is empty string (unselected), show loading skeleton */}
-                {field.value === "" ? (
+                Feedbacks: {/* If data is loading, show skeleton */}
+                {isLoading ? (
+                  <Skeleton className="inline-block h-4 w-16 align-middle" />
+                ) : /* If field.value is empty string (unselected), show loading skeleton */
+                field.value === "" ? (
                   <Skeleton className="inline-block h-4 w-16 align-middle" />
                 ) : /* If field.value is null (selected "None"), show N/A */
                 field.value === null ? (
                   <span className="font-medium">N/A</span>
                 ) : (
                   /* Otherwise show the actual feedback count */
-                  <span className="font-medium">{feedbackCount}</span>
+                  <span className="font-medium">
+                    {feedbackCount?.toLocaleString() ?? "0"}
+                  </span>
                 )}
               </div>
               <div>
-                Curated Inferences:{" "}
-                {/* If field.value is empty string (unselected), show loading skeleton */}
-                {field.value === "" ? (
+                Curated Inferences: {/* If data is loading, show skeleton */}
+                {isLoading ? (
+                  <Skeleton className="inline-block h-4 w-16 align-middle" />
+                ) : /* If field.value is empty string (unselected), show loading skeleton */
+                field.value === "" ? (
                   <Skeleton className="inline-block h-4 w-16 align-middle" />
                 ) : /* If field.value is null (selected "None"), show N/A */
                 field.value === null ? (
                   <span className="font-medium">N/A</span>
                 ) : (
                   /* Otherwise show the actual curated inference count */
-                  <span className="font-medium">{curatedInferenceCount}</span>
+                  <span className="font-medium">
+                    {curatedInferenceCount?.toLocaleString() ?? "0"}
+                  </span>
                 )}
               </div>
             </div>

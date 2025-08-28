@@ -10,18 +10,20 @@ use evaluators::{evaluate_inference, EvaluateInferenceParams};
 use helpers::{get_cache_options, get_tool_params_args};
 use serde::{Deserialize, Serialize};
 use stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate};
-use tensorzero::ClientInput;
 use tensorzero::{
     input_handling::resolved_input_to_client_input, Client, ClientBuilder, ClientBuilderMode,
     ClientInferenceParams, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
     InferenceResponse,
 };
+use tensorzero::{ClientInput, StoragePath};
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::config_parser::{ConfigFileGlob, MetricConfigOptimize};
+use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize};
+use tensorzero_core::error::Error;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
+use tensorzero_core::inference::types::stored_input::StoragePathResolver;
 use tensorzero_core::{
-    config_parser::Config, db::clickhouse::ClickHouseConnectionInfo,
-    endpoints::datasets::Datapoint, function::FunctionConfig,
+    config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::Datapoint,
+    function::FunctionConfig,
 };
 use tokio::{sync::Semaphore, task::JoinSet};
 use tracing::{debug, error, info, instrument};
@@ -95,11 +97,13 @@ pub async fn run_evaluation(
     // We do not validate credentials here since we just want the evaluator config
     // If we are using an embedded gateway, credentials are validated when that is initialized
     info!(config_file = ?args.config_file, "Loading configuration");
-    let config = Config::load_from_path_optional_verify_credentials(
-        &ConfigFileGlob::new_from_path(&args.config_file)?,
-        false,
-    )
-    .await?;
+    let config = Arc::new(
+        Config::load_from_path_optional_verify_credentials(
+            &ConfigFileGlob::new_from_path(&args.config_file)?,
+            false,
+        )
+        .await?,
+    );
     debug!("Configuration loaded successfully");
     let evaluation_config = config
         .evaluations
@@ -180,7 +184,7 @@ pub async fn run_evaluation(
         let datapoint = Arc::new(datapoint);
         let datapoint_id = datapoint.id();
         let abort_handle = join_set.spawn(async move {
-            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone(), &clients_clone.tensorzero_client.client).await?);
+            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&clients_clone.tensorzero_client).await?)?);
             let inference_response = Arc::new(
                 infer_datapoint(InferDatapointParams {
                     clients: &clients_clone,
@@ -482,6 +486,12 @@ impl ThrottledTensorZeroClient {
     async fn feedback(&self, params: FeedbackParams) -> Result<()> {
         self.client.feedback(params).await?;
         Ok(())
+    }
+}
+
+impl StoragePathResolver for ThrottledTensorZeroClient {
+    async fn resolve(&self, storage_path: StoragePath) -> Result<String, Error> {
+        self.client.resolve(storage_path).await
     }
 }
 

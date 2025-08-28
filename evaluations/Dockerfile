@@ -1,6 +1,6 @@
 # ========== builder ==========
 
-FROM rust:latest AS builder
+FROM rust:1.88.0 AS builder
 
 WORKDIR /src
 
@@ -10,9 +10,7 @@ COPY . .
 
 ARG CARGO_BUILD_FLAGS=""
 
-RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/registry \
-    --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/git \
-    cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
+RUN cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
     cp -r /src/target/release /release
 
 # ========== base ==========

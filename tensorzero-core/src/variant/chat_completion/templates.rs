@@ -1,7 +1,7 @@
 use serde::Serialize;
 
 use crate::{
-    config_parser::{path::TomlRelativePath, PathWithContents, SchemaData},
+    config::{path::TomlRelativePath, PathWithContents, SchemaData},
     error::{Error, ErrorDetails},
     jsonschema_util::StaticJSONSchema,
     variant::chat_completion::{TemplateWithSchema, UninitializedInputWrappers},

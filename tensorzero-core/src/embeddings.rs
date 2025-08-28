@@ -6,9 +6,12 @@ use crate::cache::{
     embedding_cache_lookup, start_cache_write, CacheData, EmbeddingCacheData,
     EmbeddingModelProviderRequest,
 };
-use crate::config_parser::{ProviderTypesConfig, TimeoutsConfig};
+use crate::config::{ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
-use crate::model::UninitializedProviderConfig;
+use crate::inference::types::extra_body::ExtraBodyConfig;
+use crate::inference::types::RequestMessagesOrBatch;
+use crate::inference::types::{ContentBlock, Text};
+use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
 use crate::model_table::BaseModelTable;
 use crate::model_table::ShorthandModelConfig;
 use crate::providers::azure::AzureProvider;
@@ -54,6 +57,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
             inner: provider_config,
             timeouts: TimeoutsConfig::default(),
             provider_name: Arc::from(provider_type.to_string()),
+            extra_body: Default::default(),
         };
         Ok(EmbeddingModelConfig {
             routing: vec![provider_type.to_string().into()],
@@ -143,7 +147,12 @@ impl EmbeddingModelConfig {
                     }
                 }
                 let response = provider_config
-                    .embed(request, clients.http_client, clients.credentials)
+                    .embed(
+                        request,
+                        clients.http_client,
+                        clients.credentials,
+                        &provider_config.into(),
+                    )
                     .await;
 
                 match response {
@@ -370,10 +379,12 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
             output: vec![],
             created: response.created,
             system: None,
-            input_messages: vec![RequestMessage {
+            input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::User,
-                content: vec![input.clone().into()],
-            }], // TODO (#399): Store this information in a more appropriate way for this kind of request
+                content: vec![ContentBlock::Text(Text {
+                    text: input.clone(),
+                })],
+            }]), // TODO (#399): Store this information in a more appropriate way for this kind of request
             raw_request: response.raw_request,
             raw_response: response.raw_response,
             usage: response.usage,
@@ -392,6 +403,7 @@ pub trait EmbeddingProvider {
         request: &EmbeddingRequest,
         client: &Client,
         dynamic_api_keys: &InferenceCredentials,
+        model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> impl Future<Output = Result<EmbeddingProviderResponse, Error>> + Send;
 }
 
@@ -412,6 +424,33 @@ pub struct EmbeddingProviderInfo {
     pub inner: EmbeddingProviderConfig,
     pub timeouts: TimeoutsConfig,
     pub provider_name: Arc<str>,
+    #[cfg_attr(test, ts(skip))]
+    pub extra_body: Option<ExtraBodyConfig>,
+}
+
+#[derive(Clone, Debug)]
+pub struct EmbeddingProviderRequestInfo {
+    pub provider_name: Arc<str>,
+    pub extra_body: Option<ExtraBodyConfig>,
+}
+
+impl From<&EmbeddingProviderInfo> for EmbeddingProviderRequestInfo {
+    fn from(val: &EmbeddingProviderInfo) -> Self {
+        EmbeddingProviderRequestInfo {
+            provider_name: val.provider_name.clone(),
+            extra_body: val.extra_body.clone(),
+        }
+    }
+}
+
+impl From<&EmbeddingProviderRequestInfo> for ModelProviderRequestInfo {
+    fn from(val: &EmbeddingProviderRequestInfo) -> Self {
+        crate::model::ModelProviderRequestInfo {
+            provider_name: val.provider_name.clone(),
+            extra_headers: None, // Embeddings don't use extra headers yet
+            extra_body: val.extra_body.clone(),
+        }
+    }
 }
 
 impl EmbeddingProvider for EmbeddingProviderInfo {
@@ -420,8 +459,11 @@ impl EmbeddingProvider for EmbeddingProviderInfo {
         request: &EmbeddingRequest,
         client: &Client,
         dynamic_api_keys: &InferenceCredentials,
+        model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
-        let response_fut = self.inner.embed(request, client, dynamic_api_keys);
+        let response_fut = self
+            .inner
+            .embed(request, client, dynamic_api_keys, model_provider_data);
         Ok(
             if let Some(timeout_ms) = self.timeouts.non_streaming.total_ms {
                 let timeout = Duration::from_millis(timeout_ms);
@@ -447,6 +489,8 @@ pub struct UninitializedEmbeddingProviderConfig {
     config: UninitializedProviderConfig,
     #[serde(default)]
     timeouts: TimeoutsConfig,
+    #[serde(default)]
+    pub extra_body: Option<ExtraBodyConfig>,
 }
 
 impl UninitializedEmbeddingProviderConfig {
@@ -457,22 +501,26 @@ impl UninitializedEmbeddingProviderConfig {
     ) -> Result<EmbeddingProviderInfo, Error> {
         let provider_config = self.config.load(provider_types).await?;
         let timeouts = self.timeouts;
+        let extra_body = self.extra_body;
         Ok(match provider_config {
             ProviderConfig::OpenAI(provider) => EmbeddingProviderInfo {
                 inner: EmbeddingProviderConfig::OpenAI(provider),
                 timeouts,
                 provider_name,
+                extra_body,
             },
             ProviderConfig::Azure(provider) => EmbeddingProviderInfo {
                 inner: EmbeddingProviderConfig::Azure(provider),
                 timeouts,
                 provider_name,
+                extra_body,
             },
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => EmbeddingProviderInfo {
                 inner: EmbeddingProviderConfig::Dummy(provider),
                 timeouts,
                 provider_name,
+                extra_body,
             },
             _ => {
                 return Err(Error::new(ErrorDetails::Config {
@@ -491,17 +539,24 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
         request: &EmbeddingRequest,
         client: &Client,
         dynamic_api_keys: &InferenceCredentials,
+        model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         match self {
             EmbeddingProviderConfig::OpenAI(provider) => {
-                provider.embed(request, client, dynamic_api_keys).await
+                provider
+                    .embed(request, client, dynamic_api_keys, model_provider_data)
+                    .await
             }
             EmbeddingProviderConfig::Azure(provider) => {
-                provider.embed(request, client, dynamic_api_keys).await
+                provider
+                    .embed(request, client, dynamic_api_keys, model_provider_data)
+                    .await
             }
             #[cfg(any(test, feature = "e2e_tests"))]
             EmbeddingProviderConfig::Dummy(provider) => {
-                provider.embed(request, client, dynamic_api_keys).await
+                provider
+                    .embed(request, client, dynamic_api_keys, model_provider_data)
+                    .await
             }
         }
     }
@@ -574,6 +629,7 @@ mod tests {
             inner: bad_provider,
             timeouts: Default::default(),
             provider_name: Arc::from("error".to_string()),
+            extra_body: None,
         };
         let good_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "good".into(),
@@ -583,6 +639,7 @@ mod tests {
             inner: good_provider,
             timeouts: Default::default(),
             provider_name: Arc::from("good".to_string()),
+            extra_body: None,
         };
         let fallback_embedding_model = EmbeddingModelConfig {
             routing: vec!["error".to_string().into(), "good".to_string().into()],
@@ -616,5 +673,42 @@ mod tests {
         assert!(logs_contain(
             "Error sending request to Dummy provider for model 'error'"
         ));
+    }
+
+    #[tokio::test]
+    async fn test_embedding_provider_config_with_extra_body() {
+        use crate::inference::types::extra_body::{
+            ExtraBodyConfig, ExtraBodyReplacement, ExtraBodyReplacementKind,
+        };
+        use serde_json::json;
+
+        let replacement = ExtraBodyReplacement {
+            pointer: "/task".to_string(),
+            kind: ExtraBodyReplacementKind::Value(json!("query")),
+        };
+        let extra_body_config = ExtraBodyConfig {
+            data: vec![replacement.clone()],
+        };
+
+        let uninitialized_config = UninitializedEmbeddingProviderConfig {
+            config: crate::model::UninitializedProviderConfig::OpenAI {
+                model_name: "text-embedding-ada-002".to_string(),
+                api_base: None,
+                api_key_location: Some(crate::model::CredentialLocation::None),
+            },
+            timeouts: TimeoutsConfig::default(),
+            extra_body: Some(extra_body_config.clone()),
+        };
+
+        let provider_info = uninitialized_config
+            .load(&ProviderTypesConfig::default(), Arc::from("test_provider"))
+            .await
+            .unwrap();
+
+        // Verify the extra_body is preserved
+        assert!(provider_info.extra_body.is_some());
+        let loaded_extra_body = provider_info.extra_body.unwrap();
+        assert_eq!(loaded_extra_body.data.len(), 1);
+        assert_eq!(loaded_extra_body.data[0], replacement);
     }
 }
