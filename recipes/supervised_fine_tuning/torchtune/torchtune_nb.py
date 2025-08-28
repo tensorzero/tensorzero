@@ -18,20 +18,17 @@
 # - Update the following parameters:
 
 # %%
-CONFIG_PATH = "../../../../examples/data-extraction-ner/config/tensorzero.toml"
+CONFIG_PATH = "../../../examples/data-extraction-ner/config/tensorzero.toml"
 
 FUNCTION_NAME = "extract_entities"
 
-METRIC_NAME = "exact_match"
+METRIC_NAME = "jaccard_similarity"
 
 # The name of the variant to use to grab the templates used for fine-tuning
 TEMPLATE_VARIANT_NAME = "gpt_4o_mini"  # It's OK that this variant uses a different model than the one we're fine-tuning
 
 # If the metric is a float metric, you can set the threshold to filter the data
 FLOAT_METRIC_THRESHOLD = 0.5
-
-# Fraction of the data to use for validation
-VAL_FRACTION = 0.2
 
 # Fraction of the data to use for validation
 VAL_FRACTION = 0.2
@@ -47,6 +44,7 @@ SEED = 42
 
 # %%
 # The name of the model to fine-tune (supported models: https://docs.pytorch.org/torchtune/main/api_ref_models.html)
+# You may need to update the MODELS dictionary in utils.py if you want to use a model that we have not yet included there
 MODEL_NAME = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 
 # Whether to use LoRA or not. Set to False for full model fine-tuning
@@ -74,6 +72,13 @@ OUTPUT_DIR = "fine-tuned"
 
 # %%
 import os
+import sys
+
+tensorzero_path = os.path.abspath(os.path.join(os.getcwd(), "../../"))
+if tensorzero_path not in sys.path:
+    sys.path.append(tensorzero_path)
+
+# %%
 import subprocess
 from pathlib import Path
 
@@ -195,73 +200,15 @@ TUNING_CONFIG = {
 # %%
 import json
 import tempfile
-import warnings
-from typing import Any, Dict, List, Optional
 
-import numpy as np
-import pandas as pd
 import toml
 import yaml
 from tensorzero import (
-    BooleanMetricNode,
-    ContentBlock,
-    FloatMetricNode,
-    RawText,
+    FloatMetricFilter,
     TensorZeroGateway,
-    Text,
-    Thought,
-    ToolCall,
-    ToolResult,
 )
-from tensorzero.internal import OutputMessage
 from tensorzero.util import uuid7
-
-# %% [markdown]
-# Load the TensorZero configuration file.
-
-# %%
-config_path = Path(CONFIG_PATH)
-
-assert config_path.exists(), f"{CONFIG_PATH} does not exist"
-assert config_path.is_file(), f"{CONFIG_PATH} is not a file"
-
-with config_path.open("r") as f:
-    config = toml.load(f)
-
-# %% [markdown]
-# Retrieve the metric configuration.
-#
-
-# %%
-assert "metrics" in config, "No `[metrics]` section found in config"
-assert METRIC_NAME in config["metrics"], (
-    f"No metric named `{METRIC_NAME}` found in config"
-)
-
-metric = config["metrics"][METRIC_NAME]
-
-metric
-
-# %% [markdown]
-# Retrieve the configuration for the variant with the templates we'll use for fine-tuning.
-#
-
-# %%
-assert "functions" in config, "No `[functions]` section found in config"
-assert FUNCTION_NAME in config["functions"], (
-    f"No function named `{FUNCTION_NAME}` found in config"
-)
-assert "variants" in config["functions"][FUNCTION_NAME], (
-    f"No variants section found for function `{FUNCTION_NAME}`"
-)
-assert TEMPLATE_VARIANT_NAME in config["functions"][FUNCTION_NAME]["variants"], (
-    f"No variant named `{TEMPLATE_VARIANT_NAME}` found in function `{FUNCTION_NAME}`"
-)
-
-function_type = config["functions"][FUNCTION_NAME]["type"]
-variant = config["functions"][FUNCTION_NAME]["variants"][TEMPLATE_VARIANT_NAME]
-
-variant
+from util import tensorzero_rendered_samples_to_conversations, train_val_split
 
 # %% [markdown]
 # Load and render the stored inferences
@@ -274,23 +221,20 @@ tensorzero_client = TensorZeroGateway.build_embedded(
 )
 
 # %% [markdown]
-# Set the metric filter
+# Set the metric filter as needed
 
 # %%
-assert "optimize" in metric, "Metric is missing the `optimize` field"
-
-if metric.get("type") == "float":
-    comparison_operator = ">=" if metric["optimize"] == "max" else "<="
-    metric_node = FloatMetricNode(
-        metric_name=METRIC_NAME,
-        value=FLOAT_METRIC_THRESHOLD,
-        comparison_operator=comparison_operator,
-    )
-elif metric.get("type") == "boolean":
-    metric_node = BooleanMetricNode(
-        metric_name=METRIC_NAME,
-        value=True if metric["optimize"] == "max" else False,
-    )
+comparison_operator = ">="
+metric_node = FloatMetricFilter(
+    metric_name=METRIC_NAME,
+    value=FLOAT_METRIC_THRESHOLD,
+    comparison_operator=comparison_operator,
+)
+# from tensorzero import BooleanMetricFilter
+# metric_node = BooleanMetricFilter(
+#     metric_name=METRIC_NAME,
+#     value=True  # or False
+# )
 
 metric_node
 
@@ -301,6 +245,7 @@ metric_node
 stored_inferences = tensorzero_client.experimental_list_inferences(
     function_name=FUNCTION_NAME,
     variant_name=None,
+    output_source="inference",  # could also be "demonstration"
     filters=metric_node,
     limit=MAX_SAMPLES,
 )
@@ -309,157 +254,31 @@ stored_inferences = tensorzero_client.experimental_list_inferences(
 # Render the stored inferences
 
 # %%
-rendered_inferences = tensorzero_client.experimental_render_inferences(
+rendered_samples = tensorzero_client.experimental_render_inferences(
     stored_inferences=stored_inferences,
     variants={FUNCTION_NAME: TEMPLATE_VARIANT_NAME},
 )
 
-
-# %% [markdown]
-# Reformat the rendered inferences to ChatML
-
-
-# %%
-def message_to_chatml(message: OutputMessage) -> Optional[List[Dict[str, Any]]]:
-    chatml_messages: List[Dict[str, Any]] = []
-    assert message.role in ["user", "assistant"], f"Invalid role: {message.role}"
-    content: List[str] = []
-    tool_calls: List[Dict[str, Any]] = []
-    for content_block in message.content:
-        if isinstance(content_block, Text):
-            assert content_block.arguments is None, "Arguments should be None"
-            content.append(content_block.text)
-        elif isinstance(content_block, RawText):
-            content.append(content_block.value)
-        elif isinstance(content_block, Thought):
-            content.append(f"<think>{content_block['text']}</think>")
-        elif isinstance(content_block, ToolCall):
-            tool_calls.append(
-                {
-                    "function": {
-                        "arguments": content_block.raw_arguments,
-                        "name": content_block.name,
-                    },
-                    "id": content_block.id,
-                    "type": "function",
-                }
-            )
-        elif isinstance(content_block, ToolResult):
-            # Tool results get priority so that they follow the tool call in the conversation.
-            # Any other "user" content will be appended in another message below.
-            chatml_messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": content_block.id,
-                    "content": content_block.result,
-                }
-            )
-        else:
-            warnings.warn(
-                f"We do not support content block type: {type(content_block)}, dropping example.",
-                UserWarning,
-            )
-            return None
-    if content or tool_calls:
-        chatml_message: Dict[str, Any] = {"role": message.role}
-        if content:
-            chatml_message["content"] = "\n".join(content)
-        if tool_calls:
-            chatml_message["tool_calls"] = tool_calls
-            if len(content) == 0:
-                chatml_message["content"] = ""
-        chatml_messages.append(chatml_message)
-
-    return chatml_messages
-
-
-def output_to_chatml(output: List[ContentBlock]) -> Dict[str, Any]:
-    content: List[str] = []
-    tool_calls: List[Dict[str, Any]] = []
-
-    for content_block in output:
-        if isinstance(content_block, Text):
-            assert content_block.arguments is None, "Arguments should be None"
-            content.append(content_block.text)
-        elif isinstance(content_block, Thought):
-            content.append(f"<think>{content_block['text']}</think>")
-        elif isinstance(content_block, ToolCall):
-            tool_calls.append(
-                {
-                    "function": {
-                        "arguments": content_block.raw_arguments,
-                        "name": content_block.name,
-                    },
-                    "id": content_block.id,
-                    "type": "function",
-                }
-            )
-        else:
-            warnings.warn(
-                f"We do not support content block type: {type(content_block)}, dropping example.",
-                UserWarning,
-            )
-            return None
-
-    # Once we finish collecting all blocks, create one assistant message.
-    output_message: Dict[str, Any] = {"role": "assistant"}
-    if content:
-        output_message["content"] = "\n".join(content)
-    if tool_calls:
-        output_message["tool_calls"] = tool_calls
-        if len(content) == 0:
-            output_message["content"] = ""
-
-    return output_message
-
-
-conversations = []
-for rendered_inference in rendered_inferences:
-    messages = []
-    model_input = rendered_inference.input
-    if model_input.system is not None:
-        messages.append({"role": "system", "content": model_input.system})
-    for message in model_input.messages:
-        messages.extend(message_to_chatml(message))
-    messages.append(output_to_chatml(rendered_inference.output))
-
-    # Drop conversations that have unknown content
-    if all(msg is not None for msg in messages):
-        conversations.append(
-            {
-                "conversation": {"messages": messages},
-                "episode_id": rendered_inference.episode_id,
-            }
-        )
-
-conversations = pd.DataFrame(conversations)
-
 # %% [markdown]
 # Split the data into training and validation sets for fine-tuning.
-#
 
 # %%
-# Get unique episode_ids
-unique_episode_ids = conversations["episode_id"].unique()
+train_samples, eval_samples = train_val_split(
+    rendered_samples,
+    val_size=VAL_FRACTION,
+    last_inference_only=True,
+)
 
-# Shuffle the unique episode_ids
-np.random.seed(SEED)
-np.random.shuffle(unique_episode_ids)
+# %% [markdown]
+# Convert the rendered samples to conversations for tokenization
 
-# Calculate the split index for episode_ids
-split_index = int(len(unique_episode_ids) * (1 - VAL_FRACTION))
-
-# Split the episode_ids into training and validation sets
-train_episode_ids = unique_episode_ids[:split_index]
-val_episode_ids = unique_episode_ids[split_index:]
-
-# Create training and validation DataFrames based on episode_ids
-train_df = conversations[conversations["episode_id"].isin(train_episode_ids)]
-val_df = conversations[conversations["episode_id"].isin(val_episode_ids)]
-
-print(f"Training set size: {len(train_df)}")
-print(f"Validation set size: {len(val_df)}")
-print(f"Actual validation fraction: {len(val_df) / len(conversations):.2f}")
+# %%
+train_conversations = tensorzero_rendered_samples_to_conversations(
+    train_samples, conversation_key="messages"
+)
+eval_conversations = tensorzero_rendered_samples_to_conversations(
+    eval_samples, conversation_key="messages"
+)
 
 # %%
 with tempfile.TemporaryDirectory() as temp_dir:
@@ -468,14 +287,14 @@ with tempfile.TemporaryDirectory() as temp_dir:
     # Write training JSONL
     train_json_path = temp_dir / "train.json"
     with train_json_path.open("w") as f:
-        for item in train_df["conversation"]:
+        for item in train_conversations:
             json.dump(item, f)
             f.write("\n")
 
     # Write evaluation JSONL
     val_json_path = temp_dir / "eval.json"
     with val_json_path.open("w") as f:
-        for item in val_df["conversation"]:
+        for item in eval_conversations:
             json.dump(item, f)
             f.write("\n")
 
@@ -626,34 +445,6 @@ model_config = {
 }
 
 print(toml.dumps(model_config))
-
-# %% [markdown]
-# Finally, add a new variant to your function to use the fine-tuned model.
-
-# %%
-variant_config = {
-    "type": "chat_completion",
-    "weight": 0,
-    "model": model_identifier,
-}
-
-system_template = variant.get("system_template")
-if system_template:
-    variant_config["system_template"] = system_template
-
-user_template = variant.get("user_template")
-if user_template:
-    variant_config["user_template"] = user_template
-
-assistant_template = variant.get("assistant_template")
-if assistant_template:
-    variant_config["assistant_template"] = assistant_template
-
-full_variant_config = {
-    "functions": {FUNCTION_NAME: {"variants": {model_identifier: variant_config}}}
-}
-
-print(toml.dumps(full_variant_config))
 
 # %% [markdown]
 # You're all set!

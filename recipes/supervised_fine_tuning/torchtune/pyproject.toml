@@ -1,5 +1,5 @@
 [project]
-name = "tensorzero-recipe-sft-unsloth-demonstrations"
+name = "tensorzero-recipe-sft-torchtune"
 version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -11,7 +11,7 @@ dependencies = [
     "notebook",
     "numpy",
     "pandas",
-    "tensorzero>=2025.6.1",
+    "tensorzero",
     "toml",
     "torchao",
     "torch",

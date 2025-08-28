@@ -20,7 +20,7 @@ To use our container, follow the [VS Code Instructions](https://code.visualstudi
 uv venv  # Create a new virtual environment
 source .venv/bin/activate # Activate environment
 uv pip sync requirements.txt # Install the dependencies
-uv pip install --pre torchtune --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+uv pip install --pre torchtune --extra-index-url https://download.pytorch.org/whl/nightly/cu126
 ```
 
 ### Using `pip`
@@ -29,5 +29,5 @@ We recommend using Python 3.10+ and a virtual environment.
 
 ```bash
 pip install -r requirements.txt
-pip install --pre torchtune --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+pip install --pre torchtune --extra-index-url https://download.pytorch.org/whl/nightly/cu126
 ```
