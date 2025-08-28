@@ -322,8 +322,11 @@ impl<'a> TryFrom<&'a RenderedSample> for OpenAISupervisedRow<'a> {
             None => (false, vec![]),
         };
         let mut messages = prepare_openai_messages(PrepareOpenAIMessagesArgs {
-            system: inference.input.system.as_deref(),
-            developer: None,
+            system_or_developer: inference
+                .input
+                .system
+                .as_deref()
+                .map(super::SystemOrDeveloperMessage::System),
             messages: &inference.input.messages,
             json_mode: None,
             provider_type: PROVIDER_TYPE,
@@ -384,8 +387,11 @@ impl<'a> TryFrom<&'a RenderedSample> for OpenAIReinforcementRow<'a> {
             None => (false, vec![]),
         };
         let messages = prepare_openai_messages(PrepareOpenAIMessagesArgs {
-            system: None,
-            developer: inference.input.system.as_deref(),
+            system_or_developer: inference
+                .input
+                .system
+                .as_deref()
+                .map(super::SystemOrDeveloperMessage::Developer),
             messages: &inference.input.messages,
             json_mode: None,
             provider_type: PROVIDER_TYPE,

@@ -32,10 +32,10 @@ use crate::tool::ToolCallChunk;
 
 use super::openai::{
     convert_stream_error, get_chat_url, handle_openai_error, prepare_openai_tools,
-    tensorzero_to_openai_messages, tensorzero_to_openai_system_message,
+    prepare_system_or_developer_message, tensorzero_to_openai_messages,
     OpenAIAssistantRequestMessage, OpenAIContentBlock, OpenAIFinishReason, OpenAIRequestMessage,
     OpenAIResponseToolCall, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIUsage,
-    OpenAIUserRequestMessage, StreamOptions,
+    OpenAIUserRequestMessage, StreamOptions, SystemOrDeveloperMessage,
 };
 
 lazy_static! {
@@ -604,11 +604,13 @@ pub(super) fn prepare_deepseek_messages<'a>(
                 }),
             );
         }
-    } else if let Some(system_msg) = tensorzero_to_openai_system_message(
-        request.system.as_deref(),
+    } else if let Some(system_msg) = prepare_system_or_developer_message(
+        request
+            .system
+            .as_deref()
+            .map(SystemOrDeveloperMessage::System),
         Some(&request.json_mode),
         &messages,
-        OpenAIRequestMessage::System,
     ) {
         messages.insert(0, system_msg);
     }
