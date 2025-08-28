@@ -4,6 +4,25 @@ set -euo pipefail
 
 DATABASE_NAME="${1:-tensorzero_ui_fixtures}"
 
+# Determine credentials based on environment
+if command -v buildkite-agent >/dev/null 2>&1; then
+  # Running on Buildkite - use secrets (fail if not available)
+  if [ "${TENSORZERO_CLICKHOUSE_FAST_CHANNEL:-}" = "1" ]; then
+    CLICKHOUSE_HOST_VAR=$(buildkite-agent secret get CLICKHOUSE_HOST_FAST_CHANNEL)
+  else
+    CLICKHOUSE_HOST_VAR=$(buildkite-agent secret get CLICKHOUSE_HOST)
+  fi
+  CLICKHOUSE_USER_VAR=$(buildkite-agent secret get clickhouse_username)
+  CLICKHOUSE_PASSWORD_VAR=$(buildkite-agent secret get clickhouse_password)
+  CLICKHOUSE_SECURE_FLAG="--secure"
+else
+  # Not on Buildkite - use environment variables with defaults
+  CLICKHOUSE_HOST_VAR="${CLICKHOUSE_HOST}"
+  CLICKHOUSE_USER_VAR="${CLICKHOUSE_USER:-chuser}"
+  CLICKHOUSE_PASSWORD_VAR="${CLICKHOUSE_PASSWORD:-chpassword}"
+  CLICKHOUSE_SECURE_FLAG=""
+fi
+
 echo "Verifying fixture counts for tables..."
 echo "==============================================="
 
@@ -30,7 +49,7 @@ mismatch=0
 # Check each table
 for table in "${!all_tables[@]}"; do
     # Get total count from database
-    db_count=$(clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword \
+    db_count=$(clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG \
               --database "$DATABASE_NAME" --query "SELECT count() FROM $table" 2>/dev/null || echo "ERROR")
 
     if [[ "$db_count" == "ERROR" ]]; then
@@ -89,7 +108,7 @@ if [ $mismatch -eq 0 ]; then
 
     for table in "${tables_to_check_duplicates[@]}"; do
         echo "Checking for duplicate ids in $table..."
-        duplicates=$(clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword \
+        duplicates=$(clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG \
                       --database "$DATABASE_NAME" --query "SELECT
         id,
         count() AS duplicate_count
