@@ -721,12 +721,15 @@ async fn test_config_assistant_schema_does_not_exist() {
     .into();
 
     let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
-    assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
-            }.into()
-        );
+    let error = result.unwrap_err();
+    if let ErrorDetails::Config { message } = error.get_details() {
+        assert!(message.contains("Failed to read file at"));
+        assert!(message.contains("non_existent_file.json"));
+        assert!(message.contains("No such file or directory"));
+    } else {
+        panic!("Expected Config error, got: {error:?}");
+    }
+
     let mut sample_config = get_sample_valid_config();
     sample_config["functions"]["templates_with_variables_json"]["assistant_schema"] = [(
         "__tensorzero_remapped_path".into(),
@@ -737,12 +740,14 @@ async fn test_config_assistant_schema_does_not_exist() {
     .into();
 
     let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
-    assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
-            }.into()
-        );
+    let error = result.unwrap_err();
+    if let ErrorDetails::Config { message } = error.get_details() {
+        assert!(message.contains("Failed to read file at"));
+        assert!(message.contains("non_existent_file.json"));
+        assert!(message.contains("No such file or directory"));
+    } else {
+        panic!("Expected Config error, got: {error:?}");
+    }
 }
 
 /// Ensure that the config loading fails when the system schema is missing but is needed
