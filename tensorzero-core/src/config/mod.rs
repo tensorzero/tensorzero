@@ -1,3 +1,7 @@
+/// IMPORTANT: THIS MODULE IS NOT STABLE.
+///            IT IS MEANT FOR INTERNAL USE ONLY.
+///            EXPECT FREQUENT, UNANNOUNCED BREAKING CHANGES.
+///            USE AT YOUR OWN RISK.
 use futures::future::try_join_all;
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
