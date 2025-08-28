@@ -151,8 +151,8 @@ mod tests {
 
     #[test]
     fn test_get_static_evaluation_human_feedback_info_all_tags_present() {
-        let datapoint_id = Uuid::new_v4();
-        let evaluator_inference_id = Uuid::new_v4();
+        let datapoint_id = Uuid::now_v7();
+        let evaluator_inference_id = Uuid::now_v7();
 
         let mut tags = HashMap::new();
         tags.insert(
@@ -175,7 +175,7 @@ mod tests {
 
     #[test]
     fn test_get_static_evaluation_human_feedback_info_missing_datapoint_id() {
-        let evaluator_inference_id = Uuid::new_v4();
+        let evaluator_inference_id = Uuid::now_v7();
 
         let mut tags = HashMap::new();
         tags.insert(
@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn test_get_static_evaluation_human_feedback_info_missing_evaluator_inference_id() {
-        let datapoint_id = Uuid::new_v4();
+        let datapoint_id = Uuid::now_v7();
 
         let mut tags = HashMap::new();
         tags.insert(
@@ -205,8 +205,8 @@ mod tests {
 
     #[test]
     fn test_get_static_evaluation_human_feedback_info_missing_human_feedback() {
-        let datapoint_id = Uuid::new_v4();
-        let evaluator_inference_id = Uuid::new_v4();
+        let datapoint_id = Uuid::now_v7();
+        let evaluator_inference_id = Uuid::now_v7();
 
         let mut tags = HashMap::new();
         tags.insert(
@@ -224,7 +224,7 @@ mod tests {
 
     #[test]
     fn test_get_static_evaluation_human_feedback_info_invalid_datapoint_uuid() {
-        let evaluator_inference_id = Uuid::new_v4();
+        let evaluator_inference_id = Uuid::now_v7();
 
         let mut tags = HashMap::new();
         tags.insert(
@@ -252,7 +252,7 @@ mod tests {
 
     #[test]
     fn test_get_static_evaluation_human_feedback_info_invalid_evaluator_inference_uuid() {
-        let datapoint_id = Uuid::new_v4();
+        let datapoint_id = Uuid::now_v7();
 
         let mut tags = HashMap::new();
         tags.insert(
@@ -288,8 +288,8 @@ mod tests {
 
     #[test]
     fn test_get_static_evaluation_human_feedback_info_human_feedback_value_variations() {
-        let datapoint_id = Uuid::new_v4();
-        let evaluator_inference_id = Uuid::new_v4();
+        let datapoint_id = Uuid::now_v7();
+        let evaluator_inference_id = Uuid::now_v7();
 
         // Test different values for human_feedback tag - the function only checks presence, not value
         let test_values = vec!["true", "false", "", "some_value"];
@@ -316,8 +316,8 @@ mod tests {
 
     #[test]
     fn test_get_static_evaluation_human_feedback_info_extra_tags() {
-        let datapoint_id = Uuid::new_v4();
-        let evaluator_inference_id = Uuid::new_v4();
+        let datapoint_id = Uuid::now_v7();
+        let evaluator_inference_id = Uuid::now_v7();
 
         let mut tags = HashMap::new();
         tags.insert(
