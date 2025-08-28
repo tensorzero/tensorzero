@@ -10,14 +10,15 @@ use std::collections::HashMap;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::collections::HashSet;
+use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage};
 use tensorzero_core::{
-    clickhouse::{
+    db::clickhouse::{
         test_helpers::select_batch_model_inferences_clickhouse, ClickHouseConnectionInfo, TableName,
     },
     endpoints::batch_inference::PollPathParams,
     inference::types::{
         batch::{BatchModelInferenceRow, BatchRequestRow},
-        ContentBlock, RequestMessage, Role,
+        ContentBlock, RequestMessage, Role, Text,
     },
     tool::{ToolCall, ToolResult},
 };
@@ -25,7 +26,7 @@ use tokio::time::{sleep, Duration};
 use url::Url;
 use uuid::Uuid;
 
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_batch_model_inference_clickhouse, select_latest_batch_request_clickhouse,
 };
 
@@ -627,11 +628,11 @@ async fn insert_fake_pending_batch_inference_data(
     }
 
     clickhouse
-        .write(batch_inferences.as_slice(), TableName::BatchModelInference)
+        .write_batched(batch_inferences.as_slice(), TableName::BatchModelInference)
         .await
         .unwrap();
     clickhouse
-        .write(&[batch_request], TableName::BatchRequest)
+        .write_batched(&[batch_request], TableName::BatchRequest)
         .await
         .unwrap();
 
@@ -758,15 +759,17 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
     assert_eq!(input, correct_input);
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     assert_eq!(input_messages.len(), 1);
     assert_eq!(input_messages[0].role, Role::User);
     assert_eq!(
         input_messages[0].content[0],
-        "What kind of animal is in this image?".to_string().into()
+        StoredContentBlock::Text(Text {
+            text: "What kind of animal is in this image?".to_string(),
+        })
     );
     assert!(
-        matches!(input_messages[0].content[1], ContentBlock::File(_)),
+        matches!(input_messages[0].content[1], StoredContentBlock::File(_)),
         "Unexpected input: {input_messages:?}"
     );
     assert_eq!(input_messages[0].content.len(), 2);

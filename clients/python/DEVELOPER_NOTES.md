@@ -26,6 +26,8 @@ uv run python
 
 Integration tests can be run with `./test.sh` (this requires the same setup as `cargo test-e2e` - see `CONTRIBUTING.md`)
 
+This also runs all tests for OpenAI compatibility in Python.
+
 ## Naming
 
 There are several different names in use in this client:

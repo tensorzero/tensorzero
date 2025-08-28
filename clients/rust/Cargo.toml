@@ -23,7 +23,7 @@ tokio-stream = { workspace = true }
 tensorzero-core = { path = "../../tensorzero-core" }
 ts-rs = { workspace = true }
 url = { workspace = true }
-thiserror = "2.0.11"
+thiserror = "2.0.15"
 pyo3 = { workspace = true, optional = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
@@ -32,6 +32,7 @@ git2 = { workspace = true }
 serde_path_to_error = { workspace = true }
 tensorzero-derive = { path = "../../internal/tensorzero-derive" }
 mime = { workspace = true }
+tokio-util = "0.7.15"
 
 [lints]
 workspace = true

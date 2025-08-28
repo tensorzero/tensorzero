@@ -26,7 +26,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::cache::CacheParamsOptions;
-use crate::config_parser::UninitializedVariantInfo;
+use crate::config::UninitializedVariantInfo;
 use crate::embeddings::{Embedding, EmbeddingInput};
 use crate::endpoints::embeddings::Params as EmbeddingParams;
 use crate::endpoints::inference::{
@@ -51,6 +51,22 @@ use super::inference::{
     InferenceStream,
 };
 use crate::embeddings::EmbeddingEncodingFormat;
+use axum::routing::post;
+use axum::Router;
+
+pub trait RouterExt {
+    /// Applies our OpenAI-compatible endpoints to the router.
+    /// This is used by the the gateway for the patched OpenAI python client (`start_openai_compatible_gateway`),
+    /// as well as the normal standalone TensorZero gateway.
+    fn register_openai_compatible_routes(self) -> Self;
+}
+
+impl RouterExt for Router<AppStateData> {
+    fn register_openai_compatible_routes(self) -> Self {
+        self.route("/openai/v1/chat/completions", post(inference_handler))
+            .route("/openai/v1/embeddings", post(embeddings_handler))
+    }
+}
 
 /// A handler for the OpenAI-compatible inference endpoint
 #[debug_handler(state = AppStateData)]
@@ -107,7 +123,7 @@ pub async fn inference_handler(
         .into()),
     }?;
 
-    let response = inference(config, &http_client, clickhouse_connection_info, params).await?;
+    let response = inference(config, &http_client, clickhouse_connection_info, params, ()).await?;
 
     match response {
         InferenceOutput::NonStreaming(response) => {
@@ -143,19 +159,31 @@ pub struct OpenAICompatibleEmbeddingParams {
     tensorzero_cache_options: Option<CacheParamsOptions>,
 }
 
-impl From<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
-    fn from(params: OpenAICompatibleEmbeddingParams) -> Self {
-        EmbeddingParams {
+impl TryFrom<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
+    type Error = Error;
+    fn try_from(params: OpenAICompatibleEmbeddingParams) -> Result<Self, Self::Error> {
+        let model_name = match params
+            .model
+            .strip_prefix(TENSORZERO_EMBEDDING_MODEL_NAME_PREFIX)
+        {
+            Some(model_name) => model_name.to_string(),
+            None => {
+                tracing::warn!("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'");
+                params.model
+            }
+        };
+        Ok(EmbeddingParams {
             input: params.input,
-            model_name: params.model,
+            model_name,
             dimensions: params.dimensions,
             encoding_format: params.encoding_format,
             credentials: params.tensorzero_credentials,
             dryrun: params.tensorzero_dryrun,
             cache_options: params.tensorzero_cache_options.unwrap_or_default(),
-        }
+        })
     }
 }
+
 #[derive(Debug, Serialize)]
 #[serde(tag = "object", rename_all = "lowercase")]
 pub enum OpenAIEmbeddingResponse {
@@ -190,7 +218,7 @@ impl From<EmbeddingResponse> for OpenAIEmbeddingResponse {
                     index: i,
                 })
                 .collect(),
-            model: response.model,
+            model: format!("{TENSORZERO_EMBEDDING_MODEL_NAME_PREFIX}{}", response.model),
             usage: OpenAIEmbeddingUsage {
                 prompt_tokens: response.usage.input_tokens,
                 total_tokens: response.usage.input_tokens,
@@ -208,7 +236,7 @@ pub async fn embeddings_handler(
     }): AppState,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleEmbeddingParams>,
 ) -> Result<Json<OpenAIEmbeddingResponse>, Error> {
-    let embedding_params = openai_compatible_params.into();
+    let embedding_params = openai_compatible_params.try_into()?;
     let response = embeddings(
         config,
         &http_client,
@@ -462,6 +490,7 @@ struct OpenAICompatibleResponse {
 
 const TENSORZERO_FUNCTION_NAME_PREFIX: &str = "tensorzero::function_name::";
 const TENSORZERO_MODEL_NAME_PREFIX: &str = "tensorzero::model_name::";
+const TENSORZERO_EMBEDDING_MODEL_NAME_PREFIX: &str = "tensorzero::embedding_model_name::";
 
 impl Params {
     fn try_from_openai(
@@ -1983,5 +2012,43 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly
             }
         );
+    }
+
+    #[traced_test]
+    #[test]
+    fn test_try_from_embedding_params_deprecated() {
+        let openai_embedding_params = OpenAICompatibleEmbeddingParams {
+            input: EmbeddingInput::Single("foo".to_string()),
+            model: "text-embedding-ada-002".to_string(),
+            dimensions: Some(15),
+            encoding_format: EmbeddingEncodingFormat::Float,
+            tensorzero_credentials: InferenceCredentials::default(),
+            tensorzero_dryrun: None,
+            tensorzero_cache_options: None,
+        };
+        let param: EmbeddingParams = openai_embedding_params.try_into().unwrap();
+        assert_eq!(param.model_name, "text-embedding-ada-002");
+        assert_eq!(param.dimensions, Some(15));
+        assert_eq!(param.encoding_format, EmbeddingEncodingFormat::Float);
+        assert!(logs_contain("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"));
+    }
+
+    #[traced_test]
+    #[test]
+    fn test_try_from_embedding_params_strip() {
+        let openai_embedding_params = OpenAICompatibleEmbeddingParams {
+            input: EmbeddingInput::Single("foo".to_string()),
+            model: "tensorzero::embedding_model_name::text-embedding-ada-002".to_string(),
+            dimensions: Some(15),
+            encoding_format: EmbeddingEncodingFormat::Float,
+            tensorzero_credentials: InferenceCredentials::default(),
+            tensorzero_dryrun: None,
+            tensorzero_cache_options: None,
+        };
+        let param: EmbeddingParams = openai_embedding_params.try_into().unwrap();
+        assert_eq!(param.model_name, "text-embedding-ada-002");
+        assert_eq!(param.dimensions, Some(15));
+        assert_eq!(param.encoding_format, EmbeddingEncodingFormat::Float);
+        assert!(!logs_contain("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"));
     }
 }

@@ -89,8 +89,12 @@ export async function getConfig(configPath: string): Promise<Config> {
   return JSON.parse(configString) as Config;
 }
 
-function safeStringify(obj: unknown): string {
-  return JSON.stringify(obj, (_key, value) =>
-    typeof value === "bigint" ? value.toString() : value,
-  );
+function safeStringify(obj: unknown) {
+  try {
+    return JSON.stringify(obj, (_key, value) =>
+      typeof value === "bigint" ? value.toString() : value,
+    );
+  } catch {
+    return "null";
+  }
 }

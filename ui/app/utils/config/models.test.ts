@@ -1,28 +1,37 @@
 import { describe, it, expect } from "vitest";
 import { dump_optimizer_output } from "./models";
-import type { OptimizerOutput } from "tensorzero-node";
+import type { OptimizerOutput, TimeoutsConfig } from "tensorzero-node";
 
 describe("dump_optimizer_output", () => {
   it("should create correct config for fireworks model", async () => {
     const optimizerOutput: OptimizerOutput = {
       type: "model",
-      routing: ["claude-2"],
-      providers: {
-        "claude-2": {
-          type: "fireworks",
-          model_name: "claude-2",
-          parse_think_blocks: false,
-          api_key_location: null,
-          discard_unknown_chunks: false,
-          timeouts: null,
+      content: {
+        routing: ["claude-2"],
+        providers: {
+          "claude-2": {
+            type: "fireworks",
+            model_name: "claude-2",
+            parse_think_blocks: false,
+            api_key_location: null,
+            discard_unknown_chunks: false,
+            timeouts: {
+              non_streaming: {
+                total_ms: null,
+              },
+              streaming: {
+                ttft_ms: null,
+              },
+            },
+          },
         },
-      },
-      timeouts: {
-        non_streaming: {
-          total_ms: null,
-        },
-        streaming: {
-          ttft_ms: null,
+        timeouts: {
+          non_streaming: {
+            total_ms: null,
+          },
+          streaming: {
+            ttft_ms: null,
+          },
         },
       },
     };
@@ -35,23 +44,25 @@ describe("dump_optimizer_output", () => {
   it("should create correct config for openai model", async () => {
     const optimizerOutput: OptimizerOutput = {
       type: "model",
-      routing: ["gpt-4o"],
-      providers: {
-        "gpt-4o": {
-          type: "openai",
-          model_name: "gpt-4o",
-          api_base: null,
-          api_key_location: null,
-          discard_unknown_chunks: false,
-          timeouts: null,
+      content: {
+        routing: ["gpt-4o"],
+        providers: {
+          "gpt-4o": {
+            type: "openai",
+            model_name: "gpt-4o",
+            api_base: null,
+            api_key_location: null,
+            discard_unknown_chunks: false,
+            timeouts: {} as TimeoutsConfig,
+          },
         },
-      },
-      timeouts: {
-        non_streaming: {
-          total_ms: null,
-        },
-        streaming: {
-          ttft_ms: null,
+        timeouts: {
+          non_streaming: {
+            total_ms: null,
+          },
+          streaming: {
+            ttft_ms: null,
+          },
         },
       },
     };

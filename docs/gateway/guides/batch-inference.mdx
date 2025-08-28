@@ -1,0 +1,170 @@
+---
+title: Batch Inference
+description: Learn how to process multiple requests at once with batch inference to save on inference costs at the expense of longer wait times.
+---
+
+The batch inference endpoint provides access to batch inference APIs offered by some model providers.
+These APIs provide inference with large cost savings compared to real-time inference, at the expense of much higher latency (sometimes up to a day).
+
+The batch inference workflow consists of two steps: submitting your batch request, then polling for the batch job status until completion.
+
+See the [Batch Inference API Reference](/gateway/api-reference/batch-inference/) for more details on the batch inference endpoints, and see [Integrations](/gateway/integrations/) for model provider integrations that support batch inference.
+
+## Example
+
+<Tip>
+
+You can also find the runnable code for this example on [GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/guides/batch-inference).
+
+</Tip>
+
+Imagine you have a simple TensorZero function that generates haikus using GPT-4o Mini.
+
+```toml
+[functions.generate_haiku]
+type = "chat"
+
+[functions.generate_haiku.variants.gpt_4o_mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+```
+
+You can submit a batch inference job to generate multiple haikus with a single request.
+Each entry in `inputs` is equal to the `input` field in a regular inference request.
+
+```sh
+curl -X POST http://localhost:3000/batch_inference \
+  -H "Content-Type: application/json" \
+  -d '{
+    "function_name": "generate_haiku",
+    "variant_name": "gpt_4o_mini",
+    "inputs": [
+      {
+        "messages": [
+          {
+            "role": "user",
+            "content": "Write a haiku about artificial intelligence."
+          }
+        ]
+      },
+      {
+        "messages": [
+          {
+            "role": "user",
+            "content": "Write a haiku about general aviation."
+          }
+        ]
+      },
+      {
+        "messages": [
+          {
+            "role": "user",
+            "content": "Write a haiku about anime."
+          }
+        ]
+      }
+    ]
+  }'
+```
+
+The response contains a `batch_id` as well as `inference_ids` and `episode_ids` for each inference in the batch.
+
+```json
+{
+  "batch_id": "019470f0-db4c-7811-9e14-6fe6593a2652",
+  "inference_ids": [
+    "019470f0-d34a-77a3-9e59-bcc66db2b82f",
+    "019470f0-d34a-77a3-9e59-bcdd2f8e06aa",
+    "019470f0-d34a-77a3-9e59-bcecfb7172a0"
+  ],
+  "episode_ids": [
+    "019470f0-d34a-77a3-9e59-bc933973d087",
+    "019470f0-d34a-77a3-9e59-bca6e9b748b2",
+    "019470f0-d34a-77a3-9e59-bcb20177bf3a"
+  ]
+}
+```
+
+You can use this `batch_id` to poll for the status of the job or retrieve the results using the `GET /batch_inference/{batch_id}` endpoint.
+
+```sh
+curl -X GET http://localhost:3000/batch_inference/019470f0-db4c-7811-9e14-6fe6593a2652
+```
+
+While the job is pending, the response will only contain the `status` field.
+
+```json
+{
+  "status": "pending"
+}
+```
+
+Once the job is completed, the response will contain the `status` field and the `inferences` field.
+Each inference object is the same as the response from a regular inference request.
+
+```json
+{
+  "status": "completed",
+  "batch_id": "019470f0-db4c-7811-9e14-6fe6593a2652",
+  "inferences": [
+    {
+      "inference_id": "019470f0-d34a-77a3-9e59-bcc66db2b82f",
+      "episode_id": "019470f0-d34a-77a3-9e59-bc933973d087",
+      "variant_name": "gpt_4o_mini",
+      "content": [
+        {
+          "type": "text",
+          "text": "Whispers of circuits,  \nLearning paths through endless code,  \nDreams in binary."
+        }
+      ],
+      "usage": {
+        "input_tokens": 15,
+        "output_tokens": 19
+      }
+    },
+    {
+      "inference_id": "019470f0-d34a-77a3-9e59-bcdd2f8e06aa",
+      "episode_id": "019470f0-d34a-77a3-9e59-bca6e9b748b2",
+      "variant_name": "gpt_4o_mini",
+      "content": [
+        {
+          "type": "text",
+          "text": "Wings of freedom soar,  \nClouds embrace the lonely flight,  \nSky whispers adventure."
+        }
+      ],
+      "usage": {
+        "input_tokens": 15,
+        "output_tokens": 20
+      }
+    },
+    {
+      "inference_id": "019470f0-d34a-77a3-9e59-bcecfb7172a0",
+      "episode_id": "019470f0-d34a-77a3-9e59-bcb20177bf3a",
+      "variant_name": "gpt_4o_mini",
+      "content": [
+        {
+          "type": "text",
+          "text": "Vivid worlds unfold,  \nHeroes rise with dreams in hand,  \nInk and dreams collide."
+        }
+      ],
+      "usage": {
+        "input_tokens": 14,
+        "output_tokens": 20
+      }
+    }
+  ]
+}
+```
+
+## Technical Notes
+
+- **Observability**
+  - For now, pending batch inference jobs are not shown in the TensorZero UI.
+    You can find the relevant information in the `BatchRequest` and `BatchModelInference` tables on ClickHouse.
+    See [Data Model](/gateway/data-model/) for more information.
+  - Inferences from completed batch inference jobs are shown in the UI alongside regular inferences.
+- **Experimentation**
+  - The gateway samples the same variant for the entire batch.
+- **Python Client**
+  - The TensorZero Python client doesn't natively support batch inference yet.
+    You'll need to submit batch requests using HTTP requests, as shown above.

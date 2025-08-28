@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 pub async fn test_basic_embedding_with_provider(provider: EmbeddingTestProvider) {
     let payload = json!({
         "input": "Hello, world!",
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
     });
     let response = Client::new()
         .post(get_gateway_endpoint("/openai/v1/embeddings"))
@@ -36,7 +36,7 @@ pub async fn test_basic_embedding_with_provider(provider: EmbeddingTestProvider)
     assert!(response_json["usage"]["total_tokens"].as_u64().unwrap() > 0);
 }
 
-pub async fn test_batch_embedding_with_provider(provider: EmbeddingTestProvider) {
+pub async fn test_bulk_embedding_with_provider(provider: EmbeddingTestProvider) {
     let inputs = vec![
         "Hello, world!",
         "How are you today?",
@@ -44,7 +44,7 @@ pub async fn test_batch_embedding_with_provider(provider: EmbeddingTestProvider)
     ];
     let payload = json!({
         "input": inputs,
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
     });
     let response = Client::new()
         .post(get_gateway_endpoint("/openai/v1/embeddings"))
@@ -58,7 +58,7 @@ pub async fn test_batch_embedding_with_provider(provider: EmbeddingTestProvider)
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
     assert_eq!(
         response_json["model"].as_str().unwrap(),
-        provider.model_name
+        format!("tensorzero::embedding_model_name::{}", provider.model_name)
     );
     assert_eq!(
         response_json["data"].as_array().unwrap().len(),
@@ -78,7 +78,7 @@ pub async fn test_batch_embedding_with_provider(provider: EmbeddingTestProvider)
 pub async fn test_embedding_with_dimensions_with_provider(provider: EmbeddingTestProvider) {
     let payload = json!({
         "input": "Test with specific dimensions",
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
         "dimensions": 512,
     });
     let response = Client::new()
@@ -93,7 +93,7 @@ pub async fn test_embedding_with_dimensions_with_provider(provider: EmbeddingTes
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
     assert_eq!(
         response_json["model"].as_str().unwrap(),
-        provider.model_name
+        format!("tensorzero::embedding_model_name::{}", provider.model_name)
     );
     assert_eq!(response_json["data"].as_array().unwrap().len(), 1);
     assert_eq!(
@@ -108,7 +108,7 @@ pub async fn test_embedding_with_dimensions_with_provider(provider: EmbeddingTes
 pub async fn test_embedding_with_encoding_format_with_provider(provider: EmbeddingTestProvider) {
     let payload = json!({
         "input": "Test encoding format",
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
         "encoding_format": "float",
     });
     let response = Client::new()
@@ -123,7 +123,7 @@ pub async fn test_embedding_with_encoding_format_with_provider(provider: Embeddi
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
     assert_eq!(
         response_json["model"].as_str().unwrap(),
-        provider.model_name
+        format!("tensorzero::embedding_model_name::{}", provider.model_name)
     );
     assert_eq!(response_json["data"].as_array().unwrap().len(), 1);
     let embedding = &response_json["data"][0]["embedding"];
@@ -136,7 +136,7 @@ pub async fn test_embedding_with_user_parameter_with_provider(provider: Embeddin
     let user_id = "test_user_123";
     let payload = json!({
         "input": "Test with user parameter",
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
         "user": user_id,
     });
     let response = Client::new()
@@ -151,7 +151,7 @@ pub async fn test_embedding_with_user_parameter_with_provider(provider: Embeddin
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
     assert_eq!(
         response_json["model"].as_str().unwrap(),
-        provider.model_name
+        format!("tensorzero::embedding_model_name::{}", provider.model_name)
     );
     assert_eq!(response_json["data"].as_array().unwrap().len(), 1);
     assert!(!response_json["data"][0]["embedding"]
@@ -163,7 +163,7 @@ pub async fn test_embedding_with_user_parameter_with_provider(provider: Embeddin
 pub async fn test_embedding_invalid_model_error_with_provider(_provider: EmbeddingTestProvider) {
     let payload = json!({
         "input": "Test invalid model",
-        "model": "tensorzero::model_name::nonexistent_model",
+        "model": "tensorzero::embedding_model_name::nonexistent_model",
     });
     let response = Client::new()
         .post(get_gateway_endpoint("/openai/v1/embeddings"))
@@ -174,13 +174,13 @@ pub async fn test_embedding_invalid_model_error_with_provider(_provider: Embeddi
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
-pub async fn test_embedding_large_batch_with_provider(provider: EmbeddingTestProvider) {
+pub async fn test_embedding_large_bulk_with_provider(provider: EmbeddingTestProvider) {
     let inputs: Vec<String> = (1..=10)
         .map(|i| format!("This is test input number {i}"))
         .collect();
     let payload = json!({
         "input": inputs,
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
     });
     let response = Client::new()
         .post(get_gateway_endpoint("/openai/v1/embeddings"))
@@ -194,7 +194,7 @@ pub async fn test_embedding_large_batch_with_provider(provider: EmbeddingTestPro
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
     assert_eq!(
         response_json["model"].as_str().unwrap(),
-        provider.model_name
+        format!("tensorzero::embedding_model_name::{}", provider.model_name)
     );
     assert_eq!(response_json["data"].as_array().unwrap().len(), 10);
 
@@ -214,7 +214,7 @@ pub async fn test_embedding_consistency_with_provider(provider: EmbeddingTestPro
     // Generate embeddings twice with the same input
     let payload = json!({
         "input": input_text,
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
     });
 
     let response1 = Client::new()
@@ -265,7 +265,7 @@ pub async fn test_embedding_consistency_with_provider(provider: EmbeddingTestPro
 pub async fn test_basic_embedding_fallback() {
     let payload = json!({
         "input": "Hello, world!",
-        "model": "fallback",
+        "model": format!("tensorzero::embedding_model_name::{}", "fallback"),
     });
     let response = Client::new()
         .post(get_gateway_endpoint("/openai/v1/embeddings"))
@@ -298,7 +298,7 @@ pub async fn test_basic_embedding_fallback() {
 pub async fn test_basic_embedding_timeout() {
     let payload = json!({
         "input": "Hello, world!",
-        "model": "timeout",
+        "model": format!("tensorzero::embedding_model_name::{}", "timeout"),
     });
     let response = Client::new()
         .post(get_gateway_endpoint("/openai/v1/embeddings"))

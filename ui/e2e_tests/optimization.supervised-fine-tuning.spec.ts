@@ -214,7 +214,9 @@ model_name = "mock-inference-finetune-1234"
       .click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
 
-    await page.getByText("running", { exact: true }).waitFor({ timeout: 3000 });
+    await page
+      .getByText("running", { exact: true })
+      .waitFor({ timeout: 10_000 });
     await expect(
       page.getByText("accounts/fireworks/models/llama-v3p2-3b-instruct"),
     ).toBeVisible();

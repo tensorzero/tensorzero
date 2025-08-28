@@ -6,19 +6,20 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero::{ChatInferenceDatapoint, JsonInferenceDatapoint, Role};
 use tensorzero_core::{
-    clickhouse::test_helpers::{
+    db::clickhouse::test_helpers::{
         select_chat_dataset_clickhouse, select_json_dataset_clickhouse, stale_datapoint_clickhouse,
     },
     endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
-    inference::types::{ContentBlockChatOutput, ResolvedInputMessageContent},
+    inference::types::{ContentBlockChatOutput, StoredInputMessageContent},
 };
+
 use uuid::Uuid;
 
 use crate::{
     common::{delete_datapoint, get_gateway_endpoint},
     providers::common::make_embedded_gateway,
 };
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_datapoint_clickhouse, select_json_datapoint_clickhouse,
 };
 
@@ -279,11 +280,11 @@ async fn test_create_delete_datapoint_chat() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { .. }
+            StoredInputMessageContent::Text { .. }
         ));
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { value: _, .. }
+            StoredInputMessageContent::Text { value: _, .. }
         ));
 
         // Verify the list datapoint input structure and content
@@ -302,7 +303,7 @@ async fn test_create_delete_datapoint_chat() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { .. }
+            StoredInputMessageContent::Text { .. }
         ));
 
         // Verify output if present
@@ -1084,11 +1085,11 @@ async fn test_create_delete_datapoint_json() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { .. }
+            StoredInputMessageContent::Text { .. }
         ));
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { value: _, .. }
+            StoredInputMessageContent::Text { value: _, .. }
         ));
 
         // Verify the list datapoint input structure and content
@@ -1107,7 +1108,7 @@ async fn test_create_delete_datapoint_json() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { .. }
+            StoredInputMessageContent::Text { .. }
         ));
 
         // Get the output schema
@@ -1458,6 +1459,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
 
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
@@ -1568,6 +1570,7 @@ async fn test_datapoint_insert_output_none_chat() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
 
@@ -1832,6 +1835,7 @@ async fn test_datapoint_insert_output_inherit_json() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
 
@@ -1944,6 +1948,7 @@ async fn test_datapoint_insert_output_none_json() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
 
@@ -2172,6 +2177,7 @@ async fn test_datapoint_missing_demonstration() {
         .await
         .unwrap();
     assert!(response.status().is_success());
+    tokio::time::sleep(Duration::from_secs(1)).await;
     let response_json = response.json::<Value>().await.unwrap();
     let episode_id = response_json.get("episode_id").unwrap().as_str().unwrap();
     let episode_id = Uuid::parse_str(episode_id).unwrap();

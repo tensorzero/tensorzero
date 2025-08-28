@@ -8,16 +8,18 @@ use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
+use tensorzero_core::config::ConfigFileGlob;
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 use tensorzero_core::endpoints::stored_inference::render_samples;
-use tensorzero_core::howdy::setup_howdy;
+use tensorzero_core::inference::types::stored_input::StoragePathResolver;
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
-    config_parser::Config,
+    config::Config,
+    db::DatabaseConnection,
     endpoints::{
         datasets::InsertDatapointParams,
         dynamic_evaluation_run::{
@@ -45,7 +47,7 @@ pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 
 pub use tensorzero_core::cache::CacheParamsOptions;
-pub use tensorzero_core::clickhouse::query_builder::{
+pub use tensorzero_core::db::clickhouse::query_builder::{
     BooleanMetricNode, FloatComparisonOperator, FloatMetricNode, InferenceFilterTreeNode,
     InferenceOutputSource, ListInferencesParams, TagComparisonOperator, TagNode,
     TimeComparisonOperator, TimeNode,
@@ -179,7 +181,12 @@ pub enum ClientBuilderError {
     #[error("Failed to configure ClickHouse: {0}")]
     Clickhouse(TensorZeroError),
     #[error("Failed to parse config: {0}")]
-    ConfigParsing(TensorZeroError),
+    ConfigParsingPreGlob(TensorZeroError),
+    #[error("Failed to parse config: {error}. Config file glob `{glob}` resolved to the following files:\n{paths}", glob = glob.glob,paths = glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"))]
+    ConfigParsing {
+        error: TensorZeroError,
+        glob: ConfigFileGlob,
+    },
     #[error("Failed to build HTTP client: {0}")]
     HTTPClientBuild(TensorZeroError),
     #[error("Failed to get gateway version: {0}")]
@@ -215,6 +222,10 @@ pub enum ClientBuilderMode {
         /// If this timeout is hit, any in-progress LLM requests may be aborted.
         timeout: Option<std::time::Duration>,
         verify_credentials: bool,
+        // Allow turning on batch writes - used in e2e tests.
+        // We don't expose this through the Python client, since we're having deadlock issues
+        // there.
+        allow_batch_writes: bool,
     },
 }
 
@@ -252,7 +263,7 @@ impl ClientBuilder {
         match &self.mode {
             ClientBuilderMode::HTTPGateway { .. } => {
                 let client = self.build_http()?;
-                if let ClientMode::HTTPGateway(mode) = &client.mode {
+                if let ClientMode::HTTPGateway(mode) = &*client.mode {
                     mode.discover_initialize_gateway_version(&client).await?;
                 }
                 Ok(client)
@@ -262,24 +273,47 @@ impl ClientBuilder {
                 clickhouse_url,
                 timeout,
                 verify_credentials,
+                allow_batch_writes,
             } => {
                 let config = if let Some(config_file) = config_file {
+                    let glob = ConfigFileGlob::new(config_file.to_string_lossy().to_string())
+                        .map_err(|e| {
+                            ClientBuilderError::ConfigParsingPreGlob(TensorZeroError::Other {
+                                source: e.into(),
+                            })
+                        })?;
                     Arc::new(
                         Config::load_from_path_optional_verify_credentials(
-                            config_file,
+                            &glob,
                             *verify_credentials,
                         )
                         .await
                         .map_err(|e| {
-                            ClientBuilderError::ConfigParsing(TensorZeroError::Other {
-                                source: e.into(),
-                            })
+                            ClientBuilderError::ConfigParsing {
+                                error: TensorZeroError::Other { source: e.into() },
+                                glob,
+                            }
                         })?,
                     )
                 } else {
                     tracing::info!("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`");
                     Arc::new(Config::default())
                 };
+                if !allow_batch_writes
+                    && config.gateway.observability.batch_writes.enabled
+                    && !config
+                        .gateway
+                        .observability
+                        .batch_writes
+                        .__force_allow_embedded_batch_writes
+                {
+                    return Err(ClientBuilderError::Clickhouse(TensorZeroError::Other {
+                        source: tensorzero_core::error::Error::new(ErrorDetails::Config {
+                            message: "[gateway.observability.batch_writes] is not yet supported in embedded gateway mode".to_string(),
+                        })
+                        .into(),
+                    }));
+                }
                 let clickhouse_connection_info =
                     setup_clickhouse(&config, clickhouse_url.clone(), true)
                         .await
@@ -288,7 +322,7 @@ impl ClientBuilder {
                                 source: e.into(),
                             })
                         })?;
-                setup_howdy(clickhouse_connection_info.clone());
+
                 let http_client = if let Some(http_client) = self.http_client {
                     http_client
                 } else {
@@ -299,7 +333,7 @@ impl ClientBuilder {
                     })?
                 };
                 Ok(Client {
-                    mode: ClientMode::EmbeddedGateway {
+                    mode: Arc::new(ClientMode::EmbeddedGateway {
                         gateway: EmbeddedGateway {
                             handle: GatewayHandle::new_with_clickhouse_and_http_client(
                                 config,
@@ -308,7 +342,7 @@ impl ClientBuilder {
                             ),
                         },
                         timeout: *timeout,
-                    },
+                    }),
                     verbose_errors: self.verbose_errors,
                     #[cfg(feature = "e2e_tests")]
                     last_body: Default::default(),
@@ -317,13 +351,36 @@ impl ClientBuilder {
         }
     }
 
+    /// Builds a dummy client for use in pyo3. Should not otherwise be used
+    /// This avoids logging any messages
+    #[cfg(feature = "pyo3")]
+    pub fn build_dummy() -> Client {
+        use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
+
+        Client {
+            mode: Arc::new(ClientMode::EmbeddedGateway {
+                gateway: EmbeddedGateway {
+                    handle: GatewayHandle::new_with_clickhouse_and_http_client(
+                        Arc::new(Config::default()),
+                        ClickHouseConnectionInfo::Disabled,
+                        reqwest::Client::new(),
+                    ),
+                },
+                timeout: None,
+            }),
+            verbose_errors: false,
+            #[cfg(feature = "e2e_tests")]
+            last_body: Default::default(),
+        }
+    }
+
     #[cfg(any(test, feature = "e2e_tests"))]
     pub async fn build_from_state(handle: GatewayHandle) -> Result<Client, ClientBuilderError> {
         Ok(Client {
-            mode: ClientMode::EmbeddedGateway {
+            mode: Arc::new(ClientMode::EmbeddedGateway {
                 gateway: EmbeddedGateway { handle },
                 timeout: None,
-            },
+            }),
             verbose_errors: false,
             #[cfg(feature = "e2e_tests")]
             last_body: Default::default(),
@@ -343,11 +400,11 @@ impl ClientBuilder {
             url.set_path(&format!("{}/", url.path()));
         }
         Ok(Client {
-            mode: ClientMode::HTTPGateway(HTTPGateway {
+            mode: Arc::new(ClientMode::HTTPGateway(HTTPGateway {
                 base_url: url,
                 http_client: self.http_client.unwrap_or_default(),
                 gateway_version: Mutex::new(None),
-            }),
+            })),
             verbose_errors: self.verbose_errors,
             #[cfg(feature = "e2e_tests")]
             last_body: Default::default(),
@@ -358,17 +415,31 @@ impl ClientBuilder {
 /// A TensorZero client. This is constructed using `ClientBuilder`
 #[derive(Debug)]
 pub struct Client {
-    mode: ClientMode,
+    mode: Arc<ClientMode>,
     verbose_errors: bool,
     #[cfg(feature = "e2e_tests")]
     pub last_body: Mutex<Option<String>>,
+}
+
+impl StoragePathResolver for Client {
+    async fn resolve(&self, storage_path: StoragePath) -> Result<String, Error> {
+        Ok(self
+            .get_object(storage_path.clone())
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!("Error resolving object {storage_path}: {e}"),
+                })
+            })?
+            .data)
+    }
 }
 
 impl Client {
     /// Queries the health of the ClickHouse database
     /// This does nothing in `ClientMode::HTTPGateway`
     pub async fn clickhouse_health(&self) -> Result<(), TensorZeroError> {
-        match &self.mode {
+        match &*self.mode {
             ClientMode::HTTPGateway(_) => Ok(()),
             ClientMode::EmbeddedGateway {
                 gateway,
@@ -389,7 +460,7 @@ impl Client {
         &self,
         params: FeedbackParams,
     ) -> Result<FeedbackResponse, TensorZeroError> {
-        match &self.mode {
+        match &*self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client
                     .base_url
@@ -425,7 +496,7 @@ impl Client {
         &self,
         mut params: ClientInferenceParams,
     ) -> Result<InferenceOutput, TensorZeroError> {
-        match &self.mode {
+        match &*self.mode {
             ClientMode::HTTPGateway(client) => {
                 let gateway_version = { client.gateway_version.lock().await.clone() };
                 // We only perform this adjustment in HTTP gateway mode, since the embedded gateway
@@ -484,15 +555,28 @@ impl Client {
                 }
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
+                let client = self.mode.clone();
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_core::endpoints::inference::inference(
+                    let res = tensorzero_core::endpoints::inference::inference(
                         gateway.handle.app_state.config.clone(),
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.clickhouse_connection_info.clone(),
                         params.try_into().map_err(err_to_http)?,
+                        // Make the stream hold on to a reference to the client,
+                        // so that we client is only dropped after all streams have finished
+                        // See 'create_stream' and 'GatewayHandle' for more details
+                        client,
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(err_to_http)?;
+                    match res {
+                        InferenceOutput::NonStreaming(response) => {
+                            Ok(InferenceOutput::NonStreaming(response))
+                        }
+                        InferenceOutput::Streaming(stream) => {
+                            Ok(InferenceOutput::Streaming(stream))
+                        }
+                    }
                 })
                 .await?)
             }
@@ -503,7 +587,7 @@ impl Client {
         &self,
         storage_path: StoragePath,
     ) -> Result<ObjectResponse, TensorZeroError> {
-        match &self.mode {
+        match &*self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client
                     .base_url
@@ -558,7 +642,7 @@ impl Client {
         }
         // Set internal to true so we don't validate the tags again
         params.internal = true;
-        match &self.mode {
+        match &*self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join("dynamic_evaluation_run").map_err(|e| TensorZeroError::Other {
                     source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
@@ -588,7 +672,7 @@ impl Client {
         run_id: Uuid,
         params: DynamicEvaluationRunEpisodeParams,
     ) -> Result<DynamicEvaluationRunEpisodeResponse, TensorZeroError> {
-        match &self.mode {
+        match &*self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("dynamic_evaluation_run/{run_id}/episode")).map_err(|e| TensorZeroError::Other {
                     source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
@@ -619,7 +703,7 @@ impl Client {
         dataset_name: String,
         params: InsertDatapointParams,
     ) -> Result<Vec<Uuid>, TensorZeroError> {
-        match &self.mode {
+        match &*self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints/bulk")).map_err(|e| TensorZeroError::Other {
                     source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
@@ -652,7 +736,7 @@ impl Client {
         dataset_name: String,
         datapoint_id: Uuid,
     ) -> Result<(), TensorZeroError> {
-        match &self.mode {
+        match &*self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints/{datapoint_id}")).map_err(|e| TensorZeroError::Other {
                     source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
@@ -703,7 +787,7 @@ impl Client {
         limit: Option<u32>,
         offset: Option<u32>,
     ) -> Result<Vec<Datapoint>, TensorZeroError> {
-        match &self.mode {
+        match &*self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints")).map_err(|e| TensorZeroError::Other {
                     source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
@@ -742,7 +826,7 @@ impl Client {
         dataset_name: String,
         datapoint_id: Uuid,
     ) -> Result<Datapoint, TensorZeroError> {
-        match &self.mode {
+        match &*self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints/{datapoint_id}")).map_err(|e| TensorZeroError::Other {
                     source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
@@ -775,7 +859,7 @@ impl Client {
         &self,
         dataset_name: String,
     ) -> Result<StaleDatasetResponse, TensorZeroError> {
-        match &self.mode {
+        match &*self.mode {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::stale_dataset(
@@ -818,7 +902,7 @@ impl Client {
         params: ListInferencesParams<'_>,
     ) -> Result<Vec<StoredInference>, TensorZeroError> {
         // TODO: consider adding a flag that returns the generated sql query
-        let ClientMode::EmbeddedGateway { gateway, .. } = &self.mode else {
+        let ClientMode::EmbeddedGateway { gateway, .. } = &*self.mode else {
             return Err(TensorZeroError::Other {
                 source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
                     mode: "Http".to_string(),
@@ -850,7 +934,7 @@ impl Client {
         stored_samples: Vec<T>,
         variants: HashMap<String, String>, // Map from function name to variant name
     ) -> Result<Vec<RenderedSample>, TensorZeroError> {
-        let ClientMode::EmbeddedGateway { gateway, .. } = &self.mode else {
+        let ClientMode::EmbeddedGateway { gateway, .. } = &*self.mode else {
             return Err(TensorZeroError::Other {
                 source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
                     mode: "Http".to_string(),
@@ -873,13 +957,18 @@ impl Client {
         &self,
         params: tensorzero_core::endpoints::optimization::LaunchOptimizationParams,
     ) -> Result<OptimizationJobHandle, TensorZeroError> {
-        match &self.mode {
+        match &*self.mode {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 // TODO: do we want this?
                 Ok(with_embedded_timeout(*timeout, async {
-                    launch_optimization(&gateway.handle.app_state.http_client, params)
-                        .await
-                        .map_err(err_to_http)
+                    launch_optimization(
+                        &gateway.handle.app_state.http_client,
+                        params,
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        gateway.handle.app_state.config.clone(),
+                    )
+                    .await
+                    .map_err(err_to_http)
                 })
                 .await?)
             }
@@ -899,7 +988,7 @@ impl Client {
         &self,
         params: LaunchOptimizationWorkflowParams,
     ) -> Result<OptimizationJobHandle, TensorZeroError> {
-        match &self.mode {
+        match &*self.mode {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
                     launch_optimization_workflow(
@@ -951,7 +1040,7 @@ impl Client {
         &self,
         job_handle: &OptimizationJobHandle,
     ) -> Result<OptimizationJobInfo, TensorZeroError> {
-        match &self.mode {
+        match &*self.mode {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::optimization::poll_optimization(
@@ -985,7 +1074,7 @@ impl Client {
     }
 
     pub fn get_config(&self) -> Result<Arc<Config>, TensorZeroError> {
-        match &self.mode {
+        match &*self.mode {
             ClientMode::EmbeddedGateway { gateway, .. } => {
                 Ok(gateway.handle.app_state.config.clone())
             }
@@ -1164,7 +1253,7 @@ impl Client {
 
     #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
     pub fn get_app_state_data(&self) -> Option<&tensorzero_core::gateway_util::AppStateData> {
-        match &self.mode {
+        match &*self.mode {
             ClientMode::EmbeddedGateway { gateway, .. } => Some(&gateway.handle.app_state),
             _ => None,
         }
@@ -1191,7 +1280,7 @@ impl Client {
     }
 
     async fn update_gateway_version(&self, version: String) {
-        match &self.mode {
+        match &*self.mode {
             ClientMode::HTTPGateway(client) => {
                 // Acquire the lock on the gateway version
                 let mut gateway_version = client.gateway_version.lock().await;
@@ -1204,7 +1293,7 @@ impl Client {
 
     #[cfg(feature = "e2e_tests")]
     pub async fn get_gateway_version(&self) -> Option<String> {
-        match &self.mode {
+        match &*self.mode {
             ClientMode::HTTPGateway(client) => client.gateway_version.lock().await.clone(),
             ClientMode::EmbeddedGateway { .. } => None,
         }
@@ -1229,9 +1318,13 @@ async fn with_embedded_timeout<R, F: Future<Output = Result<R, TensorZeroError>>
 /// and returns a `TensorZeroError` instead of a `ConfigError`.
 /// This function does NOT verify credentials.
 pub async fn get_config_no_verify_credentials(path: PathBuf) -> Result<Config, TensorZeroError> {
-    Config::load_from_path_optional_verify_credentials(&path, false)
-        .await
-        .map_err(|e| TensorZeroError::Other { source: e.into() })
+    Config::load_from_path_optional_verify_credentials(
+        &ConfigFileGlob::new(path.to_string_lossy().to_string())
+            .map_err(|e| TensorZeroError::Other { source: e.into() })?,
+        false,
+    )
+    .await
+    .map_err(|e| TensorZeroError::Other { source: e.into() })
 }
 
 /// Compares two TensorZero version strings, returning `None`
@@ -1331,6 +1424,7 @@ mod tests {
             clickhouse_url: None,
             timeout: None,
             verify_credentials: true,
+            allow_batch_writes: true,
         })
         .build()
         .await
@@ -1353,6 +1447,7 @@ mod tests {
             clickhouse_url: None,
             timeout: None,
             verify_credentials: true,
+            allow_batch_writes: true,
         })
         .build()
         .await
@@ -1371,6 +1466,7 @@ mod tests {
             clickhouse_url: None,
             timeout: None,
             verify_credentials: true,
+            allow_batch_writes: true,
         })
         .build()
         .await

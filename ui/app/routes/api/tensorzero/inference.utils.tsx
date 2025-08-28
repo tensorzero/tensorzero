@@ -9,6 +9,9 @@ import type {
   ClientInputMessageContent,
   FunctionConfig,
   JsonValue,
+  PathWithContents,
+  UninitializedVariantInfo,
+  VariantInfo,
   Tool,
 } from "tensorzero-node";
 import type {
@@ -29,9 +32,9 @@ import type { InferenceResponse } from "~/utils/tensorzero";
 import { logger } from "~/utils/logger";
 import type {
   ClientInferenceParams,
-  ResolvedInput as TensorZeroResolvedInput,
-  ResolvedInputMessage as TensorZeroResolvedInputMessage,
-  ResolvedInputMessageContent as TensorZeroResolvedInputMessageContent,
+  StoredInput as TensorZeroStoredInput,
+  StoredInputMessage as TensorZeroStoredInputMessage,
+  StoredInputMessageContent as TensorZeroStoredInputMessageContent,
   ToolCallConfigDatabaseInsert,
   ContentBlockChatOutput,
   JsonInferenceOutput,
@@ -186,29 +189,27 @@ export function useInferenceActionFetcher() {
   } satisfies ActionFetcher;
 }
 
-// Convert TensorZero's ResolvedInput to our Input type
-export function tensorZeroResolvedInputToInput(
-  resolvedInput: TensorZeroResolvedInput,
+// Convert TensorZero's StoredInput to our Input type
+export function tensorZeroStoredInputToInput(
+  resolvedInput: TensorZeroStoredInput,
 ): Input {
   return {
     system: resolvedInput.system ?? undefined,
-    messages: resolvedInput.messages.map(
-      tensorZeroResolvedMessageToInputMessage,
-    ),
+    messages: resolvedInput.messages.map(tensorZeroStoredMessageToInputMessage),
   };
 }
 
-function tensorZeroResolvedMessageToInputMessage(
-  message: TensorZeroResolvedInputMessage,
+function tensorZeroStoredMessageToInputMessage(
+  message: TensorZeroStoredInputMessage,
 ): InputMessage {
   return {
     role: message.role,
-    content: message.content.map(tensorZeroResolvedContentToInputContent),
+    content: message.content.map(tensorZeroStoredContentToInputContent),
   };
 }
 
-function tensorZeroResolvedContentToInputContent(
-  content: TensorZeroResolvedInputMessageContent,
+function tensorZeroStoredContentToInputContent(
+  content: TensorZeroStoredInputMessageContent,
 ): InputMessageContent {
   switch (content.type) {
     case "text":
@@ -291,9 +292,10 @@ interface ClickHouseDatapointActionArgs {
   // Optional fields for json / chat datapoints
   tool_params?: ToolCallConfigDatabaseInsert;
   output_schema?: JsonValue;
-  variant: string;
+  variant?: string;
   cache_options: CacheParamsOptions;
   dryrun: boolean;
+  editedVariantInfo?: VariantInfo;
   functionConfig: FunctionConfig;
 }
 
@@ -354,6 +356,9 @@ export function prepareInferenceActionRequest(
     // Extract tool parameters from the ClickHouse datapoint args
     const tool_choice = args.tool_params?.tool_choice;
     const parallel_tool_calls = args.tool_params?.parallel_tool_calls;
+    const dynamicVariantInfo = args.editedVariantInfo
+      ? variantInfoToUninitalizedVariantInfo(args.editedVariantInfo)
+      : null;
     const additional_tools = args.tool_params?.tools_available
       ? subtractStaticToolsFromInferenceInput(
           args.tool_params?.tools_available,
@@ -365,13 +370,14 @@ export function prepareInferenceActionRequest(
       ...baseParams,
       function_name: args.functionName,
       input: resolvedInputToClientInput(args.input),
-      variant_name: args.variant,
+      variant_name: args.variant || null,
       output_schema: args.output_schema || null,
       tool_choice: tool_choice || null,
-      dryrun: true,
+      dryrun: args.dryrun,
       parallel_tool_calls: parallel_tool_calls || null,
       additional_tools,
       cache_options: args.cache_options,
+      internal_dynamic_variant_config: dynamicVariantInfo,
     };
   } else {
     // For other sources, the input is already a DisplayInput
@@ -596,6 +602,170 @@ function resolvedFileContentToClientFile(
     mime_type: content.file.mime_type,
     data: data,
   };
+}
+
+function variantInfoToUninitalizedVariantInfo(
+  variantInfo: VariantInfo,
+): UninitializedVariantInfo {
+  const convertTemplate = (template: PathWithContents | null) => {
+    if (!template) return null;
+    return {
+      __tensorzero_remapped_path: `template_${Math.random().toString(36).substring(2, 15)}`,
+      __data: template.contents,
+    };
+  };
+  const stringToTemplate = (template: string | null) => {
+    if (!template) return null;
+    return {
+      __tensorzero_remapped_path: `template_${Math.random().toString(36).substring(2, 15)}`,
+      __data: template,
+    };
+  };
+
+  const baseUninitialized = {
+    timeouts: variantInfo.timeouts,
+  };
+
+  const inner = variantInfo.inner;
+
+  switch (inner.type) {
+    case "chat_completion":
+      return {
+        ...baseUninitialized,
+        type: "chat_completion" as const,
+        weight: inner.weight,
+        model: inner.model,
+        input_wrappers: null,
+        system_template: convertTemplate(
+          inner.templates.system?.template || null,
+        ),
+        user_template: convertTemplate(inner.templates.user?.template || null),
+        assistant_template: convertTemplate(
+          inner.templates.assistant?.template || null,
+        ),
+        temperature: inner.temperature,
+        max_tokens: inner.max_tokens,
+        seed: inner.seed,
+        top_p: inner.top_p,
+        presence_penalty: inner.presence_penalty,
+        frequency_penalty: inner.frequency_penalty,
+        stop_sequences: inner.stop_sequences,
+        json_mode: inner.json_mode,
+        retries: inner.retries,
+      };
+
+    case "best_of_n_sampling":
+      return {
+        ...baseUninitialized,
+        type: "experimental_best_of_n_sampling" as const,
+        weight: inner.weight,
+        timeout_s: inner.timeout_s,
+        candidates: inner.candidates,
+        evaluator: {
+          weight: inner.evaluator.weight,
+          model: inner.evaluator.model,
+          input_wrappers: null,
+          system_template: convertTemplate(
+            inner.evaluator.templates.system?.template || null,
+          ),
+          user_template: convertTemplate(
+            inner.evaluator.templates.user?.template || null,
+          ),
+          assistant_template: convertTemplate(
+            inner.evaluator.templates.assistant?.template || null,
+          ),
+          temperature: inner.evaluator.temperature,
+          top_p: inner.evaluator.top_p,
+          max_tokens: inner.evaluator.max_tokens,
+          presence_penalty: inner.evaluator.presence_penalty,
+          frequency_penalty: inner.evaluator.frequency_penalty,
+          seed: inner.evaluator.seed,
+          stop_sequences: inner.evaluator.stop_sequences,
+          json_mode: inner.evaluator.json_mode,
+          retries: inner.evaluator.retries,
+        },
+      };
+
+    case "dicl":
+      return {
+        ...baseUninitialized,
+        type: "experimental_dynamic_in_context_learning" as const,
+        weight: inner.weight,
+        embedding_model: inner.embedding_model,
+        k: inner.k,
+        model: inner.model,
+        system_instructions: stringToTemplate(inner.system_instructions),
+        temperature: inner.temperature,
+        top_p: inner.top_p,
+        stop_sequences: inner.stop_sequences,
+        presence_penalty: inner.presence_penalty,
+        frequency_penalty: inner.frequency_penalty,
+        max_tokens: inner.max_tokens,
+        seed: inner.seed,
+        json_mode: inner.json_mode,
+        retries: inner.retries,
+      };
+
+    case "mixture_of_n":
+      return {
+        ...baseUninitialized,
+        type: "experimental_mixture_of_n" as const,
+        weight: inner.weight,
+        timeout_s: inner.timeout_s,
+        candidates: inner.candidates,
+        fuser: {
+          weight: inner.fuser.weight,
+          model: inner.fuser.model,
+          input_wrappers: null,
+          system_template: convertTemplate(
+            inner.fuser.templates.system?.template || null,
+          ),
+          user_template: convertTemplate(
+            inner.fuser.templates.user?.template || null,
+          ),
+          assistant_template: convertTemplate(
+            inner.fuser.templates.assistant?.template || null,
+          ),
+          temperature: inner.fuser.temperature,
+          top_p: inner.fuser.top_p,
+          max_tokens: inner.fuser.max_tokens,
+          presence_penalty: inner.fuser.presence_penalty,
+          frequency_penalty: inner.fuser.frequency_penalty,
+          seed: inner.fuser.seed,
+          stop_sequences: inner.fuser.stop_sequences,
+          json_mode: inner.fuser.json_mode,
+          retries: inner.fuser.retries,
+        },
+      };
+
+    case "chain_of_thought":
+      return {
+        ...baseUninitialized,
+        type: "experimental_chain_of_thought" as const,
+        weight: inner.weight,
+        model: inner.model,
+        input_wrappers: null,
+        system_template: convertTemplate(
+          inner.templates.system?.template || null,
+        ),
+        user_template: convertTemplate(inner.templates.user?.template || null),
+        assistant_template: convertTemplate(
+          inner.templates.assistant?.template || null,
+        ),
+        temperature: inner.temperature,
+        top_p: inner.top_p,
+        max_tokens: inner.max_tokens,
+        presence_penalty: inner.presence_penalty,
+        frequency_penalty: inner.frequency_penalty,
+        seed: inner.seed,
+        stop_sequences: inner.stop_sequences,
+        json_mode: inner.json_mode,
+        retries: inner.retries,
+      };
+
+    default:
+      throw new Error(`Unknown variant type`);
+  }
 }
 
 /*

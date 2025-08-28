@@ -18,11 +18,12 @@ use std::time::Duration;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
 use tracing::instrument;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
-use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
-use crate::config_parser::{Config, ObjectStoreInfo, UninitializedVariantInfo};
+use crate::config::{Config, ObjectStoreInfo, SchemaData, UninitializedVariantInfo};
+use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -153,7 +154,7 @@ pub async fn inference_handler(
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
     let inference_output =
-        inference(config, &http_client, clickhouse_connection_info, params).await?;
+        inference(config, &http_client, clickhouse_connection_info, params, ()).await?;
     match inference_output {
         InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
         InferenceOutput::Streaming(stream) => {
@@ -193,7 +194,7 @@ pub struct InferenceIds {
 
 #[instrument(
     name="inference",
-    skip(config, http_client, clickhouse_connection_info, params),
+    skip(config, http_client, clickhouse_connection_info, params, extra_handle),
     fields(
         function_name,
         model_name,
@@ -203,11 +204,13 @@ pub struct InferenceIds {
         otel.name = "function_inference"
     )
 )]
-pub async fn inference(
+pub async fn inference<T: Send + 'static>(
     config: Arc<Config>,
     http_client: &reqwest::Client,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     params: Params,
+    // See 'create_stream' for more details about this parameter
+    extra_handle: T,
 ) -> Result<InferenceOutput, Error> {
     let span = tracing::Span::current();
     if let Some(function_name) = &params.function_name {
@@ -221,6 +224,9 @@ pub async fn inference(
     }
     if let Some(episode_id) = &params.episode_id {
         span.record("episode_id", episode_id.to_string());
+    }
+    for (tag_key, tag_value) in &params.tags {
+        span.set_attribute(format!("tags.{tag_key}"), tag_value.clone());
     }
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
@@ -279,6 +285,8 @@ pub async fn inference(
         params.variant_name.as_deref(),
         params.internal_dynamic_variant_config,
         &mut templates,
+        &function,
+        function_name.clone(),
     )?;
     let templates = &*templates;
 
@@ -402,6 +410,7 @@ pub async fn inference(
                 inference_metadata,
                 stream,
                 clickhouse_connection_info,
+                extra_handle,
             );
 
             return Ok(InferenceOutput::Streaming(Box::pin(stream)));
@@ -532,9 +541,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                     )]
                     .into_iter()
                     .collect(),
-                    system_schema: None,
-                    user_schema: None,
-                    assistant_schema: None,
+                    schemas: SchemaData::default(),
                     tools: vec![],
                     tool_choice: ToolChoice::Auto,
                     parallel_tool_calls: None,
@@ -559,12 +566,18 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
     }
 }
 
-fn create_stream(
+fn create_stream<T: Send + 'static>(
     function: Arc<FunctionConfig>,
     config: Arc<Config>,
     metadata: InferenceMetadata,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
+    // An arbitrary 'handle' parameter, which is guaranteed to be dropped after `clickhouse_connection_info`
+    // This is used by the embedded Rust client to ensure that we only drop the last reference to the client
+    // after all outstanding streams have finished (so that we can block in `Drop` from Python without risking
+    // a deadlock due to a `ClickHouseConnectionInfo` being kept alive by a stream in Python
+    // See `GatewayHandle` for more details
+    extra_handle: T,
 ) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
@@ -707,6 +720,8 @@ fn create_stream(
                         ).await;
 
                 }
+                drop(clickhouse_connection_info);
+                drop(extra_handle);
             };
             if async_write {
                 tokio::spawn(write_future);
@@ -854,23 +869,29 @@ async fn write_inference(
         // Write the model responses to the ModelInference table
         for response in model_responses {
             let _ = clickhouse_connection_info
-                .write(&[response], TableName::ModelInference)
+                .write_batched(&[response], TableName::ModelInference)
                 .await;
         }
         // Write the inference to the Inference table
         match result {
             InferenceResult::Chat(result) => {
-                let chat_inference =
-                    ChatInferenceDatabaseInsert::new(result, input.clone(), metadata);
+                let chat_inference = ChatInferenceDatabaseInsert::new(
+                    result,
+                    input.clone().into_stored_input(),
+                    metadata,
+                );
                 let _ = clickhouse_connection_info
-                    .write(&[chat_inference], TableName::ChatInference)
+                    .write_batched(&[chat_inference], TableName::ChatInference)
                     .await;
             }
             InferenceResult::Json(result) => {
-                let json_inference =
-                    JsonInferenceDatabaseInsert::new(result, input.clone(), metadata);
+                let json_inference = JsonInferenceDatabaseInsert::new(
+                    result,
+                    input.clone().into_stored_input(),
+                    metadata,
+                );
                 let _ = clickhouse_connection_info
-                    .write(&[json_inference], TableName::JsonInference)
+                    .write_batched(&[json_inference], TableName::JsonInference)
                     .await;
             }
         }
@@ -1213,6 +1234,8 @@ fn prepare_candidate_variants(
     pinned_variant_name: Option<&str>,
     dynamic_variant_config: Option<UninitializedVariantInfo>,
     template_config: &mut Cow<'_, TemplateConfig>,
+    function: &FunctionConfig,
+    function_name: String,
 ) -> Result<(), Error> {
     match (pinned_variant_name, dynamic_variant_config) {
         // If a variant is pinned, only that variant should be attempted
@@ -1233,7 +1256,11 @@ fn prepare_candidate_variants(
         }
         (None, Some(dynamic_variant_config)) => {
             // Replace the variant config with just the dynamic variant
-            let candidate_variant_info = load_dynamic_variant_info(dynamic_variant_config)?;
+            let candidate_variant_info = load_dynamic_variant_info(
+                dynamic_variant_config,
+                function.schemas(),
+                function_name,
+            )?;
 
             // Replace templates in the template config with the ones passed in
             // We Clone here so that we can still reference the old templates that don't conflict

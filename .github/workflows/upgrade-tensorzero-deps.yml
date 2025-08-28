@@ -1,0 +1,197 @@
+name: Upgrade TensorZero Dependencies
+
+on:
+  workflow_run:
+    workflows: ["Publish PyO3 client to PyPI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  FORCE_COLOR: 1
+
+jobs:
+  upgrade-dependencies:
+    name: Upgrade TensorZero dependencies across all projects
+    runs-on: ubuntu-latest
+    # Only run if the PyPI publish workflow succeeded (or if manually triggered)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install uv
+        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Wait for PyPI availability (auto-trigger only)
+        if: github.event_name == 'workflow_run'
+        run: |
+          echo "Waiting 60 seconds for PyPI to propagate the new version..."
+          sleep 60
+
+      - name: Get latest TensorZero version from PyPI
+        id: get_version
+        run: |
+          echo "Fetching latest tensorzero version from PyPI..."
+          response=$(curl -sSf https://pypi.org/pypi/tensorzero/json)
+          if [ $? -ne 0 ] || [ -z "$response" ]; then
+            echo "Error: Failed to fetch tensorzero info from PyPI." >&2
+            exit 1
+          fi
+          latest_version=$(echo "$response" | jq -r '.info.version')
+          if [ -z "$latest_version" ] || [ "$latest_version" = "null" ]; then
+            echo "Error: Failed to extract version from PyPI response." >&2
+            exit 1
+          fi
+          echo "Latest version: $latest_version"
+          echo "version=$latest_version" >> $GITHUB_OUTPUT
+
+      - name: Discover projects with TensorZero dependency
+        id: discover_projects
+        run: |
+          echo "Discovering projects that depend on tensorzero..."
+
+          # Find all pyproject.toml files that contain 'tensorzero' dependency
+          projects=$(git ls-files "**/pyproject.toml" | xargs -r grep -l "tensorzero")
+
+          echo "Found projects:"
+          echo "$projects"
+
+          # Store project list for later steps
+          echo "$projects" > tensorzero_projects.txt
+
+          project_count=$([ -n "$projects" ] && echo "$projects" | wc -l || echo 0)
+          echo "project_count=$project_count" >> $GITHUB_OUTPUT
+
+      - name: Upgrade TensorZero in each project
+        run: |
+          echo "Upgrading tensorzero to version ${{ steps.get_version.outputs.version }} in each project..."
+
+          while IFS= read -r project_file; do
+            if [ -n "$project_file" ]; then
+              project_dir=$(dirname "$project_file")
+              echo "Upgrading tensorzero in: $project_dir"
+
+              (cd "$project_dir" && uv lock --upgrade-package tensorzero --project="pyproject.toml") || {
+                echo "Warning: Failed to upgrade tensorzero in $project_dir"
+              }
+            fi
+          done < tensorzero_projects.txt
+
+      - name: Run uv-lock on all projects
+        run: |
+          echo "Running uv-lock on all projects (following general.yml pattern)..."
+          git ls-files "**/pyproject.toml" | while read f; do
+            dir=$(dirname "$f")
+            echo "Running uv lock in: $dir"
+            (cd "$dir" && uv lock --project="pyproject.toml") || {
+              echo "Warning: uv lock failed in $dir"
+            }
+          done
+
+      - name: Update requirements.txt files
+        run: |
+          echo "Updating requirements.txt files (following general.yml pattern)..."
+          git ls-files "**/pyproject.toml" | while read f; do
+            dir=$(dirname "$f")
+            echo "Running uv export in: $dir"
+            (cd "$dir" && uv export --project="pyproject.toml" --output-file=requirements.txt --quiet) || {
+              echo "Warning: uv export failed in $dir"
+            }
+          done
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if git diff --quiet; then
+            echo "No changes detected"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changes detected"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+
+            # Show summary of changes
+            echo "Changed files:"
+            git diff --name-only
+          fi
+
+      - name: Create Pull Request
+        if: steps.check_changes.outputs.has_changes == 'true'
+        id: create_pr
+        run: |
+          version="${{ steps.get_version.outputs.version }}"
+          branch_name="auto/upgrade-tensorzero-${version}"
+
+          # Configure git
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          # Check if branch already exists and delete it
+          if git ls-remote --heads origin "$branch_name" | grep -q "$branch_name"; then
+            echo "Branch $branch_name already exists, deleting it..."
+            git push origin --delete "$branch_name" || true
+          fi
+
+          # Create and switch to new branch
+          git checkout -b "$branch_name"
+
+          # Add all changes
+          git add .
+
+          # Create commit
+          git commit -m "chore: upgrade tensorzero to ${version}
+
+          Auto-upgrade of tensorzero dependency across ${{ steps.discover_projects.outputs.project_count }} projects.
+
+          🤖 Generated with GitHub Actions"
+
+          # Push branch
+          git push origin "$branch_name"
+
+          # Create PR body
+          cat > pr_body.md << EOF
+          ## Summary
+          Automatically upgrade \`tensorzero\` dependency to version **${version}** across all projects in the monorepo.
+
+          ## Changes
+          - Upgraded tensorzero dependency in ${{ steps.discover_projects.outputs.project_count }} projects
+          - Regenerated uv.lock files using \`uv lock\`
+          - Updated requirements.txt files using \`uv export\`
+
+          ## Projects Updated
+          \`\`\`
+          $(cat tensorzero_projects.txt)
+          \`\`\`
+
+          🤖 This PR was automatically created by the \`upgrade-tensorzero-deps\` workflow.
+          EOF
+
+          # Create PR using GitHub CLI
+          gh pr create \
+            --title "chore: upgrade tensorzero to ${version}" \
+            --body-file pr_body.md \
+            --head "$branch_name" \
+            --base main \
+            --label "dependencies" \
+            --label "automated"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.check_changes.outputs.has_changes }}" == "true" ]; then
+            echo "✅ Successfully created PR to upgrade tensorzero to ${{ steps.get_version.outputs.version }}"
+            echo "   Updated ${{ steps.discover_projects.outputs.project_count }} projects"
+          else
+            echo "ℹ️  No changes needed - all projects already use the latest version"
+          fi

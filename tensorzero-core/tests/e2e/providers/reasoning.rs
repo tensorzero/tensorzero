@@ -10,7 +10,7 @@ use reqwest_eventsource::RequestBuilderExt;
 use serde_json::json;
 use serde_json::Value;
 use tensorzero::Role;
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
     select_json_inference_clickhouse, select_model_inference_clickhouse,
 };

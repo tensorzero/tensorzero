@@ -17,10 +17,12 @@ uv run pytest
 ```
 """
 
+import asyncio
 import base64
 import inspect
 import json
 import os
+import tempfile
 import threading
 import time
 import typing as t
@@ -31,6 +33,7 @@ from uuid import UUID
 
 import pytest
 import tensorzero
+from clickhouse_connect import get_client  # type: ignore
 from openai import AsyncOpenAI, OpenAI
 from tensorzero import (
     AsyncTensorZeroGateway,
@@ -68,6 +71,13 @@ TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "../../../tensorzero-core/tests/e2e/tensorzero.toml",
 )
+
+# Test image with File block
+basepath = path.dirname(__file__)
+with open(
+    f"{basepath}/../../../tensorzero-core/tests/e2e/providers/ferris.png", "rb"
+) as f:
+    ferris_png = base64.b64encode(f.read()).decode("ascii")
 
 
 def test_sync_embedded_gateway_no_config():
@@ -1134,6 +1144,9 @@ def test_sync_inference_caching(sync_client: TensorZeroGateway):
     assert usage.input_tokens == 10
     assert usage.output_tokens == 1
 
+    # Wait for the cache entry to be written to ClickHouse
+    time.sleep(1)
+
     # Test caching
     result = sync_client.inference(
         function_name="basic_test",
@@ -1206,6 +1219,9 @@ def test_sync_inference_streaming_caching(sync_client: TensorZeroGateway):
     assert final_chunk.usage.input_tokens == 10
     assert final_chunk.usage.output_tokens == 16
 
+    # Wait for the cache entry to be written to ClickHouse
+    time.sleep(1)
+
     # Test caching
     stream = sync_client.inference(
         function_name="basic_test",
@@ -1267,12 +1283,6 @@ def test_default_function_inference(sync_client: TensorZeroGateway):
 
 
 def test_image_inference_base64(sync_client: TensorZeroGateway):
-    basepath = path.dirname(__file__)
-    with open(
-        f"{basepath}/../../../tensorzero-core/tests/e2e/providers/ferris.png", "rb"
-    ) as f:
-        ferris_png = base64.b64encode(f.read()).decode("ascii")
-
     input = {
         "system": "You are a helpful assistant named Alfred Pennyworth.",
         "messages": [
@@ -1305,7 +1315,7 @@ def test_image_inference_base64(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "file": {"url": None, "mime_type": "image/png"},
+            "file": {"url": None, "mime_type": "image/png", "data": ferris_png},
             "storage_path": {
                 "kind": {"type": "disabled"},
                 "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
@@ -1315,13 +1325,6 @@ def test_image_inference_base64(sync_client: TensorZeroGateway):
 
 
 def test_file_inference_base64(sync_client: TensorZeroGateway):
-    # Test image with File block
-    basepath = path.dirname(__file__)
-    with open(
-        f"{basepath}/../../../tensorzero-core/tests/e2e/providers/ferris.png", "rb"
-    ) as f:
-        ferris_png = base64.b64encode(f.read()).decode("ascii")
-
     input = {
         "system": "You are a helpful assistant named Alfred Pennyworth.",
         "messages": [
@@ -1354,7 +1357,7 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "file": {"url": None, "mime_type": "image/png"},
+            "file": {"url": None, "mime_type": "image/png", "data": ferris_png},
             "storage_path": {
                 "kind": {"type": "disabled"},
                 "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
@@ -1401,7 +1404,11 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "file": {"url": None, "mime_type": "application/pdf"},
+            "file": {
+                "url": None,
+                "mime_type": "application/pdf",
+                "data": deepseek_paper_pdf,
+            },
             "storage_path": {
                 "kind": {"type": "disabled"},
                 "path": "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf",
@@ -1447,6 +1454,7 @@ def test_image_inference_url_wrong_mime_type(sync_client: TensorZeroGateway):
             "file": {
                 "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                 "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "data": ferris_png,
             },
             "storage_path": {
                 "kind": {"type": "disabled"},
@@ -1492,6 +1500,7 @@ def test_image_inference_url(sync_client: TensorZeroGateway):
             "file": {
                 "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                 "mime_type": "image/png",
+                "data": ferris_png,
             },
             "storage_path": {
                 "kind": {"type": "disabled"},
@@ -1537,6 +1546,7 @@ def test_file_inference_url(sync_client: TensorZeroGateway):
             "file": {
                 "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                 "mime_type": "image/png",
+                "data": ferris_png,
             },
             "storage_path": {
                 "kind": {"type": "disabled"},
@@ -3249,3 +3259,136 @@ def test_sync_include_original_response_json(sync_client: TensorZeroGateway):
     )
     assert isinstance(response, JsonInferenceResponse)
     assert response.original_response == '{"answer":"Hello"}'
+
+
+def test_sync_clickhouse_batch_writes():
+    # Create a temp file and write to it
+    with tempfile.NamedTemporaryFile() as temp_file:
+        temp_file.write(b"gateway.observability.enabled = true\n")
+        temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
+        temp_file.write(
+            b"gateway.observability.batch_writes.__force_allow_embedded_batch_writes = true\n"
+        )
+        temp_file.flush()
+        clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
+        client = TensorZeroGateway.build_embedded(
+            config_file=temp_file.name,
+            clickhouse_url=clickhouse_url,
+        )
+        num_inferences = 100
+        results: t.List[t.Any] = []
+        episode_id = str(uuid7())
+        for _ in range(num_inferences):
+            results.append(
+                client.inference(
+                    model_name="dummy::good",
+                    episode_id=episode_id,
+                    input={
+                        "messages": [{"role": "user", "content": "Hello, world!"}],
+                    },
+                )
+            )
+
+        assert len(results) == num_inferences
+
+        # Wait for results to be written to ClickHouse
+        time.sleep(1)
+
+        expected_inference_ids = set(result.inference_id for result in results)
+
+        clickhouse_client = get_client(dsn=clickhouse_url)
+        clickhouse_result = clickhouse_client.query_df(  # type: ignore
+            f"SELECT * FROM ChatInference where episode_id = '{episode_id}'"
+        )
+        assert len(clickhouse_result) == num_inferences  # type: ignore
+
+        actual_inference_ids = set(row.id for row in clickhouse_result.iloc)  # type: ignore
+        assert actual_inference_ids == expected_inference_ids
+
+
+@pytest.mark.asyncio
+async def test_async_clickhouse_batch_writes():
+    # Create a temp file and write to it
+    with tempfile.NamedTemporaryFile() as temp_file:
+        temp_file.write(b"gateway.observability.enabled = true\n")
+        temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
+        temp_file.write(
+            b"gateway.observability.batch_writes.__force_allow_embedded_batch_writes = true\n"
+        )
+        temp_file.flush()
+        clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
+        client_fut = AsyncTensorZeroGateway.build_embedded(
+            config_file=temp_file.name,
+            clickhouse_url=clickhouse_url,
+        )
+        assert inspect.isawaitable(client_fut)
+        client = await client_fut
+        num_inferences = 100
+        futures: t.List[t.Awaitable[t.Any]] = []
+        episode_id = str(uuid7())
+        for _ in range(num_inferences):
+            futures.append(
+                client.inference(
+                    model_name="dummy::good",
+                    episode_id=episode_id,
+                    input={
+                        "messages": [{"role": "user", "content": "Hello, world!"}],
+                    },
+                )
+            )
+
+        results = await asyncio.gather(*futures)
+        assert len(results) == num_inferences
+
+        # Wait for results to be written to ClickHouse
+        await asyncio.sleep(1)
+
+        expected_inference_ids = set(result.inference_id for result in results)
+
+        clickhouse_client = get_client(dsn=clickhouse_url)
+        clickhouse_result = clickhouse_client.query_df(  # type: ignore
+            f"SELECT * FROM ChatInference where episode_id = '{episode_id}'"
+        )
+        assert len(clickhouse_result) == num_inferences  # type: ignore
+
+        actual_inference_ids = set(row.id for row in clickhouse_result.iloc)  # type: ignore
+        assert actual_inference_ids == expected_inference_ids
+
+
+def test_sync_cannot_enable_batch_writes():
+    # Create a temp file and write to it
+    with tempfile.NamedTemporaryFile() as temp_file:
+        temp_file.write(b"gateway.observability.enabled = true\n")
+        temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
+        temp_file.flush()
+        clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
+        with pytest.raises(TensorZeroInternalError) as exc_info:
+            TensorZeroGateway.build_embedded(
+                config_file=temp_file.name,
+                clickhouse_url=clickhouse_url,
+            )
+        assert (
+            str(exc_info.value)
+            == """Failed to construct TensorZero client: Clickhouse(Other { source: TensorZeroInternalError(Error(Config { message: "[gateway.observability.batch_writes] is not yet supported in embedded gateway mode" })) })"""
+        )
+
+
+@pytest.mark.asyncio
+async def test_async_cannot_enable_batch_writes():
+    # Create a temp file and write to it
+    with tempfile.NamedTemporaryFile() as temp_file:
+        temp_file.write(b"gateway.observability.enabled = true\n")
+        temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
+        temp_file.flush()
+        clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
+        client_fut = AsyncTensorZeroGateway.build_embedded(
+            config_file=temp_file.name,
+            clickhouse_url=clickhouse_url,
+        )
+        assert inspect.isawaitable(client_fut)
+        with pytest.raises(TensorZeroInternalError) as exc_info:
+            await client_fut
+        assert (
+            str(exc_info.value)
+            == """Failed to construct TensorZero client: Clickhouse(Other { source: TensorZeroInternalError(Error(Config { message: "[gateway.observability.batch_writes] is not yet supported in embedded gateway mode" })) })"""
+        )

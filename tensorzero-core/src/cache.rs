@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::clickhouse::{ClickHouseConnectionInfo, TableName};
+use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::embeddings::{EmbeddingModelResponse, EmbeddingRequest};
 use crate::error::{warn_discarded_cache_write, Error, ErrorDetails};
 use crate::inference::types::file::serialize_with_file_data;
@@ -276,7 +276,7 @@ fn spawn_maybe_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
     tokio::spawn(async move {
         if row.data.output.should_write_to_cache() {
             if let Err(e) = clickhouse_client
-                .write(&[row], TableName::ModelInferenceCache)
+                .write_batched(&[row], TableName::ModelInferenceCache)
                 .await
             {
                 tracing::warn!("Failed to write to cache: {e}");

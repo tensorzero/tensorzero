@@ -2,6 +2,7 @@
 import type { JsonMode } from "./JsonMode";
 import type { RetryConfig } from "./RetryConfig";
 import type { TomlRelativePath } from "./TomlRelativePath";
+import type { UninitializedInputWrappers } from "./UninitializedInputWrappers";
 
 export type UninitializedChainOfThoughtConfig = {
   weight: number | null;
@@ -9,6 +10,7 @@ export type UninitializedChainOfThoughtConfig = {
   system_template: TomlRelativePath | null;
   user_template: TomlRelativePath | null;
   assistant_template: TomlRelativePath | null;
+  input_wrappers: UninitializedInputWrappers | null;
   temperature: number | null;
   top_p: number | null;
   max_tokens: number | null;

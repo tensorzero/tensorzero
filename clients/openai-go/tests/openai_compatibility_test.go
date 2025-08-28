@@ -306,6 +306,9 @@ func TestBasicInference(t *testing.T) {
 		require.Equal(t, int64(1), resp.Usage.CompletionTokens)
 		require.Equal(t, int64(11), resp.Usage.TotalTokens)
 
+		// Sleep for 1s
+		time.Sleep(time.Second)
+
 		// Second request (cached)
 		req.WithExtraFields(map[string]any{
 			"tensorzero::cache_options": map[string]any{

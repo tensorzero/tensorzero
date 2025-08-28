@@ -18,7 +18,7 @@ use crate::cache::{
     cache_lookup, cache_lookup_streaming, start_cache_write, start_cache_write_streaming,
     CacheData, ModelProviderRequest, NonStreamingCacheData, StreamingCacheData,
 };
-use crate::config_parser::{skip_credential_validation, ProviderTypesConfig, TimeoutsConfig};
+use crate::config::{skip_credential_validation, ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
 use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -642,7 +642,8 @@ pub struct UninitializedModelProvider {
     pub extra_body: Option<ExtraBodyConfig>,
     #[cfg_attr(test, ts(skip))]
     pub extra_headers: Option<ExtraHeadersConfig>,
-    pub timeouts: Option<TimeoutsConfig>,
+    #[serde(default)]
+    pub timeouts: TimeoutsConfig,
     /// If `true`, we emit a warning and discard chunks that we don't recognize
     /// (on a best-effort, per-provider basis).
     /// By default, we produce an error in the stream
@@ -662,22 +663,18 @@ pub struct ModelProvider {
     pub extra_headers: Option<ExtraHeadersConfig>,
     #[cfg_attr(test, ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
-    pub timeouts: Option<TimeoutsConfig>,
+    pub timeouts: TimeoutsConfig,
     /// See `UninitializedModelProvider.discard_unknown_chunks`.
     pub discard_unknown_chunks: bool,
 }
 
 impl ModelProvider {
     fn non_streaming_total_timeout(&self) -> Option<Duration> {
-        Some(Duration::from_millis(
-            self.timeouts.as_ref()?.non_streaming.total_ms?,
-        ))
+        Some(Duration::from_millis(self.timeouts.non_streaming.total_ms?))
     }
 
     fn streaming_ttft_timeout(&self) -> Option<Duration> {
-        Some(Duration::from_millis(
-            self.timeouts.as_ref()?.streaming.ttft_ms?,
-        ))
+        Some(Duration::from_millis(self.timeouts.streaming.ttft_ms?))
     }
 
     /// The name to report in the OTEL `gen_ai.system` attribute
@@ -1914,11 +1911,11 @@ mod tests {
     use std::{borrow::Cow, cell::Cell};
 
     use crate::cache::CacheEnabledMode;
-    use crate::config_parser::SKIP_CREDENTIAL_VALIDATION;
+    use crate::config::SKIP_CREDENTIAL_VALIDATION;
     use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         cache::CacheOptions,
-        clickhouse::ClickHouseConnectionInfo,
+        db::clickhouse::ClickHouseConnectionInfo,
         inference::types::{
             ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk,
         },
