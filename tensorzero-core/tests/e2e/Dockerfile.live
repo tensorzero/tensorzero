@@ -21,7 +21,7 @@ RUN curl -L --proto '=https' --tlsv1.2 -sSf \
 
 FROM base AS build-env
 
-WORKDIR /build
+WORKDIR /app
 
 # Copy the entire project
 COPY . .
@@ -43,16 +43,12 @@ COPY . ./
 RUN rm -rf target
 
 # Copy over just the evaluations and gateway binaries
-# they live in /build/target/debug/evaluations and /build/target/debug/gateway
-COPY --from=build-env /build/target/debug/evaluations /build/target/debug/evaluations
-COPY --from=build-env /build/target/debug/gateway /build/target/debug/gateway
-
-# Copy over the tensorzero-core test fixtures
-COPY ./tensorzero-core /build
-
+# they live in /app/target/debug/evaluations and /app/target/debug/gateway
+COPY --from=build-env /app/target/debug/evaluations /app/target/debug/evaluations
+COPY --from=build-env /app/target/debug/gateway /app/target/debug/gateway
 
 # Copy only the test archive instead of entire target directory
-COPY --from=build-env /build/tests.tar.zst /app/tests.tar.zst
+COPY --from=build-env /app/tests.tar.zst /app/tests.tar.zst
 
 # Install cargo-nextest in this stage too (for running tests)
 RUN cargo binstall -y cargo-nextest --secure
