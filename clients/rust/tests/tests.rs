@@ -10,7 +10,7 @@ use reqwest::Url;
 use tensorzero_core::inference::types::ResolvedInput;
 
 lazy_static::lazy_static! {
-    static ref GATEWAY_URL: String = std::env::var("GATEWAY_URL").unwrap_or("http://localhost:3000".to_string());
+    static ref GATEWAY_URL: String = std::env::var("TENSORZERO_GATEWAY_URL").unwrap_or("http://localhost:3000".to_string());
 }
 
 pub fn get_gateway_endpoint(endpoint: Option<&str>) -> Url {
