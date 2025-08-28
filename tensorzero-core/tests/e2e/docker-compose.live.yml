@@ -201,7 +201,7 @@ services:
       dockerfile: tensorzero-core/tests/e2e/Dockerfile.live
     environment:
       # Test environment variables
-      GATEWAY_URL: http://gateway:3000
+      TENSORZERO_GATEWAY_URL: http://gateway:3000
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
       TENSORZERO_E2E_PROXY: http://provider-proxy:3003
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
