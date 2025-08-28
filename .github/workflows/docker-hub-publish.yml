@@ -16,6 +16,7 @@ jobs:
   build:
     name: Build and push Docker image to Docker Hub
     runs-on: ${{ matrix.platform.runner }}
+    if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
         platform:
@@ -101,6 +102,7 @@ jobs:
           - name: ${{ github.event_name == 'push' && 'gateway-dev' || 'gateway' }}
           - name: ${{ github.event_name == 'push' && 'evaluations-dev' || 'evaluations' }}
     runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
     needs:
       - build
     steps:

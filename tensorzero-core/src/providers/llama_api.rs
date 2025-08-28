@@ -45,10 +45,10 @@ pub const PROVIDER_TYPE: &str = "llama_api";
 pub struct LlamaAPIProvider {
     model_name: String,
     #[serde(skip)]
-    credentials: LlamaCredentials,
+    credentials: LlamaAPICredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<LlamaCredentials> = OnceLock::new();
+static DEFAULT_CREDENTIALS: OnceLock<LlamaAPICredentials> = OnceLock::new();
 
 impl LlamaAPIProvider {
     pub fn new(
@@ -73,21 +73,21 @@ impl LlamaAPIProvider {
 }
 
 #[derive(Clone, Debug)]
-pub enum LlamaCredentials {
+pub enum LlamaAPICredentials {
     Static(SecretString),
     Dynamic(String),
     None,
 }
 
-impl TryFrom<Credential> for LlamaCredentials {
+impl TryFrom<Credential> for LlamaAPICredentials {
     type Error = Error;
 
     fn try_from(credentials: Credential) -> Result<Self, Error> {
         match credentials {
-            Credential::Static(key) => Ok(LlamaCredentials::Static(key)),
-            Credential::Dynamic(key_name) => Ok(LlamaCredentials::Dynamic(key_name)),
-            Credential::None => Ok(LlamaCredentials::None),
-            Credential::Missing => Ok(LlamaCredentials::None),
+            Credential::Static(key) => Ok(LlamaAPICredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(LlamaAPICredentials::Dynamic(key_name)),
+            Credential::None => Ok(LlamaAPICredentials::None),
+            Credential::Missing => Ok(LlamaAPICredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Llama provider".to_string(),
             })),
@@ -95,14 +95,14 @@ impl TryFrom<Credential> for LlamaCredentials {
     }
 }
 
-impl LlamaCredentials {
+impl LlamaAPICredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<Option<&'a SecretString>, Error> {
         match self {
-            LlamaCredentials::Static(api_key) => Ok(Some(api_key)),
-            LlamaCredentials::Dynamic(key_name) => {
+            LlamaAPICredentials::Static(api_key) => Ok(Some(api_key)),
+            LlamaAPICredentials::Dynamic(key_name) => {
                 Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
@@ -111,7 +111,7 @@ impl LlamaCredentials {
                 }))
                 .transpose()
             }
-            LlamaCredentials::None => Ok(None),
+            LlamaAPICredentials::None => Ok(None),
         }
     }
 }
@@ -129,16 +129,15 @@ impl InferenceProvider for LlamaAPIProvider {
         let start_time = Instant::now();
 
         let request_body =
-            serde_json::to_value(LlamaRequest::new(&self.model_name, request.request)?).map_err(
-                |e| {
+            serde_json::to_value(LlamaAPIRequest::new(&self.model_name, request.request)?)
+                .map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
                         message: format!(
                             "Error serializing Llama request: {}",
                             DisplayOrDebugGateway::new(e)
                         ),
                     })
-                },
-            )?;
+                })?;
 
         let mut request_builder = http_client.post(request_url);
 
@@ -170,7 +169,7 @@ impl InferenceProvider for LlamaAPIProvider {
                 })
             })?;
 
-            let actual_response: LlamaActualResponse = serde_json::from_str(&raw_response)
+            let actual_response: LlamaAPIActualResponse = serde_json::from_str(&raw_response)
                 .map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
                         message: format!(
@@ -183,13 +182,13 @@ impl InferenceProvider for LlamaAPIProvider {
                     })
                 })?;
 
-            // Convert LlamaActualResponse to LlamaResponse format
+            // Convert LlamaAPIActualResponse to LlamaResponse format
             let response = convert_llama_actual_response_to_llama_response(actual_response);
 
             let latency = Latency::NonStreaming {
                 response_time: start_time.elapsed(),
             };
-            Ok(LlamaResponseWithMetadata {
+            Ok(LlamaAPIResponseWithMetadata {
                 response,
                 raw_response,
                 latency,
@@ -198,7 +197,7 @@ impl InferenceProvider for LlamaAPIProvider {
             }
             .try_into()?)
         } else {
-            Err(handle_llama_error(
+            Err(handle_llama_api_error(
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
@@ -227,15 +226,15 @@ impl InferenceProvider for LlamaAPIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(LlamaRequest::new(&self.model_name, request)?)
+        let request_body = serde_json::to_value(LlamaAPIRequest::new(&self.model_name, request)?)
             .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing Llama request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing Llama API request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let request_url = "https://api.llama.com/v1/chat/completions".to_string();
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -254,7 +253,7 @@ impl InferenceProvider for LlamaAPIProvider {
         )
         .await?;
 
-        let stream = stream_llama(
+        let stream = stream_llama_api(
             PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
@@ -302,7 +301,7 @@ pub async fn convert_stream_error(provider_type: String, e: reqwest_eventsource:
     .into()
 }
 
-pub fn stream_llama(
+pub fn stream_llama_api(
     provider_type: String,
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
@@ -359,11 +358,11 @@ pub fn stream_llama(
                                 ))
                             } else {
                                 // First try the new streaming format
-                                if let Ok(streaming_response) = serde_json::from_str::<LlamaStreamingResponse>(&message.data) {
-                                    llama_streaming_to_tensorzero_chunk(streaming_response, latency, &mut tool_call_ids)
+                                if let Ok(streaming_response) = serde_json::from_str::<LlamaAPIStreamingResponse>(&message.data) {
+                                    llama_api_streaming_to_tensorzero_chunk(streaming_response, latency, &mut tool_call_ids)
                                 } else {
                                     // Fall back to old format for backward compatibility
-                                    let old_chunk: LlamaChatChunk = serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
+                                    let old_chunk: LlamaAPIChatChunk = serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
                                         message: format!(
                                             "Error parsing chunk. Error: {e}",
                                             ),
@@ -371,7 +370,7 @@ pub fn stream_llama(
                                         raw_response: Some(message.data.clone()),
                                         provider_type: provider_type.clone(),
                                     }))?;
-                                    llama_to_tensorzero_chunk(old_chunk, latency, &mut tool_call_ids)
+                                    llama_api_to_tensorzero_chunk(old_chunk, latency, &mut tool_call_ids)
                                 }
                             }
                         };
@@ -402,7 +401,7 @@ pub fn stream_llama(
     })
 }
 
-pub(super) fn handle_llama_error(
+pub(super) fn handle_llama_api_error(
     response_code: StatusCode,
     response_body: &str,
     provider_type: &str,
@@ -430,18 +429,18 @@ pub(super) fn handle_llama_error(
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(super) struct LlamaSystemRequestMessage<'a> {
+pub(super) struct LlamaAPISystemRequestMessage<'a> {
     pub content: Cow<'a, str>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(super) struct LlamaUserRequestMessage<'a> {
+pub(super) struct LlamaAPIUserRequestMessage<'a> {
     #[serde(serialize_with = "serialize_text_content_vec")]
-    pub(super) content: Vec<LlamaContentBlock<'a>>,
+    pub(super) content: Vec<LlamaAPIContentBlock<'a>>,
 }
 
 fn serialize_text_content_vec<S>(
-    content: &Vec<LlamaContentBlock<'_>>,
+    content: &Vec<LlamaAPIContentBlock<'_>>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
 where
@@ -449,7 +448,7 @@ where
 {
     // If we have a single text block, serialize it as a string
     // to stay compatible with older providers which may not support content blocks
-    if let [LlamaContentBlock::Text { text }] = &content.as_slice() {
+    if let [LlamaAPIContentBlock::Text { text }] = &content.as_slice() {
         text.serialize(serializer)
     } else {
         content.serialize(serializer)
@@ -457,7 +456,7 @@ where
 }
 
 fn serialize_optional_text_content_vec<S>(
-    content: &Option<Vec<LlamaContentBlock<'_>>>,
+    content: &Option<Vec<LlamaAPIContentBlock<'_>>>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
 where
@@ -470,13 +469,13 @@ where
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum LlamaContentBlock<'a> {
+pub enum LlamaAPIContentBlock<'a> {
     Text { text: Cow<'a, str> },
-    ImageUrl { image_url: LlamaImageUrl },
+    ImageUrl { image_url: LlamaAPIImageUrl },
     Unknown { data: Cow<'a, Value> },
 }
 
-impl Serialize for LlamaContentBlock<'_> {
+impl Serialize for LlamaAPIContentBlock<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -485,43 +484,43 @@ impl Serialize for LlamaContentBlock<'_> {
         #[serde(tag = "type", rename_all = "snake_case")]
         enum Helper<'a> {
             Text { text: &'a str },
-            ImageUrl { image_url: &'a LlamaImageUrl },
+            ImageUrl { image_url: &'a LlamaAPIImageUrl },
         }
         match self {
-            LlamaContentBlock::Text { text } => Helper::Text { text }.serialize(serializer),
-            LlamaContentBlock::ImageUrl { image_url } => {
+            LlamaAPIContentBlock::Text { text } => Helper::Text { text }.serialize(serializer),
+            LlamaAPIContentBlock::ImageUrl { image_url } => {
                 Helper::ImageUrl { image_url }.serialize(serializer)
             }
-            LlamaContentBlock::Unknown { data } => data.serialize(serializer),
+            LlamaAPIContentBlock::Unknown { data } => data.serialize(serializer),
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub struct LlamaImageUrl {
+pub struct LlamaAPIImageUrl {
     pub url: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct LlamaRequestFunctionCall<'a> {
+pub struct LlamaAPIRequestFunctionCall<'a> {
     pub name: &'a str,
     pub arguments: &'a str,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-pub struct LlamaRequestToolCall<'a> {
+pub struct LlamaAPIRequestToolCall<'a> {
     pub id: &'a str,
-    pub r#type: LlamaToolType,
-    pub function: LlamaRequestFunctionCall<'a>,
+    pub r#type: LlamaAPIToolType,
+    pub function: LlamaAPIRequestFunctionCall<'a>,
 }
 
-impl<'a> From<&'a ToolCall> for LlamaRequestToolCall<'a> {
+impl<'a> From<&'a ToolCall> for LlamaAPIRequestToolCall<'a> {
     fn from(tool_call: &'a ToolCall) -> Self {
-        LlamaRequestToolCall {
+        LlamaAPIRequestToolCall {
             id: &tool_call.id,
-            r#type: LlamaToolType::Function,
-            function: LlamaRequestFunctionCall {
+            r#type: LlamaAPIToolType::Function,
+            function: LlamaAPIRequestFunctionCall {
                 name: &tool_call.name,
                 arguments: &tool_call.arguments,
             },
@@ -530,18 +529,18 @@ impl<'a> From<&'a ToolCall> for LlamaRequestToolCall<'a> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(super) struct LlamaAssistantRequestMessage<'a> {
+pub(super) struct LlamaAPIAssistantRequestMessage<'a> {
     #[serde(
         skip_serializing_if = "Option::is_none",
         serialize_with = "serialize_optional_text_content_vec"
     )]
-    pub content: Option<Vec<LlamaContentBlock<'a>>>,
+    pub content: Option<Vec<LlamaAPIContentBlock<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_calls: Option<Vec<LlamaRequestToolCall<'a>>>,
+    pub tool_calls: Option<Vec<LlamaAPIRequestToolCall<'a>>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(super) struct LlamaToolRequestMessage<'a> {
+pub(super) struct LlamaAPIToolRequestMessage<'a> {
     pub content: &'a str,
     pub tool_call_id: &'a str,
 }
@@ -549,50 +548,52 @@ pub(super) struct LlamaToolRequestMessage<'a> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "role")]
 #[serde(rename_all = "lowercase")]
-pub(super) enum LlamaRequestMessage<'a> {
-    System(LlamaSystemRequestMessage<'a>),
-    User(LlamaUserRequestMessage<'a>),
-    Assistant(LlamaAssistantRequestMessage<'a>),
-    Tool(LlamaToolRequestMessage<'a>),
+pub(super) enum LlamaAPIRequestMessage<'a> {
+    System(LlamaAPISystemRequestMessage<'a>),
+    User(LlamaAPIUserRequestMessage<'a>),
+    Assistant(LlamaAPIAssistantRequestMessage<'a>),
+    Tool(LlamaAPIToolRequestMessage<'a>),
 }
 
-impl LlamaRequestMessage<'_> {
+impl LlamaAPIRequestMessage<'_> {
     pub fn content_contains_case_insensitive(&self, value: &str) -> bool {
         match self {
-            LlamaRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
-            LlamaRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
-                LlamaContentBlock::Text { text } => text.to_lowercase().contains(value),
-                LlamaContentBlock::ImageUrl { .. } => false,
+            LlamaAPIRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
+            LlamaAPIRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
+                LlamaAPIContentBlock::Text { text } => text.to_lowercase().contains(value),
+                LlamaAPIContentBlock::ImageUrl { .. } => false,
                 // Don't inspect the contents of 'unknown' blocks
-                LlamaContentBlock::Unknown { data: _ } => false,
+                LlamaAPIContentBlock::Unknown { data: _ } => false,
             }),
-            LlamaRequestMessage::Assistant(msg) => {
+            LlamaAPIRequestMessage::Assistant(msg) => {
                 if let Some(content) = &msg.content {
                     content.iter().any(|c| match c {
-                        LlamaContentBlock::Text { text } => text.to_lowercase().contains(value),
-                        LlamaContentBlock::ImageUrl { .. } => false,
+                        LlamaAPIContentBlock::Text { text } => text.to_lowercase().contains(value),
+                        LlamaAPIContentBlock::ImageUrl { .. } => false,
                         // Don't inspect the contents of 'unknown' blocks
-                        LlamaContentBlock::Unknown { data: _ } => false,
+                        LlamaAPIContentBlock::Unknown { data: _ } => false,
                     })
                 } else {
                     false
                 }
             }
-            LlamaRequestMessage::Tool(msg) => msg.content.to_lowercase().contains(value),
+            LlamaAPIRequestMessage::Tool(msg) => msg.content.to_lowercase().contains(value),
         }
     }
 }
 
 pub(super) fn prepare_llama_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
-) -> Result<Vec<LlamaRequestMessage<'a>>, Error> {
+) -> Result<Vec<LlamaAPIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
     for message in &request.messages {
-        messages.extend(tensorzero_to_llama_messages(message)?);
+        messages.extend(tensorzero_to_llama_api_messages(message)?);
     }
-    if let Some(system_msg) =
-        tensorzero_to_llama_system_message(request.system.as_deref(), request.json_mode, &messages)
-    {
+    if let Some(system_msg) = tensorzero_to_llama_api_system_message(
+        request.system.as_deref(),
+        request.json_mode,
+        &messages,
+    ) {
         messages.insert(0, system_msg);
     }
     Ok(messages)
@@ -604,8 +605,8 @@ pub(super) fn prepare_llama_messages<'a>(
 pub(super) fn prepare_llama_tools<'a>(
     request: &'a ModelInferenceRequest,
 ) -> (
-    Option<Vec<LlamaTool<'a>>>,
-    Option<LlamaToolChoice<'a>>,
+    Option<Vec<LlamaAPITool<'a>>>,
+    Option<LlamaAPIToolChoice<'a>>,
     Option<bool>,
 ) {
     match &request.tool_config {
@@ -625,11 +626,11 @@ pub(super) fn prepare_llama_tools<'a>(
 /// If ModelInferenceRequestJsonMode::On and the system message or instructions does not contain "JSON"
 /// the request will return an error.
 /// So, we need to format the instructions to include "Respond using JSON." if it doesn't already.
-pub(super) fn tensorzero_to_llama_system_message<'a>(
+pub(super) fn tensorzero_to_llama_api_system_message<'a>(
     system: Option<&'a str>,
     json_mode: ModelInferenceRequestJsonMode,
-    messages: &[LlamaRequestMessage<'a>],
-) -> Option<LlamaRequestMessage<'a>> {
+    messages: &[LlamaAPIRequestMessage<'a>],
+) -> Option<LlamaAPIRequestMessage<'a>> {
     match system {
         Some(system) => {
             match &json_mode {
@@ -639,47 +640,47 @@ pub(super) fn tensorzero_to_llama_system_message<'a>(
                         .any(|msg| msg.content_contains_case_insensitive("json"))
                         || system.to_lowercase().contains("json")
                     {
-                        LlamaRequestMessage::System(LlamaSystemRequestMessage {
+                        LlamaAPIRequestMessage::System(LlamaAPISystemRequestMessage {
                             content: Cow::Borrowed(system),
                         })
                     } else {
                         let formatted_instructions = format!("Respond using JSON.\n\n{system}");
-                        LlamaRequestMessage::System(LlamaSystemRequestMessage {
+                        LlamaAPIRequestMessage::System(LlamaAPISystemRequestMessage {
                             content: Cow::Owned(formatted_instructions),
                         })
                     }
                 }
 
                 // If JSON mode is either off or strict, we don't need to do anything special
-                _ => LlamaRequestMessage::System(LlamaSystemRequestMessage {
+                _ => LlamaAPIRequestMessage::System(LlamaAPISystemRequestMessage {
                     content: Cow::Borrowed(system),
                 }),
             }
             .into()
         }
         None => match json_mode {
-            ModelInferenceRequestJsonMode::On => {
-                Some(LlamaRequestMessage::System(LlamaSystemRequestMessage {
+            ModelInferenceRequestJsonMode::On => Some(LlamaAPIRequestMessage::System(
+                LlamaAPISystemRequestMessage {
                     content: Cow::Owned("Respond using JSON.".to_string()),
-                }))
-            }
+                },
+            )),
             _ => None,
         },
     }
 }
 
-pub(super) fn tensorzero_to_llama_messages(
+pub(super) fn tensorzero_to_llama_api_messages(
     message: &RequestMessage,
-) -> Result<Vec<LlamaRequestMessage<'_>>, Error> {
+) -> Result<Vec<LlamaAPIRequestMessage<'_>>, Error> {
     match message.role {
-        Role::User => tensorzero_to_llama_user_messages(&message.content),
-        Role::Assistant => tensorzero_to_llama_assistant_messages(&message.content),
+        Role::User => tensorzero_to_llama_api_user_messages(&message.content),
+        Role::Assistant => tensorzero_to_llama_api_assistant_messages(&message.content),
     }
 }
 
-fn tensorzero_to_llama_user_messages(
+fn tensorzero_to_llama_api_user_messages(
     content_blocks: &[ContentBlock],
-) -> Result<Vec<LlamaRequestMessage<'_>>, Error> {
+) -> Result<Vec<LlamaAPIRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the user content blocks.
 
     let mut messages = Vec::new();
@@ -688,7 +689,7 @@ fn tensorzero_to_llama_user_messages(
     for block in content_blocks {
         match block {
             ContentBlock::Text(Text { text }) => {
-                user_content_blocks.push(LlamaContentBlock::Text {
+                user_content_blocks.push(LlamaAPIContentBlock::Text {
                     text: Cow::Borrowed(text),
                 });
             }
@@ -698,7 +699,7 @@ fn tensorzero_to_llama_user_messages(
                 }));
             }
             ContentBlock::ToolResult(tool_result) => {
-                messages.push(LlamaRequestMessage::Tool(LlamaToolRequestMessage {
+                messages.push(LlamaAPIRequestMessage::Tool(LlamaAPIToolRequestMessage {
                     content: &tool_result.result,
                     tool_call_id: &tool_result.id,
                 }));
@@ -708,8 +709,8 @@ fn tensorzero_to_llama_user_messages(
                     file,
                     storage_path: _,
                 } = &**file;
-                user_content_blocks.push(LlamaContentBlock::ImageUrl {
-                    image_url: LlamaImageUrl {
+                user_content_blocks.push(LlamaAPIContentBlock::ImageUrl {
+                    image_url: LlamaAPIImageUrl {
                         // This will only produce an error if we pass in a bad
                         // `Base64Image` (with missing image data)
                         url: format!("data:{};base64,{}", file.mime_type, file.data()?),
@@ -723,7 +724,7 @@ fn tensorzero_to_llama_user_messages(
                 data,
                 model_provider_name: _,
             } => {
-                user_content_blocks.push(LlamaContentBlock::Unknown {
+                user_content_blocks.push(LlamaAPIContentBlock::Unknown {
                     data: Cow::Borrowed(data),
                 });
             }
@@ -732,7 +733,7 @@ fn tensorzero_to_llama_user_messages(
 
     // If there are any user content blocks, combine them into a single user message.
     if !user_content_blocks.is_empty() {
-        messages.push(LlamaRequestMessage::User(LlamaUserRequestMessage {
+        messages.push(LlamaAPIRequestMessage::User(LlamaAPIUserRequestMessage {
             content: user_content_blocks,
         }));
     }
@@ -740,9 +741,9 @@ fn tensorzero_to_llama_user_messages(
     Ok(messages)
 }
 
-fn tensorzero_to_llama_assistant_messages(
+fn tensorzero_to_llama_api_assistant_messages(
     content_blocks: &[ContentBlock],
-) -> Result<Vec<LlamaRequestMessage<'_>>, Error> {
+) -> Result<Vec<LlamaAPIRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the assistant content blocks.
     let mut assistant_content_blocks = Vec::new();
     let mut assistant_tool_calls = Vec::new();
@@ -750,15 +751,15 @@ fn tensorzero_to_llama_assistant_messages(
     for block in content_blocks {
         match block {
             ContentBlock::Text(Text { text }) => {
-                assistant_content_blocks.push(LlamaContentBlock::Text {
+                assistant_content_blocks.push(LlamaAPIContentBlock::Text {
                     text: Cow::Borrowed(text),
                 });
             }
             ContentBlock::ToolCall(tool_call) => {
-                let tool_call = LlamaRequestToolCall {
+                let tool_call = LlamaAPIRequestToolCall {
                     id: &tool_call.id,
-                    r#type: LlamaToolType::Function,
-                    function: LlamaRequestFunctionCall {
+                    r#type: LlamaAPIToolType::Function,
+                    function: LlamaAPIRequestFunctionCall {
                         name: &tool_call.name,
                         arguments: &tool_call.arguments,
                     },
@@ -776,8 +777,8 @@ fn tensorzero_to_llama_assistant_messages(
                     file,
                     storage_path: _,
                 } = &**file;
-                assistant_content_blocks.push(LlamaContentBlock::ImageUrl {
-                    image_url: LlamaImageUrl {
+                assistant_content_blocks.push(LlamaAPIContentBlock::ImageUrl {
+                    image_url: LlamaAPIImageUrl {
                         // This will only produce an error if we pass in a bad
                         // `Base64Image` (with missing image data)
                         url: format!("data:{};base64,{}", file.mime_type, file.data()?),
@@ -791,7 +792,7 @@ fn tensorzero_to_llama_assistant_messages(
                 data,
                 model_provider_name: _,
             } => {
-                assistant_content_blocks.push(LlamaContentBlock::Unknown {
+                assistant_content_blocks.push(LlamaAPIContentBlock::Unknown {
                     data: Cow::Borrowed(data),
                 });
             }
@@ -808,7 +809,7 @@ fn tensorzero_to_llama_assistant_messages(
         _ => Some(assistant_tool_calls),
     };
 
-    let message = LlamaRequestMessage::Assistant(LlamaAssistantRequestMessage {
+    let message = LlamaAPIRequestMessage::Assistant(LlamaAPIAssistantRequestMessage {
         content,
         tool_calls,
     });
@@ -818,10 +819,10 @@ fn tensorzero_to_llama_assistant_messages(
 
 // Llama 4 doesn't support response_format field, so we don't need this enum
 
-// Convert LlamaActualResponse to LlamaResponse format
+// Convert LlamaAPIActualResponse to LlamaResponse format
 fn convert_llama_actual_response_to_llama_response(
-    actual_response: LlamaActualResponse,
-) -> LlamaResponse {
+    actual_response: LlamaAPIActualResponse,
+) -> LlamaAPIResponse {
     let completion_message = actual_response.completion_message;
 
     // Extract usage from metrics
@@ -838,7 +839,7 @@ fn convert_llama_actual_response_to_llama_response(
         }
     }
 
-    let usage = LlamaUsage {
+    let usage = LlamaAPIUsage {
         prompt_tokens,
         completion_tokens,
         total_tokens,
@@ -854,27 +855,27 @@ fn convert_llama_actual_response_to_llama_response(
         (None, None) => (None, None),
     };
 
-    let message = LlamaResponseMessage {
+    let message = LlamaAPIResponseMessage {
         content: message_content,
         tool_calls: message_tool_calls,
     };
 
-    // Convert stop_reason to LlamaFinishReason
+    // Convert stop_reason to LlamaAPIFinishReason
     let finish_reason = match completion_message.stop_reason.as_str() {
-        "stop" => LlamaFinishReason::Stop,
-        "length" => LlamaFinishReason::Length,
-        "content_filter" => LlamaFinishReason::ContentFilter,
-        "tool_calls" => LlamaFinishReason::ToolCalls,
-        _ => LlamaFinishReason::Unknown,
+        "stop" => LlamaAPIFinishReason::Stop,
+        "length" => LlamaAPIFinishReason::Length,
+        "content_filter" => LlamaAPIFinishReason::ContentFilter,
+        "tool_calls" => LlamaAPIFinishReason::ToolCalls,
+        _ => LlamaAPIFinishReason::Unknown,
     };
 
-    let choice = LlamaResponseChoice {
+    let choice = LlamaAPIResponseChoice {
         index: 0,
         message,
         finish_reason,
     };
 
-    LlamaResponse {
+    LlamaAPIResponse {
         choices: vec![choice],
         usage,
     }
@@ -882,44 +883,44 @@ fn convert_llama_actual_response_to_llama_response(
 
 // Actual Llama API response structures
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(super) struct LlamaCompletionMessage {
+pub(super) struct LlamaAPICompletionMessage {
     pub role: String,
     pub stop_reason: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub content: Option<LlamaContent>,
+    pub content: Option<LlamaAPIContent>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_calls: Option<Vec<LlamaResponseToolCall>>,
+    pub tool_calls: Option<Vec<LlamaAPIResponseToolCall>>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(super) struct LlamaContent {
+pub(super) struct LlamaAPIContent {
     #[serde(rename = "type")]
     pub content_type: String,
     pub text: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(super) struct LlamaMetric {
+pub(super) struct LlamaAPIMetric {
     pub metric: String,
     pub value: u32,
     pub unit: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(super) struct LlamaActualResponse {
+pub(super) struct LlamaAPIActualResponse {
     pub id: String,
-    pub completion_message: LlamaCompletionMessage,
-    pub metrics: Vec<LlamaMetric>,
+    pub completion_message: LlamaAPICompletionMessage,
+    pub metrics: Vec<LlamaAPIMetric>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub enum LlamaToolType {
+pub enum LlamaAPIToolType {
     Function,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-pub(super) struct LlamaFunction<'a> {
+pub(super) struct LlamaAPIFunction<'a> {
     pub(super) name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) description: Option<&'a str>,
@@ -927,17 +928,17 @@ pub(super) struct LlamaFunction<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-pub(super) struct LlamaTool<'a> {
-    pub(super) r#type: LlamaToolType,
-    pub(super) function: LlamaFunction<'a>,
+pub(super) struct LlamaAPITool<'a> {
+    pub(super) r#type: LlamaAPIToolType,
+    pub(super) function: LlamaAPIFunction<'a>,
     pub(super) strict: bool,
 }
 
-impl<'a> From<&'a ToolConfig> for LlamaTool<'a> {
+impl<'a> From<&'a ToolConfig> for LlamaAPITool<'a> {
     fn from(tool: &'a ToolConfig) -> Self {
-        LlamaTool {
-            r#type: LlamaToolType::Function,
-            function: LlamaFunction {
+        LlamaAPITool {
+            r#type: LlamaAPIToolType::Function,
+            function: LlamaAPIFunction {
                 name: tool.name(),
                 description: Some(tool.description()),
                 parameters: tool.parameters(),
@@ -949,14 +950,14 @@ impl<'a> From<&'a ToolConfig> for LlamaTool<'a> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(untagged)]
-pub(super) enum LlamaToolChoice<'a> {
-    String(LlamaToolChoiceString),
+pub(super) enum LlamaAPIToolChoice<'a> {
+    String(LlamaAPIToolChoiceString),
     Specific(SpecificToolChoice<'a>),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub(super) enum LlamaToolChoiceString {
+pub(super) enum LlamaAPIToolChoiceString {
     None,
     Auto,
     Required,
@@ -964,7 +965,7 @@ pub(super) enum LlamaToolChoiceString {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct SpecificToolChoice<'a> {
-    pub(super) r#type: LlamaToolType,
+    pub(super) r#type: LlamaAPIToolType,
     pub(super) function: SpecificToolFunction<'a>,
 }
 
@@ -973,20 +974,20 @@ pub(super) struct SpecificToolFunction<'a> {
     pub(super) name: &'a str,
 }
 
-impl Default for LlamaToolChoice<'_> {
+impl Default for LlamaAPIToolChoice<'_> {
     fn default() -> Self {
-        LlamaToolChoice::String(LlamaToolChoiceString::None)
+        LlamaAPIToolChoice::String(LlamaAPIToolChoiceString::None)
     }
 }
 
-impl<'a> From<&'a ToolChoice> for LlamaToolChoice<'a> {
+impl<'a> From<&'a ToolChoice> for LlamaAPIToolChoice<'a> {
     fn from(tool_choice: &'a ToolChoice) -> Self {
         match tool_choice {
-            ToolChoice::None => LlamaToolChoice::String(LlamaToolChoiceString::None),
-            ToolChoice::Auto => LlamaToolChoice::String(LlamaToolChoiceString::Auto),
-            ToolChoice::Required => LlamaToolChoice::String(LlamaToolChoiceString::Required),
-            ToolChoice::Specific(tool_name) => LlamaToolChoice::Specific(SpecificToolChoice {
-                r#type: LlamaToolType::Function,
+            ToolChoice::None => LlamaAPIToolChoice::String(LlamaAPIToolChoiceString::None),
+            ToolChoice::Auto => LlamaAPIToolChoice::String(LlamaAPIToolChoiceString::Auto),
+            ToolChoice::Required => LlamaAPIToolChoice::String(LlamaAPIToolChoiceString::Required),
+            ToolChoice::Specific(tool_name) => LlamaAPIToolChoice::Specific(SpecificToolChoice {
+                r#type: LlamaAPIToolType::Function,
                 function: SpecificToolFunction { name: tool_name },
             }),
         }
@@ -1005,8 +1006,8 @@ pub(super) struct StreamOptions {
 /// presence_penalty, seed, service_tier, stop, user,
 /// or the deprecated function_call and functions arguments.
 #[derive(Debug, Serialize)]
-struct LlamaRequest<'a> {
-    messages: Vec<LlamaRequestMessage<'a>>,
+struct LlamaAPIRequest<'a> {
+    messages: Vec<LlamaAPIRequestMessage<'a>>,
     model: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
@@ -1025,20 +1026,20 @@ struct LlamaRequest<'a> {
     stream_options: Option<StreamOptions>,
     // Llama 4 doesn't support response_format field
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<LlamaTool<'a>>>,
+    tools: Option<Vec<LlamaAPITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<LlamaToolChoice<'a>>,
+    tool_choice: Option<LlamaAPIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
 }
 
-impl<'a> LlamaRequest<'a> {
+impl<'a> LlamaAPIRequest<'a> {
     pub fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
-    ) -> Result<LlamaRequest<'a>, Error> {
+    ) -> Result<LlamaAPIRequest<'a>, Error> {
         // Llama 4 doesn't support response_format field
         let stream_options = if request.stream {
             Some(StreamOptions {
@@ -1055,10 +1056,10 @@ impl<'a> LlamaRequest<'a> {
         }
 
         if model.to_lowercase().starts_with("o1-mini") {
-            if let Some(LlamaRequestMessage::System(_)) = messages.first() {
-                if let LlamaRequestMessage::System(system_msg) = messages.remove(0) {
-                    let user_msg = LlamaRequestMessage::User(LlamaUserRequestMessage {
-                        content: vec![LlamaContentBlock::Text {
+            if let Some(LlamaAPIRequestMessage::System(_)) = messages.first() {
+                if let LlamaAPIRequestMessage::System(system_msg) = messages.remove(0) {
+                    let user_msg = LlamaAPIRequestMessage::User(LlamaAPIUserRequestMessage {
+                        content: vec![LlamaAPIContentBlock::Text {
                             text: system_msg.content,
                         }],
                     });
@@ -1102,7 +1103,7 @@ impl<'a> LlamaRequest<'a> {
             None
         };
 
-        Ok(LlamaRequest {
+        Ok(LlamaAPIRequest {
             messages,
             model,
             temperature: validated_temperature,
@@ -1123,15 +1124,15 @@ impl<'a> LlamaRequest<'a> {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub(super) struct LlamaUsage {
+pub(super) struct LlamaAPIUsage {
     pub prompt_tokens: u32,
     #[serde(default)]
     pub completion_tokens: u32,
     pub total_tokens: u32,
 }
 
-impl From<LlamaUsage> for Usage {
-    fn from(usage: LlamaUsage) -> Self {
+impl From<LlamaAPIUsage> for Usage {
+    fn from(usage: LlamaAPIUsage) -> Self {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: usage.completion_tokens,
@@ -1140,21 +1141,21 @@ impl From<LlamaUsage> for Usage {
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct LlamaResponseFunctionCall {
+struct LlamaAPIResponseFunctionCall {
     name: String,
     arguments: String,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-pub(super) struct LlamaResponseToolCall {
+pub(super) struct LlamaAPIResponseToolCall {
     id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    r#type: Option<LlamaToolType>,
-    function: LlamaResponseFunctionCall,
+    r#type: Option<LlamaAPIToolType>,
+    function: LlamaAPIResponseFunctionCall,
 }
 
-impl From<LlamaResponseToolCall> for ToolCall {
-    fn from(llama_tool_call: LlamaResponseToolCall) -> Self {
+impl From<LlamaAPIResponseToolCall> for ToolCall {
+    fn from(llama_tool_call: LlamaAPIResponseToolCall) -> Self {
         ToolCall {
             id: llama_tool_call.id,
             name: llama_tool_call.function.name,
@@ -1164,16 +1165,16 @@ impl From<LlamaResponseToolCall> for ToolCall {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(super) struct LlamaResponseMessage {
+pub(super) struct LlamaAPIResponseMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) tool_calls: Option<Vec<LlamaResponseToolCall>>,
+    pub(super) tool_calls: Option<Vec<LlamaAPIResponseToolCall>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub(super) enum LlamaFinishReason {
+pub(super) enum LlamaAPIFinishReason {
     Stop,
     Length,
     ContentFilter,
@@ -1183,46 +1184,46 @@ pub(super) enum LlamaFinishReason {
     Unknown,
 }
 
-impl From<LlamaFinishReason> for FinishReason {
-    fn from(finish_reason: LlamaFinishReason) -> Self {
+impl From<LlamaAPIFinishReason> for FinishReason {
+    fn from(finish_reason: LlamaAPIFinishReason) -> Self {
         match finish_reason {
-            LlamaFinishReason::Stop => FinishReason::Stop,
-            LlamaFinishReason::Length => FinishReason::Length,
-            LlamaFinishReason::ContentFilter => FinishReason::ContentFilter,
-            LlamaFinishReason::ToolCalls => FinishReason::ToolCall,
-            LlamaFinishReason::FunctionCall => FinishReason::ToolCall,
-            LlamaFinishReason::Unknown => FinishReason::Unknown,
+            LlamaAPIFinishReason::Stop => FinishReason::Stop,
+            LlamaAPIFinishReason::Length => FinishReason::Length,
+            LlamaAPIFinishReason::ContentFilter => FinishReason::ContentFilter,
+            LlamaAPIFinishReason::ToolCalls => FinishReason::ToolCall,
+            LlamaAPIFinishReason::FunctionCall => FinishReason::ToolCall,
+            LlamaAPIFinishReason::Unknown => FinishReason::Unknown,
         }
     }
 }
 
 // Leaving out logprobs and finish_reason for now
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub(super) struct LlamaResponseChoice {
+pub(super) struct LlamaAPIResponseChoice {
     pub(super) index: u8,
-    pub(super) message: LlamaResponseMessage,
-    pub(super) finish_reason: LlamaFinishReason,
+    pub(super) message: LlamaAPIResponseMessage,
+    pub(super) finish_reason: LlamaAPIFinishReason,
 }
 
 // Leaving out id, created, model, service_tier, system_fingerprint, object for now
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub(super) struct LlamaResponse {
-    pub(super) choices: Vec<LlamaResponseChoice>,
-    pub(super) usage: LlamaUsage,
+pub(super) struct LlamaAPIResponse {
+    pub(super) choices: Vec<LlamaAPIResponseChoice>,
+    pub(super) usage: LlamaAPIUsage,
 }
 
-struct LlamaResponseWithMetadata<'a> {
-    response: LlamaResponse,
+struct LlamaAPIResponseWithMetadata<'a> {
+    response: LlamaAPIResponse,
     latency: Latency,
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
     raw_response: String,
 }
 
-impl<'a> TryFrom<LlamaResponseWithMetadata<'a>> for ProviderInferenceResponse {
+impl<'a> TryFrom<LlamaAPIResponseWithMetadata<'a>> for ProviderInferenceResponse {
     type Error = Error;
-    fn try_from(value: LlamaResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
-        let LlamaResponseWithMetadata {
+    fn try_from(value: LlamaAPIResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
+        let LlamaAPIResponseWithMetadata {
             mut response,
             latency,
             raw_request,
@@ -1241,7 +1242,7 @@ impl<'a> TryFrom<LlamaResponseWithMetadata<'a>> for ProviderInferenceResponse {
             }
             .into());
         }
-        let LlamaResponseChoice {
+        let LlamaAPIResponseChoice {
             message,
             finish_reason,
             ..
@@ -1282,7 +1283,7 @@ impl<'a> TryFrom<LlamaResponseWithMetadata<'a>> for ProviderInferenceResponse {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct LlamaFunctionCallChunk {
+struct LlamaAPIFunctionCallChunk {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1290,55 +1291,55 @@ struct LlamaFunctionCallChunk {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct LlamaToolCallChunk {
+struct LlamaAPIToolCallChunk {
     index: u8,
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
     // NOTE: these are externally tagged enums, for now we're gonna just keep this hardcoded as there's only one option
     // If we were to do this better, we would need to check the `type` field
-    function: LlamaFunctionCallChunk,
+    function: LlamaAPIFunctionCallChunk,
 }
 
 // This doesn't include role
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct LlamaDelta {
+struct LlamaAPIDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<LlamaToolCallChunk>>,
+    tool_calls: Option<Vec<LlamaAPIToolCallChunk>>,
 }
 
 // New streaming response format structures
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct LlamaStreamingEvent {
+struct LlamaAPIStreamingEvent {
     #[serde(rename = "event_type")]
     event_type: String,
-    delta: LlamaStreamingDelta,
+    delta: LlamaAPIStreamingDelta,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct LlamaStreamingDelta {
+struct LlamaAPIStreamingDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     text: Option<String>,
     #[serde(rename = "type")]
     #[serde(skip_serializing_if = "Option::is_none")]
     content_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<LlamaStreamingToolCall>>,
+    tool_calls: Option<Vec<LlamaAPIStreamingToolCall>>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct LlamaStreamingToolCall {
+struct LlamaAPIStreamingToolCall {
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     index: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    function: Option<LlamaStreamingFunctionCall>,
+    function: Option<LlamaAPIStreamingFunctionCall>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct LlamaStreamingFunctionCall {
+struct LlamaAPIStreamingFunctionCall {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1346,9 +1347,9 @@ struct LlamaStreamingFunctionCall {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct LlamaStreamingResponse {
+struct LlamaAPIStreamingResponse {
     id: String,
-    event: LlamaStreamingEvent,
+    event: LlamaAPIStreamingEvent,
 }
 
 // Custom deserializer function for empty string to None
@@ -1374,23 +1375,23 @@ where
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct LlamaChatChunkChoice {
-    delta: LlamaDelta,
+struct LlamaAPIChatChunkChoice {
+    delta: LlamaAPIDelta,
     #[serde(default)]
     #[serde(deserialize_with = "empty_string_as_none")]
-    finish_reason: Option<LlamaFinishReason>,
+    finish_reason: Option<LlamaAPIFinishReason>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct LlamaChatChunk {
-    choices: Vec<LlamaChatChunkChoice>,
+struct LlamaAPIChatChunk {
+    choices: Vec<LlamaAPIChatChunkChoice>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    usage: Option<LlamaUsage>,
+    usage: Option<LlamaAPIUsage>,
 }
 
 /// Maps an Llama chunk to a TensorZero chunk for streaming inferences
-fn llama_to_tensorzero_chunk(
-    mut chunk: LlamaChatChunk,
+fn llama_api_to_tensorzero_chunk(
+    mut chunk: LlamaAPIChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
@@ -1467,8 +1468,8 @@ fn llama_to_tensorzero_chunk(
 }
 
 /// Maps the new Llama streaming response format to a TensorZero chunk
-fn llama_streaming_to_tensorzero_chunk(
-    response: LlamaStreamingResponse,
+fn llama_api_streaming_to_tensorzero_chunk(
+    response: LlamaAPIStreamingResponse,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
@@ -1581,7 +1582,7 @@ mod tests {
         use reqwest::StatusCode;
 
         // Test unauthorized error
-        let unauthorized = handle_llama_error(
+        let unauthorized = handle_llama_api_error(
             StatusCode::UNAUTHORIZED,
             "Unauthorized access",
             PROVIDER_TYPE,
@@ -1605,7 +1606,7 @@ mod tests {
 
         // Test forbidden error
         let forbidden =
-            handle_llama_error(StatusCode::FORBIDDEN, "Forbidden access", PROVIDER_TYPE);
+            handle_llama_api_error(StatusCode::FORBIDDEN, "Forbidden access", PROVIDER_TYPE);
         let details = forbidden.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
         if let ErrorDetails::InferenceClient {
@@ -1624,7 +1625,7 @@ mod tests {
         }
 
         // Test rate limit error
-        let rate_limit = handle_llama_error(
+        let rate_limit = handle_llama_api_error(
             StatusCode::TOO_MANY_REQUESTS,
             "Rate limit exceeded",
             PROVIDER_TYPE,
@@ -1647,7 +1648,7 @@ mod tests {
         }
 
         // Test server error
-        let server_error = handle_llama_error(
+        let server_error = handle_llama_api_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Server error",
             PROVIDER_TYPE,
@@ -1700,7 +1701,7 @@ mod tests {
         };
 
         let llama_request =
-            LlamaRequest::new("Llama-4-Scout-17B-16E-Instruct-FP8", &basic_request).unwrap();
+            LlamaAPIRequest::new("Llama-4-Scout-17B-16E-Instruct-FP8", &basic_request).unwrap();
         assert_eq!(llama_request.model, "Llama-4-Scout-17B-16E-Instruct-FP8");
         assert_eq!(llama_request.messages.len(), 2);
         assert_eq!(llama_request.temperature, Some(0.7));
@@ -1739,7 +1740,8 @@ mod tests {
         };
 
         let llama_request =
-            LlamaRequest::new("Llama-4-Scout-17B-16E-Instruct-FP8", &request_with_tools).unwrap();
+            LlamaAPIRequest::new("Llama-4-Scout-17B-16E-Instruct-FP8", &request_with_tools)
+                .unwrap();
 
         assert_eq!(llama_request.model, "Llama-4-Scout-17B-16E-Instruct-FP8");
         assert_eq!(llama_request.messages.len(), 2); // We'll add a system message containing Json to fit Llama requirements
@@ -1757,8 +1759,8 @@ mod tests {
         assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
             llama_request.tool_choice,
-            Some(LlamaToolChoice::Specific(SpecificToolChoice {
-                r#type: LlamaToolType::Function,
+            Some(LlamaAPIToolChoice::Specific(SpecificToolChoice {
+                r#type: LlamaAPIToolType::Function,
                 function: SpecificToolFunction {
                     name: WEATHER_TOOL.name(),
                 }
@@ -1789,7 +1791,8 @@ mod tests {
         };
 
         let llama_request =
-            LlamaRequest::new("Llama-4-Scout-17B-16E-Instruct-FP8", &request_with_tools).unwrap();
+            LlamaAPIRequest::new("Llama-4-Scout-17B-16E-Instruct-FP8", &request_with_tools)
+                .unwrap();
 
         assert_eq!(llama_request.model, "Llama-4-Scout-17B-16E-Instruct-FP8");
         assert_eq!(llama_request.messages.len(), 1);
@@ -1827,7 +1830,8 @@ mod tests {
         };
 
         let llama_request =
-            LlamaRequest::new("Llama-4-Scout-17B-16E-Instruct-FP8", &request_with_tools).unwrap();
+            LlamaAPIRequest::new("Llama-4-Scout-17B-16E-Instruct-FP8", &request_with_tools)
+                .unwrap();
 
         assert_eq!(llama_request.model, "Llama-4-Scout-17B-16E-Instruct-FP8");
         assert_eq!(llama_request.messages.len(), 1);
@@ -1844,16 +1848,16 @@ mod tests {
     #[test]
     fn test_try_from_llama_response() {
         // Test case 1: Valid response with content
-        let valid_response = LlamaResponse {
-            choices: vec![LlamaResponseChoice {
+        let valid_response = LlamaAPIResponse {
+            choices: vec![LlamaAPIResponseChoice {
                 index: 0,
-                message: LlamaResponseMessage {
+                message: LlamaAPIResponseMessage {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
                 },
-                finish_reason: LlamaFinishReason::Stop,
+                finish_reason: LlamaAPIFinishReason::Stop,
             }],
-            usage: LlamaUsage {
+            usage: LlamaAPIUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
                 total_tokens: 30,
@@ -1881,7 +1885,7 @@ mod tests {
             ..Default::default()
         };
 
-        let request_body = LlamaRequest {
+        let request_body = LlamaAPIRequest {
             messages: vec![],
             model: "Llama-4-Scout-17B-16E-Instruct-FP8",
             temperature: Some(0.5),
@@ -1899,7 +1903,7 @@ mod tests {
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test_response".to_string();
-        let result = ProviderInferenceResponse::try_from(LlamaResponseWithMetadata {
+        let result = ProviderInferenceResponse::try_from(LlamaAPIResponseWithMetadata {
             response: valid_response,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -1934,23 +1938,23 @@ mod tests {
             }]
         );
         // Test case 2: Valid response with tool calls
-        let valid_response_with_tools = LlamaResponse {
-            choices: vec![LlamaResponseChoice {
+        let valid_response_with_tools = LlamaAPIResponse {
+            choices: vec![LlamaAPIResponseChoice {
                 index: 0,
-                finish_reason: LlamaFinishReason::ToolCalls,
-                message: LlamaResponseMessage {
+                finish_reason: LlamaAPIFinishReason::ToolCalls,
+                message: LlamaAPIResponseMessage {
                     content: None,
-                    tool_calls: Some(vec![LlamaResponseToolCall {
+                    tool_calls: Some(vec![LlamaAPIResponseToolCall {
                         id: "call1".to_string(),
-                        r#type: Some(LlamaToolType::Function),
-                        function: LlamaResponseFunctionCall {
+                        r#type: Some(LlamaAPIToolType::Function),
+                        function: LlamaAPIResponseFunctionCall {
                             name: "test_function".to_string(),
                             arguments: "{}".to_string(),
                         },
                     }]),
                 },
             }],
-            usage: LlamaUsage {
+            usage: LlamaAPIUsage {
                 prompt_tokens: 15,
                 completion_tokens: 25,
                 total_tokens: 40,
@@ -1978,7 +1982,7 @@ mod tests {
             ..Default::default()
         };
 
-        let request_body = LlamaRequest {
+        let request_body = LlamaAPIRequest {
             messages: vec![],
             model: "Llama-4-Scout-17B-16E-Instruct-FP8",
             temperature: Some(0.5),
@@ -1995,7 +1999,7 @@ mod tests {
             stop: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
-        let result = ProviderInferenceResponse::try_from(LlamaResponseWithMetadata {
+        let result = ProviderInferenceResponse::try_from(LlamaAPIResponseWithMetadata {
             response: valid_response_with_tools,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(110),
@@ -2037,15 +2041,15 @@ mod tests {
             }]
         );
         // Test case 3: Invalid response with no choices
-        let invalid_response_no_choices = LlamaResponse {
+        let invalid_response_no_choices = LlamaAPIResponse {
             choices: vec![],
-            usage: LlamaUsage {
+            usage: LlamaAPIUsage {
                 prompt_tokens: 5,
                 completion_tokens: 0,
                 total_tokens: 5,
             },
         };
-        let request_body = LlamaRequest {
+        let request_body = LlamaAPIRequest {
             messages: vec![],
             model: "Llama-4-Scout-17B-16E-Instruct-FP8",
             temperature: Some(0.5),
@@ -2061,7 +2065,7 @@ mod tests {
             parallel_tool_calls: None,
             stop: None,
         };
-        let result = ProviderInferenceResponse::try_from(LlamaResponseWithMetadata {
+        let result = ProviderInferenceResponse::try_from(LlamaAPIResponseWithMetadata {
             response: invalid_response_no_choices,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(120),
@@ -2076,33 +2080,33 @@ mod tests {
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
 
         // Test case 4: Invalid response with multiple choices
-        let invalid_response_multiple_choices = LlamaResponse {
+        let invalid_response_multiple_choices = LlamaAPIResponse {
             choices: vec![
-                LlamaResponseChoice {
+                LlamaAPIResponseChoice {
                     index: 0,
-                    message: LlamaResponseMessage {
+                    message: LlamaAPIResponseMessage {
                         content: Some("Choice 1".to_string()),
                         tool_calls: None,
                     },
-                    finish_reason: LlamaFinishReason::Stop,
+                    finish_reason: LlamaAPIFinishReason::Stop,
                 },
-                LlamaResponseChoice {
+                LlamaAPIResponseChoice {
                     index: 1,
-                    finish_reason: LlamaFinishReason::Stop,
-                    message: LlamaResponseMessage {
+                    finish_reason: LlamaAPIFinishReason::Stop,
+                    message: LlamaAPIResponseMessage {
                         content: Some("Choice 2".to_string()),
                         tool_calls: None,
                     },
                 },
             ],
-            usage: LlamaUsage {
+            usage: LlamaAPIUsage {
                 prompt_tokens: 10,
                 completion_tokens: 10,
                 total_tokens: 20,
             },
         };
 
-        let request_body = LlamaRequest {
+        let request_body = LlamaAPIRequest {
             messages: vec![],
             model: "Llama-4-Scout-17B-16E-Instruct-FP8",
             temperature: Some(0.5),
@@ -2118,7 +2122,7 @@ mod tests {
             parallel_tool_calls: None,
             stop: None,
         };
-        let result = ProviderInferenceResponse::try_from(LlamaResponseWithMetadata {
+        let result = ProviderInferenceResponse::try_from(LlamaAPIResponseWithMetadata {
             response: invalid_response_multiple_choices,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(130),
@@ -2166,7 +2170,7 @@ mod tests {
         let tool_choice = tool_choice.unwrap();
         assert_eq!(
             tool_choice,
-            LlamaToolChoice::String(LlamaToolChoiceString::Required)
+            LlamaAPIToolChoice::String(LlamaAPIToolChoiceString::Required)
         );
         let parallel_tool_calls = parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
@@ -2205,15 +2209,15 @@ mod tests {
     }
 
     #[test]
-    fn test_tensorzero_to_llama_messages() {
+    fn test_tensorzero_to_llama_api_messages() {
         let content_blocks = vec!["Hello".to_string().into()];
-        let llama_messages = tensorzero_to_llama_user_messages(&content_blocks).unwrap();
+        let llama_messages = tensorzero_to_llama_api_user_messages(&content_blocks).unwrap();
         assert_eq!(llama_messages.len(), 1);
         match &llama_messages[0] {
-            LlamaRequestMessage::User(content) => {
+            LlamaAPIRequestMessage::User(content) => {
                 assert_eq!(
                     content.content,
-                    &[LlamaContentBlock::Text {
+                    &[LlamaAPIContentBlock::Text {
                         text: "Hello".into()
                     }]
                 );
@@ -2226,17 +2230,17 @@ mod tests {
             "Hello".to_string().into(),
             "How are you?".to_string().into(),
         ];
-        let llama_messages = tensorzero_to_llama_user_messages(&content_blocks).unwrap();
+        let llama_messages = tensorzero_to_llama_api_user_messages(&content_blocks).unwrap();
         assert_eq!(llama_messages.len(), 1);
         match &llama_messages[0] {
-            LlamaRequestMessage::User(content) => {
+            LlamaAPIRequestMessage::User(content) => {
                 assert_eq!(
                     content.content,
                     vec![
-                        LlamaContentBlock::Text {
+                        LlamaAPIContentBlock::Text {
                             text: "Hello".into()
                         },
-                        LlamaContentBlock::Text {
+                        LlamaAPIContentBlock::Text {
                             text: "How are you?".into()
                         }
                     ]
@@ -2254,13 +2258,13 @@ mod tests {
             arguments: "{}".to_string(),
         });
         let content_blocks = vec!["Hello".to_string().into(), tool_block];
-        let llama_messages = tensorzero_to_llama_assistant_messages(&content_blocks).unwrap();
+        let llama_messages = tensorzero_to_llama_api_assistant_messages(&content_blocks).unwrap();
         assert_eq!(llama_messages.len(), 1);
         match &llama_messages[0] {
-            LlamaRequestMessage::Assistant(content) => {
+            LlamaAPIRequestMessage::Assistant(content) => {
                 assert_eq!(
                     content.content,
-                    Some(vec![LlamaContentBlock::Text {
+                    Some(vec![LlamaAPIContentBlock::Text {
                         text: "Hello".into()
                     }])
                 );
@@ -2275,21 +2279,24 @@ mod tests {
     }
 
     #[test]
-    fn test_llama_to_tensorzero_chunk() {
-        let chunk = LlamaChatChunk {
-            choices: vec![LlamaChatChunkChoice {
-                delta: LlamaDelta {
+    fn test_llama_api_to_tensorzero_chunk() {
+        let chunk = LlamaAPIChatChunk {
+            choices: vec![LlamaAPIChatChunkChoice {
+                delta: LlamaAPIDelta {
                     content: Some("Hello".to_string()),
                     tool_calls: None,
                 },
-                finish_reason: Some(LlamaFinishReason::Stop),
+                finish_reason: Some(LlamaAPIFinishReason::Stop),
             }],
             usage: None,
         };
         let mut tool_call_ids = vec!["id1".to_string()];
-        let message =
-            llama_to_tensorzero_chunk(chunk.clone(), Duration::from_millis(50), &mut tool_call_ids)
-                .unwrap();
+        let message = llama_api_to_tensorzero_chunk(
+            chunk.clone(),
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+        )
+        .unwrap();
         assert_eq!(
             message.content,
             vec![ContentBlockChunk::Text(TextChunk {
@@ -2299,15 +2306,15 @@ mod tests {
         );
         assert_eq!(message.finish_reason, Some(FinishReason::Stop));
         // Test what an intermediate tool chunk should look like
-        let chunk = LlamaChatChunk {
-            choices: vec![LlamaChatChunkChoice {
-                finish_reason: Some(LlamaFinishReason::ToolCalls),
-                delta: LlamaDelta {
+        let chunk = LlamaAPIChatChunk {
+            choices: vec![LlamaAPIChatChunkChoice {
+                finish_reason: Some(LlamaAPIFinishReason::ToolCalls),
+                delta: LlamaAPIDelta {
                     content: None,
-                    tool_calls: Some(vec![LlamaToolCallChunk {
+                    tool_calls: Some(vec![LlamaAPIToolCallChunk {
                         index: 0,
                         id: None,
-                        function: LlamaFunctionCallChunk {
+                        function: LlamaAPIFunctionCallChunk {
                             name: None,
                             arguments: Some("{\"hello\":\"world\"}".to_string()),
                         },
@@ -2316,9 +2323,12 @@ mod tests {
             }],
             usage: None,
         };
-        let message =
-            llama_to_tensorzero_chunk(chunk.clone(), Duration::from_millis(50), &mut tool_call_ids)
-                .unwrap();
+        let message = llama_api_to_tensorzero_chunk(
+            chunk.clone(),
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+        )
+        .unwrap();
         assert_eq!(
             message.content,
             vec![ContentBlockChunk::ToolCall(ToolCallChunk {
@@ -2329,15 +2339,15 @@ mod tests {
         );
         assert_eq!(message.finish_reason, Some(FinishReason::ToolCall));
         // Test what a bad tool chunk would do (new ID but no names)
-        let chunk = LlamaChatChunk {
-            choices: vec![LlamaChatChunkChoice {
+        let chunk = LlamaAPIChatChunk {
+            choices: vec![LlamaAPIChatChunkChoice {
                 finish_reason: None,
-                delta: LlamaDelta {
+                delta: LlamaAPIDelta {
                     content: None,
-                    tool_calls: Some(vec![LlamaToolCallChunk {
+                    tool_calls: Some(vec![LlamaAPIToolCallChunk {
                         index: 1,
                         id: None,
-                        function: LlamaFunctionCallChunk {
+                        function: LlamaAPIFunctionCallChunk {
                             name: None,
                             arguments: Some("{\"hello\":\"world\"}".to_string()),
                         },
@@ -2346,9 +2356,12 @@ mod tests {
             }],
             usage: None,
         };
-        let error =
-            llama_to_tensorzero_chunk(chunk.clone(), Duration::from_millis(50), &mut tool_call_ids)
-                .unwrap_err();
+        let error = llama_api_to_tensorzero_chunk(
+            chunk.clone(),
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+        )
+        .unwrap_err();
         let details = error.get_details();
         assert_eq!(
             *details,
@@ -2360,15 +2373,15 @@ mod tests {
             }
         );
         // Test a correct new tool chunk
-        let chunk = LlamaChatChunk {
-            choices: vec![LlamaChatChunkChoice {
-                finish_reason: Some(LlamaFinishReason::Stop),
-                delta: LlamaDelta {
+        let chunk = LlamaAPIChatChunk {
+            choices: vec![LlamaAPIChatChunkChoice {
+                finish_reason: Some(LlamaAPIFinishReason::Stop),
+                delta: LlamaAPIDelta {
                     content: None,
-                    tool_calls: Some(vec![LlamaToolCallChunk {
+                    tool_calls: Some(vec![LlamaAPIToolCallChunk {
                         index: 1,
                         id: Some("id2".to_string()),
-                        function: LlamaFunctionCallChunk {
+                        function: LlamaAPIFunctionCallChunk {
                             name: Some("name2".to_string()),
                             arguments: Some("{\"hello\":\"world\"}".to_string()),
                         },
@@ -2377,9 +2390,12 @@ mod tests {
             }],
             usage: None,
         };
-        let message =
-            llama_to_tensorzero_chunk(chunk.clone(), Duration::from_millis(50), &mut tool_call_ids)
-                .unwrap();
+        let message = llama_api_to_tensorzero_chunk(
+            chunk.clone(),
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+        )
+        .unwrap();
         assert_eq!(
             message.content,
             vec![ContentBlockChunk::ToolCall(ToolCallChunk {
@@ -2394,17 +2410,20 @@ mod tests {
 
         // Check a chunk with no choices and only usage
         // Test a correct new tool chunk
-        let chunk = LlamaChatChunk {
+        let chunk = LlamaAPIChatChunk {
             choices: vec![],
-            usage: Some(LlamaUsage {
+            usage: Some(LlamaAPIUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
                 total_tokens: 30,
             }),
         };
-        let message =
-            llama_to_tensorzero_chunk(chunk.clone(), Duration::from_millis(50), &mut tool_call_ids)
-                .unwrap();
+        let message = llama_api_to_tensorzero_chunk(
+            chunk.clone(),
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+        )
+        .unwrap();
         assert_eq!(message.content, vec![]);
         assert_eq!(
             message.usage,
@@ -2418,179 +2437,193 @@ mod tests {
     // Llama 4 doesn't support response_format field, so this test is no longer needed
 
     #[test]
-    fn test_tensorzero_to_llama_system_message() {
+    fn test_tensorzero_to_llama_api_system_message() {
         // Test Case 1: system is None, json_mode is Off
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::Off;
-        let messages: Vec<LlamaRequestMessage> = vec![];
-        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
+        let messages: Vec<LlamaAPIRequestMessage> = vec![];
+        let result = tensorzero_to_llama_api_system_message(system, json_mode, &messages);
         assert_eq!(result, None);
 
         // Test Case 2: system is Some, json_mode is On, messages contain "json"
         let system = Some("System instructions");
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
-            LlamaRequestMessage::User(LlamaUserRequestMessage {
-                content: vec![LlamaContentBlock::Text {
+            LlamaAPIRequestMessage::User(LlamaAPIUserRequestMessage {
+                content: vec![LlamaAPIContentBlock::Text {
                     text: "Please respond in JSON format.".into(),
                 }],
             }),
-            LlamaRequestMessage::Assistant(LlamaAssistantRequestMessage {
-                content: Some(vec![LlamaContentBlock::Text {
+            LlamaAPIRequestMessage::Assistant(LlamaAPIAssistantRequestMessage {
+                content: Some(vec![LlamaAPIContentBlock::Text {
                     text: "Sure, here is the data.".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
-        let expected = Some(LlamaRequestMessage::System(LlamaSystemRequestMessage {
-            content: Cow::Borrowed("System instructions"),
-        }));
-        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
+        let expected = Some(LlamaAPIRequestMessage::System(
+            LlamaAPISystemRequestMessage {
+                content: Cow::Borrowed("System instructions"),
+            },
+        ));
+        let result = tensorzero_to_llama_api_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 3: system is Some, json_mode is On, messages do not contain "json"
         let system = Some("System instructions");
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
-            LlamaRequestMessage::User(LlamaUserRequestMessage {
-                content: vec![LlamaContentBlock::Text {
+            LlamaAPIRequestMessage::User(LlamaAPIUserRequestMessage {
+                content: vec![LlamaAPIContentBlock::Text {
                     text: "Hello, how are you?".into(),
                 }],
             }),
-            LlamaRequestMessage::Assistant(LlamaAssistantRequestMessage {
-                content: Some(vec![LlamaContentBlock::Text {
+            LlamaAPIRequestMessage::Assistant(LlamaAPIAssistantRequestMessage {
+                content: Some(vec![LlamaAPIContentBlock::Text {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
         let expected_content = "Respond using JSON.\n\nSystem instructions".to_string();
-        let expected = Some(LlamaRequestMessage::System(LlamaSystemRequestMessage {
-            content: Cow::Owned(expected_content),
-        }));
-        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
+        let expected = Some(LlamaAPIRequestMessage::System(
+            LlamaAPISystemRequestMessage {
+                content: Cow::Owned(expected_content),
+            },
+        ));
+        let result = tensorzero_to_llama_api_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 4: system is Some, json_mode is Off
         let system = Some("System instructions");
         let json_mode = ModelInferenceRequestJsonMode::Off;
         let messages = vec![
-            LlamaRequestMessage::User(LlamaUserRequestMessage {
-                content: vec![LlamaContentBlock::Text {
+            LlamaAPIRequestMessage::User(LlamaAPIUserRequestMessage {
+                content: vec![LlamaAPIContentBlock::Text {
                     text: "Hello, how are you?".into(),
                 }],
             }),
-            LlamaRequestMessage::Assistant(LlamaAssistantRequestMessage {
-                content: Some(vec![LlamaContentBlock::Text {
+            LlamaAPIRequestMessage::Assistant(LlamaAPIAssistantRequestMessage {
+                content: Some(vec![LlamaAPIContentBlock::Text {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
-        let expected = Some(LlamaRequestMessage::System(LlamaSystemRequestMessage {
-            content: Cow::Borrowed("System instructions"),
-        }));
-        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
+        let expected = Some(LlamaAPIRequestMessage::System(
+            LlamaAPISystemRequestMessage {
+                content: Cow::Borrowed("System instructions"),
+            },
+        ));
+        let result = tensorzero_to_llama_api_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 5: system is Some, json_mode is Strict
         let system = Some("System instructions");
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let messages = vec![
-            LlamaRequestMessage::User(LlamaUserRequestMessage {
-                content: vec![LlamaContentBlock::Text {
+            LlamaAPIRequestMessage::User(LlamaAPIUserRequestMessage {
+                content: vec![LlamaAPIContentBlock::Text {
                     text: "Hello, how are you?".into(),
                 }],
             }),
-            LlamaRequestMessage::Assistant(LlamaAssistantRequestMessage {
-                content: Some(vec![LlamaContentBlock::Text {
+            LlamaAPIRequestMessage::Assistant(LlamaAPIAssistantRequestMessage {
+                content: Some(vec![LlamaAPIContentBlock::Text {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
-        let expected = Some(LlamaRequestMessage::System(LlamaSystemRequestMessage {
-            content: Cow::Borrowed("System instructions"),
-        }));
-        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
+        let expected = Some(LlamaAPIRequestMessage::System(
+            LlamaAPISystemRequestMessage {
+                content: Cow::Borrowed("System instructions"),
+            },
+        ));
+        let result = tensorzero_to_llama_api_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 6: system contains "json", json_mode is On
         let system = Some("Respond using JSON.\n\nSystem instructions");
         let json_mode = ModelInferenceRequestJsonMode::On;
-        let messages = vec![LlamaRequestMessage::User(LlamaUserRequestMessage {
-            content: vec![LlamaContentBlock::Text {
+        let messages = vec![LlamaAPIRequestMessage::User(LlamaAPIUserRequestMessage {
+            content: vec![LlamaAPIContentBlock::Text {
                 text: "Hello, how are you?".into(),
             }],
         })];
-        let expected = Some(LlamaRequestMessage::System(LlamaSystemRequestMessage {
-            content: Cow::Borrowed("Respond using JSON.\n\nSystem instructions"),
-        }));
-        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
+        let expected = Some(LlamaAPIRequestMessage::System(
+            LlamaAPISystemRequestMessage {
+                content: Cow::Borrowed("Respond using JSON.\n\nSystem instructions"),
+            },
+        ));
+        let result = tensorzero_to_llama_api_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 7: system is None, json_mode is On
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
-            LlamaRequestMessage::User(LlamaUserRequestMessage {
-                content: vec![LlamaContentBlock::Text {
+            LlamaAPIRequestMessage::User(LlamaAPIUserRequestMessage {
+                content: vec![LlamaAPIContentBlock::Text {
                     text: "Tell me a joke.".into(),
                 }],
             }),
-            LlamaRequestMessage::Assistant(LlamaAssistantRequestMessage {
-                content: Some(vec![LlamaContentBlock::Text {
+            LlamaAPIRequestMessage::Assistant(LlamaAPIAssistantRequestMessage {
+                content: Some(vec![LlamaAPIContentBlock::Text {
                     text: "Sure, here's one for you.".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
-        let expected = Some(LlamaRequestMessage::System(LlamaSystemRequestMessage {
-            content: Cow::Owned("Respond using JSON.".to_string()),
-        }));
-        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
+        let expected = Some(LlamaAPIRequestMessage::System(
+            LlamaAPISystemRequestMessage {
+                content: Cow::Owned("Respond using JSON.".to_string()),
+            },
+        ));
+        let result = tensorzero_to_llama_api_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 8: system is None, json_mode is Strict
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let messages = vec![
-            LlamaRequestMessage::User(LlamaUserRequestMessage {
-                content: vec![LlamaContentBlock::Text {
+            LlamaAPIRequestMessage::User(LlamaAPIUserRequestMessage {
+                content: vec![LlamaAPIContentBlock::Text {
                     text: "Provide a summary of the news.".into(),
                 }],
             }),
-            LlamaRequestMessage::Assistant(LlamaAssistantRequestMessage {
-                content: Some(vec![LlamaContentBlock::Text {
+            LlamaAPIRequestMessage::Assistant(LlamaAPIAssistantRequestMessage {
+                content: Some(vec![LlamaAPIContentBlock::Text {
                     text: "Here's the summary.".into(),
                 }]),
                 tool_calls: None,
             }),
         ];
 
-        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
+        let result = tensorzero_to_llama_api_system_message(system, json_mode, &messages);
         assert!(result.is_none());
 
         // Test Case 9: system is None, json_mode is On, with empty messages
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::On;
-        let messages: Vec<LlamaRequestMessage> = vec![];
-        let expected = Some(LlamaRequestMessage::System(LlamaSystemRequestMessage {
-            content: Cow::Owned("Respond using JSON.".to_string()),
-        }));
-        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
+        let messages: Vec<LlamaAPIRequestMessage> = vec![];
+        let expected = Some(LlamaAPIRequestMessage::System(
+            LlamaAPISystemRequestMessage {
+                content: Cow::Owned("Respond using JSON.".to_string()),
+            },
+        ));
+        let result = tensorzero_to_llama_api_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 10: system is None, json_mode is Off, with messages containing "json"
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::Off;
-        let messages = vec![LlamaRequestMessage::User(LlamaUserRequestMessage {
-            content: vec![LlamaContentBlock::Text {
+        let messages = vec![LlamaAPIRequestMessage::User(LlamaAPIUserRequestMessage {
+            content: vec![LlamaAPIContentBlock::Text {
                 text: "Please include JSON in your response.".into(),
             }],
         })];
         let expected = None;
-        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
+        let result = tensorzero_to_llama_api_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
     }
 
@@ -2598,27 +2631,27 @@ mod tests {
     fn test_try_from_llama_credentials() {
         // Test Static credentials
         let generic = Credential::Static(SecretString::from("test_key"));
-        let creds = LlamaCredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, LlamaCredentials::Static(_)));
+        let creds = LlamaAPICredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, LlamaAPICredentials::Static(_)));
 
         // Test Dynamic credentials
         let generic = Credential::Dynamic("key_name".to_string());
-        let creds = LlamaCredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, LlamaCredentials::Dynamic(_)));
+        let creds = LlamaAPICredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, LlamaAPICredentials::Dynamic(_)));
 
         // Test None credentials
         let generic = Credential::None;
-        let creds = LlamaCredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, LlamaCredentials::None));
+        let creds = LlamaAPICredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, LlamaAPICredentials::None));
 
         // Test Missing credentials
         let generic = Credential::Missing;
-        let creds = LlamaCredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, LlamaCredentials::None));
+        let creds = LlamaAPICredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, LlamaAPICredentials::None));
 
         // Test invalid credential type
         let generic = Credential::FileContents(SecretString::from("test"));
-        let result = LlamaCredentials::try_from(generic);
+        let result = LlamaAPICredentials::try_from(generic);
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err().get_owned_details(),
@@ -2629,8 +2662,8 @@ mod tests {
     #[test]
     fn test_serialize_user_messages() {
         // Test that a single message is serialized as 'content: string'
-        let message = LlamaUserRequestMessage {
-            content: vec![LlamaContentBlock::Text {
+        let message = LlamaAPIUserRequestMessage {
+            content: vec![LlamaAPIContentBlock::Text {
                 text: "My single message".into(),
             }],
         };
@@ -2638,12 +2671,12 @@ mod tests {
         assert_eq!(serialized, r#"{"content":"My single message"}"#);
 
         // Test that a multiple messages are serialized as an array of content blocks
-        let message = LlamaUserRequestMessage {
+        let message = LlamaAPIUserRequestMessage {
             content: vec![
-                LlamaContentBlock::Text {
+                LlamaAPIContentBlock::Text {
                     text: "My first message".into(),
                 },
-                LlamaContentBlock::Text {
+                LlamaAPIContentBlock::Text {
                     text: "My second message".into(),
                 },
             ],
