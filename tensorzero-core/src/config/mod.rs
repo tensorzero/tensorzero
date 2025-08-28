@@ -1050,14 +1050,8 @@ pub trait LoadableConfig<T> {
 ///
 /// This allows us to avoid using Option types to represent variables that are initialized after the
 /// config is initially parsed.
-///
-/// IMPORTANT: THIS API IS NOT STABLE.
-///            EXPECT FREQUENT UNANNOUNCED BREAKING CHANGES.
-///            WE ARE EXPOSING IT FOR USERS BUILDING EXPERIMENTAL SOFTWARE.
-///            DO NOT USE IT IN PRODUCTION SOFTWARE.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[instability::unstable(feature = "config-parser")]
 pub struct UninitializedConfig {
     #[serde(default)]
     pub gateway: UninitializedGatewayConfig,

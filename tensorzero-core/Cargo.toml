@@ -13,12 +13,6 @@ e2e_tests = ["tensorzero/e2e_tests"]
 optimization_tests = ["e2e_tests"]
 pyo3 = ["dep:pyo3"]
 
-# IMPORTANT: THE FOLLOWING FEATURES ARE NOT STABLE.
-#            EXPECT FREQUENT UNANNOUNCED BREAKING CHANGES.
-#            WE ARE EXPODING THEM FOR USERS BUILDING EXPERIMENTAL SOFTWARE.
-#            WE ADVISE AGAINST USING THEM THEM IN PRODUCTION SOFTWARE.
-unstable-config-parser = []
-
 [[test]]
 name = "e2e"
 path = "tests/e2e/tests.rs"
@@ -136,7 +130,6 @@ enum-map = "2.7.3"
 tokio-util = "0.7.15"
 tempfile = "3.20.0"
 ts-rs = { workspace = true }
-instability = "0.3.9"
 
 
 [dev-dependencies]
