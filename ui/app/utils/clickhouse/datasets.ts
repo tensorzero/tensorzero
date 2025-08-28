@@ -1,8 +1,9 @@
 import { z } from "zod";
 import {
-  contentBlockOutputSchema,
+  contentBlockChatOutputSchema,
   jsonInferenceOutputSchema,
-  resolvedInputSchema,
+  displayInputSchema,
+  JsonValueSchema,
 } from "./common";
 
 /**
@@ -23,6 +24,7 @@ export const ChatInferenceDatapointRowSchema = z
     updated_at: z.string().datetime().default(new Date().toISOString()),
     staled_at: z.string().datetime().nullable(),
     source_inference_id: z.string().uuid().nullable(),
+    is_custom: z.boolean(),
   })
   .strict();
 export type ChatInferenceDatapointRow = z.infer<
@@ -47,6 +49,7 @@ export const JsonInferenceDatapointRowSchema = z
     updated_at: z.string().datetime(),
     staled_at: z.string().datetime().nullable(),
     source_inference_id: z.string().uuid().nullable(),
+    is_custom: z.boolean(),
   })
   .strict();
 export type JsonInferenceDatapointRow = z.infer<
@@ -68,9 +71,10 @@ export const ParsedChatInferenceDatapointRowSchema =
     output: true,
     tool_params: true,
   }).extend({
-    input: resolvedInputSchema,
-    output: z.array(contentBlockOutputSchema).optional(),
-    tool_params: z.record(z.string(), z.unknown()).optional(),
+    input: displayInputSchema,
+    output: z.array(contentBlockChatOutputSchema).optional(),
+    tool_params: z.record(z.string(), JsonValueSchema).optional(),
+    is_custom: z.boolean(),
     tags: z.record(z.string(), z.string()),
   });
 export type ParsedChatInferenceDatapointRow = z.infer<
@@ -83,9 +87,10 @@ export const ParsedJsonInferenceDatapointRowSchema =
     output: true,
     output_schema: true,
   }).extend({
-    input: resolvedInputSchema,
+    input: displayInputSchema,
     output: jsonInferenceOutputSchema.optional(),
-    output_schema: z.record(z.string(), z.unknown()),
+    output_schema: JsonValueSchema,
+    is_custom: z.boolean(),
   });
 export type ParsedJsonInferenceDatapointRow = z.infer<
   typeof ParsedJsonInferenceDatapointRowSchema
@@ -160,6 +165,7 @@ export const DatasetQueryParamsSchema = z.object({
   output_source: z.enum(["none", "inference", "demonstration"]),
   limit: z.number().optional(),
   offset: z.number().optional(),
+  is_custom: z.boolean().optional(),
 });
 export type DatasetQueryParams = z.infer<typeof DatasetQueryParamsSchema>;
 

@@ -1,16 +1,18 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use serde_untagged::UntaggedEnumVisitor;
-use tensorzero_derive::TensorZeroDeserialize;
-use tensorzero_internal::{
+use tensorzero_core::{
     error::Error,
     inference::types::{File, InputMessageContent, Role, TextKind, Thought},
-    tool::{ToolCall, ToolCallInput, ToolResult},
+    tool::{ToolCallInput, ToolResult},
 };
+use tensorzero_derive::TensorZeroDeserialize;
 
 // Like the normal `Input` type, but with `ClientInputMessage` instead of `InputMessage`.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct ClientInput {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<Value>,
@@ -21,6 +23,8 @@ pub struct ClientInput {
 // Like the normal `InputMessage` type, but with `ClientInputMessageContent` instead of `InputMessageContent`.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct ClientInputMessage {
     pub role: Role,
     #[serde(deserialize_with = "deserialize_content")]
@@ -30,6 +34,8 @@ pub struct ClientInputMessage {
 #[derive(Clone, Debug, TensorZeroDeserialize, Serialize, PartialEq)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum ClientInputMessageContent {
     Text(TextKind),
     ToolCall(ToolCallInput),
@@ -58,7 +64,7 @@ impl TryFrom<ClientInputMessageContent> for InputMessageContent {
         Ok(match this {
             ClientInputMessageContent::Text(text) => InputMessageContent::Text(text),
             ClientInputMessageContent::ToolCall(tool_call) => {
-                InputMessageContent::ToolCall(tool_call.try_into()?)
+                InputMessageContent::ToolCall(tool_call)
             }
             ClientInputMessageContent::ToolResult(tool_result) => {
                 InputMessageContent::ToolResult(tool_result)
@@ -80,6 +86,7 @@ impl TryFrom<ClientInputMessageContent> for InputMessageContent {
 pub fn deserialize_content<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Vec<ClientInputMessageContent>, D::Error> {
+    #[expect(clippy::redundant_closure_for_method_calls)]
     UntaggedEnumVisitor::new()
         .string(|text| {
             Ok(vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -100,15 +107,15 @@ pub fn deserialize_content<'de, D: Deserializer<'de>>(
 // as expected. This is never actually called - we just care that it compiles
 pub(super) fn test_client_input_to_input(
     client_input: ClientInput,
-) -> tensorzero_internal::inference::types::Input {
-    tensorzero_internal::inference::types::Input {
+) -> tensorzero_core::inference::types::Input {
+    tensorzero_core::inference::types::Input {
         system: client_input.system,
         messages: client_input
             .messages
             .into_iter()
             .map(|message| {
                 let ClientInputMessage { role, content } = message;
-                tensorzero_internal::inference::types::InputMessage {
+                tensorzero_core::inference::types::InputMessage {
                     role,
                     content: content
                         .into_iter()
@@ -128,13 +135,15 @@ pub(super) fn test_client_to_message_content(
         ClientInputMessageContent::ToolCall(ToolCallInput {
             id,
             name,
-            raw_name: _,
+            raw_name,
             arguments,
-            raw_arguments: _,
-        }) => InputMessageContent::ToolCall(ToolCall {
+            raw_arguments,
+        }) => InputMessageContent::ToolCall(ToolCallInput {
             id,
-            name: name.unwrap_or_default(),
-            arguments: arguments.unwrap_or_default().to_string(),
+            name,
+            raw_name,
+            raw_arguments,
+            arguments,
         }),
         ClientInputMessageContent::ToolResult(tool_result) => {
             InputMessageContent::ToolResult(tool_result)

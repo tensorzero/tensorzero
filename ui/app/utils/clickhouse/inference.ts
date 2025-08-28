@@ -1,30 +1,58 @@
 import { z } from "zod";
 import {
-  contentBlockOutputSchema,
-  contentBlockSchema,
+  contentBlockChatOutputSchema,
   inputSchema,
   jsonInferenceOutputSchema,
-  resolvedInputMessageSchema,
-  resolvedInputSchema,
-  type ContentBlockOutput,
-  type JsonInferenceOutput,
+  displayInputSchema,
+  displayModelInferenceInputMessageSchema,
+  modelInferenceOutputContentBlockSchema,
+  JsonValueSchema,
 } from "./common";
-import { JSONValueSchema } from "../tensorzero";
+import type {
+  JsonInferenceOutput,
+  ContentBlockChatOutput,
+  Tool,
+} from "tensorzero-node";
 
-export const providerInferenceExtraBodySchema = z.object({
-  model_provider_name: z.string(),
-  pointer: z.string(),
-  value: JSONValueSchema,
+// Zod schemas for ToolCallConfigDatabaseInsert
+export const toolSchema = z.object({
+  description: z.string(),
+  parameters: JsonValueSchema,
+  name: z.string(),
+  strict: z.boolean(),
+}) satisfies z.ZodType<Tool>;
+
+export const toolChoiceSchema = z.union([
+  z.literal("none"),
+  z.literal("auto"),
+  z.literal("required"),
+  z.object({ specific: z.string() }),
+]);
+
+export const toolCallConfigDatabaseInsertSchema = z.object({
+  tools_available: z.array(toolSchema),
+  tool_choice: toolChoiceSchema,
+  parallel_tool_calls: z.boolean().nullable(),
 });
+
+export const providerInferenceExtraBodySchema = z
+  .object({
+    model_provider_name: z.string(),
+    pointer: z.string(),
+    value: JsonValueSchema,
+  })
+  .strict();
 export type ProviderInferenceExtraBody = z.infer<
   typeof providerInferenceExtraBodySchema
 >;
 
-export const variantInferenceExtraBodySchema = z.object({
-  variant_name: z.string(),
-  pointer: z.string(),
-  value: JSONValueSchema,
-});
+export const variantInferenceExtraBodySchema = z
+  .object({
+    variant_name: z.string(),
+    pointer: z.string(),
+    value: JsonValueSchema,
+  })
+  .strict();
 export type VariantInferenceExtraBody = z.infer<
   typeof variantInferenceExtraBodySchema
 >;
@@ -115,10 +143,10 @@ export const parsedChatInferenceRowSchema = chatInferenceRowSchema
   })
   .extend({
     input: inputSchema,
-    output: z.array(contentBlockOutputSchema),
+    output: z.array(contentBlockChatOutputSchema),
     inference_params: z.record(z.string(), z.unknown()),
-    tool_params: z.record(z.string(), z.unknown()),
-    extra_body: inferenceExtraBodySchema.nullable(),
+    tool_params: toolCallConfigDatabaseInsertSchema.nullable(),
+    extra_body: z.array(inferenceExtraBodySchema).nullable(),
   });
 
 export type ParsedChatInferenceRow = z.infer<
@@ -137,8 +165,8 @@ export const parsedJsonInferenceRowSchema = jsonInferenceRowSchema
     input: inputSchema,
     output: jsonInferenceOutputSchema,
     inference_params: z.record(z.string(), z.unknown()),
-    output_schema: z.record(z.string(), z.unknown()),
-    extra_body: inferenceExtraBodySchema.nullable(),
+    output_schema: JsonValueSchema,
+    extra_body: z.array(inferenceExtraBodySchema).nullable(),
   });
 
 export type ParsedJsonInferenceRow = z.infer<
@@ -148,11 +176,11 @@ export type ParsedJsonInferenceRow = z.infer<
 export const parsedInferenceRowSchema = z.discriminatedUnion("function_type", [
   parsedChatInferenceRowSchema.extend({
     function_type: z.literal("chat"),
-    input: resolvedInputSchema,
+    input: displayInputSchema,
   }),
   parsedJsonInferenceRowSchema.extend({
     function_type: z.literal("json"),
-    input: resolvedInputSchema,
+    input: displayInputSchema,
   }),
 ]);
 
@@ -160,10 +188,10 @@ export type ParsedInferenceRow = z.infer<typeof parsedInferenceRowSchema>;
 
 export function parseInferenceOutput(
   output: string,
-): ContentBlockOutput[] | JsonInferenceOutput {
+): ContentBlockChatOutput[] | JsonInferenceOutput {
   const parsed = JSON.parse(output);
   if (Array.isArray(parsed)) {
-    return z.array(contentBlockOutputSchema).parse(parsed);
+    return z.array(contentBlockChatOutputSchema).parse(parsed);
   }
   return jsonInferenceOutputSchema.parse(parsed);
 }
@@ -194,8 +222,8 @@ export const parsedModelInferenceRowSchema = modelInferenceRowSchema
     output: true,
   })
   .extend({
-    input_messages: z.array(resolvedInputMessageSchema),
-    output: z.array(contentBlockSchema),
+    input_messages: z.array(displayModelInferenceInputMessageSchema),
+    output: z.array(modelInferenceOutputContentBlockSchema),
   });
 
 export type ParsedModelInferenceRow = z.infer<

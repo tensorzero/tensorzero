@@ -2,6 +2,18 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
 /**
+ * A utility to check if the current environment is a browser. Type-checking
+ * `window` is not sufficient in some server runtimes (Deno, some test
+ * environments, etc.) so we use the more robust check that is consistent with
+ * React's internal logic.
+ */
+export const canUseDOM = !!(
+  typeof window !== "undefined" &&
+  window.document &&
+  window.document.createElement
+);
+
+/**
  * A helper function to merge class names conditionally, and deduplicating potentially conflicting
  * Tailwind classes. Note that deduplication can have a potentially significant performance overhead
  * for already slow-rendering components, and it is generally only useful in cases where a component
@@ -30,6 +42,124 @@ export function extractTimestampFromUUIDv7(uuid: string): Date {
   return date;
 }
 
+/**
+ * Utility function to debounce a request for a certain number of milliseconds
+ * in route client loaders.
+ *
+ * @see
+ * https://programmingarehard.com/2025/02/24/debouncing-in-react-router-v7.html/
+ */
+export function abortableTimeout(request: Request, ms: number) {
+  const { signal } = request;
+  return new Promise((resolve, reject) => {
+    // If the signal is aborted by the time it reaches this, reject
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+
+    // Schedule the resolve function to be called in the future a certain number
+    // of milliseconds
+    const timeoutId = setTimeout(resolve, ms);
+
+    // Listen for the abort event. If it fires, reject
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timeoutId);
+        reject(signal.reason);
+      },
+      { once: true },
+    );
+  });
+}
+
+export function safeParseInt(
+  value: string | number | null | undefined,
+  defaultValue: number,
+): number;
+
+export function safeParseInt(
+  value: string | number | null | undefined,
+  defaultValue?: number,
+): number | null;
+
+export function safeParseInt(
+  value: string | number | null | undefined,
+  defaultValue?: number,
+) {
+  if (value === null || value === undefined) {
+    return defaultValue ?? null;
+  }
+
+  const integer = Number.parseInt(value.toString(), 10);
+  if (Number.isNaN(integer)) {
+    return defaultValue ?? null;
+  }
+
+  return Number.isNaN(integer) ? (defaultValue ?? null) : integer;
+}
+
+/** @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/isSupersetOf */
+export function isSupersetOf(setA: Set<unknown>, setB: Set<unknown>): boolean {
+  // @ts-expect-error: Check if native Set.prototype.isSuperset is available
+  if (typeof Set.prototype.isSupersetOf === "function") {
+    // @ts-expect-error: Call native
+    return setA.isSupersetOf(setB);
+  }
+
+  for (const item of setB) {
+    if (!setA.has(item)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/** @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/isSubsetOf */
+export function isSubsetOf(setA: Set<unknown>, setB: Set<unknown>): boolean {
+  // @ts-expect-error: Check if native Set.prototype.isSubsetOf is available
+  if (typeof Set.prototype.isSubsetOf === "function") {
+    // @ts-expect-error: Call native
+    return setA.isSubsetOf(setB);
+  }
+
+  for (const item of setA) {
+    if (!setB.has(item)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/** @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/symmetricDifference */
+export function symmetricDifference<A, B = A>(
+  setA: Set<A>,
+  setB: Set<B>,
+): Set<A | B> {
+  // @ts-expect-error: Check if native Set.prototype.symmetricDifference is available
+  if (typeof Set.prototype.symmetricDifference === "function") {
+    // @ts-expect-error: Call native
+    return setA.symmetricDifference(setB);
+  }
+
+  const result = new Set<A | B>();
+  for (const item of setA) {
+    if (!setB.has(item as unknown as B)) {
+      result.add(item);
+    }
+  }
+  for (const item of setB) {
+    if (!setA.has(item as unknown as A)) {
+      result.add(item);
+    }
+  }
+
+  return result;
+}
+
 interface ErrorLike {
   message: string;
   name: string;
@@ -49,19 +179,12 @@ export function isErrorLike(error: unknown): error is ErrorLike {
   );
 }
 
-export class JSONParseError extends SyntaxError {}
-
-export class ServerRequestError extends Error {
-  statusCode: number;
-  constructor(message: string, statusCode: number) {
-    super(message);
-    this.name = "ServerRequestError";
-    this.statusCode = statusCode;
+export class JSONParseError extends SyntaxError {
+  constructor(
+    public message: string,
+    public cause?: unknown,
+  ) {
+    super(message, { cause });
+    this.name = "JSONParseError";
   }
-}
-
-export function isServerRequestError(
-  error: unknown,
-): error is ServerRequestError {
-  return isErrorLike(error) && error.name === "ServerRequestError";
 }

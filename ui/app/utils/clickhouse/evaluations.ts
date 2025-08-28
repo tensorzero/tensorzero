@@ -1,8 +1,8 @@
 import { z } from "zod";
 import {
-  contentBlockOutputSchema,
+  contentBlockChatOutputSchema,
   jsonInferenceOutputSchema,
-  resolvedInputSchema,
+  displayInputSchema,
 } from "./common";
 
 export const EvaluationRunInfoSchema = z.object({
@@ -49,7 +49,7 @@ export const JsonEvaluationResultSchema = z.object({
   datapoint_id: z.string().uuid(),
   evaluation_run_id: z.string().uuid(),
   evaluator_inference_id: z.string().uuid().nullable(),
-  input: resolvedInputSchema,
+  input: displayInputSchema,
   generated_output: jsonInferenceOutputSchema,
   reference_output: jsonInferenceOutputSchema,
   dataset_name: z.string(),
@@ -66,9 +66,9 @@ export const ChatEvaluationResultSchema = z.object({
   datapoint_id: z.string().uuid(),
   evaluation_run_id: z.string().uuid(),
   evaluator_inference_id: z.string().uuid().nullable(),
-  input: resolvedInputSchema,
-  generated_output: z.array(contentBlockOutputSchema),
-  reference_output: z.array(contentBlockOutputSchema),
+  input: displayInputSchema,
+  generated_output: z.array(contentBlockChatOutputSchema),
+  reference_output: z.array(contentBlockChatOutputSchema),
   dataset_name: z.string(),
   metric_name: z.string(),
   metric_value: z.string(),

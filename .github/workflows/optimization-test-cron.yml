@@ -1,0 +1,62 @@
+name: Daily Optimization Tests
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: "0 2 * * *"
+  workflow_dispatch: # Allow manual triggering
+
+env:
+  FORCE_COLOR: 1
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+  TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+  GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcp_jwt_key.json
+
+jobs:
+  optimization-tests:
+    if: github.repository == 'tensorzero/tensorzero'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Write GCP JWT key to file
+        env:
+          GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
+        run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
+
+      - name: Install Rust
+        run: |
+          for attempt in 1 2 3; do
+            if rustup toolchain install stable && rustup default stable; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust toolchain after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          cache-provider: "buildjet"
+          shared-key: "optimization-test-cache"
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        with:
+          tool: cargo-nextest
+
+      - name: Run optimization tests
+        run: cargo test-optimization --nocapture --no-fail-fast
+
+      - name: Log test completion
+        if: always()
+        run: |
+          echo "Optimization tests completed at $(date)"
+          echo "Test result: ${{ job.status }}"

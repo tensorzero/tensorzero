@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "location": {
+      "type": "string",
+      "description": "The location to get the temperature for (e.g. \"New York\")"
+    },
+    "units": {
+      "type": "string",
+      "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
+      "enum": ["fahrenheit", "celsius"]
+    }
+  },
+  "required": ["location"],
+  "additionalProperties": false
+}

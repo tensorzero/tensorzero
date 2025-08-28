@@ -9,6 +9,7 @@ import concurrent.futures
 import hashlib
 import os
 import subprocess
+import time
 from pathlib import Path
 
 import requests
@@ -68,26 +69,52 @@ def get_remote_etag(filename):
 
 def download_file(filename, remote_etag):
     """Download file from R2 bucket."""
-    url = f"{R2_BUCKET}/{filename}"
-    response = requests.get(url, stream=True)
-    response.raise_for_status()
+    RETRIES = 3
+    for i in range(RETRIES):
+        try:
+            url = f"{R2_BUCKET}/{filename}"
+            response = requests.get(url, stream=True)
+            response.raise_for_status()
 
-    local_file = S3_FIXTURES_DIR / filename
+            local_file = S3_FIXTURES_DIR / filename
 
-    with open(local_file, "wb") as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            f.write(chunk)
+            with open(local_file, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
 
-    local_etag = calculate_etag(local_file)
-    if local_etag != remote_etag:
-        raise Exception(
-            f"ETag mismatch after downloading: {local_etag} != {remote_etag}"
-        )
+            local_etag = calculate_etag(local_file)
+            if local_etag != remote_etag:
+                raise Exception(
+                    f"ETag mismatch after downloading: {local_etag} != {remote_etag}"
+                )
+            return
+        except Exception as e:
+            print(
+                f"Error downloading `{filename}` (attempt {i + 1} of {RETRIES}): {e}",
+                flush=True,
+            )
+            time.sleep(1)
+    raise Exception(f"Failed to download `{filename}` after {RETRIES} attempts")
 
 
 def main():
     # Create s3-fixtures directory if it doesn't exist
     S3_FIXTURES_DIR.mkdir(exist_ok=True)
+
+    if (
+        os.environ.get("R2_ACCESS_KEY_ID") is not None
+        and os.environ.get("R2_SECRET_ACCESS_KEY") != ""
+    ):
+        print("R2_ACCESS_KEY_ID set, downloading fixtures using 'aws s3 sync'")
+        subprocess.check_call(
+            f"aws s3 --region auto --endpoint-url https://19918a216783f0ac9e052233569aef60.r2.cloudflarestorage.com/ sync s3://tensorzero-fixtures/ {S3_FIXTURES_DIR}",
+            env={
+                "AWS_ACCESS_KEY_ID": os.environ["R2_ACCESS_KEY_ID"],
+                "AWS_SECRET_ACCESS_KEY": os.environ["R2_SECRET_ACCESS_KEY"],
+            },
+            shell=True,
+        )
+        return
 
     def process_fixture(fixture):
         local_file = S3_FIXTURES_DIR / fixture

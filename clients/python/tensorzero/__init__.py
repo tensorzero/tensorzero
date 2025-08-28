@@ -5,18 +5,42 @@ import httpx
 
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import (
-    RenderedStoredInference,
+    BestOfNSamplingConfig,
+    ChainOfThoughtConfig,
+    ChatCompletionConfig,
+    Config,
+    Datapoint,
+    DiclConfig,
+    FireworksSFTConfig,
+    FunctionConfigChat,
+    FunctionConfigJson,
+    FunctionsConfig,
+    GCPVertexGeminiSFTConfig,
+    MixtureOfNConfig,
+    OpenAISFTConfig,
+    OptimizationJobHandle,
+    OptimizationJobInfo,
+    OptimizationJobStatus,
+    RenderedSample,
+    ResolvedInput,
+    ResolvedInputMessage,
+    StoredInference,
+    TogetherSFTConfig,
+    VariantsConfig,
 )
 from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
 )
 from .types import (
+    AndFilter,
+    AndNode,  # DEPRECATED
     BaseTensorZeroError,
+    BooleanMetricFilter,
+    BooleanMetricNode,  # DEPRECATED
     ChatDatapointInsert,
     ChatInferenceDatapointInput,  # DEPRECATED
     ChatInferenceResponse,
     ContentBlock,
-    Datapoint,
     DynamicEvaluationRunEpisodeResponse,
     DynamicEvaluationRunResponse,
     ExtraBody,
@@ -24,6 +48,8 @@ from .types import (
     FileBase64,
     FileUrl,
     FinishReason,
+    FloatMetricFilter,
+    FloatMetricNode,  # DEPRECATED
     ImageBase64,
     ImageUrl,
     InferenceChunk,
@@ -34,17 +60,21 @@ from .types import (
     JsonInferenceOutput,
     JsonInferenceResponse,
     Message,
+    NotFilter,
+    NotNode,  # DEPRECATED
+    OrderBy,
+    OrFilter,
+    OrNode,  # DEPRECATED
     RawText,
-    StoredChatInference,
-    StoredInference,
-    StoredJsonInference,
     System,
+    TagFilter,
     TensorZeroError,
     TensorZeroInternalError,
     Text,
     TextChunk,
     Thought,
     ThoughtChunk,
+    TimeFilter,
     Tool,
     ToolCall,
     ToolCallChunk,
@@ -55,14 +85,28 @@ from .types import (
     Usage,
 )
 
+RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample instead
+# Type aliases to preserve backward compatibility with main
+ChatDatapoint = Datapoint.Chat
+JsonDatapoint = Datapoint.Json
+
+OptimizationConfig = t.Union[OpenAISFTConfig, FireworksSFTConfig, TogetherSFTConfig]
+ChatInferenceOutput = t.List[ContentBlock]
+
+
 __all__ = [
+    "AndFilter",
+    "AndNode",  # DEPRECATED
     "AsyncTensorZeroGateway",
     "BaseTensorZeroError",
     "BaseTensorZeroGateway",
+    "BooleanMetricFilter",
+    "BooleanMetricNode",  # DEPRECATED
+    "ChatDatapoint",
     "ChatDatapointInsert",
     "ChatInferenceDatapointInput",  # DEPRECATED
-    "StoredChatInference",
     "ChatInferenceResponse",
+    "Config",
     "ContentBlock",
     "Datapoint",
     "DynamicEvaluationRunEpisodeResponse",
@@ -72,22 +116,49 @@ __all__ = [
     "FileBase64",
     "FileUrl",
     "FinishReason",
+    "FloatMetricFilter",
+    "FloatMetricNode",  # DEPRECATED
+    "FunctionsConfig",
+    "FunctionConfigChat",
+    "FunctionConfigJson",
+    "VariantsConfig",
+    "ChatCompletionConfig",
+    "BestOfNSamplingConfig",
+    "DiclConfig",
+    "MixtureOfNConfig",
+    "ChainOfThoughtConfig",
     "ImageBase64",
     "ImageUrl",
     "InferenceChunk",
+    "ResolvedInput",
+    "ResolvedInputMessage",
     "StoredInference",
     "InferenceInput",
     "InferenceResponse",
+    "JsonDatapoint",
     "JsonDatapointInsert",
     "JsonInferenceDatapointInput",  # DEPRECATED
     "JsonInferenceOutput",
-    "StoredJsonInference",
     "JsonInferenceResponse",
     "Message",
+    "NotFilter",
+    "NotNode",  # DEPRECATED
+    "OrderBy",
+    "OrFilter",
+    "OrNode",  # DEPRECATED
+    "OptimizationJobHandle",
+    "OptimizationJobInfo",
+    "OptimizationJobStatus",
+    "FireworksSFTConfig",
+    "GCPVertexGeminiSFTConfig",
+    "OpenAISFTConfig",
+    "OptimizationConfig",
     "patch_openai_client",
     "RawText",
-    "RenderedStoredInference",
+    "RenderedStoredInference",  # DEPRECATED
+    "RenderedSample",
     "System",
+    "TagFilter",
     "TensorZeroError",
     "TensorZeroGateway",
     "TensorZeroInternalError",
@@ -95,6 +166,8 @@ __all__ = [
     "TextChunk",
     "Thought",
     "ThoughtChunk",
+    "TimeFilter",
+    "TogetherSFTConfig",
     "Tool",
     "ToolChoice",
     "ToolParams",

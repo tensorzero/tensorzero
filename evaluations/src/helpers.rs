@@ -4,12 +4,14 @@ use anyhow::{anyhow, Result};
 use serde::Deserialize;
 use serde_json::Value;
 use tensorzero::{CacheParamsOptions, DynamicToolParams, InferenceResponse};
-use tensorzero_internal::clickhouse::escape_string_for_clickhouse_literal;
-use tensorzero_internal::serde_util::deserialize_json_string;
-use tensorzero_internal::{
-    cache::CacheEnabledMode, clickhouse::ClickHouseConnectionInfo, function::FunctionConfig,
+use tensorzero_core::db::clickhouse::escape_string_for_clickhouse_literal;
+use tensorzero_core::serde_util::deserialize_json_string;
+use tensorzero_core::{
+    cache::CacheEnabledMode, db::clickhouse::ClickHouseConnectionInfo, function::FunctionConfig,
     tool::ToolCallConfigDatabaseInsert,
 };
+use tracing::debug;
+use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
 use crate::{Args, OutputFormat};
@@ -25,11 +27,11 @@ pub async fn get_tool_params_args(
         FunctionConfig::Chat(function_config) => {
             let mut additional_tools = Vec::new();
             let mut allowed_tools = Vec::new();
-            for tool in tool_params.tools_available.iter() {
-                if !function_config.tools.contains(&tool.name) {
-                    additional_tools.push(tool.clone());
-                } else {
+            for tool in &tool_params.tools_available {
+                if function_config.tools.contains(&tool.name) {
                     allowed_tools.push(tool.name.clone());
+                } else {
+                    additional_tools.push(tool.clone());
                 }
             }
             DynamicToolParams {
@@ -55,12 +57,16 @@ pub fn setup_logging(args: &Args) -> Result<()> {
             let subscriber = tracing_subscriber::FmtSubscriber::builder()
                 .with_writer(std::io::stderr)
                 .json()
+                .with_env_filter(EnvFilter::from_default_env())
                 .finish();
             tracing::subscriber::set_global_default(subscriber)
                 .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))
         }
         OutputFormat::Pretty => {
-            let subscriber = tracing_subscriber::FmtSubscriber::new();
+            let subscriber = tracing_subscriber::FmtSubscriber::builder()
+                .with_writer(std::io::stderr)
+                .with_env_filter(EnvFilter::from_default_env())
+                .finish();
             tracing::subscriber::set_global_default(subscriber)
                 .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))
         }
@@ -88,7 +94,7 @@ pub async fn check_static_eval_human_feedback(
     inference_output: &InferenceResponse,
 ) -> Result<Option<HumanFeedbackResult>> {
     let serialized_output = inference_output.get_serialized_output()?;
-    let query = r#"
+    let query = r"
         SELECT value, evaluator_inference_id FROM StaticEvaluationHumanFeedback
         WHERE
             metric_name = {metric_name:String}
@@ -96,8 +102,8 @@ pub async fn check_static_eval_human_feedback(
         AND output = {output:String}
         ORDER BY timestamp DESC
         LIMIT 1
-        FORMAT JSONEachRow
-    "#;
+        FORMAT JSONEachRow";
+    debug!(query = %query, "Executing ClickHouse query");
     let escaped_serialized_output = escape_string_for_clickhouse_literal(&serialized_output);
     let result = clickhouse
         .run_query_synchronous(
@@ -109,10 +115,14 @@ pub async fn check_static_eval_human_feedback(
             ]),
         )
         .await?;
-    if result.is_empty() {
+    debug!(
+        result_length = result.response.len(),
+        "Query executed successfully"
+    );
+    if result.response.is_empty() {
         return Ok(None);
     }
-    let human_feedback_result: HumanFeedbackResult = serde_json::from_str(&result)
+    let human_feedback_result: HumanFeedbackResult = serde_json::from_str(&result.response)
         .map_err(|e| anyhow!("Failed to parse human feedback result: {}", e))?;
     Ok(Some(human_feedback_result))
 }
@@ -123,7 +133,7 @@ mod tests {
 
     use serde_json::json;
     use tensorzero::Tool;
-    use tensorzero_internal::{function::FunctionConfigChat, tool::ToolChoice};
+    use tensorzero_core::{config::SchemaData, function::FunctionConfigChat, tool::ToolChoice};
 
     use super::*;
 
@@ -142,9 +152,7 @@ mod tests {
         };
         let function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec![],
             tool_choice: ToolChoice::Specific("tool_1".to_string()),
             parallel_tool_calls: None,
@@ -179,9 +187,7 @@ mod tests {
         };
         let function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             tools: vec!["tool_1".to_string()],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,

@@ -1,0 +1,16 @@
+[project]
+name = "tensorzero-recipes-dpo-openai"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "clickhouse-connect",
+    "ipykernel",
+    "tensorzero",
+    "minijinja",
+    "notebook",
+    "numpy",
+    "openai",
+    "pandas",
+    "toml",
+]

@@ -1,21 +1,23 @@
 import { useConfig } from "~/context/config";
 import MetricSelector from "../metric/MetricSelector";
 import { useState } from "react";
-import type { ContentBlockOutput } from "~/utils/clickhouse/common";
-import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
-import Output from "../inference/Output";
+import type {
+  ContentBlockChatOutput,
+  JsonInferenceOutput,
+} from "tensorzero-node";
+import { Output } from "../inference/Output";
 import { Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
   filterMetricsByLevel,
   filterStaticEvaluationMetrics,
-} from "~/utils/config/metric";
+} from "~/utils/config/feedback";
 import BooleanFeedbackInput from "./BooleanFeedbackInput";
 import FloatFeedbackInput from "./FloatFeedbackInput";
 import CommentFeedbackInput from "./CommentFeedbackInput";
 
 export interface HumanFeedbackFormSharedProps {
-  inferenceOutput?: ContentBlockOutput[] | JsonInferenceOutput;
+  inferenceOutput?: ContentBlockChatOutput[] | JsonInferenceOutput;
   formError?: string | null;
   isSubmitting?: boolean;
 }
@@ -48,7 +50,7 @@ export function HumanFeedbackForm({
   const [floatValue, setFloatValue] = useState<string>("");
   const [commentValue, setCommentValue] = useState<string>("");
   const [demonstrationValue, setDemonstrationValue] = useState<
-    ContentBlockOutput[] | JsonInferenceOutput | undefined
+    ContentBlockChatOutput[] | JsonInferenceOutput | undefined
   >(inferenceOutput);
   const [demonstrationIsValid, setDemonstrationIsValid] =
     useState<boolean>(true);
@@ -173,10 +175,10 @@ export function HumanFeedbackForm({
  * If the type of the demonstration value is JsonInferenceOutput,
  * we need to submit only demonstrationValue.parsed and not the entire
  * demonstrationValue object.
- * For ContentBlockOutput[], we submit the entire object.
+ * For ContentBlockChatOutput[], we submit the entire object.
  */
 function getDemonstrationValueToSubmit(
-  demonstrationValue: ContentBlockOutput[] | JsonInferenceOutput,
+  demonstrationValue: ContentBlockChatOutput[] | JsonInferenceOutput,
 ) {
   if (Array.isArray(demonstrationValue)) {
     return demonstrationValue;

@@ -3,17 +3,19 @@ import { useFetcher } from "react-router";
 import { useEffect } from "react";
 import { v7 as uuid } from "uuid";
 import { type SFTFormValues, SFTFormValuesResolver } from "./types";
-import { FunctionSelector } from "~/components/function/FunctionSelector";
+import { FunctionFormField } from "~/components/function/FunctionFormField";
 import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
 import { VariantSelector } from "./VariantSelector";
 import { ModelSelector } from "./ModelSelector";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import { Button } from "~/components/ui/button";
 import { Form } from "~/components/ui/form";
-import type { ChatCompletionConfig } from "~/utils/config/variant";
-import type { Config } from "~/utils/config";
+import type { ChatCompletionConfig, VariantInfo } from "tensorzero-node";
+import type { Config } from "tensorzero-node";
 import { models } from "./model_options";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
+import { logger } from "~/utils/logger";
+import { useAllFunctionConfigs, useFunctionConfig } from "~/context/config";
 
 export function SFTForm({
   config,
@@ -53,6 +55,7 @@ export function SFTForm({
   });
 
   const [functionName, metricName, threshold] = watchedFields;
+  const functionConfig = useFunctionConfig(functionName);
   const counts = useCountFetcher({
     functionName: functionName ?? undefined,
     metricName: metricName ?? undefined,
@@ -91,7 +94,7 @@ export function SFTForm({
       formFetcher.submit(submitData, { method: "POST" });
       setSubmissionPhase("submitting");
     } catch (error) {
-      console.error("Submission error (likely a bug):", error);
+      logger.error("Submission error (likely a bug):", error);
     }
   };
 
@@ -99,18 +102,20 @@ export function SFTForm({
     string,
     ChatCompletionConfig
   > => {
-    const selectedFunction = form.getValues("function");
-
-    if (!selectedFunction || !config?.functions[selectedFunction]) {
+    if (!functionConfig) {
       return {};
     }
 
-    const functionConfig = config.functions[selectedFunction];
     return Object.fromEntries(
-      Object.entries(functionConfig.variants || {}).filter(
-        (entry): entry is [string, ChatCompletionConfig] =>
-          entry[1].type === "chat_completion",
-      ),
+      Object.entries(functionConfig.variants || {})
+        .filter(
+          (entry): entry is [string, VariantInfo] =>
+            entry[1]?.inner.type === "chat_completion",
+        )
+        .map(([name, variant]) => [
+          name,
+          variant.inner as ChatCompletionConfig,
+        ]),
     );
   };
 
@@ -138,13 +143,13 @@ export function SFTForm({
         >
           <div className="space-y-6">
             <div className="flex flex-col gap-1">
-              <FunctionSelector<SFTFormValues>
+              <FunctionFormField
                 control={form.control}
                 name="function"
-                inferenceCount={counts.inferenceCount}
-                config={config}
-                hide_default_function={true}
+                functions={useAllFunctionConfigs()}
+                hideDefaultFunction={true}
               />
+
               {errors.function && (
                 <p className="text-xs text-red-500">
                   {errors.function.message}
@@ -157,9 +162,11 @@ export function SFTForm({
                 control={form.control}
                 name="metric"
                 functionFieldName="function"
+                config={config}
+                addDemonstrations={true}
                 feedbackCount={counts.feedbackCount}
                 curatedInferenceCount={counts.curatedInferenceCount}
-                config={config}
+                isLoading={counts.isLoading}
               />
 
               {errors.metric && (

@@ -7,6 +7,8 @@ from typing import (
     List,
     Literal,
     Optional,
+    Sequence,
+    Type,
     Union,
     final,
 )
@@ -14,11 +16,10 @@ from uuid import UUID
 
 import uuid_utils
 
-import tensorzero.internal_optimization_server_types as iost
 from tensorzero import (
     ChatDatapointInsert,
+    ChatInferenceOutput,
     ContentBlock,
-    Datapoint,
     DynamicEvaluationRunEpisodeResponse,
     DynamicEvaluationRunResponse,
     ExtraBody,
@@ -27,23 +28,320 @@ from tensorzero import (
     InferenceInput,
     InferenceResponse,
     JsonDatapointInsert,
-    StoredInference,
+    OptimizationConfig,
 )
 from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
+from tensorzero.types import (
+    InferenceFilterTreeNode,
+    JsonInferenceOutput,
+    OrderBy,
+)
 
 @final
-class RenderedStoredInference:
+class ResolvedInputMessage:
+    role: Literal["user", "assistant"]
+    content: List[ContentBlock]
+
+@final
+class ResolvedInput:
+    system: Optional[str | Dict[str, Any]]
+    messages: List[ResolvedInputMessage]
+
+@final
+class StoredInference:
+    Chat: Type["StoredInference"]
+    Json: Type["StoredInference"]
+
+    def __init__(
+        self,
+        type: str,
+        function_name: str,
+        variant_name: str,
+        input: Any,
+        output: Any,
+        episode_id: UUID,
+        inference_id: UUID,
+        timestamp: str,
+        tool_params: Optional[Any] = None,
+        output_schema: Optional[Any] = None,
+        # Dispreferred outputs are lists because there may be several of them in the future.
+        dispreferred_outputs: Union[
+            List[ChatInferenceOutput], List[JsonInferenceOutput]
+        ] = [],
+        tags: Dict[str, str] = {},
+    ) -> None: ...
+    def __repr__(self) -> str: ...
+    @property
+    def function_name(self) -> str: ...
+    @property
+    def variant_name(self) -> str: ...
+    @property
+    def input(self) -> ResolvedInput: ...
+    @property
+    def output(self) -> Any: ...
+    @property
+    def episode_id(self) -> Optional[UUID]: ...
+    @property
+    def inference_id(self) -> Optional[UUID]: ...
+    @property
+    def tool_params(self) -> Optional[Any]: ...
+    @property
+    def output_schema(self) -> Optional[Any]: ...
+    @property
+    def type(self) -> str: ...
+    @property
+    def timestamp(self) -> str: ...
+    @property
+    def dispreferred_outputs(
+        self,
+    ) -> Union[List[ChatInferenceOutput], List[JsonInferenceOutput]]: ...
+    @property
+    def tags(self) -> Dict[str, str]: ...
+
+@final
+class RenderedSample:
     function_name: str
-    variant_name: str
     input: ModelInput
-    output: List[ContentBlock]
-    episode_id: UUID
-    inference_id: UUID
+    stored_input: ResolvedInput
+    output: Optional[ChatInferenceOutput]
+    episode_id: Optional[UUID]
+    inference_id: Optional[UUID]
     tool_params: Optional[ToolCallConfigDatabaseInsert]
     output_schema: Optional[Dict[str, Any]]
+    dispreferred_outputs: List[ChatInferenceOutput] = []
+    tags: Dict[str, str]
+
+@final
+class OptimizationJobHandle:
+    OpenAISFT: Type["OptimizationJobHandle"]
+    FireworksSFT: Type["OptimizationJobHandle"]
+    GCPVertexGeminiSFT: Type["OptimizationJobHandle"]
+    TogetherSFT: Type["OptimizationJobHandle"]
+
+@final
+class OptimizationJobStatus:
+    Pending: Type["OptimizationJobStatus"]
+    Completed: Type["OptimizationJobStatus"]
+    Failed: Type["OptimizationJobStatus"]
+
+@final
+class OptimizationJobInfo:
+    OpenAISFT: Type["OptimizationJobInfo"]
+    FireworksSFT: Type["OptimizationJobInfo"]
+    GCPVertexGeminiSFT: Type["OptimizationJobInfo"]
+    TogetherSFT: Type["OptimizationJobInfo"]
+    @property
+    def message(self) -> str: ...
+    @property
+    def status(self) -> Type[OptimizationJobStatus]: ...
+    @property
+    def output(self) -> Optional[Any]: ...
+    @property
+    def estimated_finish(self) -> Optional[int]: ...
+
+@final
+class OpenAISFTConfig:
+    def __init__(
+        self,
+        *,
+        model: str,
+        batch_size: Optional[int] = None,
+        learning_rate_multiplier: Optional[float] = None,
+        n_epochs: Optional[int] = None,
+        credentials: Optional[str] = None,
+        api_base: Optional[str] = None,
+        seed: Optional[int] = None,
+        suffix: Optional[str] = None,
+    ) -> None: ...
+
+@final
+class FireworksSFTConfig:
+    def __init__(
+        self,
+        *,
+        model: str,
+        early_stop: Optional[bool] = None,
+        epochs: Optional[int] = None,
+        learning_rate: Optional[float] = None,
+        max_context_length: Optional[int] = None,
+        lora_rank: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        display_name: Optional[str] = None,
+        output_model: Optional[str] = None,
+        warm_start_from: Optional[str] = None,
+        is_turbo: Optional[bool] = None,
+        eval_auto_carveout: Optional[bool] = None,
+        nodes: Optional[int] = None,
+        mtp_enabled: Optional[bool] = None,
+        mtp_num_draft_tokens: Optional[int] = None,
+        mtp_freeze_base_model: Optional[bool] = None,
+        credentials: Optional[str] = None,
+        account_id: str,
+        api_base: Optional[str] = None,
+    ) -> None: ...
+
+@final
+class GCPVertexGeminiSFTConfig:
+    def __init__(
+        self,
+        *,
+        model: str,
+        bucket_name: str,
+        project_id: str,
+        region: str,
+        learning_rate_multiplier: Optional[float] = None,
+        adapter_size: Optional[int] = None,
+        n_epochs: Optional[int] = None,
+        export_last_checkpoint_only: Optional[bool] = None,
+        credentials: Optional[str] = None,
+        api_base: Optional[str] = None,
+        seed: Optional[int] = None,
+        service_account: Optional[str] = None,
+        kms_key_name: Optional[str] = None,
+        tuned_model_display_name: Optional[str] = None,
+        bucket_path_prefix: Optional[str] = None,
+    ) -> None: ...
+
+@final
+class TogetherSFTConfig:
+    """
+    Configuration for Together supervised fine-tuning.
+
+    For detailed API documentation, see: https://docs.together.ai/reference/post-fine-tunes
+    """
+    def __init__(
+        self,
+        *,
+        model: str,
+        credentials: Optional[str] = None,
+        api_base: Optional[str] = None,
+        n_epochs: Optional[int] = None,
+        n_checkpoints: Optional[int] = None,
+        n_evals: Optional[int] = None,
+        batch_size: Optional[Union[int, str]] = None,
+        learning_rate: Optional[float] = None,
+        warmup_ratio: Optional[float] = None,
+        max_grad_norm: Optional[float] = None,
+        weight_decay: Optional[float] = None,
+        suffix: Optional[str] = None,
+        lr_scheduler: Optional[Dict[str, Any]] = None,
+        wandb_api_key: Optional[str] = None,
+        wandb_base_url: Optional[str] = None,
+        wandb_project_name: Optional[str] = None,
+        wandb_name: Optional[str] = None,
+        training_method: Optional[Dict[str, Any]] = None,
+        training_type: Optional[Dict[str, Any]] = None,
+        from_checkpoint: Optional[str] = None,
+        from_hf_model: Optional[str] = None,
+        hf_model_revision: Optional[str] = None,
+        hf_api_token: Optional[str] = None,
+        hf_output_repo_name: Optional[str] = None,
+    ) -> None: ...
+
+@final
+class Datapoint:
+    Chat: Type["Datapoint"]
+    Json: Type["Datapoint"]
+
+    @property
+    def id(self) -> UUID: ...
+    @property
+    def input(self) -> ResolvedInput: ...
+    @property
+    def output(self) -> Any: ...
+    @property
+    def dataset_name(self) -> str: ...
+    @property
+    def function_name(self) -> str: ...
+    @property
+    def tool_params(self) -> Optional[Any]: ...
+    @property
+    def output_schema(self) -> Optional[Any]: ...
+    @property
+    def is_custom(self) -> bool: ...
+
+@final
+class ChatCompletionConfig:
+    @property
+    def system_template(self) -> Optional[str]: ...
+    @property
+    def user_template(self) -> Optional[str]: ...
+    @property
+    def assistant_template(self) -> Optional[str]: ...
+    @property
+    def model(self) -> str: ...
+
+@final
+class BestOfNSamplingConfig:
+    pass
+
+@final
+class DiclConfig:
+    pass
+
+@final
+class MixtureOfNConfig:
+    pass
+
+@final
+class ChainOfThoughtConfig:
+    pass
+
+@final
+class VariantsConfig:
+    def __len__(self) -> int: ...
+    def __getitem__(
+        self, key: str
+    ) -> Union[
+        ChatCompletionConfig,
+        BestOfNSamplingConfig,
+        DiclConfig,
+        MixtureOfNConfig,
+        ChainOfThoughtConfig,
+    ]: ...
+
+@final
+class FunctionConfigChat:
+    @property
+    def type(self) -> Literal["chat"]: ...
+    @property
+    def variants(self) -> VariantsConfig: ...
+    @property
+    def system_schema(self) -> Optional[Any]: ...
+    @property
+    def user_schema(self) -> Optional[Any]: ...
+    @property
+    def assistant_schema(self) -> Optional[Any]: ...
+
+@final
+class FunctionConfigJson:
+    @property
+    def type(self) -> Literal["json"]: ...
+    @property
+    def variants(self) -> VariantsConfig: ...
+    @property
+    def system_schema(self) -> Optional[Any]: ...
+    @property
+    def user_schema(self) -> Optional[Any]: ...
+    @property
+    def assistant_schema(self) -> Optional[Any]: ...
+    @property
+    def output_schema(self) -> Optional[Any]: ...
+
+@final
+class FunctionsConfig:
+    def __len__(self) -> int: ...
+    def __getitem__(
+        self, key: str
+    ) -> Union[FunctionConfigChat, FunctionConfigJson]: ...
+
+@final
+class Config:
+    @property
+    def functions(self) -> FunctionsConfig: ...
 
 class BaseTensorZeroGateway:
-    pass
+    def experimental_get_config(self) -> Config: ...
 
 @final
 class TensorZeroGateway(BaseTensorZeroGateway):
@@ -240,6 +538,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         dataset_name: str,
+        function_name: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
     ) -> List[Datapoint]:
@@ -247,6 +546,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
 
         :param dataset_name: The name of the dataset to list the datapoints from.
+        :param function_name: The name of the function to list the datapoints from.
         :param limit: The maximum number of datapoints to return.
         :param offset: The offset to start the list from.
         :return: A list of `Datapoint` instances.
@@ -266,17 +566,42 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: A `Datapoint` instance.
         """
 
+    def experimental_list_inferences(
+        self,
+        *,
+        function_name: str,
+        variant_name: Optional[str] = None,
+        filters: Optional[InferenceFilterTreeNode] = None,
+        output_source: str = "inference",
+        order_by: Optional[List[OrderBy]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> List[StoredInference]:
+        """
+        Query the Clickhouse database for inferences.
+        This function is only available in EmbeddedGateway mode.
+
+        :param function_name: The name of the function to query.
+        :param variant_name: The name of the variant to query. Optional
+        :param filters: A filter tree to apply to the query. Optional
+        :param output_source: The source of the output to query. "inference" or "demonstration"
+        :param limit: The maximum number of inferences to return. Optional
+        :param offset: The offset to start from. Optional
+        :return: A list of `StoredInference` instances.
+        """
+
     def experimental_render_inferences(
         self,
         *,
         stored_inferences: List[StoredInference],
         variants: Dict[str, str],
-    ) -> List[RenderedStoredInference]:
+    ) -> List[RenderedSample]:
         """
-        Render a list of stored inferences into a list of rendered stored inferences.
+        DEPRECATED: use `experimental_render_samples` instead.
+        Render a list of stored samples into a list of rendered stored samples.
 
         This function performs two main tasks:
-        1. Resolves all network resources (e.g., images) in the stored inference.
+        1. Resolves all network resources (e.g., images) in the stored samples.
         2. Prepares all messages into "simple" messages that have been templated for a particular variant.
            To do this, the function needs to know which variant to use for each function that might appear in the data.
 
@@ -284,10 +609,64 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         the function has no variant specified, or the process of downloading resources fails.
         In the future, this behavior may be made configurable by the caller.
 
-        :param stored_inferences: A list of stored inferences to render.
+        :param stored_inferences: A list of stored samples to render.
         :param variants: A mapping from function name to variant name.
-        :return: A list of rendered stored inferences.
+        :return: A list of rendered samples.
         """
+
+    def experimental_render_samples(
+        self,
+        *,
+        stored_samples: Sequence[Union[StoredInference, Datapoint]],
+        variants: Dict[str, str],
+    ) -> List[RenderedSample]:
+        """
+        Render a list of stored samples (datapoints or inferences) into a list of rendered stored samples.
+
+        This function performs two main tasks:
+        1. Resolves all network resources (e.g., images) in the stored samples.
+        2. Prepares all messages into "simple" messages that have been templated for a particular variant.
+            To do this, the function needs to know which variant to use for each function that might appear in the data.
+
+        IMPORTANT: For now, this function drops datapoints that are invalid, such as those where templating fails,
+        the function has no variant specified, or the process of downloading resources fails.
+        In the future, this behavior may be made configurable by the caller.
+
+        :param stored_samples: A list of stored samples (datapoints or inferences) to render.
+        :param variants: A mapping from function name to variant name.
+        :return: A list of rendered samples.
+        """
+        ...
+
+    def experimental_launch_optimization(
+        self,
+        *,
+        train_samples: List[RenderedSample],
+        val_samples: Optional[List[RenderedSample]] = None,
+        optimization_config: OptimizationConfig,
+    ) -> OptimizationJobHandle:
+        """
+        Launch an optimization job.
+
+        :param train_samples: A list of RenderedSample objects that will be used for training.
+        :param val_samples: A list of RenderedSample objects that will be used for validation.
+        :param optimization_config: The optimization config.
+        :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
+        """
+        ...
+
+    def experimental_poll_optimization(
+        self,
+        *,
+        job_handle: OptimizationJobHandle,
+    ) -> OptimizationJobInfo:
+        """
+        Poll an optimization job.
+
+        :param job_handle: The job handle returned by `experimental_launch_optimization`.
+        :return: An `OptimizerStatus` object.
+        """
+        ...
 
     def close(self) -> None:
         """
@@ -501,6 +880,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         dataset_name: str,
+        function_name: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
     ) -> List[Datapoint]:
@@ -508,6 +888,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
 
         :param dataset_name: The name of the dataset to list the datapoints from.
+        :param function_name: The name of the function to list the datapoints from.
         :param limit: The maximum number of datapoints to return.
         :param offset: The offset to start the list from.
         :return: A list of `Datapoint` instances.
@@ -527,17 +908,43 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: A `Datapoint` instance.
         """
 
+    async def experimental_list_inferences(
+        self,
+        *,
+        function_name: str,
+        variant_name: Optional[str] = None,
+        filters: Optional[InferenceFilterTreeNode] = None,
+        output_source: str = "inference",
+        order_by: Optional[List[OrderBy]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> List[StoredInference]:
+        """
+        Query the Clickhouse database for inferences.
+        This function is only available in EmbeddedGateway mode.
+
+        :param function_name: The name of the function to query.
+        :param variant_name: The name of the variant to query. Optional
+        :param filters: A filter tree to apply to the query. Optional
+        :param output_source: The source of the output to query. "inference" or "demonstration"
+        :param limit: The maximum number of inferences to return. Optional
+        :param offset: The offset to start from. Optional
+        :return: A list of `StoredInference` instances.
+        """
+
     async def experimental_render_inferences(
         self,
         *,
         stored_inferences: List[StoredInference],
         variants: Dict[str, str],
-    ) -> List[RenderedStoredInference]:
+    ) -> List[RenderedSample]:
         """
-        Render a list of stored inferences into a list of rendered stored inferences.
+        DEPRECATED: use `experimental_render_samples` instead.
+
+        Render a list of stored samples into a list of rendered stored samples.
 
         This function performs two main tasks:
-        1. Resolves all network resources (e.g., images) in the stored inferences.
+        1. Resolves all network resources (e.g., images) in the stored samples.
         2. Prepares all messages into "simple" messages that have been templated for a particular variant.
            To do this, the function needs to know which variant to use for each function that might appear in the data.
 
@@ -545,10 +952,63 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         the function has no variant specified, or the process of downloading resources fails.
         In the future, this behavior may be made configurable by the caller.
 
-        :param stored_inferences: A list of stored inferences to render.
+        :param stored_inferences: A list of stored samples to render.
         :param variants: A mapping from function name to variant name.
-        :return: A list of rendered stored inferences.
+        :return: A list of rendered samples.
         """
+
+    async def experimental_render_samples(
+        self,
+        *,
+        stored_samples: Sequence[Union[StoredInference, Datapoint]],
+        variants: Dict[str, str],
+    ) -> List[RenderedSample]:
+        """
+        Render a list of stored samples into a list of rendered stored samples.
+
+        This function performs two main tasks:
+        1. Resolves all network resources (e.g., images) in the stored samples.
+        2. Prepares all messages into "simple" messages that have been templated for a particular variant.
+           To do this, the function needs to know which variant to use for each function that might appear in the data.
+
+        IMPORTANT: For now, this function drops datapoints that are invalid, such as those where templating fails,
+        the function has no variant specified, or the process of downloading resources fails.
+        In the future, this behavior may be made configurable by the caller.
+
+        :param stored_samples: A list of stored samples to render.
+        :param variants: A mapping from function name to variant name.
+        :return: A list of rendered samples.
+        """
+
+    async def experimental_launch_optimization(
+        self,
+        *,
+        train_samples: List[RenderedSample],
+        val_samples: Optional[List[RenderedSample]] = None,
+        optimization_config: OptimizationConfig,
+    ) -> OptimizationJobHandle:
+        """
+        Launch an optimization job.
+
+        :param train_samples: A list of RenderedSample objects that will be used for training.
+        :param val_samples: A list of RenderedSample objects that will be used for validation.
+        :param optimization_config: The optimization config.
+        :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
+        """
+        ...
+
+    async def experimental_poll_optimization(
+        self,
+        *,
+        job_handle: OptimizationJobHandle,
+    ) -> OptimizationJobInfo:
+        """
+        Poll an optimization job.
+
+        :param job_handle: The job handle returned by `experimental_launch_optimization`.
+        :return: An `OptimizerStatus` object.
+        """
+        ...
 
     async def close(self) -> None:
         """
@@ -562,17 +1022,6 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         exc_val: Optional[BaseException],
         exc_tb: Optional[object],
     ) -> None: ...
-    async def _internal_get_curated_inferences(
-        self,
-        *,
-        function_name: str,
-        metric_name: Optional[str] = None,
-        threshold: Optional[float] = None,
-        max_samples: Optional[int] = None,
-    ) -> List[iost.Sample]: ...
-    def _internal_get_template_config(
-        self, *, function_name: str, variant_name: str
-    ) -> Dict[str, Any]: ...
 
 # Internal helper method
 def _start_http_gateway(
@@ -590,8 +1039,29 @@ class LocalHttpGateway(object):
 __all__ = [
     "AsyncTensorZeroGateway",
     "BaseTensorZeroGateway",
+    "BestOfNSamplingConfig",
+    "ChatCompletionConfig",
+    "ChainOfThoughtConfig",
+    "Config",
+    "Datapoint",
+    "DiclConfig",
+    "FunctionConfigChat",
+    "FunctionConfigJson",
+    "FunctionsConfig",
+    "FireworksSFTConfig",
+    "GCPVertexGeminiSFTConfig",
     "TensorZeroGateway",
     "LocalHttpGateway",
+    "MixtureOfNConfig",
     "_start_http_gateway",
-    "RenderedStoredInference",
+    "OpenAISFTConfig",
+    "OptimizationJobHandle",
+    "OptimizationJobInfo",
+    "OptimizationJobStatus",
+    "RenderedSample",
+    "TogetherSFTConfig",
+    "StoredInference",
+    "ResolvedInput",
+    "ResolvedInputMessage",
+    "VariantsConfig",
 ]

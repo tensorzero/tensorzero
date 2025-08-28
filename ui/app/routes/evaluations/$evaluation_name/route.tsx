@@ -1,5 +1,5 @@
 import type { Route } from "./+types/route";
-import { getConfig } from "~/utils/config/index.server";
+import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import {
   getEvaluationStatistics,
   getEvaluationResults,
@@ -17,7 +17,7 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import PageButtons from "~/components/utils/PageButtons";
-import { redirect, useNavigate } from "react-router";
+import { data, redirect, useNavigate } from "react-router";
 import AutoRefreshIndicator, { useAutoRefresh } from "./AutoRefreshIndicator";
 import BasicInfo from "./EvaluationBasicInfo";
 import { useConfig } from "~/context/config";
@@ -30,12 +30,25 @@ import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
-  const function_name =
-    config.evaluations[params.evaluation_name].function_name;
-  const function_type = config.functions[function_name].type;
+  const evaluationConfig = config.evaluations[params.evaluation_name];
+  if (!evaluationConfig) {
+    throw data(
+      `Evaluation config not found for evaluation ${params.evaluation_name}`,
+      { status: 404 },
+    );
+  }
+  const function_name = evaluationConfig.function_name;
+  const functionConfig = await getFunctionConfig(function_name, config);
+  const function_type = functionConfig?.type;
+  if (!function_type) {
+    throw data(`Function config not found for function ${function_name}`, {
+      status: 404,
+    });
+  }
 
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
@@ -50,9 +63,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const offset = parseInt(searchParams.get("offset") || "0");
   const pageSize = parseInt(searchParams.get("pageSize") || "15");
 
-  const evaluator_names = Object.keys(
-    config.evaluations[params.evaluation_name].evaluators,
-  );
+  const evaluator_names = Object.keys(evaluationConfig.evaluators);
 
   const metric_names = evaluator_names.map((evaluatorName) =>
     getEvaluatorMetricName(params.evaluation_name, evaluatorName),
@@ -201,12 +212,12 @@ export async function action({ request }: Route.ActionArgs) {
           response.judgeDemonstrationResponse.feedback_id,
         );
       } else {
-        console.warn("No judge demonstration response");
+        logger.warn("No judge demonstration response");
       }
       return redirect(url.toString());
     }
     default:
-      console.error(`Unknown action: ${_action}`);
+      logger.error(`Unknown action: ${_action}`);
       return null;
   }
 }
@@ -244,6 +255,12 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
 
   const config = useConfig();
   const evaluation_config = config.evaluations[evaluation_name];
+  if (!evaluation_config) {
+    throw data(
+      `Evaluation config not found for evaluation ${evaluation_name}`,
+      { status: 404 },
+    );
+  }
   const hasErrorsToDisplay = Object.values(errors).some(
     (error) => error.errors.length > 0,
   );
@@ -272,7 +289,11 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
           )}
           <div className="flex items-center">
             <SectionHeader heading="Results" />
-            <div className="ml-4">
+            <div
+              className="ml-4"
+              data-testid="auto-refresh-wrapper"
+              data-running={any_evaluation_is_running}
+            >
               <AutoRefreshIndicator isActive={any_evaluation_is_running} />
             </div>
           </div>

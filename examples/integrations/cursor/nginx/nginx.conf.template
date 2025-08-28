@@ -1,45 +1,39 @@
-events {}
+server {
+    listen 80;
 
-http {
-    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
-                    '$status $body_bytes_sent "$http_referer" '
-                    '"$http_user_agent"';
-    access_log /var/log/nginx/access.log main;
+    # --- CORS helper macro ---
+    set $CORS_ALLOW_ORIGIN  "$http_origin";   # reflect the caller's origin
+    set $CORS_ALLOW_HEADERS "Authorization,Content-Type";
 
-    map $http_authorization $is_authorized {
-        default                                 0;
-        "~*^Bearer ${API_TOKEN}$"               1;
-    }
+    # Set USER environment variable as Nginx variable
+    set $user_env "${USER}";
 
-    server {
-        listen 80;
-
-        # --- CORS helper macro --------------------------------------------
-        set $CORS_ALLOW_ORIGIN  "$http_origin";   # reflect the caller’s origin
-        set $CORS_ALLOW_HEADERS "Authorization,Content-Type";
-
-        location / {
-            # -------- pre‑flight --------
-            if ($request_method = OPTIONS) {
-                add_header Access-Control-Allow-Origin  "$CORS_ALLOW_ORIGIN" always;
-                add_header Access-Control-Allow-Credentials "true"          always;
-                add_header Access-Control-Allow-Methods "GET,POST,OPTIONS"   always;
-                add_header Access-Control-Allow-Headers "$CORS_ALLOW_HEADERS" always;
-                add_header Access-Control-Max-Age       86400               always;
-                return 204;          # 204 No Content is conventional for pre‑flight
-            }
-
-            # -------- authenticated requests --------
-            if ($is_authorized = 0) {
-                return 401;
-            }
-
-            proxy_pass         http://gateway:3000;
-            proxy_set_header   Host $host;
-
-            # expose CORS headers on the real response too
+    # Handle all requests
+    location / {
+        # Handle OPTIONS first - this MUST come before authentication
+        if ($request_method = OPTIONS) {
             add_header Access-Control-Allow-Origin      "$CORS_ALLOW_ORIGIN" always;
-            add_header Access-Control-Allow-Credentials "true"               always;
+            add_header Access-Control-Allow-Credentials "true" always;
+            add_header Access-Control-Allow-Methods     "GET,POST,OPTIONS" always;
+            add_header Access-Control-Allow-Headers     "$CORS_ALLOW_HEADERS" always;
+            add_header Access-Control-Max-Age           86400 always;
+            return 204;
         }
+
+        # For non-OPTIONS requests, check authentication
+        if ($is_authorized = 0) {
+            return 401;
+        }
+
+        # Modify POST request bodies to add tensorzero::tags
+        access_by_lua_file /etc/nginx/modify_body.lua;
+
+        # Proxy configuration
+        proxy_pass       http://gateway:3000;
+        proxy_set_header Host $host;
+
+        # Add CORS headers to response
+        add_header Access-Control-Allow-Origin      "$CORS_ALLOW_ORIGIN" always;
+        add_header Access-Control-Allow-Credentials "true" always;
     }
 }

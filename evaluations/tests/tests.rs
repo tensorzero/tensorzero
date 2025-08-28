@@ -9,15 +9,15 @@ use evaluations::evaluators::llm_judge::{run_llm_judge_evaluator, RunLLMJudgeEva
 use evaluations::{Clients, ThrottledTensorZeroClient};
 use serde_json::json;
 use tensorzero::input_handling::resolved_input_to_client_input;
-use tensorzero_internal::cache::CacheEnabledMode;
-use tensorzero_internal::clickhouse::test_helpers::{
+use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::db::clickhouse::test_helpers::{
     select_human_static_evaluation_feedback_clickhouse, select_model_inferences_clickhouse,
 };
-use tensorzero_internal::endpoints::datasets::Datapoint;
-use tensorzero_internal::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
-use tensorzero_internal::function::{FunctionConfig, FunctionConfigJson};
-use tensorzero_internal::inference::types::{
-    ResolvedInputMessage, ResolvedInputMessageContent, Text,
+use tensorzero_core::endpoints::datasets::Datapoint;
+use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
+use tensorzero_core::function::{FunctionConfig, FunctionConfigJson};
+use tensorzero_core::inference::types::{
+    StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
 };
 use tokio::time::sleep;
 use url::Url;
@@ -30,14 +30,14 @@ use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
 use tensorzero::{ClientBuilder, ClientBuilderMode, FeedbackParams};
 use tensorzero::{InferenceResponse, Role};
-use tensorzero_internal::{
-    clickhouse::test_helpers::{
+use tensorzero_core::{
+    db::clickhouse::test_helpers::{
         clickhouse_flush_async_insert, get_clickhouse, select_chat_inference_clickhouse,
         select_feedback_by_target_id_clickhouse, select_json_inference_clickhouse,
     },
-    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, Usage},
+    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Usage},
 };
-use tensorzero_internal::{
+use tensorzero_core::{
     endpoints::{
         datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint},
         inference::{ChatInferenceResponse, JsonInferenceResponse},
@@ -47,21 +47,26 @@ use tensorzero_internal::{
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
+pub fn init_tracing_for_tests() {
+    tracing_subscriber::fmt().init();
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_json() {
+    init_tracing_for_tests();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     let tensorzero_client = get_tensorzero_client().await;
     write_json_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -82,6 +87,7 @@ async fn run_evaluations_json() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
@@ -107,7 +113,7 @@ async fn run_evaluations_json() {
             InferenceResponse::Json(json_response) => json_response,
             InferenceResponse::Chat(..) => panic!("Chat response not supported"),
         };
-        let clickhouse_input: ResolvedInput =
+        let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // Check the input to the inference is the same as the input to the datapoint
         assert_eq!(&clickhouse_input, parsed.datapoint.input());
@@ -250,8 +256,8 @@ async fn run_evaluations_json() {
         );
         total_sports += feedback["value"].as_f64().unwrap() as u32;
         parsed_output.push(parsed);
-        // Sleep for 500ms to make sure the feedback is recorded
-        sleep(Duration::from_millis(500)).await;
+        // Sleep for 5s to make sure the feedback is recorded
+        sleep(Duration::from_secs(5)).await;
 
         let human_feedback = select_human_static_evaluation_feedback_clickhouse(
             &clickhouse,
@@ -269,7 +275,7 @@ async fn run_evaluations_json() {
     }
     assert_eq!(parsed_output.len(), 6);
     assert_eq!(total_sports, 3);
-    sleep(Duration::from_millis(1000)).await;
+    sleep(Duration::from_secs(5)).await;
 
     // Check that the human feedback affects the next eval run results
     // Run the evaluation again but now it should read the human feedback that was sent
@@ -278,6 +284,7 @@ async fn run_evaluations_json() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut total_sports = 0;
@@ -320,18 +327,19 @@ async fn run_evaluations_json() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_exact_match_evaluation_chat() {
+    init_tracing_for_tests();
     let dataset_name = format!("good-haiku-data-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_chat_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("good-haiku-data".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -351,6 +359,7 @@ async fn run_exact_match_evaluation_chat() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
@@ -372,7 +381,7 @@ async fn run_exact_match_evaluation_chat() {
             InferenceResponse::Chat(chat_response) => chat_response,
             InferenceResponse::Json(..) => panic!("Json response not supported"),
         };
-        let clickhouse_input: ResolvedInput =
+        let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // Check the input to the inference is the same as the input to the datapoint
         assert_eq!(&clickhouse_input, parsed.datapoint.input());
@@ -440,18 +449,19 @@ async fn run_exact_match_evaluation_chat() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_llm_judge_evaluation_chat() {
+    init_tracing_for_tests();
     let dataset_name = format!("good-haikus-no-output-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_chat_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("good-haikus-no-output".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let tensorzero_client = get_tensorzero_client().await;
@@ -472,6 +482,7 @@ async fn run_llm_judge_evaluation_chat() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
@@ -494,7 +505,7 @@ async fn run_llm_judge_evaluation_chat() {
             InferenceResponse::Chat(chat_response) => chat_response,
             InferenceResponse::Json(..) => panic!("Json response not supported"),
         };
-        let clickhouse_input: ResolvedInput =
+        let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // Check the input to the inference is the same as the input to the datapoint
         assert_eq!(&clickhouse_input, parsed.datapoint.input());
@@ -609,13 +620,14 @@ async fn run_llm_judge_evaluation_chat() {
     }
     assert_eq!(parsed_output.len(), 10);
     assert_eq!(total_topic_fs, 3);
-    sleep(Duration::from_millis(1000)).await;
+    sleep(Duration::from_secs(5)).await;
     // Run the evaluation again but now it should read the human feedback that was sent
     let mut output = Vec::new();
     run_evaluation(args(), evaluation_run_id, &mut output)
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut total_topic_fs = 0;
@@ -657,18 +669,19 @@ async fn run_llm_judge_evaluation_chat() {
 /// However, it takes an image and we verify that the image is actually used in the inference.
 #[tokio::test(flavor = "multi_thread")]
 async fn run_image_evaluation() {
+    init_tracing_for_tests();
     let dataset_name = format!("baz-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_chat_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("baz".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -688,7 +701,7 @@ async fn run_image_evaluation() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
-    sleep(Duration::from_secs(1)).await;
+    sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
@@ -712,8 +725,8 @@ async fn run_image_evaluation() {
             InferenceResponse::Chat(chat_response) => chat_response,
             InferenceResponse::Json(..) => panic!("Json response not supported"),
         };
-        // Check the input to the inference parses as ResolvedInput
-        let _clickhouse_input: ResolvedInput =
+        // Check the input to the inference parses as StoredInput
+        let _clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // assert_eq!(&clickhouse_input, parsed.datapoint.input());
         let clickhouse_output: Vec<ContentBlockChatOutput> =
@@ -870,18 +883,19 @@ async fn run_image_evaluation() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn check_invalid_image_evaluation() {
+    init_tracing_for_tests();
     let dataset_name = format!("baz-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_chat_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("baz".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -901,7 +915,7 @@ async fn check_invalid_image_evaluation() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
-    sleep(Duration::from_secs(1)).await;
+    sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     for line in output_lines {
@@ -924,8 +938,8 @@ async fn check_invalid_image_evaluation() {
             InferenceResponse::Chat(chat_response) => chat_response,
             InferenceResponse::Json(..) => panic!("Json response not supported"),
         };
-        // Check the input to the inference parses as ResolvedInput
-        let _clickhouse_input: ResolvedInput =
+        // Check the input to the inference parses as StoreInput
+        let _clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // assert_eq!(&clickhouse_input, parsed.datapoint.input());
         let clickhouse_output: Vec<ContentBlockChatOutput> =
@@ -970,17 +984,18 @@ async fn check_invalid_image_evaluation() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_llm_judge_evaluation_chat_pretty() {
+    init_tracing_for_tests();
     let dataset_name = format!("good-haikus-no-output-{}", Uuid::now_v7());
     write_chat_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("good-haikus-no-output".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1000,6 +1015,7 @@ async fn run_llm_judge_evaluation_chat_pretty() {
     run_evaluation(args, evaluation_run_id, &mut output)
         .await
         .unwrap();
+    sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     // Check for run info at the beginning
     assert!(output_str.contains("Run ID:"));
@@ -1011,17 +1027,18 @@ async fn run_llm_judge_evaluation_chat_pretty() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_llm_judge_evaluation_json_pretty() {
+    init_tracing_for_tests();
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     write_json_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1041,6 +1058,7 @@ async fn run_llm_judge_evaluation_json_pretty() {
     let err = run_evaluation(args, evaluation_run_id, &mut output)
         .await
         .unwrap_err();
+    sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     // Check for run info at the beginning
     assert!(output_str.contains("Run ID:"));
@@ -1164,18 +1182,19 @@ async fn test_run_evaluation_binary() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_errors() {
+    init_tracing_for_tests();
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_json_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1195,6 +1214,7 @@ async fn run_evaluations_errors() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     for line in output_lines {
@@ -1215,13 +1235,16 @@ async fn run_evaluations_errors() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_llm_judge_evaluator_chat() {
+    init_tracing_for_tests();
     let tensorzero_client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(PathBuf::from(&format!(
-            "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+            "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         ))),
         clickhouse_url: None,
         timeout: None,
+        verify_credentials: true,
+        allow_batch_writes: true,
     })
     .build()
     .await
@@ -1246,16 +1269,16 @@ async fn test_run_llm_judge_evaluator_chat() {
         variant_name: "test_variant".to_string(),
     });
     let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
         },
-        auxiliary: "".to_string(),
+        auxiliary: String::new(),
         dataset_name: "test_dataset".to_string(),
         episode_id: Some(Uuid::now_v7()),
         id: Uuid::now_v7(),
@@ -1268,6 +1291,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         tool_params: None,
         source_inference_id: None,
         staled_at: None,
+        is_custom: true,
     });
     let llm_judge_config = LLMJudgeConfig {
         input_format: LLMJudgeInputFormat::Serialized,
@@ -1279,10 +1303,13 @@ async fn test_run_llm_judge_evaluator_chat() {
         cutoff: None,
     };
     let input = resolved_input_to_client_input(
-        datapoint.input().clone(),
-        &clients.tensorzero_client.client,
+        datapoint
+            .input()
+            .clone()
+            .reresolve(&clients.tensorzero_client)
+            .await
+            .unwrap(),
     )
-    .await
     .unwrap();
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
@@ -1350,16 +1377,16 @@ async fn test_run_llm_judge_evaluator_chat() {
 
     // Try without output
     let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
         },
-        auxiliary: "".to_string(),
+        auxiliary: String::new(),
         dataset_name: "test_dataset".to_string(),
         episode_id: Some(Uuid::now_v7()),
         id: Uuid::now_v7(),
@@ -1370,6 +1397,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         tool_params: None,
         source_inference_id: None,
         staled_at: None,
+        is_custom: true,
     });
 
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
@@ -1390,6 +1418,7 @@ async fn test_run_llm_judge_evaluator_chat() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_llm_judge_evaluator_json() {
+    init_tracing_for_tests();
     let tensorzero_client = get_tensorzero_client().await;
     let tensorzero_client = ThrottledTensorZeroClient::new(tensorzero_client, Semaphore::new(1));
     let clients = Arc::new(Clients {
@@ -1412,16 +1441,16 @@ async fn test_run_llm_judge_evaluator_json() {
         variant_name: "test_variant".to_string(),
     });
     let datapoint = Datapoint::Json(JsonInferenceDatapoint {
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
         },
-        auxiliary: "".to_string(),
+        auxiliary: String::new(),
         dataset_name: "test_dataset".to_string(),
         episode_id: Some(Uuid::now_v7()),
         id: Uuid::now_v7(),
@@ -1435,6 +1464,7 @@ async fn test_run_llm_judge_evaluator_json() {
         tags: None,
         source_inference_id: None,
         staled_at: None,
+        is_custom: true,
     });
     let llm_judge_config = LLMJudgeConfig {
         input_format: LLMJudgeInputFormat::Serialized,
@@ -1446,10 +1476,13 @@ async fn test_run_llm_judge_evaluator_json() {
         cutoff: None,
     };
     let input = resolved_input_to_client_input(
-        datapoint.input().clone(),
-        &clients.tensorzero_client.client,
+        datapoint
+            .input()
+            .clone()
+            .reresolve(&clients.tensorzero_client)
+            .await
+            .unwrap(),
     )
-    .await
     .unwrap();
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
@@ -1517,16 +1550,16 @@ async fn test_run_llm_judge_evaluator_json() {
 
     // Try without output
     let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
         },
-        auxiliary: "".to_string(),
+        auxiliary: String::new(),
         dataset_name: "test_dataset".to_string(),
         episode_id: Some(Uuid::now_v7()),
         id: Uuid::now_v7(),
@@ -1537,6 +1570,7 @@ async fn test_run_llm_judge_evaluator_json() {
         tool_params: None,
         source_inference_id: None,
         staled_at: None,
+        is_custom: true,
     });
 
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
@@ -1557,18 +1591,19 @@ async fn test_run_llm_judge_evaluator_json() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_best_of_3() {
+    init_tracing_for_tests();
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_json_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1588,6 +1623,7 @@ async fn run_evaluations_best_of_3() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
@@ -1609,7 +1645,7 @@ async fn run_evaluations_best_of_3() {
             InferenceResponse::Json(json_response) => json_response,
             InferenceResponse::Chat(..) => panic!("Chat response not supported"),
         };
-        let clickhouse_input: ResolvedInput =
+        let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // Check the input to the inference is the same as the input to the datapoint
         assert_eq!(&clickhouse_input, parsed.datapoint.input());
@@ -1731,7 +1767,7 @@ async fn run_evaluations_best_of_3() {
                 assert!(model_inference["system"]
                     .as_str()
                     .unwrap()
-                    .starts_with("You are an assistant tasked with re-ranking"))
+                    .starts_with("You are an assistant tasked with re-ranking"));
             }
         }
         assert_eq!(happy_count, 3);
@@ -1742,18 +1778,19 @@ async fn run_evaluations_best_of_3() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_mixture_of_3() {
+    init_tracing_for_tests();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     write_json_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1773,6 +1810,7 @@ async fn run_evaluations_mixture_of_3() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
@@ -1794,7 +1832,7 @@ async fn run_evaluations_mixture_of_3() {
             InferenceResponse::Json(json_response) => json_response,
             InferenceResponse::Chat(..) => panic!("Chat response not supported"),
         };
-        let clickhouse_input: ResolvedInput =
+        let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // Check the input to the inference is the same as the input to the datapoint
         assert_eq!(&clickhouse_input, parsed.datapoint.input());
@@ -1919,7 +1957,7 @@ async fn run_evaluations_mixture_of_3() {
                 assert!(model_inference["system"]
                     .as_str()
                     .unwrap()
-                    .starts_with("You have been provided with a set of responses from various"))
+                    .starts_with("You have been provided with a set of responses from various"));
             }
         }
         assert_eq!(happy_count, 3);
@@ -1930,18 +1968,19 @@ async fn run_evaluations_mixture_of_3() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_dicl() {
+    init_tracing_for_tests();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     write_json_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1961,6 +2000,7 @@ async fn run_evaluations_dicl() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
@@ -1982,7 +2022,7 @@ async fn run_evaluations_dicl() {
             InferenceResponse::Json(json_response) => json_response,
             InferenceResponse::Chat(..) => panic!("Chat response not supported"),
         };
-        let clickhouse_input: ResolvedInput =
+        let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // Check the input to the inference is the same as the input to the datapoint
         assert_eq!(&clickhouse_input, parsed.datapoint.input());
@@ -2121,11 +2161,12 @@ async fn run_evaluations_dicl() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_query_skips_staled_datapoints() {
+    init_tracing_for_tests();
     let dataset_name = format!("exact_matches_empty-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_json_fixture_to_dataset(
         &PathBuf::from(&format!(
-            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("exact_matches_empty".to_string(), dataset_name.clone())]),

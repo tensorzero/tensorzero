@@ -16,45 +16,72 @@ use pyo3::{
     ffi::c_str,
     marker::Ungil,
     prelude::*,
-    sync::GILOnceCell,
     types::{PyDict, PyList, PyString, PyType},
     IntoPyObjectExt,
 };
 use python_helpers::{
-    parse_datapoint, parse_dynamic_evaluation_run_episode_response,
-    parse_dynamic_evaluation_run_response, parse_feedback_response, parse_inference_chunk,
-    parse_inference_response, parse_tool, python_uuid_to_uuid,
+    parse_dynamic_evaluation_run_episode_response, parse_dynamic_evaluation_run_response,
+    parse_feedback_response, parse_inference_chunk, parse_inference_response, parse_tool,
+    python_uuid_to_uuid,
 };
-use tensorzero_internal::inference::types::pyo3_helpers::{
-    deserialize_from_pyobj, serialize_to_dict, tensorzero_internal_error, JSON_DUMPS, JSON_LOADS,
+use tensorzero_core::{
+    config::{ConfigPyClass, FunctionsConfigPyClass},
+    db::clickhouse::{query_builder::OrderBy, ClickhouseFormat},
+    function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
+    inference::types::{
+        pyo3_helpers::{
+            deserialize_from_pyobj, deserialize_from_rendered_sample,
+            deserialize_from_stored_sample, deserialize_optimization_config, serialize_to_dict,
+            tensorzero_core_error, tensorzero_core_error_class, tensorzero_error_class, JSON_DUMPS,
+            JSON_LOADS,
+        },
+        ResolvedInput, ResolvedInputMessage,
+    },
+    optimization::{
+        fireworks_sft::UninitializedFireworksSFTConfig,
+        gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig,
+        openai_sft::UninitializedOpenAISFTConfig, together_sft::UninitializedTogetherSFTConfig,
+        OptimizationJobInfoPyClass, OptimizationJobStatus, UninitializedOptimizerInfo,
+    },
+    variant::{
+        BestOfNSamplingConfigPyClass, ChainOfThoughtConfigPyClass, ChatCompletionConfigPyClass,
+        DiclConfigPyClass, MixtureOfNConfigPyClass,
+    },
 };
-use tensorzero_internal::{
+use tensorzero_core::{
     endpoints::{
         datasets::InsertDatapointParams, dynamic_evaluation_run::DynamicEvaluationRunEpisodeParams,
     },
     gateway_util::ShutdownHandle,
     inference::types::{
         extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
-        file::serialize_with_file_data,
     },
 };
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
-    ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString,
+    ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, Datapoint,
     DynamicEvaluationRunParams, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, RenderedStoredInference, TensorZeroError, Tool,
+    InferenceParams, InferenceStream, LaunchOptimizationParams, ListInferencesParams,
+    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
 };
 use tokio::sync::Mutex;
 use url::Url;
 
-mod internal;
+mod gil_helpers;
 mod python_helpers;
 
-pub(crate) static TENSORZERO_HTTP_ERROR: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
+use crate::gil_helpers::DropInTokio;
 
 #[pymodule]
 fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Make sure that we can load our error classes, so that we don't trigger
+    // a nested exception when calling `convert_error` below
+    let _ = tensorzero_error_class(m.py())?;
+    let _ = tensorzero_core_error_class(m.py())?;
     // Otel is disabled for now in the Python client until we decide how it should be configured
+    // We might have produced an error when trying to construct the (not yet enabled) OTEL layer,
+    // which will just get ignored here. The HTTP gateway will handle that error, as that's
+    // the only place where we actually try to enable OTEL.
     let _delayed_enable = tokio_block_on_without_gil(
         m.py(),
         tensorzero_rust::observability::setup_observability(LogFormat::Pretty),
@@ -64,7 +91,28 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<AsyncTensorZeroGateway>()?;
     m.add_class::<TensorZeroGateway>()?;
     m.add_class::<LocalHttpGateway>()?;
-    m.add_class::<RenderedStoredInference>()?;
+    m.add_class::<RenderedSample>()?;
+    m.add_class::<StoredInference>()?;
+    m.add_class::<UninitializedOpenAISFTConfig>()?;
+    m.add_class::<UninitializedFireworksSFTConfig>()?;
+    m.add_class::<UninitializedGCPVertexGeminiSFTConfig>()?;
+    m.add_class::<UninitializedTogetherSFTConfig>()?;
+    m.add_class::<Datapoint>()?;
+    m.add_class::<ResolvedInput>()?;
+    m.add_class::<ResolvedInputMessage>()?;
+    m.add_class::<ConfigPyClass>()?;
+    m.add_class::<FunctionsConfigPyClass>()?;
+    m.add_class::<FunctionConfigChatPyClass>()?;
+    m.add_class::<FunctionConfigJsonPyClass>()?;
+    m.add_class::<VariantsConfigPyClass>()?;
+    m.add_class::<ChatCompletionConfigPyClass>()?;
+    m.add_class::<BestOfNSamplingConfigPyClass>()?;
+    m.add_class::<DiclConfigPyClass>()?;
+    m.add_class::<MixtureOfNConfigPyClass>()?;
+    m.add_class::<ChainOfThoughtConfigPyClass>()?;
+    m.add_class::<OptimizationJobHandle>()?;
+    m.add_class::<OptimizationJobInfoPyClass>()?;
+    m.add_class::<OptimizationJobStatus>()?;
 
     let py_json = PyModule::import(m.py(), "json")?;
     let json_loads = py_json.getattr("loads")?;
@@ -83,13 +131,21 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
 struct LocalHttpGateway {
     #[pyo3(get)]
     base_url: String,
-    shutdown_handle: Option<ShutdownHandle>,
+    // We use a double `Option` so that we can implement `LocalHttpGateway.close`
+    // by setting it to `None`, without needing to complicate the api of `DropInTokio`
+    shutdown_handle: Option<DropInTokio<Option<ShutdownHandle>>>,
+}
+
+impl Drop for LocalHttpGateway {
+    fn drop(&mut self) {
+        self.close();
+    }
 }
 
 #[pymethods]
 impl LocalHttpGateway {
     fn close(&mut self) {
-        self.shutdown_handle.take();
+        self.shutdown_handle = None;
     }
 }
 
@@ -103,14 +159,14 @@ fn _start_http_gateway(
 ) -> PyResult<Bound<'_, PyAny>> {
     warn_no_config(py, config_file.as_deref())?;
     let gateway_fut = async move {
-        let (addr, handle) = tensorzero_internal::gateway_util::start_openai_compatible_gateway(
+        let (addr, handle) = tensorzero_core::gateway_util::start_openai_compatible_gateway(
             config_file,
             clickhouse_url,
         )
         .await?;
         Ok(LocalHttpGateway {
             base_url: format!("http://{addr}/openai/v1"),
-            shutdown_handle: Some(handle),
+            shutdown_handle: Some(DropInTokio::new(Some(handle), || None)),
         })
     };
     if async_setup {
@@ -127,14 +183,20 @@ fn _start_http_gateway(
 }
 
 // TODO - this should extend the python `ABC` class once pyo3 supports it: https://github.com/PyO3/pyo3/issues/991
-#[pyclass(subclass)]
+#[pyclass(subclass, frozen)]
 struct BaseTensorZeroGateway {
-    client: Arc<Client>,
+    client: DropInTokio<Client>,
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 struct AsyncStreamWrapper {
     stream: Arc<Mutex<InferenceStream>>,
+    // A handle to the original `AsyncTensorZeroGateway` object.
+    // This ensures that Python will only garbage-collect the `AsyncTensorZeroGateway`
+    // after all `AsyncStreamWrapper` objects have been garbage collected.
+    // This allows us to safely block from within the Drop impl of `AsyncTensorZeroGateway`.
+    // knowing that there are no remaining Python objects holding on to a `ClickhouseConnectionInfo`
+    _gateway: PyObject,
 }
 
 #[pymethods]
@@ -168,9 +230,15 @@ impl AsyncStreamWrapper {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 struct StreamWrapper {
     stream: Arc<Mutex<InferenceStream>>,
+    // A handle to the original `TensorZeroGateway` object.
+    // This ensures that Python will only garbage-collect the `TensorZeroGateway`
+    // after all `StreamWrapper` objects have been garbage collected.
+    // This allows us to safely block from within the Drop impl of `TensorZeroGateway`.
+    // knowing that there are no remaining Python objects holding on to a `ClickhouseConnectionInfo`
+    _gateway: PyObject,
 }
 
 #[pymethods]
@@ -190,6 +258,12 @@ impl StreamWrapper {
         let chunk = chunk.map_err(|e| convert_error(py, err_to_http(e)))?;
         parse_inference_chunk(py, chunk)
     }
+}
+
+/// Constructs a dummy embedded client. We use this so that we can move out of the real 'client'
+/// field of `BaseTensorZeroGateway` when it is dropped.
+fn make_dummy_client() -> Client {
+    ClientBuilder::build_dummy()
 }
 
 #[pymethods]
@@ -222,7 +296,7 @@ impl BaseTensorZeroGateway {
         let client = match client_builder.build_http() {
             Ok(client) => client,
             Err(e) => {
-                return Err(tensorzero_internal_error(
+                return Err(tensorzero_core_error(
                     py,
                     &format!("Failed to construct TensorZero client: {e:?}"),
                 )?);
@@ -230,7 +304,7 @@ impl BaseTensorZeroGateway {
         };
 
         Ok(Self {
-            client: Arc::new(client),
+            client: DropInTokio::new(client, make_dummy_client),
         })
     }
 
@@ -283,6 +357,14 @@ impl BaseTensorZeroGateway {
             include_original_response.unwrap_or(false),
         )?;
         serialize_to_dict(this.py(), params)
+    }
+
+    fn experimental_get_config(&self) -> PyResult<ConfigPyClass> {
+        let config = self
+            .client
+            .get_config()
+            .map_err(|e| PyValueError::new_err(format!("Failed to get config: {e:?}")))?;
+        Ok(ConfigPyClass::new(config))
     }
 }
 
@@ -446,6 +528,7 @@ impl BaseTensorZeroGateway {
             include_original_response,
             extra_body,
             extra_headers,
+            internal_dynamic_variant_config: None,
         })
     }
 }
@@ -498,14 +581,14 @@ impl TensorZeroGateway {
         let client = match client_res {
             Ok(client) => client,
             Err(e) => {
-                return Err(tensorzero_internal_error(
+                return Err(tensorzero_core_error(
                     cls.py(),
                     &format!("Failed to construct TensorZero client: {e:?}"),
                 )?);
             }
         };
         let instance = PyClassInitializer::from(BaseTensorZeroGateway {
-            client: Arc::new(client),
+            client: DropInTokio::new(client, make_dummy_client),
         })
         .add_subclass(TensorZeroGateway {});
         Py::new(cls.py(), instance)
@@ -524,6 +607,7 @@ impl TensorZeroGateway {
     }
 
     /// Close the connection to the TensorZero gateway.
+    #[expect(clippy::unused_self)]
     fn close(&self) {
         // TODO - implement closing the 'reqwest' connection pool: https://github.com/tensorzero/tensorzero/issues/857
     }
@@ -533,6 +617,7 @@ impl TensorZeroGateway {
     }
 
     // TODO - implement closing the 'reqwest' connection pool: https://github.com/tensorzero/tensorzero/issues/857
+    #[expect(clippy::unnecessary_wraps)]
     fn __exit__(
         _this: Py<Self>,
         _exc_type: Py<PyAny>,
@@ -566,13 +651,15 @@ impl TensorZeroGateway {
             config_file: config_file.map(PathBuf::from),
             clickhouse_url,
             timeout,
+            verify_credentials: true,
+            allow_batch_writes: false,
         })
         .build();
         let client = tokio_block_on_without_gil(cls.py(), client_fut);
         let client = match client {
             Ok(client) => client,
             Err(e) => {
-                return Err(tensorzero_internal_error(
+                return Err(tensorzero_core_error(
                     cls.py(),
                     &format!("Failed to construct TensorZero client: {e:?}"),
                 )?);
@@ -580,7 +667,7 @@ impl TensorZeroGateway {
         };
         // Construct an instance of `TensorZeroGateway` (while providing the fields from the `BaseTensorZeroGateway` superclass).
         let instance = PyClassInitializer::from(BaseTensorZeroGateway {
-            client: Arc::new(client),
+            client: DropInTokio::new(client, make_dummy_client),
         })
         .add_subclass(TensorZeroGateway {});
         Py::new(cls.py(), instance)
@@ -692,32 +779,30 @@ impl TensorZeroGateway {
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
     ) -> PyResult<Py<PyAny>> {
-        let fut =
-            this.as_super()
-                .client
-                .inference(BaseTensorZeroGateway::prepare_inference_params(
-                    py,
-                    input,
-                    function_name,
-                    model_name,
-                    episode_id,
-                    stream,
-                    params,
-                    variant_name,
-                    dryrun,
-                    output_schema,
-                    allowed_tools,
-                    additional_tools,
-                    tool_choice,
-                    parallel_tool_calls,
-                    internal.unwrap_or(false),
-                    tags,
-                    credentials,
-                    cache_options,
-                    extra_body,
-                    extra_headers,
-                    include_original_response.unwrap_or(false),
-                )?);
+        let client = this.as_super().client.clone();
+        let fut = client.inference(BaseTensorZeroGateway::prepare_inference_params(
+            py,
+            input,
+            function_name,
+            model_name,
+            episode_id,
+            stream,
+            params,
+            variant_name,
+            dryrun,
+            output_schema,
+            allowed_tools,
+            additional_tools,
+            tool_choice,
+            parallel_tool_calls,
+            internal.unwrap_or(false),
+            tags,
+            credentials,
+            cache_options,
+            extra_body,
+            extra_headers,
+            include_original_response.unwrap_or(false),
+        )?);
 
         // We're in the synchronous `TensorZeroGateway` class, so we need to block on the Rust future,
         // and then return the result to the Python caller directly (not wrapped in a Python `Future`).
@@ -726,6 +811,7 @@ impl TensorZeroGateway {
             InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
             InferenceOutput::Streaming(stream) => Ok(StreamWrapper {
                 stream: Arc::new(Mutex::new(stream)),
+                _gateway: this.into_pyobject(py)?.into_any().unbind(),
             }
             .into_pyobject(py)?
             .into_any()
@@ -822,7 +908,7 @@ impl TensorZeroGateway {
             .iter()
             .map(|x| uuid.call(this.py(), (x.to_string(),), None))
             .collect::<Result<Vec<_>, _>>()?;
-        PyList::new(this.py(), uuids).map(|x| x.unbind())
+        PyList::new(this.py(), uuids).map(Bound::unbind)
     }
 
     /// Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
@@ -848,40 +934,39 @@ impl TensorZeroGateway {
     /// :param datapoint_id: The ID of the datapoint to get.
     /// :return: A `Datapoint` object.
     #[pyo3(signature = (*, dataset_name, datapoint_id))]
-    fn get_datapoint(
-        this: PyRef<'_, Self>,
+    fn get_datapoint<'py>(
+        this: PyRef<'py, Self>,
         dataset_name: String,
-        datapoint_id: Bound<'_, PyAny>,
-    ) -> PyResult<Py<PyAny>> {
+        datapoint_id: Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, Datapoint>> {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
         let fut = client.get_datapoint(dataset_name, datapoint_id);
-        let resp = tokio_block_on_without_gil(this.py(), fut);
-        match resp {
-            Ok(resp) => parse_datapoint(this.py(), resp),
-            Err(e) => Err(convert_error(this.py(), e)),
-        }
+        tokio_block_on_without_gil(this.py(), fut)
+            .map(|x| x.into_pyobject(this.py()))
+            .map_err(|e| convert_error(this.py(), e))?
     }
 
     /// Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
     ///
     /// :param dataset_name: The name of the dataset to get the datapoints from.
     /// :return: A list of `Datapoint` objects.
-    #[pyo3(signature = (*, dataset_name, limit=None, offset=None))]
+    #[pyo3(signature = (*, dataset_name, function_name=None, limit=None, offset=None))]
     fn list_datapoints(
         this: PyRef<'_, Self>,
         dataset_name: String,
+        function_name: Option<String>,
         limit: Option<u32>,
         offset: Option<u32>,
     ) -> PyResult<Bound<'_, PyList>> {
         let client = this.as_super().client.clone();
-        let fut = client.list_datapoints(dataset_name, limit, offset);
+        let fut = client.list_datapoints(dataset_name, function_name, limit, offset);
         let resp = tokio_block_on_without_gil(this.py(), fut);
         match resp {
             Ok(resp) => {
                 let datapoints = resp
                     .into_iter()
-                    .map(|x| parse_datapoint(this.py(), x))
+                    .map(|x| x.into_pyobject(this.py()))
                     .collect::<Result<Vec<_>, _>>()?;
                 PyList::new(this.py(), datapoints)
             }
@@ -889,6 +974,74 @@ impl TensorZeroGateway {
         }
     }
 
+    /// Query the Clickhouse database for inferences.
+    ///
+    /// This function is only available in EmbeddedGateway mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `function_name` - The name of the function to query.
+    /// * `variant_name` - The name of the variant to query. Optional
+    /// * `filters` - A filter tree to apply to the query. Optional
+    /// * `output_source` - The source of the output to query. "inference" or "demonstration"
+    /// * `limit` - The maximum number of inferences to return. Optional
+    /// * `offset` - The offset to start from. Optional
+    /// * `format` - The format to return the inferences in. For now, only "JSONEachRow" is supported.
+    #[pyo3(signature = (*,
+                        function_name,
+                        variant_name=None,
+                        filters=None,
+                        output_source="inference".to_string(),
+                        order_by=None,
+                        limit=None,
+                        offset=None
+    ),
+    text_signature = "(self, *, function_name, variant_name=None, filters=None, output_source='inference', order_by=None, limit=None, offset=None)"
+    )]
+    // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
+    // is written as an ellipsis object.
+    #[expect(clippy::too_many_arguments)]
+    fn experimental_list_inferences(
+        this: PyRef<'_, Self>,
+        function_name: String,
+        variant_name: Option<String>,
+        filters: Option<Bound<'_, PyAny>>,
+        output_source: String,
+        order_by: Option<Bound<'_, PyAny>>,
+        limit: Option<u64>,
+        offset: Option<u64>,
+    ) -> PyResult<Vec<StoredInference>> {
+        let client = this.as_super().client.clone();
+        let filters = filters
+            .as_ref()
+            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .transpose()?;
+        let output_source =
+            output_source
+                .as_str()
+                .try_into()
+                .map_err(|e: tensorzero_core::error::Error| {
+                    convert_error(this.py(), TensorZeroError::Other { source: e.into() })
+                })?;
+        let order_by: Option<Vec<OrderBy>> = order_by
+            .as_ref()
+            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .transpose()?;
+        let params = ListInferencesParams {
+            function_name: &function_name,
+            variant_name: variant_name.as_deref(),
+            filters: filters.as_ref(),
+            output_source,
+            order_by: order_by.as_deref(),
+            limit,
+            offset,
+            format: ClickhouseFormat::JsonEachRow,
+        };
+        let fut = client.experimental_list_inferences(params);
+        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
+    }
+
+    /// DEPRECATED: use `experimental_render_samples` instead.
     /// Render a list of stored inferences into a list of rendered stored inferences.
     /// There are two things that need to happen in this function:
     /// 1. We need to resolve all network resources (e.g. images) in the stored inferences.
@@ -907,14 +1060,96 @@ impl TensorZeroGateway {
         this: PyRef<'_, Self>,
         stored_inferences: Vec<Bound<'_, PyAny>>,
         variants: HashMap<String, String>,
-    ) -> PyResult<Vec<RenderedStoredInference>> {
+    ) -> PyResult<Vec<RenderedSample>> {
+        tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead. See https://github.com/tensorzero/tensorzero/issues/2675");
         let client = this.as_super().client.clone();
         let stored_inferences = stored_inferences
             .iter()
-            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .map(|x| deserialize_from_stored_sample(this.py(), x))
             .collect::<Result<Vec<_>, _>>()?;
-        let fut = client.experimental_render_inferences(stored_inferences, variants);
+        let fut = client.experimental_render_samples(stored_inferences, variants);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
+    }
+
+    /// Render a list of stored samples (datapoints or inferences) into a list of rendered stored samples.
+    /// There are two things that need to happen in this function:
+    /// 1. We need to resolve all network resources (e.g. images) in the stored samples.
+    /// 2. We need to prepare all messages into "simple" messages that have been templated for a particular variant.
+    ///    To do this, we need to know what variant to use for each function that might appear in the data.
+    ///
+    /// IMPORTANT: For now, this function drops datapoints which are bad, e.g. ones where templating fails, the function
+    ///            has no variant specified, or where the process of downloading resources fails.
+    ///            In future we will make this behavior configurable by the caller.
+    ///
+    /// :param stored_samples: A list of stored samples to render.
+    /// :param variants: A map from function name to variant name.
+    /// :return: A list of rendered samples.
+    #[pyo3(signature = (*, stored_samples, variants))]
+    fn experimental_render_samples(
+        this: PyRef<'_, Self>,
+        stored_samples: Vec<Bound<'_, PyAny>>,
+        variants: HashMap<String, String>,
+    ) -> PyResult<Vec<RenderedSample>> {
+        let client = this.as_super().client.clone();
+        let stored_samples = stored_samples
+            .iter()
+            .map(|x| deserialize_from_stored_sample(this.py(), x))
+            .collect::<Result<Vec<_>, _>>()?;
+        let fut = client.experimental_render_samples(stored_samples, variants);
+        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
+    }
+
+    /// Launch an optimization job.
+    ///
+    /// :param train_samples: A list of RenderedSample objects that will be used for training.
+    /// :param val_samples: A list of RenderedSample objects that will be used for validation.
+    /// :param optimization_config: The optimization config.
+    /// :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
+    #[pyo3(signature = (*, train_samples, val_samples=None, optimization_config))]
+    fn experimental_launch_optimization(
+        this: PyRef<'_, Self>,
+        train_samples: Vec<Bound<'_, PyAny>>,
+        val_samples: Option<Vec<Bound<'_, PyAny>>>,
+        optimization_config: Bound<'_, PyAny>,
+    ) -> PyResult<OptimizationJobHandle> {
+        let client = this.as_super().client.clone();
+        let train_samples = train_samples
+            .iter()
+            .map(|x| deserialize_from_rendered_sample(this.py(), x))
+            .collect::<Result<Vec<_>, _>>()?;
+        let val_samples = val_samples
+            .map(|x| {
+                x.iter()
+                    .map(|x| deserialize_from_rendered_sample(this.py(), x))
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .transpose()?;
+        let optimization_config = deserialize_optimization_config(&optimization_config)?;
+        let fut = client.experimental_launch_optimization(LaunchOptimizationParams {
+            train_samples,
+            val_samples,
+            optimization_config: UninitializedOptimizerInfo {
+                inner: optimization_config,
+            },
+        });
+        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
+    }
+
+    /// Poll an optimization job.
+    ///
+    /// :param job_handle: The job handle returned by `experimental_launch_optimization`.
+    /// :return: An `OptimizerStatus` object.
+    #[pyo3(signature = (*, job_handle))]
+    fn experimental_poll_optimization(
+        this: PyRef<'_, Self>,
+        job_handle: OptimizationJobHandle,
+    ) -> PyResult<OptimizationJobInfoPyClass> {
+        let client = this.as_super().client.clone();
+        let fut = client.experimental_poll_optimization(&job_handle);
+        match tokio_block_on_without_gil(this.py(), fut) {
+            Ok(status) => Ok(OptimizationJobInfoPyClass::new(status)),
+            Err(e) => Err(convert_error(this.py(), e)),
+        }
     }
 }
 
@@ -977,7 +1212,7 @@ impl AsyncTensorZeroGateway {
                 let client = match client {
                     Ok(client) => client,
                     Err(e) => {
-                        return Err(tensorzero_internal_error(
+                        return Err(tensorzero_core_error(
                             py,
                             &format!("Failed to construct TensorZero client: {e:?}"),
                         )?);
@@ -986,7 +1221,7 @@ impl AsyncTensorZeroGateway {
 
                 // Construct an instance of `AsyncTensorZeroGateway` (while providing the fields from the `BaseTensorZeroGateway` superclass).
                 let instance = PyClassInitializer::from(BaseTensorZeroGateway {
-                    client: Arc::new(client),
+                    client: DropInTokio::new(client, make_dummy_client),
                 })
                 .add_subclass(AsyncTensorZeroGateway {});
                 Py::new(py, instance)
@@ -1064,9 +1299,10 @@ impl AsyncTensorZeroGateway {
             config_file: config_file.map(PathBuf::from),
             clickhouse_url,
             timeout,
+            verify_credentials: true,
+            allow_batch_writes: false,
         })
         .build();
-
         let fut = async move {
             let client = client_fut.await;
             // We need to interact with Python objects here (to build up a Python `AsyncTensorZeroGateway`),
@@ -1075,7 +1311,7 @@ impl AsyncTensorZeroGateway {
                 let client = match client {
                     Ok(client) => client,
                     Err(e) => {
-                        return Err(tensorzero_internal_error(
+                        return Err(tensorzero_core_error(
                             py,
                             &format!("Failed to construct TensorZero client: {e:?}"),
                         )?);
@@ -1084,7 +1320,7 @@ impl AsyncTensorZeroGateway {
 
                 // Construct an instance of `AsyncTensorZeroGateway` (while providing the fields from the `BaseTensorZeroGateway` superclass).
                 let instance = PyClassInitializer::from(BaseTensorZeroGateway {
-                    client: Arc::new(client),
+                    client: DropInTokio::new(client, make_dummy_client),
                 })
                 .add_subclass(AsyncTensorZeroGateway {});
                 Py::new(py, instance)
@@ -1183,6 +1419,7 @@ impl AsyncTensorZeroGateway {
             include_original_response.unwrap_or(false),
         )?;
         let client = this.as_super().client.clone();
+        let gateway = this.into_pyobject(py)?.into_any().unbind();
         // See `AsyncStreamWrapper::__anext__` for more details about `future_into_py`
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let res = client.inference(params).await;
@@ -1194,6 +1431,7 @@ impl AsyncTensorZeroGateway {
                     InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
                     InferenceOutput::Streaming(stream) => Ok(AsyncStreamWrapper {
                         stream: Arc::new(Mutex::new(stream)),
+                        _gateway: gateway,
                     }
                     .into_pyobject(py)?
                     .into_any()
@@ -1368,7 +1606,7 @@ impl AsyncTensorZeroGateway {
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.delete_datapoint(dataset_name, datapoint_id).await;
             Python::with_gil(|py| match res {
-                Ok(_) => Ok(()),
+                Ok(()) => Ok(()),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -1383,14 +1621,14 @@ impl AsyncTensorZeroGateway {
     fn get_datapoint<'a>(
         this: PyRef<'a, Self>,
         dataset_name: String,
-        datapoint_id: Bound<'a, PyAny>,
+        datapoint_id: Bound<'_, PyAny>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.get_datapoint(dataset_name, datapoint_id).await;
             Python::with_gil(|py| match res {
-                Ok(resp) => parse_datapoint(py, resp),
+                Ok(resp) => Ok(resp.into_py_any(py)?),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -1400,24 +1638,93 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param dataset_name: The name of the dataset to get the datapoints from.
     /// :return: A list of `Datapoint` objects.
-    #[pyo3(signature = (*, dataset_name, limit=None, offset=None))]
+    #[pyo3(signature = (*, dataset_name, function_name=None, limit=None, offset=None))]
     fn list_datapoints(
         this: PyRef<'_, Self>,
         dataset_name: String,
+        function_name: Option<String>,
         limit: Option<u32>,
         offset: Option<u32>,
     ) -> PyResult<Bound<'_, PyAny>> {
         let client = this.as_super().client.clone();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.list_datapoints(dataset_name, limit, offset).await;
+            let res = client
+                .list_datapoints(dataset_name, function_name, limit, offset)
+                .await;
             Python::with_gil(|py| match res {
-                Ok(resp) => {
-                    let datapoints = resp
-                        .into_iter()
-                        .map(|x| parse_datapoint(py, x))
-                        .collect::<Result<Vec<_>, _>>()?;
-                    Ok(PyList::new(py, datapoints)?.unbind())
-                }
+                Ok(datapoints) => Ok(PyList::new(py, datapoints)?.unbind()),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    /// Query the Clickhouse database for inferences.
+    ///
+    /// This function is only available in EmbeddedGateway mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `function_name` - The name of the function to query.
+    /// * `variant_name` - The name of the variant to query. Optional
+    /// * `filters` - A filter tree to apply to the query. Optional
+    /// * `output_source` - The source of the output to query. "inference" or "demonstration"
+    /// * `limit` - The maximum number of inferences to return. Optional
+    /// * `offset` - The offset to start from. Optional
+    /// * `format` - The format to return the inferences in. For now, only "JSONEachRow" is supported.
+    #[pyo3(signature = (*,
+        function_name,
+        variant_name=None,
+        filters=None,
+        output_source="inference".to_string(),
+        order_by=None,
+        limit=None,
+        offset=None
+    ),
+    text_signature = "(self, *, function_name, variant_name=None, filters=None, output_source='inference', order_by=None, limit=None, offset=None)"
+    )]
+    // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
+    // is written as an ellipsis object.
+    #[expect(clippy::too_many_arguments)]
+    fn experimental_list_inferences<'a>(
+        this: PyRef<'a, Self>,
+        function_name: String,
+        variant_name: Option<String>,
+        filters: Option<Bound<'a, PyAny>>,
+        output_source: String,
+        order_by: Option<Bound<'a, PyAny>>,
+        limit: Option<u64>,
+        offset: Option<u64>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let filters = filters
+            .as_ref()
+            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .transpose()?;
+        let order_by: Option<Vec<OrderBy>> = order_by
+            .as_ref()
+            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .transpose()?;
+        let output_source =
+            output_source
+                .as_str()
+                .try_into()
+                .map_err(|e: tensorzero_core::error::Error| {
+                    convert_error(this.py(), TensorZeroError::Other { source: e.into() })
+                })?;
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let params = ListInferencesParams {
+                function_name: &function_name,
+                variant_name: variant_name.as_deref(),
+                filters: filters.as_ref(),
+                output_source,
+                order_by: order_by.as_deref(),
+                limit,
+                offset,
+                format: ClickhouseFormat::JsonEachRow,
+            };
+            let res = client.experimental_list_inferences(params).await;
+            Python::with_gil(|py| match res {
+                Ok(stored_inferences) => Ok(PyList::new(py, stored_inferences)?.unbind()),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -1436,20 +1743,33 @@ impl AsyncTensorZeroGateway {
     /// :param stored_inferences: A list of stored inferences to render.
     /// :param variants: A map from function name to variant name.
     /// :return: A list of rendered stored inferences.
+    /// DEPRECATED: use `experimental_render_samples` instead.
+    ///
+    /// Renders stored inferences using the templates of the specified variants.
+    ///
+    /// Warning: This API is experimental and may change without notice. For now
+    ///          we discard inferences where the input references a static tool that
+    ///          has no variant specified, or where the process of downloading resources fails.
+    ///          In future we will make this behavior configurable by the caller.
+    ///
+    /// :param stored_inferences: A list of stored inferences to render.
+    /// :param variants: A map from function name to variant name.
+    /// :return: A list of rendered stored inferences.
     #[pyo3(signature = (*, stored_inferences, variants))]
     fn experimental_render_inferences<'a>(
         this: PyRef<'a, Self>,
         stored_inferences: Vec<Bound<'a, PyAny>>,
         variants: HashMap<String, String>,
     ) -> PyResult<Bound<'a, PyAny>> {
+        tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead. See https://github.com/tensorzero/tensorzero/issues/2675");
         let client = this.as_super().client.clone();
         let stored_inferences = stored_inferences
             .iter()
-            .map(|x| deserialize_from_pyobj(this.py(), x))
+            .map(|x| deserialize_from_stored_sample(this.py(), x))
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
-                .experimental_render_inferences(stored_inferences, variants)
+                .experimental_render_samples(stored_inferences, variants)
                 .await;
             Python::with_gil(|py| match res {
                 Ok(inferences) => Ok(PyList::new(py, inferences)?.unbind()),
@@ -1458,70 +1778,103 @@ impl AsyncTensorZeroGateway {
         })
     }
 
-    /// For internal use only - do not call.
-    // This is a helper function used by `optimization-server` to get the template config
-    // when applying a new prompt template during fine-tuning
-    #[pyo3(signature = (*, function_name, variant_name))]
-    fn _internal_get_template_config(
-        this: PyRef<'_, Self>,
-        function_name: &str,
-        variant_name: &str,
-    ) -> PyResult<Py<PyDict>> {
-        let Some(config) = this.as_super().client.get_config() else {
-            return Err(tensorzero_internal_error(
-                this.py(),
-                "Called _get_template_config on HTTP gateway",
-            )?);
-        };
-        crate::internal::get_template_config(this.py(), &config, function_name, variant_name)
+    /// Render a list of stored samples into a list of rendered stored samples.
+    ///
+    /// This function performs two main tasks:
+    /// 1. Resolves all network resources (e.g., images) in the stored samples.
+    /// 2. Prepares all messages into "simple" messages that have been templated for a particular variant.
+    ///    To do this, the function needs to know which variant to use for each function that might appear in the data.
+    ///
+    /// IMPORTANT: For now, this function drops datapoints that are invalid, such as those where templating fails,
+    /// the function has no variant specified, or the process of downloading resources fails.
+    /// In the future, this behavior may be made configurable by the caller.
+    ///
+    /// :param stored_samples: A list of stored samples to render.
+    /// :param variants: A mapping from function name to variant name.
+    /// :return: A list of rendered samples.
+    #[pyo3(signature = (*, stored_samples, variants))]
+    fn experimental_render_samples<'a>(
+        this: PyRef<'a, Self>,
+        stored_samples: Vec<Bound<'a, PyAny>>,
+        variants: HashMap<String, String>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let stored_samples = stored_samples
+            .iter()
+            .map(|x| deserialize_from_stored_sample(this.py(), x))
+            .collect::<Result<Vec<_>, _>>()?;
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client
+                .experimental_render_samples(stored_samples, variants)
+                .await;
+            Python::with_gil(|py| match res {
+                Ok(samples) => Ok(PyList::new(py, samples)?.unbind()),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
     }
 
-    /// For internal use only - do not call.
-    // This is a helper function used by `optimization-server` to get inferences used for fine-tuning
-    #[pyo3(signature = (*, function_name, metric_name=None, threshold=None, max_samples=None))]
-    fn _internal_get_curated_inferences(
-        this: PyRef<'_, Self>,
-        function_name: String,
-        metric_name: Option<String>,
-        threshold: Option<f64>,
-        max_samples: Option<u64>,
-    ) -> PyResult<Py<PyAny>> {
-        let Some(app_state) = this.as_super().client.get_app_state_data().cloned() else {
-            return Err(tensorzero_internal_error(
-                this.py(),
-                "Called _internal_get_curated_inferences on HTTP gateway",
-            )?);
-        };
+    /// Launch an optimization job.
+    ///
+    /// :param train_samples: A list of RenderedSample objects that will be used for training.
+    /// :param val_samples: A list of RenderedSample objects that will be used for validation.
+    /// :param optimiztion_config: The optimization config.
+    /// :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
+    #[pyo3(signature = (*, train_samples, val_samples=None, optimization_config))]
+    fn experimental_launch_optimization<'a>(
+        this: PyRef<'a, Self>,
+        train_samples: Vec<Bound<'a, PyAny>>,
+        val_samples: Option<Vec<Bound<'a, PyAny>>>,
+        optimization_config: Bound<'a, PyAny>,
+    ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
-        Ok(
-            pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-                let inferences_result = crate::internal::get_curated_inferences(
-                    &app_state.config,
-                    &app_state.clickhouse_connection_info,
-                    &client,
-                    &function_name,
-                    metric_name.as_deref(),
-                    threshold,
-                    max_samples,
-                )
-                .await;
-
-                Python::with_gil(|py| {
-                    let inferences = inferences_result.map_err(|e| convert_error(py, e))?;
-                    let mut dict_inferences = Vec::with_capacity(inferences.len());
-                    for inference in inferences {
-                        dict_inferences.push(serialize_to_dict(
-                            py,
-                            serialize_with_file_data(&inference).map_err(|e| {
-                                convert_error(py, TensorZeroError::Other { source: e.into() })
-                            })?,
-                        )?);
-                    }
-                    Ok(PyList::new(py, dict_inferences)?.unbind())
+        let train_samples = train_samples
+            .iter()
+            .map(|x| deserialize_from_rendered_sample(this.py(), x))
+            .collect::<Result<Vec<_>, _>>()?;
+        let val_samples = val_samples
+            .as_ref()
+            .map(|x| {
+                x.iter()
+                    .map(|x| deserialize_from_rendered_sample(this.py(), x))
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .transpose()?;
+        let optimizer_config = deserialize_optimization_config(&optimization_config)?;
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client
+                .experimental_launch_optimization(LaunchOptimizationParams {
+                    train_samples,
+                    val_samples,
+                    optimization_config: UninitializedOptimizerInfo {
+                        inner: optimizer_config,
+                    },
                 })
-            })?
-            .unbind(),
-        )
+                .await;
+            match res {
+                Ok(job_handle) => Ok(job_handle),
+                Err(e) => Python::with_gil(|py| Err(convert_error(py, e))),
+            }
+        })
+    }
+
+    /// Poll an optimization job.
+    ///
+    /// :param job_handle: The job handle returned by `experimental_launch_optimization`.
+    /// :return: An `OptimizerStatus` object.
+    #[pyo3(signature = (*, job_handle))]
+    fn experimental_poll_optimization(
+        this: PyRef<'_, Self>,
+        job_handle: OptimizationJobHandle,
+    ) -> PyResult<Bound<'_, PyAny>> {
+        let client = this.as_super().client.clone();
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client.experimental_poll_optimization(&job_handle).await;
+            match res {
+                Ok(status) => Ok(OptimizationJobInfoPyClass::new(status)),
+                Err(e) => Python::with_gil(|py| Err(convert_error(py, e))),
+            }
+        })
     }
 }
 
@@ -1537,26 +1890,25 @@ pub fn convert_error(py: Python<'_>, e: TensorZeroError) -> PyErr {
             source: _,
         } => tensorzero_error(py, status_code, text).unwrap_or_else(|e| e),
         TensorZeroError::Other { source } => {
-            tensorzero_internal_error(py, &source.to_string()).unwrap_or_else(|e| e)
+            tensorzero_core_error(py, &source.to_string()).unwrap_or_else(|e| e)
         }
         TensorZeroError::RequestTimeout => {
-            tensorzero_internal_error(py, &e.to_string()).unwrap_or_else(|e| e)
+            tensorzero_core_error(py, &e.to_string()).unwrap_or_else(|e| e)
         }
         // Required due to the `#[non_exhaustive]` attribute on `TensorZeroError` - we want to force
         // downstream consumers to handle all possible error types, but the compiler also requires us
         // to do this (since our python bindings are in a different crate from the Rust client.)
-        _ => tensorzero_internal_error(py, &format!("Unexpected TensorZero error: {e:?}"))
+        _ => tensorzero_core_error(py, &format!("Unexpected TensorZero error: {e:?}"))
             .unwrap_or_else(|e| e),
     }
 }
 
 fn tensorzero_error(py: Python<'_>, status_code: u16, text: Option<String>) -> PyResult<PyErr> {
-    let err = TENSORZERO_HTTP_ERROR.get_or_try_init::<_, PyErr>(py, || {
-        let self_module = PyModule::import(py, "tensorzero")?;
-        let err: Bound<'_, PyAny> = self_module.getattr("TensorZeroError")?;
-        Ok(err.unbind())
-    })?;
-    Ok(PyErr::from_value(err.bind(py).call1((status_code, text))?))
+    Ok(PyErr::from_value(
+        tensorzero_error_class(py)?
+            .bind(py)
+            .call1((status_code, text))?,
+    ))
 }
 
 fn warn_no_config(py: Python<'_>, config: Option<&str>) -> PyResult<()> {

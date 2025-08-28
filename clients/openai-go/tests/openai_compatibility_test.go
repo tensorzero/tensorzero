@@ -52,18 +52,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func OldFormatSystemMessageWithAssistant(t *testing.T, assistant_name string) *openai.ChatCompletionSystemMessageParam {
-	t.Helper()
-
-	sysMsg := param.OverrideObj[openai.ChatCompletionSystemMessageParam](map[string]interface{}{
-		"content": []map[string]interface{}{
-			{"assistant_name": assistant_name},
-		},
-		"role": "system",
-	})
-	return &sysMsg
-}
-
 func systemMessageWithAssistant(t *testing.T, assistant_name string) *openai.ChatCompletionSystemMessageParam {
 	t.Helper()
 
@@ -126,13 +114,59 @@ func sendRequestTzGateway(t *testing.T, body map[string]interface{}) (map[string
 	return responseBody, nil
 }
 
+func TestTags(t *testing.T) {
+	t.Run("Test tensorzero tags", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
+			openai.UserMessage("Hello"),
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Model:       "tensorzero::function_name::basic_test",
+			Messages:    messages,
+			Temperature: openai.Float(0.4),
+		}
+		req.WithExtraFields(map[string]any{
+			"tensorzero::episode_id": episodeID.String(),
+			"tensorzero::tags":       map[string]any{"foo": "bar"},
+		})
+
+		// Send API request
+		resp, err := client.Chat.Completions.New(ctx, *req)
+		require.NoError(t, err, "API request failed")
+
+		// If episode_id is passed in the old format,
+		// verify its presence in the response extras and ensure it's a valid UUID,
+		// without checking the exact value.
+		rawEpisodeID, ok := resp.JSON.ExtraFields["episode_id"]
+		require.True(t, ok, "Response does not contain an episode_id")
+		var responseEpisodeID string
+		err = json.Unmarshal([]byte(rawEpisodeID.Raw()), &responseEpisodeID)
+		require.NoError(t, err, "Failed to parse episode_id from response extras")
+		_, err = uuid.Parse(responseEpisodeID)
+		require.NoError(t, err, "Response episode_id is not a valid UUID")
+
+		// Validate response fields
+		assert.Equal(t, `Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.`,
+			resp.Choices[0].Message.Content)
+
+		// Validate Usage
+		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
+		assert.Equal(t, int64(1), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(11), resp.Usage.TotalTokens)
+		assert.Equal(t, "stop", resp.Choices[0].FinishReason)
+	})
+}
+
 // Test basic inference with old model format
 func TestBasicInference(t *testing.T) {
 	t.Run("Basic Inference using Old Model Format and Header", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -166,8 +200,8 @@ func TestBasicInference(t *testing.T) {
 
 		// Validate Usage
 		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
-		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
-		assert.Equal(t, int64(20), resp.Usage.TotalTokens)
+		assert.Equal(t, int64(1), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(11), resp.Usage.TotalTokens)
 		assert.Equal(t, "stop", resp.Choices[0].FinishReason)
 	})
 	// TODO: [test_async_basic_inference]
@@ -175,7 +209,7 @@ func TestBasicInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -206,15 +240,15 @@ func TestBasicInference(t *testing.T) {
 
 		// Validate Usage
 		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
-		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
-		assert.Equal(t, int64(20), resp.Usage.TotalTokens)
+		assert.Equal(t, int64(1), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(11), resp.Usage.TotalTokens)
 		assert.Equal(t, "stop", resp.Choices[0].FinishReason)
 
 	})
 
 	t.Run("it should handle basic json schema parsing and throw proper validation error", func(t *testing.T) {
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -248,7 +282,7 @@ func TestBasicInference(t *testing.T) {
 
 	t.Run("it should handle inference with cache", func(t *testing.T) {
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -269,8 +303,11 @@ func TestBasicInference(t *testing.T) {
 		// Validate usage
 		require.NotNil(t, resp.Usage)
 		require.Equal(t, int64(10), resp.Usage.PromptTokens)
-		require.Equal(t, int64(10), resp.Usage.CompletionTokens)
-		require.Equal(t, int64(20), resp.Usage.TotalTokens)
+		require.Equal(t, int64(1), resp.Usage.CompletionTokens)
+		require.Equal(t, int64(11), resp.Usage.TotalTokens)
+
+		// Sleep for 1s
+		time.Sleep(time.Second)
 
 		// Second request (cached)
 		req.WithExtraFields(map[string]any{
@@ -357,7 +394,7 @@ func TestBasicInference(t *testing.T) {
 		assert.Nil(t, resp.Choices[0].Message.ToolCalls, "Tool calls should be nil")
 		// Validate usage
 		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
-		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(1), resp.Usage.CompletionTokens)
 	})
 
 	t.Run("it should handle chat function null response", func(t *testing.T) {
@@ -510,12 +547,17 @@ func TestBasicInference(t *testing.T) {
 
 		userMsg := param.OverrideObj[openai.ChatCompletionUserMessageParam](map[string]interface{}{
 			"content": []map[string]interface{}{
-				{"country": "Japan"},
+				{
+					"type": "text",
+					"tensorzero::arguments": map[string]interface{}{
+						"country": "Japan",
+					},
+				},
 			},
 			"role": "user",
 		})
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			{OfUser: &userMsg},
 		}
 
@@ -549,7 +591,7 @@ func TestBasicInference(t *testing.T) {
 
 		// Validate usage
 		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
-		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(1), resp.Usage.CompletionTokens)
 	})
 
 	t.Run("it should handle json invalid system", func(t *testing.T) {
@@ -568,7 +610,12 @@ func TestBasicInference(t *testing.T) {
 		})
 		userMsg := param.OverrideObj[openai.ChatCompletionUserMessageParam](map[string]interface{}{
 			"content": []map[string]interface{}{
-				{"country": "Japan"},
+				{
+					"type": "text",
+					"tensorzero::arguments": map[string]interface{}{
+						"country": "Japan",
+					},
+				},
 			},
 			"role": "user",
 		})
@@ -596,7 +643,7 @@ func TestBasicInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello, world!"),
 		}
 
@@ -620,7 +667,7 @@ func TestBasicInference(t *testing.T) {
 
 		// Validate usage
 		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
-		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(1), resp.Usage.CompletionTokens)
 	})
 }
 
@@ -647,7 +694,7 @@ func TestStreamingInference(t *testing.T) {
 			" pizza.",
 		}
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -740,7 +787,7 @@ func TestStreamingInference(t *testing.T) {
 	t.Run("it should handle streaming inference with cache", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -849,7 +896,7 @@ func TestStreamingInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -875,7 +922,7 @@ func TestStreamingInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -900,7 +947,7 @@ func TestStreamingInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -925,7 +972,7 @@ func TestStreamingInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
 		}
 
@@ -951,7 +998,12 @@ func TestStreamingInference(t *testing.T) {
 
 		sysMsg := param.OverrideObj[openai.ChatCompletionSystemMessageParam](map[string]interface{}{
 			"content": []map[string]interface{}{
-				{"name_of_assistant": "Alfred Pennyworth"},
+				{
+					"type": "text",
+					"tensorzero::arguments": map[string]interface{}{
+						"name_of_assistant": "Alfred Pennyworth",
+					},
+				},
 			},
 			"role": "system",
 		})
@@ -986,12 +1038,17 @@ func TestStreamingInference(t *testing.T) {
 
 		userMsg := param.OverrideObj[openai.ChatCompletionUserMessageParam](map[string]interface{}{
 			"content": []map[string]interface{}{
-				{"country": "Japan"},
+				{
+					"type": "text",
+					"tensorzero::arguments": map[string]interface{}{
+						"country": "Japan",
+					},
+				},
 			},
 			"role": "user",
 		})
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			{OfUser: &userMsg},
 		}
 
@@ -1003,7 +1060,10 @@ func TestStreamingInference(t *testing.T) {
 				IncludeUsage: openai.Bool(false), // No usage information
 			},
 		}
-		addEpisodeIDToRequest(t, req, episodeID)
+		req.WithExtraFields(map[string]any{
+			"tensorzero::episode_id":   episodeID.String(),
+			"tensorzero::variant_name": "test-diff-schema",
+		})
 
 		// Start streaming
 		stream := client.Chat.Completions.NewStreaming(ctx, *req)
@@ -1051,7 +1111,7 @@ func TestStreamingInference(t *testing.T) {
 				continue
 			}
 			// Validate the model
-			assert.Equal(t, "tensorzero::function_name::json_success::variant_name::test", chunk.Model, "Model mismatch")
+			assert.Equal(t, "tensorzero::function_name::json_success::variant_name::test-diff-schema", chunk.Model, "Model mismatch")
 			// Validate inference ID consistency
 			if previousInferenceID != "" {
 				assert.Equal(t, previousInferenceID, chunk.ID, "Inference ID should remain consistent across chunks")
@@ -1089,7 +1149,7 @@ func TestToolCallingInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hi I'm visiting Brooklyn from Brazil. What's the weather?"),
 		}
 
@@ -1126,8 +1186,8 @@ func TestToolCallingInference(t *testing.T) {
 		assert.Equal(t, `{"location":"Brooklyn","units":"celsius"}`, toolCall.Function.Arguments, "Function arguments do not match")
 		// Validate the Usage
 		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
-		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
-		assert.Equal(t, int64(20), resp.Usage.TotalTokens)
+		assert.Equal(t, int64(1), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(11), resp.Usage.TotalTokens)
 		assert.Equal(t, "tool_calls", resp.Choices[0].FinishReason)
 	})
 
@@ -1135,7 +1195,7 @@ func TestToolCallingInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hi I'm visiting Brooklyn from Brazil. What's the weather?"),
 		}
 
@@ -1166,8 +1226,8 @@ func TestToolCallingInference(t *testing.T) {
 		assert.Equal(t, `{"location":"Brooklyn","units":"Celsius"}`, toolCall.Function.Arguments, "Function arguments do not match")
 		// Validate usage
 		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
-		assert.Equal(t, int64(10), resp.Usage.CompletionTokens)
-		assert.Equal(t, int64(20), resp.Usage.TotalTokens)
+		assert.Equal(t, int64(1), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(11), resp.Usage.TotalTokens)
 		assert.Equal(t, "tool_calls", resp.Choices[0].FinishReason)
 	})
 
@@ -1175,7 +1235,7 @@ func TestToolCallingInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hi I'm visiting Brooklyn from Brazil. What's the weather?"),
 		}
 
@@ -1219,6 +1279,7 @@ func TestToolCallingInference(t *testing.T) {
 		assert.Equal(t, int64(15), completionChunk.Usage.TotalTokens)
 
 		var previousInferenceID, previousEpisodeID string
+		nameSeen := false
 		//Test for intermediate chunks
 		for i := range len(allChunks) - 2 {
 			chunk := allChunks[i]
@@ -1253,16 +1314,21 @@ func TestToolCallingInference(t *testing.T) {
 			toolCall := chunk.Choices[0].Delta.ToolCalls[0]
 			//BUG : other toolcall.type arr of `constant.Function("function")`
 			assert.Equal(t, "function", toolCall.Type, "Tool call type should be 'function'")
-			assert.Equal(t, "get_temperature", toolCall.Function.Name, "Function name should be 'get_temperature'")
+			if toolCall.Function.Name != "" {
+				assert.False(t, nameSeen, "Function name should only appear once")
+				assert.Equal(t, "get_temperature", toolCall.Function.Name, "Function name should be 'get_temperature'")
+				nameSeen = true
+			}
 			assert.Equal(t, expectedText[i], toolCall.Function.Arguments, "Function arguments do not match expected text")
 		}
+		assert.True(t, nameSeen, "Function name should have been seen in at least one chunk")
 	})
 
 	t.Run("it should handle dynamic tool use inference with OpenAI", func(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Dr. Mehta")},
+			{OfSystem: systemMessageWithAssistant(t, "Dr. Mehta")},
 			openai.UserMessage("What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."),
 		}
 
@@ -1347,12 +1413,17 @@ func TestToolCallingInference(t *testing.T) {
 
 		usrMsg := param.OverrideObj[openai.ChatCompletionUserMessageParam](map[string]interface{}{
 			"content": []map[string]interface{}{
-				{"country": "Japan"},
+				{
+					"type": "text",
+					"tensorzero::arguments": map[string]interface{}{
+						"country": "Japan",
+					},
+				},
 			},
 			"role": "user",
 		})
 		messages := []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: OldFormatSystemMessageWithAssistant(t, "Alfred Pennyworth")},
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hi how are you?"),
 			{OfUser: &usrMsg},
 		}
@@ -1571,7 +1642,7 @@ func TestImageInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		// Read image and convert to base64
-		imagePath := "../../../tensorzero-internal/tests/e2e/providers/ferris.png"
+		imagePath := "../../../tensorzero-core/tests/e2e/providers/ferris.png"
 		imageData, err := os.ReadFile(imagePath)
 		require.NoError(t, err, "Failed to read image file")
 		imageBase64 := base64.StdEncoding.EncodeToString(imageData)

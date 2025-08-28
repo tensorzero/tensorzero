@@ -20,7 +20,7 @@ repos:
       - id: detect-private-key
         exclude: |
           (?x)^(
-              tensorzero-internal/src/inference/providers/gcp_vertex_gemini\.rs|
+              tensorzero-core/src/providers/gcp_vertex_gemini/mod\.rs|
               ci/dummy-gcp-credentials\.json
           )$
       - id: end-of-file-fixer
@@ -29,22 +29,6 @@ repos:
 
   - repo: local
     hooks:
-      # Find every pyproject.toml and generate a uv.lock file
-      - id: uv-lock
-        name: uv lock
-        entry: bash -c 'git ls-files "*.toml" "**/pyproject.toml" | grep -E "pyproject\.toml$" | while read f; do dir=$(dirname "$f"); echo "Locking $f"; (cd "$dir" && uv lock --project="pyproject.toml" && git add --intent-to-add "uv.lock"); done'
-        language: system
-        pass_filenames: false
-        always_run: true
-
-      # Find every pyproject.toml and generate a requirements.txt file
-      - id: uv-export
-        name: uv export
-        entry: bash -c 'git ls-files "*.toml" "**/pyproject.toml" | grep -E "pyproject\.toml$" | while read f; do dir=$(dirname "$f"); echo "Exporting $f"; (cd "$dir" && uv export --project="pyproject.toml" --output-file="requirements.txt" --quiet && git add --intent-to-add "requirements.txt"); done'
-        language: system
-        pass_filenames: false
-        always_run: true
-
       - id: cargo-deny
         name: cargo deny
         entry: cargo deny check
@@ -66,13 +50,6 @@ repos:
         types: [rust]
         pass_filenames: false
 
-      - id: cargo-test-unit
-        name: cargo test-unit
-        entry: cargo test-unit
-        language: system
-        types: [rust]
-        pass_filenames: false
-
       - id: "prettier: ui"
         name: "prettier: ui"
         entry: bash -c 'pnpm --filter=tensorzero-ui run format'
@@ -89,6 +66,19 @@ repos:
       - id: "prettier: openai-node"
         name: "prettier: openai-node"
         entry: bash -c 'pnpm --filter=openai-node run format'
+        language: node
+        types_or:
+          [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
+        additional_dependencies:
+          - prettier
+          - prettier-plugin-tailwindcss
+          - "@prettier/plugin-xml"
+        exclude: '.*\.ipynb$'
+        pass_filenames: false
+
+      - id: "prettier: tensorzero-node"
+        name: "prettier: tensorzero-node"
+        entry: bash -c 'pnpm --filter=tensorzero-node run format'
         language: node
         types_or:
           [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
@@ -121,6 +111,17 @@ repos:
           - "@typescript-eslint/eslint-plugin"
         pass_filenames: false
 
+      - id: "eslint: tensorzero-node"
+        name: "eslint: tensorzero-node"
+        entry: bash -c 'pnpm --filter=tensorzero-node run lint'
+        language: node
+        types_or: [javascript, jsx, ts, tsx]
+        additional_dependencies:
+          - eslint
+          - "@typescript-eslint/parser"
+          - "@typescript-eslint/eslint-plugin"
+        pass_filenames: false
+
       - id: "tsc: ui"
         name: "tsc: ui"
         entry: bash -c 'pnpm --filter=tensorzero-ui run typecheck'
@@ -133,6 +134,15 @@ repos:
       - id: "tsc: openai-node"
         name: "tsc: openai-node"
         entry: bash -c 'pnpm --filter=openai-node run typecheck'
+        language: node
+        types_or: [ts, tsx]
+        additional_dependencies:
+          - typescript
+        pass_filenames: false
+
+      - id: "tsc: tensorzero-node"
+        name: "tsc: tensorzero-node"
+        entry: bash -c 'pnpm --filter=tensorzero-node run typecheck'
         language: node
         types_or: [ts, tsx]
         additional_dependencies:
@@ -164,13 +174,6 @@ repos:
   - repo: https://github.com/RobertCraigie/pyright-python
     rev: v1.1.391
     hooks:
-      - id: pyright
-        name: "pyright: clients/openai-python"
-        files: ^clients/openai-python/
-        args: ["--project", "clients/openai-python/pyrightconfig.json"]
-        additional_dependencies:
-          - openai
-
       - id: pyright
         name: "pyright: recipes"
         files: ^recipes/

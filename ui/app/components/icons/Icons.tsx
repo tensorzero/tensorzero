@@ -1,4 +1,4 @@
-import { UserPen, FlaskConical } from "lucide-react";
+import { RefreshCw, UserPen } from "lucide-react";
 import React from "react";
 
 export interface IconProps {
@@ -87,7 +87,18 @@ export const Functions: React.FC<IconProps> = (props) => (
     <path
       fillRule="evenodd"
       clipRule="evenodd"
-      d="M4 1.4H12C13.4359 1.4 14.6 2.56406 14.6 4V12C14.6 13.4359 13.4359 14.6 12 14.6H4C2.56406 14.6 1.4 13.4359 1.4 12V4C1.4 2.56406 2.56406 1.4 4 1.4ZM0 4C0 1.79086 1.79086 0 4 0H12C14.2091 0 16 1.79086 16 4V12C16 14.2091 14.2091 16 12 16H4C1.79086 16 0 14.2091 0 12V4ZM8.6998 6.4998C8.6998 5.78183 9.28183 5.1998 9.9998 5.1998H10.9998C11.3864 5.1998 11.6998 4.8864 11.6998 4.4998C11.6998 4.11321 11.3864 3.7998 10.9998 3.7998H9.9998C8.50864 3.7998 7.2998 5.00864 7.2998 6.4998V6.7998H5.9998C5.61321 6.7998 5.2998 7.11321 5.2998 7.4998C5.2998 7.8864 5.61321 8.1998 5.9998 8.1998H7.2998V9.4998C7.2998 10.2178 6.71777 10.7998 5.9998 10.7998H4.9998C4.61321 10.7998 4.2998 11.1132 4.2998 11.4998C4.2998 11.8864 4.61321 12.1998 4.9998 12.1998H5.9998C7.49097 12.1998 8.6998 10.991 8.6998 9.4998V8.1998H9.9998C10.3864 8.1998 10.6998 7.8864 10.6998 7.4998C10.6998 7.11321 10.3864 6.7998 9.9998 6.7998H8.6998V6.4998Z"
+      d="M12 0.75C13.7949 0.75 15.25 2.20507 15.25 4V12C15.25 13.7949 13.7949 15.25 12 15.25H4C2.20507 15.25 0.75 13.7949 0.75 12V4C0.75 2.20507 2.20507 0.75 4 0.75H12ZM4 2.25C3.0335 2.25 2.25 3.0335 2.25 4V12C2.25 12.9665 3.0335 13.75 4 13.75H12C12.9665 13.75 13.75 12.9665 13.75 12V4C13.75 3.0335 12.9665 2.25 12 2.25H4ZM10.5 3.75C10.9142 3.75 11.25 4.08579 11.25 4.5C11.25 4.91421 10.9142 5.25 10.5 5.25H9.5C9.08579 5.25 8.75 5.58579 8.75 6V6.75H10C10.4142 6.75 10.75 7.08579 10.75 7.5C10.75 7.91421 10.4142 8.25 10 8.25H8.75V10C8.75 11.2426 7.74264 12.25 6.5 12.25H5.5C5.08579 12.25 4.75 11.9142 4.75 11.5C4.75 11.0858 5.08579 10.75 5.5 10.75H6.5C6.91421 10.75 7.25 10.4142 7.25 10V8.25H6C5.58579 8.25 5.25 7.91421 5.25 7.5C5.25 7.08579 5.58579 6.75 6 6.75H7.25V6C7.25 4.75736 8.25736 3.75 9.5 3.75H10.5Z"
+      fill="currentColor"
+    />
+  </IconWrapper>
+);
+
+export const Function: React.FC<IconProps> = (props) => (
+  <IconWrapper {...props}>
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M12 0.75C13.7949 0.75 15.25 2.20507 15.25 4V12C15.25 13.7949 13.7949 15.25 12 15.25H4C2.20507 15.25 0.75 13.7949 0.75 12V4C0.75 2.20507 2.20507 0.75 4 0.75H12ZM4 2.25C3.0335 2.25 2.25 3.0335 2.25 4V12C2.25 12.9665 3.0335 13.75 4 13.75H12C12.9665 13.75 13.75 12.9665 13.75 12V4C13.75 3.0335 12.9665 2.25 12 2.25H4ZM10.5 3.75C10.9142 3.75 11.25 4.08579 11.25 4.5C11.25 4.91421 10.9142 5.25 10.5 5.25H9.5C9.08579 5.25 8.75 5.58579 8.75 6V6.75H10C10.4142 6.75 10.75 7.08579 10.75 7.5C10.75 7.91421 10.4142 8.25 10 8.25H8.75V10C8.75 11.2426 7.74264 12.25 6.5 12.25H5.5C5.08579 12.25 4.75 11.9142 4.75 11.5C4.75 11.0858 5.08579 10.75 5.5 10.75H6.5C6.91421 10.75 7.25 10.4142 7.25 10V8.25H6C5.58579 8.25 5.25 7.91421 5.25 7.5C5.25 7.08579 5.58579 6.75 6 6.75H7.25V6C7.25 4.75736 8.25736 3.75 9.5 3.75H10.5Z"
       fill="currentColor"
     />
   </IconWrapper>
@@ -256,7 +267,7 @@ export const Calendar: React.FC<IconProps> = (props) => (
   </IconWrapper>
 );
 
-export const Input: React.FC<IconProps> = (props) => (
+export const InputIcon: React.FC<IconProps> = (props) => (
   <IconWrapper {...props}>
     <path
       fillRule="evenodd"
@@ -287,6 +298,28 @@ export const Dataset: React.FC<IconProps> = (props) => (
       fill="currentColor"
     />
   </IconWrapper>
+);
+
+export const Playground: React.FC<IconProps> = (props) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    width={props.size}
+    height={props.size}
+    className={props.className}
+  >
+    <path d="M13 7 8.7 2.7a2.41 2.41 0 0 0-3.4 0L2.7 5.3a2.41 2.41 0 0 0 0 3.4L7 13" />
+    <path d="m8 6 2-2" />
+    <path d="m18 16 2-2" />
+    <path d="m17 11 4.3 4.3c.94.94.94 2.46 0 3.4l-2.6 2.6c-.94.94-2.46.94-3.4 0L11 17" />
+    <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+    <path d="m15 5 4 4" />
+  </svg>
 );
 
 export const AddToDataset: React.FC<IconProps> = (props) => (
@@ -420,6 +453,28 @@ export const GridCheck: React.FC<IconProps> = (props) => (
   </IconWrapper>
 );
 
+export const Table: React.FC<IconProps> = (props) => (
+  <IconWrapper {...props}>
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M1.25 3.5C1.25 2.25736 2.25736 1.25 3.5 1.25H6H12.5C13.7426 1.25 14.75 2.25736 14.75 3.5V6V12.5C14.75 13.7426 13.7426 14.75 12.5 14.75H6H3.5C2.25736 14.75 1.25 13.7426 1.25 12.5V6V3.5ZM2.75 6.75V12.5C2.75 12.9142 3.08579 13.25 3.5 13.25H5.25L5.25 6.75H2.75ZM5.25 5.25H2.75V3.5C2.75 3.08579 3.08579 2.75 3.5 2.75H5.25V5.25ZM6.75 6.75L6.75 13.25H12.5C12.9142 13.25 13.25 12.9142 13.25 12.5V6.75H6.75ZM13.25 5.25H6.75V2.75H12.5C12.9142 2.75 13.25 3.08579 13.25 3.5V5.25Z"
+      fill="currentColor"
+    />
+  </IconWrapper>
+);
+
+export const TablePlus: React.FC<IconProps> = (props) => (
+  <IconWrapper {...props}>
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M1.25 3.5C1.25 2.25736 2.25736 1.25 3.5 1.25H6H12.5C13.7426 1.25 14.75 2.25736 14.75 3.5V6V8C14.75 8.41421 14.4142 8.75 14 8.75C13.5858 8.75 13.25 8.41421 13.25 8V6.75H6.75L6.75 13.25H8C8.41421 13.25 8.75 13.5858 8.75 14C8.75 14.4142 8.41421 14.75 8 14.75H6H3.5C2.25736 14.75 1.25 13.7426 1.25 12.5V6V3.5ZM2.75 6.75V12.5C2.75 12.9142 3.08579 13.25 3.5 13.25H5.25L5.25 6.75H2.75ZM5.25 5.25H2.75V3.5C2.75 3.08579 3.08579 2.75 3.5 2.75H5.25V5.25ZM6.75 5.25H13.25V3.5C13.25 3.08579 12.9142 2.75 12.5 2.75H6.75V5.25ZM12.25 9C12.25 8.58579 11.9142 8.25 11.5 8.25C11.0858 8.25 10.75 8.58579 10.75 9V10.75H9C8.58579 10.75 8.25 11.0858 8.25 11.5C8.25 11.9142 8.58579 12.25 9 12.25H10.75V14C10.75 14.4142 11.0858 14.75 11.5 14.75C11.9142 14.75 12.25 14.4142 12.25 14V12.25H14C14.4142 12.25 14.75 11.9142 14.75 11.5C14.75 11.0858 14.4142 10.75 14 10.75H12.25V9Z"
+      fill="currentColor"
+    />
+  </IconWrapper>
+);
+
 export const TableCheck: React.FC<IconProps> = (props) => (
   <IconWrapper {...props}>
     <path
@@ -496,11 +551,22 @@ export const Evaluation: React.FC<IconProps> = (props) => (
   </IconWrapper>
 );
 
+export const SequenceChecks: React.FC<IconProps> = (props) => (
+  <IconWrapper {...props}>
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M12 1.25C12.4142 1.25 12.75 1.58579 12.75 2C12.75 2.41421 12.4142 2.75 12 2.75H3.5C3.08579 2.75 2.75 3.08579 2.75 3.5V5.25H7C7.41421 5.25 7.75 5.58579 7.75 6C7.75 6.41421 7.41421 6.75 7 6.75H2.75V9.25H7C7.41421 9.25 7.75 9.58579 7.75 10C7.75 10.4142 7.41421 10.75 7 10.75H2.75V12.5C2.75 12.9142 3.08579 13.25 3.5 13.25H7C7.41421 13.25 7.75 13.5858 7.75 14C7.75 14.4142 7.41421 14.75 7 14.75H3.5C2.25736 14.75 1.25 13.7426 1.25 12.5V3.5C1.25 2.25736 2.25736 1.25 3.5 1.25H12ZM14.0264 10.918C14.3209 10.6777 14.7557 10.6951 15.0303 10.9697C15.3049 11.2443 15.3223 11.6791 15.082 11.9736L15.0303 12.0303L12.5371 14.5234C12.2589 14.8015 11.8189 14.8186 11.5205 14.5752L11.4629 14.5234L9.96973 13.0303L9.91797 12.9736C9.67766 12.6791 9.69512 12.2443 9.96973 11.9697C10.2443 11.6951 10.6791 11.6777 10.9736 11.918L11.0303 11.9697L12 12.9395L13.9697 10.9697L14.0264 10.918ZM14.0264 4.91797C14.3209 4.67766 14.7557 4.69512 15.0303 4.96973C15.3049 5.24433 15.3223 5.67905 15.082 5.97363L15.0303 6.03027L12.5371 8.52344C12.2589 8.80146 11.8189 8.8186 11.5205 8.5752L11.4629 8.52344L9.96973 7.03027L9.91797 6.97363C9.67766 6.67905 9.69512 6.24433 9.96973 5.96973C10.2443 5.69512 10.6791 5.67766 10.9736 5.91797L11.0303 5.96973L12 6.93945L13.9697 4.96973L14.0264 4.91797Z"
+      fill="currentColor"
+    />
+  </IconWrapper>
+);
+
 export const UserFeedback: React.FC = () => <UserPen size={12} />;
 
-export const DynamicEvaluation: React.FC<IconProps> = (props) => (
+export const Refresh: React.FC<IconProps> = (props) => (
   <IconWrapper {...props}>
-    <FlaskConical size={16} />
+    <RefreshCw size={16} />
   </IconWrapper>
 );
 
@@ -511,6 +577,7 @@ export const iconComponents: Record<string, React.FC<IconProps>> = {
   Inferences,
   Episodes,
   Functions,
+  Function,
   SupervisedFineTuning,
   Documentation,
   Globe,
@@ -526,7 +593,7 @@ export const iconComponents: Record<string, React.FC<IconProps>> = {
   TypeJson,
   Timer,
   Calendar,
-  Input,
+  Input: InputIcon,
   Output,
   Dataset,
   AddToDataset,
@@ -540,6 +607,8 @@ export const iconComponents: Record<string, React.FC<IconProps>> = {
   Float,
   QuestionMark,
   GridCheck,
+  Table,
+  TablePlus,
   TableCheck,
   Evaluation,
   Plus,

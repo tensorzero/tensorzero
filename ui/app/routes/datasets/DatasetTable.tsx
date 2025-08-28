@@ -8,14 +8,29 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
-import { Link } from "react-router";
+import { Link, useFetcher } from "react-router";
 import { TableItemTime } from "~/components/ui/TableItems";
+import { Button } from "~/components/ui/button";
+import { Trash } from "lucide-react";
+import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "~/components/ui/dialog";
 
 export default function DatasetTable({
   counts,
 }: {
   counts: DatasetCountInfo[];
 }) {
+  const fetcher = useFetcher();
+  const [hoveredRow, setHoveredRow] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [datasetToDelete, setDatasetToDelete] = useState<string | null>(null);
   return (
     <div>
       <Table>
@@ -31,7 +46,12 @@ export default function DatasetTable({
             <TableEmptyState message="No datasets found" />
           ) : (
             counts.map((count) => (
-              <TableRow key={count.dataset_name} id={count.dataset_name}>
+              <TableRow
+                key={count.dataset_name}
+                id={count.dataset_name}
+                onMouseEnter={() => setHoveredRow(count.dataset_name)}
+                onMouseLeave={() => setHoveredRow(null)}
+              >
                 <TableCell className="max-w-[200px]">
                   <Link
                     to={`/datasets/${count.dataset_name}`}
@@ -46,11 +66,69 @@ export default function DatasetTable({
                 <TableCell>
                   <TableItemTime timestamp={count.last_updated} />
                 </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={
+                      hoveredRow === count.dataset_name ? "" : "invisible"
+                    }
+                    onClick={() => {
+                      setDatasetToDelete(count.dataset_name);
+                      setDeleteDialogOpen(true);
+                    }}
+                  >
+                    <Trash />
+                  </Button>
+                </TableCell>
               </TableRow>
             ))
           )}
         </TableBody>
       </Table>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Are you sure you want to delete the dataset{" "}
+              <span className="font-mono text-lg font-bold text-red-500">
+                {datasetToDelete}
+              </span>
+              ?
+            </DialogTitle>
+            <DialogDescription>
+              The datapoints will be marked as stale in the database (soft
+              deletion). This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex justify-between gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <div className="flex-1" />
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (datasetToDelete) {
+                  fetcher.submit(
+                    { action: "delete", datasetName: datasetToDelete },
+                    { method: "post" },
+                  );
+                }
+                setDeleteDialogOpen(false);
+                setDatasetToDelete(null);
+              }}
+            >
+              <Trash className="inline h-4 w-4" />
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
