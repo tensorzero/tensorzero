@@ -3,6 +3,7 @@ use base64::Engine;
 use serde_json::json;
 use std::collections::HashMap;
 use tokio::time::{sleep, Duration};
+use url::Url;
 use uuid::Uuid;
 
 use tensorzero::{
@@ -36,6 +37,13 @@ static FERRIS_PNG: &[u8] = include_bytes!("../../e2e/providers/ferris.png");
 
 fn use_mock_inference_provider() -> bool {
     std::env::var("TENSORZERO_USE_MOCK_INFERENCE_PROVIDER").is_ok()
+}
+
+pub fn mock_inference_provider_base() -> Url {
+    std::env::var("TENSORZERO_MOCK_INFERENCE_PROVIDER_BASE_URL")
+        .unwrap_or_else(|_| "http://localhost:3030/".to_string())
+        .parse()
+        .unwrap()
 }
 
 pub trait OptimizationTestCase {

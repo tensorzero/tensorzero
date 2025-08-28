@@ -47,8 +47,20 @@ RUN rm -rf target
 
 # Copy over just the evaluations and gateway binaries
 # they live in /app/target/debug/evaluations and /app/target/debug/gateway
-COPY --from=build-env /app/target/debug/evaluations /app/target/debug/evaluations
-COPY --from=build-env /app/target/debug/gateway /app/target/debug/gateway
+COPY --from=build-env /app/target/debug/evaluations /app/target/debug
+COPY --from=build-env /app/target/debug/gateway /app/target/debug
+
+# Add this in your test-env stage after copying binaries
+RUN echo "Host architecture: $(uname -m)" && \
+    echo "Binary file info:" && \
+    file /app/target/debug/evaluations && \
+    ldd /app/target/debug/evaluations || echo "Not a dynamic executable"
+
+# Test execution from the same context as the test
+RUN echo "=== Testing from container context ===" && \
+    CARGO_BIN_EXE_evaluations=/app/target/debug/evaluations && \
+    echo "Testing with path: $CARGO_BIN_EXE_evaluations" && \
+    $CARGO_BIN_EXE_evaluations 2>&1 || echo "Container execution failed with exit code: $?"
 
 # Copy only the test archive instead of entire target directory
 COPY --from=build-env /app/tests.tar.zst /app/tests.tar.zst
@@ -60,4 +72,4 @@ RUN cargo binstall -y cargo-nextest --secure
 ENV CI=true
 
 # Set the entrypoint to run tests from archive with absolute config file path and e2e profile
-ENTRYPOINT ["cargo", "nextest", "run", "--no-fail-fast", "--archive-file", "tests.tar.zst", "--workspace-remap", "/app", "--config-file", "/app/.config/nextest.toml", "--profile", "e2e"]
+CMD ["cargo", "nextest", "run", "--no-fail-fast", "--archive-file", "tests.tar.zst", "--workspace-remap", "/app", "--config-file", "/app/.config/nextest.toml", "--profile", "e2e"]

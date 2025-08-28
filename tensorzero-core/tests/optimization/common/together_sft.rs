@@ -1,4 +1,4 @@
-use crate::common::OptimizationTestCase;
+use crate::common::{mock_inference_provider_base, OptimizationTestCase};
 use tensorzero_core::optimization::{
     together_sft::{
         TogetherBatchSize, TogetherLRScheduler, TogetherTrainingMethod, TogetherTrainingType,
@@ -25,7 +25,7 @@ impl OptimizationTestCase for TogetherSFTTestCase {
                     model: "meta-llama/Meta-Llama-3.1-8B-Instruct-Reference".to_string(),
                     credentials: None,
                     api_base: if use_mock_inference_provider {
-                        Some("http://localhost:3030/together/".parse().unwrap())
+                        Some(mock_inference_provider_base().join("together").unwrap())
                     } else {
                         None
                     },

@@ -1119,7 +1119,7 @@ async fn test_parse_args() {
     assert_eq!(args.config_file, PathBuf::from("/path/to/config.toml"));
     assert_eq!(
         args.gateway_url,
-        Some(Url::parse("http://localhost:8080").unwrap())
+        Some(Url::parse("http://localhost:8080/").unwrap())
     );
     assert_eq!(args.concurrency, 10);
     assert_eq!(args.format, OutputFormat::Jsonl);
@@ -1155,17 +1155,47 @@ async fn test_parse_args() {
         .contains("invalid value 'invalid' for '--format <FORMAT>'"));
 }
 
+// #[tokio::test]
+// async fn test_run_evaluation_binary() {
+//     let bin_path = env!("CARGO_BIN_EXE_evaluations");
+//     println!("Running evaluations binary at {bin_path}");
+//     let output = std::process::Command::new(bin_path)
+//         .output()
+//         .expect("Failed to execute evaluations binary");
+//     let output_str = String::from_utf8(output.stdout).unwrap();
+//     assert!(output_str.is_empty());
+//     let stderr_str = String::from_utf8(output.stderr).unwrap();
+//     assert!(stderr_str.contains("the following required arguments were not provided:"));
+// }
+
 #[tokio::test]
 async fn test_run_evaluation_binary() {
     let bin_path = env!("CARGO_BIN_EXE_evaluations");
     println!("Running evaluations binary at {bin_path}");
-    let output = std::process::Command::new(bin_path)
-        .output()
-        .expect("Failed to execute evaluations binary");
-    let output_str = String::from_utf8(output.stdout).unwrap();
-    assert!(output_str.is_empty());
-    let stderr_str = String::from_utf8(output.stderr).unwrap();
-    assert!(stderr_str.contains("the following required arguments were not provided:"));
+
+    // Add detailed debugging
+    println!("Binary exists: {}", std::path::Path::new(bin_path).exists());
+    println!(
+        "Binary is executable: {:?}",
+        std::fs::metadata(bin_path).map(|m| m.permissions())
+    );
+
+    let result = std::process::Command::new(bin_path).output();
+
+    match result {
+        Ok(output) => {
+            let output_str = String::from_utf8(output.stdout).unwrap();
+            assert!(output_str.is_empty());
+            let stderr_str = String::from_utf8(output.stderr).unwrap();
+            assert!(stderr_str.contains("the following required arguments were not provided:"));
+        }
+        Err(e) => {
+            println!("Command failed with error: {:?}", e);
+            println!("Error kind: {:?}", e.kind());
+            println!("OS Error: {:?}", e.raw_os_error());
+            panic!("Failed to execute evaluations binary: {:?}", e);
+        }
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
