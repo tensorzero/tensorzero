@@ -766,7 +766,8 @@ mod tests {
         db::clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::{InferenceCredentials, InferenceIds},
         inference::types::{
-            ChatInferenceResult, FinishReason, JsonInferenceResult, Latency, Usage,
+            ChatInferenceResult, FinishReason, JsonInferenceResult, Latency,
+            RequestMessagesOrBatch, Usage,
         },
         minijinja_util::tests::get_test_template_config,
         model::{ModelConfig, ModelProvider, ProviderConfig},
@@ -950,10 +951,10 @@ mod tests {
             created: 200u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: None,
-            input_messages: vec![RequestMessage {
+            input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::Assistant,
                 content: vec!["test_assistant".to_string().into()],
-            }],
+            }]),
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
             usage: Usage {
@@ -986,10 +987,10 @@ mod tests {
             created: 201u64,
             output: vec!["Candidate answer 2".to_string().into()],
             system: Some("test_system".to_string()),
-            input_messages: vec![RequestMessage {
+            input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::Assistant,
                 content: vec!["test_assistant".to_string().into()],
-            }],
+            }]),
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Example response 2\"}".to_string(),
             usage: Usage {
@@ -1041,10 +1042,10 @@ mod tests {
             created: 200u64,
             output: vec!["{\"response\": \"Valid JSON response\"}".to_string().into()],
             system: Some("test_system".to_string()),
-            input_messages: vec![RequestMessage {
+            input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::Assistant,
                 content: vec!["test_assistant".to_string().into()],
-            }],
+            }]),
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Valid JSON response\"}".to_string(),
             usage: Usage {
@@ -1079,10 +1080,10 @@ mod tests {
                 .to_string()
                 .into()], // missing closing brace
             system: Some("test_system".to_string()),
-            input_messages: vec![RequestMessage {
+            input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::Assistant,
                 content: vec!["test_assistant".to_string().into()],
-            }],
+            }]),
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Malformed JSON response\"".to_string(), // malformed
             usage: Usage {
@@ -1152,10 +1153,10 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
             system: Some("test_system".to_string()),
-            input_messages: vec![RequestMessage {
+            input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::Assistant,
                 content: vec!["test_assistant".to_string().into()],
-            }],
+            }]),
             usage: Usage {
                 input_tokens: 50,
                 output_tokens: 100,
@@ -1186,10 +1187,10 @@ mod tests {
             created: 201u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: Some("test_system".to_string()),
-            input_messages: vec![RequestMessage {
+            input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::Assistant,
                 content: vec!["test_assistant".to_string().into()],
-            }],
+            }]),
             raw_request: "{\"prompt\": \"Example prompt 1\"}".to_string(),
             raw_response: "{\"response\": \"Example response 1\"}".to_string(),
             usage: Usage {

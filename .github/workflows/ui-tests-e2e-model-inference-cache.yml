@@ -22,7 +22,7 @@ on:
 
 jobs:
   ui-tests-e2e:
-    runs-on: ${{ inputs.regen_cache && 'namespace-profile-tensorzero-8x16' || 'namespace-profile-tensorzero-8x16' }}
+    runs-on: ${{ inputs.regen_cache && 'namespace-profile-tensorzero-32x64' || 'namespace-profile-tensorzero-16x32' }}
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
     # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
     # For now, it just runs in the merge queue and on prs from the main repo
@@ -43,7 +43,18 @@ jobs:
           node-version: "22.9.0"
 
       - name: Setup `pnpm`
-        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@latest; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Install `pnpm` dependencies
         run: pnpm install --frozen-lockfile
@@ -106,15 +117,15 @@ jobs:
           OLD_ROWS=$(wc -l < ./fixtures/model_inference_cache_e2e.jsonl.old)
           NEW_ROWS=$(wc -l < ./fixtures/model_inference_cache_e2e.jsonl)
           echo "Old cache file has $OLD_ROWS rows, new cache file has $NEW_ROWS rows"
-          # Temporarily disabled
-          # if [ "$OLD_ROWS" != "$NEW_ROWS" ]; then
-          #   echo "ERROR: Row count mismatch between old and new cache files"
-          #   echo "Old rows:"
-          #   echo "$OLD_ROWS"
-          #   echo "New rows:"
-          #   echo "$NEW_ROWS"
-          #   exit 1
-          # fi
+          if [ "$OLD_ROWS" != "$NEW_ROWS" ]; then
+            echo "ERROR: Row count mismatch between old and new cache files"
+            echo "Old rows:"
+            echo "$OLD_ROWS"
+            echo "New rows:"
+            echo "$NEW_ROWS"
+            # Temporarily disabled
+            # exit 1
+          fi
           # Note that we cannot check the file contents - we will legitimately get some different cache keys when
           # regenerating, since the output from some cache entries get fed into judge models (affecting the cache key)
           echo "Cache file validation passed: same number of rows"
