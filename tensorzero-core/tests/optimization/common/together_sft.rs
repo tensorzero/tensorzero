@@ -25,7 +25,7 @@ impl OptimizationTestCase for TogetherSFTTestCase {
                     model: "meta-llama/Meta-Llama-3.1-8B-Instruct-Reference".to_string(),
                     credentials: None,
                     api_base: if use_mock_inference_provider {
-                        Some(mock_inference_provider_base().join("together").unwrap())
+                        Some(mock_inference_provider_base().join("together/").unwrap())
                     } else {
                         None
                     },

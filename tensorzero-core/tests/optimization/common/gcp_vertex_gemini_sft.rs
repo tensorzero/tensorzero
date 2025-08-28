@@ -34,7 +34,7 @@ impl OptimizationTestCase for GCPVertexGeminiSFTTestCase {
                     api_base: if use_mock_inference_provider {
                         Some(
                             mock_inference_provider_base()
-                                .join("gcp_vertex_gemini")
+                                .join("gcp_vertex_gemini/")
                                 .unwrap(),
                         )
                     } else {

@@ -27,7 +27,7 @@ impl OptimizationTestCase for OpenAISFTTestCase {
                 seed: None,
                 suffix: None,
                 api_base: if use_mock_inference_provider {
-                    Some(mock_inference_provider_base().join("openai").unwrap())
+                    Some(mock_inference_provider_base().join("openai/").unwrap())
                 } else {
                     None
                 },

@@ -90,7 +90,8 @@ test-group = 'e2e_aws_sagemaker_tgi'
 filter = 'binary(e2e) and test(providers::groq::)'
 test-group = 'e2e_groq'
 # We have a low rate limit on Groq, so we often need to retry several times
-retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max-delay = "120s" }
+# temporary
+# retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max-delay = "120s" }
 
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::vllm::)'
@@ -99,7 +100,8 @@ slow-timeout = { period = "60s", terminate-after = 2 }
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::sglang::)'
 # The model we run on SGLang often fails to emit valid tool calls, so we need many retries
-retries = { backoff = "fixed", count = 8, delay = "10s", jitter = true }
+# temporary
+# retries = { backoff = "fixed", count = 8, delay = "10s", jitter = true }
 slow-timeout = { period = "60s", terminate-after = 2 }
 
 [[profile.default.overrides]]
@@ -126,4 +128,5 @@ slow-timeout = { period = "10s", terminate-after = 1 }
 
 [[profile.default.overrides]]
 filter = 'binary(e2e) and (test(providers::aws_bedrock::) or test(providers::aws_sagemaker))'
-retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max-delay = "120s" }
+# temporary
+# retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max-delay = "120s" }
