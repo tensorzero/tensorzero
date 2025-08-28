@@ -764,10 +764,17 @@ non_streaming = { total_ms = 1000 }
 type = "dummy"
 model_name = "slow"
 
+[embedding_models.dummy-embedding-model]
+routing = ["dummy"]
+
+[embedding_models.dummy-embedding-model.providers.dummy]
+type = "dummy"
+model_name = "test-embeddings"
+
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
-# └────────────────────────────────────────────────────────────────────────────┘
+# └────────────────────────────────────────────────────────────────────────────────┘
 
 # Timeout tests
 

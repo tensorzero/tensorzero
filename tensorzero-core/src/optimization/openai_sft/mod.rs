@@ -9,6 +9,8 @@ use tokio::try_join;
 use url::Url;
 
 use crate::{
+    config::Config,
+    db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     model::{build_creds_caching_default, CredentialLocation},
@@ -190,6 +192,8 @@ impl Optimizer for OpenAISFTConfig {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
+        _clickhouse_connection_info: &ClickHouseConnectionInfo,
+        _config: &Config,
     ) -> Result<Self::Handle, Error> {
         // TODO(#2642): improve error handling here so we know what index of example failed
         let train_rows: Vec<OpenAISupervisedRow> = train_examples
