@@ -1,4 +1,4 @@
-import type { FunctionConfig } from "~/utils/config/function";
+import type { FunctionConfig } from "tensorzero-node";
 import {
   BasicInfoLayout,
   BasicInfoItem,
@@ -14,6 +14,16 @@ interface BasicInfoProps {
 export default function BasicInfo({ functionConfig }: BasicInfoProps) {
   return (
     <BasicInfoLayout>
+      {functionConfig.description && (
+        <BasicInfoItem>
+          <BasicInfoItemTitle>Description</BasicInfoItemTitle>
+          <BasicInfoItemContent wrap>
+            <span className="text-sm md:px-2">
+              {functionConfig.description}
+            </span>
+          </BasicInfoItemContent>
+        </BasicInfoItem>
+      )}
       {/* Fields specific to chat type */}
       {functionConfig.type === "chat" && (
         <>

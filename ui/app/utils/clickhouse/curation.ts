@@ -1,6 +1,6 @@
-import type { MetricConfigLevel } from "../config/metric";
+import type { MetricConfigLevel } from "tensorzero-node";
 import {
-  contentBlockOutputSchema,
+  contentBlockChatOutputSchema,
   InferenceJoinKey,
   inputSchema,
   jsonInferenceOutputSchema,
@@ -34,7 +34,7 @@ export const parsedChatExampleSchema = inferenceExampleSchema
   })
   .extend({
     input: inputSchema,
-    output: z.array(contentBlockOutputSchema),
+    output: z.array(contentBlockChatOutputSchema),
   })
   .strict();
 export type ParsedChatInferenceExample = z.infer<

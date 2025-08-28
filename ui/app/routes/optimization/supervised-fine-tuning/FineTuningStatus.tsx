@@ -4,115 +4,122 @@
  * Includes links to external job details and raw data visualization.
  */
 
-import { Badge } from "~/components/ui/badge";
-import {
-  Clock,
-  ExternalLink,
-  Server,
-  ActivityIcon as Function,
-  BarChart2,
-  MessageSquare,
-} from "lucide-react";
-import type { SFTJobStatus } from "~/utils/supervised_fine_tuning/common";
-import { SFTAnalysis } from "./SFTAnalysis";
-import { ModelBadge } from "~/components/model/ModelBadge";
+import { ExternalLink } from "lucide-react";
+import { Calendar, Function } from "~/components/icons/Icons";
 import { extractTimestampFromUUIDv7 } from "~/utils/common";
-import { MetadataItem } from "./MetadataItem";
 import { RawDataAccordion } from "./RawDataAccordion";
 import { ProgressIndicator } from "./ProgressIndicator";
-import { Separator } from "~/components/ui/separator";
+import {
+  BasicInfoLayout,
+  BasicInfoItem,
+  BasicInfoItemTitle,
+  BasicInfoItemContent,
+} from "~/components/layout/BasicInfoLayout";
+import Chip from "~/components/ui/Chip";
+import {
+  SectionHeader,
+  SectionLayout,
+  SectionsGroup,
+} from "~/components/layout/PageLayout";
+import { SFTResult } from "./SFTResult";
+import type { SFTFormValues } from "./types";
+import type {
+  OptimizationJobHandle,
+  OptimizationJobInfo,
+} from "tensorzero-node";
 
 export default function LLMFineTuningStatus({
   status,
+  formData,
+  result,
+  jobHandle,
 }: {
-  status: SFTJobStatus;
+  status: { status: "idle" } | OptimizationJobInfo;
+  formData: SFTFormValues;
+  result: string | null;
+  jobHandle: OptimizationJobHandle;
 }) {
   if (status.status === "idle") return null;
-  const createdAt = extractTimestampFromUUIDv7(status.formData.jobId);
+  const createdAt = extractTimestampFromUUIDv7(formData.jobId);
   return (
-    <div className="bg-background container mx-auto space-y-6 p-6">
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <h3 className="text-lg font-semibold">
-            Job{" "}
-            <code className="bg-muted rounded px-1 py-0.5 text-sm">
-              {status.formData.jobId}
-            </code>
-          </h3>
-          <div className="flex items-center gap-2">
-            <Badge
-              variant={
-                status.status === "running"
-                  ? "default"
-                  : status.status === "completed"
-                    ? "secondary"
-                    : "destructive"
-              }
-            >
-              {status.status}
-            </Badge>
-            <ModelBadge provider={status.modelProvider} />
-          </div>
-        </div>
+    <SectionsGroup>
+      <SectionLayout>
+        <SectionHeader heading="Results" />
+        <BasicInfoLayout>
+          <BasicInfoItem>
+            <BasicInfoItemTitle>Base Model</BasicInfoItemTitle>
+            <BasicInfoItemContent>
+              <Chip label={formData.model.name} font="mono" />
+            </BasicInfoItemContent>
+          </BasicInfoItem>
 
-        <div className="space-y-2">
-          <MetadataItem
-            icon={Server}
-            label="Base Model"
-            value={status.formData.model.name}
-          />
-          <MetadataItem
-            icon={Function}
-            label="Function"
-            value={status.formData.function}
-          />
-          <MetadataItem
-            icon={BarChart2}
-            label="Metric"
-            value={status.formData.metric ?? "None"}
-          />
-          <MetadataItem
-            icon={MessageSquare}
-            label="Prompt"
-            value={status.formData.variant}
-          />
-          <MetadataItem
-            icon={Clock}
-            label="Created"
-            value={createdAt.toLocaleString()}
-            isRaw
-          />
-        </div>
-        <a
-          href={status.jobUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-primary inline-flex items-center hover:underline"
-        >
-          View Job Details
-          <ExternalLink className="ml-1 h-4 w-4" />
-        </a>
-
-        <Separator />
-
-        <SFTAnalysis status={status} />
-
-        {/* hide if not available from provider, eg fireworks */}
-        {status.status === "running" &&
-          "estimatedCompletionTime" in status &&
-          status.estimatedCompletionTime && (
-            <div className="max-w-lg space-y-2">
-              <ProgressIndicator
-                createdAt={createdAt}
-                estimatedCompletion={
-                  new Date(status.estimatedCompletionTime * 1000)
-                }
+          <BasicInfoItem>
+            <BasicInfoItemTitle>Function</BasicInfoItemTitle>
+            <BasicInfoItemContent>
+              <Chip
+                link={`/observability/functions/${formData.function}`}
+                icon={<Function className="text-fg-tertiary" />}
+                label={formData.function}
+                font="mono"
               />
-            </div>
-          )}
+            </BasicInfoItemContent>
+          </BasicInfoItem>
 
-        <RawDataAccordion rawData={status.rawData} />
-      </div>
-    </div>
+          <BasicInfoItem>
+            <BasicInfoItemTitle>Metric</BasicInfoItemTitle>
+            <BasicInfoItemContent>
+              <Chip label={formData.metric ?? "None"} font="mono" />
+            </BasicInfoItemContent>
+          </BasicInfoItem>
+
+          <BasicInfoItem>
+            <BasicInfoItemTitle>Prompt</BasicInfoItemTitle>
+            <BasicInfoItemContent>
+              <Chip label={formData.variant} font="mono" />
+            </BasicInfoItemContent>
+          </BasicInfoItem>
+
+          <BasicInfoItem>
+            <BasicInfoItemTitle>Created</BasicInfoItemTitle>
+            <BasicInfoItemContent>
+              <Chip
+                icon={<Calendar className="text-fg-tertiary" />}
+                label={createdAt.toLocaleString()}
+              />
+            </BasicInfoItemContent>
+          </BasicInfoItem>
+        </BasicInfoLayout>
+      </SectionLayout>
+
+      {/* hide if not available from provider, eg fireworks */}
+      {status.status === "pending" && status.estimated_finish && (
+        <SectionLayout>
+          <SectionHeader heading="Estimated completion" />
+          <div className="max-w-lg space-y-2">
+            <ProgressIndicator
+              createdAt={createdAt}
+              estimatedCompletion={status.estimated_finish}
+            />
+          </div>
+        </SectionLayout>
+      )}
+      <SFTResult finalResult={result} />
+
+      <SectionLayout>
+        {"job_url" in jobHandle && (
+          <a
+            href={jobHandle.job_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary inline-flex items-center text-sm hover:underline"
+          >
+            <SectionHeader heading="Job details"></SectionHeader>
+            <ExternalLink className="ml-2 h-5 w-5" />
+          </a>
+        )}
+
+        <RawDataAccordion rawData={status} />
+      </SectionLayout>
+    </SectionsGroup>
   );
 }

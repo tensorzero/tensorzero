@@ -13,6 +13,7 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
+import { logger } from "~/utils/logger";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -45,28 +46,30 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
   const { episodes, pageSize, bounds, totalCount } = loaderData;
   const navigate = useNavigate();
 
-  const topEpisode = episodes[0];
-  const bottomEpisode = episodes[episodes.length - 1];
+  const topEpisode = episodes.at(0);
+  const bottomEpisode = episodes.at(-1);
 
-  // IMPORTANT: use the last_inference_id to navigate
   const handleNextPage = () => {
-    navigate(
-      `?before=${bottomEpisode.last_inference_id}&pageSize=${pageSize}`,
-      { preventScrollReset: true },
-    );
+    if (bottomEpisode) {
+      navigate(`?before=${bottomEpisode.episode_id}&pageSize=${pageSize}`, {
+        preventScrollReset: true,
+      });
+    }
   };
 
   const handlePreviousPage = () => {
-    navigate(`?after=${topEpisode.last_inference_id}&pageSize=${pageSize}`, {
-      preventScrollReset: true,
-    });
+    if (topEpisode) {
+      navigate(`?after=${topEpisode.episode_id}&pageSize=${pageSize}`, {
+        preventScrollReset: true,
+      });
+    }
   };
 
   // These are swapped because the table is sorted in descending order
   const disablePrevious =
-    !bounds?.last_id || bounds.last_id === topEpisode.last_inference_id;
+    !bounds?.last_id || bounds.last_id === topEpisode?.episode_id;
   const disableNext =
-    !bounds?.first_id || bounds.first_id === bottomEpisode.last_inference_id;
+    !bounds?.first_id || bounds.first_id === bottomEpisode?.episode_id;
 
   return (
     <PageLayout>
@@ -86,7 +89,7 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (

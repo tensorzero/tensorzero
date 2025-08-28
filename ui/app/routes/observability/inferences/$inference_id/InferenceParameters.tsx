@@ -1,25 +1,20 @@
 import {
   SnippetLayout,
   SnippetContent,
-  SnippetMessage,
 } from "~/components/layout/SnippetLayout";
-import { CodeMessage } from "~/components/layout/SnippetContent";
+import { CodeEditor } from "~/components/ui/code-editor";
 
 interface ParameterCardProps {
-  parameters: Record<string, unknown>;
+  parameters: string;
 }
 
 export function ParameterCard({ parameters }: ParameterCardProps) {
   return (
     <SnippetLayout>
       <SnippetContent>
-        <SnippetMessage>
-          <CodeMessage
-            content={JSON.stringify(parameters, null, 2)}
-            showLineNumbers={true}
-            emptyMessage="No parameters defined"
-          />
-        </SnippetMessage>
+        <div className="w-full">
+          <CodeEditor allowedLanguages={["json"]} value={parameters} readOnly />
+        </div>
       </SnippetContent>
     </SnippetLayout>
   );

@@ -5,7 +5,7 @@ use indicatif::ProgressBar;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero::InferenceResponse;
-use tensorzero_internal::{endpoints::datasets::Datapoint, evaluations::EvaluatorConfig};
+use tensorzero_core::{endpoints::datasets::Datapoint, evaluations::EvaluatorConfig};
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
@@ -54,7 +54,7 @@ impl EvaluationStats {
         }
         match evaluation_update {
             EvaluationUpdate::Success(evaluation_info) => {
-                self.evaluation_infos.push(evaluation_info)
+                self.evaluation_infos.push(evaluation_info);
             }
             EvaluationUpdate::Error(evaluation_error) => {
                 self.evaluation_errors.push(evaluation_error);
@@ -77,8 +77,8 @@ impl EvaluationStats {
         debug!(evaluators = ?evaluators.keys().collect::<Vec<_>>(), "Initialized data collectors for evaluators");
         // Collect evaluation inference data into vectors by evaluation (all as floats)
         debug!("Processing evaluation results into statistics");
-        for evaluation_info in self.evaluation_infos.iter() {
-            for (evaluation_name, evaluation_result) in evaluation_info.evaluations.iter() {
+        for evaluation_info in &self.evaluation_infos {
+            for (evaluation_name, evaluation_result) in &evaluation_info.evaluations {
                 match evaluation_result {
                     Some(Value::Number(n)) => {
                         if let Some(data_vec) = data.get_mut(evaluation_name) {

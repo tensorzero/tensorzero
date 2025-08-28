@@ -11,7 +11,7 @@ gateway:
 
   image:
     repository: tensorzero/gateway
-    tag: latest
+    tag: "" # If empty, uses Chart.appVersion
     pullPolicy: IfNotPresent
 
   service:
@@ -44,11 +44,20 @@ gateway:
   affinity: {}
   ingress:
     enabled: true
+    className: ""
+    annotations:
+      {}
+      # kubernetes.io/tls-acme: "true"
+      # cert-manager.io/cluster-issuer: letsencrypt-prod
     hosts:
       - host: tensorzero-gateway.local # TODO: change this to the correct host
         paths:
           - path: /
             pathType: Prefix
+    tls: []
+    #  - secretName: tensorzero-gateway-tls
+    #    hosts:
+    #      - tensorzero-gateway.local
 
 # UI Configuration
 ui:
@@ -56,7 +65,7 @@ ui:
   replicaCount: 1
   image:
     repository: tensorzero/ui
-    tag: latest
+    tag: "" # If empty, uses Chart.appVersion
     pullPolicy: IfNotPresent
 
   service:
@@ -87,11 +96,32 @@ ui:
 
   ingress:
     enabled: true
+    className: ""
+    annotations:
+      {}
+      # kubernetes.io/tls-acme: "true"
+      # cert-manager.io/cluster-issuer: letsencrypt-prod
     hosts:
       - host: tensorzero-ui.local # TODO: change this to the correct host
         paths:
           - path: /
             pathType: Prefix
+    tls: []
+    #  - secretName: tensorzero-ui-tls
+    #    hosts:
+    #      - tensorzero-ui.local
+
+# Persistence Configuration
+persistence:
+  enabled: false
+  size: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClass: ""
+  mountPath: /app/storage
+
+globalLabels: {}
+  # my.domain/owner: my-team
 
 # TensorZero Configuration
 configMap:
@@ -103,3 +133,7 @@ configMap:
       [functions.my_function_name.variants.my_variant_name]
       type = "chat_completion"
       model = "openai::gpt-4o-mini"
+
+      # [object_storage]
+      # type = "filesystem"
+      # path = "/app/storage/"

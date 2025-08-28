@@ -51,27 +51,36 @@ json_mode = "strict"
 [functions.extract_entities]
 type = "json"
 output_schema = "functions/extract_entities/output_schema.json"
+description = "Extract named entities from text"
 
 [functions.extract_entities.variants.gpt4o_mini_initial_prompt]
 type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+retries = { num_retries = 4, max_delay_s = 10 }
+temperature = 0
 
 [functions.extract_entities.variants.gpt4o_initial_prompt]
 type = "chat_completion"
 model = "openai::gpt-4o"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+retries = { num_retries = 4, max_delay_s = 10 }
+temperature = 0
 
 [functions.extract_entities.variants.llama_8b_initial_prompt]
 type = "chat_completion"
 model = "llama-3.1-8b-instruct"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+retries = { num_retries = 4, max_delay_s = 10 }
+temperature = 0
 
 [functions.extract_entities.variants.baseline]
 type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
 system_template = "functions/extract_entities/baseline/system_template.minijinja"
 json_mode = "strict"
+retries = { num_retries = 4, max_delay_s = 10 }
+temperature = 0
 
 [functions.extract_entities.variants.dicl]
 type = "experimental_dynamic_in_context_learning"
@@ -81,33 +90,43 @@ k = 10
 system_instructions = "functions/extract_entities/baseline/system_template.minijinja"
 json_mode = "strict"
 weight = 1
+retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.extract_entities.variants.turbo]
 type = "chat_completion"
 model = "ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"
 system_template = "functions/extract_entities/baseline/system_template.minijinja"
+retries = { num_retries = 4, max_delay_s = 10 }
+temperature = 0
 
 [functions.write_haiku]
 type = "chat"
 user_schema = "functions/write_haiku/user_schema.json"
+description = "Generate a haiku about a given topic"
 
 [functions.write_haiku.variants.initial_prompt_gpt4o_mini]
 type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
 system_template = "functions/write_haiku/initial_prompt/system_template.minijinja"
 user_template = "functions/write_haiku/initial_prompt/user_template.minijinja"
+retries = { num_retries = 4, max_delay_s = 10 }
+
 
 [functions.write_haiku.variants.initial_prompt_haiku_3_5]
 type = "chat_completion"
 model = "anthropic::claude-3-5-haiku-20241022"
 system_template = "functions/write_haiku/initial_prompt/system_template.minijinja"
 user_template = "functions/write_haiku/initial_prompt/user_template.minijinja"
+retries = { num_retries = 4, max_delay_s = 10 }
+
 
 [functions.write_haiku.variants.better_prompt_haiku_3_5]
 type = "chat_completion"
 model = "anthropic::claude-3-5-haiku-20241022"
 system_template = "functions/write_haiku/better_prompt/system_template.minijinja"
 user_template = "functions/write_haiku/better_prompt/user_template.minijinja"
+retries = { num_retries = 4, max_delay_s = 10 }
+
 
 [functions.generate_secret]
 type = "json"
@@ -119,6 +138,8 @@ type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "functions/generate_secret/baseline/system_template.minijinja"
 json_mode = "strict"
+retries = { num_retries = 4, max_delay_s = 10 }
+
 # for creativity
 temperature = 1.5
 
@@ -132,6 +153,8 @@ type = "chat_completion"
 weight = 1
 model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "functions/ask_question/baseline/system_template.minijinja"
+retries = { num_retries = 4, max_delay_s = 10 }
+
 
 [functions.ask_question.variants."gpt-4.1-nano"]
 type = "chat_completion"
@@ -139,6 +162,8 @@ weight = 0
 model = "openai::gpt-4.1-nano-2025-04-14"
 system_template = "functions/ask_question/baseline/system_template.minijinja"
 json_mode = "strict"
+retries = { num_retries = 4, max_delay_s = 10 }
+
 
 [functions.ask_question.variants."gpt-4.1-mini"]
 type = "chat_completion"
@@ -146,6 +171,8 @@ weight = 0
 model = "openai::gpt-4.1-mini-2025-04-14"
 system_template = "functions/ask_question/baseline/system_template.minijinja"
 json_mode = "strict"
+retries = { num_retries = 4, max_delay_s = 10 }
+
 
 [functions.answer_question]
 type = "chat"
@@ -158,6 +185,7 @@ model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "functions/answer_question/baseline/system_template.minijinja"
 # for honesty
 temperature = 0.5
+retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.unleash_kraken]
 type = "chat"
@@ -165,6 +193,7 @@ type = "chat"
 [functions.unleash_kraken.variants.baseline]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
+retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.image_judger]
 type = "chat"
@@ -172,6 +201,7 @@ type = "chat"
 [functions.image_judger.variants.honest_answer]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
+retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.multi_hop_rag_agent]
 type = "chat"
@@ -364,6 +394,7 @@ active = true
 system_instructions = "evaluations/entity_extraction/count_sports/system_instructions.txt"
 json_mode = "strict"
 temperature = 0.1
+retries = { num_retries = 4, max_delay_s = 10 }
 
 [evaluations.haiku]
 type = "static"
@@ -387,6 +418,7 @@ active = true
 system_instructions = "evaluations/haiku/topic_starts_with_f/system_instructions.txt"
 json_mode = "strict"
 temperature = 0
+retries = { num_retries = 4, max_delay_s = 10 }
 
 [evaluations.images]
 type = "static"
@@ -409,6 +441,7 @@ model = "openai::gpt-4o-mini-2024-07-18"
 system_instructions = "evaluations/images/honest_answer/system_instructions.txt"
 temperature = 0
 json_mode = "strict"
+retries = { num_retries = 4, max_delay_s = 10 }
 
 [evaluations.images.evaluators.matches_reference]
 type = "llm_judge"
@@ -424,6 +457,7 @@ model = "openai::gpt-4o-mini-2024-07-18"
 system_instructions = "evaluations/images/matches_reference/system_instructions.txt"
 temperature = 0
 json_mode = "strict"
+retries = { num_retries = 4, max_delay_s = 10 }
 
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
@@ -434,3 +468,7 @@ json_mode = "strict"
 type = "s3_compatible"
 bucket_name = "tensorzero-e2e-test-images"
 region = "us-east-1"
+
+[gateway.observability.batch_writes]
+enabled = true
+flush_interval_ms = 80

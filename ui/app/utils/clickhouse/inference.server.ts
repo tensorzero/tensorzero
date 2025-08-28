@@ -1,10 +1,10 @@
 import {
-  type ContentBlockOutput,
   CountSchema,
-  type JsonInferenceOutput,
   modelInferenceInputMessageSchema,
   type TableBounds,
-  TableBoundsSchema,
+  type TableBoundsWithCount,
+  TableBoundsWithCountSchema,
+  JsonValueSchema,
 } from "./common";
 import {
   contentBlockSchema,
@@ -12,8 +12,12 @@ import {
   inputSchema,
 } from "./common";
 import { data } from "react-router";
-import type { FunctionConfig } from "../config/function";
-import { clickhouseClient } from "./client.server";
+import type {
+  FunctionConfig,
+  JsonInferenceOutput,
+  ContentBlockChatOutput,
+} from "tensorzero-node";
+import { getClickhouseClient } from "./client.server";
 import { resolveInput, resolveModelInferenceMessages } from "../resolve.server";
 import {
   episodeByIdSchema,
@@ -29,8 +33,11 @@ import {
   type ModelInferenceRow,
   type ParsedInferenceRow,
   type ParsedModelInferenceRow,
+  toolCallConfigDatabaseInsertSchema,
 } from "./inference";
 import { z } from "zod";
+import { logger } from "~/utils/logger";
+import { getConfig, getFunctionConfig } from "../config/index.server";
 
 /**
  * Query a table of at most `page_size` Inferences from ChatInference or JsonInference that are
@@ -43,6 +50,8 @@ import { z } from "zod";
  * - If `after` is provided, returns the earliest `page_size` Inferences after the given `after` ID.
  *
  * All returned data should be ordered by `id` in descending order.
+ *
+ * TODO (#2788): Create MVs for sorting episodes and inferences by ID DESC
  */
 export async function queryInferenceTable(params: {
   page_size: number;
@@ -160,7 +169,7 @@ export async function queryInferenceTable(params: {
   }
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params,
@@ -168,15 +177,16 @@ export async function queryInferenceTable(params: {
     const rows = await resultSet.json<InferenceByIdRow>();
     return z.array(inferenceByIdRowSchema).parse(rows);
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error querying inference table", { status: 500 });
   }
 }
 
+/// TODO (#2788): Create MVs for sorting episodes and inferences by ID DESC
 export async function queryInferenceTableBounds(params?: {
   extraWhere?: string[];
   extraParams?: Record<string, string | number>;
-}): Promise<TableBounds> {
+}): Promise<TableBoundsWithCount> {
   const { extraWhere = [], extraParams = {} } = params ?? {};
 
   // Build WHERE clause
@@ -184,47 +194,50 @@ export async function queryInferenceTableBounds(params?: {
   const whereClause =
     whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
+  // IMPORTANT: This query will return zero UUIDs if there are no results, so we need to handle this case below.
   const query = `
   SELECT
-    (SELECT uint_to_uuid(id_uint) FROM InferenceById FINAL WHERE id_uint = (SELECT MIN(id_uint) FROM InferenceById FINAL ${whereClause})) AS first_id,
-    (SELECT uint_to_uuid(id_uint) FROM InferenceById FINAL WHERE id_uint = (SELECT MAX(id_uint) FROM InferenceById FINAL ${whereClause})) AS last_id
+    uint_to_uuid(MIN(id_uint)) AS first_id,
+    uint_to_uuid(MAX(id_uint)) AS last_id,
+    toUInt32(COUNT()) AS count
   FROM InferenceById FINAL
+  ${whereClause}
   LIMIT 1
   `;
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params: extraParams,
     });
+    const rows = await resultSet.json<TableBoundsWithCount>();
 
-    const rows = await resultSet.json<TableBounds>();
-    if (!rows.length) {
+    // Handle the case where there are no results
+    if (!rows.length || rows[0].count === 0) {
       return {
         first_id: null,
         last_id: null,
+        count: 0,
       };
     }
 
-    return TableBoundsSchema.parse(rows[0]);
+    return TableBoundsWithCountSchema.parse(rows[0]);
   } catch (error) {
-    console.error("Failed to query inference table bounds:", error);
-    return {
-      first_id: null,
-      last_id: null,
-    };
+    logger.error("Failed to query inference table bounds:", error);
+    throw data("Error querying inference table bounds", { status: 500 });
   }
 }
 
-/// Query a table of at most `page_size` Episodes that are before the given `before` ID or after the given `after` ID.
-/// Important: The ordering is on the last inference in the episode, not the first (we want to show the freshest episodes first)
-/// So we should paginate on the last_inference_ids not the Episode IDs
-/// If `before` and `after` are both not provided, the query will return the most recent `page_size` Inferences.
+/// Query a table of at most `page_size` episodes that are before the given `before` ID or after the given `after` ID.
+/// If neither `before` nor `after` are provided, the query will return the most recent `page_size` episodes.
 /// If `before` and `after` are both provided, we will throw an error.
-/// If `before` is provided, the query will return the most recent `page_size` Inferences before the given `before` ID.
-/// If `after` is provided, the query will return the earliest `page_size` Inferences after the given `after` ID.
-/// All returned data should be ordered by `id` in descending order.
+/// If `before` is provided, the query will return the most recent `page_size` episodes before the given `before` ID.
+/// If `after` is provided, the query will return the earliest `page_size` episodes after the given `after` ID.
+///
+/// All returned data should be ordered by `episode_id_uint` in descending order.
+///
+/// TODO (#2788): Create MVs for sorting episodes and inferences by ID DESC
 export async function queryEpisodeTable(params: {
   page_size: number;
   before?: string; // UUIDv7 string
@@ -232,17 +245,22 @@ export async function queryEpisodeTable(params: {
 }): Promise<EpisodeByIdRow[]> {
   const { page_size, before, after } = params;
   if (before && after) {
-    throw new Error("Cannot specify both 'before' and 'after' parameters");
+    throw new Error("Cannot specify both `before` and `after` parameters");
   }
   let query = "";
   const query_params: Record<string, string | number> = {
     page_size,
   };
   if (!before && !after) {
-    // No before/after => just the most recent page_size items
-    // The weird 'WHERE' clause lowers the peak memory usage (and also seems to speed up the query),
-    // though it unfortunately still does a full table scan.
     query = `
+      WITH latest_episode_ids_uint AS (
+        SELECT DISTINCT episode_id_uint
+        FROM InferenceByEpisodeId FINAL
+        -- Filter out episodes in the future i.e. dynamic evaluations
+        WHERE episode_id_uint <= (SELECT toUInt128(generateUUIDv7()) AS uuid_now)
+        ORDER BY episode_id_uint DESC
+        LIMIT {page_size:UInt32}
+      )
       SELECT
         uint_to_uuid(episode_id_uint) as episode_id,
         toUInt32(count(*)) as count,
@@ -250,13 +268,21 @@ export async function queryEpisodeTable(params: {
         formatDateTime(max(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
         uint_to_uuid(max(id_uint)) as last_inference_id
       FROM InferenceByEpisodeId FINAL
-      WHERE episode_id_uint in (SELECT DISTINCT ON (episode_id) toUInt128(episode_id) FROM InferenceById FINAL ORDER BY id_uint DESC LIMIT {page_size:UInt32})
-      GROUP BY episode_id
-      ORDER BY toUInt128(last_inference_id) DESC
-      LIMIT {page_size:UInt32}
+      WHERE episode_id_uint IN latest_episode_ids_uint
+      GROUP BY episode_id_uint
+      ORDER BY episode_id_uint DESC
     `;
   } else if (before) {
     query = `
+      WITH latest_episode_ids_uint AS (
+        SELECT DISTINCT episode_id_uint
+        FROM InferenceByEpisodeId FINAL
+        -- Filter out episodes in the future i.e. dynamic evaluations
+        WHERE episode_id_uint <= (SELECT toUInt128(generateUUIDv7()) AS uuid_now)
+          AND episode_id_uint < toUInt128(toUUID({before:String}))
+        ORDER BY episode_id_uint DESC
+        LIMIT {page_size:UInt32}
+      )
       SELECT
         uint_to_uuid(episode_id_uint) as episode_id,
         toUInt32(count(*)) as count,
@@ -264,42 +290,38 @@ export async function queryEpisodeTable(params: {
         formatDateTime(max(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
         uint_to_uuid(max(id_uint)) as last_inference_id
       FROM InferenceByEpisodeId FINAL
-      GROUP BY episode_id
-      HAVING toUInt128(last_inference_id) < toUInt128(toUUID({before:String}))
-      ORDER BY toUInt128(last_inference_id) DESC
-      LIMIT {page_size:UInt32}
+      WHERE episode_id_uint IN latest_episode_ids_uint
+      GROUP BY episode_id_uint
+      ORDER BY episode_id_uint DESC
     `;
     query_params.before = before;
   } else if (after) {
     query = `
-      SELECT
-        episode_id,
-        count,
-        start_time,
-        end_time,
-        last_inference_id
-      FROM
-      (
-        SELECT
-          uint_to_uuid(episode_id_uint) as episode_id,
-          toUInt32(count(*)) as count,
-          formatDateTime(min(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
-          formatDateTime(max(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
-          uint_to_uuid(max(id_uint)) as last_inference_id,
-          max(id_uint) as last_inference_id_uint
+      WITH latest_episode_ids_uint AS (
+        SELECT DISTINCT episode_id_uint
         FROM InferenceByEpisodeId FINAL
-        GROUP BY episode_id
-        HAVING last_inference_id_uint > toUInt128(toUUID({after:String}))
-        ORDER BY last_inference_id_uint ASC
+        -- Filter out episodes in the future i.e. dynamic evaluations
+        WHERE episode_id_uint <= (SELECT toUInt128(generateUUIDv7()) AS uuid_now)
+          AND episode_id_uint > toUInt128(toUUID({after:String}))
+        ORDER BY episode_id_uint ASC
         LIMIT {page_size:UInt32}
       )
-      ORDER BY last_inference_id_uint DESC
+      SELECT
+        uint_to_uuid(episode_id_uint) as episode_id,
+        toUInt32(count(*)) as count,
+        formatDateTime(min(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+        formatDateTime(max(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
+        uint_to_uuid(max(id_uint)) as last_inference_id
+      FROM InferenceByEpisodeId FINAL
+      WHERE episode_id_uint IN latest_episode_ids_uint
+      GROUP BY episode_id_uint
+      ORDER BY episode_id_uint DESC
     `;
     query_params.after = after;
   }
 
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
       query_params,
@@ -308,44 +330,48 @@ export async function queryEpisodeTable(params: {
     const episodeIds = rows.map((episode) => episode.episode_id);
     const uniqueIds = new Set(episodeIds);
     if (uniqueIds.size !== rows.length) {
-      console.warn(
+      logger.warn(
         `Found duplicate episode IDs: ${rows.length - uniqueIds.size} duplicates detected`,
       );
     }
     return z.array(episodeByIdSchema).parse(rows);
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw data("Error querying episode table", { status: 500 });
   }
 }
 
-/// NOTE: these are the last inference IDs of the episodes that have the earliest and latest last inferences,
-/// i.e. the first and last episodes in the table sort order
-/// You should still paginate on the Inference IDs not the Episode IDs
-export async function queryEpisodeTableBounds(): Promise<TableBounds> {
+/// TODO (#2788): Create MVs for sorting episodes and inferences by ID DESC
+export async function queryEpisodeTableBounds(): Promise<TableBoundsWithCount> {
+  // IMPORTANT: This query will return zero UUIDs if there are no results, so we need to handle this case below.
   const query = `
     SELECT
-     (SELECT uint_to_uuid(id_uint) FROM InferenceByEpisodeId FINAL WHERE id_uint = (SELECT MIN(id_uint) FROM InferenceByEpisodeId FINAL)) AS first_id,
-     (SELECT uint_to_uuid(id_uint) FROM InferenceByEpisodeId FINAL WHERE id_uint = (SELECT MAX(id_uint) FROM InferenceByEpisodeId FINAL)) AS last_id
+      uint_to_uuid(MIN(episode_id_uint)) AS first_id,
+      uint_to_uuid(MAX(episode_id_uint)) AS last_id,
+      toUInt32(COUNT()) AS count
     FROM InferenceByEpisodeId FINAL
-    LIMIT 1
+    -- Filter out episodes in the future i.e. dynamic evaluations
+    WHERE episode_id_uint <= (SELECT toUInt128(generateUUIDv7()) AS uuid_now)
   `;
+
   try {
-    const resultSet = await clickhouseClient.query({
+    const resultSet = await getClickhouseClient().query({
       query,
       format: "JSONEachRow",
     });
-    const rows = await resultSet.json<TableBounds>();
-    if (!rows.length) {
+    const rows = await resultSet.json<TableBoundsWithCount>();
+    // Handle the case where there are no results
+    if (!rows.length || rows[0].count === 0) {
       return {
         first_id: null,
         last_id: null,
+        count: 0,
       };
     }
-    return TableBoundsSchema.parse(rows[0]);
+    return TableBoundsWithCountSchema.parse(rows[0]);
   } catch (error) {
-    console.error(error);
-    throw data("Error querying inference table bounds", { status: 500 });
+    logger.error(error);
+    throw data("Error querying episode table bounds", { status: 500 });
   }
 }
 
@@ -441,7 +467,7 @@ export async function countInferencesForFunction(
 ): Promise<number> {
   const inference_table_name = getInferenceTableName(function_config);
   const query = `SELECT toUInt32(COUNT()) AS count FROM ${inference_table_name} WHERE function_name = {function_name:String}`;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { function_name },
@@ -458,7 +484,7 @@ export async function countInferencesForVariant(
 ): Promise<number> {
   const inference_table_name = getInferenceTableName(function_config);
   const query = `SELECT toUInt32(COUNT()) AS count FROM ${inference_table_name} WHERE function_name = {function_name:String} AND variant_name = {variant_name:String}`;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { function_name, variant_name },
@@ -472,7 +498,7 @@ export async function countInferencesForEpisode(
   episode_id: string,
 ): Promise<number> {
   const query = `SELECT toUInt32(COUNT()) AS count FROM InferenceByEpisodeId FINAL WHERE episode_id_uint = toUInt128(toUUID({episode_id:String}))`;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { episode_id },
@@ -486,22 +512,23 @@ async function parseInferenceRow(
   row: InferenceRow,
 ): Promise<ParsedInferenceRow> {
   const input = inputSchema.parse(JSON.parse(row.input));
-  const resolvedInput = await resolveInput(input);
+  const config = await getConfig();
+  const functionConfig = await getFunctionConfig(row.function_name, config);
+  const resolvedInput = await resolveInput(input, functionConfig);
   const extra_body = row.extra_body ? JSON.parse(row.extra_body) : undefined;
   if (row.function_type === "chat") {
+    const tool_params =
+      row.tool_params === ""
+        ? null
+        : toolCallConfigDatabaseInsertSchema.parse(JSON.parse(row.tool_params));
     return {
       ...row,
       input: resolvedInput,
-      output: parseInferenceOutput(row.output) as ContentBlockOutput[],
+      output: parseInferenceOutput(row.output) as ContentBlockChatOutput[],
       inference_params: z
         .record(z.string(), z.unknown())
         .parse(JSON.parse(row.inference_params)),
-      tool_params:
-        row.tool_params === ""
-          ? {}
-          : z
-              .record(z.string(), z.unknown())
-              .parse(JSON.parse(row.tool_params)),
+      tool_params: tool_params,
       extra_body,
     };
   } else {
@@ -512,9 +539,7 @@ async function parseInferenceRow(
       inference_params: z
         .record(z.string(), z.unknown())
         .parse(JSON.parse(row.inference_params)),
-      output_schema: z
-        .record(z.string(), z.unknown())
-        .parse(JSON.parse(row.output_schema)),
+      output_schema: JsonValueSchema.parse(JSON.parse(row.output_schema)),
       extra_body,
     };
   }
@@ -531,7 +556,7 @@ export async function queryInferenceById(
             variant_name,
             episode_id,
             function_type
-        FROM InferenceById FINAL
+        FROM InferenceById
         WHERE id_uint = toUInt128({id:UUID})
         LIMIT 1
     )
@@ -584,7 +609,7 @@ export async function queryInferenceById(
         AND j.id = {id:UUID}
   `;
 
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { id },
@@ -617,7 +642,7 @@ export async function queryModelInferencesByInferenceId(
   const query = `
     SELECT *, formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp FROM ModelInference WHERE inference_id = {id:String}
   `;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { id },
@@ -654,7 +679,7 @@ export async function countInferencesByFunction(): Promise<
     )
     GROUP BY function_name
     ORDER BY max_timestamp DESC`;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
   });
@@ -665,7 +690,7 @@ export async function countInferencesByFunction(): Promise<
 
 export async function countEpisodes(): Promise<number> {
   const query = `SELECT toUInt32(uniqExact(episode_id_uint)) AS count FROM InferenceByEpisodeId`;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
   });
@@ -689,7 +714,7 @@ export async function getAdjacentInferenceIds(
         toUUID('00000000-0000-0000-0000-000000000000')
       ) as next_id
   `;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { current_inference_id: currentInferenceId },
@@ -713,7 +738,7 @@ export async function getAdjacentEpisodeIds(
         toUUID('00000000-0000-0000-0000-000000000000')
       ) as next_id
   `;
-  const resultSet = await clickhouseClient.query({
+  const resultSet = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
     query_params: { current_episode_id: currentEpisodeId },

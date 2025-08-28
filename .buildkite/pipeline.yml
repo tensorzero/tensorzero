@@ -1,0 +1,20 @@
+agents:
+  queue: "t0-merge-queue"
+
+# We need to use individual steps instead of a build matrix, as we can't use matrix keys
+# inside concurrency_group
+steps:
+  - label: "Clickhouse Cloud tests - normal release channel"
+    concurrency: 1
+    concurrency_group: 'clickhouse-cloud-normal-${CLICKHOUSE_ID}'
+    command: CLICKHOUSE_PREFIX="dev-tensorzero-e2e-tests-instance-" ./ci/buildkite/test-clickhouse-cloud.sh
+  - label: "Clickhouse Cloud tests - fast release channel"
+    concurrency: 1
+    concurrency_group: 'clickhouse-cloud-fast-${CLICKHOUSE_ID}'
+    command: CLICKHOUSE_PREFIX="dev-tensorzero-e2e-tests-fast-instance-" ./ci/buildkite/test-clickhouse-cloud.sh
+
+notify:
+  - github_commit_status:
+      # We need a custom status (without a slash in the name) so that we can report
+      # it as a dummy status in 'dummy.yml' for PRs
+      context: "merge-checks-buildkite"

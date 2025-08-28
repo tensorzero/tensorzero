@@ -29,18 +29,19 @@ docker compose up
 a. Install the dependencies:
 
 ```bash
-# We recommend using Python 3.9+ and a virtual environment
+# We recommend using Python 3.10+ and a virtual environment
 pip install -r requirements.txt
 ```
 
 b. Run the example:
 
 ```bash
-python main.py
+python tensorzero_sdk.py
 ```
 
 </details>
 
+<details>
 <summary><b>Python (OpenAI)</b></summary>
 
 a. Install the dependencies:
@@ -53,7 +54,7 @@ pip install -r requirements.txt
 b. Run the example:
 
 ```bash
-python main_openai.py
+python openai_sdk.py
 ```
 
 </details>
@@ -79,11 +80,11 @@ curl -X POST http://localhost:3000/inference \
               "text": "Do the images share any common features?"
             },
             {
-              "type": "image",
-              "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png"
+              "type": "file",
+              "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-core/tests/e2e/providers/ferris.png"
             },
             {
-              "type": "image",
+              "type": "file",
               "mime_type": "image/png",
               "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAA1JREFUGFdj+O/P8B8ABe0CTsv8mHgAAAAASUVORK5CYII="
             }

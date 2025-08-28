@@ -20,7 +20,7 @@ all_tables["ChatInference"]="chat_inference_examples.jsonl ./s3-fixtures/large_c
 all_tables["ModelInference"]="model_inference_examples.jsonl ./s3-fixtures/large_chat_model_inference_v2.parquet ./s3-fixtures/large_json_model_inference_v2.parquet"
 all_tables["ChatInferenceDatapoint FINAL"]="chat_inference_datapoint_examples.jsonl"
 all_tables["JsonInferenceDatapoint FINAL"]="json_inference_datapoint_examples.jsonl"
-all_tables["ModelInferenceCache"]="model_inference_cache_examples.jsonl"
+all_tables["ModelInferenceCache"]="model_inference_cache_e2e.jsonl"
 all_tables["DynamicEvaluationRun"]="dynamic_evaluation_run_examples.jsonl"
 all_tables["DynamicEvaluationRunEpisode"]="dynamic_evaluation_run_episode_examples.jsonl"
 

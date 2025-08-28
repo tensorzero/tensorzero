@@ -9,8 +9,10 @@ import { Badge } from "~/components/ui/badge";
 
 export default function OutputSourceSelector({
   control,
+  onLoadingChange,
 }: {
   control: Control<DatasetBuilderFormValues>;
+  onLoadingChange?: (loading: boolean) => void;
 }) {
   const fieldName = "output_source";
   const functionFieldName = "function";
@@ -28,6 +30,12 @@ export default function OutputSourceSelector({
     // TODO: Fix and stop ignoring lint rule
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [functionValue]);
+
+  // Bubble up loading state changes
+  useEffect(() => {
+    onLoadingChange?.(metricsFetcher.state === "loading");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metricsFetcher.state]);
 
   const demonstrationCount = useMemo(() => {
     if (!metricsFetcher.data) return 0;

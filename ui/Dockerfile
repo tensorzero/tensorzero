@@ -49,15 +49,17 @@ RUN tar -vxf /tmp/packages.tar -C .
 
 RUN pnpm install --frozen-lockfile --prod
 
-# ========== minijinja-build-env ==========
+# ========== tensorzero-node-build-env ==========
 
-FROM rust:latest AS minijinja-build-env
+FROM rust:1.88.0 AS tensorzero-node-build-env
+
+RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
+RUN npm install -g pnpm
 
 COPY . /build
+WORKDIR /build/internal/tensorzero-node
 
-WORKDIR /build/ui/app/utils/minijinja
-RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-RUN wasm-pack build --features console_error_panic_hook
+RUN pnpm install --frozen-lockfile && pnpm run build
 
 # ========== evaluations-build-env ==========
 
@@ -83,25 +85,14 @@ WORKDIR /app
 # Copy dependencies from development-dependencies-env
 COPY --from=development-dependencies-env /app/node_modules /app/node_modules
 COPY --from=development-dependencies-env /app/ui/node_modules* /app/ui/node_modules
+# Copy tensorzero-node binding
+COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/dist /app/internal/tensorzero-node/dist
+COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/index.cjs /app/internal/tensorzero-node/index.cjs
+COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/*linux*.node /app/internal/tensorzero-node/
 
 COPY . .
 
-COPY --from=minijinja-build-env /build/ui/app/utils/minijinja/pkg ./ui/app/utils/minijinja/pkg
-
 RUN pnpm --filter=tensorzero-ui run build
-
-# ========== python-build-env ==========
-
-FROM rust:latest AS python-build-env
-RUN apt-get update && apt-get install -y python3
-COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /uvx /bin/
-COPY . /build
-WORKDIR /build/optimization-server
-# TODO - figure out how to cache the rust build here
-# UV_PYTHON_DOWNLOADS=never
-# https://hynek.me/articles/docker-uv/
-ENV UV_COMPILE_BYTECODE=1
-RUN uv --verbose sync --locked --no-dev
 
 # ========== ui ==========
 
@@ -109,7 +100,7 @@ FROM base AS ui
 
 RUN useradd -m -s /bin/sh ui
 
-RUN apt-get update && apt-get install -y curl python3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl wget python3 && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -124,10 +115,9 @@ COPY --from=production-dependencies-env /app/ui/node_modules /app/ui/node_module
 # Copy the built UI
 COPY --from=build-env /app/ui/build /app/ui/build
 
-# Copy Python optimization server and its dependencies
-COPY --from=python-build-env /build/optimization-server /build/optimization-server
-COPY --from=python-build-env /build/clients/python /build/clients/python
-COPY --from=python-build-env /build/optimization-server/.venv  /build/optimization-server/.venv
+# Copy tensorzero-node bindings for runtime (from build-env which has complete node modules)
+COPY --from=build-env /app/internal/tensorzero-node/index.cjs /app/ui/build/index.cjs
+COPY --from=build-env /app/internal/tensorzero-node/*.node /app/ui/build/
 
 # Copy evaluations binary
 COPY --from=evaluations-build-env /release/evaluations /usr/local/bin/evaluations
@@ -142,7 +132,10 @@ USER ui
 EXPOSE 4000
 
 ENV HOST=0.0.0.0
-ENV TENSORZERO_UI_CONFIG_PATH=/app/config/tensorzero.toml
+ENV NODE_ENV=production
+ENV PORT=4000
 ENV RUST_LOG=warn
+ENV TENSORZERO_UI_CONFIG_PATH=/app/config/tensorzero.toml
 
 ENTRYPOINT ["./entrypoint.sh"]
+HEALTHCHECK --start-period=10s --start-interval=1s --timeout=1s CMD wget --no-verbose --tries=1 --spider http://localhost:4000/api/tensorzero/status

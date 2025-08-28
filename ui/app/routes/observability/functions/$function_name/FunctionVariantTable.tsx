@@ -14,7 +14,7 @@ import { TableItemTime } from "~/components/ui/TableItems";
 
 type VariantCountsWithMetadata = VariantCounts & {
   type: string;
-  weight: number;
+  weight: number | null;
 };
 
 export default function FunctionVariantTable({

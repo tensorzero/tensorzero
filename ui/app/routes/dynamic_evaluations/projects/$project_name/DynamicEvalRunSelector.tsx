@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import {
@@ -15,11 +15,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "~/components/ui/popover";
-import { useSearchParams, useNavigate } from "react-router";
+import { useSearchParams, useNavigate, useFetcher } from "react-router";
 import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
 import { getLastUuidSegment } from "~/components/evaluations/EvaluationRunBadge";
 import type { DynamicEvaluationRun } from "~/utils/clickhouse/dynamic_evaluations";
-import { useSearchDynamicEvaluationRunsFetcher } from "~/routes/api/dynamic_evaluations/search_runs/route";
 import DynamicEvaluationRunBadge from "./DynamicEvaluationRunBadge";
 
 interface DynamicEvalRunSelectorProps {
@@ -44,12 +43,13 @@ export function DynamicEvalRunSelector({
   // Use the color assigner context
   const { getColor } = useColorAssigner();
 
-  const { data, isLoading } = useSearchDynamicEvaluationRunsFetcher({
-    projectName,
-    query: searchValue,
-  });
-
-  const availableRunInfos = data ? data : [];
+  const {
+    data,
+    state,
+    load: loadRunsFetcher,
+  } = useFetcher<DynamicEvaluationRun[]>();
+  const isLoading = state === "loading";
+  const availableRunInfos = data ?? [];
 
   // Update the URL with the selected run IDs
   const updateSelectedRunIds = (runIds: string[]) => {
@@ -104,6 +104,28 @@ export function DynamicEvalRunSelector({
     updateSelectedRunIds(newSelectedRunInfos.map((info) => info.id));
   };
 
+  const hasInitializedRuns = useRef(false);
+  function loadRuns(query: string | null, args?: { debounce?: boolean }) {
+    if (projectName) {
+      const searchParams = new URLSearchParams();
+      searchParams.set("project_name", projectName);
+      if (query) {
+        searchParams.set("q", query);
+      }
+      if (args?.debounce) {
+        searchParams.set("debounce", "");
+      }
+      hasInitializedRuns.current = true;
+      loadRunsFetcher(`/api/dynamic_evaluations/search_runs/?${searchParams}`);
+    }
+  }
+
+  function loadInitialRuns() {
+    if (!hasInitializedRuns.current) {
+      loadRuns(null);
+    }
+  }
+
   return (
     <div className="mb-6">
       <div className="flex flex-col space-y-2">
@@ -114,6 +136,8 @@ export function DynamicEvalRunSelector({
               role="combobox"
               aria-expanded={open}
               className="flex w-96 items-center justify-between gap-2"
+              onFocus={loadInitialRuns}
+              onClick={loadInitialRuns}
             >
               <span>Select dynamic evaluation runs to compare...</span>
               <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
@@ -124,10 +148,13 @@ export function DynamicEvalRunSelector({
               <CommandInput
                 placeholder="Search by variant name or evaluation run ID..."
                 value={searchValue}
-                onValueChange={setSearchValue}
+                onValueChange={(value) => {
+                  setSearchValue(value);
+                  loadRuns(value, { debounce: true });
+                }}
               />
               <CommandList>
-                {isLoading ? (
+                {isLoading && !hasInitializedRuns.current ? (
                   <div className="flex items-center justify-center py-6">
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600"></div>
                     <span className="text-muted-foreground ml-2 text-sm">
@@ -147,7 +174,8 @@ export function DynamicEvalRunSelector({
                         const isSelected = selectedRunIds.includes(info.id);
                         const variantColor = getColor(info.id);
                         const runIdSegment = getLastUuidSegment(info.id);
-                        const isDisabled = !isSelected && !canAddMore;
+                        const isDisabled =
+                          (!isSelected && !canAddMore) || isLoading;
 
                         return (
                           <CommandItem
@@ -178,6 +206,7 @@ export function DynamicEvalRunSelector({
                           <CommandItem
                             onSelect={selectAll}
                             className="font-medium"
+                            disabled={isLoading}
                           >
                             {availableRunInfos.every((info) =>
                               selectedRunIds.includes(info.id),

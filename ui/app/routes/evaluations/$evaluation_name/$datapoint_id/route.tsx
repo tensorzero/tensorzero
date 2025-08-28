@@ -12,9 +12,16 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { PageLayout } from "~/components/layout/PageLayout";
-import Input from "~/components/inference/Input";
-import { data, isRouteErrorResponse, redirect } from "react-router";
-import Output from "~/components/inference/NewOutput";
+import InputSnippet from "~/components/inference/InputSnippet";
+
+import {
+  data,
+  isRouteErrorResponse,
+  Link,
+  redirect,
+  type RouteHandle,
+} from "react-router";
+import { Output } from "~/components/inference/Output";
 import {
   consolidate_evaluation_results,
   getEvaluatorMetricName,
@@ -22,10 +29,7 @@ import {
 } from "~/utils/clickhouse/evaluations";
 import { useConfig } from "~/context/config";
 import MetricValue from "~/components/metric/MetricValue";
-import {
-  getMetricType,
-  type EvaluatorConfig,
-} from "~/utils/config/evaluations";
+import { getMetricType } from "~/utils/config/evaluations";
 import EvaluationRunBadge from "~/components/evaluations/EvaluationRunBadge";
 import BasicInfo from "./EvaluationDatapointBasicInfo";
 import {
@@ -40,14 +44,22 @@ import {
   useColorAssigner,
 } from "~/hooks/evaluations/ColorAssigner";
 import { getConfig } from "~/utils/config/index.server";
-import type { EvaluationConfig } from "~/utils/config/evaluations";
-import type { ContentBlockOutput } from "~/utils/clickhouse/common";
-import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
+import type {
+  EvaluationConfig,
+  EvaluatorConfig,
+  ContentBlockChatOutput,
+  JsonInferenceOutput,
+} from "tensorzero-node";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
+import { logger } from "~/utils/logger";
+
+export const handle: RouteHandle = {
+  crumb: (match) => ["Datapoints", match.params.datapoint_id!],
+};
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const evaluation_name = params.evaluation_name;
@@ -56,6 +68,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const searchParams = new URLSearchParams(url.search);
   const config = await getConfig();
   const evaluation_config = config.evaluations[evaluation_name];
+  if (!evaluation_config) {
+    throw data(
+      `Evaluation config not found for evaluation ${evaluation_name}`,
+      { status: 404 },
+    );
+  }
   const function_name = evaluation_config.function_name;
   const newFeedbackId = searchParams.get("newFeedbackId");
   const newJudgeDemonstrationId = searchParams.get("newJudgeDemonstrationId");
@@ -148,12 +166,12 @@ export async function action({ request }: Route.ActionArgs) {
           response.judgeDemonstrationResponse.feedback_id,
         );
       } else {
-        console.warn("No judge demonstration response");
+        logger.warn("No judge demonstration response");
       }
       return redirect(url.toString());
     }
     default:
-      console.error(`Unknown action: ${_action}`);
+      logger.error(`Unknown action: ${_action}`);
       return null;
   }
 }
@@ -173,6 +191,12 @@ export default function EvaluationDatapointPage({
   } = loaderData;
   const config = useConfig();
   const evaluation_config = config.evaluations[evaluation_name];
+  if (!evaluation_config) {
+    throw data(
+      `Evaluation config not found for evaluation ${evaluation_name}`,
+      { status: 404 },
+    );
+  }
   const outputsToDisplay = [
     {
       id: "Reference",
@@ -218,7 +242,7 @@ export default function EvaluationDatapointPage({
         <SectionsGroup>
           <SectionLayout>
             <SectionHeader heading="Input" />
-            <Input input={consolidatedEvaluationResults[0].input} />
+            <InputSnippet {...consolidatedEvaluationResults[0].input} />
           </SectionLayout>
           <OutputsSection
             outputsToDisplay={outputsToDisplay}
@@ -245,14 +269,14 @@ const MetricsDisplay = ({
 }: {
   metrics: ConsolidatedMetric[];
   evaluation_name: string;
-  evaluatorsConfig: Record<string, EvaluatorConfig>;
+  evaluatorsConfig: Record<string, EvaluatorConfig | undefined>;
   datapointId: string;
   inferenceId: string | null;
   evalRunId: string;
   variantName: string;
 }) => {
   return (
-    <div className="mt-3 border-t border-gray-200 pt-2">
+    <div className="pt-2">
       <div className="space-y-1">
         {metrics.map((metricObj) => {
           const evaluatorConfig = evaluatorsConfig[metricObj.evaluator_name];
@@ -306,14 +330,11 @@ const MetricRow = ({
   const config = useConfig();
   const metric_name = getEvaluatorMetricName(evaluation_name, evaluatorName);
   const metricProperties = config.metrics[metric_name];
-  if (
-    metricProperties.type === "comment" ||
-    metricProperties.type === "demonstration"
-  ) {
+  if (!metricProperties) {
     return null;
   }
   if (inferenceId === null) {
-    console.warn(
+    logger.warn(
       `Inference ID is null for metric ${metric_name} in datapoint ${datapointId}, this should not happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports`,
     );
   }
@@ -361,7 +382,7 @@ const MetricRow = ({
             ? evaluatorConfig.optimize
             : "max"
         }
-        cutoff={evaluatorConfig.cutoff}
+        cutoff={evaluatorConfig.cutoff ?? undefined}
         isHumanFeedback={isHumanFeedback}
         className="text-sm"
       />
@@ -383,7 +404,7 @@ const MetricRow = ({
 };
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  console.error(error);
+  logger.error(error);
 
   if (isRouteErrorResponse(error)) {
     return (
@@ -414,7 +435,7 @@ type OutputsSectionProps = {
   outputsToDisplay: Array<{
     id: string;
     variant_name: string;
-    output: ContentBlockOutput[] | JsonInferenceOutput;
+    output: ContentBlockChatOutput[] | JsonInferenceOutput;
     metrics: ConsolidatedMetric[];
     inferenceId: string | null;
   }>;
@@ -434,23 +455,20 @@ function OutputsSection({
   return (
     <SectionLayout>
       <SectionHeader heading="Output" />
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      <div className="grid grid-flow-col grid-rows-[min-content_min-content_min-content] gap-x-4 gap-y-2 overflow-x-auto">
         {outputsToDisplay.map((result) => (
-          <div
-            key={result.id}
-            className="flex max-w-[450px] min-w-[300px] shrink-0 flex-col justify-between"
-          >
-            <div>
-              <div className="mb-2 flex">
-                {result.id === "Reference" ? (
-                  <EvaluationRunBadge
-                    runInfo={{
-                      evaluation_run_id: "",
-                      variant_name: result.variant_name,
-                    }}
-                    getColor={() => "bg-gray-100 text-gray-700"}
-                  />
-                ) : (
+          <section className="contents" key={result.id}>
+            <div className="row-start-1 flex flex-col gap-1">
+              {result.id === "Reference" ? (
+                <EvaluationRunBadge
+                  runInfo={{
+                    evaluation_run_id: "",
+                    variant_name: result.variant_name,
+                  }}
+                  getColor={() => "bg-gray-100 text-gray-700"}
+                />
+              ) : (
+                <>
                   <EvaluationRunBadge
                     runInfo={{
                       evaluation_run_id: result.id,
@@ -459,10 +477,26 @@ function OutputsSection({
                     // Use the getColor obtained from the correct context
                     getColor={getColor}
                   />
-                )}
-              </div>
-              <Output output={result.output} />
+
+                  {result.inferenceId && (
+                    <div className="text-xs text-gray-500">
+                      Inference:{" "}
+                      <Link
+                        to={`/observability/inferences/${result.inferenceId}`}
+                        className="text-blue-600 hover:text-blue-800 hover:underline"
+                      >
+                        {result.inferenceId}
+                      </Link>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
+
+            <section className="row-start-2">
+              <Output output={result.output} />
+            </section>
+
             {result.id !== "Reference" &&
               result.metrics &&
               result.metrics.length > 0 && (
@@ -476,7 +510,7 @@ function OutputsSection({
                   variantName={result.variant_name}
                 />
               )}
-          </div>
+          </section>
         ))}
       </div>
     </SectionLayout>

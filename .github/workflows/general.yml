@@ -3,99 +3,67 @@ run-name: "General Checks for: ${{ github.event.pull_request.title || github.ref
 
 on:
   merge_group:
+    paths-ignore:
+      - "docs/**"
   pull_request:
     branches: ["main"]
+
+# When triggered from the merge queue, cancel any existing workflow runs for the same PR branch
+# Otherwise, use the unique run id for the concurrency group, to prevent anything from getting cancelled
+concurrency:
+  group: ${{ github.event_name == 'merge_group' && format('{0}-{1}', github.workflow, github.ref) || github.run_id }}
+  cancel-in-progress: true
 
 env:
   FORCE_COLOR: 1
   TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
 jobs:
-  clickhouse-tests-cloud:
-    if: github.event_name == 'merge_group'
+  check-version-consistency:
     runs-on: ubuntu-latest
-    # Note - a concurrency group only allows at most one job to be pending at a time - additional
-    # pending jobs will cause existing pending jobs to be cancelled.
-    # This setting required a merge group concurrency limit of at most 2 - if it's any higher,
-    # jobs will get cancelled, causing spurious failures in the merge queue.
-    concurrency:
-      group: clickhouse-tests-cloud-${{ matrix.cloud_instance.release_channel }}
-      cancel-in-progress: false
-    strategy:
-      matrix:
-        cloud_instance:
-          - release_channel: regular
-            url_secret: CLICKHOUSE_CLOUD_URL
-          - release_channel: fast
-            url_secret: CLICKHOUSE_CLOUD_FAST_CHANNEL_URL
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+
+      - name: Check version consistency
+        run: ./ci/check-version-consistency.sh
+
+  # Like 'check-docker-compose', but loads the freshly built 'gateway' and 'ui' container images first
+  # This checks that all of our docker-compose files work with the changes in the PR
+  check-latest-docker-compose:
+    needs: [build-gateway-container, build-ui-container]
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Download container images
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
         with:
-          cache-provider: "buildjet"
-          shared-key: "build-gateway-cache"
-          save-if: false
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
-        with:
-          tool: cargo-nextest
+          pattern: build-*-container
+          merge-multiple: true
 
-      - name: Set up TENSORZERO_CLICKHOUSE_URL
+      - name: Load `gateway` and `ui` containers
         run: |
-          echo "TENSORZERO_CLICKHOUSE_URL=${{ secrets[matrix.cloud_instance.url_secret] }}" >> $GITHUB_ENV
+          docker load < gateway-container.tar
+          docker load < ui-container.tar
 
-      - name: Wake up ClickHouse cloud
+      - name: Create the `object_storage` directory for the multimodal-vision-finetuning example
         run: |
-          curl $TENSORZERO_CLICKHOUSE_URL --data-binary 'SHOW DATABASES'
+          mkdir -p examples/multimodal-vision-finetuning/object_storage
+          chmod 777 examples/multimodal-vision-finetuning/object_storage
 
-      - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+      - name: Check latest docker-compose
+        run: ./ci/check-all-docker-compose.sh
 
-      - name: Download ClickHouse fixtures
-        run: uv run ./ui/fixtures/download-fixtures.py
-
-      - name: Delete old ClickHouse cloud dbs
-        run: ./ci/delete-clickhouse-dbs.sh
-
-      # We run this as a separate step so that we can see live build logs
-      # (and fail the job immediately if the build fails)
-      - name: Build the gateway for E2E tests
-        run: cargo build-e2e
-
-      - name: Launch the gateway for E2E tests
-        run: |
-          cargo run-e2e > e2e_logs.txt 2>&1 &
-            count=0
-            max_attempts=30
-            while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
-              echo "Waiting for gateway to be healthy..."
-              sleep 1
-              count=$((count + 1))
-              if [ $count -ge $max_attempts ]; then
-                echo "Gateway failed to become healthy after $max_attempts attempts"
-                exit 1
-              fi
-            done
-          echo "GATEWAY_PID=$!" >> $GITHUB_ENV
-
-      - name: Test (Rust)
-        # This test causes a huge slowdown on ClickHouse cloud, even though it uses a fresh database
-        # For now, let's skip it (we still run it in the local docker ClickHouse tests)
-        # See https://github.com/tensorzero/tensorzero/issues/2216
-        # Also, `test_clickhouse_migration_manager` is consistently taking a very long time (and timing out)
-        # on the fast release channel, so we temporarily skip it
-        run: |
-          if [ "${{ matrix.cloud_instance.release_channel }}" = "fast" ]; then
-            cargo test-e2e-no-creds -- --skip test_concurrent_clickhouse_migrations --skip test_clickhouse_migration_manager
-          else
-            cargo test-e2e-no-creds -- --skip test_concurrent_clickhouse_migrations
-          fi
-
-      - name: Print e2e logs
-        if: always()
-        run: cat e2e_logs.txt
-
+  # Checks our docker-compose files against the most recent published 'gateway' and 'ui' container images
+  # (not the ones built for this PR)
   check-docker-compose:
     permissions:
       # Permission to checkout the repository
@@ -103,9 +71,11 @@ jobs:
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     steps:
+      - name: Set DNS
+        run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
@@ -119,17 +89,81 @@ jobs:
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
+      - name: Create the `object_storage` directory for the multimodal-vision-finetuning example
+        run: |
+          mkdir -p examples/multimodal-vision-finetuning/object_storage
+          chmod 777 examples/multimodal-vision-finetuning/object_storage
+
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
 
   check-python-client-build:
     uses: ./.github/workflows/python-client-build.yml
 
+  check-node-bindings:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        with:
+          node-version: "22.9.0"
+
+      - name: Install pnpm
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@latest; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - name: Install dependencies
+        working-directory: internal/tensorzero-node
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Node.js bindings
+        working-directory: internal/tensorzero-node
+        run: pnpm build-bindings
+
+      - name: Check for git diff after building bindings
+        id: git_diff_check
+        run: git diff --exit-code
+
+      - name: Upload bindings artifact on diff failure
+        if: failure()
+        uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
+        with:
+          name: node-bindings
+          path: internal/tensorzero-node/lib/bindings
+          retention-days: 7
+
+      - name: Check tensorzero-node bindings are properly exported
+        run: pnpm --filter=tensorzero-node run check-exports
+
   build-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain
+        run: |
+          for attempt in 1 2 3; do
+            if rustup toolchain install stable && rustup default stable; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust toolchain after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           cache-provider: "buildjet"
@@ -138,9 +172,9 @@ jobs:
         run: cargo build --workspace
 
   validate:
-    runs-on: namespace-profile-tensorzero-8x16
+    runs-on: namespace-profile-tensorzero-32x64
 
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -157,10 +191,19 @@ jobs:
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
-      - name: Install Rust 1.85.0
+      - name: Install Rust 1.86.0
         run: |
-          rustup install 1.85.0 --component clippy,rustfmt
-          rustup default 1.85.0
+          for attempt in 1 2 3; do
+            if rustup install 1.86.0 --component clippy,rustfmt && rustup default 1.86.0; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust 1.86.0 after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Print Rust version
         run: rustc --version
@@ -171,10 +214,21 @@ jobs:
           node-version: "22.9.0"
 
       - name: Install pnpm
-        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@latest; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
 
       - name: Configure Namespace cache for Rust, Python (pip), and pnpm
         uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
@@ -252,7 +306,7 @@ jobs:
       #   run: uv run --with nb-clean nb-clean check --remove-empty-cells
 
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
-        uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
           tool: cargo-nextest,cargo-deny,cargo-hack
 
@@ -296,18 +350,6 @@ jobs:
         run: |
           uv run stubtest tensorzero.tensorzero
 
-      - name: "Python: OpenAI Client: Install dependencies"
-        working-directory: clients/openai-python
-        run: |
-          uv venv
-          uv pip sync requirements.txt
-
-      - name: "Python: OpenAI Client: pyright"
-        working-directory: clients/openai-python
-        run: |
-          uv pip install pyright==1.1.394
-          uv run pyright
-
       - name: "Node.js: Run prettier"
         run: pnpm --filter=openai-node run format
 
@@ -329,22 +371,23 @@ jobs:
         run: |
           uv run pyright
 
-      - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - name: Build npm workspace
+        run: pnpm -r build
 
-      - name: Build minijinja WASM bindings
-        working-directory: ui/app/utils/minijinja
-        run: wasm-pack build --dev --features console_error_panic_hook
+      - name: Format tensorzero-node package
+        run: pnpm --filter=tensorzero-node run format:check
 
-      - name: Run minijinja WASM tests
-        working-directory: ui/app/utils/minijinja
-        run: wasm-pack test --node --features console_error_panic_hook
+      - name: Lint tensorzero-node package
+        run: pnpm --filter=tensorzero-node run lint:check
+
+      - name: Typecheck tensorzero-node package
+        run: pnpm --filter=tensorzero-node run typecheck
 
       - name: Run ESLint
-        run: pnpm --filter=tensorzero-ui run lint
+        run: pnpm --filter=tensorzero-ui run lint:check
 
       - name: Run Prettier
-        run: pnpm --filter=tensorzero-ui run format
+        run: pnpm --filter=tensorzero-ui run format:check
 
       - name: pnpm TypeScript type checking
         run: pnpm --filter=tensorzero-ui run typecheck
@@ -352,50 +395,61 @@ jobs:
       - name: Compile / validate notebooks
         run: ci/compile-check-notebooks.sh
 
+      - name: Lint Helm charts
+        run: find . -name "Chart.yaml" -exec dirname {} \; | xargs -I {} helm lint {}
+
   clickhouse-tests:
+    name: "ClickHouse tests (replicated: ${{ matrix.replicated }}) (version: ${{ matrix.clickhouse_version.tag }})"
+
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
     # the main 'validate' job)
-    runs-on: ubuntu-latest
+    # runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-32x64' || 'ubuntu-latest' }}
+    runs-on: namespace-profile-tensorzero-32x64
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     strategy:
       matrix:
-        clickhouse_version:
-          - tag: "24.12-alpine"
-            prefix: "24.12"
-            allow_failure: false
-          - tag: "25.2-alpine"
-            prefix: "25.2"
-            allow_failure: false
-          - tag: "latest-alpine"
-            prefix: ""
-            # ClickHouse can make new releases at any time, which might break our tests.
-            # We allow this job to fail to avoid blocking CI whenever this happens.
-            # However, we'll still want to fix the failing tests soon after we notice the failure
-            allow_failure: true
+        # Only include replicated: true when running in merge queue
+        replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
+        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"24.12-alpine","prefix":"24.12","allow_failure":false},{"tag":"latest-alpine","prefix":"","allow_failure":false}]') || fromJSON('[{"tag":"latest-alpine","prefix":"","allow_failure":false}]') }}
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain
+        run: |
+          for attempt in 1 2 3; do
+            if rustup toolchain install stable && rustup default stable; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust toolchain after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           cache-provider: "buildjet"
           shared-key: "build-gateway-cache"
           save-if: false
-      - run: df -h
+      - name: "Check disk space before cleanup"
+        run: df -h
       # ClickHouse intermittently runs out of disk space on the `ubuntu-latest` runner
-      # I'm using the commands from https://carlosbecker.com/posts/github-actions-disk-space/ to try to get more disk space
+      # Use extreme disk cleanup script that frees up ~26GB of space (11-phase cleanup)
       - name: "Free up disk space"
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-      - run: df -h
+        run: ./ci/free-disk-space.sh
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
           tool: cargo-nextest
 
+      - name: Set ClickHouse replicated cluster name
+        if: matrix.replicated == true
+        run: echo "TENSORZERO_CLICKHOUSE_CLUSTER_NAME=tensorzero_e2e_tests_cluster" >> $GITHUB_ENV
+
       - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
 
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
@@ -404,8 +458,13 @@ jobs:
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
-      - name: Launch ClickHouse container for E2E tests
-        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up clickhouse --wait
+      - name: Launch non-replicated ClickHouse container for E2E tests
+        if: matrix.replicated == false
+        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up clickhouse --wait
+
+      - name: Launch replicated ClickHouse container for E2E tests
+        if: matrix.replicated == true
+        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml up clickhouse-01 clickhouse-02 clickhouse-03 --wait
 
       # Make an HTTP request to ClickHouse and check that the version matches '${{ matrix.clickhouse_version }}'
       - name: Check ClickHouse version
@@ -419,11 +478,30 @@ jobs:
       - name: Build the gateway for E2E tests
         run: cargo build-e2e
 
-      - name: Launch the gateway for E2E tests
+      - name: Launch the gateway for E2E tests (not configured for replication)
+        if: matrix.replicated == false
         run: |
           cargo run-e2e > e2e_logs.txt 2>&1 &
             count=0
-            max_attempts=10
+            max_attempts=20
+            while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+              echo "Waiting for gateway to be healthy..."
+              sleep 1
+              count=$((count + 1))
+              if [ $count -ge $max_attempts ]; then
+                echo "Gateway failed to become healthy after $max_attempts attempts"
+                exit 1
+              fi
+            done
+          echo "GATEWAY_PID=$!" >> $GITHUB_ENV
+
+      - name: Launch the gateway for E2E tests (configured for replication)
+        if: matrix.replicated == true
+        run: |
+          cargo run-e2e --run-migrations-only &&
+          cargo run-e2e > e2e_logs.txt 2>&1 &
+            count=0
+            max_attempts=40
             while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
               echo "Waiting for gateway to be healthy..."
               sleep 1
@@ -438,9 +516,114 @@ jobs:
       - name: Test (Rust)
         run: cargo test-e2e-no-creds
 
+      - name: Print docker compose logs (replicated)
+        if: always() && matrix.replicated == true
+        run: |
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml logs -t
+
+      - name: Print ClickHouse error logs (replicated)
+        if: always() && matrix.replicated == true
+        run: |
+          echo "Error logs for ClickHouse 01:"
+          docker exec e2e-clickhouse-01-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+          echo "Error logs for ClickHouse 02:"
+          docker exec e2e-clickhouse-02-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+          echo "Error logs for ClickHouse 03:"
+          docker exec e2e-clickhouse-03-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+
+      - name: Print ClickHouse trace logs (replicated)
+        if: always() && matrix.replicated == true
+        run: |
+          echo "Trace logs for ClickHouse 01:"
+          docker exec e2e-clickhouse-01-1 cat /var/log/clickhouse-server/clickhouse-server.log
+          echo "Trace logs for ClickHouse 02:"
+          docker exec e2e-clickhouse-02-1 cat /var/log/clickhouse-server/clickhouse-server.log
+          echo "Trace logs for ClickHouse 03:"
+          docker exec e2e-clickhouse-03-1 cat /var/log/clickhouse-server/clickhouse-server.log
+
+      - name: Print container health checks (replicated)
+        if: always() && matrix.replicated == true
+        run: |
+          echo "Health check for ClickHouse 01:"
+          docker inspect --format "{{json .State.Health }}" $(docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml ps -q clickhouse-01) | jq
+          echo "Health check for ClickHouse 02:"
+          docker inspect --format "{{json .State.Health }}" $(docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml ps -q clickhouse-02) | jq
+          echo "Health check for ClickHouse 03:"
+          docker inspect --format "{{json .State.Health }}" $(docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml ps -q clickhouse-03) | jq
+
+      - name: Print docker compose logs (non-replicated)
+        if: always() && matrix.replicated == false
+        run: |
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
+
       - name: Print e2e logs
         if: always()
         run: cat e2e_logs.txt
+
+  # Run 'cargo test-optimization' against mock-inference-provider
+  mock-optimization-tests:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: not_used
+      FIREWORKS_API_KEY: not_used
+      FIREWORKS_ACCOUNT_ID: not_used
+      TOGETHER_API_KEY: not_used
+      TENSORZERO_USE_MOCK_INFERENCE_PROVIDER: 1
+      TENSORZERO_SKIP_LARGE_FIXTURES: 1
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install Rust toolchain
+        run: |
+          for attempt in 1 2 3; do
+            if rustup toolchain install stable && rustup default stable; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust toolchain after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          cache-provider: "buildjet"
+          shared-key: "build-gateway-cache"
+          save-if: false
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        with:
+          tool: cargo-nextest
+
+      - name: Install uv
+        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
+
+      - name: Download ClickHouse fixtures
+        run: uv run ./ui/fixtures/download-fixtures.py
+
+      - name: Cleanup disk space
+        run: ./ci/free-disk-space.sh
+
+      - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
+        run: |
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
+
+      - name: Launch ClickHouse container for E2E tests
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
+
+      - name: Launch the gateway for E2E tests
+        run: |
+          cargo run-e2e > e2e_logs.txt 2>&1 &
+          while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+            echo "Waiting for gateway to be healthy..."
+            sleep 1
+          done
+
+      - name: Test (Rust)
+        run: cargo test-optimization-mock
 
   build-gateway-container:
     uses: ./.github/workflows/build-gateway-container.yml
@@ -458,22 +641,34 @@ jobs:
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
+      FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+      S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
     if: always()
     needs:
       [
-        clickhouse-tests-cloud,
+        check-version-consistency,
         check-docker-compose,
+        check-latest-docker-compose,
         check-python-client-build,
+        check-node-bindings,
         build-windows,
+        build-ui-container,
+        build-gateway-container,
         validate,
         clickhouse-tests,
         ui-tests,
         ui-tests-e2e,
+        mock-optimization-tests,
       ]
     runs-on: ubuntu-latest
     steps:
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+      # When running in the merge queue, jobs should never be skipped.
+      # In PR CI, some jobs may be intentionally skipped (e.g. due to running from a fork, or to save money)
+      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled' || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped'))) }}
         run: exit 1

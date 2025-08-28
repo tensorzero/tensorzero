@@ -7,7 +7,10 @@ use std::{
 use tensorzero::{
     ChatInferenceDatapoint, Client, ClientBuilder, ClientBuilderMode, JsonInferenceDatapoint,
 };
-use tensorzero_internal::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
+use tensorzero_core::db::clickhouse::{
+    test_helpers::{get_clickhouse, CLICKHOUSE_URL},
+    TableName,
+};
 use uuid::Uuid;
 
 /// Takes a chat fixture as a path to a JSONL file and writes the fixture to the dataset.
@@ -32,7 +35,7 @@ pub async fn write_chat_fixture_to_dataset(
     }
     let clickhouse = get_clickhouse().await;
     clickhouse
-        .write(&datapoints, "ChatInferenceDatapoint")
+        .write_batched(&datapoints, TableName::ChatInferenceDatapoint)
         .await
         .unwrap();
 }
@@ -56,7 +59,7 @@ pub async fn write_json_fixture_to_dataset(
     }
     let clickhouse = get_clickhouse().await;
     clickhouse
-        .write(&datapoints, "JsonInferenceDatapoint")
+        .write_batched(&datapoints, TableName::JsonInferenceDatapoint)
         .await
         .unwrap();
 }
@@ -64,11 +67,13 @@ pub async fn write_json_fixture_to_dataset(
 pub async fn get_tensorzero_client() -> Client {
     ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(PathBuf::from(&format!(
-            "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+            "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         ))),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
+        verify_credentials: true,
+        allow_batch_writes: true,
     })
     .build()
     .await

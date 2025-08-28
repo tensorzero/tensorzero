@@ -5,23 +5,43 @@ import httpx
 
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import (
-    RenderedStoredInference,
+    BestOfNSamplingConfig,
+    ChainOfThoughtConfig,
+    ChatCompletionConfig,
+    Config,
+    Datapoint,
+    DiclConfig,
+    DiclOptimizationConfig,
+    FireworksSFTConfig,
+    FunctionConfigChat,
+    FunctionConfigJson,
+    FunctionsConfig,
+    GCPVertexGeminiSFTConfig,
+    MixtureOfNConfig,
+    OpenAISFTConfig,
+    OptimizationJobHandle,
+    OptimizationJobInfo,
+    OptimizationJobStatus,
+    RenderedSample,
     ResolvedInput,
     ResolvedInputMessage,
     StoredInference,
+    TogetherSFTConfig,
+    VariantsConfig,
 )
 from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
 )
 from .types import (
-    AndNode,
+    AndFilter,
+    AndNode,  # DEPRECATED
     BaseTensorZeroError,
-    BooleanMetricNode,
+    BooleanMetricFilter,
+    BooleanMetricNode,  # DEPRECATED
     ChatDatapointInsert,
     ChatInferenceDatapointInput,  # DEPRECATED
     ChatInferenceResponse,
     ContentBlock,
-    Datapoint,
     DynamicEvaluationRunEpisodeResponse,
     DynamicEvaluationRunResponse,
     ExtraBody,
@@ -29,7 +49,8 @@ from .types import (
     FileBase64,
     FileUrl,
     FinishReason,
-    FloatMetricNode,
+    FloatMetricFilter,
+    FloatMetricNode,  # DEPRECATED
     ImageBase64,
     ImageUrl,
     InferenceChunk,
@@ -40,16 +61,21 @@ from .types import (
     JsonInferenceOutput,
     JsonInferenceResponse,
     Message,
-    NotNode,
-    OrNode,
+    NotFilter,
+    NotNode,  # DEPRECATED
+    OrderBy,
+    OrFilter,
+    OrNode,  # DEPRECATED
     RawText,
     System,
+    TagFilter,
     TensorZeroError,
     TensorZeroInternalError,
     Text,
     TextChunk,
     Thought,
     ThoughtChunk,
+    TimeFilter,
     Tool,
     ToolCall,
     ToolCallChunk,
@@ -60,17 +86,33 @@ from .types import (
     Usage,
 )
 
+RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample instead
+# Type aliases to preserve backward compatibility with main
+ChatDatapoint = Datapoint.Chat
+JsonDatapoint = Datapoint.Json
+
+OptimizationConfig = t.Union[
+    OpenAISFTConfig, FireworksSFTConfig, TogetherSFTConfig, DiclOptimizationConfig
+]
+ChatInferenceOutput = t.List[ContentBlock]
+
+
 __all__ = [
-    "AndNode",
+    "AndFilter",
+    "AndNode",  # DEPRECATED
     "AsyncTensorZeroGateway",
     "BaseTensorZeroError",
     "BaseTensorZeroGateway",
-    "BooleanMetricNode",
+    "BooleanMetricFilter",
+    "BooleanMetricNode",  # DEPRECATED
+    "ChatDatapoint",
     "ChatDatapointInsert",
     "ChatInferenceDatapointInput",  # DEPRECATED
     "ChatInferenceResponse",
+    "Config",
     "ContentBlock",
     "Datapoint",
+    "DiclOptimizationConfig",
     "DynamicEvaluationRunEpisodeResponse",
     "DynamicEvaluationRunResponse",
     "ExtraBody",
@@ -78,7 +120,17 @@ __all__ = [
     "FileBase64",
     "FileUrl",
     "FinishReason",
-    "FloatMetricNode",
+    "FloatMetricFilter",
+    "FloatMetricNode",  # DEPRECATED
+    "FunctionsConfig",
+    "FunctionConfigChat",
+    "FunctionConfigJson",
+    "VariantsConfig",
+    "ChatCompletionConfig",
+    "BestOfNSamplingConfig",
+    "DiclConfig",
+    "MixtureOfNConfig",
+    "ChainOfThoughtConfig",
     "ImageBase64",
     "ImageUrl",
     "InferenceChunk",
@@ -87,17 +139,30 @@ __all__ = [
     "StoredInference",
     "InferenceInput",
     "InferenceResponse",
+    "JsonDatapoint",
     "JsonDatapointInsert",
     "JsonInferenceDatapointInput",  # DEPRECATED
     "JsonInferenceOutput",
     "JsonInferenceResponse",
     "Message",
-    "NotNode",
-    "OrNode",
+    "NotFilter",
+    "NotNode",  # DEPRECATED
+    "OrderBy",
+    "OrFilter",
+    "OrNode",  # DEPRECATED
+    "OptimizationJobHandle",
+    "OptimizationJobInfo",
+    "OptimizationJobStatus",
+    "FireworksSFTConfig",
+    "GCPVertexGeminiSFTConfig",
+    "OpenAISFTConfig",
+    "OptimizationConfig",
     "patch_openai_client",
     "RawText",
-    "RenderedStoredInference",
+    "RenderedStoredInference",  # DEPRECATED
+    "RenderedSample",
     "System",
+    "TagFilter",
     "TensorZeroError",
     "TensorZeroGateway",
     "TensorZeroInternalError",
@@ -105,6 +170,8 @@ __all__ = [
     "TextChunk",
     "Thought",
     "ThoughtChunk",
+    "TimeFilter",
+    "TogetherSFTConfig",
     "Tool",
     "ToolChoice",
     "ToolParams",

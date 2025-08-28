@@ -1,0 +1,101 @@
+---
+title: "Comparison: TensorZero vs. OpenRouter"
+sidebarTitle: "OpenRouter"
+description: "TensorZero is an open-source alternative to OpenRouter featuring an LLM gateway, observability, optimization, evaluations, and experimentation."
+---
+
+TensorZero and OpenRouter both offer a unified inference API for LLMs, but they have different features beyond that.
+TensorZero offers a more comprehensive set of features (including observability, optimization, evaluations, and experimentation), whereas OpenRouter offers more dynamic routing capabilities.
+That said, **you can get the best of both worlds by using OpenRouter as a model provider inside TensorZero**!
+
+## Similarities
+
+- **Unified Inference API.**
+  Both TensorZero and OpenRouter offer a unified inference API that allows you to access LLMs from most major model providers with a single integration, with support for structured outputs, tool use, streaming, and more.<br />
+  [→ TensorZero Gateway Quickstart](/quickstart/)
+
+- **Automatic Fallbacks for Higher Reliability.**
+  Both TensorZero and OpenRouter offer automatic fallbacks to increase reliability.<br />
+  [→ Retries & Fallbacks with TensorZero](/gateway/guides/retries-fallbacks/)
+
+## Key Differences
+
+### TensorZero
+
+- **Open Source & Self-Hosted.**
+  TensorZero is fully open source and self-hosted.
+  Your data never leaves your infrastructure, and you don't risk downtime by relying on external APIs.
+  OpenRouter is a closed-source external API.
+
+- **No Added Cost.**
+  TensorZero is free to use: your bring your own LLM API keys and there is no additional cost.
+  OpenRouter charges 5% of your inference spend when you bring your own API keys.
+
+- **Built-in Observability.**
+  TensorZero offers built-in observability features, collecting inference and feedback data in your own database.
+  OpenRouter doesn't offer any observability features.
+
+- **Built-in Evaluations.**
+  TensorZero offers built-in functionality, including heuristics and LLM judges.
+  OpenRouter doesn't offer any evaluation features.<br />
+  [→ TensorZero Evaluations Overview](/evaluations/)
+
+- **Built-in Experimentation (A/B Testing).**
+  TensorZero offers built-in experimentation features, allowing you to run experiments on your prompts, models, and inference strategies.
+  OpenRouter doesn't offer any experimentation features.<br />
+  [→ Experimentation (A/B Testing) with TensorZero](/gateway/guides/experimentation/)
+
+- **Built-in Inference-Time Optimizations.**
+  TensorZero offers built-in inference-time optimizations (e.g. dynamic in-context learning), allowing you to optimize your inference performance.
+  OpenRouter doesn't offer any inference-time optimizations, except for dynamic model routing via NotDiamond.<br />
+  [→ Inference-Time Optimizations with TensorZero](/gateway/guides/inference-time-optimizations/)
+
+- **Optimization Recipes.**
+  TensorZero offers optimization recipes (e.g. supervised fine-tuning, RLHF, MIPRO) that leverage your own data to improve your LLM's performance.
+  OpenRouter doesn't offer any features like this.<br />
+  [→ Optimization Recipes with TensorZero](/recipes/)
+
+- **Batch Inference.**
+  TensorZero supports batch inference with certain model providers, which significantly reduces inference costs.
+  OpenRouter doesn't support batch inference.<br />
+  [→ Batch Inference with TensorZero](/gateway/guides/batch-inference/)
+
+- **Inference Caching.**
+  TensorZero offers inference caching, which can significantly reduce inference costs and latency.
+  OpenRouter doesn't offer inference caching.<br />
+  [→ Inference Caching with TensorZero](/gateway/guides/inference-caching/)
+
+- **Schemas, Templates, GitOps.**
+  TensorZero enables a schema-first approach to building LLM applications, allowing you to separate your application logic from LLM implementation details.
+  This approach allows your to more easily manage complex LLM applications, benefit from GitOps for prompt and configuration management, counterfactually improve data for optimization, and more.
+  OpenRouter only offers the standard unstructured chat completion interface.<br />
+  [→ Prompt Templates & Schemas with TensorZero](/gateway/guides/prompt-templates-schemas/)
+
+### OpenRouter
+
+- **Dynamic Provider Routing.**
+  OpenRouter allows you to dynamically route requests to different model providers based on latency, cost, and availability.
+  TensorZero only offers static routing capabilities, i.e. a pre-defined sequence of model providers to attempt.<br />
+  [→ Retries & Fallbacks with TensorZero](/gateway/guides/retries-fallbacks/)
+
+- **Dynamic Model Routing.**
+  OpenRouter integrates with NotDiamond to offer dynamic model routing based on input.
+  TensorZero supports other inference-time optimizations but doesn't support dynamic model routing at this time.<br />
+  [→ Inference-Time Optimizations with TensorZero](/gateway/guides/inference-time-optimizations/)
+
+- **Consolidated Billing.**
+  OpenRouter allows you to access every supported model using a single OpenRouter API key.
+  Under the hood, OpenRouter uses their own API keys with model providers.
+  This approach can increase your rate limits and streamline billing, but slightly increases your inference costs.
+  TensorZero requires you to use your own API keys, without any added cost.
+
+<Tip title="Feedback">
+
+Is TensorZero missing any features that are really important to you? Let us know on [GitHub Discussions](https://github.com/tensorzero/tensorzero/discussions), [Slack](https://www.tensorzero.com/slack), or [Discord](https://www.tensorzero.com/discord).
+
+</Tip>
+
+## Combining TensorZero and OpenRouter
+
+You can get the best of both worlds by using OpenRouter as a model provider inside TensorZero.
+Learn more about using [OpenRouter as a model provider](/gateway/guides/providers/openrouter/).
