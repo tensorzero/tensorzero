@@ -4,6 +4,7 @@ use reqwest::multipart::Form;
 use reqwest::multipart::Part;
 use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
+use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
@@ -422,11 +423,26 @@ impl ClickHouseConnectionInfo {
         }
     }
 
+    // TODO: deprecate this
     pub async fn run_query_synchronous_no_params(
         &self,
         query: String,
     ) -> Result<ClickHouseResponse, Error> {
         self.run_query_synchronous(query, &HashMap::default()).await
+    }
+
+    pub async fn run_query_synchronous_no_params_de<T>(&self, query: String) -> Result<T, Error>
+    where
+        T: DeserializeOwned,
+    {
+        let result = self
+            .run_query_synchronous(query, &HashMap::default())
+            .await?;
+        serde_json::from_str(&result.response).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: e.to_string(),
+            })
+        })
     }
 
     /// Sometimes you might want to treat the data you're sending as a table if you're going
