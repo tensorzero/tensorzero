@@ -15,8 +15,8 @@ if command -v buildkite-agent >/dev/null 2>&1; then
   else
     CLICKHOUSE_HOST_VAR=$(buildkite-agent secret get CLICKHOUSE_HOST)
   fi
-  CLICKHOUSE_USER_VAR_URLENCODED=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_USERNAME)
-  CLICKHOUSE_PASSWORD_VAR_URLENCODED=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_PASSWORD)
+  CLICKHOUSE_USER_VAR=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_USERNAME)
+  CLICKHOUSE_PASSWORD_VAR=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_PASSWORD)
   CLICKHOUSE_SECURE_FLAG="--secure"
 else
   # Not on Buildkite - use environment variables with defaults
