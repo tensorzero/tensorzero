@@ -4,11 +4,12 @@ use crate::endpoints::datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint}
 use crate::endpoints::dynamic_evaluation_run::{
     DynamicEvaluationRunEpisodeRow, DynamicEvaluationRunRow,
 };
-use crate::endpoints::feedback::human_feedback::StaticEvaluationHumanFeedback;
 
 #[cfg(feature = "e2e_tests")]
 use super::escape_string_for_clickhouse_literal;
 use super::ClickHouseConnectionInfo;
+#[cfg(feature = "e2e_tests")]
+use crate::endpoints::feedback::human_feedback::StaticEvaluationHumanFeedback;
 use serde_json::Value;
 #[cfg(feature = "e2e_tests")]
 use std::collections::HashMap;
