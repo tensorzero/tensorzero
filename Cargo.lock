@@ -2529,6 +2529,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "instability"
+version = "0.3.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "435d80800b936787d62688c927b6490e887c7ef5ff9ce922c6c6050fca75eb9a"
+dependencies = [
+ "darling 0.20.11",
+ "indoc",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "interpolate_name"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4865,6 +4878,7 @@ dependencies = [
  "image",
  "indexmap 2.10.0",
  "init-tracing-opentelemetry",
+ "instability",
  "itertools 0.14.0",
  "jsonschema",
  "jsonwebtoken",
