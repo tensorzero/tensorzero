@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euxo pipefail
 echo "CLICKHOUSE_ID=${CLICKHOUSE_ID}"
+
+set +x
 # Get the url of a ClickHouse cloud instance, based on the $CLICKHOUSE_ID that we assigned in '.buildkite/hooks/post-checkout'
 # We also use this id as part of the concurrent group key in '.buildkite/pipeline.yml', so we're guaranteed to be the only job trying to use this instance.
 # This allows us to distribute our tests across multiple ClickHouse cloud instances (since running too many parallel tests will overload any single instance).
@@ -8,8 +10,6 @@ export CLICKHOUSE_API_KEY=$(buildkite-agent secret get clickhouse_api_key)
 export CLICKHOUSE_KEY_SECRET=$(buildkite-agent secret get clickhouse_key_secret)
 export CLICKHOUSE_USERNAME=$(buildkite-agent secret get clickhouse_username)
 export CLICKHOUSE_PASSWORD=$(buildkite-agent secret get clickhouse_password)
-
-set +x
 # We concatenate our clickhouse instance prefix, along with our chosen clickhouse id (e.g. 'dev-tensorzero-e2e-tests-instance-' and '0'), to form the instance name
 # Then, we look up the instance url for this name, and add basic-auth credentials to the url to get our full TENSORZERO_CLICKHOUSE_URL
 export TENSORZERO_CLICKHOUSE_URL=$(curl --user "$CLICKHOUSE_API_KEY:$CLICKHOUSE_KEY_SECRET" https://api.clickhouse.cloud/v1/organizations/b55f1935-803f-4931-90b3-4d26089004d4/services | jq -r ".result[] | select(.name == \"${CLICKHOUSE_PREFIX}${CLICKHOUSE_ID}\") | .endpoints[] | select(.protocol == \"https\") | \"https://$CLICKHOUSE_USERNAME:$CLICKHOUSE_PASSWORD@\" + .host + \":\" + (.port | tostring)")

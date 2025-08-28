@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euxo pipefail
+set -euo pipefail
 
 DATABASE_NAME="${1:-tensorzero_ui_fixtures}"
 if [ -f /load_complete.marker ]; then
@@ -18,6 +18,17 @@ if command -v buildkite-agent >/dev/null 2>&1; then
   CLICKHOUSE_USER_VAR=$(buildkite-agent secret get clickhouse_username)
   CLICKHOUSE_PASSWORD_VAR=$(buildkite-agent secret get clickhouse_password)
   CLICKHOUSE_SECURE_FLAG="--secure"
+  
+  # Debug: Check if password appears to be URL-encoded
+  if echo "$CLICKHOUSE_PASSWORD_VAR" | grep -qE '%[0-9A-Fa-f]{2}'; then
+    echo "Password appears to be URL-encoded (contains %XX patterns)"
+    echo "PANIC: Stopping job to investigate URL encoding issue"
+    exit 1
+  else
+    echo "Password does not appear to be URL-encoded"
+    echo "PANIC: Stopping job to investigate authentication issue"
+    exit 1
+  fi
 else
   # Not on Buildkite - use environment variables with defaults
   CLICKHOUSE_HOST_VAR="${CLICKHOUSE_HOST}"
