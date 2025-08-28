@@ -1350,29 +1350,9 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
             .send()
             .await
             .unwrap();
-        
+
         let status = response.status();
-        if status != StatusCode::OK {
-            // Handle error case for streaming
-            if let Some(error) = response.json::<Value>().await.ok().and_then(|json| json.get("error").cloned()) {
-                let error_msg = error.as_str().unwrap_or("Unknown error");
-                println!("Provider returned error in streaming mode: {}", error_msg);
-                
-                // For Llama provider, allow 502 Bad Gateway as it might not support this functionality
-                if provider.model_provider_name == "llama_api" && status == StatusCode::BAD_GATEWAY {
-                    println!("Llama provider returned 502 Bad Gateway in streaming mode - this may indicate unsupported functionality");
-                    (Uuid::now_v7(), true)
-                } else {
-                    // If we get here, the status was unexpected
-                    panic!("Unexpected status code in streaming mode: {} for provider {} (model: {})", 
-                           status, provider.model_provider_name, provider.model_name);
-                }
-            } else {
-                // If we get here, the status was unexpected
-                panic!("Unexpected status code in streaming mode: {} for provider {} (model: {})", 
-                       status, provider.model_provider_name, provider.model_name);
-            }
-        } else {
+        if status == StatusCode::OK {
             // If we get here, the status was OK, so we can proceed with streaming
             let mut event_source = Client::new()
                 .post(get_gateway_endpoint("/inference"))
@@ -1400,6 +1380,36 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
             let response_json = serde_json::from_str::<Value>(&chunks[0]).unwrap();
             let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
             (Uuid::parse_str(inference_id).unwrap(), false)
+        } else {
+            // Handle error case for streaming
+            if let Some(error) = response
+                .json::<Value>()
+                .await
+                .ok()
+                .and_then(|json| json.get("error").cloned())
+            {
+                let error_msg = error.as_str().unwrap_or("Unknown error");
+                println!("Provider returned error in streaming mode: {error_msg}");
+
+                // For Llama provider, allow 502 Bad Gateway as it might not support this functionality
+                if provider.model_provider_name == "llama_api" && status == StatusCode::BAD_GATEWAY
+                {
+                    println!("Llama provider returned 502 Bad Gateway in streaming mode - this may indicate unsupported functionality");
+                    (Uuid::now_v7(), true)
+                } else {
+                    // If we get here, the status was unexpected
+                    panic!(
+                        "Unexpected status code in streaming mode: {} for provider {} (model: {})",
+                        status, provider.model_provider_name, provider.model_name
+                    );
+                }
+            } else {
+                // If we get here, the status was unexpected
+                panic!(
+                    "Unexpected status code in streaming mode: {} for provider {} (model: {})",
+                    status, provider.model_provider_name, provider.model_name
+                );
+            }
         }
     } else {
         let response = Client::new()
@@ -1422,22 +1432,27 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
             // If the provider returns an error, check that it's a reasonable error
             if let Some(error) = response_json.get("error") {
                 let error_msg = error.as_str().unwrap_or("Unknown error");
-                println!("Provider returned error: {}", error_msg);
-                
+                println!("Provider returned error: {error_msg}");
+
                 // For Llama provider, allow 502 Bad Gateway as it might not support this functionality
-                if provider.model_provider_name == "llama_api" && status == StatusCode::BAD_GATEWAY {
+                if provider.model_provider_name == "llama_api" && status == StatusCode::BAD_GATEWAY
+                {
                     println!("Llama provider returned 502 Bad Gateway - this may indicate unsupported functionality");
                     // Return a dummy UUID since we can't proceed with the test
                     (Uuid::now_v7(), true)
                 } else {
                     // If we get here, the status was unexpected
-                    panic!("Unexpected status code: {} for provider {} (model: {})", 
-                           status, provider.model_provider_name, provider.model_name);
+                    panic!(
+                        "Unexpected status code: {} for provider {} (model: {})",
+                        status, provider.model_provider_name, provider.model_name
+                    );
                 }
             } else {
                 // If we get here, the status was unexpected
-                panic!("Unexpected status code: {} for provider {} (model: {})", 
-                       status, provider.model_provider_name, provider.model_name);
+                panic!(
+                    "Unexpected status code: {} for provider {} (model: {})",
+                    status, provider.model_provider_name, provider.model_name
+                );
             }
         }
     };
@@ -1603,29 +1618,9 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
             .send()
             .await
             .unwrap();
-        
+
         let status = response.status();
-        if status != StatusCode::OK {
-            // Handle error case for streaming
-            if let Some(error) = response.json::<Value>().await.ok().and_then(|json| json.get("error").cloned()) {
-                let error_msg = error.as_str().unwrap_or("Unknown error");
-                println!("Provider returned error in streaming mode: {}", error_msg);
-                
-                // For Llama provider, allow 502 Bad Gateway as it might not support this functionality
-                if provider.model_provider_name == "llama_api" && status == StatusCode::BAD_GATEWAY {
-                    println!("Llama provider returned 502 Bad Gateway in streaming mode - this may indicate unsupported functionality");
-                    (Uuid::now_v7(), true)
-                } else {
-                    // If we get here, the status was unexpected
-                    panic!("Unexpected status code in streaming mode: {} for provider {} (model: {})", 
-                           status, provider.model_provider_name, provider.model_name);
-                }
-            } else {
-                // If we get here, the status was unexpected
-                panic!("Unexpected status code in streaming mode: {} for provider {} (model: {})", 
-                       status, provider.model_provider_name, provider.model_name);
-            }
-        } else {
+        if status == StatusCode::OK {
             // If we get here, the status was OK, so we can proceed with streaming
             let mut event_source = Client::new()
                 .post(get_gateway_endpoint("/inference"))
@@ -1653,6 +1648,36 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
             let response_json = serde_json::from_str::<Value>(&chunks[0]).unwrap();
             let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
             (Uuid::parse_str(inference_id).unwrap(), false)
+        } else {
+            // Handle error case for streaming
+            if let Some(error) = response
+                .json::<Value>()
+                .await
+                .ok()
+                .and_then(|json| json.get("error").cloned())
+            {
+                let error_msg = error.as_str().unwrap_or("Unknown error");
+                println!("Provider returned error in streaming mode: {error_msg}");
+
+                // For Llama provider, allow 502 Bad Gateway as it might not support this functionality
+                if provider.model_provider_name == "llama_api" && status == StatusCode::BAD_GATEWAY
+                {
+                    println!("Llama provider returned 502 Bad Gateway in streaming mode - this may indicate unsupported functionality");
+                    (Uuid::now_v7(), true)
+                } else {
+                    // If we get here, the status was unexpected
+                    panic!(
+                        "Unexpected status code in streaming mode: {} for provider {} (model: {})",
+                        status, provider.model_provider_name, provider.model_name
+                    );
+                }
+            } else {
+                // If we get here, the status was unexpected
+                panic!(
+                    "Unexpected status code in streaming mode: {} for provider {} (model: {})",
+                    status, provider.model_provider_name, provider.model_name
+                );
+            }
         }
     } else {
         let response = Client::new()
@@ -1675,22 +1700,27 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
             // If the provider returns an error, check that it's a reasonable error
             if let Some(error) = response_json.get("error") {
                 let error_msg = error.as_str().unwrap_or("Unknown error");
-                println!("Provider returned error: {}", error_msg);
-                
+                println!("Provider returned error: {error_msg}");
+
                 // For Llama provider, allow 502 Bad Gateway as it might not support this functionality
-                if provider.model_provider_name == "llama_api" && status == StatusCode::BAD_GATEWAY {
+                if provider.model_provider_name == "llama_api" && status == StatusCode::BAD_GATEWAY
+                {
                     println!("Llama provider returned 502 Bad Gateway - this may indicate unsupported functionality");
                     // Return a dummy UUID since we can't proceed with the test
                     (Uuid::now_v7(), true)
                 } else {
                     // If we get here, the status was unexpected
-                    panic!("Unexpected status code: {} for provider {} (model: {})", 
-                           status, provider.model_provider_name, provider.model_name);
+                    panic!(
+                        "Unexpected status code: {} for provider {} (model: {})",
+                        status, provider.model_provider_name, provider.model_name
+                    );
                 }
             } else {
                 // If we get here, the status was unexpected
-                panic!("Unexpected status code: {} for provider {} (model: {})", 
-                       status, provider.model_provider_name, provider.model_name);
+                panic!(
+                    "Unexpected status code: {} for provider {} (model: {})",
+                    status, provider.model_provider_name, provider.model_name
+                );
             }
         }
     };
@@ -1913,9 +1943,15 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
         }
         "llama_api" => {
             assert!(
-                res["error"].as_str().unwrap().contains("401 Unauthorized") 
-                || res["error"].as_str().unwrap().contains("Authentication Error")
-                || res["error"].as_str().unwrap().contains("No API key provided"),
+                res["error"].as_str().unwrap().contains("401 Unauthorized")
+                    || res["error"]
+                        .as_str()
+                        .unwrap()
+                        .contains("Authentication Error")
+                    || res["error"]
+                        .as_str()
+                        .unwrap()
+                        .contains("No API key provided"),
                 "Unexpected error: {res}"
             );
         }
@@ -3203,7 +3239,10 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 
     // NB: Azure doesn't support input/output tokens during streaming
     // Llama .com endpoint doesn't support streaming properly
-    if provider.variant_name.contains("azure") || provider.model_provider_name == "llama_api" || check_cache {
+    if provider.variant_name.contains("azure")
+        || provider.model_provider_name == "llama_api"
+        || check_cache
+    {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -3421,18 +3460,22 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
         // If the provider returns an error, check that it's a reasonable error
         if let Some(error) = response_json.get("error") {
             let error_msg = error.as_str().unwrap_or("Unknown error");
-            println!("Provider returned error: {}", error_msg);
-            
+            println!("Provider returned error: {error_msg}");
+
             // For Llama provider, allow 502 Bad Gateway as it might not support this functionality
-            if provider.model_provider_name == "llama_api" && response_status == StatusCode::BAD_GATEWAY {
+            if provider.model_provider_name == "llama_api"
+                && response_status == StatusCode::BAD_GATEWAY
+            {
                 println!("Llama provider returned 502 Bad Gateway - this may indicate unsupported functionality");
                 return;
             }
         }
-        
+
         // If we get here, the status was unexpected
-        panic!("Unexpected status code: {} for provider {} (model: {})", 
-               response_status, provider.model_provider_name, provider.model_name);
+        panic!(
+            "Unexpected status code: {} for provider {} (model: {})",
+            response_status, provider.model_provider_name, provider.model_name
+        );
     }
 }
 
@@ -3672,26 +3715,33 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         .send()
         .await
         .unwrap();
-    
+
     let status = response.status();
     if status != StatusCode::OK {
         // Handle error case for streaming
-        if let Some(error) = response.json::<Value>().await.ok().and_then(|json| json.get("error").cloned()) {
+        if let Some(error) = response
+            .json::<Value>()
+            .await
+            .ok()
+            .and_then(|json| json.get("error").cloned())
+        {
             let error_msg = error.as_str().unwrap_or("Unknown error");
-            println!("Provider returned error in streaming mode: {}", error_msg);
-            
+            println!("Provider returned error in streaming mode: {error_msg}");
+
             // For Llama provider, allow 502 Bad Gateway as it might not support this functionality
             if provider.model_provider_name == "llama_api" && status == StatusCode::BAD_GATEWAY {
                 println!("Llama provider returned 502 Bad Gateway in streaming mode - this may indicate unsupported functionality");
                 return;
             }
         }
-        
+
         // If we get here, the status was unexpected
-        panic!("Unexpected status code in streaming mode: {} for provider {} (model: {})", 
-               status, provider.model_provider_name, provider.model_name);
+        panic!(
+            "Unexpected status code in streaming mode: {} for provider {} (model: {})",
+            status, provider.model_provider_name, provider.model_name
+        );
     }
-    
+
     // If we get here, the status was OK, so we can proceed with streaming
     let mut event_source = Client::new()
         .post(get_gateway_endpoint("/inference"))
@@ -8453,14 +8503,14 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         Err(e) => {
             // Handle Llama provider errors gracefully
             if provider.model_provider_name == "llama_api" {
-                let error_msg = format!("{:?}", e);
+                let error_msg = format!("{e:?}");
                 if error_msg.contains("No API key provided") {
                     println!("Llama provider failed with 'No API key provided' - this is expected without proper credentials");
                     return;
                 }
             }
             // Re-raise other errors
-            panic!("Unexpected error: {:?}", e);
+            panic!("Unexpected error: {e:?}");
         }
     };
 
@@ -8772,14 +8822,14 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         Err(e) => {
             // Handle Llama provider errors gracefully
             if provider.model_provider_name == "llama_api" {
-                let error_msg = format!("{:?}", e);
+                let error_msg = format!("{e:?}");
                 if error_msg.contains("No API key provided") {
                     println!("Llama provider failed with 'No API key provided' - this is expected without proper credentials");
                     return;
                 }
             }
             // Re-raise other errors
-            panic!("Unexpected error: {:?}", e);
+            panic!("Unexpected error: {e:?}");
         }
     };
 
@@ -10171,7 +10221,7 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
         "output_schema": output_schema.clone(),
         "extra_headers": extra_headers.extra_headers,
     });
-    
+
     let response = Client::new()
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
@@ -10198,18 +10248,20 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
         // If the provider returns an error, check that it's a reasonable error
         if let Some(error) = response_json.get("error") {
             let error_msg = error.as_str().unwrap_or("Unknown error");
-            println!("Provider returned error: {}", error_msg);
-            
+            println!("Provider returned error: {error_msg}");
+
             // For Llama provider, allow 502 Bad Gateway as it might not support this functionality
             if provider.model_provider_name == "llama_api" && status == StatusCode::BAD_GATEWAY {
                 println!("Llama provider returned 502 Bad Gateway - this may indicate unsupported functionality");
                 return;
             }
         }
-        
+
         // If we get here, the status was unexpected
-        panic!("Unexpected status code: {} for provider {} (model: {})", 
-               status, provider.model_provider_name, provider.model_name);
+        panic!(
+            "Unexpected status code: {} for provider {} (model: {})",
+            status, provider.model_provider_name, provider.model_name
+        );
     }
 }
 

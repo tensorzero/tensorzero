@@ -36,7 +36,7 @@ fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("LLAMA_API_KEY".to_string())
 }
 
-const PROVIDER_NAME: &str = "Llama";
+const PROVIDER_NAME: &str = "Llama API";
 pub const PROVIDER_TYPE: &str = "llama_api";
 
 #[derive(Debug, Serialize)]
@@ -170,20 +170,21 @@ impl InferenceProvider for LlamaAPIProvider {
                 })
             })?;
 
-            let actual_response: LlamaActualResponse = serde_json::from_str(&raw_response).map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!(
-                        "Error parsing JSON response: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: Some(raw_response.clone()),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+            let actual_response: LlamaActualResponse = serde_json::from_str(&raw_response)
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!(
+                            "Error parsing JSON response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        raw_request: Some(raw_request.clone()),
+                        raw_response: Some(raw_response.clone()),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
 
             // Convert LlamaActualResponse to LlamaResponse format
-            let response = convert_llama_actual_response_to_llama_response(actual_response)?;
+            let response = convert_llama_actual_response_to_llama_response(actual_response);
 
             let latency = Latency::NonStreaming {
                 response_time: start_time.elapsed(),
@@ -307,10 +308,10 @@ pub fn stream_llama(
     start_time: Instant,
 ) -> ProviderInferenceResponseStreamInner {
     let mut tool_call_ids = Vec::new();
-    
+
     Box::pin(async_stream::stream! {
         futures::pin_mut!(event_source);
-        
+
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -329,12 +330,12 @@ pub fn stream_llama(
                         if message.data == "[DONE]" {
                             break;
                         }
-                        
+
                         // Log the raw message for debugging
                         if message.data.contains("error") || message.data.contains("Bad request") || message.data.contains("400") || message.data.contains("502") {
-                            eprintln!("DEBUG: Received message: {}", message.data);
+                            // Debug message removed to avoid eprintln! usage
                         }
-                        
+
                         let latency = start_time.elapsed();
                         // Try to parse as new streaming format first, then fall back to old format
                         let data: Result<ProviderInferenceResponseChunk, Error> = {
@@ -374,7 +375,7 @@ pub fn stream_llama(
                                 }
                             }
                         };
-                        
+
                         // Handle the result
                         match &data {
                             Ok(chunk) => {
@@ -586,11 +587,11 @@ pub(super) fn prepare_llama_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
 ) -> Result<Vec<LlamaRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
-    for message in request.messages.iter() {
+    for message in &request.messages {
         messages.extend(tensorzero_to_llama_messages(message)?);
     }
     if let Some(system_msg) =
-        tensorzero_to_llama_system_message(request.system.as_deref(), &request.json_mode, &messages)
+        tensorzero_to_llama_system_message(request.system.as_deref(), request.json_mode, &messages)
     {
         messages.insert(0, system_msg);
     }
@@ -626,12 +627,12 @@ pub(super) fn prepare_llama_tools<'a>(
 /// So, we need to format the instructions to include "Respond using JSON." if it doesn't already.
 pub(super) fn tensorzero_to_llama_system_message<'a>(
     system: Option<&'a str>,
-    json_mode: &ModelInferenceRequestJsonMode,
+    json_mode: ModelInferenceRequestJsonMode,
     messages: &[LlamaRequestMessage<'a>],
 ) -> Option<LlamaRequestMessage<'a>> {
     match system {
         Some(system) => {
-            match json_mode {
+            match &json_mode {
                 ModelInferenceRequestJsonMode::On => {
                     if messages
                         .iter()
@@ -656,7 +657,7 @@ pub(super) fn tensorzero_to_llama_system_message<'a>(
             }
             .into()
         }
-        None => match *json_mode {
+        None => match json_mode {
             ModelInferenceRequestJsonMode::On => {
                 Some(LlamaRequestMessage::System(LlamaSystemRequestMessage {
                     content: Cow::Owned("Respond using JSON.".to_string()),
@@ -684,7 +685,7 @@ fn tensorzero_to_llama_user_messages(
     let mut messages = Vec::new();
     let mut user_content_blocks = Vec::new();
 
-    for block in content_blocks.iter() {
+    for block in content_blocks {
         match block {
             ContentBlock::Text(Text { text }) => {
                 user_content_blocks.push(LlamaContentBlock::Text {
@@ -746,7 +747,7 @@ fn tensorzero_to_llama_assistant_messages(
     let mut assistant_content_blocks = Vec::new();
     let mut assistant_tool_calls = Vec::new();
 
-    for block in content_blocks.iter() {
+    for block in content_blocks {
         match block {
             ContentBlock::Text(Text { text }) => {
                 assistant_content_blocks.push(LlamaContentBlock::Text {
@@ -820,14 +821,14 @@ fn tensorzero_to_llama_assistant_messages(
 // Convert LlamaActualResponse to LlamaResponse format
 fn convert_llama_actual_response_to_llama_response(
     actual_response: LlamaActualResponse,
-) -> Result<LlamaResponse, Error> {
+) -> LlamaResponse {
     let completion_message = actual_response.completion_message;
-    
+
     // Extract usage from metrics
     let mut prompt_tokens = 0;
     let mut completion_tokens = 0;
     let mut total_tokens = 0;
-    
+
     for metric in &actual_response.metrics {
         match metric.metric.as_str() {
             "num_prompt_tokens" => prompt_tokens = metric.value,
@@ -836,13 +837,13 @@ fn convert_llama_actual_response_to_llama_response(
             _ => {}
         }
     }
-    
+
     let usage = LlamaUsage {
         prompt_tokens,
         completion_tokens,
         total_tokens,
     };
-    
+
     // Convert completion_message to LlamaResponseMessage (support tool calls or text)
     let (message_content, message_tool_calls) = match (
         completion_message.content.as_ref(),
@@ -857,7 +858,7 @@ fn convert_llama_actual_response_to_llama_response(
         content: message_content,
         tool_calls: message_tool_calls,
     };
-    
+
     // Convert stop_reason to LlamaFinishReason
     let finish_reason = match completion_message.stop_reason.as_str() {
         "stop" => LlamaFinishReason::Stop,
@@ -866,17 +867,17 @@ fn convert_llama_actual_response_to_llama_response(
         "tool_calls" => LlamaFinishReason::ToolCalls,
         _ => LlamaFinishReason::Unknown,
     };
-    
+
     let choice = LlamaResponseChoice {
         index: 0,
         message,
         finish_reason,
     };
-    
-    Ok(LlamaResponse {
+
+    LlamaResponse {
         choices: vec![choice],
         usage,
-    })
+    }
 }
 
 // Actual Llama API response structures
@@ -1068,10 +1069,12 @@ impl<'a> LlamaRequest<'a> {
 
         // Validate parameters for llama.com API
         let validated_top_p = if let Some(top_p) = request.top_p {
-            if top_p < 0.0 || top_p > 1.0 {
+            if !(0.0..=1.0).contains(&top_p) {
                 return Err(Error::new(ErrorDetails::InferenceClient {
                     status_code: None,
-                    message: format!("Invalid 'top_p': must be a float between 0.0 and 1.0, got {}", top_p),
+                    message: format!(
+                        "Invalid 'top_p': must be a float between 0.0 and 1.0, got {top_p}"
+                    ),
                     raw_request: None,
                     raw_response: None,
                     provider_type: "llama".to_string(),
@@ -1083,10 +1086,12 @@ impl<'a> LlamaRequest<'a> {
         };
 
         let validated_temperature = if let Some(temp) = request.temperature {
-            if temp < 0.0 || temp > 2.0 {
+            if !(0.0..=2.0).contains(&temp) {
                 return Err(Error::new(ErrorDetails::InferenceClient {
                     status_code: None,
-                    message: format!("Invalid 'temperature': must be a float between 0.0 and 2.0, got {}", temp),
+                    message: format!(
+                        "Invalid 'temperature': must be a float between 0.0 and 2.0, got {temp}"
+                    ),
                     raw_request: None,
                     raw_response: None,
                     provider_type: "llama".to_string(),
@@ -1599,7 +1604,8 @@ mod tests {
         }
 
         // Test forbidden error
-        let forbidden = handle_llama_error(StatusCode::FORBIDDEN, "Forbidden access", PROVIDER_TYPE);
+        let forbidden =
+            handle_llama_error(StatusCode::FORBIDDEN, "Forbidden access", PROVIDER_TYPE);
         let details = forbidden.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
         if let ErrorDetails::InferenceClient {
@@ -1695,10 +1701,7 @@ mod tests {
 
         let llama_request =
             LlamaRequest::new("Llama-4-Scout-17B-16E-Instruct-FP8", &basic_request).unwrap();
-        assert_eq!(
-            llama_request.model,
-            "Llama-4-Scout-17B-16E-Instruct-FP8"
-        );
+        assert_eq!(llama_request.model, "Llama-4-Scout-17B-16E-Instruct-FP8");
         assert_eq!(llama_request.messages.len(), 2);
         assert_eq!(llama_request.temperature, Some(0.7));
         assert_eq!(llama_request.max_completion_tokens, Some(100));
@@ -1735,16 +1738,10 @@ mod tests {
             ..Default::default()
         };
 
-        let llama_request = LlamaRequest::new(
-            "Llama-4-Scout-17B-16E-Instruct-FP8",
-            &request_with_tools,
-        )
-        .unwrap();
+        let llama_request =
+            LlamaRequest::new("Llama-4-Scout-17B-16E-Instruct-FP8", &request_with_tools).unwrap();
 
-        assert_eq!(
-            llama_request.model,
-            "Llama-4-Scout-17B-16E-Instruct-FP8"
-        );
+        assert_eq!(llama_request.model, "Llama-4-Scout-17B-16E-Instruct-FP8");
         assert_eq!(llama_request.messages.len(), 2); // We'll add a system message containing Json to fit Llama requirements
         assert_eq!(llama_request.temperature, None);
         assert_eq!(llama_request.max_completion_tokens, None);
@@ -1791,16 +1788,10 @@ mod tests {
             ..Default::default()
         };
 
-        let llama_request = LlamaRequest::new(
-            "Llama-4-Scout-17B-16E-Instruct-FP8",
-            &request_with_tools,
-        )
-        .unwrap();
+        let llama_request =
+            LlamaRequest::new("Llama-4-Scout-17B-16E-Instruct-FP8", &request_with_tools).unwrap();
 
-        assert_eq!(
-            llama_request.model,
-            "Llama-4-Scout-17B-16E-Instruct-FP8"
-        );
+        assert_eq!(llama_request.model, "Llama-4-Scout-17B-16E-Instruct-FP8");
         assert_eq!(llama_request.messages.len(), 1);
         assert_eq!(llama_request.temperature, None);
         assert_eq!(llama_request.max_completion_tokens, None);
@@ -1835,16 +1826,10 @@ mod tests {
             ..Default::default()
         };
 
-        let llama_request = LlamaRequest::new(
-            "Llama-4-Scout-17B-16E-Instruct-FP8",
-            &request_with_tools,
-        )
-        .unwrap();
+        let llama_request =
+            LlamaRequest::new("Llama-4-Scout-17B-16E-Instruct-FP8", &request_with_tools).unwrap();
 
-        assert_eq!(
-            llama_request.model,
-            "Llama-4-Scout-17B-16E-Instruct-FP8"
-        );
+        assert_eq!(llama_request.model, "Llama-4-Scout-17B-16E-Instruct-FP8");
         assert_eq!(llama_request.messages.len(), 1);
         assert_eq!(llama_request.temperature, None);
         assert_eq!(llama_request.max_completion_tokens, None);
@@ -2438,7 +2423,7 @@ mod tests {
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::Off;
         let messages: Vec<LlamaRequestMessage> = vec![];
-        let result = tensorzero_to_llama_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
         assert_eq!(result, None);
 
         // Test Case 2: system is Some, json_mode is On, messages contain "json"
@@ -2460,7 +2445,7 @@ mod tests {
         let expected = Some(LlamaRequestMessage::System(LlamaSystemRequestMessage {
             content: Cow::Borrowed("System instructions"),
         }));
-        let result = tensorzero_to_llama_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 3: system is Some, json_mode is On, messages do not contain "json"
@@ -2483,7 +2468,7 @@ mod tests {
         let expected = Some(LlamaRequestMessage::System(LlamaSystemRequestMessage {
             content: Cow::Owned(expected_content),
         }));
-        let result = tensorzero_to_llama_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 4: system is Some, json_mode is Off
@@ -2505,7 +2490,7 @@ mod tests {
         let expected = Some(LlamaRequestMessage::System(LlamaSystemRequestMessage {
             content: Cow::Borrowed("System instructions"),
         }));
-        let result = tensorzero_to_llama_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 5: system is Some, json_mode is Strict
@@ -2527,7 +2512,7 @@ mod tests {
         let expected = Some(LlamaRequestMessage::System(LlamaSystemRequestMessage {
             content: Cow::Borrowed("System instructions"),
         }));
-        let result = tensorzero_to_llama_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 6: system contains "json", json_mode is On
@@ -2541,7 +2526,7 @@ mod tests {
         let expected = Some(LlamaRequestMessage::System(LlamaSystemRequestMessage {
             content: Cow::Borrowed("Respond using JSON.\n\nSystem instructions"),
         }));
-        let result = tensorzero_to_llama_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 7: system is None, json_mode is On
@@ -2563,7 +2548,7 @@ mod tests {
         let expected = Some(LlamaRequestMessage::System(LlamaSystemRequestMessage {
             content: Cow::Owned("Respond using JSON.".to_string()),
         }));
-        let result = tensorzero_to_llama_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 8: system is None, json_mode is Strict
@@ -2583,7 +2568,7 @@ mod tests {
             }),
         ];
 
-        let result = tensorzero_to_llama_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
         assert!(result.is_none());
 
         // Test Case 9: system is None, json_mode is On, with empty messages
@@ -2593,7 +2578,7 @@ mod tests {
         let expected = Some(LlamaRequestMessage::System(LlamaSystemRequestMessage {
             content: Cow::Owned("Respond using JSON.".to_string()),
         }));
-        let result = tensorzero_to_llama_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
 
         // Test Case 10: system is None, json_mode is Off, with messages containing "json"
@@ -2605,7 +2590,7 @@ mod tests {
             }],
         })];
         let expected = None;
-        let result = tensorzero_to_llama_system_message(system, &json_mode, &messages);
+        let result = tensorzero_to_llama_system_message(system, json_mode, &messages);
         assert_eq!(result, expected);
     }
 
@@ -2669,4 +2654,4 @@ mod tests {
             r#"{"content":[{"type":"text","text":"My first message"},{"type":"text","text":"My second message"}]}"#
         );
     }
-} 
+}

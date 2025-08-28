@@ -394,8 +394,6 @@ type = "vllm"
 model_name = "Qwen/Qwen2.5-0.5B-Instruct"
 api_base = "https://tensorzero--vllm-inference-qwen-vllm-inference.modal.run/v1/"
 
-## Llama
-
 [models."llama-scout-llama"]
 routing = ["llama_api"]
 
@@ -410,7 +408,6 @@ routing = ["llama_api"]
 type = "llama_api"
 model_name = "Llama-4-Scout-17B-16E-Instruct-FP8"
 api_key_location = "dynamic::llama_api_key"
-
 
 [models."open-mistral-nemo-2407"]
 routing = ["mistral"]
@@ -1244,7 +1241,9 @@ type = "chat_completion"
 model = "llama-scout-llama"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
-extra_headers = [{ name = "Authorization", value = "Bearer: invalid_openai_auth" }]
+extra_headers = [
+    { name = "Authorization", value = "Bearer: invalid_openai_auth" },
+]
 
 [functions.basic_test.variants.llama_api-dynamic]
 type = "chat_completion"
@@ -2015,8 +2014,6 @@ system_template = "../../fixtures/config/functions/json_success/prompt/system_te
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 max_tokens = 100
 json_mode = "strict"
-
-## Llama
 
 [functions.dynamic_json.variants.llama_api]
 type = "chat_completion"
