@@ -3,6 +3,7 @@ run-name: Merge Queue Checks for ${{ github.ref }}
 
 on:
   workflow_dispatch:
+  push:
   merge_group:
     paths-ignore:
       - "docs/**"
