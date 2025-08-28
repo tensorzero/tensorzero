@@ -25,7 +25,9 @@ test("playground should work for a chat function that sets 2 variants", async ({
 
   // Verify the selections are visible
   await expect(page.getByText("write_haiku")).toBeVisible();
-  await expect(page.getByText("foo")).toBeVisible();
+  await expect(
+    page.getByRole("combobox").filter({ hasText: "foo" }),
+  ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "initial_prompt_gpt4o_mini" }),
   ).toBeVisible();
@@ -75,7 +77,9 @@ test("playground should work for extract_entities JSON function with 2 variants"
 
   // Verify the selections are visible
   await expect(page.getByText("extract_entities")).toBeVisible();
-  await expect(page.getByText("foo")).toBeVisible();
+  await expect(
+    page.getByRole("combobox").filter({ hasText: "foo" }),
+  ).toBeVisible();
   await expect(page.getByRole("link", { name: "baseline" })).toBeVisible();
   await expect(
     page.getByRole("link", { name: "gpt4o_mini_initial_prompt" }),
@@ -126,7 +130,9 @@ test("playground should work for image_judger function with images in input", as
 
   // Verify the selections are visible
   await expect(page.getByText("image_judger")).toBeVisible();
-  await expect(page.getByText("baz")).toBeVisible();
+  await expect(
+    page.getByRole("combobox").filter({ hasText: "baz" }),
+  ).toBeVisible();
   await expect(page.getByRole("link", { name: "honest_answer" })).toBeVisible();
 
   // Verify that there is 1 input and 1 reference output
@@ -156,7 +162,9 @@ test("playground should work for data with tools", async ({ page }) => {
 
   // Verify the selections are visible
   await expect(page.getByText("multi_hop_rag_agent")).toBeVisible();
-  await expect(page.getByText("tool_call_examples")).toBeVisible();
+  await expect(
+    page.getByRole("combobox").filter({ hasText: "tool_call_examples" }),
+  ).toBeVisible();
   await expect(page.getByRole("link", { name: "baseline" })).toBeVisible();
 
   // Verify that there is 1 input and 1 reference output
@@ -166,10 +174,13 @@ test("playground should work for data with tools", async ({ page }) => {
   ).toHaveCount(1);
 
   // Verify that tool calls are displayed correctly
-  // The datapoint has multiple tool calls in the input history
-  // plus the output from the variant, so we expect multiple "Tool Call" labels
-  const initialToolCallCount = await page.getByText("Tool Call").count();
-  expect(initialToolCallCount).toBeGreaterThan(0);
+  // Give the inference lots of time to run - assert at least one tool call since apparently sometimes the model outputs 2
+  await expect(
+    page
+      .getByTestId("datapoint-playground-output")
+      .getByText("Tool Call")
+      .first(),
+  ).toBeVisible({ timeout: 15_000 });
 
   // Verify that at least one tool call has the expected fields
   await expect(page.getByText("Name").first()).toBeVisible();
@@ -181,19 +192,50 @@ test("playground should work for data with tools", async ({ page }) => {
     page.getByRole("heading", { name: "Inference Error" }),
   ).toHaveCount(0);
 
-  // Click the refresh button to reload inference
-  // Find the refresh button in the output area
-  const refreshButton = page
-    .getByRole("button")
-    .filter({ has: page.locator("svg") });
-  await refreshButton.first().click();
-
-  // Wait for the inference to reload
+  // TODO - clicking the refresh button immediately after the inference loads doesn't seem to work
+  // We should figure out what event to wait for, and remove this sleep
   await page.waitForTimeout(1000);
 
+  // Click the refresh button to reload inference
+  // Find the refresh button in the output area
+  const refreshButton = page.getByTestId(
+    "datapoint-playground-output-refresh-button",
+  );
+  await refreshButton.first().click();
+
+  // NOTE (bad tests coverage):
+  // we can't assert well that the refresh state was displayed since all the inferences are cached
+  // so the response could come super fast
+  // We would have to build in some delay in test mode to ensure the refresh state is displayed
+  // await page.waitForTimeout(1000);
+  // Since this test is flaky and blocking merges we'll remove the check for now
+
+  // Wait for loading indicator to appear (indicates refresh started)
+  // await expect(
+  //   page.getByTestId("datapoint-playground-output-loading"),
+  // ).toBeVisible({
+  //   timeout: 5000,
+  // });
+
+  // Wait for loading indicator to disappear (indicates refresh completed)
+  // await expect(
+  //   page.getByTestId("datapoint-playground-output-loading"),
+  // ).not.toBeVisible({
+  //   timeout: 15000,
+  // });
+
   // Verify tool calls are still displayed after refresh
-  const afterRefreshToolCallCount = await page.getByText("Tool Call").count();
-  expect(afterRefreshToolCallCount).toBeGreaterThan(0);
+  await expect(
+    page
+      .getByTestId("datapoint-playground-output")
+      .getByText("Tool Call")
+      .first(),
+  ).toBeVisible({ timeout: 15_000 });
+
+  // Verify that at least one tool call has the expected fields
+  await expect(page.getByText("Name").first()).toBeVisible();
+  await expect(page.getByText("ID").first()).toBeVisible();
+  await expect(page.getByText("Arguments").first()).toBeVisible();
 
   // Verify that there are no errors after refresh
   await expect(

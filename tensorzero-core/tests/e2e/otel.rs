@@ -61,7 +61,7 @@ pub fn install_capturing_otel_exporter() -> CapturingOtelExporter {
     let exporter = CapturingOtelExporter {
         spans: Arc::new(Mutex::new(Some(vec![]))),
     };
-    let (enable_otel, layer) = build_opentelemetry_layer(Some(exporter.clone()))
+    let (enable_otel, layer, _sdk_tracer) = build_opentelemetry_layer(Some(exporter.clone()))
         .expect("Failed to build OpenTelemetry layer");
 
     tracing_subscriber::registry().with(layer).init();
@@ -120,6 +120,10 @@ pub async fn test_capture_simple_inference_spans() {
                     })],
                 }],
             },
+            tags: HashMap::from([
+                ("first_tag".to_string(), "first_value".to_string()),
+                ("second_tag".to_string(), "second_value".to_string()),
+            ]),
             ..Default::default()
         })
         .await
@@ -150,6 +154,20 @@ pub async fn test_capture_simple_inference_spans() {
     );
     assert_eq!(root_attr_map.get("function_name"), None);
     assert_eq!(root_attr_map.get("variant_name"), None);
+    assert_eq!(
+        root_attr_map.get("tags.first_tag").cloned(),
+        Some("first_value".to_string().into())
+    );
+    assert_eq!(
+        root_attr_map.get("tags.second_tag").cloned(),
+        Some("second_value".to_string().into())
+    );
+    // Check that there are no other takes
+    let tag_count = root_attr_map
+        .iter()
+        .filter(|(k, _)| k.starts_with("tags."))
+        .count();
+    assert_eq!(tag_count, 2);
 
     let root_children = &spans.span_children[&root_span.span_context.span_id()];
     let [variant_span] = root_children.as_slice() else {

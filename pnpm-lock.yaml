@@ -68,6 +68,12 @@ importers:
         specifier: ^4.20.3
         version: 4.20.3
 
+  examples/docs/guides/gateway/call-any-llm:
+    dependencies:
+      openai:
+        specifier: ^5.15.0
+        version: 5.15.0(ws@8.18.2)(zod@3.25.76)
+
   examples/guides/tool-use:
     dependencies:
       openai:
@@ -5131,6 +5137,18 @@ packages:
 
   openai@4.104.0:
     resolution: {integrity: sha512-p99EFNsA/yX6UhVO93f5kJsDRLAg+CTA2RBqdHK4RtK8u5IJw32Hyb2dTGKbnnFmnuoBv5r7Z2CURI9sGZpSuA==}
+    hasBin: true
+    peerDependencies:
+      ws: ^8.18.0
+      zod: ^3.23.8
+    peerDependenciesMeta:
+      ws:
+        optional: true
+      zod:
+        optional: true
+
+  openai@5.15.0:
+    resolution: {integrity: sha512-kcUdws8K/A8m02I+IqFBwO51gS+87GP89yWEufGbzEi8anBz4FB/bti2QxaJdGwwY4mwJGzx85XO7TuL/Tpu1w==}
     hasBin: true
     peerDependencies:
       ws: ^8.18.0
@@ -12704,6 +12722,11 @@ snapshots:
       zod: 3.25.76
     transitivePeerDependencies:
       - encoding
+
+  openai@5.15.0(ws@8.18.2)(zod@3.25.76):
+    optionalDependencies:
+      ws: 8.18.2
+      zod: 3.25.76
 
   optionator@0.9.4:
     dependencies:

@@ -18,7 +18,7 @@ use super::inference::{
     InferenceIds, InferenceModels, InferenceParams, InferenceResponse, JsonInferenceResponse,
 };
 use crate::cache::{CacheEnabledMode, CacheOptions};
-use crate::config_parser::Config;
+use crate::config::Config;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
 use crate::function::{sample_variant, FunctionConfig};
@@ -33,7 +33,8 @@ use crate::inference::types::{batch::StartBatchModelInferenceWithMetadata, Input
 use crate::inference::types::{
     current_timestamp, ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext,
     FinishReason, InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert,
-    JsonInferenceOutput, Latency, ModelInferenceResponseWithMetadata, Usage,
+    JsonInferenceOutput, Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch,
+    Usage,
 };
 use crate::inference::types::{RequestMessage, ResolvedInput};
 use crate::jsonschema_util::DynamicJSONSchema;
@@ -615,8 +616,12 @@ async fn write_start_batch_inference<'a>(
             function_name: metadata.function_name.into(),
             variant_name: metadata.variant_name.into(),
             episode_id: metadata.episode_ids[rows.len()],
-            input: row.input,
-            input_messages: row.input_messages,
+            input: row.input.into_stored_input(),
+            input_messages: row
+                .input_messages
+                .into_iter()
+                .map(RequestMessage::into_stored_message)
+                .collect(),
             system: row.system.map(Cow::Borrowed),
             tool_params,
             inference_params: Cow::Borrowed(row.inference_params),
@@ -836,7 +841,7 @@ pub async fn write_completed_batch_inference<'a>(
             created: current_timestamp(),
             output: output.clone(),
             system: system.map(Cow::into_owned),
-            input_messages,
+            input_messages: RequestMessagesOrBatch::BatchInput(input_messages),
             raw_request: raw_request.into_owned(),
             raw_response,
             usage,

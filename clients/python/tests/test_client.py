@@ -72,6 +72,13 @@ TEST_CONFIG_FILE = os.path.join(
     "../../../tensorzero-core/tests/e2e/tensorzero.toml",
 )
 
+# Test image with File block
+basepath = path.dirname(__file__)
+with open(
+    f"{basepath}/../../../tensorzero-core/tests/e2e/providers/ferris.png", "rb"
+) as f:
+    ferris_png = base64.b64encode(f.read()).decode("ascii")
+
 
 def test_sync_embedded_gateway_no_config():
     with pytest.warns(UserWarning, match="No config file provided"):
@@ -1276,12 +1283,6 @@ def test_default_function_inference(sync_client: TensorZeroGateway):
 
 
 def test_image_inference_base64(sync_client: TensorZeroGateway):
-    basepath = path.dirname(__file__)
-    with open(
-        f"{basepath}/../../../tensorzero-core/tests/e2e/providers/ferris.png", "rb"
-    ) as f:
-        ferris_png = base64.b64encode(f.read()).decode("ascii")
-
     input = {
         "system": "You are a helpful assistant named Alfred Pennyworth.",
         "messages": [
@@ -1314,7 +1315,7 @@ def test_image_inference_base64(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "file": {"url": None, "mime_type": "image/png"},
+            "file": {"url": None, "mime_type": "image/png", "data": ferris_png},
             "storage_path": {
                 "kind": {"type": "disabled"},
                 "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
@@ -1324,13 +1325,6 @@ def test_image_inference_base64(sync_client: TensorZeroGateway):
 
 
 def test_file_inference_base64(sync_client: TensorZeroGateway):
-    # Test image with File block
-    basepath = path.dirname(__file__)
-    with open(
-        f"{basepath}/../../../tensorzero-core/tests/e2e/providers/ferris.png", "rb"
-    ) as f:
-        ferris_png = base64.b64encode(f.read()).decode("ascii")
-
     input = {
         "system": "You are a helpful assistant named Alfred Pennyworth.",
         "messages": [
@@ -1363,7 +1357,7 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "file": {"url": None, "mime_type": "image/png"},
+            "file": {"url": None, "mime_type": "image/png", "data": ferris_png},
             "storage_path": {
                 "kind": {"type": "disabled"},
                 "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
@@ -1410,7 +1404,11 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "file": {"url": None, "mime_type": "application/pdf"},
+            "file": {
+                "url": None,
+                "mime_type": "application/pdf",
+                "data": deepseek_paper_pdf,
+            },
             "storage_path": {
                 "kind": {"type": "disabled"},
                 "path": "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf",
@@ -1456,6 +1454,7 @@ def test_image_inference_url_wrong_mime_type(sync_client: TensorZeroGateway):
             "file": {
                 "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                 "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "data": ferris_png,
             },
             "storage_path": {
                 "kind": {"type": "disabled"},
@@ -1501,6 +1500,7 @@ def test_image_inference_url(sync_client: TensorZeroGateway):
             "file": {
                 "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                 "mime_type": "image/png",
+                "data": ferris_png,
             },
             "storage_path": {
                 "kind": {"type": "disabled"},
@@ -1546,6 +1546,7 @@ def test_file_inference_url(sync_client: TensorZeroGateway):
             "file": {
                 "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                 "mime_type": "image/png",
+                "data": ferris_png,
             },
             "storage_path": {
                 "kind": {"type": "disabled"},
@@ -3260,12 +3261,14 @@ def test_sync_include_original_response_json(sync_client: TensorZeroGateway):
     assert response.original_response == '{"answer":"Hello"}'
 
 
-@pytest.mark.skip(reason="batched writes are currently disabled due to deadlocks")
 def test_sync_clickhouse_batch_writes():
     # Create a temp file and write to it
     with tempfile.NamedTemporaryFile() as temp_file:
         temp_file.write(b"gateway.observability.enabled = true\n")
         temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
+        temp_file.write(
+            b"gateway.observability.batch_writes.__force_allow_embedded_batch_writes = true\n"
+        )
         temp_file.flush()
         clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
         client = TensorZeroGateway.build_embedded(
@@ -3304,12 +3307,14 @@ def test_sync_clickhouse_batch_writes():
 
 
 @pytest.mark.asyncio
-@pytest.mark.skip(reason="batched writes are currently disabled due to deadlocks")
 async def test_async_clickhouse_batch_writes():
     # Create a temp file and write to it
     with tempfile.NamedTemporaryFile() as temp_file:
         temp_file.write(b"gateway.observability.enabled = true\n")
         temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
+        temp_file.write(
+            b"gateway.observability.batch_writes.__force_allow_embedded_batch_writes = true\n"
+        )
         temp_file.flush()
         clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
         client_fut = AsyncTensorZeroGateway.build_embedded(

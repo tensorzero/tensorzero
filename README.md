@@ -68,7 +68,7 @@ Take what you need, adopt incrementally, and complement with other tools.
   </tr>
   <tr>
     <td width="30%" valign="top"><b>Who is building TensorZero?</b></td>
-    <td width="70%" valign="top">Our technical team includes a former Rust compiler maintainer, machine learning researchers (Stanford, CMU, Oxford, Columbia) with thousands of citations, and the chief product officer of a decacorn startup. We're backed by the same investors as leading open-source projects (e.g. ClickHouse, CockroachDB) and AI labs (e.g. OpenAI, Anthropic).</td>
+    <td width="70%" valign="top">Our technical team includes a former Rust compiler maintainer, machine learning researchers (Stanford, CMU, Oxford, Columbia) with thousands of citations, and the chief product officer of a decacorn startup. We're backed by the same investors as leading open-source projects (e.g. ClickHouse, CockroachDB) and AI labs (e.g. OpenAI, Anthropic). See our <b><a href="https://www.tensorzero.com/blog/tensorzero-raises-7-3m-seed-round-to-build-an-open-source-stack-for-industrial-grade-llm-applications/">$7.3M seed round announcement</a></b> and <b><a href="https://venturebeat.com/ai/tensorzero-nabs-7-3m-seed-to-solve-the-messy-world-of-enterprise-llm-development/" rel="nofollow" target="_blank">coverage from VentureBeat</a></b.</td>
   </tr>
   <tr>
     <td width="30%" valign="top"><b>How do I get started?</b></td>
@@ -85,12 +85,12 @@ Take what you need, adopt incrementally, and complement with other tools.
 > **Integrate with TensorZero once and access every major LLM provider.**
 
 - [x] Access every major LLM provider (API or self-hosted) through a single unified API
-- [x] Infer with streaming, tool use, structured generation (JSON mode), batch, multimodal (VLMs), file inputs, caching, etc.
+- [x] Infer with streaming, tool use, structured generation (JSON mode), batch, embeddings, multimodal (VLMs), file inputs, caching, etc.
 - [x] Define prompt templates and schemas to enforce a consistent, typed interface between your application and the LLMs
 - [x] Satisfy extreme throughput and latency needs, thanks to 🦀 Rust: <1ms p99 latency overhead at 10k+ QPS
 - [x] Integrate using our Python client, any OpenAI SDK or OpenAI-compatible client, or our HTTP API (use any programming language)
 - [x] Ensure high availability with routing, retries, fallbacks, load balancing, granular timeouts, etc.
-- [ ] Soon: embeddings; real-time voice
+- [ ] Soon: rate limits, spend tracking and budgeting, service accounts
 
 <table>
   <tr></tr> <!-- flip highlight order -->
@@ -346,7 +346,7 @@ t0.experimental_list_inferences(
 - [x] Optimize your prompts with automated prompt engineering algorithms like MIPROv2
 - [x] Optimize your inference strategy with dynamic in-context learning, chain of thought, best/mixture-of-N sampling, etc.
 - [x] Enable a feedback loop for your LLMs: a data & learning flywheel turning production data into smarter, faster, and cheaper models
-- [ ] Soon: programmatic optimization; synthetic data generation
+- [ ] Soon: synthetic data generation
 
 #### Model Optimization
 
@@ -463,7 +463,7 @@ item_count: 7.15 ± 0.39</code></pre>
 - [x] Build simple applications or massive deployments with GitOps-friendly orchestration
 - [x] Extend TensorZero with built-in escape hatches, programmatic-first usage, direct database access, and more
 - [x] Integrate with third-party tools: specialized observability and evaluations, model providers, agent orchestration frameworks, etc.
-- [ ] Soon: UI playground
+- [x] Iterate quickly by experimenting with prompts interactively using the Playground UI
 
 ## Demo
 
@@ -509,6 +509,11 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 > This example fine-tunes GPT-4o Mini to generate haikus tailored to a specific taste.
 > You'll see TensorZero's "data flywheel in a box" in action: better variants leads to better data, and better data leads to better variants.
 > You'll see progress by fine-tuning the LLM multiple times.
+
+> **[Image Data Extraction — Multimodal (Vision) Fine-tuning](https://github.com/tensorzero/tensorzero/tree/main/examples/multimodal-vision-finetuning)**
+>
+> This example shows how to fine-tune multimodal models (VLMs) like GPT-4o to improve their performance on vision-language tasks.
+> Specifically, we'll build a system that categorizes document images (screenshots of computer science research papers).
 
 > **[Improving LLM Chess Ability with Best-of-N Sampling](https://github.com/tensorzero/tensorzero/tree/main/examples/chess-puzzles/)**
 >

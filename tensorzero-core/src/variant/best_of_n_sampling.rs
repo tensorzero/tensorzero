@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
-use crate::config_parser::{PathWithContents, SchemaData};
+use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
@@ -78,13 +78,25 @@ pub struct UninitializedBestOfNEvaluatorConfig {
 }
 
 impl UninitializedBestOfNSamplingConfig {
-    pub fn load(self, schemas: &SchemaData) -> Result<BestOfNSamplingConfig, Error> {
+    pub fn load(
+        self,
+        schemas: &SchemaData,
+        error_context: &ErrorContext,
+    ) -> Result<BestOfNSamplingConfig, Error> {
         Ok(BestOfNSamplingConfig {
             weight: self.weight,
             timeout_s: self.timeout_s,
             candidates: self.candidates,
             evaluator: BestOfNEvaluatorConfig {
-                inner: self.evaluator.inner.load(schemas)?,
+                inner: self.evaluator.inner.load(
+                    schemas,
+                    // Our stored evaluator is a plain `UninitializedChatCompletionConfig`, so we need
+                    // to explicitly add `evaluator` to any error messages it produces.
+                    &ErrorContext {
+                        function_name: error_context.function_name.clone(),
+                        variant_name: format!("{}.evaluator", error_context.variant_name),
+                    },
+                )?,
             },
         })
     }
@@ -754,7 +766,8 @@ mod tests {
         db::clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::{InferenceCredentials, InferenceIds},
         inference::types::{
-            ChatInferenceResult, FinishReason, JsonInferenceResult, Latency, Usage,
+            ChatInferenceResult, FinishReason, JsonInferenceResult, Latency,
+            RequestMessagesOrBatch, Usage,
         },
         minijinja_util::tests::get_test_template_config,
         model::{ModelConfig, ModelProvider, ProviderConfig},
@@ -938,10 +951,10 @@ mod tests {
             created: 200u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: None,
-            input_messages: vec![RequestMessage {
+            input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::Assistant,
                 content: vec!["test_assistant".to_string().into()],
-            }],
+            }]),
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
             usage: Usage {
@@ -974,10 +987,10 @@ mod tests {
             created: 201u64,
             output: vec!["Candidate answer 2".to_string().into()],
             system: Some("test_system".to_string()),
-            input_messages: vec![RequestMessage {
+            input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::Assistant,
                 content: vec!["test_assistant".to_string().into()],
-            }],
+            }]),
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Example response 2\"}".to_string(),
             usage: Usage {
@@ -1029,10 +1042,10 @@ mod tests {
             created: 200u64,
             output: vec!["{\"response\": \"Valid JSON response\"}".to_string().into()],
             system: Some("test_system".to_string()),
-            input_messages: vec![RequestMessage {
+            input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::Assistant,
                 content: vec!["test_assistant".to_string().into()],
-            }],
+            }]),
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Valid JSON response\"}".to_string(),
             usage: Usage {
@@ -1067,10 +1080,10 @@ mod tests {
                 .to_string()
                 .into()], // missing closing brace
             system: Some("test_system".to_string()),
-            input_messages: vec![RequestMessage {
+            input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::Assistant,
                 content: vec!["test_assistant".to_string().into()],
-            }],
+            }]),
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Malformed JSON response\"".to_string(), // malformed
             usage: Usage {
@@ -1140,10 +1153,10 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
             system: Some("test_system".to_string()),
-            input_messages: vec![RequestMessage {
+            input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::Assistant,
                 content: vec!["test_assistant".to_string().into()],
-            }],
+            }]),
             usage: Usage {
                 input_tokens: 50,
                 output_tokens: 100,
@@ -1174,10 +1187,10 @@ mod tests {
             created: 201u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: Some("test_system".to_string()),
-            input_messages: vec![RequestMessage {
+            input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::Assistant,
                 content: vec!["test_assistant".to_string().into()],
-            }],
+            }]),
             raw_request: "{\"prompt\": \"Example prompt 1\"}".to_string(),
             raw_response: "{\"response\": \"Example response 1\"}".to_string(),
             usage: Usage {

@@ -15,8 +15,8 @@ use tokio::time::Duration;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::config_parser::PathWithContents;
-use crate::config_parser::TimeoutsConfig;
+use crate::config::PathWithContents;
+use crate::config::TimeoutsConfig;
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::InferenceIds;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
@@ -852,7 +852,7 @@ impl ChatCompletionConfigPyClass {
 mod tests {
     use super::*;
     use crate::cache::{CacheEnabledMode, CacheOptions};
-    use crate::config_parser::SchemaData;
+    use crate::config::SchemaData;
     use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::error::ErrorDetails;
