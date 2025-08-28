@@ -81,6 +81,7 @@ pub enum TableName {
     FloatMetricFeedback,
     DemonstrationFeedback,
     CommentFeedback,
+    StaticEvaluationHumanFeedback,
 }
 
 impl TableName {
@@ -100,6 +101,7 @@ impl TableName {
             TableName::FloatMetricFeedback => "FloatMetricFeedback",
             TableName::DemonstrationFeedback => "DemonstrationFeedback",
             TableName::CommentFeedback => "CommentFeedback",
+            TableName::StaticEvaluationHumanFeedback => "StaticEvaluationHumanFeedback",
         }
     }
 }
