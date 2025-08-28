@@ -1,3 +1,7 @@
+/// IMPORTANT: THIS MODULE IS NOT STABLE.
+///            IT IS MEANT FOR INTERNAL USE ONLY.
+///            EXPECT FREQUENT, UNANNOUNCED BREAKING CHANGES.
+///            USE AT YOUR OWN RISK.
 use futures::future::try_join_all;
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
@@ -1052,7 +1056,7 @@ pub trait LoadableConfig<T> {
 /// config is initially parsed.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct UninitializedConfig {
+pub struct UninitializedConfig {
     #[serde(default)]
     pub gateway: UninitializedGatewayConfig,
     #[serde(default)]
@@ -1121,14 +1125,14 @@ impl TryFrom<toml::Table> for UninitializedConfig {
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
-enum UninitializedFunctionConfig {
+pub enum UninitializedFunctionConfig {
     Chat(UninitializedFunctionConfigChat),
     Json(UninitializedFunctionConfigJson),
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct UninitializedFunctionConfigChat {
+pub struct UninitializedFunctionConfigChat {
     variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
     system_schema: Option<TomlRelativePath>,
     user_schema: Option<TomlRelativePath>,
@@ -1145,7 +1149,7 @@ struct UninitializedFunctionConfigChat {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct UninitializedFunctionConfigJson {
+pub struct UninitializedFunctionConfigJson {
     variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
     system_schema: Option<TomlRelativePath>,
     user_schema: Option<TomlRelativePath>,
