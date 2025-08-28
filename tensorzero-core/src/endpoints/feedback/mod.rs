@@ -19,7 +19,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, FunctionType, Text,
+    parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, Text,
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::serde_util::deserialize_optional_json_string;
@@ -531,9 +531,26 @@ async fn get_function_info(
 #[derive(Debug, Deserialize, PartialEq)]
 struct FunctionInfo {
     name: String,
-    function_type: FunctionType,
+    function_type: FunctionByIdFunctionType,
     variant_name: String,
     episode_id: Uuid,
+}
+
+// TODO (#3331): Unify with crate::inference::types::FunctionType
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum FunctionByIdFunctionType {
+    Chat,
+    Json,
+}
+
+impl FunctionByIdFunctionType {
+    pub fn inference_table_name(&self) -> &'static str {
+        match self {
+            FunctionByIdFunctionType::Chat => "ChatInference",
+            FunctionByIdFunctionType::Json => "JsonInference",
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
