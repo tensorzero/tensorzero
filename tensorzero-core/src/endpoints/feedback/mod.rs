@@ -18,7 +18,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, Text,
+    parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, FunctionType, Text,
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::serde_util::deserialize_optional_json_string;
@@ -260,7 +260,7 @@ async fn write_comment(
     let Params { value, tags, .. } = params;
     // Verify that the function name exists.
     if !disable_validation {
-        let _ = throttled_get_function_name(&connection_info, level, &target_id).await?;
+        let _ = throttled_get_function_info(&connection_info, level, &target_id).await?;
     }
     let value = value.as_str().ok_or_else(|| ErrorDetails::InvalidRequest {
         message: "Feedback value for a comment must be a string".to_string(),
@@ -291,17 +291,17 @@ async fn write_demonstration(
     dryrun: bool,
 ) -> Result<(), Error> {
     let Params { value, tags, .. } = params;
-    let function_name = throttled_get_function_name(
+    let function_info = throttled_get_function_info(
         &connection_info,
         &MetricConfigLevel::Inference,
         &inference_id,
     )
     .await?;
-    let function_config = config.get_function(&function_name)?;
+    let function_config = config.get_function(&function_info.name)?;
     let dynamic_demonstration_info = get_dynamic_demonstration_info(
         &connection_info,
         inference_id,
-        &function_name,
+        &function_info.name,
         &function_config,
     )
     .await?;
@@ -339,11 +339,12 @@ async fn write_float(
         ..
     } = params;
     let metric_config: &crate::config::MetricConfig = config.get_metric_or_err(metric_name)?;
-    if !disable_validation {
-        // Verify that the function name exists.
-        let _ =
-            throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
-    }
+    let maybe_function_info = if disable_validation {
+        None
+    } else {
+        // This will also throw if the function does not exist.
+        Some(throttled_get_function_info(&connection_info, &metric_config.level, &target_id).await?)
+    };
 
     let value = value.as_f64().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
@@ -377,11 +378,12 @@ async fn write_boolean(
         ..
     } = params;
     let metric_config = config.get_metric_or_err(metric_name)?;
-    if !disable_validation {
-        // Verify that the function name exists.
-        let _ =
-            throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
-    }
+    let maybe_function_info = if disable_validation {
+        None
+    } else {
+        // This will also throw if the function does not exist.
+        Some(throttled_get_function_info(&connection_info, &metric_config.level, &target_id).await?)
+    };
     let value = value.as_bool().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
@@ -405,11 +407,11 @@ async fn write_boolean(
 /// We compute an amount of time to wait by max(FEEDBACK_COOLDOWN_PERIOD - elapsed_from_target_id, FEEDBACK_MINIMUM_WAIT_TIME)
 /// We then poll every 500ms until that time has passed.
 /// If the time has passed and the id is still not found, we return an error.
-async fn throttled_get_function_name(
+async fn throttled_get_function_info(
     connection_info: &ClickHouseConnectionInfo,
     metric_config_level: &MetricConfigLevel,
     target_id: &Uuid,
-) -> Result<String, Error> {
+) -> Result<FunctionInfo, Error> {
     // Compute how long ago the target_id was created.
     // Some UUIDs are in the future, e.g. for dynamic evaluation runs.
     // In this case we should be conservative and assume no time has passed.
@@ -424,7 +426,7 @@ async fn throttled_get_function_name(
 
     // Poll every 500ms until the deadline is reached.
     loop {
-        match get_function_name(connection_info, metric_config_level, target_id).await {
+        match get_function_info(connection_info, metric_config_level, target_id).await {
             Ok(identifier) => return Ok(identifier),
             Err(err) => {
                 if Instant::now() >= deadline {
@@ -454,14 +456,14 @@ async fn throttled_get_function_name(
 /// # Returns
 ///
 /// * On success:
-///   - Returns the `function_name` associated with the `target_id`.
+///   - Returns a `FunctionInfo` containing the function name and type.
 /// * On failure:
 ///   - Returns an `Error` if the `target_id` is invalid or does not exist.
-async fn get_function_name(
+async fn get_function_info(
     connection_info: &ClickHouseConnectionInfo,
     metric_config_level: &MetricConfigLevel,
     target_id: &Uuid,
-) -> Result<String, Error> {
+) -> Result<FunctionInfo, Error> {
     let table_name = match metric_config_level {
         MetricConfigLevel::Inference => "InferenceById",
         MetricConfigLevel::Episode => "InferenceByEpisodeId",
@@ -475,25 +477,29 @@ async fn get_function_name(
         MetricConfigLevel::Episode => "episode_id_uint",
     };
     let query = format!(
-        "SELECT function_name
+        "SELECT function_name, function_type
          FROM {table_name}
          WHERE {identifier_key} = toUInt128(toUUID('{target_id}'))
          LIMIT 1
+         FORMAT JSONEachRow
          SETTINGS max_threads=1"
     );
-    let function_name = connection_info
-        .run_query_synchronous_no_params(query)
-        .await?
-        .response
-        .trim()
-        .to_string();
-    if function_name.is_empty() {
+    let function_info: FunctionInfo = connection_info
+        .run_query_synchronous_no_params_de(query)
+        .await?;
+    if function_info.name.is_empty() {
         // We don't want to log here since this can happen if we send feedback immediately after the target is created.
         return Err(Error::new_without_logging(ErrorDetails::InvalidRequest {
             message: format!("{identifier_type} ID: {target_id} does not exist"),
         }));
     };
-    Ok(function_name)
+    Ok(function_info)
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct FunctionInfo {
+    name: String,
+    function_type: FunctionType,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
