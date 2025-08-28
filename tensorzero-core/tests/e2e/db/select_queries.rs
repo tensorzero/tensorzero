@@ -590,13 +590,6 @@ async fn test_clickhouse_model_latency_cumulative() {
         .await
         .unwrap();
     println!("Number of model inferences: {}", response.response);
-    let response = clickhouse
-        .run_query_synchronous_no_params(
-            "SELECT * FROM ModelProviderStatistics FORMAT Vertical".to_string(),
-        )
-        .await
-        .unwrap();
-    println!("Model provider statistics: {}", response.response);
     let model_latency_data = clickhouse
         .get_model_latency_quantiles(TimeWindow::Cumulative)
         .await
