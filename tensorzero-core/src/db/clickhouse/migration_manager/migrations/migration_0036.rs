@@ -3,6 +3,8 @@ use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::error::Error;
 use async_trait::async_trait;
 
+use super::check_detached_table_exists;
+
 /// Migration 0028 set up a materialized view for our StaticEvaluationHumanFeedback table.
 /// This view used some prefiltered joins to get the data needed.
 /// However, this was causing memory issues for high-throughput feedback ingestion.
@@ -15,6 +17,8 @@ pub struct Migration0036<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
 
+const MIGRATION_ID: &str = "0036";
+
 #[async_trait]
 impl Migration for Migration0036<'_> {
     async fn can_apply(&self) -> Result<(), Error> {
@@ -22,25 +26,22 @@ impl Migration for Migration0036<'_> {
     }
 
     async fn should_apply(&self) -> Result<bool, Error> {
-        let database_name = self.clickhouse.database();
-        let float_human_feedback_view_is_detached = self
-            .clickhouse
-            .run_query_synchronous_no_params(
-                format!("SELECT 1 FROM system.detached_tables WHERE database = '{database_name}' AND table = 'StaticEvaluationFloatHumanFeedbackView'")
-            )
-            .await?
-            .response;
-        if float_human_feedback_view_is_detached.trim() != "1" {
+        if !check_detached_table_exists(
+            self.clickhouse,
+            "StaticEvaluationFloatHumanFeedbackView",
+            MIGRATION_ID,
+        )
+        .await?
+        {
             return Ok(true);
         }
-        let boolean_human_feedback_view_is_detached = self
-            .clickhouse
-            .run_query_synchronous_no_params(
-                format!("SELECT 1 FROM system.detached_tables WHERE database = '{database_name}' AND table = 'StaticEvaluationBooleanHumanFeedbackView'")
-            )
-            .await?
-            .response;
-        if boolean_human_feedback_view_is_detached.trim() != "1" {
+        if !check_detached_table_exists(
+            self.clickhouse,
+            "StaticEvaluationBooleanHumanFeedbackView",
+            MIGRATION_ID,
+        )
+        .await?
+        {
             return Ok(true);
         }
         Ok(false)
