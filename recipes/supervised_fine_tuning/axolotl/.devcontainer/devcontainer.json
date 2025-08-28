@@ -1,8 +1,6 @@
 {
-  "name": "Python Container",
-  "build": {
-    "dockerfile": "Dockerfile"
-  },
+  "name": "Axolotl Container",
+  "image": "axolotlai/axolotl-base:latest",
   "features":  {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {}
   },
