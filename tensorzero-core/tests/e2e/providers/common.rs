@@ -3070,10 +3070,7 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     if provider.variant_name == "aws-sagemaker-tgi" {
         return;
     }
-    // Llama.com API has fundamental streaming incompatibilities
-    if provider.model_provider_name == "llama_api" {
-        return;
-    }
+
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
     // Generate random u32

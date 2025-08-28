@@ -259,6 +259,7 @@ impl InferenceProvider for LlamaAPIProvider {
             start_time,
         )
         .peekable();
+
         Ok((stream, raw_request))
     }
 
@@ -330,9 +331,14 @@ pub fn stream_llama_api(
                             break;
                         }
 
+                        // TODO: we can't merge without cleaning up the error handling here.
+                        println!("{message:#?}");
+
                         // Log the raw message for debugging
+                        // TODO: there's gotta be a better way to handle this, likely looking at the HTTP status code?
                         if message.data.contains("error") || message.data.contains("Bad request") || message.data.contains("400") || message.data.contains("502") {
                             // Debug message removed to avoid eprintln! usage
+                            println!("Llama API error message: {}", message.data);
                         }
 
                         let latency = start_time.elapsed();
@@ -1078,7 +1084,7 @@ impl<'a> LlamaAPIRequest<'a> {
                     ),
                     raw_request: None,
                     raw_response: None,
-                    provider_type: "llama".to_string(),
+                    provider_type: "llama_api".to_string(),
                 }));
             }
             Some(top_p)
@@ -1095,7 +1101,7 @@ impl<'a> LlamaAPIRequest<'a> {
                     ),
                     raw_request: None,
                     raw_response: None,
-                    provider_type: "llama".to_string(),
+                    provider_type: "llama_api".to_string(),
                 }));
             }
             Some(temp)
