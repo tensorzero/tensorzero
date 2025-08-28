@@ -7,7 +7,8 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::Write;
 
-use crate::config::TimeoutsConfig;
+use crate::config::{Config, TimeoutsConfig};
+use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::inference::types::ContentBlock;
@@ -695,6 +696,8 @@ impl Optimizer for TogetherSFTConfig {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
+        _clickhouse_connection_info: &ClickHouseConnectionInfo,
+        _config: &Config,
     ) -> Result<Self::Handle, Error> {
         // TODO(#2642): improve error handling here so we know what index of example failed
         let train_rows: Vec<TogetherSupervisedRow> = train_examples
