@@ -9,7 +9,7 @@ on:
 jobs:
   unit-tests:
     # Run for non-PR events, or PRs where the head repo is the same as this repo (not a fork).
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')}}
     runs-on: ubuntu-latest
     steps:
       - name: Trigger a Buildkite Build on Push using v2.0.0
