@@ -21,6 +21,7 @@ mod list_inferences;
 mod mixture_of_n;
 mod object_storage;
 mod openai_compatible;
+mod optimization;
 mod otel;
 mod otel_jaeger;
 mod prometheus;

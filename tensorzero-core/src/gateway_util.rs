@@ -2,8 +2,8 @@ use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use crate::endpoints::openai_compatible::RouterExt;
 use axum::extract::{rejection::JsonRejection, FromRequest, Json, Request};
-use axum::routing::post;
 use axum::Router;
 use reqwest::{Client, Proxy};
 use serde::de::DeserializeOwned;
@@ -322,18 +322,8 @@ pub async fn start_openai_compatible_gateway(
     };
     let gateway_handle = GatewayHandle::new_with_clickhouse(config, clickhouse_url).await?;
 
-    // TODO(# 3191): Implement a trait for openai compatible endpoints
-    // so this logic can be centralized to one place and not reimplemented in
-    // our gateway main.
     let router = Router::new()
-        .route(
-            "/openai/v1/chat/completions",
-            post(endpoints::openai_compatible::inference_handler),
-        )
-        .route(
-            "/openai/v1/embeddings",
-            post(endpoints::openai_compatible::embeddings_handler),
-        )
+        .register_openai_compatible_routes()
         .fallback(endpoints::fallback::handle_404)
         .with_state(gateway_handle.app_state.clone());
 
