@@ -7,7 +7,7 @@ use std::{borrow::Cow, collections::HashMap};
 
 use super::{
     prepare_openai_messages, tensorzero_to_openai_assistant_message, OpenAIFileID,
-    OpenAIRequestMessage, OpenAISFTTool, PrepareOpenAIMessagesArgs,
+    OpenAIRequestMessage, OpenAISFTTool,
 };
 use crate::{
     config::TimeoutsConfig,
@@ -321,16 +321,16 @@ impl<'a> TryFrom<&'a RenderedSample> for OpenAISupervisedRow<'a> {
             ),
             None => (false, vec![]),
         };
-        let mut messages = prepare_openai_messages(PrepareOpenAIMessagesArgs {
-            system_or_developer: inference
+        let mut messages = prepare_openai_messages(
+            inference
                 .input
                 .system
                 .as_deref()
                 .map(super::SystemOrDeveloper::System),
-            messages: &inference.input.messages,
-            json_mode: None,
-            provider_type: PROVIDER_TYPE,
-        })?;
+            &inference.input.messages,
+            None,
+            PROVIDER_TYPE,
+        )?;
         let Some(output) = &inference.output else {
             return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
                 message: "No output in inference".to_string(),
@@ -386,16 +386,16 @@ impl<'a> TryFrom<&'a RenderedSample> for OpenAIReinforcementRow<'a> {
             ),
             None => (false, vec![]),
         };
-        let messages = prepare_openai_messages(PrepareOpenAIMessagesArgs {
-            system_or_developer: inference
+        let messages = prepare_openai_messages(
+            inference
                 .input
                 .system
                 .as_deref()
                 .map(super::SystemOrDeveloper::Developer),
-            messages: &inference.input.messages,
-            json_mode: None,
-            provider_type: PROVIDER_TYPE,
-        })?;
+            &inference.input.messages,
+            None,
+            PROVIDER_TYPE,
+        )?;
         let Some(output) = &inference.output else {
             return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
                 message: "No output in inference".to_string(),

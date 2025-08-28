@@ -1161,26 +1161,20 @@ pub enum SystemOrDeveloper<'a> {
     Developer(&'a str),
 }
 
-pub struct PrepareOpenAIMessagesArgs<'a> {
-    pub system_or_developer: Option<SystemOrDeveloper<'a>>,
-    pub messages: &'a [RequestMessage],
-    pub json_mode: Option<&'a ModelInferenceRequestJsonMode>,
-    pub provider_type: &'a str,
-}
-
-pub fn prepare_openai_messages(
-    args: PrepareOpenAIMessagesArgs<'_>,
-) -> Result<Vec<OpenAIRequestMessage<'_>>, Error> {
-    let mut openai_messages = Vec::with_capacity(args.messages.len());
-    for message in args.messages {
-        openai_messages.extend(tensorzero_to_openai_messages(message, args.provider_type)?);
+pub fn prepare_openai_messages<'a>(
+    system_or_developer: Option<SystemOrDeveloper<'a>>,
+    messages: &'a [RequestMessage],
+    json_mode: Option<&'a ModelInferenceRequestJsonMode>,
+    provider_type: &'a str,
+) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
+    let mut openai_messages = Vec::with_capacity(messages.len());
+    for message in messages {
+        openai_messages.extend(tensorzero_to_openai_messages(message, provider_type)?);
     }
 
-    if let Some(system_msg) = prepare_system_or_developer_message(
-        args.system_or_developer,
-        args.json_mode,
-        &openai_messages,
-    ) {
+    if let Some(system_msg) =
+        prepare_system_or_developer_message(system_or_developer, json_mode, &openai_messages)
+    {
         openai_messages.insert(0, system_msg);
     }
 
@@ -1738,12 +1732,12 @@ impl<'a> OpenAIRequest<'a> {
         } else {
             None
         };
-        let mut messages = prepare_openai_messages(PrepareOpenAIMessagesArgs {
-            system_or_developer: request.system.as_deref().map(SystemOrDeveloper::System),
-            messages: &request.messages,
-            json_mode: Some(&request.json_mode),
-            provider_type: PROVIDER_TYPE,
-        })?;
+        let mut messages = prepare_openai_messages(
+            request.system.as_deref().map(SystemOrDeveloper::System),
+            &request.messages,
+            Some(&request.json_mode),
+            PROVIDER_TYPE,
+        )?;
 
         let (tools, tool_choice, mut parallel_tool_calls) = prepare_openai_tools(request);
         if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
