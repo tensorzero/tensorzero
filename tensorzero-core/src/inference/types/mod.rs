@@ -527,6 +527,7 @@ impl RequestMessage {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum FunctionType {
     #[default]
     Chat,

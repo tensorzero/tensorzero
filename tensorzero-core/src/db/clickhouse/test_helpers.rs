@@ -4,7 +4,6 @@ use crate::endpoints::datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint}
 use crate::endpoints::dynamic_evaluation_run::{
     DynamicEvaluationRunEpisodeRow, DynamicEvaluationRunRow,
 };
-#[cfg(feature = "e2e_tests")]
 use crate::endpoints::feedback::human_feedback::StaticEvaluationHumanFeedback;
 
 #[cfg(feature = "e2e_tests")]

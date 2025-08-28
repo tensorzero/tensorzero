@@ -101,8 +101,8 @@ async fn get_output(
         variant_name,
     } = function_info;
     let table_name = function_type.inference_table_name();
-    let response = clickhouse
-        .run_query_synchronous_no_params(format!(
+    let output: OutputResponse = clickhouse
+        .run_query_synchronous_no_params_de(format!(
             r"
     SELECT output FROM {table_name}
     WHERE
@@ -111,11 +111,17 @@ async fn get_output(
         function_name = '{name}' AND
         variant_name = '{variant_name}'
     LIMIT 1
+    FORMAT JSONEachRow
     SETTINGS max_threads=1"
         ))
         .await?;
-    let output = response.response;
-    Ok(output)
+    Ok(output.output)
+}
+
+/// This is so we're absolutely sure things are escaped properly.
+#[derive(Debug, Deserialize)]
+struct OutputResponse {
+    output: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

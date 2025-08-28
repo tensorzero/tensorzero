@@ -512,16 +512,20 @@ async fn get_function_info(
             SETTINGS max_threads=1"
         ),
     };
-    let function_info: FunctionInfo = connection_info
-        .run_query_synchronous_no_params_de(query)
+    let response = connection_info
+        .run_query_synchronous_no_params(query)
         .await?;
-    if function_info.name.is_empty() {
+    if response.response.is_empty() {
         // We don't want to log here since this can happen if we send feedback immediately after the target is created.
         return Err(Error::new_without_logging(ErrorDetails::InvalidRequest {
             message: format!("{identifier_type} ID: {target_id} does not exist"),
         }));
     };
-    Ok(function_info)
+    serde_json::from_str(&response.response).map_err(|e| {
+        Error::new(ErrorDetails::ClickHouseDeserialization {
+            message: e.to_string(),
+        })
+    })
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
