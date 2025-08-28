@@ -34,13 +34,13 @@ json_mode = "strict"
 #system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 #json_mode = "strict"
 
-# [functions.extract_entities.variants.gpt_4o_mini_dicl]
-# type = "experimental_dynamic_in_context_learning"
-# embedding_model = "openai::text-embedding-3-small"
-# model = "openai::gpt-4o-mini-2024-07-18"
-# k = 10
-# system_instructions = "functions/extract_entities/initial_prompt/system_template.minijinja"
-# json_mode = "strict"
+#[functions.extract_entities.variants.gpt_4_1_mini_dicl]
+#type = "experimental_dynamic_in_context_learning"
+#embedding_model = "openai::text-embedding-3-small"
+#model = "openai::gpt-4.1-mini-2025-04-14"
+#k = 10
+#system_instructions = "functions/extract_entities/initial_prompt/system_template.minijinja"
+#json_mode = "strict"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
