@@ -47,6 +47,10 @@ RUN rm -rf target
 COPY --from=build-env /build/target/debug/evaluations /build/target/debug/evaluations
 COPY --from=build-env /build/target/debug/gateway /build/target/debug/gateway
 
+# Copy over the tensorzero-core test fixtures
+COPY ./tensorzero-core/fixtures build/tensorzero-core/fixtures
+
+
 # Copy only the test archive instead of entire target directory
 COPY --from=build-env /build/tests.tar.zst /app/tests.tar.zst
 
