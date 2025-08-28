@@ -25,7 +25,7 @@ uv pip install --no-build-isolation axolotl[flash-attn,deepspeed]
 
 ### Using `pip`
 
-We recommend using Python 3.10+ and a virtual environment.
+We recommend using Python 3.11+ and a virtual environment.
 
 ```bash
 pip install -r requirements.txt
