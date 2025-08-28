@@ -1600,7 +1600,7 @@ wheels = [
 ]
 
 [[package]]
-name = "tensorzero-recipe-sft-axolotl-metrics"
+name = "tensorzero-recipe-sft-axolotl"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [

@@ -52,7 +52,7 @@ attrs==25.3.0 \
 awscli==1.42.19 \
     --hash=sha256:192fa8bfc890d6e4a1c199741f5cbe0b577f2965fffd8dc183ae9ce1e33ebd47 \
     --hash=sha256:3a6d16d912306cfcfdb0abdc7cee591a1a4f5908db3cfdd8628f0973ec193928
-    # via tensorzero-recipe-sft-axolotl-metrics
+    # via tensorzero-recipe-sft-axolotl
 babel==2.17.0 \
     --hash=sha256:0c54cffb19f690cdcc52a3b50bcbf71e07a808d1c80d549f2459b9d2cf0afb9d \
     --hash=sha256:4d0b53093fdfb4b21c92b5213dba5a1b23885afa8383709427046b21c366e5f2
@@ -123,7 +123,7 @@ clickhouse-connect==0.8.18 \
     --hash=sha256:cff5150dfde8e69d7a9850d7fede971b35ec61c2b90ee1d7023f63f75f262ea7 \
     --hash=sha256:ea0e7716a9a635cbd54ad9f59f55c3c08dfb4cbf2f7b796208bbe49a8dd25fe7 \
     --hash=sha256:eebfa66b35801a35c8a96c53c5a42ea647791c2e90c6f0960b7baad6e7c009eb
-    # via tensorzero-recipe-sft-axolotl-metrics
+    # via tensorzero-recipe-sft-axolotl
 colorama==0.4.6 \
     --hash=sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44 \
     --hash=sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6
@@ -203,7 +203,7 @@ ipykernel==6.30.1 \
     --hash=sha256:aa6b9fb93dca949069d8b85b6c79b2518e32ac583ae9c7d37c51d119e18b3fb4
     # via
     #   jupyterlab
-    #   tensorzero-recipe-sft-axolotl-metrics
+    #   tensorzero-recipe-sft-axolotl
 ipython==9.4.0 \
     --hash=sha256:25850f025a446d9b359e8d296ba175a36aedd32e83ca9b5060430fe16801f066 \
     --hash=sha256:c033c6d4e7914c3d9768aabe76bbe87ba1dc66a92a05db6bfa1125d81f2ee270
@@ -217,7 +217,7 @@ ipython-pygments-lexers==1.1.1 \
 ipywidgets==8.1.7 \
     --hash=sha256:15f1ac050b9ccbefd45dccfbb2ef6bed0029d8278682d569d71b8dd96bee0376 \
     --hash=sha256:764f2602d25471c213919b8a1997df04bef869251db4ca8efba1b76b1bd9f7bb
-    # via tensorzero-recipe-sft-axolotl-metrics
+    # via tensorzero-recipe-sft-axolotl
 isoduration==20.11.0 \
     --hash=sha256:ac2f9015137935279eac671f94f89eb00584f940f5dc49462a0c4ee692ba1bd9 \
     --hash=sha256:b2904c2a4228c3d44f409c8ae8e2370eb21a26f7ac2ec5446df141dde3452042
@@ -360,7 +360,7 @@ minijinja==2.12.0 \
     --hash=sha256:65f4f8cc47511807fd3ffbe3637bb274e7e69796bf83ece48e138d91c1f19c4f \
     --hash=sha256:8981c7ffd8303ab9fad412e92263e058db98d62e9d3eda00f14e5cddc9382505 \
     --hash=sha256:ebbb265c6b1d0f5c8828504c25b6fb0ff03e351fbf97eea6915dfcf9e6e26ec9
-    # via tensorzero-recipe-sft-axolotl-metrics
+    # via tensorzero-recipe-sft-axolotl
 mistune==3.1.3 \
     --hash=sha256:1a32314113cff28aa6432e99e522677c8587fd83e3d51c29b82a52409c842bd9 \
     --hash=sha256:a7035c21782b2becb6be62f8f25d3df81ccb4d6fa477a6525b15af06539f02a0
@@ -395,7 +395,7 @@ networkx==3.5 \
 notebook==7.4.5 \
     --hash=sha256:351635461aca9dad08cf8946a4216f963e2760cc1bf7b1aaaecb23afc33ec046 \
     --hash=sha256:7c2c4ea245913c3ad8ab3e5d36b34a842c06e524556f5c2e1f5d7d08c986615e
-    # via tensorzero-recipe-sft-axolotl-metrics
+    # via tensorzero-recipe-sft-axolotl
 notebook-shim==0.2.4 \
     --hash=sha256:411a5be4e9dc882a074ccbcae671eda64cceb068767e9a3419096986560e1cef \
     --hash=sha256:b4b2cfa1b65d98307ca24361f5b30fe785b53c3fd07b7a47e89acb5e6ac638cb
@@ -424,7 +424,7 @@ numpy==2.3.2 \
     --hash=sha256:fb1752a3bb9a3ad2d6b090b88a9a0ae1cd6f004ef95f75825e2f382c183b2097
     # via
     #   pandas
-    #   tensorzero-recipe-sft-axolotl-metrics
+    #   tensorzero-recipe-sft-axolotl
 nvidia-cublas-cu12==12.4.5.8 ; platform_machine == 'x86_64' and sys_platform == 'linux' \
     --hash=sha256:2fc8da60df463fdefa81e323eef2e36489e1c94335b5358bcb38360adf75ac9b
     # via
@@ -487,7 +487,7 @@ packaging==25.0 \
     #   jupyterlab
     #   jupyterlab-server
     #   nbconvert
-    #   tensorzero-recipe-sft-axolotl-metrics
+    #   tensorzero-recipe-sft-axolotl
 pandas==2.3.2 \
     --hash=sha256:1333e9c299adcbb68ee89a9bb568fc3f20f9cbb419f1dd5225071e6cddb2a743 \
     --hash=sha256:1d81573b3f7db40d020983f78721e9bfc425f411e616ef019a10ebf597aedb2e \
@@ -497,7 +497,7 @@ pandas==2.3.2 \
     --hash=sha256:b98bdd7c456a05eef7cd21fd6b29e3ca243591fe531c62be94a2cc987efb5ac2 \
     --hash=sha256:c253828cb08f47488d60f43c5fc95114c771bbfff085da54bfc79cb4f9e3a372 \
     --hash=sha256:e190b738675a73b581736cc8ec71ae113d6c3768d0bd18bffa5b9a0927b0b6ea
-    # via tensorzero-recipe-sft-axolotl-metrics
+    # via tensorzero-recipe-sft-axolotl
 pandocfilters==1.5.1 \
     --hash=sha256:002b4a555ee4ebc03f8b66307e287fa492e4a77b4ea14d3f934328297bb4939e \
     --hash=sha256:93be382804a9cdb0a7267585f157e5d1731bbe5545a85b268d6f5fe6232de2bc
@@ -553,7 +553,7 @@ pycparser==2.22 \
 pydantic==2.11.7 \
     --hash=sha256:d989c3c6cb79469287b1569f7447a17848c998458d49ebe294e975b9baf0f0db \
     --hash=sha256:dde5df002701f6de26248661f6835bbe296a47bf73990135c7d07ce741b9623b
-    # via tensorzero-recipe-sft-axolotl-metrics
+    # via tensorzero-recipe-sft-axolotl
 pydantic-core==2.33.2 \
     --hash=sha256:1e063337ef9e9820c77acc768546325ebe04ee38b08703244c1309cccc4f1bab \
     --hash=sha256:235f45e5dbcccf6bd99f9f472858849f73d11120d76ea8707115415f8e5ebebf \
@@ -738,7 +738,7 @@ setuptools==80.9.0 \
     --hash=sha256:f36b47402ecde768dbfafc46e8e4207b4360c654f1f3bb84475f0a28628fb19c
     # via
     #   jupyterlab
-    #   tensorzero-recipe-sft-axolotl-metrics
+    #   tensorzero-recipe-sft-axolotl
 six==1.17.0 \
     --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274 \
     --hash=sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81
@@ -770,7 +770,7 @@ tensorzero==2025.8.4 \
     --hash=sha256:cb55e6238d4728615e5b61a5908b3b2a3507c16fe8fdae81d000bb61ca3e8df7 \
     --hash=sha256:d1ea91b3208c2f7993108aefbb4c356a2e74dfe9198b754cabcbe9d99b342c8f \
     --hash=sha256:f8af0a00d064dcc1542338222c3e357fb3d5fc095b4bfcec27da61b49acae291
-    # via tensorzero-recipe-sft-axolotl-metrics
+    # via tensorzero-recipe-sft-axolotl
 terminado==0.18.1 \
     --hash=sha256:a4468e1b37bb318f8a86514f65814e1afc977cf29b3992a4500d9dd305dcceb0 \
     --hash=sha256:de09f2c4b85de4765f7714688fff57d3e75bad1f909b589fde880460c753fd2e
@@ -784,13 +784,13 @@ tinycss2==1.4.0 \
 toml==0.10.2 \
     --hash=sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b \
     --hash=sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f
-    # via tensorzero-recipe-sft-axolotl-metrics
+    # via tensorzero-recipe-sft-axolotl
 torch==2.6.0 \
     --hash=sha256:46763dcb051180ce1ed23d1891d9b1598e07d051ce4c9d14307029809c4d64f7 \
     --hash=sha256:7979834102cd5b7a43cc64e87f2f3b14bd0e1458f06e9f88ffa386d07c7446e1 \
     --hash=sha256:94fc63b3b4bedd327af588696559f68c264440e2503cc9e6954019473d74ae21 \
     --hash=sha256:ccbd0320411fe1a3b3fec7b4d3185aa7d0c52adac94480ab024b5c8f74a0bf1d
-    # via tensorzero-recipe-sft-axolotl-metrics
+    # via tensorzero-recipe-sft-axolotl
 tornado==6.5.2 \
     --hash=sha256:06ceb1300fd70cb20e43b1ad8aaee0266e69e7ced38fa910ad2e03285009ce7c \
     --hash=sha256:2436822940d37cde62771cff8774f4f00b3c8024fe482e16ca8387b8a2724db6 \
@@ -903,7 +903,7 @@ websocket-client==1.8.0 \
 wheel==0.45.1 \
     --hash=sha256:661e1abd9198507b1409a20c02106d9670b2576e916d58f520316666abca6729 \
     --hash=sha256:708e7481cc80179af0e556bbf0cc00b8444c7321e2700b8d8580231d13017248
-    # via tensorzero-recipe-sft-axolotl-metrics
+    # via tensorzero-recipe-sft-axolotl
 widgetsnbextension==4.0.14 \
     --hash=sha256:4875a9eaf72fbf5079dc372a51a9f268fc38d46f767cbf85c43a36da5cb9b575 \
     --hash=sha256:a3629b04e3edb893212df862038c7232f62973373869db5084aed739b437b5af
