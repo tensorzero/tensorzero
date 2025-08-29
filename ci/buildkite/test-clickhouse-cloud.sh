@@ -24,6 +24,7 @@ source $HOME/.local/bin/env
 curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ~/.cargo/bin
 uv run ./ui/fixtures/download-fixtures.py
 ./ci/delete-clickhouse-dbs.sh
+./ci/verify-cleanup.sh tensorzero_e2e_tests
 cargo build-e2e
 cargo run-e2e > e2e_logs.txt 2>&1 &
     count=0
