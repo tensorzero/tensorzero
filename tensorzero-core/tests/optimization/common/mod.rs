@@ -232,6 +232,9 @@ fn generate_text_example() -> RenderedSample {
     let id = Uuid::now_v7().to_string();
     let system_prompt =
         format!("You are a helpful assistant named Dr. M.M. Patel with id number {id}.");
+    let output = vec![ContentBlockChatOutput::Text(Text {
+        text: "The capital of France is Paris.".to_string(),
+    })];
     RenderedSample {
         function_name: "test".to_string(),
         input: ModelInput {
@@ -252,9 +255,10 @@ fn generate_text_example() -> RenderedSample {
                 }],
             }],
         },
-        output: Some(vec![ContentBlockChatOutput::Text(Text {
-            text: "The capital of France is Paris.".to_string(),
-        })]),
+        output: Some(output.clone()),
+        stored_output: Some(tensorzero_core::stored_inference::StoredOutput::Chat(
+            output,
+        )),
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
         tool_params: None,
@@ -271,6 +275,18 @@ fn generate_tool_call_example() -> RenderedSample {
     let id = Uuid::now_v7().to_string();
     let system_prompt =
         format!("You are a helpful assistant named Dr. M.M. Patel with id number {id}.");
+    let tool_call_output = vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
+        name: Some("get_weather".to_string()),
+        arguments: Some(serde_json::json!({
+            "location": "London",
+        })),
+        raw_name: "get_weather".to_string(),
+        raw_arguments: serde_json::json!({
+            "location": "London",
+        })
+        .to_string(),
+        id: "call_2".to_string(),
+    })];
     RenderedSample {
         function_name: "test".to_string(),
         input: ModelInput {
@@ -373,18 +389,10 @@ fn generate_tool_call_example() -> RenderedSample {
                 },
             ],
         },
-        output: Some(vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
-            name: Some("get_weather".to_string()),
-            arguments: Some(serde_json::json!({
-                "location": "London",
-            })),
-            raw_name: "get_weather".to_string(),
-            raw_arguments: serde_json::json!({
-                "location": "London",
-            })
-            .to_string(),
-            id: "call_2".to_string(),
-        })]),
+        output: Some(tool_call_output.clone()),
+        stored_output: Some(tensorzero_core::stored_inference::StoredOutput::Chat(
+            tool_call_output,
+        )),
         tool_params: Some(ToolCallConfigDatabaseInsert {
             tools_available: vec![Tool {
                 name: "get_weather".to_string(),
@@ -417,6 +425,9 @@ fn generate_image_example() -> RenderedSample {
     let id = Uuid::now_v7().to_string();
     let system_prompt =
         format!("You are a helpful assistant named Dr. M.M. Patel with id number {id}.");
+    let output = vec![ContentBlockChatOutput::Text(Text {
+        text: "Orange!".to_string(),
+    })];
     RenderedSample {
         function_name: "test".to_string(),
         input: ModelInput {
@@ -467,9 +478,8 @@ fn generate_image_example() -> RenderedSample {
                 ],
             }],
         },
-        output: Some(vec![ContentBlockChatOutput::Text(Text {
-            text: "Orange!".to_string(),
-        })]),
+        output: Some(output.clone()),
+        stored_output: Some(tensorzero_core::stored_inference::StoredOutput::Chat(output)),
         tool_params: None,
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),

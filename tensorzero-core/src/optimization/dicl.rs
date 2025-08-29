@@ -18,7 +18,7 @@ use crate::{
     providers::openai::{
         default_api_key_location, OpenAICredentials, DEFAULT_CREDENTIALS, PROVIDER_TYPE,
     },
-    stored_inference::RenderedSample,
+    stored_inference::{RenderedSample, StoredOutput},
     variant::{dicl::UninitializedDiclConfig, RetryConfig},
 };
 use futures::future::try_join_all;
@@ -556,9 +556,16 @@ pub async fn insert_dicl_examples_with_batching(
             .iter()
             .map(|(sample, embedding)| {
                 let output = sample
-                    .output
+                    .stored_output
                     .as_ref()
-                    .map(|outputs| serde_json::to_string(outputs).unwrap_or_default())
+                    .map(|stored_output| match stored_output {
+                        StoredOutput::Chat(outputs) => {
+                            serde_json::to_string(outputs).unwrap_or_default()
+                        }
+                        StoredOutput::Json(json_output) => {
+                            serde_json::to_string(json_output).unwrap_or_default()
+                        }
+                    })
                     .unwrap_or_default();
 
                 let input_text = serde_json::to_string(&sample.stored_input)

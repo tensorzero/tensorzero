@@ -10,6 +10,9 @@ use tensorzero_core::stored_inference::RenderedSample;
 use uuid::Uuid;
 
 fn create_test_rendered_sample(input: &str, output: &str) -> RenderedSample {
+    let output_vec = vec![ContentBlockChatOutput::Text(Text {
+        text: output.to_string(),
+    })];
     RenderedSample {
         function_name: "test_function".to_string(),
         input: ModelInput {
@@ -30,9 +33,10 @@ fn create_test_rendered_sample(input: &str, output: &str) -> RenderedSample {
                 }],
             }],
         },
-        output: Some(vec![ContentBlockChatOutput::Text(Text {
-            text: output.to_string(),
-        })]),
+        output: Some(output_vec.clone()),
+        stored_output: Some(tensorzero_core::stored_inference::StoredOutput::Chat(
+            output_vec,
+        )),
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
         tool_params: None,

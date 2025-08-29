@@ -303,6 +303,7 @@ mod tests {
             ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
         },
         providers::openai::OpenAIContentBlock,
+        stored_inference::StoredOutput,
     };
     use serde_json::json;
 
@@ -310,6 +311,9 @@ mod tests {
 
     #[test]
     fn test_convert_to_sft_row() {
+        let output = Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "The capital of France is Paris.".to_string(),
+        })]);
         let inference = RenderedSample {
             function_name: "test".to_string(),
             input: ModelInput {
@@ -330,9 +334,8 @@ mod tests {
                     }],
                 }],
             },
-            output: Some(vec![ContentBlockChatOutput::Text(Text {
-                text: "The capital of France is Paris.".to_string(),
-            })]),
+            output: output.clone(),
+            stored_output: output.map(StoredOutput::Chat),
             episode_id: Some(uuid::Uuid::now_v7()),
             inference_id: Some(uuid::Uuid::now_v7()),
             tool_params: None,
