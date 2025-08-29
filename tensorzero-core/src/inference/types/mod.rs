@@ -527,10 +527,20 @@ impl RequestMessage {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum FunctionType {
     #[default]
     Chat,
     Json,
+}
+
+impl FunctionType {
+    pub fn inference_table_name(&self) -> &'static str {
+        match self {
+            FunctionType::Chat => "ChatInference",
+            FunctionType::Json => "JsonInference",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Default, Debug, Deserialize, PartialEq, Serialize)]
@@ -2766,7 +2776,14 @@ mod tests {
             _ => panic!("Expected Chat inference response"),
         };
         assert_eq!(chat_result.inference_id, inference_id);
-        assert_eq!(chat_result.created, created);
+        // We make a new timestamp for `chat_result.created`, so just check that it's at least
+        // the timestamp of the first chunk.
+        assert!(
+            chat_result.created >= created,
+            "Chat result was created at {:?}, before the first chunk was created at {:?}",
+            chat_result.created,
+            created
+        );
         assert_eq!(chat_result.finish_reason, Some(FinishReason::Stop));
         assert_eq!(
             chat_result.content,
@@ -2933,7 +2950,14 @@ mod tests {
         match result {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.inference_id, inference_id);
-                assert_eq!(json_result.created, created);
+                // We make a new timestamp for `json_result.created`, so just check that it's at least
+                // the timestamp of the first chunk.
+                assert!(
+                    json_result.created >= created,
+                    "Json result was created at {:?}, before the first chunk was created at {:?}",
+                    json_result.created,
+                    created
+                );
                 assert_eq!(json_result.output.parsed, None);
                 assert_eq!(
                     json_result.output.raw,
@@ -3014,7 +3038,14 @@ mod tests {
         match result {
             InferenceResult::Chat(chat_response) => {
                 assert_eq!(chat_response.inference_id, inference_id);
-                assert_eq!(chat_response.created, created);
+                // We make a new timestamp for `chat_response.created`, so just check that it's at least
+                // the timestamp of the first chunk.
+                assert!(
+                    chat_response.created >= created,
+                    "Chat result was created at {:?}, before the first chunk was created at {:?}",
+                    chat_response.created,
+                    created
+                );
                 assert_eq!(
                     chat_response.content,
                     vec![
@@ -3370,7 +3401,14 @@ mod tests {
             _ => panic!("Expected Chat inference response"),
         };
         assert_eq!(chat_result.inference_id, inference_id);
-        assert_eq!(chat_result.created, created);
+        // We make a new timestamp for `chat_result.created`, so just check that it's at least
+        // the timestamp of the first chunk.
+        assert!(
+            chat_result.created >= created,
+            "Chat result was created at {:?}, before the first chunk was created at {:?}",
+            chat_result.created,
+            created
+        );
         assert_eq!(chat_result.finish_reason, Some(FinishReason::Stop));
 
         let expected_content = vec![

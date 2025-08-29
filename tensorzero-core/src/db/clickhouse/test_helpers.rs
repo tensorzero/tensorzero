@@ -8,7 +8,8 @@ use crate::endpoints::dynamic_evaluation_run::{
 #[cfg(feature = "e2e_tests")]
 use super::escape_string_for_clickhouse_literal;
 use super::ClickHouseConnectionInfo;
-use serde::Deserialize;
+#[cfg(feature = "e2e_tests")]
+use crate::endpoints::feedback::human_feedback::StaticEvaluationHumanFeedback;
 use serde_json::Value;
 #[cfg(feature = "e2e_tests")]
 use std::collections::HashMap;
@@ -554,16 +555,6 @@ pub async fn select_feedback_tags_clickhouse(
         .unwrap();
     let json: Value = serde_json::from_str(&text.response).ok()?;
     Some(json)
-}
-
-#[derive(Debug, Deserialize)]
-pub struct StaticEvaluationHumanFeedback {
-    pub metric_name: String,
-    pub datapoint_id: Uuid,
-    pub output: String,
-    pub value: String,
-    pub feedback_id: Uuid,
-    pub evaluator_inference_id: Option<Uuid>,
 }
 
 #[cfg(feature = "e2e_tests")]
