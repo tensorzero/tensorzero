@@ -254,8 +254,23 @@ function ChatInferenceOutputComponent({
                     toolCallId={block.id}
                   />
                 );
-              default:
-                return null;
+              case "unknown":
+                // TODO: code editor should format as JSON by default
+                return (
+                  <TextMessage
+                    key={index}
+                    label="Unknown Content"
+                    content={JSON.stringify(block.data)}
+                  />
+                );
+              case "thought":
+                return (
+                  <TextMessage
+                    key={index}
+                    label="Thought"
+                    content={block.text || ""}
+                  />
+                );
             }
           })}
         </SnippetMessage>

@@ -170,6 +170,9 @@ export async function action({ request }: Route.ActionArgs) {
       }
       return redirect(url.toString());
     }
+    case null:
+      logger.error("No action provided");
+      return null;
     default:
       logger.error(`Unknown action: ${_action}`);
       return null;

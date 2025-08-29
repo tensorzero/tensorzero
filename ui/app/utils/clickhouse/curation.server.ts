@@ -56,6 +56,7 @@ export async function countFeedbacksForMetric(
         function_name,
         inference_table_name,
       );
+    case "comment":
     default:
       throw new Error(`Unsupported metric type: ${metric_config.type}`);
   }
@@ -97,6 +98,7 @@ export async function countCuratedInferences(
         function_name,
         inference_table_name,
       );
+    case "comment":
     default:
       throw new Error(`Unsupported metric type: ${metric_config.type}`);
   }
@@ -153,6 +155,7 @@ export async function getCuratedInferences(
         inference_table_name,
         max_samples,
       );
+    case "comment":
     default:
       throw new Error(`Unsupported metric type: ${metric_config.type}`);
   }

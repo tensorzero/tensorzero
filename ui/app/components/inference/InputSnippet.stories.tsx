@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { withRouter } from "storybook-addon-remix-react-router";
 import pdfUrl from "./InputSnippet.stories.fixture.tensorzero.pdf?url";
 import mp3Url from "./InputSnippet.stories.fixture.tensorzero.mp3?url";
+import type { JsonValue } from "tensorzero-node";
 
 const meta = {
   title: "InputSnippet",
@@ -603,6 +604,38 @@ export const TextIsJSON: Story = {
           {
             type: "unstructured_text",
             text: "null",
+          },
+        ],
+      },
+    ],
+  },
+};
+
+export const UnknownAndThoughtContent: Story = {
+  args: {
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "unknown",
+            data: null,
+            model_provider_name: null,
+          },
+          {
+            type: "unknown",
+            data: {
+              some: "arbitrary",
+              data: 123,
+              structure: ["is", "not", "validated"],
+            } as JsonValue,
+            model_provider_name: null,
+          },
+          {
+            type: "thought",
+            text: "This is a thought content block for testing.",
+            signature: null,
+            _internal_provider_type: null,
           },
         ],
       },
