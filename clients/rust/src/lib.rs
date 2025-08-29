@@ -555,7 +555,6 @@ impl Client {
                 }
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                let client = self.mode.clone();
                 Ok(with_embedded_timeout(*timeout, async {
                     let res = tensorzero_core::endpoints::inference::inference(
                         gateway.handle.app_state.config.clone(),
@@ -565,7 +564,7 @@ impl Client {
                         // Make the stream hold on to a reference to the client,
                         // so that we client is only dropped after all streams have finished
                         // See 'create_stream' and 'GatewayHandle' for more details
-                        client,
+                        (),
                     )
                     .await
                     .map_err(err_to_http)?;
