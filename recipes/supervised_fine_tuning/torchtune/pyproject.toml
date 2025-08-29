@@ -1,0 +1,19 @@
+[project]
+name = "tensorzero-recipe-sft-torchtune"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "clickhouse-connect",
+    "ipykernel",
+    "ipywidgets",
+    "minijinja",
+    "notebook",
+    "numpy",
+    "pandas",
+    "tensorzero",
+    "toml",
+    "torchao",
+    "torch",
+    "torchvision",
+]
