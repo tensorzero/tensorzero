@@ -16,7 +16,6 @@ use opentelemetry_otlp::WithTonicConfig;
 use opentelemetry_sdk::trace::SdkTracer;
 use opentelemetry_sdk::trace::{SdkTracerProvider, SpanExporter};
 use opentelemetry_sdk::Resource;
-use serde::Deserialize;
 use std::hash::Hash;
 use tokio_util::task::TaskTracker;
 use tonic::metadata::{AsciiMetadataKey, MetadataValue};
@@ -349,17 +348,12 @@ pub trait RouterExt<S> {
     fn apply_otel_http_trace_layer(self) -> Self;
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(transparent)]
-struct TensorZeroOtlpHeaders {
-    headers: Vec<(String, String)>,
-}
-
-/// A special header used to attach additional headers to the OTLP export for this trace.
-/// The format is: `x-tensorzero-otlp-headers: [["header1", "value1"], ["header2", "value2"]]` -
-/// a JSON array of key-value pairs.
+/// A special header prefix used to attach an additional header to the OTLP export for this trace.
+/// The format is: `tensorzero-otlp-traces-extra-header--HEADER_NAME: HEADER_VALUE`
+/// For each header with the `tensorzero-otlp-traces-extra-header--`, we add `HEADER_NAME: HEADER_VALUE`
+/// to the OTLP export HTTP/gRPC request headers.
 ///
-/// When an incoming request has `x-tensorzero-otlp-headers` set, we handle it through
+/// When an incoming request has a `tensorzero-otlp-traces-extra-header--`, we handle it through
 /// the following sequence of events:
 /// 1. The `tensorzero_otlp_headers_middleware` function extracts the headers from the request,
 ///    validates them, and attaches a `CustomTracerKey` to the request extensions.
@@ -380,41 +374,34 @@ struct TensorZeroOtlpHeaders {
 ///    (which exports without any extra headers set).
 ///
 /// 5. The custom `SdkTracer` is preseved in a `moka::Cache` for subsequent requests.
-const TENSORZERO_OTLP_HEADERS_HEADER: &str = "x-tensorzero-otlp-headers";
+const TENSORZERO_OTLP_HEADERS_PREFIX: &str = "tensorzero-otlp-traces-extra-header-";
 
 fn extract_tensorzero_headers(headers: &HeaderMap) -> Result<Option<CustomTracerKey>, Error> {
+    let mut metadata = MetadataMap::new();
     for (name, value) in headers {
-        if name.as_str() == TENSORZERO_OTLP_HEADERS_HEADER {
-            let headers = serde_json::from_str::<TensorZeroOtlpHeaders>(value.to_str().map_err(|e| {
+        if let Some(suffix) = name.as_str().strip_prefix(TENSORZERO_OTLP_HEADERS_PREFIX) {
+            let key: AsciiMetadataKey = suffix.parse().map_err(|e| {
                 Error::new(ErrorDetails::Observability {
-                    message: format!("Failed to parse `{TENSORZERO_OTLP_HEADERS_HEADER}` header as valid UTF-8: {e}"),
+                    message: format!("Failed to parse `{TENSORZERO_OTLP_HEADERS_PREFIX}` header `{suffix}` as valid metadata key: {e}"),
                 })
-            })?)
-                .map_err(|e| {
-                    Error::new(ErrorDetails::Observability {
-                        message: format!("Failed to parse `{TENSORZERO_OTLP_HEADERS_HEADER}` header: {e}"),
-                    })
-                })?;
-
-            let mut metadata = MetadataMap::new();
-            for (name, value) in headers.headers {
-                let key: AsciiMetadataKey = name.parse().map_err(|e| {
-                    Error::new(ErrorDetails::Observability {
-                        message: format!("Failed to parse `{TENSORZERO_OTLP_HEADERS_HEADER}` header as valid metadata key: {e}"),
-                    })
-                })?;
-                let value = MetadataValue::from_str(&value).map_err(|e| {
-                    Error::new(ErrorDetails::Observability {
-                        message: format!("Failed to parse `{TENSORZERO_OTLP_HEADERS_HEADER}` value as valid metadata value: {e}"),
-                    })
-                })?;
-                metadata.insert(key, value);
-            }
-
-            return Ok(Some(CustomTracerKey {
-                extra_headers: metadata,
-            }));
+            })?;
+            let value = MetadataValue::from_str(&value.to_str().map_err(|e| {
+                Error::new(ErrorDetails::Observability {
+                    message: format!("Failed to parse `{TENSORZERO_OTLP_HEADERS_PREFIX}` header `{suffix}` value as valid string: {e}"),
+                })
+            })?).map_err(|e| {
+                Error::new(ErrorDetails::Observability {
+                    message: format!("Failed to parse `{TENSORZERO_OTLP_HEADERS_PREFIX}` header `{suffix}` value as valid metadata value: {e}"),
+                })
+            })?;
+            eprintln!("Adding header `{key}` with value `{value:?}`");
+            metadata.insert(key, value);
         }
+    }
+    if !metadata.is_empty() {
+        return Ok(Some(CustomTracerKey {
+            extra_headers: metadata,
+        }));
     }
     Ok(None)
 }

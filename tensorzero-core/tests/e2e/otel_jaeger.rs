@@ -57,8 +57,8 @@ async fn test_jaeger_trace_export(existing_trace_parent: Option<ExistingTraceDat
     let mut builder = client
         .post(get_gateway_endpoint("/inference"))
         .header(
-            "x-tensorzero-otlp-headers",
-            serde_json::json!([["x-dummy-tensorzero", "my-new-tenant"]]).to_string(),
+            "TensorZero-OTLP-Traces-Extra-Header-x-dummy-tensorzero",
+            "my-new-tenant".to_string(),
         )
         .json(&payload);
 
