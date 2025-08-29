@@ -84,6 +84,7 @@ export * from "./LLMJudgeOptimize";
 export * from "./LLMJudgeOutputType";
 export * from "./LaunchOptimizationParams";
 export * from "./LaunchOptimizationWorkflowParams";
+export * from "./LlamaAPIProvider";
 export * from "./MetricConfig";
 export * from "./MetricConfigLevel";
 export * from "./MetricConfigOptimize";

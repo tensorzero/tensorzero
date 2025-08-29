@@ -56,9 +56,9 @@ use crate::providers::{
     anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
     deepseek::DeepSeekProvider, fireworks::FireworksProvider,
     gcp_vertex_anthropic::GCPVertexAnthropicProvider, gcp_vertex_gemini::GCPVertexGeminiProvider,
-    groq::GroqProvider, mistral::MistralProvider, openai::OpenAIProvider,
-    openrouter::OpenRouterProvider, together::TogetherProvider, vllm::VLLMProvider,
-    xai::XAIProvider,
+    groq::GroqProvider, llama_api::LlamaAPIProvider, mistral::MistralProvider,
+    openai::OpenAIProvider, openrouter::OpenRouterProvider, together::TogetherProvider,
+    vllm::VLLMProvider, xai::XAIProvider,
 };
 
 #[derive(Debug, Serialize)]
@@ -690,6 +690,7 @@ impl ModelProvider {
             ProviderConfig::GoogleAIStudioGemini(_) => "google_ai_studio_gemini",
             ProviderConfig::Groq(_) => "groq",
             ProviderConfig::Hyperbolic(_) => "hyperbolic",
+            ProviderConfig::LlamaAPI(_) => "llama_api",
             ProviderConfig::Mistral(_) => "mistral",
             ProviderConfig::OpenAI(_) => "openai",
             ProviderConfig::OpenRouter(_) => "openrouter",
@@ -718,6 +719,7 @@ impl ModelProvider {
             ProviderConfig::GoogleAIStudioGemini(provider) => Some(provider.model_name()),
             ProviderConfig::Groq(provider) => Some(provider.model_name()),
             ProviderConfig::Hyperbolic(provider) => Some(provider.model_name()),
+            ProviderConfig::LlamaAPI(provider) => Some(provider.model_name()),
             ProviderConfig::Mistral(provider) => Some(provider.model_name()),
             ProviderConfig::OpenAI(provider) => Some(provider.model_name()),
             ProviderConfig::OpenRouter(provider) => Some(provider.model_name()),
@@ -773,6 +775,8 @@ pub enum ProviderConfig {
     GoogleAIStudioGemini(GoogleAIStudioGeminiProvider),
     Groq(GroqProvider),
     Hyperbolic(HyperbolicProvider),
+    #[serde(rename = "llama_api")]
+    LlamaAPI(LlamaAPIProvider),
     Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
     OpenRouter(OpenRouterProvider),
@@ -824,6 +828,9 @@ impl ProviderConfig {
             ProviderConfig::Groq(_) => Cow::Borrowed(crate::providers::groq::PROVIDER_TYPE),
             ProviderConfig::Hyperbolic(_) => {
                 Cow::Borrowed(crate::providers::hyperbolic::PROVIDER_TYPE)
+            }
+            ProviderConfig::LlamaAPI(_) => {
+                Cow::Borrowed(crate::providers::llama_api::PROVIDER_TYPE)
             }
             ProviderConfig::Mistral(_) => Cow::Borrowed(crate::providers::mistral::PROVIDER_TYPE),
             ProviderConfig::OpenAI(_) => Cow::Borrowed(crate::providers::openai::PROVIDER_TYPE),
@@ -936,6 +943,13 @@ pub enum UninitializedProviderConfig {
         api_key_location: Option<CredentialLocation>,
         #[serde(default = "crate::providers::fireworks::default_parse_think_blocks")]
         parse_think_blocks: bool,
+    },
+    #[strum(serialize = "llama_api")]
+    #[serde(rename = "llama_api")]
+    LlamaAPI {
+        model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        api_key_location: Option<CredentialLocation>,
     },
     Mistral {
         model_name: String,
@@ -1104,6 +1118,10 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_key_location,
             } => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, api_key_location)?),
+            UninitializedProviderConfig::LlamaAPI {
+                model_name,
+                api_key_location,
+            } => ProviderConfig::LlamaAPI(LlamaAPIProvider::new(model_name, api_key_location)?),
             UninitializedProviderConfig::Mistral {
                 model_name,
                 api_key_location,
@@ -1212,6 +1230,9 @@ impl ModelProvider {
             ProviderConfig::Hyperbolic(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
+            ProviderConfig::LlamaAPI(provider) => {
+                provider.infer(request, client, api_keys, self).await
+            }
             ProviderConfig::Mistral(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
@@ -1281,6 +1302,9 @@ impl ModelProvider {
                 provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::Hyperbolic(provider) => {
+                provider.infer_stream(request, client, api_keys, self).await
+            }
+            ProviderConfig::LlamaAPI(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::Mistral(provider) => {
@@ -1379,6 +1403,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::Hyperbolic(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
+            ProviderConfig::LlamaAPI(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
@@ -1490,6 +1519,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::Hyperbolic(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::LlamaAPI(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
@@ -1787,6 +1821,7 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "gcp_vertex_anthropic::",
     "hyperbolic::",
     "groq::",
+    "llama_api::",
     "mistral::",
     "openai::",
     "openrouter::",
@@ -1821,6 +1856,7 @@ impl ShorthandModelConfig for ModelConfig {
             ),
             "groq" => ProviderConfig::Groq(GroqProvider::new(model_name, None)?),
             "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
+            "llama_api" => ProviderConfig::LlamaAPI(LlamaAPIProvider::new(model_name, None)?),
             "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
             "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
             "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(model_name, None)?),

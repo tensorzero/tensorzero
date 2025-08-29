@@ -736,6 +736,10 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
 pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
     provider: E2ETestProvider,
 ) {
+    // Llama.com API has fundamental streaming incompatibilities
+    if provider.model_provider_name == "llama_api" {
+        return;
+    }
     // OpenAI O1 doesn't support streaming responses
 
     if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {

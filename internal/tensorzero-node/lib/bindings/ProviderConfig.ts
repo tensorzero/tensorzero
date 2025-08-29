@@ -11,6 +11,7 @@ import type { GCPVertexGeminiProvider } from "./GCPVertexGeminiProvider";
 import type { GoogleAIStudioGeminiProvider } from "./GoogleAIStudioGeminiProvider";
 import type { GroqProvider } from "./GroqProvider";
 import type { HyperbolicProvider } from "./HyperbolicProvider";
+import type { LlamaAPIProvider } from "./LlamaAPIProvider";
 import type { MistralProvider } from "./MistralProvider";
 import type { OpenAIProvider } from "./OpenAIProvider";
 import type { OpenRouterProvider } from "./OpenRouterProvider";
@@ -32,6 +33,7 @@ export type ProviderConfig =
   | ({ type: "google_ai_studio_gemini" } & GoogleAIStudioGeminiProvider)
   | ({ type: "groq" } & GroqProvider)
   | ({ type: "hyperbolic" } & HyperbolicProvider)
+  | ({ type: "llama_api" } & LlamaAPIProvider)
   | ({ type: "mistral" } & MistralProvider)
   | ({ type: "openai" } & OpenAIProvider)
   | ({ type: "openrouter" } & OpenRouterProvider)
