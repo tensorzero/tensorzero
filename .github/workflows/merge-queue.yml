@@ -57,7 +57,7 @@ jobs:
 
   live-tests:
     name: "live-tests (batch_writes: ${{ matrix.batch_writes }})"
-    runs-on: namespace-profile-tensorzero-32x64
+    runs-on: namespace-profile-tensorzero-16x32
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -74,15 +74,12 @@ jobs:
       - name: Install gdb
         run: sudo apt-get update && sudo apt-get install -y gdb
 
-      - name: Warm up modal instances
+      - name: Warm up Modal instances
         run: |
           curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-inference-vllm-inference.modal.run/docs > vllm_modal_logs.txt &
           curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--sglang-inference-sglang-inference.modal.run/ > sglang_modal_logs.txt &
           # TODO: Re-enable once we can switch to a T4 GPU
           # curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-gpt-oss-20b-serve.modal.run/ > vllm_gpt_oss_modal_logs.txt &
-
-      - name: Install Namespace CLI
-        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
 
       - name: Cleanup disk space
         run: ./ci/free-disk-space.sh
@@ -392,5 +389,7 @@ jobs:
       ]
     runs-on: ubuntu-latest
     steps:
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+      # When running in the merge queue, jobs should never be skipped.
+      # In a scheduled run, some jobs may be intentionally skipped, as we only care about regenerating the model inference cache.
+      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped')) }}
         run: exit 1
