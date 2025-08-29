@@ -349,11 +349,11 @@ pub trait RouterExt<S> {
 }
 
 /// A special header prefix used to attach an additional header to the OTLP export for this trace.
-/// The format is: `tensorzero-otlp-traces-extra-header--HEADER_NAME: HEADER_VALUE`
-/// For each header with the `tensorzero-otlp-traces-extra-header--`, we add `HEADER_NAME: HEADER_VALUE`
+/// The format is: `tensorzero-otlp-traces-extra-header-HEADER_NAME: HEADER_VALUE`
+/// For each header with the `tensorzero-otlp-traces-extra-header-`, we add `HEADER_NAME: HEADER_VALUE`
 /// to the OTLP export HTTP/gRPC request headers.
 ///
-/// When an incoming request has a `tensorzero-otlp-traces-extra-header--`, we handle it through
+/// When an incoming request has a `tensorzero-otlp-traces-extra-header-`, we handle it through
 /// the following sequence of events:
 /// 1. The `tensorzero_otlp_headers_middleware` function extracts the headers from the request,
 ///    validates them, and attaches a `CustomTracerKey` to the request extensions.
@@ -385,7 +385,7 @@ fn extract_tensorzero_headers(headers: &HeaderMap) -> Result<Option<CustomTracer
                     message: format!("Failed to parse `{TENSORZERO_OTLP_HEADERS_PREFIX}` header `{suffix}` as valid metadata key: {e}"),
                 })
             })?;
-            let value = MetadataValue::from_str(&value.to_str().map_err(|e| {
+            let value = MetadataValue::from_str(value.to_str().map_err(|e| {
                 Error::new(ErrorDetails::Observability {
                     message: format!("Failed to parse `{TENSORZERO_OTLP_HEADERS_PREFIX}` header `{suffix}` value as valid string: {e}"),
                 })
@@ -394,10 +394,10 @@ fn extract_tensorzero_headers(headers: &HeaderMap) -> Result<Option<CustomTracer
                     message: format!("Failed to parse `{TENSORZERO_OTLP_HEADERS_PREFIX}` header `{suffix}` value as valid metadata value: {e}"),
                 })
             })?;
-            eprintln!("Adding header `{key}` with value `{value:?}`");
             metadata.insert(key, value);
         }
     }
+    tracing::debug!("Using custom OTLP headers: {:?}", metadata);
     if !metadata.is_empty() {
         return Ok(Some(CustomTracerKey {
             extra_headers: metadata,
