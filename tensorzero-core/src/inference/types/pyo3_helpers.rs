@@ -15,6 +15,7 @@ use crate::inference::types::{
 };
 use crate::optimization::dicl::UninitializedDiclOptimizationConfig;
 use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
+use crate::optimization::gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig;
 use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
 use crate::optimization::together_sft::UninitializedTogetherSFTConfig;
 use crate::optimization::UninitializedOptimizerConfig;
@@ -396,11 +397,15 @@ pub fn deserialize_optimization_config(
         Ok(UninitializedOptimizerConfig::TogetherSFT(Box::new(
             obj.extract()?,
         )))
+    } else if obj.is_instance_of::<UninitializedGCPVertexGeminiSFTConfig>() {
+        Ok(UninitializedOptimizerConfig::GCPVertexGeminiSFT(
+            obj.extract()?,
+        ))
     } else if obj.is_instance_of::<UninitializedDiclOptimizationConfig>() {
         Ok(UninitializedOptimizerConfig::Dicl(obj.extract()?))
     } else {
         Err(PyValueError::new_err(
-            "Invalid optimization config. Expected OpenAISFTConfig, FireworksSFTConfig, TogetherSFTConfig, or DiclOptimizationConfig",
+            "Invalid optimization config. Expected OpenAISFTConfig, FireworksSFTConfig, GCPVertexGeminiSFTConfig, TogetherSFTConfig, or DiclOptimizationConfig",
         ))
     }
 }

@@ -92,7 +92,11 @@ ChatDatapoint = Datapoint.Chat
 JsonDatapoint = Datapoint.Json
 
 OptimizationConfig = t.Union[
-    OpenAISFTConfig, FireworksSFTConfig, TogetherSFTConfig, DiclOptimizationConfig
+    OpenAISFTConfig,
+    FireworksSFTConfig,
+    GCPVertexGeminiSFTConfig,
+    TogetherSFTConfig,
+    DiclOptimizationConfig,
 ]
 ChatInferenceOutput = t.List[ContentBlock]
 

@@ -217,6 +217,7 @@ pub struct GCPVertexGeminiSFTJobHandle {
     pub credential_location: Option<CredentialLocation>,
     pub region: String,
     pub project_id: String,
+    pub api_base: Option<Url>,
 }
 
 impl std::fmt::Display for GCPVertexGeminiSFTJobHandle {
@@ -309,21 +310,36 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
             encryption_spec,
         };
 
-        let url = gcp_vertex_gemini_base_url(&self.project_id, &self.region).map_err(|e| {
-            Error::new(ErrorDetails::InvalidBaseUrl {
-                message: e.to_string(),
-            })
-        })?;
+        let url = match &self.api_base {
+            Some(api_base) => {
+                // Build the full URL using the base plus the project/region path
+                let path = format!(
+                    "v1/projects/{}/locations/{}/tuningJobs",
+                    self.project_id, self.region
+                );
+                api_base.join(&path).map_err(|e| {
+                    Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: e.to_string(),
+                    })
+                })?
+            }
+            None => gcp_vertex_gemini_base_url(&self.project_id, &self.region).map_err(|e| {
+                Error::new(ErrorDetails::InvalidBaseUrl {
+                    message: e.to_string(),
+                })
+            })?,
+        };
 
+        let auth_base_url = match &self.api_base {
+            Some(api_base) => api_base.to_string(),
+            None => format!(
+                "https://{}aiplatform.googleapis.com/",
+                location_subdomain_prefix(&self.region)
+            ),
+        };
         let auth_headers = self
             .credentials
-            .get_auth_headers(
-                &format!(
-                    "https://{}aiplatform.googleapis.com/",
-                    location_subdomain_prefix(&self.region)
-                ),
-                credentials,
-            )
+            .get_auth_headers(&auth_base_url, credentials)
             .await?;
 
         let request = client.post(url).headers(auth_headers);
@@ -364,6 +380,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
+        // job_url is for human viewing, always use the real GCP console URL
         let subdomain_prefix = location_subdomain_prefix(&self.region);
         let job_url = Url::parse(&format!(
             "https://{subdomain_prefix}aiplatform.googleapis.com/v1/{}",
@@ -380,6 +397,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
             credential_location: self.credential_location.clone(),
             region: self.region.clone(),
             project_id: self.project_id.clone(),
+            api_base: self.api_base.clone(),
         })
     }
 }
@@ -393,19 +411,46 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
         let gcp_credentials =
             GCPVertexGeminiProvider::build_credentials(self.credential_location.clone()).await?;
 
+        // Construct the poll URL based on whether api_base is provided
+        let poll_url = match &self.api_base {
+            Some(api_base) => {
+                // For mock server, extract just the job ID from job_url and build full path
+                let job_id = self.job_url.path().split('/').next_back().ok_or_else(|| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: "Failed to extract job ID from job URL".to_string(),
+                    })
+                })?;
+                // Build the full URL using the base plus the project/region/job path
+                let path = format!(
+                    "v1/projects/{}/locations/{}/tuningJobs/{}",
+                    self.project_id, self.region, job_id
+                );
+                api_base.join(&path).map_err(|e| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: format!("Failed to construct poll URL: {e}"),
+                    })
+                })?
+            }
+            None => {
+                // For real GCP, use the job_url directly
+                self.job_url.clone()
+            }
+        };
+
+        // Extract the base URL for auth purposes
+        let auth_base_url = {
+            let mut url = poll_url.clone();
+            url.set_path("");
+            url.set_query(None);
+            url.to_string()
+        };
         let auth_headers = gcp_credentials
-            .get_auth_headers(
-                &format!(
-                    "https://{}aiplatform.googleapis.com/",
-                    location_subdomain_prefix(&self.region)
-                ),
-                credentials,
-            )
+            .get_auth_headers(&auth_base_url, credentials)
             .await?;
 
-        // Use the stored job_url directly (it was already constructed with the helper)
+        // Use the constructed poll_url
         let res = client
-            .get(self.job_url.clone())
+            .get(poll_url)
             .headers(auth_headers)
             .send()
             .await
