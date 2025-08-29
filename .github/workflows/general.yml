@@ -172,7 +172,7 @@ jobs:
         run: cargo build --workspace
 
   validate:
-    runs-on: namespace-profile-tensorzero-8x16
+    runs-on: namespace-profile-tensorzero-32x64
 
     timeout-minutes: 30
 
