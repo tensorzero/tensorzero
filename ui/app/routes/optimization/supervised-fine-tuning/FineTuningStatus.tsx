@@ -106,15 +106,17 @@ export default function LLMFineTuningStatus({
       <SFTResult finalResult={result} />
 
       <SectionLayout>
-        <a
-          href={jobHandle.job_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-primary inline-flex items-center text-sm hover:underline"
-        >
-          <SectionHeader heading="Job details"></SectionHeader>
-          <ExternalLink className="ml-2 h-5 w-5" />
-        </a>
+        {"job_url" in jobHandle && (
+          <a
+            href={jobHandle.job_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary inline-flex items-center text-sm hover:underline"
+          >
+            <SectionHeader heading="Job details"></SectionHeader>
+            <ExternalLink className="ml-2 h-5 w-5" />
+          </a>
+        )}
 
         <RawDataAccordion rawData={status} />
       </SectionLayout>
