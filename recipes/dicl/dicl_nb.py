@@ -72,6 +72,11 @@ assert "TENSORZERO_CLICKHOUSE_URL" in os.environ, (
 
 clickhouse_client = get_client(dsn=os.environ["TENSORZERO_CLICKHOUSE_URL"])
 
+# %%
+import tensorzero
+
+print(tensorzero.__version__)
+
 # %% [markdown]
 # Initialize the TensorZero Client
 #
@@ -137,6 +142,7 @@ for inference, embedding in zip(inferences, embeddings):
     data.append(
         {
             "input": str(inference.input),
+            "output": str(inference.output),
             "embedding": embedding,
             "function_name": FUNCTION_NAME,
             "variant_name": DICL_VARIANT_NAME,
