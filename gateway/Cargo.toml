@@ -30,6 +30,10 @@ e2e_tests = ["tensorzero-core/e2e_tests"]
 default = []
 
 [dev-dependencies]
-reqwest.workspace = true
+reqwest = { workspace = true, features = ["json"] }
 tempfile = "3.20.0"
 tensorzero = { path = "../clients/rust"}
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+jsonschema = { workspace = true }
+tokio = { workspace = true, features = ["macros"] }
