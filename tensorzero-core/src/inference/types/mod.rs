@@ -527,10 +527,20 @@ impl RequestMessage {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum FunctionType {
     #[default]
     Chat,
     Json,
+}
+
+impl FunctionType {
+    pub fn inference_table_name(&self) -> &'static str {
+        match self {
+            FunctionType::Chat => "ChatInference",
+            FunctionType::Json => "JsonInference",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Default, Debug, Deserialize, PartialEq, Serialize)]

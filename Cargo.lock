@@ -1608,7 +1608,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2025.8.4"
+version = "2025.8.5"
 dependencies = [
  "anyhow",
  "clap",
@@ -1842,7 +1842,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2025.8.4"
+version = "2025.8.5"
 dependencies = [
  "axum",
  "clap",
@@ -4832,7 +4832,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-core"
-version = "2025.8.4"
+version = "2025.8.5"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -4930,7 +4930,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2025.8.4"
+version = "2025.8.5"
 dependencies = [
  "napi",
  "napi-build",
@@ -4943,7 +4943,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.8.4"
+version = "2025.8.5"
 dependencies = [
  "futures",
  "pyo3",

@@ -5,10 +5,11 @@ use std::time::Duration;
 
 use axum::extract::State;
 use axum::{debug_handler, Json};
+use human_feedback::write_static_evaluation_human_feedback_if_necessary;
 use metrics::counter;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tokio::time::Instant;
+use tokio::{time::Instant, try_join};
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -18,7 +19,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, Text,
+    parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, FunctionType, Text,
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::serde_util::deserialize_optional_json_string;
@@ -26,6 +27,7 @@ use crate::tool::{ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
 use crate::uuid_util::uuid_elapsed;
 
 use super::validate_tags;
+pub mod human_feedback;
 
 /// There is a potential issue here where if we write an inference and then immediately write feedback for it,
 /// we might not be able to find the inference in the database because it hasn't been written yet.
@@ -162,7 +164,7 @@ pub async fn feedback(
             write_float(
                 clickhouse_connection_info,
                 &config,
-                &params,
+                params,
                 feedback_metadata.target_id,
                 feedback_id,
                 dryrun,
@@ -174,7 +176,7 @@ pub async fn feedback(
             write_boolean(
                 clickhouse_connection_info,
                 &config,
-                &params,
+                params,
                 feedback_metadata.target_id,
                 feedback_id,
                 dryrun,
@@ -260,7 +262,7 @@ async fn write_comment(
     let Params { value, tags, .. } = params;
     // Verify that the function name exists.
     if !disable_validation {
-        let _ = throttled_get_function_name(&connection_info, level, &target_id).await?;
+        let _ = throttled_get_function_info(&connection_info, level, &target_id).await?;
     }
     let value = value.as_str().ok_or_else(|| ErrorDetails::InvalidRequest {
         message: "Feedback value for a comment must be a string".to_string(),
@@ -291,17 +293,17 @@ async fn write_demonstration(
     dryrun: bool,
 ) -> Result<(), Error> {
     let Params { value, tags, .. } = params;
-    let function_name = throttled_get_function_name(
+    let function_info = throttled_get_function_info(
         &connection_info,
         &MetricConfigLevel::Inference,
         &inference_id,
     )
     .await?;
-    let function_config = config.get_function(&function_name)?;
+    let function_config = config.get_function(&function_info.name)?;
     let dynamic_demonstration_info = get_dynamic_demonstration_info(
         &connection_info,
         inference_id,
-        &function_name,
+        &function_info.name,
         &function_config,
     )
     .await?;
@@ -326,7 +328,7 @@ async fn write_demonstration(
 async fn write_float(
     connection_info: ClickHouseConnectionInfo,
     config: &Config,
-    params: &Params,
+    params: Params,
     target_id: Uuid,
     feedback_id: Uuid,
     dryrun: bool,
@@ -338,14 +340,15 @@ async fn write_float(
         tags,
         ..
     } = params;
-    let metric_config: &crate::config::MetricConfig = config.get_metric_or_err(metric_name)?;
-    if !disable_validation {
-        // Verify that the function name exists.
-        let _ =
-            throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
-    }
+    let metric_config: &crate::config::MetricConfig = config.get_metric_or_err(&metric_name)?;
+    let maybe_function_info = if disable_validation {
+        None
+    } else {
+        // This will also throw if the function does not exist.
+        Some(throttled_get_function_info(&connection_info, &metric_config.level, &target_id).await?)
+    };
 
-    let value = value.as_f64().ok_or_else(|| {
+    value.as_f64().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a number"),
         })
@@ -353,9 +356,21 @@ async fn write_float(
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
     if !dryrun {
         tokio::spawn(async move {
-            let _ = connection_info
-                .write_batched(&[payload], TableName::FloatMetricFeedback)
-                .await;
+            let payload = payload;
+            let payload_array = [payload];
+            let clickhouse = connection_info;
+            let _ = try_join!(
+                write_static_evaluation_human_feedback_if_necessary(
+                    &clickhouse,
+                    maybe_function_info,
+                    &metric_name,
+                    &tags,
+                    feedback_id,
+                    &value,
+                    target_id
+                ),
+                clickhouse.write_batched(&payload_array, TableName::FloatMetricFeedback)
+            );
         });
     }
     Ok(())
@@ -364,7 +379,7 @@ async fn write_float(
 async fn write_boolean(
     connection_info: ClickHouseConnectionInfo,
     config: &Config,
-    params: &Params,
+    params: Params,
     target_id: Uuid,
     feedback_id: Uuid,
     dryrun: bool,
@@ -376,13 +391,14 @@ async fn write_boolean(
         tags,
         ..
     } = params;
-    let metric_config = config.get_metric_or_err(metric_name)?;
-    if !disable_validation {
-        // Verify that the function name exists.
-        let _ =
-            throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
-    }
-    let value = value.as_bool().ok_or_else(|| {
+    let metric_config = config.get_metric_or_err(&metric_name)?;
+    let maybe_function_info = if disable_validation {
+        None
+    } else {
+        // This will also throw if the function does not exist.
+        Some(throttled_get_function_info(&connection_info, &metric_config.level, &target_id).await?)
+    };
+    value.as_bool().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
         })
@@ -390,9 +406,20 @@ async fn write_boolean(
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
     if !dryrun {
         tokio::spawn(async move {
-            let _ = connection_info
-                .write_batched(&[payload], TableName::BooleanMetricFeedback)
-                .await;
+            let payload_array = [payload];
+            let clickhouse = connection_info;
+            let _ = try_join!(
+                write_static_evaluation_human_feedback_if_necessary(
+                    &clickhouse,
+                    maybe_function_info,
+                    &metric_name,
+                    &tags,
+                    feedback_id,
+                    &value,
+                    target_id
+                ),
+                clickhouse.write_batched(&payload_array, TableName::BooleanMetricFeedback)
+            );
         });
     }
     Ok(())
@@ -405,11 +432,11 @@ async fn write_boolean(
 /// We compute an amount of time to wait by max(FEEDBACK_COOLDOWN_PERIOD - elapsed_from_target_id, FEEDBACK_MINIMUM_WAIT_TIME)
 /// We then poll every 500ms until that time has passed.
 /// If the time has passed and the id is still not found, we return an error.
-async fn throttled_get_function_name(
+async fn throttled_get_function_info(
     connection_info: &ClickHouseConnectionInfo,
     metric_config_level: &MetricConfigLevel,
     target_id: &Uuid,
-) -> Result<String, Error> {
+) -> Result<FunctionInfo, Error> {
     // Compute how long ago the target_id was created.
     // Some UUIDs are in the future, e.g. for dynamic evaluation runs.
     // In this case we should be conservative and assume no time has passed.
@@ -424,7 +451,7 @@ async fn throttled_get_function_name(
 
     // Poll every 500ms until the deadline is reached.
     loop {
-        match get_function_name(connection_info, metric_config_level, target_id).await {
+        match get_function_info(connection_info, metric_config_level, target_id).await {
             Ok(identifier) => return Ok(identifier),
             Err(err) => {
                 if Instant::now() >= deadline {
@@ -454,46 +481,59 @@ async fn throttled_get_function_name(
 /// # Returns
 ///
 /// * On success:
-///   - Returns the `function_name` associated with the `target_id`.
+///   - Returns a `FunctionInfo` containing the function name and type.
 /// * On failure:
 ///   - Returns an `Error` if the `target_id` is invalid or does not exist.
-async fn get_function_name(
+async fn get_function_info(
     connection_info: &ClickHouseConnectionInfo,
     metric_config_level: &MetricConfigLevel,
     target_id: &Uuid,
-) -> Result<String, Error> {
-    let table_name = match metric_config_level {
-        MetricConfigLevel::Inference => "InferenceById",
-        MetricConfigLevel::Episode => "InferenceByEpisodeId",
-    };
+) -> Result<FunctionInfo, Error> {
     let identifier_type = match metric_config_level {
         MetricConfigLevel::Inference => "Inference",
         MetricConfigLevel::Episode => "Episode",
     };
-    let identifier_key = match metric_config_level {
-        MetricConfigLevel::Inference => "id_uint",
-        MetricConfigLevel::Episode => "episode_id_uint",
+
+    let query = match metric_config_level {
+        MetricConfigLevel::Inference => format!(
+            "SELECT function_name as name, function_type, variant_name, episode_id
+            FROM InferenceById
+            WHERE id_uint = toUInt128(toUUID('{target_id}'))
+            LIMIT 1
+            FORMAT JSONEachRow
+            SETTINGS max_threads=1"
+        ),
+        MetricConfigLevel::Episode => format!(
+            "SELECT function_name as name, function_type, variant_name, uint_to_uuid(episode_id_uint) as episode_id
+            FROM InferenceByEpisodeId
+            WHERE episode_id_uint = toUInt128(toUUID('{target_id}'))
+            LIMIT 1
+            FORMAT JSONEachRow
+            SETTINGS max_threads=1"
+        ),
     };
-    let query = format!(
-        "SELECT function_name
-         FROM {table_name}
-         WHERE {identifier_key} = toUInt128(toUUID('{target_id}'))
-         LIMIT 1
-         SETTINGS max_threads=1"
-    );
-    let function_name = connection_info
+    let response = connection_info
         .run_query_synchronous_no_params(query)
-        .await?
-        .response
-        .trim()
-        .to_string();
-    if function_name.is_empty() {
+        .await?;
+    if response.response.is_empty() {
         // We don't want to log here since this can happen if we send feedback immediately after the target is created.
         return Err(Error::new_without_logging(ErrorDetails::InvalidRequest {
             message: format!("{identifier_type} ID: {target_id} does not exist"),
         }));
     };
-    Ok(function_name)
+    serde_json::from_str(&response.response).map_err(|e| {
+        Error::new(ErrorDetails::ClickHouseDeserialization {
+            message: e.to_string(),
+        })
+    })
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct FunctionInfo {
+    name: String,
+    function_type: FunctionType,
+    variant_name: String,
+    episode_id: Uuid,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]

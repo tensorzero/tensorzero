@@ -82,7 +82,7 @@ async fn e2e_test_float_human_feedback() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
+    sleep(Duration::from_secs(1)).await;
 
     // Check ClickHouse FloatMetricFeedback
     let clickhouse = get_clickhouse().await;
@@ -112,7 +112,6 @@ async fn e2e_test_float_human_feedback() {
     let id = result.get("feedback_id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
-
     // Check that data was written to StaticEvaluationHumanFeedback
     let human_feedback = select_human_static_evaluation_feedback_clickhouse(
         &clickhouse,
@@ -179,7 +178,7 @@ async fn e2e_test_boolean_human_feedback() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
+    sleep(Duration::from_secs(1)).await;
 
     // Check ClickHouse BooleanMetricFeedback
     let clickhouse = get_clickhouse().await;
