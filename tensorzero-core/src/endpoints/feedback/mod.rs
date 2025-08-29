@@ -25,6 +25,7 @@ use crate::jsonschema_util::StaticJSONSchema;
 use crate::serde_util::deserialize_optional_json_string;
 use crate::tool::{ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
 use crate::uuid_util::uuid_elapsed;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::validate_tags;
 pub mod human_feedback;
@@ -89,12 +90,6 @@ pub struct FeedbackResponse {
 }
 
 /// A handler for the feedback endpoint
-#[instrument(name="feedback",
-  skip_all,
-  fields(
-    metric_name = %params.metric_name,
-  )
-)]
 #[debug_handler(state = AppStateData)]
 pub async fn feedback_handler(
     State(app_state): AppState,
@@ -104,6 +99,15 @@ pub async fn feedback_handler(
 }
 
 // Helper function to avoid requiring axum types in the client
+#[instrument(name="feedback",
+  skip_all,
+  fields(
+    inference_id,
+    episode_id,
+    metric_name = %params.metric_name,
+    otel.name = "feedback"
+  )
+)]
 pub async fn feedback(
     AppStateData {
         config,
@@ -112,6 +116,16 @@ pub async fn feedback(
     }: AppStateData,
     params: Params,
 ) -> Result<FeedbackResponse, Error> {
+    let span = tracing::Span::current();
+    if let Some(inference_id) = params.inference_id {
+        span.record("inference_id", inference_id.to_string());
+    }
+    if let Some(episode_id) = params.episode_id {
+        span.record("episode_id", episode_id.to_string());
+    }
+    for (tag_key, tag_value) in &params.tags {
+        span.set_attribute(format!("tags.{tag_key}"), tag_value.clone());
+    }
     validate_tags(&params.tags, params.internal)?;
     validate_feedback_specific_tags(&params.tags)?;
     // Get the metric config or return an error if it doesn't exist
