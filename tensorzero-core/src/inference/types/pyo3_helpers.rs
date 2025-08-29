@@ -10,8 +10,10 @@ use uuid::Uuid;
 
 use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::stored_input::StoredInput;
-use crate::inference::types::ResolvedInputMessageContent;
-use crate::inference::types::{stored_input::StoredInputMessageContent, ContentBlockChatOutput};
+use crate::inference::types::{
+    stored_input::StoredInputMessageContent, ContentBlockChatOutput, ResolvedInputMessageContent,
+};
+use crate::optimization::dicl::UninitializedDiclOptimizationConfig;
 use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
 use crate::optimization::gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig;
 use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
@@ -399,9 +401,11 @@ pub fn deserialize_optimization_config(
         Ok(UninitializedOptimizerConfig::GCPVertexGeminiSFT(
             obj.extract()?,
         ))
+    } else if obj.is_instance_of::<UninitializedDiclOptimizationConfig>() {
+        Ok(UninitializedOptimizerConfig::Dicl(obj.extract()?))
     } else {
         Err(PyValueError::new_err(
-            "Invalid optimization config. Expected OpenAISFTConfig, FireworksSFTConfig, GCPVertexGeminiSFTConfig, or TogetherSFTConfig",
+            "Invalid optimization config. Expected OpenAISFTConfig, FireworksSFTConfig, GCPVertexGeminiSFTConfig, TogetherSFTConfig, or DiclOptimizationConfig",
         ))
     }
 }
