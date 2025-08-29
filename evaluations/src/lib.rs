@@ -293,7 +293,7 @@ pub async fn run_evaluation(
     // we need to wait for the batch writer to finish.
     // This happens automatically when `run_evaluation` is called from the standalone `evaluations` binary
     // (since Tokio will wait for the `spawn_blocking` task to finish before shutting down the runtime).
-    // We explicitly wait here for the batch writer to finish, so that we can call `run_evaluation` can be called
+    // We explicitly wait here for the batch writer to finish, so that `run_evaluation` can be called
     // from other places in the codebase (e.g. e2e tests), and subsequently query ClickHouse for the evaluation results.
     if let Some(handle) = clients.clickhouse_client.batcher_join_handle() {
         drop(clients);
