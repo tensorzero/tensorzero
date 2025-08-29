@@ -57,7 +57,7 @@ jobs:
 
   live-tests:
     name: "live-tests (batch_writes: ${{ matrix.batch_writes }})"
-    runs-on: namespace-profile-tensorzero-2x8
+    runs-on: namespace-profile-tensorzero-8x16
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -114,8 +114,8 @@ jobs:
             sleep $((10 * attempt))
           done
         shell: bash
-
       # Start testing workload identity federation credentials once the SDK adds support: https://github.com/googleapis/google-cloud-rust/issues/1342
+
       # - uses: 'google-github-actions/auth@v2'
       #   with:
       #     project_id: 'tensozero-public'
