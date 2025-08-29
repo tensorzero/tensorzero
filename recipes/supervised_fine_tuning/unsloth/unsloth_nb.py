@@ -16,7 +16,7 @@
 # - Update the following parameters:
 
 # %%
-CONFIG_PATH = "../../../../examples/data-extraction-ner/config/tensorzero.toml"
+CONFIG_PATH = "../../../examples/data-extraction-ner/config/tensorzero.toml"
 
 FUNCTION_NAME = "extract_entities"
 
