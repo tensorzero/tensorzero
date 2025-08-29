@@ -15,6 +15,14 @@ steps:
         - exit_status: "*"
           limit: 3
 
+  - label: "Build Fixtures Container"
+    command: bash ./ci/buildkite/build-fixtures-container.sh"
+    key: "build-fixtures-container"
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 3
+
   - label: "Build Mock Inference Provider Container"
     command: bash ./ci/buildkite/build-mock-inference-provider-container.sh
     key: "build-mock-inference-provider-container"
@@ -74,6 +82,7 @@ steps:
     depends_on:
       - "build-gateway-container"
       - "build-node-unit-tests-container"
+      - "build-fixtures-container"
 
   - label: ":playwright: UI E2E Tests"
     command: |
@@ -83,6 +92,7 @@ steps:
       - "build-mock-inference-provider-container"
       - "build-ui-container"
       - "build-ui-e2e-tests-container"
+      - "build-fixtures-container"
     artifact_paths:
       - "ui/fixtures/ui-e2e-artifacts.zip"
 
@@ -99,3 +109,4 @@ steps:
       - "build-gateway-e2e-container"
       - "build-clickhouse-tests-container"
       - "download-fixtures"
+      - "build-fixtures-container"

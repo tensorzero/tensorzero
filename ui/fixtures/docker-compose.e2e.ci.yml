@@ -74,6 +74,7 @@ services:
       timeout: 1s
 
   fixtures:
+    image: tensorzero/fixtures:${TENSORZERO_FIXTURES_TAG:-latest}
     build:
       dockerfile: Dockerfile
     volumes:

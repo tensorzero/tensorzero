@@ -174,30 +174,31 @@ services:
       start_period: 1s
       start_interval: 1s
       timeout: 1s
-  # fixtures:
-  #   build:
-  #     dockerfile: ../../../ui/fixtures/Dockerfile
-  #   volumes:
-  #     - ../../../ui/fixtures:/fixtures
-  #     - ~/.aws:/root/.aws
-  #   environment:
-  #     - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
-  #     - CLICKHOUSE_HOST=clickhouse
-  #     - CLICKHOUSE_PASSWORD=chpassword
-  #     - CLICKHOUSE_USER=chuser
-  #     - TENSORZERO_SKIP_LARGE_FIXTURES
-  #   depends_on:
-  #     gateway:
-  #       condition: service_healthy
-  #   # Keep this running to make 'check-docker-compose.sh' detect that all containers are healthy
-  #   command:
-  #     ["bash", "-c", "cd /fixtures && ./load_fixtures.sh tensorzero_e2e_tests"]
-  #   healthcheck:
-  #     test: ["CMD", "test", "-f", "/load_complete.marker"]
-  #     interval: 5s
-  #     timeout: 1s
-  #     retries: 48 # Retry for up to 4 minutes
-  #     start_period: 5s # Give the script time to start
+  fixtures:
+    image: tensorzero/fixtures:${TENSORZERO_FIXTURES_TAG:-latest}
+    build:
+      dockerfile: ../../../ui/fixtures/Dockerfile
+    volumes:
+      - ../../../ui/fixtures:/fixtures
+      - ~/.aws:/root/.aws
+    environment:
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PASSWORD=chpassword
+      - CLICKHOUSE_USER=chuser
+      - TENSORZERO_SKIP_LARGE_FIXTURES
+    depends_on:
+      gateway:
+        condition: service_healthy
+    # Keep this running to make 'check-docker-compose.sh' detect that all containers are healthy
+    command:
+      ["bash", "-c", "cd /fixtures && ./load_fixtures.sh tensorzero_e2e_tests"]
+    healthcheck:
+      test: ["CMD", "test", "-f", "/load_complete.marker"]
+      interval: 5s
+      timeout: 1s
+      retries: 48 # Retry for up to 4 minutes
+      start_period: 5s # Give the script time to start
 
   live-tests:
     image: tensorzero/live-tests:${TENSORZERO_LIVE_TESTS_TAG:-latest}
@@ -252,12 +253,12 @@ services:
       - ./tensorzero.toml:/app/tensorzero-core/tests/e2e/tensorzero.toml:ro
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       - .cargo/:/app/.cargo/
-      - ../../../target:/app/target
+      - ../../../target/nextest:/app/target/nextest
     depends_on:
       gateway:
         condition: service_healthy
-      # fixtures:
-      #   condition: service_completed_successfully
+      fixtures:
+        condition: service_completed_successfully
       clickhouse:
         condition: service_healthy
       mock-inference-provider:

@@ -1,10 +1,10 @@
-#!/bin/sh
+#!/bin/bash
 set -euo pipefail
 
 # Get the short hash from the buildkite environment variable
 SHORT_HASH=${BUILDKITE_COMMIT:0:7}
-TAG=tensorzero/ui-dev:ci-sha-$SHORT_HASH
-LATEST_TAG=tensorzero/ui-dev:latest
+TAG=tensorzero/fixtures:ci-sha-$SHORT_HASH
+LATEST_TAG=tensorzero/fixtures:latest
 
 source ci/buildkite/utils/docker-hub-credentials.sh
 
@@ -14,10 +14,10 @@ echo "$DOCKER_HUB_ACCESS_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --passw
 # Pull latest image for caching (ignore errors if image doesn't exist)
 docker pull $LATEST_TAG || true
 
-# Build container with cache
+# Build the container with cache
 docker build --load --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 \
   --cache-from $LATEST_TAG \
-  -f ui/Dockerfile . -t $TAG
+  -f gateway/Dockerfile . -t $TAG
 
 # Tag with latest and push both tags
 docker tag $TAG $LATEST_TAG

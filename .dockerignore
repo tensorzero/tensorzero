@@ -11,6 +11,8 @@ target-rust-analyzer
 **/.claude
 /recipes
 /examples
+gcp_jwt_key.json
+.credentials/
 /docs
 !/examples/integrations/cursor/feedback
 !/examples/quickstart/package.json

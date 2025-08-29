@@ -1,6 +1,6 @@
 # ========== base ==========
 
-FROM rust:1.88.0-bookworm AS base
+FROM rust:1.88.0-slim AS base
 
 # Install required system dependencies
 RUN apt-get update && \
@@ -10,6 +10,8 @@ RUN apt-get update && \
         build-essential \
         pkg-config \
         libssl-dev \
+        # TODO remove
+        file \
         git && \
     rm -rf /var/lib/apt/lists/*
 
@@ -19,7 +21,11 @@ RUN curl -L --proto '=https' --tlsv1.2 -sSf \
 
 # ========== build-env ==========
 
-FROM base AS build-env
+FROM rust:1.88.0 AS builder
+
+# Install cargo-binstall for faster tool installation
+RUN curl -L --proto '=https' --tlsv1.2 -sSf \
+    https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 
 WORKDIR /app
 
@@ -30,7 +36,7 @@ COPY . .
 RUN cargo binstall -y cargo-nextest --secure
 
 # Build the binaries that the tests will use
-RUN cargo build --bin evaluations --bin gateway --features e2e_tests
+RUN cargo build -p evaluations -p gateway --features e2e_tests
 
 # Build and archive tests instead of copying entire target directory
 RUN cargo nextest archive --features e2e_tests --profile e2e --archive-file tests.tar.zst
@@ -47,8 +53,8 @@ RUN rm -rf target
 
 # Copy over just the evaluations and gateway binaries
 # they live in /app/target/debug/evaluations and /app/target/debug/gateway
-COPY --from=build-env /app/target/debug/evaluations /app/target/debug
-COPY --from=build-env /app/target/debug/gateway /app/target/debug
+COPY --from=builder /app/target/debug/evaluations /app/target/debug/
+COPY --from=builder /app/target/debug/gateway /app/target/debug/
 
 # Add this in your test-env stage after copying binaries
 RUN echo "Host architecture: $(uname -m)" && \
@@ -63,7 +69,7 @@ RUN echo "=== Testing from container context ===" && \
     $CARGO_BIN_EXE_evaluations 2>&1 || echo "Container execution failed with exit code: $?"
 
 # Copy only the test archive instead of entire target directory
-COPY --from=build-env /app/tests.tar.zst /app/tests.tar.zst
+COPY --from=builder /app/tests.tar.zst /app/tests.tar.zst
 
 # Install cargo-nextest in this stage too (for running tests)
 RUN cargo binstall -y cargo-nextest --secure

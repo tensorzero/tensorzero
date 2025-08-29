@@ -1171,14 +1171,6 @@ async fn test_parse_args() {
 #[tokio::test]
 async fn test_run_evaluation_binary() {
     let bin_path = env!("CARGO_BIN_EXE_evaluations");
-    println!("Running evaluations binary at {bin_path}");
-
-    // Add detailed debugging
-    println!("Binary exists: {}", std::path::Path::new(bin_path).exists());
-    println!(
-        "Binary is executable: {:?}",
-        std::fs::metadata(bin_path).map(|m| m.permissions())
-    );
 
     let result = std::process::Command::new(bin_path).output();
 
@@ -1190,10 +1182,7 @@ async fn test_run_evaluation_binary() {
             assert!(stderr_str.contains("the following required arguments were not provided:"));
         }
         Err(e) => {
-            println!("Command failed with error: {:?}", e);
-            println!("Error kind: {:?}", e.kind());
-            println!("OS Error: {:?}", e.raw_os_error());
-            panic!("Failed to execute evaluations binary: {:?}", e);
+            panic!("Failed to execute evaluations binary: {e:?}");
         }
     }
 }

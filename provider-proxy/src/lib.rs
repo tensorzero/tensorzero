@@ -457,6 +457,9 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
                         .with_context(|| "Failed to collect body")?
                         .to_bytes();
                     let bytes_request = hyper::Request::from_parts(parts, body_bytes);
+                    // Add 1ms delay to simulate network latency
+                    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
                     let response = check_cache(start_time, &args, bytes_request.clone(), || async {
                         let mut request: reqwest::Request =
                             bytes_request.try_into().with_context(|| {

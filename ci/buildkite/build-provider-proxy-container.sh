@@ -4,6 +4,7 @@ set -euo pipefail
 # Get the short hash from the buildkite environment variable
 SHORT_HASH=${BUILDKITE_COMMIT:0:7}
 TAG=tensorzero/provider-proxy:ci-sha-$SHORT_HASH
+LATEST_TAG=tensorzero/provider-proxy:latest
 
 source ci/buildkite/utils/docker-hub-credentials.sh
 
@@ -11,16 +12,16 @@ source ci/buildkite/utils/docker-hub-credentials.sh
 echo "$DOCKER_HUB_ACCESS_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin
 
 # Pull latest image for caching (ignore errors if image doesn't exist)
-docker pull tensorzero/provider-proxy:latest || true
+docker pull $LATEST_TAG || true
 
 # Build the container with cache
 docker build --load --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 \
-  --cache-from tensorzero/provider-proxy:latest \
+  --cache-from $LATEST_TAG \
   -f provider-proxy/Dockerfile . -t $TAG
 
 # Tag with latest and push both tags
-docker tag $TAG tensorzero/provider-proxy:latest
+docker tag $TAG $LATEST_TAG
 echo "Pushing $TAG"
 docker push $TAG
-echo "Pushing tensorzero/provider-proxy:latest"
-docker push tensorzero/provider-proxy:latest
+echo "Pushing $LATEST_TAG"
+docker push $LATEST_TAG
