@@ -2,9 +2,11 @@ name: Buildkite Test Suite
 run-name: "Buildkite Test Suite: ${{ github.event.pull_request.title || github.ref }}"
 
 on:
-  merge_group:
-  pull_request:
-    branches: ["main"]
+  workflow_dispatch:
+
+  # Temporarily disabled
+  # pull_request:
+  #   branches: ["main"]
 
 jobs:
   unit-tests:

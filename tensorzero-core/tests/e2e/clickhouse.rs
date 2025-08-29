@@ -174,8 +174,19 @@ async fn count_table_rows(clickhouse: &ClickHouseConnectionInfo, table: &str) ->
 
 async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     // Insert data so that we test the migration re-creates the tables properly.
-    let s3_fixtures_path = format!("{MANIFEST_PATH}/../ui/fixtures/s3-fixtures");
+    let s3_fixtures_path = std::env::var("TENSORZERO_S3_FIXTURES_PATH")
+        .unwrap_or_else(|_| format!("{MANIFEST_PATH}/../ui/fixtures/s3-fixtures"));
     let s3_fixtures_path = &s3_fixtures_path;
+    println!("Inserting large fixtures from S3 at {s3_fixtures_path}");
+    // Print all items in the s3_fixtures_path directory
+    if let Ok(entries) = std::fs::read_dir(s3_fixtures_path) {
+        println!("Contents of {s3_fixtures_path}:");
+        for entry in entries.flatten() {
+            println!("  - {}", entry.file_name().to_string_lossy());
+        }
+    } else {
+        println!("Failed to read directory: {s3_fixtures_path}");
+    }
 
     let ClickHouseConnectionInfo::Production {
         database_url,
@@ -229,29 +240,51 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     .map(|(file, table)| {
         let password = password.clone();
         async move {
-            let mut command = tokio::process::Command::new("docker");
-            command.args([
-                "run",
-                "--add-host=host.docker.internal:host-gateway",
-                "-v",
-                &format!("{s3_fixtures_path}:/s3-fixtures"),
-                "clickhouse/clickhouse-server:25.4-alpine",
-                "clickhouse-client",
-                "--host",
-                host,
-                "--user",
-                username,
-                "--password",
-                &password,
-                "--database",
-                database,
-                "--query",
-                &format!(
-                    r"
+            // If we are running in CI (TENSORZERO_CI=1), we should have the clickhouse client installed locally
+            // so we should not use Docker
+            let mut command = if std::env::var("TENSORZERO_CI").is_ok() {
+                let mut cmd = tokio::process::Command::new("clickhouse-client");
+                cmd.args([
+                    "--host",
+                    host,
+                    "--user",
+                    username,
+                    "--password",
+                    &password,
+                    "--database",
+                    database,
+                    "--query",
+                    &format!("INSERT INTO {table} SELECT * FROM file('{file}', 'Parquet')"),
+                ]);
+                cmd
+            } else {
+                // If we are running locally, we should use docker so that we can
+                // be platform independent in how we insert these files into ClickHouse.
+                let mut cmd = tokio::process::Command::new("docker");
+                cmd.args([
+                    "run",
+                    "--add-host=host.docker.internal:host-gateway",
+                    "-v",
+                    &format!("{s3_fixtures_path}:/s3-fixtures"),
+                    "clickhouse/clickhouse-server:25.4-alpine",
+                    "clickhouse-client",
+                    "--host",
+                    host,
+                    "--user",
+                    username,
+                    "--password",
+                    &password,
+                    "--database",
+                    database,
+                    "--query",
+                    &format!(
+                        r"
         INSERT INTO {table} FROM INFILE '/s3-fixtures/{file}' FORMAT Parquet
     "
-                ),
-            ]);
+                    ),
+                ]);
+                cmd
+            };
             assert!(
                 command.spawn().unwrap().wait().await.unwrap().success(),
                 "Failed to insert {table}"
