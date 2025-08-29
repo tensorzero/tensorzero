@@ -356,7 +356,7 @@ pub async fn test_capture_model_error() {
     assert_eq!(num_spans, 4);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 pub async fn test_capture_feedback_spans() {
     let exporter = install_capturing_otel_exporter();
 
