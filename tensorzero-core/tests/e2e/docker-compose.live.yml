@@ -40,7 +40,7 @@ services:
       timeout: 1s
 
   minio:
-    image: bitnami/minio:2025.4.22
+    image: bitnamilegacy/minio:2025.7.23
     ports:
       - "8000:9000" # API port
       - "9001:9001" # Console port
@@ -177,7 +177,8 @@ services:
   fixtures:
     image: tensorzero/fixtures:${TENSORZERO_FIXTURES_TAG:-latest}
     build:
-      dockerfile: ../../../ui/fixtures/Dockerfile
+      context: ../../../
+      dockerfile: ui/fixtures/Dockerfile
     volumes:
       - ../../../ui/fixtures:/fixtures
       - ~/.aws:/root/.aws
