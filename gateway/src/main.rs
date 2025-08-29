@@ -506,7 +506,7 @@ fn print_configuration_info(glob: Option<&impl ConfigGlobInfo>) {
                     if i < glob.paths().len() - 1 {
                         tracing::info!("│ ├ {}", path.to_string_lossy());
                     } else {
-                        tracing::info!("│ └ {}", path.to_string_lossy());
+                        tracing::info!("│ └  {}", path.to_string_lossy());
                     }
                 }
             }
