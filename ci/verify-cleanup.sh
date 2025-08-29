@@ -24,6 +24,24 @@ else
   CLICKHOUSE_SECURE_FLAG=""
 fi
 
+# Test database connection
+echo "Testing database connection..."
+connection_test=$(clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG \
+                   --query "SELECT 1" 2>/dev/null || echo "ERROR")
+
+if [[ "$connection_test" == "ERROR" ]]; then
+  echo "✗ Failed to connect to ClickHouse database"
+  echo "  Host: $CLICKHOUSE_HOST_VAR"
+  echo "  User: $CLICKHOUSE_USER_VAR"
+  echo "  Database: $DATABASE_NAME"
+  exit 1
+elif [[ "$connection_test" == "1" ]]; then
+  echo "✓ Database connection successful"
+else
+  echo "✗ Unexpected response from database connection test: $connection_test"
+  exit 1
+fi
+
 # Define all tables that should be empty after cleanup
 tables=(
   "JsonInference"
