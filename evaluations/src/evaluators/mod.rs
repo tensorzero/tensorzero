@@ -10,6 +10,8 @@ use tensorzero_core::evaluations::{get_evaluator_metric_name, EvaluationConfig, 
 
 mod exact_match;
 use exact_match::run_exact_match_evaluator;
+mod regex;
+use regex::run_regex_evaluator;
 pub mod llm_judge;
 use futures::stream::{FuturesUnordered, StreamExt};
 use llm_judge::{run_llm_judge_evaluator, LLMJudgeEvaluationResult, RunLLMJudgeEvaluatorParams};
@@ -232,6 +234,12 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
             debug!(result = ?result, "LLM judge evaluator completed");
             EvaluatorResult::LLMJudge(result)
         }
+        EvaluatorConfig::Regex(regex_config) => {
+            debug!("Running regex evaluator");
+            let result = run_regex_evaluator(inference_response, datapoint, &regex_config.regex)?;
+            debug!(result = ?result, "Regex evaluator completed");
+            EvaluatorResult::Regex(result)
+        }
     })
 }
 
@@ -239,6 +247,7 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
 pub enum EvaluatorResult {
     ExactMatch(Option<Value>),
     LLMJudge(Option<LLMJudgeEvaluationResult>),
+    Regex(Option<Value>),
 }
 
 impl<'a> EvaluatorResult {
@@ -246,6 +255,7 @@ impl<'a> EvaluatorResult {
         match self {
             EvaluatorResult::ExactMatch(value) => value.as_ref(),
             EvaluatorResult::LLMJudge(value) => value.as_ref().map(|v| &v.value),
+            EvaluatorResult::Regex(value) => value.as_ref(),
         }
     }
 
@@ -253,12 +263,14 @@ impl<'a> EvaluatorResult {
         match self {
             EvaluatorResult::ExactMatch(_) => None,
             EvaluatorResult::LLMJudge(value) => value.as_ref().map(|v| &v.evaluator_inference_id),
+            EvaluatorResult::Regex(_) => None,
         }
     }
     pub fn value_owned(self) -> Option<Value> {
         match self {
             EvaluatorResult::ExactMatch(value) => value,
             EvaluatorResult::LLMJudge(value) => value.map(|v| v.value),
+            EvaluatorResult::Regex(value) => value,
         }
     }
     pub fn tags(&'a self) -> HashMap<String, String> {
@@ -268,6 +280,7 @@ impl<'a> EvaluatorResult {
                 .as_ref()
                 .map(LLMJudgeEvaluationResult::tags)
                 .unwrap_or_default(),
+            EvaluatorResult::Regex(_) => HashMap::new(),
         }
     }
 }
