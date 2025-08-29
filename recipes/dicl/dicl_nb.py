@@ -137,6 +137,7 @@ for inference, embedding in zip(inferences, embeddings):
     data.append(
         {
             "input": str(inference.input),
+            "output": str(inference.output),
             "embedding": embedding,
             "function_name": FUNCTION_NAME,
             "variant_name": DICL_VARIANT_NAME,
