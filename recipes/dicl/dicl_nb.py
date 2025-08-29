@@ -72,11 +72,6 @@ assert "TENSORZERO_CLICKHOUSE_URL" in os.environ, (
 
 clickhouse_client = get_client(dsn=os.environ["TENSORZERO_CLICKHOUSE_URL"])
 
-# %%
-import tensorzero
-
-print(tensorzero.__version__)
-
 # %% [markdown]
 # Initialize the TensorZero Client
 #
