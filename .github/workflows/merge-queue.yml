@@ -74,15 +74,12 @@ jobs:
       - name: Install gdb
         run: sudo apt-get update && sudo apt-get install -y gdb
 
-      - name: Warm up modal instances
+      - name: Warm up Modal instances
         run: |
           curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-inference-vllm-inference.modal.run/docs > vllm_modal_logs.txt &
           curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--sglang-inference-sglang-inference.modal.run/ > sglang_modal_logs.txt &
           # TODO: Re-enable once we can switch to a T4 GPU
           # curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-gpt-oss-20b-serve.modal.run/ > vllm_gpt_oss_modal_logs.txt &
-
-      - name: Install Namespace CLI
-        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
 
       - name: Cleanup disk space
         run: ./ci/free-disk-space.sh
