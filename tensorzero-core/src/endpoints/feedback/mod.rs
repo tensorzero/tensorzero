@@ -275,11 +275,11 @@ async fn write_comment(
         "tags": tags
     });
     if !dryrun {
-        tokio::spawn(async move {
-            let _ = connection_info
-                .write_batched(&[payload], TableName::CommentFeedback)
-                .await;
-        });
+        //tokio::spawn(async move {
+        let _ = connection_info
+            .write_batched(&[payload], TableName::CommentFeedback)
+            .await;
+        //});
     }
     Ok(())
 }
@@ -316,11 +316,11 @@ async fn write_demonstration(
     })?;
     let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags});
     if !dryrun {
-        tokio::spawn(async move {
-            let _ = connection_info
-                .write_batched(&[payload], TableName::DemonstrationFeedback)
-                .await;
-        });
+        //tokio::spawn(async move {
+        let _ = connection_info
+            .write_batched(&[payload], TableName::DemonstrationFeedback)
+            .await;
+        //});
     }
     Ok(())
 }
@@ -355,23 +355,23 @@ async fn write_float(
     })?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
     if !dryrun {
-        tokio::spawn(async move {
-            let payload = payload;
-            let payload_array = [payload];
-            let clickhouse = connection_info;
-            let _ = try_join!(
-                write_static_evaluation_human_feedback_if_necessary(
-                    &clickhouse,
-                    maybe_function_info,
-                    &metric_name,
-                    &tags,
-                    feedback_id,
-                    &value,
-                    target_id
-                ),
-                clickhouse.write_batched(&payload_array, TableName::FloatMetricFeedback)
-            );
-        });
+        //tokio::spawn(async move {
+        let payload = payload;
+        let payload_array = [payload];
+        let clickhouse = connection_info;
+        let _ = try_join!(
+            write_static_evaluation_human_feedback_if_necessary(
+                &clickhouse,
+                maybe_function_info,
+                &metric_name,
+                &tags,
+                feedback_id,
+                &value,
+                target_id
+            ),
+            clickhouse.write_batched(&payload_array, TableName::FloatMetricFeedback)
+        );
+        //});
     }
     Ok(())
 }
@@ -405,22 +405,22 @@ async fn write_boolean(
     })?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
     if !dryrun {
-        tokio::spawn(async move {
-            let payload_array = [payload];
-            let clickhouse = connection_info;
-            let _ = try_join!(
-                write_static_evaluation_human_feedback_if_necessary(
-                    &clickhouse,
-                    maybe_function_info,
-                    &metric_name,
-                    &tags,
-                    feedback_id,
-                    &value,
-                    target_id
-                ),
-                clickhouse.write_batched(&payload_array, TableName::BooleanMetricFeedback)
-            );
-        });
+        //tokio::spawn(async move {
+        let payload_array = [payload];
+        let clickhouse = connection_info;
+        let _ = try_join!(
+            write_static_evaluation_human_feedback_if_necessary(
+                &clickhouse,
+                maybe_function_info,
+                &metric_name,
+                &tags,
+                feedback_id,
+                &value,
+                target_id
+            ),
+            clickhouse.write_batched(&payload_array, TableName::BooleanMetricFeedback)
+        );
+        //});
     }
     Ok(())
 }
