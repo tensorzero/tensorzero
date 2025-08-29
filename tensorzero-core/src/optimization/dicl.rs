@@ -558,12 +558,11 @@ pub async fn insert_dicl_examples_with_batching(
                 let output = sample
                     .output
                     .as_ref()
-                    .and_then(|outputs| outputs.first())
-                    .map(|output| serde_json::to_string(output).unwrap_or_default())
+                    .map(|outputs| serde_json::to_string(outputs).unwrap_or_default())
                     .unwrap_or_default();
 
-                let input_text = serde_json::to_string(&sample.input.messages)
-                    .unwrap_or_else(|_| format!("{:?}", sample.input.messages));
+                let input_text = serde_json::to_string(&sample.stored_input)
+                    .unwrap_or_else(|_| format!("{:?}", sample.stored_input));
 
                 let row = json!({
                     "id": Uuid::now_v7(),
