@@ -228,7 +228,6 @@ func TestMultiStep(t *testing.T) {
 		// without checking the exact value.
 		rawEpisodeID, ok = resp2.JSON.ExtraFields["episode_id"]
 		require.True(t, ok, "Response does not contain an episode_id")
-		require.True(t, rawEpisodeID.Raw() == episodeID.String(), "Second response episode ID is the same as the first")
 		err = json.Unmarshal([]byte(rawEpisodeID.Raw()), &responseEpisodeID)
 		require.NoError(t, err, "Failed to parse episode_id from response extras")
 		_, err = uuid.Parse(responseEpisodeID)
@@ -244,6 +243,10 @@ func TestMultiStep(t *testing.T) {
 		assert.Equal(t, int64(11), resp2.Usage.TotalTokens)
 		assert.Equal(t, "stop", resp2.Choices[0].FinishReason)
 
+		// Ensure there are two unique responses on one episode ID.
+		require.True(t, resp2.JSON.ExtraFields["episode_id"].Raw() == resp.JSON.ExtraFields["episode_id"].Raw(),
+			"Second response episode ID must be the same as the first")
+		require.False(t, resp2.ID == resp.ID, "Response IDs must be unique")
 	})
 }
 
