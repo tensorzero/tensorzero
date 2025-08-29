@@ -20,6 +20,7 @@ use crate::{
         chain_of_thought::ChainOfThoughtConfig,
         chat_completion::{ChatCompletionConfig, ChatTemplates, TemplateWithSchema},
         dicl::DiclConfig,
+        first_of_n::FirstOfNConfig,
         mixture_of_n::{FuserConfig, MixtureOfNConfig},
         JsonMode, RetryConfig, VariantConfig, VariantInfo,
     },
@@ -395,6 +396,9 @@ impl UninitializedEvaluatorConfig {
                         VariantConfig::ChainOfThought(variant) => {
                             variant.inner.weight = Some(1.0);
                         }
+                        VariantConfig::FirstOfN(variant) => {
+                            variant.weight = Some(1.0);
+                        }
                     };
                 }
                 let variants = variants
@@ -452,6 +456,8 @@ enum UninitializedLLMJudgeVariantConfig {
     Dicl(UninitializedLLMJudgeDiclVariantConfig),
     #[serde(rename = "experimental_chain_of_thought")]
     ChainOfThought(UninitializedLLMJudgeChainOfThoughtVariantConfig),
+    #[serde(rename = "experimental_first_of_n")]
+    FirstOfN(UninitializedLLMJudgeFirstOfNVariantConfig),
 }
 
 #[derive(Debug, Deserialize)]
@@ -593,6 +599,16 @@ struct UninitializedLLMJudgeDiclVariantConfig {
 struct UninitializedLLMJudgeChainOfThoughtVariantConfig {
     #[serde(flatten)]
     inner: UninitializedLLMJudgeChatCompletionVariantConfig,
+}
+
+#[derive(Debug, Deserialize)]
+struct UninitializedLLMJudgeFirstOfNVariantConfig {
+    #[serde(default)]
+    active: Option<bool>,
+    #[serde(default = "default_timeout")]
+    timeout_s: f64,
+    #[serde(default)]
+    candidates: Vec<String>,
 }
 
 fn get_template_path(
@@ -801,6 +817,13 @@ impl UninitializedLLMJudgeVariantInfo {
                     )?,
                 })
             }
+            UninitializedLLMJudgeVariantConfig::FirstOfN(params) => {
+                VariantConfig::FirstOfN(FirstOfNConfig {
+                    weight: get_weight(params.active),
+                    timeout_s: params.timeout_s,
+                    candidates: params.candidates,
+                })
+            }
         };
         Ok(VariantInfo {
             inner,
@@ -943,6 +966,13 @@ fn check_convert_variant_to_llm_judge_variant(
                 },
             ))
         }
+        VariantConfig::FirstOfN(variant) => Ok(UninitializedLLMJudgeVariantConfig::FirstOfN(
+            UninitializedLLMJudgeFirstOfNVariantConfig {
+                active: Some(false),
+                timeout_s: variant.timeout_s,
+                candidates: variant.candidates,
+            },
+        )),
     }
 }
 
