@@ -33,6 +33,7 @@ pub mod migration_0032;
 pub mod migration_0033;
 pub mod migration_0034;
 pub mod migration_0035;
+pub mod migration_0036;
 
 /// Returns true if the table exists, false if it does not
 /// Errors if the query fails

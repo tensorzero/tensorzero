@@ -6,6 +6,7 @@ mod clickhouse;
 mod common;
 mod config;
 mod datasets;
+mod db;
 mod dicl;
 mod dynamic_evaluations;
 mod dynamic_variants;
