@@ -16,7 +16,9 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
 use tensorzero_core::function::{FunctionConfig, FunctionConfigJson};
-use tensorzero_core::inference::types::{ResolvedInputMessage, ResolvedInputMessageContent, Text};
+use tensorzero_core::inference::types::{
+    StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
+};
 use tokio::time::sleep;
 use url::Url;
 
@@ -33,7 +35,7 @@ use tensorzero_core::{
         clickhouse_flush_async_insert, get_clickhouse, select_chat_inference_clickhouse,
         select_feedback_by_target_id_clickhouse, select_json_inference_clickhouse,
     },
-    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, Usage},
+    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Usage},
 };
 use tensorzero_core::{
     endpoints::{
@@ -45,8 +47,13 @@ use tensorzero_core::{
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
+pub fn init_tracing_for_tests() {
+    tracing_subscriber::fmt().init();
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_json() {
+    init_tracing_for_tests();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     let tensorzero_client = get_tensorzero_client().await;
@@ -106,7 +113,7 @@ async fn run_evaluations_json() {
             InferenceResponse::Json(json_response) => json_response,
             InferenceResponse::Chat(..) => panic!("Chat response not supported"),
         };
-        let clickhouse_input: ResolvedInput =
+        let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // Check the input to the inference is the same as the input to the datapoint
         assert_eq!(&clickhouse_input, parsed.datapoint.input());
@@ -320,6 +327,7 @@ async fn run_evaluations_json() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_exact_match_evaluation_chat() {
+    init_tracing_for_tests();
     let dataset_name = format!("good-haiku-data-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_chat_fixture_to_dataset(
@@ -373,7 +381,7 @@ async fn run_exact_match_evaluation_chat() {
             InferenceResponse::Chat(chat_response) => chat_response,
             InferenceResponse::Json(..) => panic!("Json response not supported"),
         };
-        let clickhouse_input: ResolvedInput =
+        let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // Check the input to the inference is the same as the input to the datapoint
         assert_eq!(&clickhouse_input, parsed.datapoint.input());
@@ -441,6 +449,7 @@ async fn run_exact_match_evaluation_chat() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_llm_judge_evaluation_chat() {
+    init_tracing_for_tests();
     let dataset_name = format!("good-haikus-no-output-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_chat_fixture_to_dataset(
@@ -496,7 +505,7 @@ async fn run_llm_judge_evaluation_chat() {
             InferenceResponse::Chat(chat_response) => chat_response,
             InferenceResponse::Json(..) => panic!("Json response not supported"),
         };
-        let clickhouse_input: ResolvedInput =
+        let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // Check the input to the inference is the same as the input to the datapoint
         assert_eq!(&clickhouse_input, parsed.datapoint.input());
@@ -660,6 +669,7 @@ async fn run_llm_judge_evaluation_chat() {
 /// However, it takes an image and we verify that the image is actually used in the inference.
 #[tokio::test(flavor = "multi_thread")]
 async fn run_image_evaluation() {
+    init_tracing_for_tests();
     let dataset_name = format!("baz-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_chat_fixture_to_dataset(
@@ -715,8 +725,8 @@ async fn run_image_evaluation() {
             InferenceResponse::Chat(chat_response) => chat_response,
             InferenceResponse::Json(..) => panic!("Json response not supported"),
         };
-        // Check the input to the inference parses as ResolvedInput
-        let _clickhouse_input: ResolvedInput =
+        // Check the input to the inference parses as StoredInput
+        let _clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // assert_eq!(&clickhouse_input, parsed.datapoint.input());
         let clickhouse_output: Vec<ContentBlockChatOutput> =
@@ -873,6 +883,7 @@ async fn run_image_evaluation() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn check_invalid_image_evaluation() {
+    init_tracing_for_tests();
     let dataset_name = format!("baz-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_chat_fixture_to_dataset(
@@ -927,8 +938,8 @@ async fn check_invalid_image_evaluation() {
             InferenceResponse::Chat(chat_response) => chat_response,
             InferenceResponse::Json(..) => panic!("Json response not supported"),
         };
-        // Check the input to the inference parses as ResolvedInput
-        let _clickhouse_input: ResolvedInput =
+        // Check the input to the inference parses as StoreInput
+        let _clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // assert_eq!(&clickhouse_input, parsed.datapoint.input());
         let clickhouse_output: Vec<ContentBlockChatOutput> =
@@ -973,6 +984,7 @@ async fn check_invalid_image_evaluation() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_llm_judge_evaluation_chat_pretty() {
+    init_tracing_for_tests();
     let dataset_name = format!("good-haikus-no-output-{}", Uuid::now_v7());
     write_chat_fixture_to_dataset(
         &PathBuf::from(&format!(
@@ -1015,6 +1027,7 @@ async fn run_llm_judge_evaluation_chat_pretty() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_llm_judge_evaluation_json_pretty() {
+    init_tracing_for_tests();
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     write_json_fixture_to_dataset(
         &PathBuf::from(&format!(
@@ -1200,6 +1213,7 @@ async fn test_run_evaluation_binary() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_errors() {
+    init_tracing_for_tests();
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_json_fixture_to_dataset(
@@ -1252,6 +1266,7 @@ async fn run_evaluations_errors() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_llm_judge_evaluator_chat() {
+    init_tracing_for_tests();
     let tensorzero_client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(PathBuf::from(&format!(
             "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
@@ -1285,11 +1300,11 @@ async fn test_run_llm_judge_evaluator_chat() {
         variant_name: "test_variant".to_string(),
     });
     let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -1319,10 +1334,13 @@ async fn test_run_llm_judge_evaluator_chat() {
         cutoff: None,
     };
     let input = resolved_input_to_client_input(
-        datapoint.input().clone(),
-        &clients.tensorzero_client.client,
+        datapoint
+            .input()
+            .clone()
+            .reresolve(&clients.tensorzero_client)
+            .await
+            .unwrap(),
     )
-    .await
     .unwrap();
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
@@ -1390,11 +1408,11 @@ async fn test_run_llm_judge_evaluator_chat() {
 
     // Try without output
     let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -1431,6 +1449,7 @@ async fn test_run_llm_judge_evaluator_chat() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_llm_judge_evaluator_json() {
+    init_tracing_for_tests();
     let tensorzero_client = get_tensorzero_client().await;
     let tensorzero_client = ThrottledTensorZeroClient::new(tensorzero_client, Semaphore::new(1));
     let clients = Arc::new(Clients {
@@ -1453,11 +1472,11 @@ async fn test_run_llm_judge_evaluator_json() {
         variant_name: "test_variant".to_string(),
     });
     let datapoint = Datapoint::Json(JsonInferenceDatapoint {
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -1488,10 +1507,13 @@ async fn test_run_llm_judge_evaluator_json() {
         cutoff: None,
     };
     let input = resolved_input_to_client_input(
-        datapoint.input().clone(),
-        &clients.tensorzero_client.client,
+        datapoint
+            .input()
+            .clone()
+            .reresolve(&clients.tensorzero_client)
+            .await
+            .unwrap(),
     )
-    .await
     .unwrap();
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
@@ -1559,11 +1581,11 @@ async fn test_run_llm_judge_evaluator_json() {
 
     // Try without output
     let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -1600,6 +1622,7 @@ async fn test_run_llm_judge_evaluator_json() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_best_of_3() {
+    init_tracing_for_tests();
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_json_fixture_to_dataset(
@@ -1653,7 +1676,7 @@ async fn run_evaluations_best_of_3() {
             InferenceResponse::Json(json_response) => json_response,
             InferenceResponse::Chat(..) => panic!("Chat response not supported"),
         };
-        let clickhouse_input: ResolvedInput =
+        let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // Check the input to the inference is the same as the input to the datapoint
         assert_eq!(&clickhouse_input, parsed.datapoint.input());
@@ -1786,6 +1809,7 @@ async fn run_evaluations_best_of_3() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_mixture_of_3() {
+    init_tracing_for_tests();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     write_json_fixture_to_dataset(
@@ -1839,7 +1863,7 @@ async fn run_evaluations_mixture_of_3() {
             InferenceResponse::Json(json_response) => json_response,
             InferenceResponse::Chat(..) => panic!("Chat response not supported"),
         };
-        let clickhouse_input: ResolvedInput =
+        let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // Check the input to the inference is the same as the input to the datapoint
         assert_eq!(&clickhouse_input, parsed.datapoint.input());
@@ -1975,6 +1999,7 @@ async fn run_evaluations_mixture_of_3() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_dicl() {
+    init_tracing_for_tests();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     write_json_fixture_to_dataset(
@@ -2028,7 +2053,7 @@ async fn run_evaluations_dicl() {
             InferenceResponse::Json(json_response) => json_response,
             InferenceResponse::Chat(..) => panic!("Chat response not supported"),
         };
-        let clickhouse_input: ResolvedInput =
+        let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
         // Check the input to the inference is the same as the input to the datapoint
         assert_eq!(&clickhouse_input, parsed.datapoint.input());
@@ -2167,6 +2192,7 @@ async fn run_evaluations_dicl() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_query_skips_staled_datapoints() {
+    init_tracing_for_tests();
     let dataset_name = format!("exact_matches_empty-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
     write_json_fixture_to_dataset(

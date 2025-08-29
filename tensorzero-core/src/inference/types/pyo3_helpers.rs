@@ -9,7 +9,11 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::endpoints::datasets::Datapoint;
-use crate::inference::types::{ContentBlockChatOutput, ResolvedInput, ResolvedInputMessageContent};
+use crate::inference::types::stored_input::StoredInput;
+use crate::inference::types::{
+    stored_input::StoredInputMessageContent, ContentBlockChatOutput, ResolvedInputMessageContent,
+};
+use crate::optimization::dicl::UninitializedDiclOptimizationConfig;
 use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
 use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
 use crate::optimization::together_sft::UninitializedTogetherSFTConfig;
@@ -17,6 +21,7 @@ use crate::optimization::UninitializedOptimizerConfig;
 use crate::stored_inference::{
     RenderedSample, SimpleStoredSampleInfo, StoredInference, StoredSample,
 };
+use pyo3::types::PyNone;
 
 use super::ContentBlock;
 
@@ -109,10 +114,7 @@ pub fn content_block_to_python(
             let file_content_block = import_file_content_block(py)?;
             file_content_block.call1(
                 py,
-                (
-                    file.file.data.clone().unwrap_or(String::new()),
-                    file.file.mime_type.to_string(),
-                ),
+                (file.file.data.clone(), file.file.mime_type.to_string()),
             )
         }
         ContentBlock::ToolCall(tool_call) => {
@@ -191,6 +193,75 @@ pub fn content_block_chat_output_to_python(
     }
 }
 
+pub fn stored_input_message_content_to_python(
+    py: Python<'_>,
+    content: StoredInputMessageContent,
+) -> PyResult<Py<PyAny>> {
+    match content {
+        StoredInputMessageContent::Text { value } => {
+            let text_content_block = import_text_content_block(py)?;
+            match value {
+                Value::String(s) => {
+                    let kwargs = [(intern!(py, "text"), s)].into_py_dict(py)?;
+                    text_content_block.call(py, (), Some(&kwargs))
+                }
+                _ => {
+                    let value = serialize_to_dict(py, value)?;
+                    let kwargs = [(intern!(py, "arguments"), value)].into_py_dict(py)?;
+                    text_content_block.call(py, (), Some(&kwargs))
+                }
+            }
+        }
+        StoredInputMessageContent::ToolCall(tool_call) => {
+            let tool_call_content_block = import_tool_call_content_block(py)?;
+            let parsed_arguments_py = JSON_LOADS
+                .get(py)
+                .ok_or_else(|| {
+                    PyRuntimeError::new_err(
+                        "TensorZero: JSON_LOADS was not initialized. This should never happen",
+                    )
+                })?
+                .call1(py, (tool_call.arguments.clone().into_pyobject(py)?,))
+                .ok();
+            tool_call_content_block.call1(
+                py,
+                (
+                    tool_call.id,
+                    tool_call.arguments,
+                    tool_call.name.clone(),
+                    parsed_arguments_py,
+                    tool_call.name,
+                ),
+            )
+        }
+        StoredInputMessageContent::ToolResult(tool_result) => {
+            let tool_result_content_block = import_tool_result_content_block(py)?;
+            tool_result_content_block
+                .call1(py, (tool_result.name, tool_result.result, tool_result.id))
+        }
+        StoredInputMessageContent::Thought(thought) => {
+            let thought_content_block = import_thought_content_block(py)?;
+            thought_content_block.call1(py, (thought.text,))
+        }
+        StoredInputMessageContent::RawText { value } => {
+            let raw_text_content_block = import_raw_text_content_block(py)?;
+            raw_text_content_block.call1(py, (value,))
+        }
+        StoredInputMessageContent::File(file) => {
+            let file_content_block = import_file_content_block(py)?;
+            file_content_block.call1(py, (PyNone::get(py), file.file.mime_type.to_string()))
+        }
+        StoredInputMessageContent::Unknown {
+            data,
+            model_provider_name,
+        } => {
+            let unknown_content_block = import_unknown_content_block(py)?;
+            let serialized_data = serialize_to_dict(py, data)?;
+            unknown_content_block.call1(py, (serialized_data, model_provider_name))
+        }
+    }
+}
+
 pub fn resolved_input_message_content_to_python(
     py: Python<'_>,
     content: ResolvedInputMessageContent,
@@ -249,10 +320,7 @@ pub fn resolved_input_message_content_to_python(
             let file_content_block = import_file_content_block(py)?;
             file_content_block.call1(
                 py,
-                (
-                    file.file.data.clone().unwrap_or(String::new()),
-                    file.file.mime_type.to_string(),
-                ),
+                (file.file.data.clone(), file.file.mime_type.to_string()),
             )
         }
         ResolvedInputMessageContent::Unknown {
@@ -328,9 +396,11 @@ pub fn deserialize_optimization_config(
         Ok(UninitializedOptimizerConfig::TogetherSFT(Box::new(
             obj.extract()?,
         )))
+    } else if obj.is_instance_of::<UninitializedDiclOptimizationConfig>() {
+        Ok(UninitializedOptimizerConfig::Dicl(obj.extract()?))
     } else {
         Err(PyValueError::new_err(
-            "Invalid optimization config. Expected OpenAISFTConfig, FireworksSFTConfig, or TogetherSFTConfig",
+            "Invalid optimization config. Expected OpenAISFTConfig, FireworksSFTConfig, TogetherSFTConfig, or DiclOptimizationConfig",
         ))
     }
 }
@@ -349,17 +419,24 @@ impl StoredSample for StoredSampleItem {
         }
     }
 
-    fn input(&self) -> &ResolvedInput {
+    fn input(&self) -> &StoredInput {
         match self {
             StoredSampleItem::StoredInference(inference) => inference.input(),
             StoredSampleItem::Datapoint(datapoint) => datapoint.input(),
         }
     }
 
-    fn input_mut(&mut self) -> &mut ResolvedInput {
+    fn input_mut(&mut self) -> &mut StoredInput {
         match self {
             StoredSampleItem::StoredInference(inference) => inference.input_mut(),
             StoredSampleItem::Datapoint(datapoint) => datapoint.input_mut(),
+        }
+    }
+
+    fn into_input(self) -> StoredInput {
+        match self {
+            StoredSampleItem::StoredInference(inference) => inference.into_input(),
+            StoredSampleItem::Datapoint(datapoint) => datapoint.into_input(),
         }
     }
 

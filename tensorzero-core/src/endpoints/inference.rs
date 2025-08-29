@@ -875,15 +875,21 @@ async fn write_inference(
         // Write the inference to the Inference table
         match result {
             InferenceResult::Chat(result) => {
-                let chat_inference =
-                    ChatInferenceDatabaseInsert::new(result, input.clone(), metadata);
+                let chat_inference = ChatInferenceDatabaseInsert::new(
+                    result,
+                    input.clone().into_stored_input(),
+                    metadata,
+                );
                 let _ = clickhouse_connection_info
                     .write_batched(&[chat_inference], TableName::ChatInference)
                     .await;
             }
             InferenceResult::Json(result) => {
-                let json_inference =
-                    JsonInferenceDatabaseInsert::new(result, input.clone(), metadata);
+                let json_inference = JsonInferenceDatabaseInsert::new(
+                    result,
+                    input.clone().into_stored_input(),
+                    metadata,
+                );
                 let _ = clickhouse_connection_info
                     .write_batched(&[json_inference], TableName::JsonInference)
                     .await;

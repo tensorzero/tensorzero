@@ -1242,3 +1242,11 @@ impl IntoResponse for Error {
         (self.status_code(), Json(body)).into_response()
     }
 }
+
+impl From<serde_json::Error> for Error {
+    fn from(err: serde_json::Error) -> Self {
+        Self::new(ErrorDetails::Serialization {
+            message: err.to_string(),
+        })
+    }
+}
