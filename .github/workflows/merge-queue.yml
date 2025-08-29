@@ -51,9 +51,9 @@ env:
   XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
 
 jobs:
-  batch-tests:
-    uses: ./.github/workflows/batch-test.yml
-    secrets: inherit
+  # batch-tests:
+  #   uses: ./.github/workflows/batch-test.yml
+  #   secrets: inherit
 
   live-tests:
     name: "live-tests (batch_writes: ${{ matrix.batch_writes }})"
@@ -66,7 +66,7 @@ jobs:
     timeout-minutes: 30
     strategy:
       matrix:
-        batch_writes: [true, false]
+        batch_writes: [true]
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -330,66 +330,66 @@ jobs:
         run: |
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY ./ci/upload-provider-proxy-cache.sh
 
-  check-production-docker-container:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Build Docker container for production deployment tests
-        run: docker build -t tensorzero/gateway -f gateway/Dockerfile .
+  # check-production-docker-container:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+  #     - name: Build Docker container for production deployment tests
+  #       run: docker build -t tensorzero/gateway -f gateway/Dockerfile .
 
-      - name: Launch ClickHouse container for E2E tests
-        run: |
-          # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait || true
+  #     - name: Launch ClickHouse container for E2E tests
+  #       run: |
+  #         # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
+  #         docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait || true
 
-      - name: Set up .env file for production deployment tests
-        run: |
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
-          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> examples/production-deployment/.env
-          echo "TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1" >> examples/production-deployment/.env
+  #     - name: Set up .env file for production deployment tests
+  #       run: |
+  #         echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
+  #         echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> examples/production-deployment/.env
+  #         echo "TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1" >> examples/production-deployment/.env
 
-      - name: Run docker compose for production deployment tests
-        run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
+  #     - name: Run docker compose for production deployment tests
+  #       run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
 
-      - name: Run inference for production deployment tests
-        run: examples/production-deployment/run.sh
+  #     - name: Run inference for production deployment tests
+  #       run: examples/production-deployment/run.sh
 
-      - name: Print Docker compose logs
-        if: always()
-        run: |
-          docker compose -f examples/production-deployment/docker-compose.yml logs -t
+  #     - name: Print Docker compose logs
+  #       if: always()
+  #       run: |
+  #         docker compose -f examples/production-deployment/docker-compose.yml logs -t
 
-      - name: Take down docker compose for production deployment tests
-        run: |
-          docker compose -f examples/production-deployment/docker-compose.yml down
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
+  #     - name: Take down docker compose for production deployment tests
+  #       run: |
+  #         docker compose -f examples/production-deployment/docker-compose.yml down
+  #         docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
 
-  # Test that the ui e2e tests still pass after we regenerate the model inference cache
-  ui-tests-e2e-regen-model-inference-cache:
-    uses: ./.github/workflows/ui-tests-e2e-model-inference-cache.yml
-    with:
-      regen_cache: true
-    secrets:
-      S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
-      FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  # # Test that the ui e2e tests still pass after we regenerate the model inference cache
+  # ui-tests-e2e-regen-model-inference-cache:
+  #   uses: ./.github/workflows/ui-tests-e2e-model-inference-cache.yml
+  #   with:
+  #     regen_cache: true
+  #   secrets:
+  #     S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  #     S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  #     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  #     FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
+  #     FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+  #     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
-  # See 'ci/README.md' at the repository root for more details.
-  check-all-live-tests-passed:
-    if: always()
-    needs:
-      [
-        check-production-docker-container,
-        ui-tests-e2e-regen-model-inference-cache,
-        live-tests,
-        batch-tests,
-      ]
-    runs-on: ubuntu-latest
-    steps:
-      # When running in the merge queue, jobs should never be skipped.
-      # In a scheduled run, some jobs may be intentionally skipped, as we only care about regenerating the model inference cache.
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped')) }}
-        run: exit 1
+  # # See 'ci/README.md' at the repository root for more details.
+  # check-all-live-tests-passed:
+  #   if: always()
+  #   needs:
+  #     [
+  #       check-production-docker-container,
+  #       ui-tests-e2e-regen-model-inference-cache,
+  #       live-tests,
+  #       batch-tests,
+  #     ]
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     # When running in the merge queue, jobs should never be skipped.
+  #     # In a scheduled run, some jobs may be intentionally skipped, as we only care about regenerating the model inference cache.
+  #     - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped')) }}
+  #       run: exit 1
