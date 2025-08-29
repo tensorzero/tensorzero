@@ -30,6 +30,9 @@ METRIC_NAME: Optional[str] = None
 
 MAX_EXAMPLES = 1000
 
+# The name of the variant to use to grab the templates used for fine-tuning
+TEMPLATE_VARIANT_NAME = "gpt_4o_mini"
+
 # The name of the DICL variant you will want to use. Set this to a meaningful name that does not conflict
 # with other variants for the function selected above.
 DICL_VARIANT_NAME = "gpt_4o_mini_dicl"
@@ -51,26 +54,27 @@ USE_DEMONSTRATIONS = True
 
 # %%
 import os
-from asyncio import Semaphore
 
-import pandas as pd
 import toml
-from clickhouse_connect import get_client
-from openai import AsyncOpenAI
-from tensorzero import TensorZeroGateway
-from tensorzero.util import uuid7
-from tqdm.asyncio import tqdm_asyncio
+from tensorzero import DiclOptimizationConfig, TensorZeroGateway
 
 # %% [markdown]
-# Initialize the ClickHouse client.
+# If you haven't, also include the embedding model in the config.
 #
 
 # %%
-assert "TENSORZERO_CLICKHOUSE_URL" in os.environ, (
-    "TENSORZERO_CLICKHOUSE_URL environment variable not set"
-)
+embedding_model_config = {
+    "embedding_models": {
+        DICL_EMBEDDING_MODEL: {
+            "routing": ["openai"],
+            "providers": {
+                "openai": {"type": "openai", "model_name": DICL_EMBEDDING_MODEL}
+            },
+        }
+    }
+}
 
-clickhouse_client = get_client(dsn=os.environ["TENSORZERO_CLICKHOUSE_URL"])
+print(toml.dumps(embedding_model_config))
 
 # %% [markdown]
 # Initialize the TensorZero Client
@@ -92,7 +96,7 @@ filters = None
 # You can even use AND, OR, and NOT operators to combine multiple filters
 
 # %%
-inferences = t0.experimental_list_inferences(
+stored_inferences = t0.experimental_list_inferences(
     function_name=FUNCTION_NAME,
     filters=filters,
     output_source="demonstration",
@@ -103,77 +107,27 @@ inferences = t0.experimental_list_inferences(
 )
 
 # %%
-openai_client = AsyncOpenAI()
-
-
-# %%
-async def get_embedding(
-    text: str, semaphore: Semaphore, model: str = "text-embedding-3-small"
-) -> Optional[list[float]]:
-    try:
-        async with semaphore:
-            response = await openai_client.embeddings.create(input=text, model=model)
-            return response.data[0].embedding
-    except Exception as e:
-        print(f"Error getting embedding: {e}")
-        return None
-
-
-# %%
-MAX_CONCURRENT_EMBEDDING_REQUESTS = 50
-semaphore = Semaphore(MAX_CONCURRENT_EMBEDDING_REQUESTS)
-
-# %%
-# Embed the 'input' column using the get_embedding function
-tasks = [
-    get_embedding(str(inference.input), semaphore, DICL_EMBEDDING_MODEL)
-    for inference in inferences
-]
-embeddings = await tqdm_asyncio.gather(*tasks, desc="Embedding inputs")
-
-# %%
-data = []
-for inference, embedding in zip(inferences, embeddings):
-    data.append(
-        {
-            "input": str(inference.input),
-            "embedding": embedding,
-            "function_name": FUNCTION_NAME,
-            "variant_name": DICL_VARIANT_NAME,
-            "id": uuid7(),
-        }
-    )
-example_df = pd.DataFrame(data)
-example_df.head()
-
-# %% [markdown]
-# Prepare the data for the DynamicInContextLearningExample table
-# The table schema is as follows:
-#
-# ```
-# CREATE TABLE tensorzero.DynamicInContextLearningExample
-# (
-#     `id` UUID,
-#     `function_name` LowCardinality(String),
-#     `variant_name` LowCardinality(String),
-#     `namespace` String,
-#     `input` String,
-#     `output` String,
-#     `embedding` Array(Float32),
-#     `timestamp` DateTime MATERIALIZED UUIDv7ToDateTime(id)
-# )
-# ENGINE = MergeTree
-# ORDER BY (function_name, variant_name, namespace)
-# ```
-#
-
-# %%
-# Insert the data into the DiclExample table
-result = clickhouse_client.insert_df(
-    "DynamicInContextLearningExample",
-    example_df,
+rendered_samples = t0.experimental_render_samples(
+    stored_samples=stored_inferences,
+    variants={FUNCTION_NAME: TEMPLATE_VARIANT_NAME},
 )
-print(result)
+
+# %%
+optimization_config = DiclOptimizationConfig(
+    embedding_model=DICL_EMBEDDING_MODEL,
+    variant_name=DICL_VARIANT_NAME,
+    function_name=FUNCTION_NAME,
+    k=DICL_K,
+    model=DICL_GENERATION_MODEL,
+)
+job_handle = t0.experimental_launch_optimization(
+    train_samples=rendered_samples,
+    val_samples=None,
+    optimization_config=optimization_config,
+)
+
+# %%
+job_info = t0.experimental_poll_optimization(job_handle=job_handle)
 
 # %% [markdown]
 # Finally, add a new variant to your function configuration to try out the Dynamic In-Context Learning variant in practice!
@@ -185,32 +139,10 @@ print(result)
 #
 
 # %%
-variant_config = {
-    "type": "experimental_dynamic_in_context_learning",
-    "embedding_model": DICL_EMBEDDING_MODEL,
-    "model": DICL_GENERATION_MODEL,
-    "k": DICL_K,
-}
 full_variant_config = {
-    "functions": {FUNCTION_NAME: {"variants": {DICL_VARIANT_NAME: variant_config}}}
-}
-
-print(toml.dumps(full_variant_config))
-
-# %% [markdown]
-# If you haven't, also include the embedding model in the config.
-#
-
-# %%
-embedding_model_config = {
-    "embedding_models": {
-        DICL_EMBEDDING_MODEL: {
-            "routing": ["openai"],
-            "providers": {
-                "openai": {"type": "openai", "model_name": DICL_EMBEDDING_MODEL}
-            },
-        }
+    "functions": {
+        FUNCTION_NAME: {"variants": {DICL_VARIANT_NAME: job_info.output["content"]}}
     }
 }
 
-print(toml.dumps(embedding_model_config))
+print(toml.dumps(full_variant_config))

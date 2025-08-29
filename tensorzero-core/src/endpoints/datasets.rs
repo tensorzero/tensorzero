@@ -21,7 +21,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::inference::types::Text;
-use crate::stored_inference::{SimpleStoredSampleInfo, StoredSample};
+use crate::stored_inference::{SimpleStoredSampleInfo, StoredOutput, StoredSample};
 use crate::{
     config::Config,
     db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
@@ -1370,7 +1370,8 @@ impl StoredSample for Datapoint {
             Datapoint::Chat(datapoint) => SimpleStoredSampleInfo {
                 function_name: datapoint.function_name,
                 input: datapoint.input,
-                output: datapoint.output,
+                output: datapoint.output.clone(),
+                stored_output: datapoint.output.map(StoredOutput::Chat),
                 dispreferred_outputs: Vec::default(),
                 tool_params: datapoint.tool_params,
                 output_schema: None,
@@ -1379,6 +1380,7 @@ impl StoredSample for Datapoint {
                 tags: datapoint.tags.unwrap_or_default(),
             },
             Datapoint::Json(datapoint) => {
+                let stored_output = datapoint.output.clone().map(StoredOutput::Json);
                 let output = datapoint.output.map(|output| match output.raw {
                     Some(raw) => vec![ContentBlockChatOutput::Text(Text { text: raw })],
                     None => vec![],
@@ -1387,6 +1389,7 @@ impl StoredSample for Datapoint {
                     function_name: datapoint.function_name,
                     input: datapoint.input,
                     output,
+                    stored_output,
                     dispreferred_outputs: Vec::default(),
                     tool_params: None,
                     output_schema: Some(datapoint.output_schema),

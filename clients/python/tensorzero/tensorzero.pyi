@@ -104,6 +104,7 @@ class RenderedSample:
     input: ModelInput
     stored_input: ResolvedInput
     output: Optional[ChatInferenceOutput]
+    stored_output: Optional[Union[ChatInferenceOutput, JsonInferenceOutput]]
     episode_id: Optional[UUID]
     inference_id: Optional[UUID]
     tool_params: Optional[ToolCallConfigDatabaseInsert]
