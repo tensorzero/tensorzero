@@ -1,6 +1,6 @@
 services:
   clickhouse-01:
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-25.7-alpine}
     hostname: clickhouse-01
     ports:
       - "8123:8123"
@@ -23,7 +23,7 @@ services:
       retries: 3
 
   clickhouse-02:
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-25.7-alpine}
     hostname: clickhouse-02
     ports:
       - "8124:8123" # Host port 8124 -> Container port 8123
@@ -46,7 +46,7 @@ services:
       retries: 3
 
   clickhouse-03:
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-25.7-alpine}
     hostname: clickhouse-03
     ports:
       - "8125:8123"

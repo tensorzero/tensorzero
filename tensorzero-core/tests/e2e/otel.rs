@@ -61,7 +61,7 @@ pub fn install_capturing_otel_exporter() -> CapturingOtelExporter {
     let exporter = CapturingOtelExporter {
         spans: Arc::new(Mutex::new(Some(vec![]))),
     };
-    let (enable_otel, layer) = build_opentelemetry_layer(Some(exporter.clone()))
+    let (enable_otel, layer, _sdk_tracer) = build_opentelemetry_layer(Some(exporter.clone()))
         .expect("Failed to build OpenTelemetry layer");
 
     tracing_subscriber::registry().with(layer).init();
