@@ -26,19 +26,29 @@ fi
 
 # Test database connection
 echo "Testing database connection..."
+error_file=$(mktemp)
 connection_test=$(clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG \
-                   --query "SELECT 1" 2>/dev/null || echo "ERROR")
+                   --query "SELECT 1" 2>"$error_file" || echo "ERROR")
 
 if [[ "$connection_test" == "ERROR" ]]; then
   echo "✗ Failed to connect to ClickHouse database"
   echo "  Host: $CLICKHOUSE_HOST_VAR"
   echo "  User: $CLICKHOUSE_USER_VAR"
   echo "  Database: $DATABASE_NAME"
+  echo "  Error details:"
+  sed 's/^/    /' "$error_file"
+  rm -f "$error_file"
   exit 1
 elif [[ "$connection_test" == "1" ]]; then
   echo "✓ Database connection successful"
+  rm -f "$error_file"
 else
   echo "✗ Unexpected response from database connection test: $connection_test"
+  if [ -s "$error_file" ]; then
+    echo "  Error details:"
+    sed 's/^/    /' "$error_file"
+  fi
+  rm -f "$error_file"
   exit 1
 fi
 
@@ -62,21 +72,27 @@ cleanup_verified=1
 
 for table in "${tables[@]}"; do
   # First check if table exists
+  error_file=$(mktemp)
   table_exists=$(clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG \
-                  --database "$DATABASE_NAME" --query "SELECT count() FROM system.tables WHERE database = '$DATABASE_NAME' AND name = '$table'" 2>/dev/null || echo "ERROR")
+                  --database "$DATABASE_NAME" --query "SELECT count() FROM system.tables WHERE database = '$DATABASE_NAME' AND name = '$table'" 2>"$error_file" || echo "ERROR")
 
   if [[ "$table_exists" == "ERROR" ]]; then
     echo "  ERROR: Could not check if table $table exists"
+    echo "    Error details:"
+    sed 's/^/      /' "$error_file"
     cleanup_verified=0
   elif [ "$table_exists" -eq 0 ]; then
     echo "  ✓ $table: does not exist (acceptable for cleanup)"
   else
     # Table exists, check if it's empty
+    count_error_file=$(mktemp)
     count=$(clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG \
-              --database "$DATABASE_NAME" --query "SELECT count() FROM $table" 2>/dev/null || echo "ERROR")
+              --database "$DATABASE_NAME" --query "SELECT count() FROM $table" 2>"$count_error_file" || echo "ERROR")
 
     if [[ "$count" == "ERROR" ]]; then
       echo "  ERROR: Could not access table $table"
+      echo "    Error details:"
+      sed 's/^/      /' "$count_error_file"
       cleanup_verified=0
     elif [ "$count" -eq 0 ]; then
       echo "  ✓ $table: empty ($count rows)"
@@ -84,7 +100,9 @@ for table in "${tables[@]}"; do
       echo "  ✗ $table: NOT empty ($count rows)"
       cleanup_verified=0
     fi
+    rm -f "$count_error_file"
   fi
+  rm -f "$error_file"
 done
 
 if [ $cleanup_verified -eq 1 ]; then
