@@ -1,0 +1,19 @@
+[project]
+name = "tensorzero-examples-data-extraction-ner-sft-dpo"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "altair",
+    "clickhouse-connect",
+    "ipykernel",
+    "minijinja",
+    "notebook",
+    "numpy",
+    "openai",
+    "pandas",
+    "tensorzero",
+    "tiktoken",
+    "toml",
+    "tqdm",
+]
