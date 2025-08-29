@@ -5,7 +5,7 @@ on:
 
 jobs:
   build-ui-container:
-    runs-on: namespace-profile-tensorzero-32x64;overrides.cache-tag=build-ui-cache
+    runs-on: namespace-profile-tensorzero-2x8;overrides.cache-tag=build-ui-cache
 
     steps:
       - uses: namespacelabs/nscloud-checkout-action@953fed31a6113cc2347ca69c9d823743c65bc84b
