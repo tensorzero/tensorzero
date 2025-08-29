@@ -15,6 +15,7 @@ use crate::inference::types::{
 };
 use crate::optimization::dicl::UninitializedDiclOptimizationConfig;
 use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
+use crate::optimization::openai_rft::UninitializedOpenAIRFTConfig;
 use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
 use crate::optimization::together_sft::UninitializedTogetherSFTConfig;
 use crate::optimization::UninitializedOptimizerConfig;
@@ -390,6 +391,8 @@ pub fn deserialize_optimization_config(
 ) -> PyResult<UninitializedOptimizerConfig> {
     if obj.is_instance_of::<UninitializedOpenAISFTConfig>() {
         Ok(UninitializedOptimizerConfig::OpenAISFT(obj.extract()?))
+    } else if obj.is_instance_of::<UninitializedOpenAIRFTConfig>() {
+        Ok(UninitializedOptimizerConfig::OpenAIRFT(obj.extract()?))
     } else if obj.is_instance_of::<UninitializedFireworksSFTConfig>() {
         Ok(UninitializedOptimizerConfig::FireworksSFT(obj.extract()?))
     } else if obj.is_instance_of::<UninitializedTogetherSFTConfig>() {
@@ -400,7 +403,7 @@ pub fn deserialize_optimization_config(
         Ok(UninitializedOptimizerConfig::Dicl(obj.extract()?))
     } else {
         Err(PyValueError::new_err(
-            "Invalid optimization config. Expected OpenAISFTConfig, FireworksSFTConfig, TogetherSFTConfig, or DiclOptimizationConfig",
+            "Invalid optimization config. Expected OpenAISFTConfig, OpenAIRFTConfig, FireworksSFTConfig, TogetherSFTConfig, or DiclOptimizationConfig",
         ))
     }
 }

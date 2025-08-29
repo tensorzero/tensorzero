@@ -1073,6 +1073,19 @@ impl<'a> From<&'a ToolCall> for OpenAIRequestToolCall<'a> {
     }
 }
 
+impl From<ToolCall> for OpenAIRequestToolCall<'static> {
+    fn from(tool_call: ToolCall) -> Self {
+        OpenAIRequestToolCall {
+            id: Cow::Owned(tool_call.id),
+            r#type: OpenAIToolType::Function,
+            function: OpenAIRequestFunctionCall {
+                name: Cow::Owned(tool_call.name),
+                arguments: Cow::Owned(tool_call.arguments),
+            },
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OpenAIAssistantRequestMessage<'a> {
     #[serde(
@@ -1094,6 +1107,7 @@ pub struct OpenAIToolRequestMessage<'a> {
 #[serde(tag = "role")]
 #[serde(rename_all = "lowercase")]
 pub enum OpenAIRequestMessage<'a> {
+    Developer(OpenAISystemRequestMessage<'a>),
     System(OpenAISystemRequestMessage<'a>),
     User(OpenAIUserRequestMessage<'a>),
     Assistant(OpenAIAssistantRequestMessage<'a>),
@@ -1104,6 +1118,7 @@ impl OpenAIRequestMessage<'_> {
     pub fn no_content(&self) -> bool {
         match self {
             OpenAIRequestMessage::System(_) => false,
+            OpenAIRequestMessage::Developer(_) => false,
             OpenAIRequestMessage::User(OpenAIUserRequestMessage { content }) => content.is_empty(),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
                 content,
@@ -1115,6 +1130,7 @@ impl OpenAIRequestMessage<'_> {
     pub fn content_contains_case_insensitive(&self, value: &str) -> bool {
         match self {
             OpenAIRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
+            OpenAIRequestMessage::Developer(msg) => msg.content.to_lowercase().contains(value),
             OpenAIRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
                 OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
                 OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } => false,
@@ -1140,21 +1156,28 @@ impl OpenAIRequestMessage<'_> {
     }
 }
 
+pub enum SystemOrDeveloper<'a> {
+    System(&'a str),
+    Developer(&'a str),
+}
+
 pub fn prepare_openai_messages<'a>(
-    system: Option<&'a str>,
+    system_or_developer: Option<SystemOrDeveloper<'a>>,
     messages: &'a [RequestMessage],
-    json_mode: Option<&'_ ModelInferenceRequestJsonMode>,
-    provider_type: &str,
+    json_mode: Option<&'a ModelInferenceRequestJsonMode>,
+    provider_type: &'a str,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut openai_messages = Vec::with_capacity(messages.len());
     for message in messages {
         openai_messages.extend(tensorzero_to_openai_messages(message, provider_type)?);
     }
+
     if let Some(system_msg) =
-        tensorzero_to_openai_system_message(system, json_mode, &openai_messages)
+        prepare_system_or_developer_message(system_or_developer, json_mode, &openai_messages)
     {
         openai_messages.insert(0, system_msg);
     }
+
     Ok(openai_messages)
 }
 
@@ -1187,46 +1210,62 @@ pub(super) fn prepare_openai_tools<'a>(
 /// If ModelInferenceRequestJsonMode::On and the system message or instructions does not contain "JSON"
 /// the request will return an error.
 /// So, we need to format the instructions to include "Respond using JSON." if it doesn't already.
-pub(super) fn tensorzero_to_openai_system_message<'a>(
-    system: Option<&'a str>,
+pub(super) fn prepare_system_or_developer_message<'a>(
+    system_or_developer: Option<SystemOrDeveloper<'a>>,
     json_mode: Option<&'_ ModelInferenceRequestJsonMode>,
     messages: &[OpenAIRequestMessage<'a>],
 ) -> Option<OpenAIRequestMessage<'a>> {
-    match system {
-        Some(system) => {
+    match system_or_developer {
+        Some(SystemOrDeveloper::System(content)) => Some(format_system_or_developer_content(
+            content, json_mode, messages, true,
+        )),
+        Some(SystemOrDeveloper::Developer(content)) => Some(format_system_or_developer_content(
+            content, json_mode, messages, false,
+        )),
+        None => {
+            // Handle JSON mode when no system/developer message is provided
             match json_mode {
                 Some(ModelInferenceRequestJsonMode::On) => {
-                    if messages
-                        .iter()
-                        .any(|msg| msg.content_contains_case_insensitive("json"))
-                        || system.to_lowercase().contains("json")
-                    {
-                        OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-                            content: Cow::Borrowed(system),
-                        })
-                    } else {
-                        let formatted_instructions = format!("Respond using JSON.\n\n{system}");
-                        OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-                            content: Cow::Owned(formatted_instructions),
-                        })
-                    }
+                    Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+                        content: Cow::Owned("Respond using JSON.".to_string()),
+                    }))
                 }
-
-                // If JSON mode is either off or strict, we don't need to do anything special
-                _ => OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-                    content: Cow::Borrowed(system),
-                }),
+                _ => None,
             }
-            .into()
         }
-        None => match json_mode {
-            Some(ModelInferenceRequestJsonMode::On) => {
-                Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-                    content: Cow::Owned("Respond using JSON.".to_string()),
-                }))
+    }
+}
+
+fn format_system_or_developer_content<'a>(
+    content: &'a str,
+    json_mode: Option<&'_ ModelInferenceRequestJsonMode>,
+    messages: &[OpenAIRequestMessage<'a>],
+    is_system: bool,
+) -> OpenAIRequestMessage<'a> {
+    let formatted_content = match json_mode {
+        Some(ModelInferenceRequestJsonMode::On) => {
+            if messages
+                .iter()
+                .any(|msg| msg.content_contains_case_insensitive("json"))
+                || content.to_lowercase().contains("json")
+            {
+                Cow::Borrowed(content)
+            } else {
+                Cow::Owned(format!("Respond using JSON.\n\n{content}"))
             }
-            _ => None,
-        },
+        }
+        // If JSON mode is either off or strict, we don't need to do anything special
+        _ => Cow::Borrowed(content),
+    };
+
+    let system_msg = OpenAISystemRequestMessage {
+        content: formatted_content,
+    };
+
+    if is_system {
+        OpenAIRequestMessage::System(system_msg)
+    } else {
+        OpenAIRequestMessage::Developer(system_msg)
     }
 }
 
@@ -1694,7 +1733,7 @@ impl<'a> OpenAIRequest<'a> {
             None
         };
         let mut messages = prepare_openai_messages(
-            request.system.as_deref(),
+            request.system.as_deref().map(SystemOrDeveloper::System),
             &request.messages,
             Some(&request.json_mode),
             PROVIDER_TYPE,
@@ -3401,16 +3440,17 @@ mod tests {
     }
 
     #[test]
-    fn test_tensorzero_to_openai_system_message() {
-        // Test Case 1: system is None, json_mode is Off
-        let system = None;
+    fn test_prepare_system_or_developer_message() {
+        // Test Case 1: system_or_developer is None, json_mode is Off
+        let system_or_developer = None;
         let json_mode = ModelInferenceRequestJsonMode::Off;
         let messages: Vec<OpenAIRequestMessage> = vec![];
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
+        let result =
+            prepare_system_or_developer_message(system_or_developer, Some(&json_mode), &messages);
         assert_eq!(result, None);
 
         // Test Case 2: system is Some, json_mode is On, messages contain "json"
-        let system = Some("System instructions");
+        let system_or_developer = Some(SystemOrDeveloper::System("System instructions"));
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
@@ -3428,11 +3468,12 @@ mod tests {
         let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
             content: Cow::Borrowed("System instructions"),
         }));
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
+        let result =
+            prepare_system_or_developer_message(system_or_developer, Some(&json_mode), &messages);
         assert_eq!(result, expected);
 
         // Test Case 3: system is Some, json_mode is On, messages do not contain "json"
-        let system = Some("System instructions");
+        let system_or_developer = Some(SystemOrDeveloper::System("System instructions"));
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
@@ -3451,11 +3492,12 @@ mod tests {
         let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
             content: Cow::Owned(expected_content),
         }));
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
+        let result =
+            prepare_system_or_developer_message(system_or_developer, Some(&json_mode), &messages);
         assert_eq!(result, expected);
 
-        // Test Case 4: system is Some, json_mode is Off
-        let system = Some("System instructions");
+        // Test Case 4: developer is Some, json_mode is Off
+        let system_or_developer = Some(SystemOrDeveloper::Developer("Developer instructions"));
         let json_mode = ModelInferenceRequestJsonMode::Off;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
@@ -3470,50 +3512,35 @@ mod tests {
                 tool_calls: None,
             }),
         ];
-        let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-            content: Cow::Borrowed("System instructions"),
-        }));
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
+        let expected = Some(OpenAIRequestMessage::Developer(
+            OpenAISystemRequestMessage {
+                content: Cow::Borrowed("Developer instructions"),
+            },
+        ));
+        let result =
+            prepare_system_or_developer_message(system_or_developer, Some(&json_mode), &messages);
         assert_eq!(result, expected);
 
-        // Test Case 5: system is Some, json_mode is Strict
-        let system = Some("System instructions");
-        let json_mode = ModelInferenceRequestJsonMode::Strict;
-        let messages = vec![
-            OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: vec![OpenAIContentBlock::Text {
-                    text: "Hello, how are you?".into(),
-                }],
-            }),
-            OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some(vec![OpenAIContentBlock::Text {
-                    text: "I am fine, thank you!".into(),
-                }]),
-                tool_calls: None,
-            }),
-        ];
-        let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-            content: Cow::Borrowed("System instructions"),
-        }));
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
-        assert_eq!(result, expected);
-
-        // Test Case 6: system contains "json", json_mode is On
-        let system = Some("Respond using JSON.\n\nSystem instructions");
+        // Test Case 5: developer is Some, json_mode is On, messages do not contain "json"
+        let system_or_developer = Some(SystemOrDeveloper::Developer("Developer instructions"));
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![OpenAIRequestMessage::User(OpenAIUserRequestMessage {
             content: vec![OpenAIContentBlock::Text {
                 text: "Hello, how are you?".into(),
             }],
         })];
-        let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-            content: Cow::Borrowed("Respond using JSON.\n\nSystem instructions"),
-        }));
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
+        let expected_content = "Respond using JSON.\n\nDeveloper instructions".to_string();
+        let expected = Some(OpenAIRequestMessage::Developer(
+            OpenAISystemRequestMessage {
+                content: Cow::Owned(expected_content),
+            },
+        ));
+        let result =
+            prepare_system_or_developer_message(system_or_developer, Some(&json_mode), &messages);
         assert_eq!(result, expected);
 
-        // Test Case 7: system is None, json_mode is On
-        let system = None;
+        // Test Case 6: system is None, json_mode is On
+        let system_or_developer = None;
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
@@ -3531,11 +3558,12 @@ mod tests {
         let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
             content: Cow::Owned("Respond using JSON.".to_string()),
         }));
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
+        let result =
+            prepare_system_or_developer_message(system_or_developer, Some(&json_mode), &messages);
         assert_eq!(result, expected);
 
-        // Test Case 8: system is None, json_mode is Strict
-        let system = None;
+        // Test Case 7: system is None, json_mode is Strict
+        let system_or_developer = None;
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
@@ -3551,30 +3579,9 @@ mod tests {
             }),
         ];
 
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
+        let result =
+            prepare_system_or_developer_message(system_or_developer, Some(&json_mode), &messages);
         assert!(result.is_none());
-
-        // Test Case 9: system is None, json_mode is On, with empty messages
-        let system = None;
-        let json_mode = ModelInferenceRequestJsonMode::On;
-        let messages: Vec<OpenAIRequestMessage> = vec![];
-        let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-            content: Cow::Owned("Respond using JSON.".to_string()),
-        }));
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
-        assert_eq!(result, expected);
-
-        // Test Case 10: system is None, json_mode is Off, with messages containing "json"
-        let system = None;
-        let json_mode = ModelInferenceRequestJsonMode::Off;
-        let messages = vec![OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-            content: vec![OpenAIContentBlock::Text {
-                text: "Please include JSON in your response.".into(),
-            }],
-        })];
-        let expected = None;
-        let result = tensorzero_to_openai_system_message(system, Some(&json_mode), &messages);
-        assert_eq!(result, expected);
     }
 
     #[test]
