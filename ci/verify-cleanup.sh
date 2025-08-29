@@ -43,17 +43,29 @@ tables=(
 cleanup_verified=1
 
 for table in "${tables[@]}"; do
-  count=$(clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG \
-            --database "$DATABASE_NAME" --query "SELECT count() FROM $table" 2>/dev/null || echo "ERROR")
+  # First check if table exists
+  table_exists=$(clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG \
+                  --database "$DATABASE_NAME" --query "SELECT count() FROM system.tables WHERE database = '$DATABASE_NAME' AND name = '$table'" 2>/dev/null || echo "ERROR")
 
-  if [[ "$count" == "ERROR" ]]; then
-    echo "  ERROR: Could not access table $table"
+  if [[ "$table_exists" == "ERROR" ]]; then
+    echo "  ERROR: Could not check if table $table exists"
     cleanup_verified=0
-  elif [ "$count" -eq 0 ]; then
-    echo "  ✓ $table: empty ($count rows)"
+  elif [ "$table_exists" -eq 0 ]; then
+    echo "  ✓ $table: does not exist (acceptable for cleanup)"
   else
-    echo "  ✗ $table: NOT empty ($count rows)"
-    cleanup_verified=0
+    # Table exists, check if it's empty
+    count=$(clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG \
+              --database "$DATABASE_NAME" --query "SELECT count() FROM $table" 2>/dev/null || echo "ERROR")
+
+    if [[ "$count" == "ERROR" ]]; then
+      echo "  ERROR: Could not access table $table"
+      cleanup_verified=0
+    elif [ "$count" -eq 0 ]; then
+      echo "  ✓ $table: empty ($count rows)"
+    else
+      echo "  ✗ $table: NOT empty ($count rows)"
+      cleanup_verified=0
+    fi
   fi
 done
 
