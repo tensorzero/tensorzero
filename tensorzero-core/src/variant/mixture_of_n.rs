@@ -868,17 +868,19 @@ mod tests {
             Latency, ModelInferenceResponseWithMetadata, Text, Thought,
         },
         jsonschema_util::StaticJSONSchema,
-        minijinja_util::tests::{get_test_template_config, test_system_template_schema},
+        minijinja_util::tests::{
+            get_system_filled_template, get_system_template, get_test_template_config,
+            test_system_template_schema,
+        },
         model::{ModelConfig, ModelProvider, ProviderConfig},
         providers::dummy::DummyProvider,
         tool::{ToolCallConfig, ToolCallOutput, ToolChoice},
-        variant::chat_completion::{ChatTemplates, TemplateWithSchema},
     };
 
     use super::*;
 
-    #[test]
-    fn test_prepare_system_message() {
+    #[tokio::test]
+    async fn test_prepare_system_message() {
         let templates = get_test_template_config();
 
         // Test without templates, string message
@@ -943,23 +945,30 @@ mod tests {
 
         // Test with templates that need new info
         let system_template_name = "system";
+        let system_template = get_system_template();
 
         let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
-                templates: ChatTemplates {
-                    system: Some(TemplateWithSchema {
-                        template: PathWithContents {
-                            path: system_template_name.into(),
-                            contents: String::new(),
-                        },
-                        schema: Some(test_system_template_schema()),
-                    }),
-                    ..Default::default()
-                },
+                system_template: Some(system_template),
+                user_template: None,
+                assistant_template: None,
+                input_wrappers: None,
                 ..Default::default()
-            },
+            }
+            .load(
+                &SchemaData {
+                    user: None,
+                    assistant: None,
+                    system: Some(test_system_template_schema()),
+                },
+                &ErrorContext {
+                    function_name: "test".to_string(),
+                    variant_name: "test".to_string(),
+                },
+            )
+            .unwrap(),
         };
 
         let max_index = 6;
@@ -983,23 +992,30 @@ mod tests {
 
         // Test with template that is complete as is (string)
         let system_template_name = "system_filled";
+        let system_template = get_system_filled_template();
 
         let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
-                templates: ChatTemplates {
-                    system: Some(TemplateWithSchema {
-                        template: PathWithContents {
-                            path: system_template_name.into(),
-                            contents: String::new(),
-                        },
-                        schema: None,
-                    }),
-                    ..Default::default()
-                },
+                system_template: Some(system_template),
+                user_template: None,
+                assistant_template: None,
+                input_wrappers: None,
                 ..Default::default()
-            },
+            }
+            .load(
+                &SchemaData {
+                    user: None,
+                    assistant: None,
+                    system: Some(test_system_template_schema()),
+                },
+                &ErrorContext {
+                    function_name: "test".to_string(),
+                    variant_name: "test".to_string(),
+                },
+            )
+            .unwrap(),
         };
 
         let max_index = 10;

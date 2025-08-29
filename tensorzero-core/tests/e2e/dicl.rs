@@ -436,7 +436,7 @@ pub async fn test_dicl_inference_request_simple() {
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text {
-                value: json!("What is the boiling point of water?"),
+                text: "What is the boiling point of water?".into(),
             }],
         }],
     };
@@ -456,7 +456,7 @@ pub async fn test_dicl_inference_request_simple() {
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text {
-                value: json!("What the capital city of India?"),
+                text: "What the capital city of India?".into(),
             }],
         }],
     };
@@ -477,7 +477,7 @@ pub async fn test_dicl_inference_request_simple() {
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text {
-                value: json!("What is an example of a computationally hard problem?"),
+                text: "What is an example of a computationally hard problem?".into(),
             }],
         }],
     };
@@ -500,7 +500,7 @@ pub async fn test_dicl_inference_request_simple() {
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text {
-                value: json!("Who wrote Lord of the Rings?"),
+                text: "Who wrote Lord of the Rings?".into(),
             }],
         }],
     };
@@ -1015,8 +1015,9 @@ async fn test_dicl_json_request() {
         system: Some(json!({"assistant_name": "Dr. Mehta"})),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
-                value: json!({"country": "Canada"}),
+            content: vec![ResolvedInputMessageContent::Template {
+                name: "user".to_string(),
+                arguments: json!({"country": "Canada"}).as_object().unwrap().clone(),
             }],
         }],
     };
@@ -1038,8 +1039,9 @@ async fn test_dicl_json_request() {
         system: Some(json!({"assistant_name": "Pinocchio"})),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
-                value: json!({"country": "India"}),
+            content: vec![ResolvedInputMessageContent::Template {
+                name: "user".to_string(),
+                arguments: json!({"country": "India"}).as_object().unwrap().clone(),
             }],
         }],
     };
@@ -1061,8 +1063,9 @@ async fn test_dicl_json_request() {
         system: Some(json!({"assistant_name": "Pinocchio"})),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
-                value: json!({"country": "USA"}),
+            content: vec![ResolvedInputMessageContent::Template {
+                name: "user".to_string(),
+                arguments: json!({"country": "USA"}).as_object().unwrap().clone(),
             }],
         }],
     };
@@ -1083,8 +1086,9 @@ async fn test_dicl_json_request() {
         system: Some(json!({"assistant_name": "Pinocchio"})),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
-                value: json!({"country": "England"}),
+            content: vec![ResolvedInputMessageContent::Template {
+                name: "user".to_string(),
+                arguments: json!({"country": "England"}).as_object().unwrap().clone(),
             }],
         }],
     };

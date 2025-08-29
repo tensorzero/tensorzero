@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use super::{storage::StoragePath, Base64File, Role, Thought};
 use crate::inference::types::file::Base64FileMetadata;
@@ -19,7 +19,7 @@ use pyo3::prelude::*;
 /// Like `Input`, but with all network resources resolved.
 /// Currently, this is just used to fetch image URLs in the image input,
 /// so that we always pass a base64-encoded image to the model provider.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -72,7 +72,7 @@ impl ResolvedInput {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -126,13 +126,17 @@ impl ResolvedInputMessage {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub enum ResolvedInputMessageContent {
     Text {
-        value: Value,
+        text: String,
+    },
+    Template {
+        name: String,
+        arguments: Map<String, Value>,
     },
     ToolCall(ToolCall),
     ToolResult(ToolResult),
@@ -152,8 +156,11 @@ pub enum ResolvedInputMessageContent {
 impl ResolvedInputMessageContent {
     pub fn into_stored_input_message_content(self) -> StoredInputMessageContent {
         match self {
-            ResolvedInputMessageContent::Text { value } => {
-                StoredInputMessageContent::Text { value }
+            ResolvedInputMessageContent::Text { text } => StoredInputMessageContent::Text {
+                value: Value::String(text),
+            },
+            ResolvedInputMessageContent::Template { name, arguments } => {
+                StoredInputMessageContent::Template { name, arguments }
             }
             ResolvedInputMessageContent::ToolCall(tool_call) => {
                 StoredInputMessageContent::ToolCall(tool_call)

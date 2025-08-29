@@ -425,7 +425,7 @@ fn json_output_to_content_block_chat_output(
 pub struct RenderedSample {
     pub function_name: String,
     pub input: ModelInput,
-    pub stored_input: ResolvedInput,
+    pub stored_input: StoredInput,
     pub output: Option<Vec<ContentBlockChatOutput>>,
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub episode_id: Option<Uuid>,
@@ -511,7 +511,7 @@ impl RenderedSample {
     }
 
     #[getter]
-    pub fn get_stored_input(&self) -> ResolvedInput {
+    pub fn get_stored_input(&self) -> StoredInput {
         self.stored_input.clone()
     }
 }
@@ -590,7 +590,7 @@ pub fn render_stored_sample<T: StoredSample>(
         episode_id,
         inference_id,
         input: model_input,
-        stored_input: resolved_input,
+        stored_input: resolved_input.into_stored_input(),
         output,
         dispreferred_outputs,
         tool_params,

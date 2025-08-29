@@ -29,12 +29,12 @@ use crate::inference::types::batch::{
     BatchOutputSchemasWithSize, BatchRequestRow, BatchStatus, PollBatchInferenceResponse,
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
 };
+use crate::inference::types::ResolveContext;
 use crate::inference::types::{batch::StartBatchModelInferenceWithMetadata, Input};
 use crate::inference::types::{
-    current_timestamp, ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext,
-    FinishReason, InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert,
-    JsonInferenceOutput, Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch,
-    Usage,
+    current_timestamp, ChatInferenceDatabaseInsert, ContentBlockChatOutput, FinishReason,
+    InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput,
+    Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch, Usage,
 };
 use crate::inference::types::{RequestMessage, ResolvedInput};
 use crate::jsonschema_util::DynamicJSONSchema;
@@ -215,7 +215,7 @@ pub async fn start_batch_inference_handler(
     let inference_params: Vec<InferenceParams> =
         BatchInferenceParamsWithSize(params.params, num_inferences).try_into()?;
 
-    let context = FetchContext {
+    let context = ResolveContext {
         client: &http_client,
         object_store_info: &config.object_store_info,
     };

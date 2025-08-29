@@ -206,7 +206,9 @@ const MIXTURE_OF_N_FUSER_CANDIDATES: &str = r"Here are the candidate answers (wi
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use crate::jsonschema_util::StaticJSONSchema;
+    use std::path::PathBuf;
+
+    use crate::{config::path::TomlRelativePath, jsonschema_util::StaticJSONSchema};
 
     use super::*;
     use serde_json::json;
@@ -333,6 +335,36 @@ pub(crate) mod tests {
         .unwrap()
     }
 
+    // Filled in system template
+    pub fn get_system_filled_template() -> TomlRelativePath {
+        TomlRelativePath::new_for_tests(
+            PathBuf::from("system_filled"),
+            Some("You are a helpful and friendly assistant named ChatGPT".to_string()),
+        )
+    }
+
+    // System template
+    pub fn get_system_template() -> TomlRelativePath {
+        TomlRelativePath::new_for_tests(
+            PathBuf::from("system"),
+            Some("You are a helpful and friendly assistant named {{ assistant_name }}".to_string()),
+        )
+    }
+
+    pub fn get_assistant_template() -> TomlRelativePath {
+        TomlRelativePath::new_for_tests(
+            PathBuf::from("assistant"),
+            Some("I'm sorry but I can't help you with that because of {{ reason }}".to_string()),
+        )
+    }
+
+    pub fn get_greeting_with_age_template() -> TomlRelativePath {
+        TomlRelativePath::new_for_tests(
+            PathBuf::from("greeting_with_age"),
+            Some("Hello, {{ name }}! You are {{ age }} years old.".to_string()),
+        )
+    }
+
     pub fn get_test_template_config<'a>() -> TemplateConfig<'a> {
         let mut templates = HashMap::new();
 
@@ -342,25 +374,22 @@ pub(crate) mod tests {
         // Template 2
         templates.insert(
             "greeting_with_age".to_string(),
-            "Hello, {{ name }}! You are {{ age }} years old.".to_string(),
+            get_greeting_with_age_template().read().unwrap(),
         );
 
         // System template
-        templates.insert(
-            "system".to_string(),
-            "You are a helpful and friendly assistant named {{ assistant_name }}".to_string(),
-        );
+        templates.insert("system".to_string(), get_system_template().read().unwrap());
 
         // Filled in system template
         templates.insert(
             "system_filled".to_string(),
-            "You are a helpful and friendly assistant named ChatGPT".to_string(),
+            get_system_filled_template().read().unwrap(),
         );
 
         // Assistant Template
         templates.insert(
             "assistant".to_string(),
-            "I'm sorry but I can't help you with that because of {{ reason }}".to_string(),
+            get_assistant_template().read().unwrap(),
         );
 
         // Filled in assistant template

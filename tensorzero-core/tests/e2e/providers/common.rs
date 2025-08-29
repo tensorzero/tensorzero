@@ -2249,6 +2249,7 @@ pub async fn check_base64_image_response(
                 StoredContentBlock::File(Box::new(StoredFile {
                     file: Base64FileMetadata {
                         url: None,
+
                         mime_type: mime::IMAGE_PNG,
                     },
                     storage_path: expected_storage_path.clone(),
@@ -2390,23 +2391,22 @@ pub async fn check_url_image_response(
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     assert_eq!(
         input_messages,
-        vec![
-            StoredRequestMessage {
-                role: Role::User,
-                content: vec![StoredContentBlock::Text(Text {
-                    text: "Describe the contents of the image".to_string(),
-                }), StoredContentBlock::File(Box::new(StoredFile {
-                    file: Base64FileMetadata {
-                        url: Some(image_url.clone()),
-                        mime_type: mime::IMAGE_PNG,
-                    },
-                    storage_path: StoragePath {
-                        kind: kind.clone(),
-                        path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
-                    }
-                }))]
-            },
-        ]
+        vec![StoredRequestMessage {
+            role: Role::User,
+            content:
+                vec![StoredContentBlock::Text(Text {
+                                    text: "Describe the contents of the image".to_string(),
+                                }), StoredContentBlock::File(Box::new(StoredFile {
+                                    file: Base64FileMetadata {
+                                        url: Some(image_url.clone()),
+                                        mime_type: mime::IMAGE_PNG,
+                                    },
+                                    storage_path: StoragePath {
+                                        kind: kind.clone(),
+                                        path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
+                                    }
+                                }))]
+        },]
     );
 
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
