@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euxo pipefail
+set -euo pipefail
 echo "CLICKHOUSE_ID=${CLICKHOUSE_ID}"
 # Get the url of a ClickHouse cloud instance, based on the $CLICKHOUSE_ID that we assigned in '.buildkite/hooks/post-checkout'
 # We also use this id as part of the concurrent group key in '.buildkite/pipeline.yml', so we're guaranteed to be the only job trying to use this instance.

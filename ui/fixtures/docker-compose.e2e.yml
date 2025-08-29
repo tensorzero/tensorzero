@@ -23,6 +23,7 @@ services:
   # We set 'OPENAI_BASE_URL=http://localhost:3030/openai' when starting the ui server in ci
   # so that we use the mock server for SFT jobs
   mock-inference-provider:
+    image: tensorzero/mock-inference-provider:${TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG:-latest}
     build:
       context: ../../
       dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile

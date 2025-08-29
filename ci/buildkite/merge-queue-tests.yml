@@ -32,6 +32,7 @@ steps:
           propagate-environment: true
 
   - label: ":node: Node.js Tests"
+    # command: bash ./ci/buildkite/node-unit-tests.sh
     command: bash ./ci/buildkite/node-unit-tests.sh
     depends_on: "build-gateway-container"
 
@@ -46,6 +47,7 @@ steps:
     command: bash ./ci/buildkite/clickhouse-tests.sh
     matrix:
       setup:
+        # TODO: do replicated & Cloud (latter will need some thought bc concurrency limit
         clickhouse_version:
           - "24.12-alpine"
           - "latest-alpine"
@@ -53,5 +55,11 @@ steps:
       TENSORZERO_CLICKHOUSE_VERSION: "{{matrix.clickhouse_version}}"
     depends_on:
       - "download-fixtures"
+      - "build-gateway-container"
+      - "build-mock-inference-provider-container"
+
+  - label: "Live Tests"
+    command: bash ./ci/buildkite/live-tests.sh
+    depends_on:
       - "build-gateway-container"
       - "build-mock-inference-provider-container"
