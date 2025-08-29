@@ -57,7 +57,7 @@ jobs:
 
   live-tests:
     name: "live-tests (batch_writes: ${{ matrix.batch_writes }})"
-    runs-on: namespace-profile-tensorzero-8x16
+    runs-on: namespace-profile-tensorzero-16x32
     permissions:
       # Permission to checkout the repository
       contents: read
