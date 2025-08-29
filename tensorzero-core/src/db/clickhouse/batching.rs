@@ -151,7 +151,11 @@ impl BatchWriter {
                         }
                     }
                     if !buffer.is_empty() {
-                        tracing::info!("Writing {} rows to ClickHouse", buffer.len());
+                        tracing::info!(
+                            "Writing {} rows to ClickHouse table {:?}",
+                            buffer.len(),
+                            table_name
+                        );
                         if let Err(e) = clickhouse
                             .write_non_batched::<()>(Rows::Serialized(&buffer), table_name)
                             .await
