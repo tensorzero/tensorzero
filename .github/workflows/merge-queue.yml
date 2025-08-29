@@ -54,8 +54,10 @@ jobs:
   batch-tests:
     uses: ./.github/workflows/batch-test.yml
     secrets: inherit
+
   live-tests:
-    runs-on: namespace-profile-tensorzero-8x16
+    name: "live-tests (batch_writes: ${{ matrix.batch_writes }})"
+    runs-on: namespace-profile-tensorzero-32x64
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -193,8 +195,7 @@ jobs:
 
       - name: Launch ClickHouse container for E2E tests
         run: |
-          # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --build -d --wait || true
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --build -d --wait
 
       - name: Print ClickHouse container logs
         if: always()
@@ -391,5 +392,7 @@ jobs:
       ]
     runs-on: ubuntu-latest
     steps:
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+      # When running in the merge queue, jobs should never be skipped.
+      # In a scheduled run, some jobs may be intentionally skipped, as we only care about regenerating the model inference cache.
+      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped')) }}
         run: exit 1

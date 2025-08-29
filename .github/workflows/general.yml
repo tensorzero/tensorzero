@@ -172,7 +172,7 @@ jobs:
         run: cargo build --workspace
 
   validate:
-    runs-on: namespace-profile-tensorzero-8x16
+    runs-on: namespace-profile-tensorzero-32x64
 
     timeout-minutes: 30
 
@@ -404,19 +404,14 @@ jobs:
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
     # the main 'validate' job)
-    runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-16x32' || 'ubuntu-latest' }}
+    # runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-32x64' || 'ubuntu-latest' }}
+    runs-on: namespace-profile-tensorzero-32x64
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     strategy:
       matrix:
         # Only include replicated: true when running in merge queue
         replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
-        clickhouse_version:
-          - tag: "24.12-alpine"
-            prefix: "24.12"
-            allow_failure: false
-          - tag: "latest-alpine"
-            prefix: ""
-            allow_failure: false
+        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"24.12-alpine","prefix":"24.12","allow_failure":false},{"tag":"latest-alpine","prefix":"","allow_failure":false}]') || fromJSON('[{"tag":"latest-alpine","prefix":"","allow_failure":false}]') }}
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -488,7 +483,7 @@ jobs:
         run: |
           cargo run-e2e > e2e_logs.txt 2>&1 &
             count=0
-            max_attempts=10
+            max_attempts=20
             while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
               echo "Waiting for gateway to be healthy..."
               sleep 1
@@ -506,7 +501,7 @@ jobs:
           cargo run-e2e --run-migrations-only &&
           cargo run-e2e > e2e_logs.txt 2>&1 &
             count=0
-            max_attempts=10
+            max_attempts=40
             while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
               echo "Waiting for gateway to be healthy..."
               sleep 1
@@ -663,6 +658,8 @@ jobs:
         check-python-client-build,
         check-node-bindings,
         build-windows,
+        build-ui-container,
+        build-gateway-container,
         validate,
         clickhouse-tests,
         ui-tests,
@@ -671,5 +668,7 @@ jobs:
       ]
     runs-on: ubuntu-latest
     steps:
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+      # When running in the merge queue, jobs should never be skipped.
+      # In PR CI, some jobs may be intentionally skipped (e.g. due to running from a fork, or to save money)
+      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled' || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped'))) }}
         run: exit 1
