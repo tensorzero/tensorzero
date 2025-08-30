@@ -60,7 +60,8 @@ services:
   fixtures:
     image: tensorzero/fixtures:${TENSORZERO_FIXTURES_TAG:-latest}
     build:
-      dockerfile: ../../../ui/fixtures/Dockerfile
+      context: ../../../
+      dockerfile: ui/fixtures/Dockerfile
     volumes:
       - ../../../ui/fixtures:/fixtures
       - ~/.aws:/root/.aws
