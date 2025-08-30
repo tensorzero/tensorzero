@@ -17,7 +17,7 @@ docker pull $LATEST_TAG || true
 # Build the container with cache
 docker build --load --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 \
   --cache-from $LATEST_TAG \
-  -f gateway/Dockerfile . -t $TAG
+  -f ui/fixtures/Dockerfile . -t $TAG
 
 # Tag with latest and push both tags
 docker tag $TAG $LATEST_TAG
