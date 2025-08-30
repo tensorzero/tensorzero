@@ -1,0 +1,7 @@
+[embedding_models."text-embedding-3-small"]
+routing = ["azure"]
+
+[embedding_models."text-embedding-3-small".providers.azure]
+type = "azure"
+deployment_id = "text-embedding-3-small"
+endpoint = "https://your-azure-openai-endpoint.openai.azure.com"

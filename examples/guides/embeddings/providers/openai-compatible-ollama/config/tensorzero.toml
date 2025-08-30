@@ -1,0 +1,8 @@
+[embedding_models.all_minilm]
+routing = ["ollama"]
+
+[embedding_models.all_minilm.providers.ollama]
+type = "openai"
+api_base = "http://localhost:11434/v1"
+model_name = "all-minilm"
+api_key_location = "none"
