@@ -1,3 +1,11 @@
+volumes:
+  shared-tmpdir:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=8G,uid=1000,gid=1000,mode=1777
+
 services:
   clickhouse:
     image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}
@@ -9,8 +17,6 @@ services:
       # If the directory doesn't exist locally (i.e. we haven't defined a version-specific config),
       # an empty dir will get mounted in the container
       - ./clickhouse-configs/${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}/users.xml:/etc/clickhouse-server/users.d/users.xml
-      # For S3 fixtures using file()
-      # - ../../../ui/fixtures/s3-fixtures:/var/lib/clickhouse/user_files
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
@@ -111,6 +117,8 @@ services:
       TENSORZERO_E2E_PROXY: http://provider-proxy:3003
       TENSORZERO_MOCK_INFERENCE_PROVIDER_BASE_URL: http://mock-inference-provider:3030
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
+      TMPDIR: /tmp
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4317
       # API Keys
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
@@ -150,6 +158,8 @@ services:
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       # Mount GCP JWT key file
       - ../../../gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
+      # Shared tmpdir filesystem
+      - shared-tmpdir:/tmp
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -187,7 +197,7 @@ services:
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_PASSWORD=chpassword
       - CLICKHOUSE_USER=chuser
-      - TENSORZERO_SKIP_LARGE_FIXTURES
+      - TENSORZERO_SKIP_LARGE_FIXTURES=1
     depends_on:
       gateway:
         condition: service_healthy
@@ -213,8 +223,10 @@ services:
       TENSORZERO_MINIO_URL: http://minio:9000/
       TENSORZERO_MOCK_INFERENCE_PROVIDER_BASE_URL: http://mock-inference-provider:3030
       TENSORZERO_JAEGER_URL: http://jaeger:16686/
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4317
       TENSORZERO_E2E_PROXY: http://provider-proxy:3003
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
+      TMPDIR: /tmp
       # API Keys
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
@@ -255,6 +267,8 @@ services:
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       - .cargo/:/app/.cargo/
       - ../../../target/nextest:/app/target/nextest
+      # Shared tmpdir filesystem
+      - shared-tmpdir:/tmp
     depends_on:
       gateway:
         condition: service_healthy

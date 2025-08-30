@@ -1604,6 +1604,9 @@ pub async fn test_image_inference_with_provider_docker_minio() {
 
     let endpoint = std::env::var("TENSORZERO_MINIO_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:8000/".to_string());
+    println!(
+        "Endpoint for providers::openai::test_image_inference_with_provider_docker_minio: {endpoint}"
+    );
 
     let test_bucket = "tensorzero-e2e-tests";
     let config = aws_config::load_from_env()

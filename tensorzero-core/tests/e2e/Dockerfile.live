@@ -38,8 +38,11 @@ RUN cargo binstall -y cargo-nextest --secure
 # Build the binaries that the tests will use
 RUN cargo build -p evaluations -p gateway --features e2e_tests
 
+# Fetch all dependencies first (including dev-dependencies needed by trybuild)
+RUN cargo fetch --locked
+
 # Build and archive tests instead of copying entire target directory
-RUN cargo nextest archive --features e2e_tests --profile e2e --archive-file tests.tar.zst
+RUN cargo nextest archive --features e2e_tests --profile e2e --archive-file tests.tar.zst --offline
 
 # ========== test-env ==========
 
