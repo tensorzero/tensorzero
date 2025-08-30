@@ -102,6 +102,9 @@ services:
       start_period: 10s
       start_interval: 1s
       timeout: 1s
+    depends_on:
+      minio:
+        condition: service_healthy
 
   gateway:
     image: tensorzero/gateway-e2e:${TENSORZERO_GATEWAY_TAG:-latest}
@@ -220,9 +223,9 @@ services:
       # Test environment variables
       TENSORZERO_GATEWAY_URL: http://gateway:3000
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
-      TENSORZERO_MINIO_URL: http://minio:9000/
+      TENSORZERO_MINIO_URL: http://minio:9000
       TENSORZERO_MOCK_INFERENCE_PROVIDER_BASE_URL: http://mock-inference-provider:3030
-      TENSORZERO_JAEGER_URL: http://jaeger:16686/
+      TENSORZERO_JAEGER_URL: http://jaeger:16686
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4317
       TENSORZERO_E2E_PROXY: http://provider-proxy:3003
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
@@ -279,4 +282,6 @@ services:
       mock-inference-provider:
         condition: service_healthy
       provider-proxy:
+        condition: service_healthy
+      minio:
         condition: service_healthy
