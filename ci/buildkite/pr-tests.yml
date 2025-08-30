@@ -16,7 +16,7 @@ steps:
           limit: 3
 
   - label: "Build Fixtures Container"
-    command: bash ./ci/buildkite/build-fixtures-container.sh"
+    command: bash ./ci/buildkite/build-fixtures-container.sh
     key: "build-fixtures-container"
     retry:
       automatic:
