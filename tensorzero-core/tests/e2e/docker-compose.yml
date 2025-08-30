@@ -95,6 +95,7 @@ services:
   fixtures:
     build:
       dockerfile: ../../../ui/fixtures/Dockerfile
+      context: ../../..
     volumes:
       - ../../../ui/fixtures:/fixtures
       - ~/.aws:/root/.aws

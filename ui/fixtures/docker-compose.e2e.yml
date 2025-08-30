@@ -75,6 +75,7 @@ services:
 
   fixtures:
     build:
+      context: ../../
       dockerfile: Dockerfile
     volumes:
       - .:/fixtures
