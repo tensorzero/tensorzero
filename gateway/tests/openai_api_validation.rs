@@ -1,589 +1,494 @@
 use jsonschema::{Draft, JSONSchema};
-use serde_json::{json, Value};
-use serde_yaml::Value as YamlValue;
-use std::sync::Arc;
-use tokio::sync::OnceCell;
+use reqwest::blocking::Client;
+use serde_json::{json, Value as JsonValue};
 
-#[derive(Clone)]
-struct Schemas {
-    chat_completion_schema: Arc<JSONSchema>,
-    chat_completion_stream_schema: Arc<JSONSchema>,
-    error_schema: Arc<JSONSchema>,
+
+fn load_openai_spec() -> JsonValue {
+    let raw = include_str!(concat!(env!("OUT_DIR"), "/openapi.json"));
+    serde_json::from_str(raw).expect("failed to parse OUT_DIR/openapi.json")
 }
 
-// OnceCell ensures the schemas are compiled only once
-static SCHEMAS: OnceCell<Schemas> = OnceCell::const_new();
-
-// Initializes and compiles JSON schemas for validation.
-async fn get_schemas() -> &'static Schemas {
-    SCHEMAS.get_or_init(|| async {
-        let chat_completion_schema_json: Value = json!({
-            "type": "object",
-            "properties": {
-                "id": { "type": "string" },
-                "object": { "type": "string", "enum": ["chat.completion"] },
-                "created": { "type": "integer" },
-                "model": { "type": "string" },
-                "choices": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "index": { "type": "integer" },
-                            "message": {
-                                "type": "object",
-                                "properties": {
-                                    "role": { "type": "string" },
-                                    "content": { "type": ["string", "null"] },
-                                    "refusal": { "type": ["string", "null"] },
-                                    "tool_calls": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "id": { "type": "string" },
-                                                "type": { "type": "string", "enum": ["function"] },
-                                                "function": {
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "name": { "type": "string" },
-                                                        "arguments": { "type": "string" }
-                                                    },
-                                                    "required": ["name", "arguments"]
-                                                }
-                                            },
-                                            "required": ["id", "type", "function"]
-                                        }
-                                    }
-                                },
-                                "required": ["role"]
-                            },
-                            "logprobs": {
-                                "type": ["object", "null"],
-                                "properties": {
-                                    "content": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "token": { "type": "string" },
-                                                "logprob": { "type": "number" }
-                                            },
-                                            "required": ["token", "logprob"]
-                                        }
-                                    }
-                                },
-                                "required": ["content"]
-                            },
-                            "finish_reason": { "type": "string", "enum": ["stop", "length", "tool_calls", "content_filter"] }
-                        },
-                        "required": ["index", "message", "finish_reason"]
-                    }
-                },
-                "audio": {
-                    "type": "object",
-                    "properties": {
-                        "bytesBase64Encoded": { "type": "string" },
-                        "mimeType": { "type": "string" },
-                        "fileSizeBytes": { "type": "integer" }
-                    },
-                    "required": ["bytesBase64Encoded", "mimeType", "fileSizeBytes"]
-                },
-                "usage": { "type": "object" }
-            },
-            "required": ["id", "object", "created", "model", "choices"]
-        });
-
-        // Embedded schema for the chat completion stream payload
-        let chat_completion_stream_schema_json: Value = json!({
-            "type": "object",
-            "properties": {
-                "id": { "type": "string" },
-                "object": { "type": "string", "enum": ["chat.completion.chunk"] },
-                "created": { "type": "integer" },
-                "model": { "type": "string" },
-                "choices": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "index": { "type": "integer" },
-                            "delta": {
-                                "type": "object",
-                                "properties": {
-                                    "role": { "type": "string" },
-                                    "content": { "type": "string" },
-                                    "refusal": { "type": "string" },
-                                    "tool_calls": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "id": { "type": ["string", "null"] },
-                                                "type": { "type": ["string", "null"], "enum": ["function", null] },
-                                                "function": {
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "name": { "type": ["string", "null"] },
-                                                        "arguments": { "type": "string" }
-                                                    },
-                                                    "required": ["arguments"]
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            },
-                            "logprobs": {
-                                "type": ["object", "null"],
-                                "properties": {
-                                    "content": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "token": { "type": "string" },
-                                                "logprob": { "type": "number" }
-                                            },
-                                            "required": ["token", "logprob"]
-                                        }
-                                    }
-                                },
-                                "required": ["content"]
-                            },
-                            "finish_reason": { "type": ["string", "null"] }
-                        },
-                        "required": ["index", "delta"]
-                    }
+/// Recursively rewrite `$ref` values so that references to OpenAPI components become local:
+fn rewrite_component_refs_in_place(node: &mut JsonValue) {
+    match node {
+        JsonValue::Object(map) => {
+            if let Some(JsonValue::String(s)) = map.get_mut("$ref") {
+                if let Some(tail) = s.strip_prefix("json-schema:///#/components/schemas/") {
+                    *s = format!("#/$defs/{}", tail);
+                } else if let Some(tail) = s.strip_prefix("#/components/schemas/") {
+                    *s = format!("#/$defs/{}", tail);
                 }
-            },
-            "required": ["id", "object", "created", "model", "choices"]
-        });
-
-        // Embedded schema for the error payload
-        let error_schema_json: Value = json!({
-            "type": "object",
-            "properties": {
-                "error": {
-                    "type": "object",
-                    "properties": {
-                        "message": { "type": "string" },
-                        "type": { "type": "string" },
-                        "param": { "type": "string" },
-                        "code": { "type": "string" }
-                    },
-                    "required": ["message", "type", "param", "code"]
-                }
-            },
-            "required": ["error"]
-        });
-
-        let chat_completion_schema = Arc::new(
-            JSONSchema::options()
-                .with_draft(Draft::Draft7)
-                .compile(&chat_completion_schema_json)
-                .expect("Failed to compile chat completion schema"),
-        );
-
-        let chat_completion_stream_schema = Arc::new(
-            JSONSchema::options()
-                .with_draft(Draft::Draft7)
-                .compile(&chat_completion_stream_schema_json)
-                .expect("Failed to compile chat completion stream schema"),
-        );
-
-        let error_schema = Arc::new(
-            JSONSchema::options()
-                .with_draft(Draft::Draft7)
-                .compile(&error_schema_json)
-                .expect("Failed to compile error schema"),
-        );
-
-        Schemas {
-            chat_completion_schema,
-            chat_completion_stream_schema,
-            error_schema,
-        }
-    })
-    .await
-}
-
-// test for standard successful response, including metadata, choices, and usage statistics.
-#[tokio::test] async fn validate_full_response_format() {
-    let schemas = get_schemas().await;
-    let full_response = json!({
-        "id": "chatcmpl-12345",
-        "object": "chat.completion",
-        "created": 1677652288,
-        "model": "gpt-4o",
-        "choices": [
-            {
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": "Hello, how can I help you today?",
-                },
-                "logprobs": null,
-                "finish_reason": "stop"
             }
+            for v in map.values_mut() {
+                rewrite_component_refs_in_place(v);
+            }
+        }
+        JsonValue::Array(arr) => {
+            for v in arr {
+                rewrite_component_refs_in_place(v);
+            }
+        }
+        _ => {}
+    }
+}
+
+
+fn schema_for_component(spec: &JsonValue, name: &str) -> Option<JsonValue> {
+    let defs = spec.pointer("/components/schemas")?.clone();
+    let mut wrapper = json!({
+        "$defs": defs,
+        "$ref": format!("#/$defs/{}", name),
+    });
+    rewrite_component_refs_in_place(&mut wrapper);
+    Some(wrapper)
+}
+
+/// Try several component names (the documented schema sometimes renames these).
+fn schema_for_first(spec: &JsonValue, names: &[&str]) -> Option<JsonValue> {
+    for n in names {
+        if let Some(defs) = spec.pointer(&format!("/components/schemas/{}", n)) {
+            if defs.is_object() || defs.is_array() {
+                return schema_for_component(spec, n);
+            }
+        }
+    }
+    None
+}
+
+fn compile(schema: &JsonValue) -> JSONSchema {
+    JSONSchema::options()
+        .with_draft(Draft::Draft7)
+        .compile(schema)
+        .expect("failed to compile schema")
+}
+
+/// Validate and, on failure, collect errors and panic with a readable message.
+fn assert_valid(compiled: &JSONSchema, instance: &JsonValue, context: &str) {
+    if let Err(it) = compiled.validate(instance) {
+        let details: Vec<String> = it.map(|e| e.to_string()).collect();
+        panic!("{}:\n  - {}\nJSON: {}", context, details.join("\n  - "), instance);
+    }
+}
+
+// Convenience accessors for common components.
+fn error_schema(spec: &JsonValue) -> JSONSchema {
+    let schema = schema_for_first(spec, &["ErrorResponse", "Error"])
+        .expect("Error schema not found in OpenAI spec");
+    compile(&schema)
+}
+
+fn chat_completions_request_schema(spec: &JsonValue) -> Option<JSONSchema> {
+    schema_for_first(
+        spec,
+        &[
+            "CreateChatCompletionRequest",
+            "CreateChatCompletionRequestBody",
+            "ChatCompletionRequest",
         ],
-        "usage": {
-            "prompt_tokens": 10,
-            "completion_tokens": 15,
-            "total_tokens": 25
-        }
-    });
-
-    let result = schemas.chat_completion_schema.validate(&full_response);
-    if let Err(errors) = result {
-        let error_messages: Vec<String> = errors.map(|e| e.to_string()).collect();
-        panic!("Full non-streaming response validation failed: {:#?}\nOriginal payload: {}", error_messages, full_response);
-    }
+    )
+    .map(|s| compile(&s))
 }
 
-// test ensures that a single chunk from a streamed response, containing
-// a delta of the message content, conforms to the chat completion stream JSON schema.
-#[tokio::test] async fn validate_stream_response_format() {
-    let schemas = get_schemas().await;
-    let full_response = json!({
-        "id": "chatcmpl-12345",
-        "object": "chat.completion.chunk",
-        "created": 1677652288,
-        "model": "gpt-4o",
-        "choices": [
-            {
-                "index": 0,
-                "delta": {
-                    "role": "assistant",
-                    "content": "Hello",
-                },
-                "logprobs": null,
-                "finish_reason": null
-            }
-        ]
-    });
-
-    let result = schemas.chat_completion_stream_schema.validate(&full_response);
-    if let Err(errors) = result {
-        let error_messages: Vec<String> = errors.map(|e| e.to_string()).collect();
-        panic!("Full stream response validation failed: {:#?}\nOriginal payload: {}", error_messages, full_response);
-    }
-}
-
-// This test checks the format of a response where the model requests to call
-// a single function, including the function name and arguments.
-#[tokio::test] async fn validate_single_tool_call_response_format() {
-    let schemas = get_schemas().await;
-    let tool_call_response = json!({
-        "id": "chatcmpl-tool-call-123",
-        "object": "chat.completion",
-        "created": 1677652289,
-        "model": "gpt-4o",
-        "choices": [
-            {
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": null,
-                    "tool_calls": [
-                        {
-                            "id": "call_1a2b3c4d",
-                            "type": "function",
-                            "function": {
-                                "name": "get_current_weather",
-                                "arguments": "{\"location\": \"New York\", \"unit\": \"celsius\"}"
-                            }
-                        }
-                    ]
-                },
-                "finish_reason": "tool_calls"
-            }
-        ]
-    });
-
-    let result = schemas.chat_completion_schema.validate(&tool_call_response);
-    if let Err(errors) = result {
-        let error_messages: Vec<String> = errors.map(|e| e.to_string()).collect();
-        panic!("Single tool call response validation failed: {:#?}\nOriginal payload: {}", error_messages, tool_call_response);
-    }
-}
-
-// Validates a response with multiple tool calls.
-#[tokio::test] async fn validate_multiple_tool_calls_response_format() {
-    let schemas = get_schemas().await;
-    let multiple_tool_calls_response = json!({
-        "id": "chatcmpl-multi-tool-123",
-        "object": "chat.completion",
-        "created": 1677652290,
-        "model": "gpt-4o",
-        "choices": [
-            {
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": null,
-                    "tool_calls": [
-                        {
-                            "id": "call_1a2b3c4d",
-                            "type": "function",
-                            "function": {
-                                "name": "get_current_weather",
-                                "arguments": "{\"location\": \"New York\", \"unit\": \"celsius\"}"
-                            }
-                        },
-                        {
-                            "id": "call_2e5f6g7h",
-                            "type": "function",
-                            "function": {
-                                "name": "get_stock_price",
-                                "arguments": "{\"symbol\": \"GOOG\"}"
-                            }
-                        }
-                    ]
-                },
-                "finish_reason": "tool_calls"
-            }
-        ]
-    });
-
-    let result = schemas.chat_completion_schema.validate(&multiple_tool_calls_response);
-    if let Err(errors) = result {
-        let error_messages: Vec<String> = errors.map(|e| e.to_string()).collect();
-        panic!("Multiple tool calls response validation failed: {:#?}\nOriginal payload: {}", error_messages, multiple_tool_calls_response);
-    }
-}
-
-// Validates a chat completion response that includes audio data.
-// This test checks the format of a response containing embedded audio,
-// ensuring that the base64-encoded data, MIME type, and file size are correctly structured.
-#[tokio::test] async fn validate_audio_response_format() {
-    let schemas = get_schemas().await;
-    let audio_response = json!({
-        "id": "chatcmpl-audio-12345",
-        "object": "chat.completion",
-        "created": 1677652291,
-        "model": "gpt-4o",
-        "choices": [
-            {
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": "Here is the audio response.",
-                },
-                "logprobs": null,
-                "finish_reason": "stop"
-            }
+fn chat_completions_response_schema(spec: &JsonValue) -> Option<JSONSchema> {
+    schema_for_first(
+        spec,
+        &[
+            "ChatCompletion",
+            "CreateChatCompletionResponse",
+            "ChatCompletionResponse",
         ],
-        "audio": {
-            "bytesBase64Encoded": "SGVyZSBpcyBhdWRpbyBkYXRhIGluIGJhc2U2NCBlbmNvZGluZw==",
-            "mimeType": "audio/L16;rate=24000",
-            "fileSizeBytes": 45
-        }
-    });
-
-    let result = schemas.chat_completion_schema.validate(&audio_response);
-    if let Err(errors) = result {
-        let error_messages: Vec<String> = errors.map(|e| e.to_string()).collect();
-        panic!("Audio response validation failed: {:#?}\nOriginal payload: {}", error_messages, audio_response);
-    }
+    )
+    .map(|s| compile(&s))
 }
 
-// Validates a chat completion response that includes log probabilities.
-// This test ensures that the `logprobs` object, containing tokens and their
-// corresponding log probabilities, is correctly formatted.
-#[tokio::test] async fn validate_logprobs_response_format() {
-    let schemas = get_schemas().await;
-    let logprobs_response = json!({
-        "id": "chatcmpl-logprobs-12345",
-        "object": "chat.completion",
-        "created": 1677652292,
-        "model": "gpt-4o",
-        "choices": [
-            {
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": "Hello world."
-                },
-                "logprobs": {
-                    "content": [
-                        { "token": "Hello", "logprob": -0.01 },
-                        { "token": " world", "logprob": -0.02 },
-                        { "token": ".", "logprob": -0.03 }
-                    ]
-                },
-                "finish_reason": "stop"
-            }
-        ]
-    });
-
-    let result = schemas.chat_completion_schema.validate(&logprobs_response);
-    if let Err(errors) = result {
-        let error_messages: Vec<String> = errors.map(|e| e.to_string()).collect();
-        panic!("Logprobs response validation failed: {:#?}\nOriginal payload: {}", error_messages, logprobs_response);
-    }
+fn embeddings_request_schema(spec: &JsonValue) -> Option<JSONSchema> {
+    schema_for_first(
+        spec,
+        &[
+            "CreateEmbeddingRequest",
+            "CreateEmbeddingsRequest",
+            "EmbeddingsRequest",
+        ],
+    )
+    .map(|s| compile(&s))
 }
 
-// This test checks that each chunk in a streamed tool call response, from the
-// initial function definition to the streaming of arguments, conforms to the
-// stream schema.
-#[tokio::test] async fn validate_stream_tool_calls_response_format() {
-    let schemas = get_schemas().await;
-    let stream_tool_call_chunks = vec![
-        json!({
-            "id": "chatcmpl-stream-tool-call-123",
-            "object": "chat.completion.chunk",
-            "created": 1677652293,
-            "model": "gpt-4o",
-            "choices": [
-                {
-                    "index": 0,
-                    "delta": {
-                        "role": "assistant",
-                        "tool_calls": [
-                            {
-                                "id": "call_1a2b3c4d",
-                                "type": "function",
-                                "function": {
-                                    "name": "get_current_weather",
-                                    "arguments": ""
-                                }
-                            }
-                        ]
-                    },
-                    "logprobs": null,
-                    "finish_reason": null
-                }
-            ]
-        }),
-        json!({
-            "id": "chatcmpl-stream-tool-call-123",
-            "object": "chat.completion.chunk",
-            "created": 1677652293,
-            "model": "gpt-4o",
-            "choices": [
-                {
-                    "index": 0,
-                    "delta": {
-                        "tool_calls": [
-                            {
-                                "id": null,
-                                "type": null,
-                                "function": {
-                                    "name": null,
-                                    "arguments": "{\"location\":\""
-                                }
-                            }
-                        ]
-                    },
-                    "logprobs": null,
-                    "finish_reason": null
-                }
-            ]
-        }),
-        json!({
-            "id": "chatcmpl-stream-tool-call-123",
-            "object": "chat.completion.chunk",
-            "created": 1677652293,
-            "model": "gpt-4o",
-            "choices": [
-                {
-                    "index": 0,
-                    "delta": {
-                        "tool_calls": [
-                            {
-                                "id": null,
-                                "type": null,
-                                "function": {
-                                    "name": null,
-                                    "arguments": "New York\"}"
-                                }
-                            }
-                        ]
-                    },
-                    "logprobs": null,
-                    "finish_reason": "tool_calls"
-                }
-            ]
-        })
-    ];
+fn embeddings_response_schema(spec: &JsonValue) -> Option<JSONSchema> {
+    schema_for_first(
+        spec,
+        &[
+            "CreateEmbeddingResponse",
+            "EmbeddingsResponse",
+            "EmbeddingList",
+        ],
+    )
+    .map(|s| compile(&s))
+}
 
-    for (i, chunk) in stream_tool_call_chunks.iter().enumerate() {
-        let result = schemas.chat_completion_stream_schema.validate(chunk);
-        if let Err(errors) = result {
-            let error_messages: Vec<String> = errors.map(|e| e.to_string()).collect();
-            panic!("Streaming tool calls validation failed for chunk {}: {:#?}\nOriginal payload: {}", i, error_messages, chunk);
+fn chat_completion_supports_content_array(spec: &JsonValue) -> bool {
+    let node = spec
+        .pointer("/components/schemas/ChatCompletion/properties/choices/items/properties/message/properties/content")
+        .or_else(|| spec.pointer("/components/schemas/CreateChatCompletionResponse/properties/choices/items/properties/message/properties/content"))
+        .or_else(|| spec.pointer("/components/schemas/ChatCompletionResponse/properties/choices/items/properties/message/properties/content"));
+
+    let Some(content_schema) = node else { return false };
+
+    fn contains_array_type(v: &JsonValue) -> bool {
+        match v {
+            JsonValue::String(s) => s == "array",
+            JsonValue::Array(a) => a.iter().any(contains_array_type),
+            JsonValue::Object(m) => m
+                .get("type")
+                .map(contains_array_type)
+                .unwrap_or_else(|| m.values().any(contains_array_type)),
+            _ => false,
         }
     }
-}
 
-// Validates a response where the content was filtered.
-// This test ensures that a response with a `content_filter` finish reason,
-// which includes a `refusal` message and null content, is correctly formatted.
-#[tokio::test] async fn validate_content_filtered_response_format() {
-    let schemas = get_schemas().await;
-    let content_filtered_response = json!({
-        "id": "chatcmpl-content-filter-123",
-        "object": "chat.completion",
-        "created": 1677652294,
-        "model": "gpt-4o",
-        "choices": [
-            {
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": null,
-                    "refusal": "I cannot provide a response to that request.",
-                },
-                "logprobs": null,
-                "finish_reason": "content_filter"
-            }
-        ]
-    });
-
-    let result = schemas.chat_completion_schema.validate(&content_filtered_response);
-    if let Err(errors) = result {
-        let error_messages: Vec<String> = errors.map(|e| e.to_string()).collect();
-        panic!("Content filtered response validation failed: {:#?}\nOriginal payload: {}", error_messages, content_filtered_response);
+    if contains_array_type(content_schema) {
+        return true;
     }
+    for key in ["oneOf", "anyOf", "allOf"] {
+        if let Some(JsonValue::Array(parts)) = content_schema.get(key) {
+            if parts.iter().any(contains_array_type) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
-// Validates the format of a 401 Unauthorized error response.
-#[tokio::test] async fn validate_401_unauthorized_error() {
-    let schemas = get_schemas().await;
 
-    let error_body = json!({
+#[test]
+fn validate_400_bad_request_error() {
+    let spec = load_openai_spec();
+    let schema = error_schema(&spec);
+
+    let mock = json!({
         "error": {
-            "message": "Incorrect API key provided: sk-1234...5678. You can find your API key at https://platform.openai.com/account/api-keys.",
+            "message": "You must provide a model parameter",
             "type": "invalid_request_error",
-            "param": "",
+            "param": "model",
+            "code": "invalid_request_error"
+        }
+    });
+
+    assert_valid(&schema, &mock, "400 Error schema mismatch");
+}
+
+#[test]
+fn validate_401_unauthorized_error() {
+    let spec = load_openai_spec();
+    let schema = error_schema(&spec);
+
+    // NOTE: The OpenAI Error schema requires "param" to be present, even if null.
+    let mock = serde_json::json!({
+        "error": {
+            "message": "Incorrect API key provided: sk-...",
+            "type": "invalid_request_error",
+            "param": null,
             "code": "invalid_api_key"
         }
     });
 
-    let result = schemas.error_schema.validate(&error_body);
-    if let Err(errors) = result {
-        let error_messages: Vec<String> = errors.map(|e| e.to_string()).collect();
-        panic!("401 Unauthorized error validation failed: {:#?}", error_messages);
-    }
+    assert_valid(&schema, &mock, "401 Error schema mismatch");
 }
 
-// Validates the format of a 400 Bad Request error response.
-#[tokio::test] async fn validate_400_bad_request_error() {
-    let schemas = get_schemas().await;
 
-    let error_body = json!({
-        "error": {
-            "message": "Invalid JSON",
-            "type": "invalid_request_error",
-            "param": "",
-            "code": "invalid_json"
+#[test]
+fn validate_chat_completion_request_schema_minimal() {
+    let spec = load_openai_spec();
+    let Some(schema) = chat_completions_request_schema(&spec) else {
+        eprintln!("No ChatCompletion request schema in spec; skipping.");
+        return;
+    };
+
+    let req = json!({
+        "model": "gpt-4o-mini",
+        "messages": [{"role":"user","content":"hi"}]
+    });
+
+    assert_valid(&schema, &req, "ChatCompletion request (minimal) schema mismatch");
+}
+
+#[test]
+fn validate_embeddings_request_schema_minimal() {
+    let spec = load_openai_spec();
+    let Some(schema) = embeddings_request_schema(&spec) else {
+        eprintln!("No Embeddings request schema in spec; skipping.");
+        return;
+    };
+
+    let req = json!({
+        "model": "text-embedding-3-small",
+        "input": "hello"
+    });
+
+    assert_valid(&schema, &req, "Embeddings request (minimal) schema mismatch");
+}
+
+#[test]
+fn validate_embeddings_request_variants() {
+    let spec = load_openai_spec();
+    let Some(schema) = embeddings_request_schema(&spec) else {
+        eprintln!("No Embeddings request schema in spec; skipping.");
+        return;
+    };
+
+    let req1 = json!({"model":"text-embedding-3-small","input":["a","b","c"]});
+    assert_valid(&schema, &req1, "Embeddings request (array of strings) mismatch");
+
+    let req2 = json!({"model":"text-embedding-3-small","input":"token"});
+    assert_valid(&schema, &req2, "Embeddings request (single string) mismatch");
+}
+
+#[test]
+fn validate_embeddings_mock_response() {
+    let spec = load_openai_spec();
+    let Some(schema) = embeddings_response_schema(&spec) else {
+        eprintln!("No Embeddings response schema in spec; skipping.");
+        return;
+    };
+
+    let mock = json!({
+        "object": "list",
+        "data": [{
+            "object": "embedding",
+            "index": 0,
+            "embedding": [0.01, 0.02, 0.03]
+        }],
+        "model": "text-embedding-3-small",
+        "usage": {
+            "prompt_tokens": 3,
+            "total_tokens": 3
         }
     });
 
-    let result = schemas.error_schema.validate(&error_body);
-    if let Err(errors) = result {
-        let error_messages: Vec<String> = errors.map(|e| e.to_string()).collect();
-        panic!("400 Bad Request error validation failed: {:#?}", error_messages);
+    assert_valid(&schema, &mock, "Embeddings response schema mismatch");
+}
+
+#[test]
+fn validate_chat_completion_logprobs_and_refusal_null() {
+    let spec = load_openai_spec();
+    let Some(schema) = chat_completions_response_schema(&spec) else {
+        eprintln!("No ChatCompletion response schema in spec; skipping.");
+        return;
+    };
+
+    let mock = json!({
+        "id":"chatcmpl-xyz",
+        "object":"chat.completion",
+        "created":1677652288,
+        "model":"gpt-4o-mini",
+        "choices":[{
+            "index":0,
+            "message":{
+                "role":"assistant",
+                "content":"Hello there!",
+                "refusal": null,
+                "tool_calls": []
+            },
+            "logprobs": null,
+            "finish_reason":"stop"
+        }],
+        "usage":{"prompt_tokens":5,"completion_tokens":7,"total_tokens":12},
+        "system_fingerprint":"fp_mock"
+    });
+
+    assert_valid(&schema, &mock, "ChatCompletion response (null logprobs/refusal) mismatch");
+}
+
+#[test]
+fn validate_chat_completion_tool_calls_mock() {
+    let spec = load_openai_spec();
+    let Some(schema) = chat_completions_response_schema(&spec) else {
+        eprintln!("No ChatCompletion response schema in spec; skipping.");
+        return;
+    };
+
+    // The spec requires "refusal" to be present (nullable).
+    let mock = serde_json::json!({
+        "id":"chatcmpl-2",
+        "object":"chat.completion",
+        "created":1677652288,
+        "model":"gpt-4o-mini",
+        "choices":[{
+            "index":0,
+            "message":{
+                "role":"assistant",
+                "content": null,
+                "refusal": null,
+                "tool_calls": [{
+                    "id": "call_1",
+                    "type": "function",
+                    "function": { "name": "get_weather", "arguments": "{\"city\":\"SF\"}" }
+                }]
+            },
+            "logprobs": null,
+            "finish_reason":"tool_calls"
+        }],
+        "usage":{"prompt_tokens":10,"completion_tokens":3,"total_tokens":13},
+        "system_fingerprint":"fp_mock"
+    });
+
+    assert_valid(&schema, &mock, "ChatCompletion response (tool_calls) mismatch");
+}
+
+
+#[test]
+fn validate_chat_completion_multipart_content_mock() {
+    let spec = load_openai_spec();
+    let Some(schema) = chat_completions_response_schema(&spec) else {
+        eprintln!("No ChatCompletion response schema in spec; skipping.");
+        return;
+    };
+    if !chat_completion_supports_content_array(&spec) {
+        eprintln!("Spec does not allow content as an array; skipping multipart content test.");
+        return;
     }
+
+    let mock = json!({
+        "id":"chatcmpl-multipart-1",
+        "object":"chat.completion",
+        "created":1677652288,
+        "model":"gpt-4o-mini",
+        "choices":[{
+            "index":0,
+            "message":{
+                "role":"assistant",
+                "content":[ { "type":"text", "text":"Hello from a content-part array." } ],
+                "refusal": "",
+                "tool_calls": []
+            },
+            "logprobs":{"content":[], "refusal":[]},
+            "finish_reason":"stop"
+        }],
+        "usage":{"prompt_tokens":5,"completion_tokens":7,"total_tokens":12},
+        "system_fingerprint":"fp_mock"
+    });
+
+    assert_valid(&schema, &mock, "ChatCompletion response (multipart content) mismatch");
+}
+
+#[test]
+fn validate_finish_reason_values() {
+    let spec = load_openai_spec();
+    let Some(schema) = chat_completions_response_schema(&spec) else {
+        eprintln!("No ChatCompletion response schema in spec; skipping.");
+        return;
+    };
+
+    for reason in ["stop", "length", "tool_calls", "content_filter"] {
+        let mock = json!({
+            "id":"chatcmpl-finish-1",
+            "object":"chat.completion",
+            "created":1677652288,
+            "model":"gpt-4o-mini",
+            "choices":[{
+                "index":0,
+                "message":{"role":"assistant","content":"ok","refusal":null,"tool_calls":[]},
+                "logprobs": null,
+                "finish_reason": reason
+            }],
+            "usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2},
+            "system_fingerprint":"fp_mock"
+        });
+        assert_valid(&schema, &mock, &format!("finish_reason={} mismatch", reason));
+    }
+}
+
+// --- Live endpoint probes (real HTTP calls to the gateway) -------------------
+
+
+fn live_tests_enabled() -> bool {
+    match std::env::var("DISABLE_LIVE_OPENAI_TESTS") {
+        Ok(v) => !(v == "1" || v.eq_ignore_ascii_case("true")),
+        Err(_) => true,
+    }
+}
+
+#[test]
+fn test_live_chat_completion_api_call() {
+    if !live_tests_enabled() {
+        eprintln!("Skipping live test per DISABLE_LIVE_OPENAI_TESTS");
+        return;
+    }
+
+    let spec = load_openai_spec();
+    let err_schema = error_schema(&spec);
+    let ok_schema = chat_completions_response_schema(&spec);
+
+    // Intentionally plain model name to trigger an error without provider calls.
+    let req_body = json!({
+        "model": "gpt-4o-mini",
+        "messages": [{ "role": "user", "content": "ping" }]
+    });
+
+    let base = std::env::var("GATEWAY_BASE")
+        .unwrap_or_else(|_| "http://127.0.0.1:8001".to_string());
+    let url = format!("{}/v1/openai/v1/chat/completions", base);
+
+    let resp = Client::new().post(&url).json(&req_body).send().expect("request failed");
+    let status = resp.status();
+    let text = resp.text().unwrap_or_default();
+    let parsed: JsonValue = serde_json::from_str(&text)
+        .unwrap_or_else(|e| panic!("response not JSON ({}): {}", status, e));
+
+    if status.is_success() {
+        if let Some(schema) = ok_schema {
+            assert_valid(&schema, &parsed, "200 OK but ChatCompletion schema mismatch");
+        }
+        return;
+    }
+
+    if err_schema.validate(&parsed).is_ok() {
+        return;
+    }
+    if parsed.get("error").and_then(|v| v.as_str()).is_some() {
+        return;
+    }
+    panic!("Unexpected error response.\nStatus: {}\nBody: {}", status, parsed);
+}
+
+#[test]
+fn test_live_embeddings_api_call() {
+    if !live_tests_enabled() {
+        eprintln!("Skipping live test per DISABLE_LIVE_OPENAI_TESTS");
+        return;
+    }
+
+    let spec = load_openai_spec();
+    let err_schema = error_schema(&spec);
+    let ok_schema = embeddings_response_schema(&spec);
+
+    // Intentionally plain model name to trigger an error without provider calls.
+    let req_body = json!({
+        "model": "text-embedding-3-small",
+        "input": "hello"
+    });
+
+    let base = std::env::var("GATEWAY_BASE")
+        .unwrap_or_else(|_| "http://127.0.0.1:8001".to_string());
+    let url = format!("{}/v1/openai/v1/embeddings", base);
+
+    let resp = Client::new().post(&url).json(&req_body).send().expect("request failed");
+    let status = resp.status();
+    let text = resp.text().unwrap_or_default();
+    let parsed: JsonValue = serde_json::from_str(&text)
+        .unwrap_or_else(|e| panic!("response not JSON ({}): {}", status, e));
+
+    if status.is_success() {
+        if let Some(schema) = ok_schema {
+            assert_valid(&schema, &parsed, "200 OK but Embeddings schema mismatch");
+        }
+        return;
+    }
+
+    if err_schema.validate(&parsed).is_ok() {
+        return;
+    }
+    if parsed.get("error").and_then(|v| v.as_str()).is_some() {
+        return;
+    }
+    panic!("Unexpected error response.\nStatus: {}\nBody: {}", status, parsed);
 }

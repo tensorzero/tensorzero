@@ -1,0 +1,78 @@
+name: openai-compliance
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  openai-compliance:
+    runs-on: ubuntu-latest
+
+    env:
+      RUSTFLAGS: -Dwarnings
+      CARGO_TERM_COLOR: always
+      # Use the locally downloaded spec in CI so builds are offline
+      OPENAI_OPENAPI_FILE: ${{ github.workspace }}/specs/openai.documented.yml
+      # Live tests talk to the locally launched gateway
+      GATEWAY_BASE: http://127.0.0.1:8001
+      DISABLE_LIVE_OPENAI_TESTS: 0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry + build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Fetch Stainless OpenAI documented schema
+        run: |
+          set -euo pipefail
+          mkdir -p specs
+          url="https://app.stainless.com/api/spec/documented/openai/openapi.documented.yml"
+          for i in 1 2 3 4 5; do
+            if curl -fL "$url" -o specs/openai.documented.yml; then
+              echo "Downloaded Stainless spec"
+              break
+            fi
+            echo "Retry $i..."; sleep 2
+          done
+          test -s specs/openai.documented.yml
+
+      - name: Build gateway (performance)
+        run: |
+          cargo build --profile performance --bin gateway
+
+      - name: Launch gateway
+        run: |
+          set -euo pipefail
+          target/performance/gateway --config-file gateway/tensorzero.toml &
+          echo $! > gateway.pid
+          # wait for health endpoint
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:8001/v1/health > /dev/null; then
+              echo "Gateway is up"; exit 0
+            fi
+            sleep 1
+          done
+          echo "Gateway failed to start" >&2; exit 1
+
+      - name: Run OpenAI compliance tests
+        run: |
+          cargo test --test openai_api_validation -- --nocapture
+
+      - name: Teardown
+        if: always()
+        run: |
+          if [ -f gateway.pid ]; then
+            kill $(cat gateway.pid) || true
+          fi
