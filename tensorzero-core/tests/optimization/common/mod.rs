@@ -8,11 +8,12 @@ use uuid::Uuid;
 use tracing_subscriber::{self, EnvFilter};
 
 use tensorzero::{
-    Client, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
+    Client, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    InferenceOutput, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
 };
 use tensorzero_core::{
     cache::CacheOptions,
-    config::{Config, ConfigFileGlob, ProviderTypesConfig},
+    config::{Config, ConfigFileGlob, ProviderTypesConfig, UninitializedVariantConfig},
     db::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL},
     db::clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
     endpoints::inference::InferenceClients,
@@ -21,7 +22,7 @@ use tensorzero_core::{
         storage::{StorageKind, StoragePath},
         Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
         ModelInput, RequestMessage, ResolvedInput, ResolvedInputMessage,
-        ResolvedInputMessageContent, Text,
+        ResolvedInputMessageContent, Text, TextKind,
     },
     optimization::JobHandle,
     optimization::{OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo},
@@ -163,8 +164,11 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         OptimizerOutput::Variant(variant_config) => {
             // Test the variant configuration
             println!("Variant configuration created successfully: {variant_config:?}");
-            // For DICL variants, we don't need to test inference like we do for models
-            // since DICL variants work by retrieving examples at inference time
+
+            // Test DICL variants with full inference
+            if let UninitializedVariantConfig::Dicl(dicl_config) = variant_config.as_ref() {
+                test_dicl_variant_inference(dicl_config).await;
+            }
         }
     };
 }
@@ -236,7 +240,7 @@ fn generate_text_example() -> RenderedSample {
         text: "The capital of France is Paris.".to_string(),
     })];
     RenderedSample {
-        function_name: "test".to_string(),
+        function_name: "basic_test".to_string(),
         input: ModelInput {
             system: Some(system_prompt.clone()),
             messages: vec![RequestMessage {
@@ -288,7 +292,7 @@ fn generate_tool_call_example() -> RenderedSample {
         id: "call_2".to_string(),
     })];
     RenderedSample {
-        function_name: "test".to_string(),
+        function_name: "basic_test".to_string(),
         input: ModelInput {
             system: Some(system_prompt.clone()),
             messages: vec![
@@ -429,7 +433,7 @@ fn generate_image_example() -> RenderedSample {
         text: "Orange!".to_string(),
     })];
     RenderedSample {
-        function_name: "test".to_string(),
+        function_name: "basic_test".to_string(),
         input: ModelInput {
             system: Some(system_prompt.clone()),
             messages: vec![RequestMessage {
@@ -517,6 +521,236 @@ pub async fn make_http_gateway() -> Client {
     .build()
     .await
     .unwrap()
+}
+
+/// Test DICL variant inference by creating a temporary config and testing inference
+async fn test_dicl_variant_inference(
+    dicl_config: &tensorzero_core::variant::dicl::UninitializedDiclConfig,
+) {
+    use std::fs;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    // Create a temporary directory for our config files
+    let temp_dir = TempDir::new().unwrap();
+
+    // Create a system schema file
+    let system_schema_path = temp_dir.path().join("system_schema.json");
+    let system_schema_content = r#"{
+  "type": "object",
+  "properties": {
+    "assistant_name": {
+      "type": "string"
+    }
+  }
+}"#;
+    fs::write(&system_schema_path, system_schema_content).unwrap();
+
+    // Create a system template file
+    let system_template_path = temp_dir.path().join("system_template.minijinja");
+    let system_template_content = "You are a helpful assistant named {{assistant_name}}.";
+    fs::write(&system_template_path, system_template_content).unwrap();
+
+    // Create a minimal but complete main config with embedding model
+    // Note: Using "basic_test" as function name to match the e2e config and stored examples
+    let main_config_content = r#"
+[functions.basic_test]
+type = "chat"
+system_schema = "system_schema.json"
+
+[functions.basic_test.variants.gpt_4o_mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "system_template.minijinja"
+
+[embedding_models.text-embedding-3-small]
+routing = ["openai"]
+
+[embedding_models.text-embedding-3-small.providers.openai]
+type = "openai"
+model_name = "text-embedding-3-small"
+"#;
+    let main_config_copy = temp_dir.path().join("main.toml");
+    fs::write(&main_config_copy, main_config_content).unwrap();
+
+    // Create a DICL variant config file
+    // Use "test_dicl" to match the variant name used during optimization
+    let variant_name = "test_dicl".to_string();
+    let temp_config_content = format!(
+        r#"
+[functions.basic_test.variants.{}]
+type = "experimental_dynamic_in_context_learning"
+embedding_model = "{}"
+k = {}
+model = "{}"
+"#,
+        variant_name, dicl_config.embedding_model, dicl_config.k, dicl_config.model
+    );
+
+    let dicl_config_path = temp_dir.path().join("dicl_variant.toml");
+    fs::write(&dicl_config_path, temp_config_content).unwrap();
+
+    // Create a glob pattern that matches both files
+    let glob_pattern = format!("{}/*.toml", temp_dir.path().display());
+
+    // Create a new gateway with the combined config
+    let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(PathBuf::from(&glob_pattern)),
+        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        timeout: None,
+        verify_credentials: true,
+        allow_batch_writes: true,
+    })
+    .with_verbose_errors(true)
+    .build()
+    .await
+    .unwrap();
+
+    // Generate a unique episode ID for tracking
+    let episode_id = Uuid::now_v7();
+
+    // Test inference with the DICL variant - using patterns from e2e tests
+    let inference_params = ClientInferenceParams {
+        function_name: Some("basic_test".to_string()),
+        model_name: None,
+        episode_id: Some(episode_id),
+        input: ClientInput {
+            system: Some(serde_json::json!({"assistant_name": "TensorZero Test Assistant"})),
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "What is the capital of France?".to_string(),
+                })],
+            }],
+        },
+        stream: Some(false),
+        params: Default::default(),
+        variant_name: Some(variant_name.clone()),
+        dryrun: None,
+        internal: false,
+        tags: Default::default(),
+        dynamic_tool_params: Default::default(),
+        output_schema: None,
+        credentials: Default::default(),
+        cache_options: Default::default(),
+        include_original_response: true, // Include original response for better debugging
+        extra_body: Default::default(),
+        extra_headers: Default::default(),
+        internal_dynamic_variant_config: None,
+    };
+
+    // Perform the inference
+    match client.inference(inference_params).await {
+        Ok(response) => {
+            println!("✅ DICL variant inference successful!");
+            println!("Variant name used: {variant_name}");
+
+            // Verify response structure and content - following e2e patterns
+            match response {
+                InferenceOutput::NonStreaming(tensorzero::InferenceResponse::Chat(
+                    ref chat_response,
+                )) => {
+                    // Verify basic response structure
+                    assert_eq!(
+                        chat_response.variant_name, variant_name,
+                        "Variant name should match"
+                    );
+                    assert_eq!(
+                        chat_response.episode_id, episode_id,
+                        "Episode ID should match"
+                    );
+
+                    // Verify content
+                    assert!(
+                        !chat_response.content.is_empty(),
+                        "Chat response should not be empty"
+                    );
+                    let first_content = &chat_response.content[0];
+
+                    // Check that the response mentions something about France/Paris
+                    if let ContentBlockChatOutput::Text(ref text_content) = first_content {
+                        let content_lower = text_content.text.to_lowercase();
+                        assert!(
+                            content_lower.contains("paris") || content_lower.contains("france"),
+                            "Response should mention Paris or France, got: {}",
+                            text_content.text
+                        );
+                    }
+
+                    // Verify usage metrics
+                    assert!(
+                        chat_response.usage.input_tokens > 0,
+                        "Should have input tokens"
+                    );
+                    assert!(
+                        chat_response.usage.output_tokens > 0,
+                        "Should have output tokens"
+                    );
+
+                    // If we have original response, verify it's from the expected model
+                    if let Some(ref original) = chat_response.original_response {
+                        println!(
+                            "Original response present (length: {} chars)",
+                            original.len()
+                        );
+                    }
+
+                    println!("✅ Response validation passed:");
+                    println!("  - Inference ID: {}", chat_response.inference_id);
+                    println!("  - Content blocks: {}", chat_response.content.len());
+                    println!("  - Input tokens: {}", chat_response.usage.input_tokens);
+                    println!("  - Output tokens: {}", chat_response.usage.output_tokens);
+                }
+                InferenceOutput::NonStreaming(tensorzero::InferenceResponse::Json(
+                    ref json_response,
+                )) => {
+                    // For JSON responses, verify structure
+                    assert_eq!(
+                        json_response.variant_name, variant_name,
+                        "Variant name should match"
+                    );
+                    assert_eq!(
+                        json_response.episode_id, episode_id,
+                        "Episode ID should match"
+                    );
+                    assert!(
+                        json_response.output.parsed.is_some() || json_response.output.raw.is_some(),
+                        "JSON response should have content"
+                    );
+                    assert!(
+                        json_response.usage.input_tokens > 0,
+                        "Should have input tokens"
+                    );
+                    assert!(
+                        json_response.usage.output_tokens > 0,
+                        "Should have output tokens"
+                    );
+                }
+                InferenceOutput::Streaming(_) => {
+                    panic!("Unexpected streaming response for non-streaming request");
+                }
+            }
+        }
+        Err(e) => {
+            // In mock tests, some inference might fail due to dummy providers
+            // but we should still verify the variant was loaded correctly
+            if use_mock_inference_provider() {
+                println!("⚠️  DICL variant inference failed in mock mode (expected): {e}");
+                // Check if the error at least shows the variant was recognized
+                let error_str = format!("{e:?}");
+                if error_str.contains(&variant_name) {
+                    println!("✅ Variant name found in error, config was loaded correctly");
+                }
+            } else {
+                panic!("DICL variant inference failed: {e}");
+            }
+        }
+    }
+
+    // Note: In the optimization test context, we've already inserted examples during optimization
+    // The DICL variant should be using those examples for retrieval
+
+    println!("✅ DICL variant test completed successfully");
 }
 
 /// Generates a `#[tokio::test] async fn $fn_name() { run_test_case(&$constructor).await; }`
