@@ -4,7 +4,11 @@ version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
+    "clickhouse-connect",
     "ipykernel",
+    "openai",
+    "pandas",
     "tensorzero",
     "toml",
+    "tqdm",
 ]
