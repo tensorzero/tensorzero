@@ -32,6 +32,8 @@ pub mod migration_0031;
 pub mod migration_0032;
 pub mod migration_0033;
 pub mod migration_0034;
+pub mod migration_0035;
+pub mod migration_0036;
 
 /// Returns true if the table exists, false if it does not
 /// Errors if the query fails
@@ -43,6 +45,36 @@ pub async fn check_table_exists(
 ) -> Result<bool, Error> {
     let query = format!(
         "SELECT 1 FROM system.tables WHERE database = '{}' AND name = '{}'",
+        clickhouse.database(),
+        table
+    );
+    match clickhouse.run_query_synchronous_no_params(query).await {
+        Err(e) => {
+            return Err(ErrorDetails::ClickHouseMigration {
+                id: migration_id.to_string(),
+                message: e.to_string(),
+            }
+            .into())
+        }
+        Ok(response) => {
+            if response.response.trim() != "1" {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(true)
+}
+
+/// Returns true if the table exists in the detached state, false if it does not
+/// Errors if the query fails
+/// This function also works to check for materialized views
+pub async fn check_detached_table_exists(
+    clickhouse: &ClickHouseConnectionInfo,
+    table: &str,
+    migration_id: &str,
+) -> Result<bool, Error> {
+    let query = format!(
+        "SELECT 1 FROM system.detached_tables WHERE database = '{}' AND table = '{}'",
         clickhouse.database(),
         table
     );
