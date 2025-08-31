@@ -62,7 +62,23 @@ impl Migration for Migration0003<'_> {
 
         let database = self.clickhouse.database();
 
-        for table in tables {
+        for table in &tables {
+            let show_create_query = format!("SHOW CREATE TABLE {table}");
+            match self
+                .clickhouse
+                .run_query_synchronous_no_params(show_create_query)
+                .await
+            {
+                Ok(response) => {
+                    println!("SHOW CREATE TABLE for {table}:\n{}", response.response);
+                }
+                Err(e) => {
+                    println!("Error getting SHOW CREATE TABLE for {table}: {e}");
+                }
+            }
+        }
+
+        for table in &tables {
             let query = format!(
                 r"SELECT EXISTS(
                     SELECT 1
@@ -95,6 +111,24 @@ impl Migration for Migration0003<'_> {
             "DemonstrationFeedbackTagView",
             "FloatMetricFeedbackTagView",
         ];
+
+        for view in &views {
+            let query = format!("SHOW CREATE VIEW {view}");
+            match self.clickhouse.run_query_synchronous_no_params(query).await {
+                Err(e) => {
+                    return Err(ErrorDetails::ClickHouseMigration {
+                        id: "0003".to_string(),
+                        message: e.to_string(),
+                    }
+                    .into());
+                }
+                Ok(response) => {
+                    if response.response.trim() != "1" {
+                        return Ok(true);
+                    }
+                }
+            }
+        }
 
         for view in views {
             if !check_table_exists(self.clickhouse, view, "0003").await? {
