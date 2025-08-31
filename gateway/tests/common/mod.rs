@@ -26,7 +26,6 @@ pub async fn start_gateway_on_random_port(
     std::fs::write(tmpfile.path(), config_str).unwrap();
 
     let mut builder = Command::new(GATEWAY_PATH);
-    println!("Running gateway binary at {GATEWAY_PATH}");
     builder
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())

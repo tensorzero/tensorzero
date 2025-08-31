@@ -177,16 +177,6 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     let s3_fixtures_path = std::env::var("TENSORZERO_S3_FIXTURES_PATH")
         .unwrap_or_else(|_| format!("{MANIFEST_PATH}/../ui/fixtures/s3-fixtures"));
     let s3_fixtures_path = &s3_fixtures_path;
-    println!("Inserting large fixtures from S3 at {s3_fixtures_path}");
-    // Print all items in the s3_fixtures_path directory
-    if let Ok(entries) = std::fs::read_dir(s3_fixtures_path) {
-        println!("Contents of {s3_fixtures_path}:");
-        for entry in entries.flatten() {
-            println!("  - {}", entry.file_name().to_string_lossy());
-        }
-    } else {
-        println!("Failed to read directory: {s3_fixtures_path}");
-    }
 
     let ClickHouseConnectionInfo::Production {
         database_url,

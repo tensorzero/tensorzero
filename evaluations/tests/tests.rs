@@ -1168,36 +1168,17 @@ async fn test_parse_args() {
         .contains("invalid value 'invalid' for '--format <FORMAT>'"));
 }
 
-// #[tokio::test]
-// async fn test_run_evaluation_binary() {
-//     let bin_path = env!("CARGO_BIN_EXE_evaluations");
-//     println!("Running evaluations binary at {bin_path}");
-//     let output = std::process::Command::new(bin_path)
-//         .output()
-//         .expect("Failed to execute evaluations binary");
-//     let output_str = String::from_utf8(output.stdout).unwrap();
-//     assert!(output_str.is_empty());
-//     let stderr_str = String::from_utf8(output.stderr).unwrap();
-//     assert!(stderr_str.contains("the following required arguments were not provided:"));
-// }
-
 #[tokio::test]
 async fn test_run_evaluation_binary() {
     let bin_path = env!("CARGO_BIN_EXE_evaluations");
-
-    let result = std::process::Command::new(bin_path).output();
-
-    match result {
-        Ok(output) => {
-            let output_str = String::from_utf8(output.stdout).unwrap();
-            assert!(output_str.is_empty());
-            let stderr_str = String::from_utf8(output.stderr).unwrap();
-            assert!(stderr_str.contains("the following required arguments were not provided:"));
-        }
-        Err(e) => {
-            panic!("Failed to execute evaluations binary: {e:?}");
-        }
-    }
+    println!("Running evaluations binary at {bin_path}");
+    let output = std::process::Command::new(bin_path)
+        .output()
+        .expect("Failed to execute evaluations binary");
+    let output_str = String::from_utf8(output.stdout).unwrap();
+    assert!(output_str.is_empty());
+    let stderr_str = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr_str.contains("the following required arguments were not provided:"));
 }
 
 #[tokio::test(flavor = "multi_thread")]

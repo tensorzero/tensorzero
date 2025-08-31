@@ -137,12 +137,6 @@ tracing-test = { workspace = true }
 tensorzero = { path = "../clients/rust" }
 paste = "1.0.15"
 base64 = "0.22.1"
-aws-sdk-s3 = { version = "1.103.0", default-features = false, features = [
-    "behavior-version-latest",
-    "sigv4a",
-    "rt-tokio",
-    "default-https-client",
-] }
 aws-credential-types = { version = "1.2.2", features = [
     "hardcoded-credentials",
 ] }
