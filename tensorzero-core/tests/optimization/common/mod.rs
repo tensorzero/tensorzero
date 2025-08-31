@@ -687,19 +687,12 @@ model = "{}"
                         "Should have output tokens"
                     );
 
-                    // If we have original response, verify it's from the expected model
-                    if let Some(ref original) = chat_response.original_response {
-                        println!(
-                            "Original response present (length: {} chars)",
-                            original.len()
-                        );
-                    }
-
-                    println!("✅ Response validation passed:");
-                    println!("  - Inference ID: {}", chat_response.inference_id);
-                    println!("  - Content blocks: {}", chat_response.content.len());
-                    println!("  - Input tokens: {}", chat_response.usage.input_tokens);
-                    println!("  - Output tokens: {}", chat_response.usage.output_tokens);
+                    // DICL should have significantly more input tokens due to retrieved examples
+                    assert!(
+                        chat_response.usage.input_tokens > 500,
+                        "DICL should use significantly more input tokens due to retrieved examples. Got: {} tokens, expected > 500",
+                        chat_response.usage.input_tokens
+                    );
                 }
                 InferenceOutput::NonStreaming(tensorzero::InferenceResponse::Json(
                     ref json_response,

@@ -2,6 +2,4 @@
 import type { ContentBlockChatOutput } from "./ContentBlockChatOutput";
 import type { JsonInferenceOutput } from "./JsonInferenceOutput";
 
-export type StoredOutput =
-  | { Chat: Array<ContentBlockChatOutput> }
-  | { Json: JsonInferenceOutput };
+export type StoredOutput = Array<ContentBlockChatOutput> | JsonInferenceOutput;
