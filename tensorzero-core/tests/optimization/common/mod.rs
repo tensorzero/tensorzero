@@ -1,7 +1,8 @@
 #![expect(clippy::unwrap_used, clippy::panic, clippy::print_stdout)]
 use base64::Engine;
 use serde_json::json;
-use std::collections::HashMap;
+use std::{collections::HashMap, fs};
+use tempfile::TempDir;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
@@ -26,6 +27,7 @@ use tensorzero_core::{
     },
     optimization::JobHandle,
     optimization::{OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo},
+    stored_inference::StoredOutput,
     tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
     variant::JsonMode,
 };
@@ -260,9 +262,7 @@ fn generate_text_example() -> RenderedSample {
             }],
         },
         output: Some(output.clone()),
-        stored_output: Some(tensorzero_core::stored_inference::StoredOutput::Chat(
-            output,
-        )),
+        stored_output: Some(StoredOutput::Chat(output)),
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
         tool_params: None,
@@ -394,9 +394,7 @@ fn generate_tool_call_example() -> RenderedSample {
             ],
         },
         output: Some(tool_call_output.clone()),
-        stored_output: Some(tensorzero_core::stored_inference::StoredOutput::Chat(
-            tool_call_output,
-        )),
+        stored_output: Some(StoredOutput::Chat(tool_call_output)),
         tool_params: Some(ToolCallConfigDatabaseInsert {
             tools_available: vec![Tool {
                 name: "get_weather".to_string(),
@@ -483,7 +481,7 @@ fn generate_image_example() -> RenderedSample {
             }],
         },
         output: Some(output.clone()),
-        stored_output: Some(tensorzero_core::stored_inference::StoredOutput::Chat(output)),
+        stored_output: Some(StoredOutput::Chat(output)),
         tool_params: None,
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
@@ -527,11 +525,7 @@ pub async fn make_http_gateway() -> Client {
 async fn test_dicl_variant_inference(
     dicl_config: &tensorzero_core::variant::dicl::UninitializedDiclConfig,
 ) {
-    use std::fs;
-    use std::path::PathBuf;
-    use tempfile::TempDir;
-
-    // Create a temporary directory for our config files
+    // Create a temporary directory for our config and schema files
     let temp_dir = TempDir::new().unwrap();
 
     // Create a system schema file
@@ -551,9 +545,10 @@ async fn test_dicl_variant_inference(
     let system_template_content = "You are a helpful assistant named {{assistant_name}}.";
     fs::write(&system_template_path, system_template_content).unwrap();
 
-    // Create a minimal but complete main config with embedding model
-    // Note: Using "basic_test" as function name to match the e2e config and stored examples
-    let main_config_content = r#"
+    // Create a single complete config file with both base variant and DICL variant
+    let variant_name = "test_dicl".to_string();
+    let config_content = format!(
+        r#"
 [functions.basic_test]
 type = "chat"
 system_schema = "system_schema.json"
@@ -563,39 +558,28 @@ type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "system_template.minijinja"
 
+[functions.basic_test.variants.{}]
+type = "experimental_dynamic_in_context_learning"
+embedding_model = "{}"
+k = {}
+model = "{}"
+
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]
 
 [embedding_models.text-embedding-3-small.providers.openai]
 type = "openai"
 model_name = "text-embedding-3-small"
-"#;
-    let main_config_copy = temp_dir.path().join("main.toml");
-    fs::write(&main_config_copy, main_config_content).unwrap();
-
-    // Create a DICL variant config file
-    // Use "test_dicl" to match the variant name used during optimization
-    let variant_name = "test_dicl".to_string();
-    let temp_config_content = format!(
-        r#"
-[functions.basic_test.variants.{}]
-type = "experimental_dynamic_in_context_learning"
-embedding_model = "{}"
-k = {}
-model = "{}"
 "#,
         variant_name, dicl_config.embedding_model, dicl_config.k, dicl_config.model
     );
 
-    let dicl_config_path = temp_dir.path().join("dicl_variant.toml");
-    fs::write(&dicl_config_path, temp_config_content).unwrap();
+    let config_path = temp_dir.path().join("tensorzero.toml");
+    fs::write(&config_path, config_content).unwrap();
 
-    // Create a glob pattern that matches both files
-    let glob_pattern = format!("{}/*.toml", temp_dir.path().display());
-
-    // Create a new gateway with the combined config
+    // Create a new gateway with the single config file
     let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
-        config_file: Some(PathBuf::from(&glob_pattern)),
+        config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
         verify_credentials: true,
@@ -725,24 +709,9 @@ model = "{}"
             }
         }
         Err(e) => {
-            // In mock tests, some inference might fail due to dummy providers
-            // but we should still verify the variant was loaded correctly
-            if use_mock_inference_provider() {
-                println!("⚠️  DICL variant inference failed in mock mode (expected): {e}");
-                // Check if the error at least shows the variant was recognized
-                let error_str = format!("{e:?}");
-                if error_str.contains(&variant_name) {
-                    println!("✅ Variant name found in error, config was loaded correctly");
-                }
-            } else {
-                panic!("DICL variant inference failed: {e}");
-            }
+            panic!("DICL variant inference failed: {e}");
         }
     }
-
-    // Note: In the optimization test context, we've already inserted examples during optimization
-    // The DICL variant should be using those examples for retrieval
-
     println!("✅ DICL variant test completed successfully");
 }
 
