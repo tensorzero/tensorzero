@@ -387,7 +387,7 @@ impl StoredSample for StoredInference {
                 tags: example.tags,
             },
             StoredInference::Json(example) => {
-                let output = json_output_to_content_block_chat_output(example.output);
+                let output = json_output_to_content_block_chat_output(example.output.clone());
                 let dispreferred_outputs = example
                     .dispreferred_outputs
                     .into_iter()
