@@ -77,7 +77,7 @@ routing = ["azure"]
 [models."gpt-4o-mini-azure".providers.azure]
 type = "azure"
 deployment_id = "gpt4o-mini-20240718"
-endpoint = "https://t0-azure-openai-east.openai.azure.com"
+endpoint = "https://joshu-mdyrg999-eastus2.cognitiveservices.azure.com/"
 
 
 [models."gpt-4o-mini-azure-dynamic"]
@@ -86,7 +86,7 @@ routing = ["azure"]
 [models."gpt-4o-mini-azure-dynamic".providers.azure]
 type = "azure"
 deployment_id = "gpt4o-mini-20240718"
-endpoint = "https://t0-azure-openai-east.openai.azure.com"
+endpoint = "https://joshu-mdyrg999-eastus2.cognitiveservices.azure.com/"
 api_key_location = "dynamic::azure_openai_api_key"
 
 [models."llama-3.3-70b-instruct-azure"]
@@ -95,7 +95,7 @@ routing = ["azure"]
 [models."llama-3.3-70b-instruct-azure".providers.azure]
 type = "azure"
 deployment_id = "Llama-3.3-70B-Instruct"
-endpoint = ""
+endpoint = "https://joshu-mdyrg999-eastus2.cognitiveservices.azure.com/"
 
 [models."llama-3.3-70b-instruct-azure-dynamic"]
 routing = ["azure"]
@@ -103,7 +103,7 @@ routing = ["azure"]
 [models."llama-3.3-70b-instruct-azure-dynamic".providers.azure]
 type = "azure"
 deployment_id = "Llama-3.3-70B-Instruct"
-endpoint = ""
+endpoint = "https://joshu-mdyrg999-eastus2.cognitiveservices.azure.com/"
 api_key_location = "dynamic::azure_openai_api_key"
 
 ## Groq
@@ -741,7 +741,7 @@ routing = ["azure"]
 
 [embedding_models.azure-text-embedding-3-small.providers.azure]
 type = "azure"
-endpoint = "https://t0-azure-openai-east.openai.azure.com/"
+endpoint = "https://joshu-mdyrg999-eastus2.cognitiveservices.azure.com/"
 deployment_id = "text-embedding-3-small"
 
 [embedding_models.voyage_3_5_lite_256]
