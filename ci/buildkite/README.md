@@ -36,8 +36,15 @@ To run these tests locally, you can do something like `docker compose -f tensorz
 One super neat feature of buildkite is the open-souce [MCP server](https://github.com/buildkite/buildkite-mcp-server) they offer. Once you install this you can run a command like `claude mcp add buildkite --env BUILDKITE_API_TOKEN=bkua_xxxxxxxx -- buildkite-mcp-server stdio` to give Claude access to the MCP server.
 You can use it to ask the status of jobs and also why they're failing etc.
 
+## XUnit viewer
+
+[Xunit viewer](https://www.npmjs.com/package/xunit-viewer) is a neat utility for generating HTML reports from JUnit XML files. It can be used to visualize the results of your tests and identify areas for improvement.
+
+`xunit-viewer -r target/nextest/e2e/junit.xml` to run on an example JUnit.
+
 ## Areas for incremental improvement
 
 - improve build caching locally
 - use remote Docker builder for better caching and faster container builds
 - work on limiting the size of test docker images, they are way too big
+- make sure the e2e tests also map the JUnit files to the local filesystem so they can be exported.
