@@ -421,9 +421,18 @@ fn json_output_to_content_block_chat_output(
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
+#[serde(untagged)]
 pub enum StoredOutput {
     Chat(Vec<ContentBlockChatOutput>),
     Json(JsonInferenceOutput),
+}
+
+impl StoredOutput {
+    /// Serialize the stored output to a JSON string.
+    /// Returns an empty string if serialization fails.
+    pub fn to_json_string(&self) -> String {
+        serde_json::to_string(self).unwrap_or_default()
+    }
 }
 
 /// Represents an inference that has been prepared for fine-tuning.
