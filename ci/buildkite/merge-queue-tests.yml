@@ -137,7 +137,7 @@ steps:
         clickhouse_version:
           # Temporary
           # - "24.12-alpine"
-          - "latest-alpine"
+          - "25.7-alpine"
     env:
       TENSORZERO_CLICKHOUSE_VERSION: "{{matrix.clickhouse_version}}"
     depends_on:

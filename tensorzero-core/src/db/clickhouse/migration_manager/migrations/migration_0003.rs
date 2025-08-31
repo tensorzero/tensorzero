@@ -90,6 +90,7 @@ impl Migration for Migration0003<'_> {
             );
             match self.clickhouse.run_query_synchronous_no_params(query).await {
                 Err(e) => {
+                    println!("Error checking for 'tags' column in {table}: {e}");
                     return Err(ErrorDetails::ClickHouseMigration {
                         id: "0003".to_string(),
                         message: e.to_string(),
@@ -98,6 +99,7 @@ impl Migration for Migration0003<'_> {
                 }
                 Ok(response) => {
                     if response.response.trim() != "1" {
+                        println!("'tags' column not found in {table}");
                         return Ok(true);
                     }
                 }
@@ -115,23 +117,18 @@ impl Migration for Migration0003<'_> {
         for view in &views {
             let query = format!("SHOW CREATE VIEW {view}");
             match self.clickhouse.run_query_synchronous_no_params(query).await {
-                Err(e) => {
-                    return Err(ErrorDetails::ClickHouseMigration {
-                        id: "0003".to_string(),
-                        message: e.to_string(),
-                    }
-                    .into());
-                }
                 Ok(response) => {
-                    if response.response.trim() != "1" {
-                        return Ok(true);
-                    }
+                    println!("SHOW CREATE TABLE for {view}:\n{}", response.response);
+                }
+                Err(e) => {
+                    println!("Error getting SHOW CREATE TABLE for {view}: {e}");
                 }
             }
         }
 
         for view in views {
             if !check_table_exists(self.clickhouse, view, "0003").await? {
+                println!("Table {view} not found");
                 return Ok(true);
             }
         }
