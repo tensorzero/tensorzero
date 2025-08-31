@@ -21,8 +21,8 @@ use tensorzero_core::{
     inference::types::{
         resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
-        Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
-        ModelInput, RequestMessage, ResolvedInput, ResolvedInputMessage,
+        Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, JsonInferenceOutput,
+        ModelInferenceRequest, ModelInput, RequestMessage, ResolvedInput, ResolvedInputMessage,
         ResolvedInputMessageContent, Text, TextKind,
     },
     optimization::JobHandle,
@@ -47,6 +47,9 @@ fn use_mock_inference_provider() -> bool {
 pub trait OptimizationTestCase {
     fn supports_image_data(&self) -> bool;
     fn supports_tool_calls(&self) -> bool;
+    fn is_json_function(&self) -> bool {
+        false // Default to chat function
+    }
     fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo;
 }
 
@@ -109,6 +112,9 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         panic!("Expected completed status");
     };
 
+    // Bind is_json_function before the match since we lose access to test_case inside
+    let is_json_function = test_case.is_json_function();
+
     // Handle both Model and Variant outputs
     match output {
         OptimizerOutput::Model(model_config) => {
@@ -169,7 +175,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
 
             // Test DICL variants with full inference
             if let UninitializedVariantConfig::Dicl(dicl_config) = variant_config.as_ref() {
-                test_dicl_variant_inference(dicl_config).await;
+                test_dicl_variant_inference(dicl_config, is_json_function).await;
             }
         }
     };
@@ -218,7 +224,12 @@ pub async fn run_workflow_test_case_with_tensorzero_client(
 
 fn get_examples(test_case: &impl OptimizationTestCase, num_examples: usize) -> Vec<RenderedSample> {
     assert!(num_examples >= 10);
-    let mut generators: Vec<fn() -> RenderedSample> = vec![generate_text_example];
+    let mut generators: Vec<fn() -> RenderedSample> = if test_case.is_json_function() {
+        vec![generate_text_example_json] // Use JSON generator for JSON functions
+    } else {
+        vec![generate_text_example] // Use regular text generator for chat functions
+    };
+
     if test_case.supports_tool_calls() {
         generators.push(generate_tool_call_example);
     }
@@ -270,6 +281,68 @@ fn generate_text_example() -> RenderedSample {
         dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
             text: "The capital of France is Marseille.".to_string(),
         })]],
+        tags: HashMap::from([("test_key".to_string(), "test_value".to_string())]),
+    }
+}
+
+fn generate_text_example_json() -> RenderedSample {
+    // So the examples are different
+    let id = Uuid::now_v7().to_string();
+    let system_prompt =
+        format!("You are a helpful assistant named Dr. M.M. Patel with id number {id}.");
+    let json_output = JsonInferenceOutput {
+        parsed: Some(json!({"answer": "The capital of France is Paris."})),
+        raw: Some(r#"{"answer":"The capital of France is Paris."}"#.to_string()),
+    };
+    let dispreferred_json_output = JsonInferenceOutput {
+        parsed: Some(json!({"answer": "The capital of France is Marseille."})),
+        raw: Some(r#"{"answer":"The capital of France is Marseille."}"#.to_string()),
+    };
+
+    // Convert JSON output to ContentBlockChatOutput as done in stored_inference.rs
+    let output = vec![ContentBlockChatOutput::Text(Text {
+        text: json_output.raw.clone().unwrap(),
+    })];
+    let dispreferred_output = vec![ContentBlockChatOutput::Text(Text {
+        text: dispreferred_json_output.raw.unwrap(),
+    })];
+
+    RenderedSample {
+        function_name: "basic_test".to_string(), // Same function name, different output type
+        input: ModelInput {
+            system: Some(system_prompt.clone()),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec![ContentBlock::Text(Text {
+                    text: "What is the capital of France?".to_string(),
+                })],
+            }],
+        },
+        stored_input: ResolvedInput {
+            system: Some(json!(system_prompt)),
+            messages: vec![ResolvedInputMessage {
+                role: Role::User,
+                content: vec![ResolvedInputMessageContent::Text {
+                    value: json!("What is the capital of France?"),
+                }],
+            }],
+        },
+        output: Some(output), // JSON output converted to chat format
+        stored_output: Some(StoredOutput::Json(json_output)),
+        episode_id: Some(Uuid::now_v7()),
+        inference_id: Some(Uuid::now_v7()),
+        tool_params: None,
+        output_schema: Some(json!({
+            "type": "object",
+            "properties": {
+                "answer": {
+                    "type": "string"
+                }
+            },
+            "required": ["answer"],
+            "additionalProperties": false
+        })),
+        dispreferred_outputs: vec![dispreferred_output],
         tags: HashMap::from([("test_key".to_string(), "test_value".to_string())]),
     }
 }
@@ -524,6 +597,7 @@ pub async fn make_http_gateway() -> Client {
 /// Test DICL variant inference by creating a temporary config and testing inference
 async fn test_dicl_variant_inference(
     dicl_config: &tensorzero_core::variant::dicl::UninitializedDiclConfig,
+    is_json_function: bool,
 ) {
     // Create a temporary directory for our config and schema files
     let temp_dir = TempDir::new().unwrap();
@@ -545,24 +619,60 @@ async fn test_dicl_variant_inference(
     let system_template_content = "You are a helpful assistant named {{assistant_name}}.";
     fs::write(&system_template_path, system_template_content).unwrap();
 
+    // Create output schema file if this is a JSON function
+    if is_json_function {
+        let output_schema_path = temp_dir.path().join("output_schema.json");
+        let output_schema_content = r#"{
+  "type": "object",
+  "properties": {
+    "answer": {
+      "type": "string"
+    }
+  },
+  "required": ["answer"],
+  "additionalProperties": false
+}"#;
+        fs::write(&output_schema_path, output_schema_content).unwrap();
+    }
+
     // Create a single complete config file with both base variant and DICL variant
-    let variant_name = "test_dicl".to_string();
+    // The variant name should match what was used during optimization
+    let variant_name = if is_json_function {
+        "test_dicl_json".to_string()
+    } else {
+        "test_dicl".to_string()
+    };
+    let function_type = if is_json_function { "json" } else { "chat" };
+    let output_schema_line = if is_json_function {
+        r#"output_schema = "output_schema.json""#
+    } else {
+        ""
+    };
+    let json_mode_line = if is_json_function {
+        r#"json_mode = "strict""#
+    } else {
+        ""
+    };
+
     let config_content = format!(
         r#"
 [functions.basic_test]
-type = "chat"
+type = "{}"
 system_schema = "system_schema.json"
+{}
 
 [functions.basic_test.variants.gpt_4o_mini]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "system_template.minijinja"
+{}
 
 [functions.basic_test.variants.{}]
 type = "experimental_dynamic_in_context_learning"
 embedding_model = "{}"
 k = {}
 model = "{}"
+{}
 
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]
@@ -571,7 +681,18 @@ routing = ["openai"]
 type = "openai"
 model_name = "text-embedding-3-small"
 "#,
-        variant_name, dicl_config.embedding_model, dicl_config.k, dicl_config.model
+        function_type,
+        output_schema_line,
+        json_mode_line,
+        variant_name,
+        dicl_config.embedding_model,
+        dicl_config.k,
+        dicl_config.model,
+        if is_json_function {
+            "json_mode = \"strict\""
+        } else {
+            ""
+        }
     );
 
     let config_path = temp_dir.path().join("tensorzero.toml");
