@@ -16,6 +16,20 @@ export TENSORZERO_CLICKHOUSE_URL=$(curl --user "$CLICKHOUSE_API_KEY:$CLICKHOUSE_
 echo $TENSORZERO_CLICKHOUSE_URL | buildkite-agent redactor add
 set -x
 
+
+# Install ClickHouse client and load fixtures into remote ClickHouse
+# Install prerequisite packages
+sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
+# Download the ClickHouse GPG key and store it in the keyring
+curl -fsSL 'https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key' | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse-keyring.gpg
+# Get the system architecture
+ARCH=$(dpkg --print-architecture)
+# Add the ClickHouse repository to apt sources
+echo "deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg arch=${ARCH}] https://packages.clickhouse.com/deb stable main" | sudo tee /etc/apt/sources.list.d/clickhouse.list
+# Update apt package lists
+sudo apt-get update
+sudo apt-get install -y clickhouse-client
+
 curl "$TENSORZERO_CLICKHOUSE_URL" --data-binary 'SHOW DATABASES'
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh  -s -- -y
 . "$HOME/.cargo/env"
@@ -41,18 +55,6 @@ cargo run-e2e > e2e_logs.txt 2>&1 &
     done
     export GATEWAY_PID=$!
 
-# Install ClickHouse client and load fixtures into remote ClickHouse
-# Install prerequisite packages
-sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
-# Download the ClickHouse GPG key and store it in the keyring
-curl -fsSL 'https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key' | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse-keyring.gpg
-# Get the system architecture
-ARCH=$(dpkg --print-architecture)
-# Add the ClickHouse repository to apt sources
-echo "deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg arch=${ARCH}] https://packages.clickhouse.com/deb stable main" | sudo tee /etc/apt/sources.list.d/clickhouse.list
-# Update apt package lists
-sudo apt-get update
-sudo apt-get install -y clickhouse-client
 export CLICKHOUSE_HOST=$(echo $TENSORZERO_CLICKHOUSE_URL | sed 's|https://[^@]*@||' | sed 's|:[0-9]*||')
 export CLICKHOUSE_USER="$CLICKHOUSE_USERNAME"
 export CLICKHOUSE_PASSWORD="$CLICKHOUSE_PASSWORD"
