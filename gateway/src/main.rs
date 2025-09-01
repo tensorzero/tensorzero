@@ -506,7 +506,7 @@ fn print_configuration_info(glob: Option<&impl ConfigGlobInfo>) {
                     if i < glob.paths().len() - 1 {
                         tracing::info!("│ ├ {}", path.to_string_lossy());
                     } else {
-                        tracing::info!("│ └  {}", path.to_string_lossy());
+                        tracing::info!("│ └ {}", path.to_string_lossy());
                     }
                 }
             }
@@ -596,8 +596,8 @@ mod tests {
         assert!(logs_contain(
             "├ Configuration: glob `config/**/*.toml` resolved to:"
         ));
-        assert!(logs_contain("│ ├  config/app.toml"));
-        assert!(logs_contain("│ ├  config/database.toml"));
+        assert!(logs_contain("│ ├ config/app.toml"));
+        assert!(logs_contain("│ ├ config/database.toml"));
         assert!(logs_contain("│ └ config/prod/settings.toml"));
     }
 }
