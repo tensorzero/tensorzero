@@ -1,4 +1,4 @@
-# TensorZero Recipe: Supervised Fine-Tuning with Unsloth
+# TensorZero Recipe: Supervised Fine-Tuning with torchtune
 
 The `torchtune.ipynb` notebook provides a step-by-step recipe to perform supervised fine-tuning of models using [torchtune](https://docs.pytorch.org/torchtune/main/) based on data collected by the TensorZero Gateway.
 
@@ -19,7 +19,7 @@ To use our container, follow the [VS Code Instructions](https://code.visualstudi
 ```bash
 uv venv  # Create a new virtual environment
 source .venv/bin/activate # Activate environment
-uv pip sync requirements.txt # Install the dependencies
+uv sync requirements.txt # Install the dependencies
 uv pip install --pre torchtune --extra-index-url https://download.pytorch.org/whl/nightly/cu126
 ```
 
