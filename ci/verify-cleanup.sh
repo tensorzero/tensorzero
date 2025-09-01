@@ -52,6 +52,27 @@ else
   exit 1
 fi
 
+# Check if database exists first
+echo "Checking if database $DATABASE_NAME exists..."
+error_file=$(mktemp)
+database_exists=$(clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG \
+                   --query "SELECT count() FROM system.databases WHERE name = '$DATABASE_NAME'" 2>"$error_file" || echo "ERROR")
+
+if [[ "$database_exists" == "ERROR" ]]; then
+  echo "✗ Failed to check if database exists"
+  echo "  Error details:"
+  sed 's/^/    /' "$error_file"
+  rm -f "$error_file"
+  exit 1
+elif [ "$database_exists" -eq 0 ]; then
+  echo "✓ Database $DATABASE_NAME does not exist (acceptable for cleanup)"
+  rm -f "$error_file"
+  exit 0
+else
+  echo "✓ Database $DATABASE_NAME exists, checking tables..."
+  rm -f "$error_file"
+fi
+
 # Define all tables that should be empty after cleanup
 tables=(
   "JsonInference"
