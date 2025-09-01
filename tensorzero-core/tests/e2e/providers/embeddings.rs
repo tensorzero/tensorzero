@@ -265,7 +265,7 @@ pub async fn test_embedding_consistency_with_provider(provider: EmbeddingTestPro
 pub async fn test_basic_embedding_fallback() {
     let payload = json!({
         "input": "Hello, world!",
-        "model": format!("tensorzero::embedding_model_name::{}", "fallback"),
+        "model": "tensorzero::embedding_model_name::fallback",
     });
     let response = Client::new()
         .post(get_gateway_endpoint("/openai/v1/embeddings"))
@@ -298,7 +298,7 @@ pub async fn test_basic_embedding_fallback() {
 pub async fn test_basic_embedding_timeout() {
     let payload = json!({
         "input": "Hello, world!",
-        "model": format!("tensorzero::embedding_model_name::{}", "timeout"),
+        "model": "tensorzero::embedding_model_name::timeout",
     });
     let response = Client::new()
         .post(get_gateway_endpoint("/openai/v1/embeddings"))
@@ -315,7 +315,7 @@ pub async fn test_embedding_cache_with_provider(provider: EmbeddingTestProvider)
     // First request with cache enabled to populate cache
     let payload = json!({
         "input": input_text,
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
         "tensorzero::cache_options": {
             "enabled": "on",
             "max_age_s": 60
@@ -342,7 +342,7 @@ pub async fn test_embedding_cache_with_provider(provider: EmbeddingTestProvider)
     // Second request with same cache options - should hit cache
     let payload_cached = json!({
         "input": input_text,
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
         "tensorzero::cache_options": {
             "enabled": "on",
             "max_age_s": 60
@@ -386,7 +386,7 @@ pub async fn test_embedding_cache_options_with_provider(provider: EmbeddingTestP
     // First, make a request that will be cached
     let payload_initial = json!({
         "input": input_text,
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
         "tensorzero::cache_options": {
             "enabled": "on",
         }
@@ -412,7 +412,7 @@ pub async fn test_embedding_cache_options_with_provider(provider: EmbeddingTestP
     // Test with cache disabled - should not use cache
     let payload_disabled = json!({
         "input": input_text,
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
         "tensorzero::cache_options": {
             "enabled": "off"
         }
@@ -435,7 +435,7 @@ pub async fn test_embedding_cache_options_with_provider(provider: EmbeddingTestP
     // Test with cache enabled and valid max_age - should use cache
     let payload_enabled = json!({
         "input": input_text,
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
         "tensorzero::cache_options": {
             "enabled": "on",
             "max_age_s": 60
@@ -465,7 +465,7 @@ pub async fn test_embedding_cache_options_with_provider(provider: EmbeddingTestP
     // Test with cache enabled but expired max_age - should miss cache
     let payload_expired = json!({
         "input": input_text,
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
         "tensorzero::cache_options": {
             "enabled": "on",
             "max_age_s": 1
@@ -499,7 +499,7 @@ pub async fn test_embedding_dryrun_with_provider(provider: EmbeddingTestProvider
     // Test with dryrun enabled (should not store to database)
     let payload = json!({
         "input": input_text,
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
         "tensorzero::dryrun": true
     });
     let response = Client::new()
@@ -524,7 +524,7 @@ pub async fn test_embedding_dryrun_with_provider(provider: EmbeddingTestProvider
     // Test dryrun combined with cache options
     let payload_dryrun_cache = json!({
         "input": input_text,
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}",  provider.model_name),
         "tensorzero::dryrun": true,
         "tensorzero::cache_options": {
             "enabled": "on",
