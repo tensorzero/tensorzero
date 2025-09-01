@@ -76,6 +76,7 @@ type = "chat_completion"
 weight = 0.1
 model = "gpt-3.5-turbo"
 system_template = "fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
+json_mode = "strict"
 
 [functions.weather_helper]
 type = "chat"
@@ -134,6 +135,7 @@ model = "gpt-3.5-turbo"
 system_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
 user_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
 assistant_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
+json_mode = "strict"
 
 [functions.templates_with_variables_json]
 type = "json"
@@ -148,6 +150,7 @@ model = "gpt-3.5-turbo"
 system_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
 user_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
 assistant_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
+json_mode = "strict"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
