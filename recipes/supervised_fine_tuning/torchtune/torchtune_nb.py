@@ -14,7 +14,7 @@
 # - Set your `TENSORZERO_CLICKHOUSE_URL` enironment variable to point to the database containing the historical inferences you'd like to train on.
 # - Set your `HF_TOKEN` to use Llama or Gemma models downloaded through huggingface.
 # - Set the environment variable `CHECKPOINT_HOME` to a path with sufficient storage to save the base LLM checkpoints.
-# - You'll also need to [install](https://docs.fireworks.ai/tools-sdks/firectl/firectl) the CLI tool `firectl` on your machine and sign in with `firectl signin`. You can test that this all worked with `firectl whoami`.
+# - You'll also need to [install](https://docs.fireworks.ai/tools-sdks/firectl/firectl) the CLI tool `firectl` on your machine and sign in with `firectl signin`. You can test that this all worked with `firectl whoami`. We use `firectl` for deployment to Fireworks in this example but you can serve the model however you prefer.
 # - Update the following parameters:
 
 # %%
@@ -40,11 +40,15 @@ MAX_SAMPLES = 100_000
 SEED = 42
 
 # %% [markdown]
-# Select a model to fine tune
+# Select a [supported model](https://docs.pytorch.org/torchtune/main/api_ref_models.html) to fine tune.
+#
+#
+# If you want to use a supported model that we have not yet included in the MODELS dictionary in utils.py, you will need to update the dictionary.
+#
+# Alternatively, you can write the `TUNING_CONFIG` defined below from scratch following the [example configs](https://github.com/pytorch/torchtune/tree/main/recipes/configs) provided by torchtune.
 
 # %%
-# The name of the model to fine-tune (supported models: https://docs.pytorch.org/torchtune/main/api_ref_models.html)
-# You may need to update the MODELS dictionary in utils.py if you want to use a model that we have not yet included there
+# The name of the model to fine-tune.
 MODEL_NAME = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 
 # Whether to use LoRA or not. Set to False for full model fine-tuning

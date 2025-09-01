@@ -6,6 +6,7 @@ You will need to set a few environment variables in the shell your notebook will
 - Set `TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero`.
 - Set `HF_TOKEN=<your-hf-token>` to your huggingface token to use models like Llama and Gemma.
 - Set `CHECKPOINT_HOME=</path/to/store/large/models>` as the directory to save models downloaded from huggingface.
+- [Install](https://docs.fireworks.ai/tools-sdks/firectl/firectl) the CLI tool `firectl` on your machine and sign in with `firectl signin`. You can test that this all worked with `firectl whoami`. We use `firectl` for deployment to Fireworks in this example but you can serve the model however you prefer.
 
 ## Setup
 
