@@ -8,7 +8,9 @@
 export AZURE_OPENAI_API_KEY="..." # Replace with your Azure OpenAI API key
 ```
 
-2. Run the example:
+2. Set your Azure `endpoint` in `config/tensorzero.toml`.
+
+3. Run the example:
 
 <details open>
 <summary><b>Python (OpenAI SDK)</b></summary>
