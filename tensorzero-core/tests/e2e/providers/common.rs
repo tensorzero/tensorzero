@@ -4096,7 +4096,10 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
                     if let Some(block_raw_name) = block.get("raw_name") {
                         match tool_name {
                             Some(_) => {
-                                assert!(block_raw_name.as_str().unwrap().is_empty(), "Raw name already seen, got {block:#?}");
+                                assert!(
+                                    block_raw_name.as_str().unwrap().is_empty(),
+                                    "Raw name already seen, got {block:#?}"
+                                );
                             }
                             None => {
                                 tool_name = Some(block_raw_name.as_str().unwrap().to_string());
@@ -5300,7 +5303,10 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
                     if let Some(block_raw_name) = block.get("raw_name") {
                         match tool_name {
                             Some(_) => {
-                                assert!(block_raw_name.as_str().unwrap().is_empty(), "Raw name already seen, got {block:#?}");
+                                assert!(
+                                    block_raw_name.as_str().unwrap().is_empty(),
+                                    "Raw name already seen, got {block:#?}"
+                                );
                             }
                             None => {
                                 tool_name = Some(block_raw_name.as_str().unwrap().to_string());
@@ -7216,7 +7222,10 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
                     if let Some(block_raw_name) = block.get("raw_name") {
                         match tool_name {
                             Some(_) => {
-                                assert!(block_raw_name.as_str().unwrap().is_empty(), "Raw name already seen, got {block:#?}");
+                                assert!(
+                                    block_raw_name.as_str().unwrap().is_empty(),
+                                    "Raw name already seen, got {block:#?}"
+                                );
                             }
                             None => {
                                 tool_name = Some(block_raw_name.as_str().unwrap().to_string());
@@ -8568,7 +8577,10 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
                     if let Some(block_raw_name) = block.get("raw_name") {
                         match tool_name {
                             Some(_) => {
-                                assert!(block_raw_name.as_str().unwrap().is_empty(), "Raw name already seen, got {block:#?}");
+                                assert!(
+                                    block_raw_name.as_str().unwrap().is_empty(),
+                                    "Raw name already seen, got {block:#?}"
+                                );
                             }
                             None => {
                                 tool_name = Some(block_raw_name.as_str().unwrap().to_string());
