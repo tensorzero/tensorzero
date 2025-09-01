@@ -20,7 +20,7 @@ on:
 
 jobs:
   ui-tests-no-network:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-tensorzero-2x8
     steps:
       - name: Set DNS
         run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
@@ -72,7 +72,7 @@ jobs:
         run: docker inspect --format "{{json .State.Health }}" $(docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml ps -q ui) | jq
 
   ui-tests-gateway-prefix:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-tensorzero-2x8
     steps:
       - name: Set DNS
         run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
@@ -177,7 +177,7 @@ jobs:
           retention-days: 7
 
   ui-tests-e2e-credentials:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-tensorzero-2x8
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
     # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
     # For now, it just runs in the merge queue and on prs from the main repo
