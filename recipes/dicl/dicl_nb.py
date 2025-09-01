@@ -138,7 +138,7 @@ tasks = [
     get_embedding(str(inference.input), semaphore, DICL_EMBEDDING_MODEL)
     for inference in inferences
 ]
-embeddings = await tqdm_asyncio.gather(*tasks[:1], desc="Embedding inputs")
+embeddings = await tqdm_asyncio.gather(*tasks, desc="Embedding inputs")
 
 # %%
 data = []
