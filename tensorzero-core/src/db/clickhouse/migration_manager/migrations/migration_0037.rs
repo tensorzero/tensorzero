@@ -5,11 +5,11 @@ use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
 use std::time::Duration;
 
-pub struct Migration0036<'a> {
+pub struct Migration0037<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
 
-const MIGRATION_ID: &str = "0036";
+const MIGRATION_ID: &str = "0037";
 
 /// Quantiles used for TDigest. Exposed as a Rust slice for programmatic use.
 pub const QUANTILES: &[f64] = &[
@@ -37,7 +37,7 @@ pub fn quantiles_sql_args() -> String {
 }
 
 #[async_trait]
-impl Migration for Migration0036<'_> {
+impl Migration for Migration0037<'_> {
     async fn can_apply(&self) -> Result<(), Error> {
         if !check_table_exists(self.clickhouse, "ModelInference", MIGRATION_ID).await? {
             return Err(Error::new(ErrorDetails::ClickHouseMigration {

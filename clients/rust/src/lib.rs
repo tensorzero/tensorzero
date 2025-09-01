@@ -75,7 +75,7 @@ pub use tensorzero_core::inference::types::{
 pub use tensorzero_core::tool::{DynamicToolParams, Tool};
 
 // Export quantile array from migration_0035
-pub use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0036::QUANTILES;
+pub use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0037::QUANTILES;
 
 enum ClientMode {
     HTTPGateway(HTTPGateway),
