@@ -191,9 +191,14 @@ pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
         return Ok(());
     }
     tracing::debug!("All migrations have not yet been applied, running migrations");
+    println!("Running migrations");
     let database_and_migrations_table_exists = clickhouse
         .check_database_and_migrations_table_exists()
         .await?;
+    println!(
+        "Database and migrations table exists: {}",
+        database_and_migrations_table_exists
+    );
     if !database_and_migrations_table_exists {
         if clickhouse.is_cluster_configured() && !manual_run {
             let database = clickhouse.database();

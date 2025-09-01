@@ -617,6 +617,7 @@ impl ClickHouseConnectionInfo {
                     })
                 })?;
                 let on_cluster_name = self.get_on_cluster_name();
+                println!("Creating database: {}", database);
                 let query = format!("CREATE DATABASE IF NOT EXISTS {database}{on_cluster_name}");
                 // In order to create the database, we need to remove the database query parameter from the URL
                 // Otherwise, ClickHouse will throw an error
