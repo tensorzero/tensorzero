@@ -475,7 +475,7 @@ async fn inner_select_best_candidate<'a, 'request>(
         .find_map(|block| match block {
             ContentBlockOutput::Text(text) => Some(&text.text),
             ContentBlockOutput::ToolCall(tool_call) => Some(&tool_call.arguments),
-            _ => None,
+            ContentBlockOutput::Thought(_) | ContentBlockOutput::Unknown { .. } => None,
         }) {
         Some(text) => text,
         None => {
@@ -689,7 +689,7 @@ impl BestOfNEvaluatorConfig {
             .unwrap_or(JsonMode::Strict);
         let tool_config = match json_mode {
             JsonMode::ImplicitTool => Some(Cow::Borrowed(&*IMPLICIT_TOOL_CALL_CONFIG)),
-            _ => None,
+            JsonMode::Off | JsonMode::On | JsonMode::Strict => None,
         };
         if !inference_config.extra_body.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
@@ -1298,7 +1298,7 @@ mod tests {
                 assert_eq!(selected.model_inference_results.len(), 3);
                 assert_eq!(selected.finish_reason, Some(FinishReason::Stop));
             }
-            _ => {
+            InferenceResult::Json(_) => {
                 panic!("Expected a Chat inference result");
             }
         }
@@ -1363,7 +1363,7 @@ mod tests {
             InferenceResult::Chat(chat_choice) => {
                 assert!(chat_choice.model_inference_results.len() == 2);
             }
-            _ => {
+            InferenceResult::Json(_) => {
                 panic!("Expected a Chat inference result");
             }
         }
@@ -1430,7 +1430,7 @@ mod tests {
                 // But, it's a random choice, so we can't assert on the specific index
                 assert!(chat_choice.model_inference_results.len() == 3);
             }
-            _ => {
+            InferenceResult::Json(_) => {
                 panic!("Expected a Chat inference result");
             }
         }

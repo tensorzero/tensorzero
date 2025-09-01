@@ -991,7 +991,7 @@ mod tests {
             assert_eq!(config.evaluators.len(), 1);
             match config.evaluators.get("em_evaluator").unwrap() {
                 EvaluatorConfig::ExactMatch(params) => assert_eq!(params.cutoff, Some(0.4)),
-                _ => panic!("Expected ExactMatch evaluator"),
+                EvaluatorConfig::LLMJudge(_) => panic!("Expected ExactMatch evaluator"),
             }
             // No additional function configs for exact match
             assert_eq!(additional_functions.len(), 0);
@@ -1081,7 +1081,7 @@ mod tests {
                     assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Min));
                     assert!(!judge_config.include.reference_output);
                 }
-                _ => panic!("Expected LLMJudge evaluator config"),
+                EvaluatorConfig::ExactMatch(_) => panic!("Expected LLMJudge evaluator config"),
             }
 
             // Verify additional function config was created
@@ -1099,7 +1099,7 @@ mod tests {
                     assert!(json_config.schemas.user.is_some());
                     assert!(json_config.output_schema.value.is_object());
                 }
-                _ => panic!("Expected Json function config"),
+                FunctionConfig::Chat(_) => panic!("Expected Json function config"),
             }
 
             // Verify the metrics
@@ -1124,7 +1124,7 @@ mod tests {
             let llm_judge_evaluation = match config.evaluators.get("llm_judge_evaluation").unwrap()
             {
                 EvaluatorConfig::LLMJudge(config) => config,
-                _ => panic!("Expected LLMJudge evaluator"),
+                EvaluatorConfig::ExactMatch(_) => panic!("Expected LLMJudge evaluator"),
             };
             assert_eq!(
                 MetricConfigType::from(llm_judge_evaluation.output_type),
@@ -1205,7 +1205,7 @@ mod tests {
                     assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Max));
                     assert!(judge_config.include.reference_output);
                 }
-                _ => panic!("Expected LLMJudge evaluator config"),
+                EvaluatorConfig::ExactMatch(_) => panic!("Expected LLMJudge evaluator config"),
             }
 
             // Verify additional function config was created
@@ -1233,7 +1233,7 @@ mod tests {
             // Verify the type conversion from LLMJudgeOutputType to MetricConfigType
             let llm_judge_evaluation = match config.evaluators.get("llm_judge_float").unwrap() {
                 EvaluatorConfig::LLMJudge(config) => config,
-                _ => panic!("Expected LLMJudge evaluator"),
+                EvaluatorConfig::ExactMatch(_) => panic!("Expected LLMJudge evaluator"),
             };
             assert_eq!(
                 MetricConfigType::from(llm_judge_evaluation.output_type),
@@ -1497,7 +1497,7 @@ mod tests {
                     assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Min));
                     assert!(judge_config.include.reference_output);
                 }
-                _ => panic!("Expected LLMJudge evaluator config"),
+                EvaluatorConfig::ExactMatch(_) => panic!("Expected LLMJudge evaluator config"),
             }
         }
 
@@ -1570,7 +1570,7 @@ mod tests {
                         _ => panic!("Expected ChatCompletion variant config"),
                     }
                 }
-                _ => panic!("Expected Json function config"),
+                FunctionConfig::Chat(_) => panic!("Expected Json function config"),
             }
         }
 
