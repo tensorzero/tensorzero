@@ -14,6 +14,25 @@ export CLICKHOUSE_PASSWORD=$(buildkite-agent secret get clickhouse_password)
 # Then, we look up the instance url for this name, and add basic-auth credentials to the url to get our full TENSORZERO_CLICKHOUSE_URL
 export TENSORZERO_CLICKHOUSE_URL=$(curl --user "$CLICKHOUSE_API_KEY:$CLICKHOUSE_KEY_SECRET" https://api.clickhouse.cloud/v1/organizations/b55f1935-803f-4931-90b3-4d26089004d4/services | jq -r ".result[] | select(.name == \"${CLICKHOUSE_PREFIX}${CLICKHOUSE_ID}\") | .endpoints[] | select(.protocol == \"https\") | \"https://$CLICKHOUSE_USERNAME:$CLICKHOUSE_PASSWORD@\" + .host + \":\" + (.port | tostring)")
 echo $TENSORZERO_CLICKHOUSE_URL | buildkite-agent redactor add
+
+# Generate unique database name with random suffix for isolation
+RANDOM_SUFFIX=$(openssl rand -hex 4)
+export TENSORZERO_E2E_TESTS_DATABASE="tensorzero_e2e_tests_${RANDOM_SUFFIX}"
+echo "Using database name: $TENSORZERO_E2E_TESTS_DATABASE"
+
+# Set up cleanup function to run on exit
+cleanup_database() {
+    if [ -n "${TENSORZERO_E2E_TESTS_DATABASE:-}" ] && [ -n "${TENSORZERO_CLICKHOUSE_URL:-}" ]; then
+        echo "Cleaning up database: $TENSORZERO_E2E_TESTS_DATABASE"
+        curl -X POST "${TENSORZERO_CLICKHOUSE_URL%/}/?param_target=$TENSORZERO_E2E_TESTS_DATABASE" \
+            --data-binary "DROP DATABASE IF EXISTS {target:Identifier}" || true
+        echo "Cleanup completed for database: $TENSORZERO_E2E_TESTS_DATABASE"
+    fi
+}
+
+# Register cleanup function to run on script exit (success or failure)
+trap cleanup_database EXIT
+
 set -x
 
 
@@ -38,7 +57,7 @@ source $HOME/.local/bin/env
 curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ~/.cargo/bin
 uv run ./ui/fixtures/download-fixtures.py
 ./ci/delete-clickhouse-dbs.sh
-./ci/verify-cleanup.sh tensorzero_e2e_tests
+./ci/verify-cleanup.sh $TENSORZERO_E2E_TESTS_DATABASE
 cargo build-e2e
 cargo run-e2e > e2e_logs.txt 2>&1 &
     count=0
@@ -58,7 +77,7 @@ cargo run-e2e > e2e_logs.txt 2>&1 &
 export CLICKHOUSE_HOST=$(echo $TENSORZERO_CLICKHOUSE_URL | sed 's|https://[^@]*@||' | sed 's|:[0-9]*||')
 export CLICKHOUSE_USER="$CLICKHOUSE_USERNAME"
 export CLICKHOUSE_PASSWORD="$CLICKHOUSE_PASSWORD"
-cd ui/fixtures && ./load_fixtures.sh tensorzero_e2e_tests && cd ../..
+cd ui/fixtures && ./load_fixtures.sh $TENSORZERO_E2E_TESTS_DATABASE && cd ../..
 
 cargo test-e2e-no-creds -- --skip test_concurrent_clickhouse_migrations
 cat e2e_logs.txt

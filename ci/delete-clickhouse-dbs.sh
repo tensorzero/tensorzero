@@ -25,4 +25,12 @@ curl -X POST "${TENSORZERO_CLICKHOUSE_URL%/}/?param_target=tensorzero_e2e_tests"
     --data-binary "DROP DATABASE IF EXISTS {target:Identifier}"
 echo "Database tensorzero_e2e_tests dropped."
 
+# Also delete the current test database if it exists and is set
+if [ -n "${TENSORZERO_E2E_TESTS_DATABASE:-}" ]; then
+    echo "Dropping database: $TENSORZERO_E2E_TESTS_DATABASE"
+    curl -X POST "${TENSORZERO_CLICKHOUSE_URL%/}/?param_target=$TENSORZERO_E2E_TESTS_DATABASE" \
+        --data-binary "DROP DATABASE IF EXISTS {target:Identifier}"
+    echo "Database $TENSORZERO_E2E_TESTS_DATABASE dropped."
+fi
+
 echo "All matching databases have been deleted."
