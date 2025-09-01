@@ -13,7 +13,7 @@
 #
 # - Set your `TENSORZERO_CLICKHOUSE_URL` enironment variable to point to the database containing the historical inferences you'd like to train on.
 # - Set your `HF_TOKEN` to use Llama or Gemma models downloaded through huggingface.
-# - You'll also need to [install](https://docs.fireworks.ai/tools-sdks/firectl/firectl) the CLI tool `firectl` on your machine and sign in with `firectl signin`. You can test that this all worked with `firectl whoami`.
+# - [Install](https://docs.fireworks.ai/tools-sdks/firectl/firectl) the CLI tool `firectl` on your machine and sign in with `firectl signin`. You can test that this all worked with `firectl whoami`. We use `firectl` for deployment to Fireworks in this example but you can serve the model however you prefer.
 # - Update the following parameters:
 
 # %%
