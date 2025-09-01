@@ -8,16 +8,17 @@ use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
-use tensorzero_core::config_parser::ConfigFileGlob;
+use tensorzero_core::config::ConfigFileGlob;
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 use tensorzero_core::endpoints::stored_inference::render_samples;
+use tensorzero_core::inference::types::stored_input::StoragePathResolver;
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
-    config_parser::Config,
+    config::Config,
     db::DatabaseConnection,
     endpoints::{
         datasets::InsertDatapointParams,
@@ -418,6 +419,20 @@ pub struct Client {
     verbose_errors: bool,
     #[cfg(feature = "e2e_tests")]
     pub last_body: Mutex<Option<String>>,
+}
+
+impl StoragePathResolver for Client {
+    async fn resolve(&self, storage_path: StoragePath) -> Result<String, Error> {
+        Ok(self
+            .get_object(storage_path.clone())
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!("Error resolving object {storage_path}: {e}"),
+                })
+            })?
+            .data)
+    }
 }
 
 impl Client {
@@ -946,9 +961,14 @@ impl Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 // TODO: do we want this?
                 Ok(with_embedded_timeout(*timeout, async {
-                    launch_optimization(&gateway.handle.app_state.http_client, params)
-                        .await
-                        .map_err(err_to_http)
+                    launch_optimization(
+                        &gateway.handle.app_state.http_client,
+                        params,
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        gateway.handle.app_state.config.clone(),
+                    )
+                    .await
+                    .map_err(err_to_http)
                 })
                 .await?)
             }

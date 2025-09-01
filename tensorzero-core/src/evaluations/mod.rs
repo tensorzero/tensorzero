@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 
 use crate::{
-    config_parser::{
+    config::{
         path::ResolvedTomlPath, MetricConfig, MetricConfigLevel, MetricConfigOptimize,
         MetricConfigType, PathWithContents, SchemaData, TimeoutsConfig,
     },

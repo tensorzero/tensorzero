@@ -23,12 +23,11 @@ use crate::inference::types::Thought;
 ///
 /// WARNING: Setting this to true will expose potentially sensitive request/response
 /// data in logs and error responses. Use with caution.
-static DEBUG: OnceCell<bool> =
-    if cfg!(feature = "e2e_tests") || cfg!(feature = "optimization_tests") {
-        OnceCell::const_new_with(true)
-    } else {
-        OnceCell::const_new()
-    };
+static DEBUG: OnceCell<bool> = if cfg!(feature = "e2e_tests") {
+    OnceCell::const_new_with(true)
+} else {
+    OnceCell::const_new()
+};
 
 pub fn set_debug(debug: bool) -> Result<(), Error> {
     // We already initialized `DEBUG`, so do nothing
@@ -1241,5 +1240,13 @@ impl IntoResponse for Error {
                 serde_json::to_value(self.get_details()).unwrap_or_else(|e| json!(e.to_string()));
         }
         (self.status_code(), Json(body)).into_response()
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(err: serde_json::Error) -> Self {
+        Self::new(ErrorDetails::Serialization {
+            message: err.to_string(),
+        })
     }
 }

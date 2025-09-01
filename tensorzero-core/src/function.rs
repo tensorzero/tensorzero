@@ -1,4 +1,4 @@
-use crate::config_parser::SchemaData;
+use crate::config::SchemaData;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
@@ -689,6 +689,7 @@ mod tests {
     use crate::inference::types::FinishReason;
     use crate::inference::types::InputMessage;
     use crate::inference::types::Latency;
+    use crate::inference::types::RequestMessagesOrBatch;
     use crate::inference::types::Text;
     use crate::inference::types::Thought;
     use crate::inference::types::Usage;
@@ -699,7 +700,7 @@ mod tests {
     use crate::variant::VariantConfig;
 
     use super::*;
-    use crate::config_parser::path::ResolvedTomlPath;
+    use crate::config::path::ResolvedTomlPath;
     use serde_json::json;
     use std::io::Write;
     use std::time::Duration;
@@ -1750,7 +1751,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -1816,7 +1817,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -1869,7 +1870,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -1922,7 +1923,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -1975,7 +1976,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -2028,7 +2029,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -2101,7 +2102,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -2148,7 +2149,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -2200,7 +2201,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -2252,7 +2253,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
@@ -2311,7 +2312,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content_blocks.clone(),
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),

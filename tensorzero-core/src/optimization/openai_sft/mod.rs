@@ -9,6 +9,8 @@ use tokio::try_join;
 use url::Url;
 
 use crate::{
+    config::Config,
+    db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     model::{build_creds_caching_default, CredentialLocation},
@@ -90,8 +92,11 @@ impl UninitializedOpenAISFTConfig {
         suffix: Option<String>,
     ) -> PyResult<Self> {
         // Use Deserialize to convert the string to a CredentialLocation
-        let credentials =
-            credentials.map(|s| serde_json::from_str(&s).unwrap_or(CredentialLocation::Env(s)));
+        let credentials = credentials
+            .map(|s| serde_json::from_str(&s))
+            .transpose()
+            .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid credentials JSON: {e}")))?
+            .or_else(|| Some(default_api_key_location()));
         let api_base = api_base
             .map(|s| {
                 Url::parse(&s)
@@ -187,6 +192,8 @@ impl Optimizer for OpenAISFTConfig {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
+        _clickhouse_connection_info: &ClickHouseConnectionInfo,
+        _config: &Config,
     ) -> Result<Self::Handle, Error> {
         // TODO(#2642): improve error handling here so we know what index of example failed
         let train_rows: Vec<OpenAISupervisedRow> = train_examples

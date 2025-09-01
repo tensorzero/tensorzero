@@ -6,7 +6,7 @@ use crate::inference::types::pyo3_helpers::{
 };
 use crate::inference::types::Text;
 use crate::{
-    config_parser::Config,
+    config::Config,
     error::{Error, ErrorDetails},
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ModelInput, ResolvedInput},
     serde_util::{deserialize_defaulted_string_or_parsed_json, deserialize_string_or_parsed_json},

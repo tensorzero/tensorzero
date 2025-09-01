@@ -3,8 +3,8 @@ use serde_json::Value;
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use crate::config_parser::path::ResolvedTomlPath;
-use crate::config_parser::{ErrorContext, PathWithContents, SchemaData};
+use crate::config::path::ResolvedTomlPath;
+use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::{Error, ErrorDetails};
@@ -671,7 +671,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::cache::{CacheEnabledMode, CacheOptions};
-    use crate::config_parser::SchemaData;
+    use crate::config::SchemaData;
     use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::embeddings::EmbeddingModelTable;
     use crate::endpoints::inference::{

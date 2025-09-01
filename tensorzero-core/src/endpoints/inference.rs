@@ -22,7 +22,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
-use crate::config_parser::{Config, ObjectStoreInfo, SchemaData, UninitializedVariantInfo};
+use crate::config::{Config, ObjectStoreInfo, SchemaData, UninitializedVariantInfo};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
@@ -875,15 +875,21 @@ async fn write_inference(
         // Write the inference to the Inference table
         match result {
             InferenceResult::Chat(result) => {
-                let chat_inference =
-                    ChatInferenceDatabaseInsert::new(result, input.clone(), metadata);
+                let chat_inference = ChatInferenceDatabaseInsert::new(
+                    result,
+                    input.clone().into_stored_input(),
+                    metadata,
+                );
                 let _ = clickhouse_connection_info
                     .write_batched(&[chat_inference], TableName::ChatInference)
                     .await;
             }
             InferenceResult::Json(result) => {
-                let json_inference =
-                    JsonInferenceDatabaseInsert::new(result, input.clone(), metadata);
+                let json_inference = JsonInferenceDatabaseInsert::new(
+                    result,
+                    input.clone().into_stored_input(),
+                    metadata,
+                );
                 let _ = clickhouse_connection_info
                     .write_batched(&[json_inference], TableName::JsonInference)
                     .await;

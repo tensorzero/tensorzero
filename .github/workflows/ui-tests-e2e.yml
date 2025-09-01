@@ -20,7 +20,7 @@ on:
 
 jobs:
   ui-tests-no-network:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-tensorzero-16x32
     steps:
       - name: Set DNS
         run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
@@ -83,7 +83,18 @@ jobs:
           node-version: "22.9.0"
 
       - name: Setup `pnpm`
-        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@latest; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Install `pnpm` dependencies
         run: pnpm install --frozen-lockfile
@@ -166,7 +177,7 @@ jobs:
           retention-days: 7
 
   ui-tests-e2e-credentials:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-tensorzero-16x32
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
     # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
     # For now, it just runs in the merge queue and on prs from the main repo
@@ -183,7 +194,18 @@ jobs:
           node-version: "22.9.0"
 
       - name: Setup `pnpm`
-        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@latest; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Install `pnpm` dependencies
         run: pnpm install --frozen-lockfile

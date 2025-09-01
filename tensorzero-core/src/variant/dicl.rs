@@ -3,9 +3,9 @@ use std::sync::Arc;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::config_parser::path::ResolvedTomlPath;
-use crate::config_parser::LoadableConfig;
-use crate::config_parser::PathWithContents;
+use crate::config::path::ResolvedTomlPath;
+use crate::config::LoadableConfig;
+use crate::config::PathWithContents;
 use crate::embeddings::EmbeddingEncodingFormat;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
@@ -841,7 +841,7 @@ mod tests {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_PNG,
-                                    data: Some("ABC".to_string()),
+                                    data: "ABC".to_string(),
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,

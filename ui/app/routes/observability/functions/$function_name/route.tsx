@@ -19,6 +19,7 @@ import { useFunctionConfig } from "~/context/config";
 import {
   getVariantCounts,
   getVariantPerformances,
+  getFunctionThroughputByVariant,
   type TimeWindowUnit,
 } from "~/utils/clickhouse/function";
 import { queryMetricsWithFeedback } from "~/utils/clickhouse/feedback";
@@ -26,6 +27,7 @@ import { getInferenceTableName } from "~/utils/clickhouse/common";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { useMemo, useState } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
+import { VariantThroughput } from "~/components/function/variant/VariantThroughput";
 import FunctionVariantTable from "./FunctionVariantTable";
 import {
   PageHeader,
@@ -46,6 +48,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const pageSize = Number(url.searchParams.get("pageSize")) || 10;
   const metric_name = url.searchParams.get("metric_name") || undefined;
   const time_granularity = url.searchParams.get("time_granularity") || "week";
+  const throughput_time_granularity =
+    url.searchParams.get("throughput_time_granularity") || "week";
   if (pageSize > 100) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
@@ -86,6 +90,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           time_window_unit: time_granularity as TimeWindowUnit,
         })
       : undefined;
+  const variantThroughputPromise = getFunctionThroughputByVariant(
+    function_name,
+    throughput_time_granularity as TimeWindowUnit,
+    10,
+  );
 
   const [
     inferences,
@@ -94,6 +103,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     metricsWithFeedback,
     variant_performances,
     variant_counts,
+    variant_throughput,
   ] = await Promise.all([
     inferencePromise,
     tableBoundsPromise,
@@ -101,6 +111,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     metricsWithFeedbackPromise,
     variantPerformancesPromise,
     variantCountsPromise,
+    variantThroughputPromise,
   ]);
   const variant_counts_with_metadata = variant_counts.map((variant_count) => {
     const variant_config = function_config.variants[
@@ -125,6 +136,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     num_inferences,
     metricsWithFeedback,
     variant_performances,
+    variant_throughput,
     variant_counts: variant_counts_with_metadata,
   };
 }
@@ -137,6 +149,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     num_inferences,
     metricsWithFeedback,
     variant_performances,
+    variant_throughput,
     variant_counts,
   } = loaderData;
   const navigate = useNavigate();
@@ -202,6 +215,22 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
+  const [throughput_time_granularity, setThroughputTimeGranularity] =
+    useState<TimeWindowUnit>(() => {
+      const param = searchParams.get(
+        "throughput_time_granularity",
+      ) as TimeWindowUnit;
+      return param || "week";
+    });
+  const handleThroughputTimeGranularityChange = (
+    granularity: TimeWindowUnit,
+  ) => {
+    setThroughputTimeGranularity(granularity);
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("throughput_time_granularity", granularity);
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
+
   return (
     <PageLayout>
       <PageHeader
@@ -219,6 +248,15 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           <FunctionVariantTable
             variant_counts={variant_counts}
             function_name={function_name}
+          />
+        </SectionLayout>
+
+        <SectionLayout>
+          <SectionHeader heading="Throughput" />
+          <VariantThroughput
+            variant_throughput={variant_throughput}
+            time_granularity={throughput_time_granularity}
+            onTimeGranularityChange={handleThroughputTimeGranularityChange}
           />
         </SectionLayout>
 

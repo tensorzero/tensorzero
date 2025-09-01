@@ -29,10 +29,6 @@ pub fn require_image(mime_type: &MediaType, provider_type: &str) -> Result<(), E
     Ok(())
 }
 
-fn skip_serialize_file_data(_: &Option<String>) -> bool {
-    !SERIALIZE_FILE_DATA.is_set()
-}
-
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(test, ts(export))]
@@ -43,11 +39,19 @@ pub struct Base64File {
     #[cfg_attr(test, ts(type = "string"))]
     pub mime_type: MediaType,
     // TODO - should we add a wrapper type to enforce base64?
-    #[serde(skip_serializing_if = "skip_serialize_file_data")]
-    #[serde(default)]
-    // This is normally `Some`, unless it was deserialized from ClickHouse
-    // (with the image data stripped out).
-    pub data: Option<String>,
+    pub data: String,
+}
+
+/// Like `Base64File`, but without the data field.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass)]
+pub struct Base64FileMetadata {
+    // The original url we used to download the file
+    pub url: Option<Url>,
+    #[cfg_attr(test, ts(type = "string"))]
+    pub mime_type: MediaType,
 }
 
 impl std::fmt::Display for Base64File {
@@ -59,11 +63,7 @@ impl std::fmt::Display for Base64File {
 
 impl Base64File {
     pub fn data(&self) -> Result<&String, Error> {
-        self.data.as_ref().ok_or_else(|| {
-            Error::new(ErrorDetails::InternalError {
-                message: "Tried to get image data from deserialized Base64File".to_string(),
-            })
-        })
+        Ok(&self.data)
     }
 }
 #[cfg(feature = "pyo3")]
@@ -164,13 +164,13 @@ impl File {
                 Ok(Base64File {
                     url: Some(url.clone()),
                     mime_type,
-                    data: Some(data),
+                    data,
                 })
             }
             File::Base64 { mime_type, data } => Ok(Base64File {
                 url: None,
                 mime_type,
-                data: Some(data),
+                data,
             }),
         }
     }
@@ -187,9 +187,7 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
                     file,
                     storage_path: _,
                 } = &**file;
-                if let Some(data) = &file.data {
-                    raw_request = raw_request.replace(data, &format!("<TENSORZERO_FILE_{i}>"));
-                }
+                raw_request = raw_request.replace(&file.data, &format!("<TENSORZERO_FILE_{i}>"));
                 i += 1;
             }
         }
@@ -287,7 +285,7 @@ mod tests {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
-                                    data: Some("my-image-1-data".to_string()),
+                                    data: "my-image-1-data".to_string(),
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,
@@ -299,7 +297,7 @@ mod tests {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
-                                    data: Some("my-image-2-data".to_string()),
+                                    data: "my-image-2-data".to_string(),
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,
@@ -311,7 +309,7 @@ mod tests {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
-                                    data: Some("my-image-1-data".to_string()),
+                                    data: "my-image-1-data".to_string(),
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,
@@ -328,7 +326,7 @@ mod tests {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
-                                    data: Some("my-image-3-data".to_string()),
+                                    data: "my-image-3-data".to_string(),
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,
@@ -340,7 +338,7 @@ mod tests {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
-                                    data: Some("my-image-1-data".to_string()),
+                                    data: "my-image-1-data".to_string(),
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,
