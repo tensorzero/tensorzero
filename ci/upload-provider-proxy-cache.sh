@@ -14,4 +14,15 @@ aws configure set default.s3.multipart_chunksize 64MB
 # Use --delete to remove stale cache files from the bucket.
 # This doesn't do anything for merge queue runs (since we start by downloading the entire bucket),
 # but it will help for cron job runs, where we intentionally start with an empty provider-proxy cache.
-aws s3 --endpoint-url https://19918a216783f0ac9e052233569aef60.r2.cloudflarestorage.com/ sync . s3://provider-proxy-cache --delete --no-progress
+for i in {1..5}; do
+  if aws s3 --endpoint-url https://19918a216783f0ac9e052233569aef60.r2.cloudflarestorage.com/ sync . s3://provider-proxy-cache --delete --no-progress; then
+    break
+  else
+    echo "Attempt $i failed. Retrying..."
+    if [ $i -eq 5 ]; then
+      echo "All attempts failed."
+      exit 1
+    fi
+    sleep 5
+  fi
+done
