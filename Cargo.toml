@@ -92,6 +92,7 @@ unnecessary_wraps = "deny"
 unreachable = "deny"
 unused_self = "deny"
 unwrap_used = "deny"
+manual_assert = "deny"
 
 [profile.performance]
 inherits = "release"
