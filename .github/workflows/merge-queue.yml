@@ -63,7 +63,7 @@ jobs:
       contents: read
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       matrix:
         batch_writes: [true, false]
