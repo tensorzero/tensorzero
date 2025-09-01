@@ -11,7 +11,7 @@ ollama serve
 2. Download an embedding model:
 
 ```bash
-ollama run nomic-embed-text
+ollama pull nomic-embed-text
 ```
 
 3. Run the example:
