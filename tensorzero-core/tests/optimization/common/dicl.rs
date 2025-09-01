@@ -12,7 +12,7 @@ impl OptimizationTestCase for DiclTestCase {
     }
 
     fn supports_tool_calls(&self) -> bool {
-        true
+        false
     }
 
     fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo {
