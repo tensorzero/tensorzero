@@ -1,35 +1,30 @@
 #![expect(clippy::unwrap_used, clippy::panic, clippy::print_stdout)]
 use base64::Engine;
 use serde_json::json;
-use std::{collections::HashMap, fs};
-use tempfile::TempDir;
+use std::collections::HashMap;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
 use tracing_subscriber::{self, EnvFilter};
 
 use tensorzero::{
-    Client, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    InferenceOutput, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
+    Client, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
 };
 use tensorzero_core::{
     cache::CacheOptions,
-    config::{Config, ConfigFileGlob, ProviderTypesConfig, UninitializedVariantConfig},
+    config::{Config, ConfigFileGlob, ProviderTypesConfig},
     db::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL},
     db::clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
     endpoints::inference::InferenceClients,
     inference::types::{
         resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
-        Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, JsonInferenceOutput,
-        ModelInferenceRequest, ModelInput, RequestMessage, ResolvedInput, ResolvedInputMessage,
-        ResolvedInputMessageContent, Text, TextKind,
+        Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
+        ModelInput, RequestMessage, ResolvedInput, ResolvedInputMessage,
+        ResolvedInputMessageContent, Text,
     },
     optimization::JobHandle,
-    optimization::{
-        OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerConfig,
-        UninitializedOptimizerInfo,
-    },
+    optimization::{OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo},
     stored_inference::StoredOutput,
     tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
     variant::JsonMode,
@@ -43,10 +38,6 @@ pub mod together_sft;
 
 static FERRIS_PNG: &[u8] = include_bytes!("../../e2e/providers/ferris.png");
 
-/// Minimum expected input tokens when DICL retrieves examples
-/// This threshold helps verify that examples are actually being retrieved and used
-const MIN_TOKENS_WITH_DICL_EXAMPLES: u32 = 500;
-
 fn use_mock_inference_provider() -> bool {
     std::env::var("TENSORZERO_USE_MOCK_INFERENCE_PROVIDER").is_ok()
 }
@@ -54,9 +45,6 @@ fn use_mock_inference_provider() -> bool {
 pub trait OptimizationTestCase {
     fn supports_image_data(&self) -> bool;
     fn supports_tool_calls(&self) -> bool;
-    fn is_json_function(&self) -> bool {
-        false // Default to chat function
-    }
     fn get_optimizer_info(&self, use_mock_inference_provider: bool) -> UninitializedOptimizerInfo;
 }
 
@@ -68,12 +56,6 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .try_init();
 
     let uninitialized_optimizer_info = test_case.get_optimizer_info(use_mock_inference_provider());
-
-    // Extract variant name for DICL configs (we'll need this later for inference testing)
-    let dicl_variant_name = match &uninitialized_optimizer_info.inner {
-        UninitializedOptimizerConfig::Dicl(dicl_config) => Some(dicl_config.variant_name.clone()),
-        _ => None,
-    };
 
     let optimizer_info = uninitialized_optimizer_info.load().await.unwrap();
 
@@ -124,9 +106,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         panic!("Expected completed status");
     };
 
-    let is_json_function = test_case.is_json_function();
-
-    // Handle both Model and Variant outputs
+    // Handle Model output only
     match output {
         OptimizerOutput::Model(model_config) => {
             let model_config = model_config
@@ -180,15 +160,8 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 .unwrap();
             println!("Response: {response:?}");
         }
-        OptimizerOutput::Variant(variant_config) => {
-            // Test the variant configuration
-            println!("Variant configuration created successfully: {variant_config:?}");
-
-            // Test DICL variants with full inference
-            if let UninitializedVariantConfig::Dicl(dicl_config) = variant_config.as_ref() {
-                let variant_name = dicl_variant_name.as_ref().unwrap();
-                test_dicl_variant_inference(dicl_config, variant_name, is_json_function).await;
-            }
+        OptimizerOutput::Variant(_) => {
+            panic!("Expected model output, got variant output");
         }
     };
 }
@@ -236,11 +209,7 @@ pub async fn run_workflow_test_case_with_tensorzero_client(
 
 fn get_examples(test_case: &impl OptimizationTestCase, num_examples: usize) -> Vec<RenderedSample> {
     assert!(num_examples >= 10);
-    let mut generators: Vec<fn() -> RenderedSample> = if test_case.is_json_function() {
-        vec![generate_text_example_json] // Use JSON generator for JSON functions
-    } else {
-        vec![generate_text_example] // Use regular text generator for chat functions
-    };
+    let mut generators: Vec<fn() -> RenderedSample> = vec![generate_text_example];
 
     if test_case.supports_tool_calls() {
         generators.push(generate_tool_call_example);
@@ -293,68 +262,6 @@ fn generate_text_example() -> RenderedSample {
         dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
             text: "The capital of France is Marseille.".to_string(),
         })]],
-        tags: HashMap::from([("test_key".to_string(), "test_value".to_string())]),
-    }
-}
-
-fn generate_text_example_json() -> RenderedSample {
-    // So the examples are different
-    let id = Uuid::now_v7().to_string();
-    let system_prompt =
-        format!("You are a helpful assistant named Dr. M.M. Patel with id number {id}.");
-    let json_output = JsonInferenceOutput {
-        parsed: Some(json!({"answer": "The capital of France is Paris."})),
-        raw: Some(r#"{"answer":"The capital of France is Paris."}"#.to_string()),
-    };
-    let dispreferred_json_output = JsonInferenceOutput {
-        parsed: Some(json!({"answer": "The capital of France is Marseille."})),
-        raw: Some(r#"{"answer":"The capital of France is Marseille."}"#.to_string()),
-    };
-
-    // Convert JSON output to ContentBlockChatOutput as done in stored_inference.rs
-    let output = vec![ContentBlockChatOutput::Text(Text {
-        text: json_output.raw.clone().unwrap(),
-    })];
-    let dispreferred_output = vec![ContentBlockChatOutput::Text(Text {
-        text: dispreferred_json_output.raw.unwrap(),
-    })];
-
-    RenderedSample {
-        function_name: "basic_test".to_string(), // Same function name, different output type
-        input: ModelInput {
-            system: Some(system_prompt.clone()),
-            messages: vec![RequestMessage {
-                role: Role::User,
-                content: vec![ContentBlock::Text(Text {
-                    text: "What is the capital of France?".to_string(),
-                })],
-            }],
-        },
-        stored_input: ResolvedInput {
-            system: Some(json!(system_prompt)),
-            messages: vec![ResolvedInputMessage {
-                role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
-                    value: json!("What is the capital of France?"),
-                }],
-            }],
-        },
-        output: Some(output), // JSON output converted to chat format
-        stored_output: Some(StoredOutput::Json(json_output)),
-        episode_id: Some(Uuid::now_v7()),
-        inference_id: Some(Uuid::now_v7()),
-        tool_params: None,
-        output_schema: Some(json!({
-            "type": "object",
-            "properties": {
-                "answer": {
-                    "type": "string"
-                }
-            },
-            "required": ["answer"],
-            "additionalProperties": false
-        })),
-        dispreferred_outputs: vec![dispreferred_output],
         tags: HashMap::from([("test_key".to_string(), "test_value".to_string())]),
     }
 }
@@ -604,254 +511,6 @@ pub async fn make_http_gateway() -> Client {
     .build()
     .await
     .unwrap()
-}
-
-/// Test DICL variant inference by creating a temporary config and testing inference
-async fn test_dicl_variant_inference(
-    dicl_config: &tensorzero_core::variant::dicl::UninitializedDiclConfig,
-    variant_name: &str,
-    is_json_function: bool,
-) {
-    // Create a temporary directory for our config and schema files
-    let temp_dir = TempDir::new().unwrap();
-
-    // Create a system schema file
-    let system_schema_path = temp_dir.path().join("system_schema.json");
-    let system_schema_content = r#"{
-  "type": "object",
-  "properties": {
-    "assistant_name": {
-      "type": "string"
-    }
-  }
-}"#;
-    fs::write(&system_schema_path, system_schema_content).unwrap();
-
-    // Create a system template file
-    let system_template_path = temp_dir.path().join("system_template.minijinja");
-    let system_template_content = "You are a helpful assistant named {{assistant_name}}.";
-    fs::write(&system_template_path, system_template_content).unwrap();
-
-    // Create output schema file if this is a JSON function
-    if is_json_function {
-        let output_schema_path = temp_dir.path().join("output_schema.json");
-        let output_schema_content = r#"{
-  "type": "object",
-  "properties": {
-    "answer": {
-      "type": "string"
-    }
-  },
-  "required": ["answer"],
-  "additionalProperties": false
-}"#;
-        fs::write(&output_schema_path, output_schema_content).unwrap();
-    }
-
-    // Create a single complete config file with both base variant and DICL variant
-    let function_type = if is_json_function { "json" } else { "chat" };
-    let output_schema_line = if is_json_function {
-        r#"output_schema = "output_schema.json""#
-    } else {
-        ""
-    };
-    let json_mode_line = if is_json_function {
-        r#"json_mode = "strict""#
-    } else {
-        ""
-    };
-
-    let config_content = format!(
-        r#"
-[functions.basic_test]
-type = "{}"
-system_schema = "system_schema.json"
-{}
-
-[functions.basic_test.variants.gpt_4o_mini]
-type = "chat_completion"
-model = "openai::gpt-4o-mini-2024-07-18"
-system_template = "system_template.minijinja"
-{}
-
-[functions.basic_test.variants.{}]
-type = "experimental_dynamic_in_context_learning"
-embedding_model = "{}"
-k = {}
-model = "{}"
-{}
-
-[embedding_models.text-embedding-3-small]
-routing = ["openai"]
-
-[embedding_models.text-embedding-3-small.providers.openai]
-type = "openai"
-model_name = "text-embedding-3-small"
-"#,
-        function_type,
-        output_schema_line,
-        json_mode_line,
-        variant_name,
-        dicl_config.embedding_model,
-        dicl_config.k,
-        dicl_config.model,
-        if is_json_function {
-            "json_mode = \"strict\""
-        } else {
-            ""
-        }
-    );
-
-    let config_path = temp_dir.path().join("tensorzero.toml");
-    fs::write(&config_path, config_content).unwrap();
-
-    // Create a new gateway with the single config file
-    let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
-        config_file: Some(config_path),
-        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        timeout: None,
-        verify_credentials: true,
-        allow_batch_writes: true,
-    })
-    .with_verbose_errors(true)
-    .build()
-    .await
-    .unwrap();
-
-    // Generate a unique episode ID for tracking
-    let episode_id = Uuid::now_v7();
-
-    // Test inference with the DICL variant - using patterns from e2e tests
-    let inference_params = ClientInferenceParams {
-        function_name: Some("basic_test".to_string()),
-        model_name: None,
-        episode_id: Some(episode_id),
-        input: ClientInput {
-            system: Some(serde_json::json!({"assistant_name": "TensorZero Test Assistant"})),
-            messages: vec![ClientInputMessage {
-                role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
-                    text: "What is the capital of France?".to_string(),
-                })],
-            }],
-        },
-        stream: Some(false),
-        params: Default::default(),
-        variant_name: Some(variant_name.to_string()),
-        dryrun: None,
-        internal: false,
-        tags: Default::default(),
-        dynamic_tool_params: Default::default(),
-        output_schema: None,
-        credentials: Default::default(),
-        cache_options: Default::default(),
-        include_original_response: true, // Include original response for better debugging
-        extra_body: Default::default(),
-        extra_headers: Default::default(),
-        internal_dynamic_variant_config: None,
-    };
-
-    // Perform inference
-    match client.inference(inference_params).await {
-        Ok(response) => {
-            println!("✅ DICL variant inference successful!");
-            println!("Variant name used: {variant_name}");
-
-            // Verify response structure and content - following e2e patterns
-            match response {
-                InferenceOutput::NonStreaming(tensorzero::InferenceResponse::Chat(
-                    ref chat_response,
-                )) => {
-                    // Verify basic response structure
-                    assert_eq!(
-                        chat_response.variant_name, variant_name,
-                        "Variant name should match"
-                    );
-                    assert_eq!(
-                        chat_response.episode_id, episode_id,
-                        "Episode ID should match"
-                    );
-
-                    // Verify content
-                    assert!(
-                        !chat_response.content.is_empty(),
-                        "Chat response should not be empty"
-                    );
-                    let first_content = &chat_response.content[0];
-
-                    // Check that the response mentions something about France/Paris
-                    if let ContentBlockChatOutput::Text(ref text_content) = first_content {
-                        let content_lower = text_content.text.to_lowercase();
-                        assert!(
-                            content_lower.contains("paris") || content_lower.contains("france"),
-                            "Response should mention Paris or France, got: {}",
-                            text_content.text
-                        );
-                    }
-
-                    // Verify usage metrics
-                    assert!(
-                        chat_response.usage.input_tokens > 0,
-                        "Should have input tokens"
-                    );
-                    assert!(
-                        chat_response.usage.output_tokens > 0,
-                        "Should have output tokens"
-                    );
-
-                    // DICL should have expected input tokens due to retrieved examples
-                    assert!(
-                        chat_response.usage.input_tokens > MIN_TOKENS_WITH_DICL_EXAMPLES,
-                        "DICL variant '{}' should use expected input tokens due to retrieved examples. Got: {} tokens, expected > {}",
-                        variant_name,
-                        chat_response.usage.input_tokens,
-                        MIN_TOKENS_WITH_DICL_EXAMPLES
-                    );
-                }
-                InferenceOutput::NonStreaming(tensorzero::InferenceResponse::Json(
-                    ref json_response,
-                )) => {
-                    // For JSON responses, verify structure
-                    assert_eq!(
-                        json_response.variant_name, variant_name,
-                        "Variant name should match"
-                    );
-                    assert_eq!(
-                        json_response.episode_id, episode_id,
-                        "Episode ID should match"
-                    );
-                    assert!(
-                        json_response.output.parsed.is_some(),
-                        "JSON response should have content"
-                    );
-                    assert!(
-                        json_response.usage.input_tokens > 0,
-                        "Should have input tokens"
-                    );
-                    assert!(
-                        json_response.usage.output_tokens > 0,
-                        "Should have output tokens"
-                    );
-
-                    // DICL should have expected input tokens due to retrieved examples
-                    assert!(
-                        json_response.usage.input_tokens > MIN_TOKENS_WITH_DICL_EXAMPLES,
-                        "DICL variant '{}' should use expected input tokens due to retrieved examples. Got: {} tokens, expected > {}",
-                        variant_name,
-                        json_response.usage.input_tokens,
-                        MIN_TOKENS_WITH_DICL_EXAMPLES
-                    );
-                }
-                InferenceOutput::Streaming(_) => {
-                    panic!("Unexpected streaming response for non-streaming request");
-                }
-            }
-        }
-        Err(e) => {
-            panic!("DICL variant '{variant_name}' inference failed: {e}");
-        }
-    }
-    println!("✅ DICL variant test completed successfully");
 }
 
 /// Generates a `#[tokio::test] async fn $fn_name() { run_test_case(&$constructor).await; }`
