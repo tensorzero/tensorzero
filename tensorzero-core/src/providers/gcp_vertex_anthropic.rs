@@ -149,11 +149,11 @@ impl GCPVertexAnthropicProvider {
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
 
         Ok(GCPVertexAnthropicProvider {
+            model_id,
             request_url,
             streaming_request_url,
             audience,
             credentials,
-            model_id,
         })
     }
 

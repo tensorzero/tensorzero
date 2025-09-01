@@ -785,8 +785,8 @@ impl<'a> BatchInferenceConfig<'a> {
         variant_name: &'a str,
     ) -> Self {
         Self {
-            templates,
             tool_configs,
+            templates,
             dynamic_output_schemas,
             function_name,
             variant_name,
