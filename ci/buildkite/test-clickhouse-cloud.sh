@@ -75,8 +75,6 @@ while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
 done
 export GATEWAY_PID=$!
 kill $GATEWAY_PID
-cat e2e_logs.txt
-rm e2e_logs.txt
 cargo run-e2e > e2e_logs.txt 2>&1 &
     count=0
     max_attempts=30
