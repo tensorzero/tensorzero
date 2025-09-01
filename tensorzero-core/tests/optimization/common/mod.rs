@@ -26,7 +26,10 @@ use tensorzero_core::{
         ResolvedInputMessageContent, Text, TextKind,
     },
     optimization::JobHandle,
-    optimization::{OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo},
+    optimization::{
+        OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerConfig,
+        UninitializedOptimizerInfo,
+    },
     stored_inference::StoredOutput,
     tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
     variant::JsonMode,
@@ -39,6 +42,10 @@ pub mod openai_sft;
 pub mod together_sft;
 
 static FERRIS_PNG: &[u8] = include_bytes!("../../e2e/providers/ferris.png");
+
+/// Minimum expected input tokens when DICL retrieves examples
+/// This threshold helps verify that examples are actually being retrieved and used
+const MIN_TOKENS_WITH_DICL_EXAMPLES: u32 = 500;
 
 fn use_mock_inference_provider() -> bool {
     std::env::var("TENSORZERO_USE_MOCK_INFERENCE_PROVIDER").is_ok()
@@ -60,11 +67,16 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
-    let optimizer_info = test_case
-        .get_optimizer_info(use_mock_inference_provider())
-        .load()
-        .await
-        .unwrap();
+    let uninitialized_optimizer_info = test_case.get_optimizer_info(use_mock_inference_provider());
+
+    // Extract variant name for DICL configs (we'll need this later for inference testing)
+    let dicl_variant_name = match &uninitialized_optimizer_info.inner {
+        UninitializedOptimizerConfig::Dicl(dicl_config) => Some(dicl_config.variant_name.clone()),
+        _ => None,
+    };
+
+    let optimizer_info = uninitialized_optimizer_info.load().await.unwrap();
+
     let client = reqwest::Client::new();
     let test_examples = get_examples(test_case, 10);
     let val_examples = Some(get_examples(test_case, 10));
@@ -112,7 +124,6 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         panic!("Expected completed status");
     };
 
-    // Bind is_json_function before the match since we lose access to test_case inside
     let is_json_function = test_case.is_json_function();
 
     // Handle both Model and Variant outputs
@@ -175,7 +186,8 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
 
             // Test DICL variants with full inference
             if let UninitializedVariantConfig::Dicl(dicl_config) = variant_config.as_ref() {
-                test_dicl_variant_inference(dicl_config, is_json_function).await;
+                let variant_name = dicl_variant_name.as_ref().unwrap();
+                test_dicl_variant_inference(dicl_config, variant_name, is_json_function).await;
             }
         }
     };
@@ -597,6 +609,7 @@ pub async fn make_http_gateway() -> Client {
 /// Test DICL variant inference by creating a temporary config and testing inference
 async fn test_dicl_variant_inference(
     dicl_config: &tensorzero_core::variant::dicl::UninitializedDiclConfig,
+    variant_name: &str,
     is_json_function: bool,
 ) {
     // Create a temporary directory for our config and schema files
@@ -636,12 +649,6 @@ async fn test_dicl_variant_inference(
     }
 
     // Create a single complete config file with both base variant and DICL variant
-    // The variant name should match what was used during optimization
-    let variant_name = if is_json_function {
-        "test_dicl_json".to_string()
-    } else {
-        "test_dicl".to_string()
-    };
     let function_type = if is_json_function { "json" } else { "chat" };
     let output_schema_line = if is_json_function {
         r#"output_schema = "output_schema.json""#
@@ -730,7 +737,7 @@ model_name = "text-embedding-3-small"
         },
         stream: Some(false),
         params: Default::default(),
-        variant_name: Some(variant_name.clone()),
+        variant_name: Some(variant_name.to_string()),
         dryrun: None,
         internal: false,
         tags: Default::default(),
@@ -744,7 +751,7 @@ model_name = "text-embedding-3-small"
         internal_dynamic_variant_config: None,
     };
 
-    // Perform the inference
+    // Perform inference
     match client.inference(inference_params).await {
         Ok(response) => {
             println!("✅ DICL variant inference successful!");
@@ -792,11 +799,13 @@ model_name = "text-embedding-3-small"
                         "Should have output tokens"
                     );
 
-                    // DICL should have significantly more input tokens due to retrieved examples
+                    // DICL should have expected input tokens due to retrieved examples
                     assert!(
-                        chat_response.usage.input_tokens > 500,
-                        "DICL should use significantly more input tokens due to retrieved examples. Got: {} tokens, expected > 500",
-                        chat_response.usage.input_tokens
+                        chat_response.usage.input_tokens > MIN_TOKENS_WITH_DICL_EXAMPLES,
+                        "DICL variant '{}' should use expected input tokens due to retrieved examples. Got: {} tokens, expected > {}",
+                        variant_name,
+                        chat_response.usage.input_tokens,
+                        MIN_TOKENS_WITH_DICL_EXAMPLES
                     );
                 }
                 InferenceOutput::NonStreaming(tensorzero::InferenceResponse::Json(
@@ -812,7 +821,7 @@ model_name = "text-embedding-3-small"
                         "Episode ID should match"
                     );
                     assert!(
-                        json_response.output.parsed.is_some() || json_response.output.raw.is_some(),
+                        json_response.output.parsed.is_some(),
                         "JSON response should have content"
                     );
                     assert!(
@@ -823,6 +832,15 @@ model_name = "text-embedding-3-small"
                         json_response.usage.output_tokens > 0,
                         "Should have output tokens"
                     );
+
+                    // DICL should have expected input tokens due to retrieved examples
+                    assert!(
+                        json_response.usage.input_tokens > MIN_TOKENS_WITH_DICL_EXAMPLES,
+                        "DICL variant '{}' should use expected input tokens due to retrieved examples. Got: {} tokens, expected > {}",
+                        variant_name,
+                        json_response.usage.input_tokens,
+                        MIN_TOKENS_WITH_DICL_EXAMPLES
+                    );
                 }
                 InferenceOutput::Streaming(_) => {
                     panic!("Unexpected streaming response for non-streaming request");
@@ -830,7 +848,7 @@ model_name = "text-embedding-3-small"
             }
         }
         Err(e) => {
-            panic!("DICL variant inference failed: {e}");
+            panic!("DICL variant '{variant_name}' inference failed: {e}");
         }
     }
     println!("✅ DICL variant test completed successfully");
