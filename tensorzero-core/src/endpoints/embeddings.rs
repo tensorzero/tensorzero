@@ -42,9 +42,11 @@ pub async fn embeddings(
         .embedding_models
         .get(&params.model_name)
         .await?
-        .ok_or(Error::new(ErrorDetails::ModelNotFound {
-            model_name: params.model_name.clone(),
-        }))?;
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::ModelNotFound {
+                model_name: params.model_name.clone(),
+            })
+        })?;
     if let EmbeddingInput::Batch(array) = &params.input {
         if array.is_empty() {
             return Err(Error::new(ErrorDetails::InvalidRequest {
