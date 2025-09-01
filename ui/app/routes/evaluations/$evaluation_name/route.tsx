@@ -218,10 +218,10 @@ export async function action({ request }: Route.ActionArgs) {
     }
     case null:
       logger.error("No action provided");
-      return null;
+      return data({ error: "No action provided" }, { status: 400 });
     default:
       logger.error(`Unknown action: ${_action}`);
-      return null;
+      return data({ error: `Unknown action: ${_action}` }, { status: 400 });
   }
 }
 
