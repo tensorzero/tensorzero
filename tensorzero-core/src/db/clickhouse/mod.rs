@@ -5,6 +5,7 @@ use reqwest::multipart::Form;
 use reqwest::multipart::Part;
 use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
+use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
@@ -82,6 +83,7 @@ pub enum TableName {
     FloatMetricFeedback,
     DemonstrationFeedback,
     CommentFeedback,
+    StaticEvaluationHumanFeedback,
 }
 
 impl TableName {
@@ -101,6 +103,7 @@ impl TableName {
             TableName::FloatMetricFeedback => "FloatMetricFeedback",
             TableName::DemonstrationFeedback => "DemonstrationFeedback",
             TableName::CommentFeedback => "CommentFeedback",
+            TableName::StaticEvaluationHumanFeedback => "StaticEvaluationHumanFeedback",
         }
     }
 }
@@ -128,7 +131,8 @@ impl ClickHouseConnectionInfo {
             .unwrap_or_else(|| "default".to_string());
 
         #[cfg(feature = "e2e_tests")]
-        let database = "tensorzero_e2e_tests".to_string();
+        let database = std::env::var("TENSORZERO_E2E_TESTS_DATABASE")
+            .unwrap_or_else(|_| "tensorzero_e2e_tests".to_string());
 
         // Although we take the database name from the URL path,
         // we need to set the query string for the database name for the ClickHouse TCP protocol
@@ -424,11 +428,26 @@ impl ClickHouseConnectionInfo {
         }
     }
 
+    // TODO: deprecate this
     pub async fn run_query_synchronous_no_params(
         &self,
         query: String,
     ) -> Result<ClickHouseResponse, Error> {
         self.run_query_synchronous(query, &HashMap::default()).await
+    }
+
+    pub async fn run_query_synchronous_no_params_de<T>(&self, query: String) -> Result<T, Error>
+    where
+        T: DeserializeOwned,
+    {
+        let result = self
+            .run_query_synchronous(query, &HashMap::default())
+            .await?;
+        serde_json::from_str(&result.response).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: e.to_string(),
+            })
+        })
     }
 
     /// Sometimes you might want to treat the data you're sending as a table if you're going
