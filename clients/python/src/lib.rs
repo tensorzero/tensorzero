@@ -494,14 +494,14 @@ impl BaseTensorZeroGateway {
         let extra_body: UnfilteredInferenceExtraBody = if let Some(extra_body) = extra_body {
             deserialize_from_pyobj(py, extra_body)?
         } else {
-            Default::default()
+            UnfilteredInferenceExtraBody::default()
         };
 
         let extra_headers: UnfilteredInferenceExtraHeaders =
             if let Some(extra_headers) = extra_headers {
                 deserialize_from_pyobj(py, extra_headers)?
             } else {
-                Default::default()
+                UnfilteredInferenceExtraHeaders::default()
             };
 
         let input: ClientInput = deserialize_from_pyobj(py, &input)?;

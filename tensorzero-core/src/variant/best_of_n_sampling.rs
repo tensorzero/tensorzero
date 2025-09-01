@@ -12,8 +12,10 @@ use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
-use crate::inference::types::extra_body::FullExtraBodyConfig;
-use crate::inference::types::extra_headers::FullExtraHeadersConfig;
+use crate::inference::types::extra_body::{FilteredInferenceExtraBody, FullExtraBodyConfig};
+use crate::inference::types::extra_headers::{
+    FilteredInferenceExtraHeaders, FullExtraHeadersConfig,
+};
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, FunctionType, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage, Role,
@@ -700,11 +702,11 @@ impl BestOfNEvaluatorConfig {
         }
         let extra_body = FullExtraBodyConfig {
             extra_body: self.inner.extra_body.clone(),
-            inference_extra_body: Default::default(),
+            inference_extra_body: FilteredInferenceExtraBody::default(),
         };
         let extra_headers = FullExtraHeadersConfig {
             variant_extra_headers: self.inner.extra_headers.clone(),
-            inference_extra_headers: Default::default(),
+            inference_extra_headers: FilteredInferenceExtraHeaders::default(),
         };
         Ok((
             ModelInferenceRequest {
@@ -763,6 +765,7 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
+        config::TimeoutsConfig,
         db::clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::{InferenceCredentials, InferenceIds},
         inference::types::{
@@ -1230,13 +1233,13 @@ mod tests {
                             model_name: "best_of_n_1".into(),
                             ..Default::default()
                         }),
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        timeouts: Default::default(),
+                        extra_body: Option::default(),
+                        extra_headers: Option::default(),
+                        timeouts: TimeoutsConfig::default(),
                         discard_unknown_chunks: false,
                     },
                 )]),
-                timeouts: Default::default(),
+                timeouts: TimeoutsConfig::default(),
             },
         )]))
         .expect("Failed to create model table");
@@ -1266,8 +1269,8 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: "",
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::default(),
+            extra_headers: Cow::default(),
             extra_cache_key: None,
         };
 
@@ -1330,13 +1333,13 @@ mod tests {
                                 model_name: "error".into(),
                                 ..Default::default()
                             }),
-                            extra_body: Default::default(),
-                            extra_headers: Default::default(),
-                            timeouts: Default::default(),
+                            extra_body: Option::default(),
+                            extra_headers: Option::default(),
+                            timeouts: TimeoutsConfig::default(),
                             discard_unknown_chunks: false,
                         },
                     )]),
-                    timeouts: Default::default(),
+                    timeouts: TimeoutsConfig::default(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
@@ -1397,13 +1400,13 @@ mod tests {
                                 model_name: "regular".into(),
                                 ..Default::default()
                             }),
-                            extra_body: Default::default(),
-                            extra_headers: Default::default(),
-                            timeouts: Default::default(),
+                            extra_body: Option::default(),
+                            extra_headers: Option::default(),
+                            timeouts: TimeoutsConfig::default(),
                             discard_unknown_chunks: false,
                         },
                     )]),
-                    timeouts: Default::default(),
+                    timeouts: TimeoutsConfig::default(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
@@ -1481,13 +1484,13 @@ mod tests {
                             model_name: "best_of_n_big".into(),
                             ..Default::default()
                         }),
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        timeouts: Default::default(),
+                        extra_body: Option::default(),
+                        extra_headers: Option::default(),
+                        timeouts: TimeoutsConfig::default(),
                         discard_unknown_chunks: false,
                     },
                 )]),
-                timeouts: Default::default(),
+                timeouts: TimeoutsConfig::default(),
             },
         );
         let big_models = ModelTable::try_from(big_models).expect("Failed to create model table");

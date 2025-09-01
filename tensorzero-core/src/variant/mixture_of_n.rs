@@ -10,7 +10,7 @@ use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
-use crate::inference::types::extra_body::FullExtraBodyConfig;
+use crate::inference::types::extra_body::{FilteredInferenceExtraBody, FullExtraBodyConfig};
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
@@ -824,7 +824,7 @@ impl FuserConfig {
         }
         let extra_body = FullExtraBodyConfig {
             extra_body: self.inner.extra_body.clone(),
-            inference_extra_body: Default::default(),
+            inference_extra_body: FilteredInferenceExtraBody::default(),
         };
         let extra_headers = FullExtraHeadersConfig {
             variant_extra_headers: self.inner.extra_headers.clone(),
@@ -851,6 +851,7 @@ impl FuserConfig {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
     use std::collections::HashMap;
 
     use reqwest::Client;
@@ -859,7 +860,7 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        config::SchemaData,
+        config::{SchemaData, TimeoutsConfig},
         db::clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::{InferenceCredentials, InferenceIds},
         function::{FunctionConfigChat, FunctionConfigJson},
@@ -1296,13 +1297,13 @@ mod tests {
                             model_name: "json".into(),
                             ..Default::default()
                         }),
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        timeouts: Default::default(),
+                        extra_body: Option::default(),
+                        extra_headers: Option::default(),
+                        timeouts: TimeoutsConfig::default(),
                         discard_unknown_chunks: false,
                     },
                 )]),
-                timeouts: Default::default(),
+                timeouts: TimeoutsConfig::default(),
             },
         )]))
         .expect("Failed to create model table");
@@ -1332,8 +1333,8 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: "",
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::default(),
+            extra_headers: Cow::default(),
             extra_cache_key: None,
         };
 
@@ -1401,13 +1402,13 @@ mod tests {
                                 model_name: "error".into(),
                                 ..Default::default()
                             }),
-                            extra_body: Default::default(),
-                            extra_headers: Default::default(),
-                            timeouts: Default::default(),
+                            extra_body: Option::default(),
+                            extra_headers: Option::default(),
+                            timeouts: TimeoutsConfig::default(),
                             discard_unknown_chunks: false,
                         },
                     )]),
-                    timeouts: Default::default(),
+                    timeouts: TimeoutsConfig::default(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
@@ -1474,13 +1475,13 @@ mod tests {
                                 model_name: "regular".into(),
                                 ..Default::default()
                             }),
-                            extra_body: Default::default(),
-                            extra_headers: Default::default(),
-                            timeouts: Default::default(),
+                            extra_body: Option::default(),
+                            extra_headers: Option::default(),
+                            timeouts: TimeoutsConfig::default(),
                             discard_unknown_chunks: false,
                         },
                     )]),
-                    timeouts: Default::default(),
+                    timeouts: TimeoutsConfig::default(),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")

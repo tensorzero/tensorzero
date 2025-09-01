@@ -1249,6 +1249,7 @@ fn parse_usage_info(usage_info: &Value) -> GCPVertexAnthropic {
 
 #[cfg(test)]
 mod tests {
+    use crate::inference::types::extra_body::FullExtraBodyConfig;
     use crate::inference::types::FlattenUnknown;
     use std::borrow::Cow;
 
@@ -1452,7 +1453,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let anthropic_request_body =
@@ -1491,7 +1492,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let anthropic_request_body =
@@ -1548,7 +1549,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let anthropic_request_body =
@@ -1619,7 +1620,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -2139,7 +2140,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let request_body = GCPVertexAnthropicRequestBody {
@@ -2233,7 +2234,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let request_body = GCPVertexAnthropicRequestBody {
@@ -2326,7 +2327,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let request_body = GCPVertexAnthropicRequestBody {
@@ -2749,7 +2750,7 @@ mod tests {
                 index: 0,
             },
             Duration::from_secs(0),
-            &mut Default::default(),
+            &mut Option::default(),
             true,
         )
         .unwrap();

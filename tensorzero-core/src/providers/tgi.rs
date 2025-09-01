@@ -763,6 +763,7 @@ fn tgi_to_tensorzero_chunk(
 
 #[cfg(test)]
 mod tests {
+    use crate::inference::types::extra_body::FullExtraBodyConfig;
     use std::borrow::Cow;
 
     use serde_json::json;
@@ -806,7 +807,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let tgi_request = TGIRequest::new(&model_name, &basic_request).unwrap();
@@ -843,7 +844,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -891,7 +892,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -927,7 +928,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -1006,7 +1007,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let tgi_response_with_metadata = TGIResponseWithMetadata {

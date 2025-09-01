@@ -18,6 +18,7 @@ use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
+use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
@@ -316,7 +317,7 @@ impl EmbeddingProvider for AzureProvider {
         let (response, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
             &FullExtraBodyConfig::default(), // No overrides supported
-            &Default::default(),             // No extra headers for embeddings yet
+            &FullExtraHeadersConfig::default(), // No extra headers for embeddings yet
             model_provider_data,
             &self.deployment_id,
             request_body_value,
@@ -693,6 +694,7 @@ mod tests {
 
     use super::*;
 
+    use crate::inference::types::extra_body::FullExtraBodyConfig;
     use crate::inference::types::{
         FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
@@ -722,7 +724,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -768,7 +770,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Json,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -911,7 +913,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let azure_response_with_metadata = AzureResponseWithMetadata {

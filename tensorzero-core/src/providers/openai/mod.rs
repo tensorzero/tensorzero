@@ -30,6 +30,7 @@ use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
 use crate::inference::types::extra_body::FullExtraBodyConfig;
+use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::file::{mime_type_to_ext, require_image};
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
@@ -617,7 +618,7 @@ impl EmbeddingProvider for OpenAIProvider {
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
             &FullExtraBodyConfig::default(), // No overrides supported
-            &Default::default(),             // No extra headers for embeddings yet
+            &FullExtraHeadersConfig::default(), // No extra headers for embeddings yet
             model_provider_data,
             &self.model_name,
             request_body_value,
@@ -2329,6 +2330,7 @@ mod tests {
     use std::borrow::Cow;
     use tracing_test::traced_test;
 
+    use crate::inference::types::extra_body::FullExtraBodyConfig;
     use crate::inference::types::{FunctionType, RequestMessage};
     use crate::providers::test_helpers::{
         MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
@@ -2489,7 +2491,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -2528,7 +2530,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -2580,7 +2582,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -2621,7 +2623,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -2665,7 +2667,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -2702,7 +2704,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -2769,7 +2771,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -2868,7 +2870,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -3052,7 +3054,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request_with_tools);
@@ -3094,7 +3096,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let (tools, tool_choice, parallel_tool_calls) =

@@ -56,7 +56,7 @@ impl UninitializedGatewayConfig {
                 base_path: None,
             },
             (None, Some(template_filesystem_access)) => template_filesystem_access,
-            (None, None) => Default::default(),
+            (None, None) => TemplateFilesystemAccess::default(),
             (Some(_), Some(_)) => {
                 return Err(Error::new(ErrorDetails::Config {
                     message: "`gateway.enable_template_filesystem_access` and `gateway.template_filesystem_access` cannot both be set".to_string(),

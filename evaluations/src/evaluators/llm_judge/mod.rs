@@ -12,6 +12,8 @@ use tensorzero_core::evaluations::{
     get_evaluator_metric_name, get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat,
     LLMJudgeOutputType,
 };
+use tensorzero_core::inference::types::extra_body::UnfilteredInferenceExtraBody;
+use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, TextKind};
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
@@ -121,8 +123,8 @@ pub async fn run_llm_judge_evaluator(
         output_schema: None,
         credentials: HashMap::new(),
         cache_options: get_cache_options(inference_cache),
-        extra_body: Default::default(),
-        extra_headers: Default::default(),
+        extra_body: UnfilteredInferenceExtraBody::default(),
+        extra_headers: UnfilteredInferenceExtraHeaders::default(),
         internal_dynamic_variant_config: None,
     };
     let result = clients.tensorzero_client.inference(params).await?;

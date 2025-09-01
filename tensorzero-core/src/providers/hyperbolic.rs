@@ -424,6 +424,7 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
 
 #[cfg(test)]
 mod tests {
+    use crate::inference::types::extra_body::FullExtraBodyConfig;
     use std::borrow::Cow;
     use std::time::Duration;
 
@@ -459,7 +460,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
 
@@ -544,7 +545,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: Default::default(),
+            extra_body: FullExtraBodyConfig::default(),
             ..Default::default()
         };
         let hyperbolic_response_with_metadata = HyperbolicResponseWithMetadata {

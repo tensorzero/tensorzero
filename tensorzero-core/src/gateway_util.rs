@@ -345,7 +345,10 @@ mod tests {
     use tracing_test::traced_test;
 
     use super::*;
-    use crate::config::{gateway::GatewayConfig, ObservabilityConfig};
+    use crate::config::{
+        gateway::GatewayConfig, BatchWritesConfig, ExportConfig, ObservabilityConfig,
+        TemplateFilesystemAccess,
+    };
 
     #[tokio::test]
     #[traced_test]
@@ -355,12 +358,12 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: Some(false),
                 async_writes: false,
-                batch_writes: Default::default(),
+                batch_writes: BatchWritesConfig::default(),
             },
             bind_address: None,
             debug: false,
-            template_filesystem_access: Default::default(),
-            export: Default::default(),
+            template_filesystem_access: TemplateFilesystemAccess::default(),
+            export: ExportConfig::default(),
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
@@ -386,7 +389,7 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: None,
                 async_writes: false,
-                batch_writes: Default::default(),
+                batch_writes: BatchWritesConfig::default(),
             },
             unstable_error_json: false,
             ..Default::default()
@@ -413,12 +416,12 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: Some(true),
                 async_writes: false,
-                batch_writes: Default::default(),
+                batch_writes: BatchWritesConfig::default(),
             },
             bind_address: None,
             debug: false,
-            template_filesystem_access: Default::default(),
-            export: Default::default(),
+            template_filesystem_access: TemplateFilesystemAccess::default(),
+            export: ExportConfig::default(),
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
@@ -440,12 +443,12 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: Some(true),
                 async_writes: false,
-                batch_writes: Default::default(),
+                batch_writes: BatchWritesConfig::default(),
             },
             bind_address: None,
             debug: false,
-            template_filesystem_access: Default::default(),
-            export: Default::default(),
+            template_filesystem_access: TemplateFilesystemAccess::default(),
+            export: ExportConfig::default(),
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
@@ -469,12 +472,12 @@ mod tests {
             observability: ObservabilityConfig {
                 enabled: Some(true),
                 async_writes: false,
-                batch_writes: Default::default(),
+                batch_writes: BatchWritesConfig::default(),
             },
             bind_address: None,
             debug: false,
-            template_filesystem_access: Default::default(),
-            export: Default::default(),
+            template_filesystem_access: TemplateFilesystemAccess::default(),
+            export: ExportConfig::default(),
             base_path: None,
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,

@@ -671,7 +671,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::cache::{CacheEnabledMode, CacheOptions};
-    use crate::config::SchemaData;
+    use crate::config::{SchemaData, TimeoutsConfig};
     use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::embeddings::EmbeddingModelTable;
     use crate::endpoints::inference::{
@@ -717,8 +717,8 @@ mod tests {
             seed: None,
             stop_sequences: None,
             retries: RetryConfig::default(),
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Option::default(),
+            extra_headers: Option::default(),
         };
 
         // Test case 1: Regular user message
@@ -1126,13 +1126,13 @@ mod tests {
                 ModelProvider {
                     name: "good".into(),
                     config: good_provider_config,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
-                    timeouts: Default::default(),
+                    extra_body: Option::default(),
+                    extra_headers: Option::default(),
+                    timeouts: TimeoutsConfig::default(),
                     discard_unknown_chunks: false,
                 },
             )]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
         let json_model_config = ModelConfig {
             routing: vec!["json_provider".into()],
@@ -1141,13 +1141,13 @@ mod tests {
                 ModelProvider {
                     name: "json_provider".into(),
                     config: json_provider_config,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
-                    timeouts: Default::default(),
+                    extra_body: Option::default(),
+                    extra_headers: Option::default(),
+                    timeouts: TimeoutsConfig::default(),
                     discard_unknown_chunks: false,
                 },
             )]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
         let tool_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "tool".into(),
@@ -1160,13 +1160,13 @@ mod tests {
                 ModelProvider {
                     name: "tool_provider".into(),
                     config: tool_provider_config,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
-                    timeouts: Default::default(),
+                    extra_body: Option::default(),
+                    extra_headers: Option::default(),
+                    timeouts: TimeoutsConfig::default(),
                     discard_unknown_chunks: false,
                 },
             )]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
         let error_model_config = ModelConfig {
             routing: vec!["error".into()],
@@ -1175,13 +1175,13 @@ mod tests {
                 ModelProvider {
                     name: "error".into(),
                     config: error_provider_config,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
-                    timeouts: Default::default(),
+                    extra_body: Option::default(),
+                    extra_headers: Option::default(),
+                    timeouts: TimeoutsConfig::default(),
                     discard_unknown_chunks: false,
                 },
             )]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
         // Test case 1: invalid message (String passed when template required)
         let messages = vec![ResolvedInputMessage {
@@ -1203,8 +1203,8 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::default(),
+            extra_headers: Cow::default(),
             extra_cache_key: None,
         };
         let models = ModelTable::default();
@@ -1258,8 +1258,8 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::default(),
+            extra_headers: Cow::default(),
             extra_cache_key: None,
         };
         let result = chat_completion_config
@@ -1319,8 +1319,8 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::default(),
+            extra_headers: Cow::default(),
             extra_cache_key: None,
         };
         let err = chat_completion_config
@@ -1387,13 +1387,13 @@ mod tests {
                 ModelProvider {
                     name: "good_provider".into(),
                     config: good_provider_config,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
-                    timeouts: Default::default(),
+                    extra_body: Option::default(),
+                    extra_headers: Option::default(),
+                    timeouts: TimeoutsConfig::default(),
                     discard_unknown_chunks: false,
                 },
             )]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
         let models = HashMap::from([("good".into(), text_model_config)])
             .try_into()
@@ -1412,8 +1412,8 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::default(),
+            extra_headers: Cow::default(),
             extra_cache_key: None,
         };
         let result = chat_completion_config
@@ -1491,8 +1491,8 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::default(),
+            extra_headers: Cow::default(),
             extra_cache_key: None,
         };
         let result = chat_completion_config
@@ -1582,8 +1582,8 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::default(),
+            extra_headers: Cow::default(),
             extra_cache_key: None,
         };
         let inference_params = InferenceParams::default();
@@ -1644,8 +1644,8 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: None,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::default(),
+            extra_headers: Cow::default(),
             extra_cache_key: None,
         };
         let chat_completion_config = ChatCompletionConfig {
@@ -1668,7 +1668,7 @@ mod tests {
                 }),
                 assistant: None,
             },
-            extra_body: Default::default(),
+            extra_body: Option::default(),
             ..Default::default()
         };
         let result = chat_completion_config
@@ -1768,8 +1768,8 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: Some(&output_schema),
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::default(),
+            extra_headers: Cow::default(),
             extra_cache_key: None,
         };
         let chat_completion_config = ChatCompletionConfig {
@@ -1880,8 +1880,8 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: Some(&output_schema),
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::default(),
+            extra_headers: Cow::default(),
             extra_cache_key: None,
         };
         let chat_completion_config = ChatCompletionConfig {
@@ -2010,13 +2010,13 @@ mod tests {
                 ModelProvider {
                     name: "good_provider".into(),
                     config: good_provider_config,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
-                    timeouts: Default::default(),
+                    extra_body: Option::default(),
+                    extra_headers: Option::default(),
+                    timeouts: TimeoutsConfig::default(),
                     discard_unknown_chunks: false,
                 },
             )]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
         let error_model_config = ModelConfig {
             routing: vec!["error_provider".into()],
@@ -2025,13 +2025,13 @@ mod tests {
                 ModelProvider {
                     name: "error_provider".into(),
                     config: error_provider_config,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
-                    timeouts: Default::default(),
+                    extra_body: Option::default(),
+                    extra_headers: Option::default(),
+                    timeouts: TimeoutsConfig::default(),
                     discard_unknown_chunks: false,
                 },
             )]),
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
         };
         // Test case 1: Model inference fails because of model issues
         let inference_params = InferenceParams::default();
@@ -2085,8 +2085,8 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: "",
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::default(),
+            extra_headers: Cow::default(),
             extra_cache_key: None,
         };
         let result = chat_completion_config
@@ -2159,8 +2159,8 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: None,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::default(),
+            extra_headers: Cow::default(),
             extra_cache_key: None,
         };
         let (mut stream, models_used) = chat_completion_config
@@ -2264,8 +2264,8 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: None,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::default(),
+            extra_headers: Cow::default(),
             extra_cache_key: None,
         };
         let model_request = chat_completion_config
@@ -2374,8 +2374,8 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: "",
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::default(),
+            extra_headers: Cow::default(),
             extra_cache_key: None,
         };
         let mut inference_params = InferenceParams::default();
@@ -2454,8 +2454,8 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
+            extra_body: Cow::default(),
+            extra_headers: Cow::default(),
             extra_cache_key: None,
         };
         let model_request = chat_completion_config

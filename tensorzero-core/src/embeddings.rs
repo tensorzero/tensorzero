@@ -57,7 +57,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
             inner: provider_config,
             timeouts: TimeoutsConfig::default(),
             provider_name: Arc::from(provider_type.to_string()),
-            extra_body: Default::default(),
+            extra_body: None,
         };
         Ok(EmbeddingModelConfig {
             routing: vec![provider_type.to_string().into()],
@@ -627,7 +627,7 @@ mod tests {
         });
         let bad_provider_info = EmbeddingProviderInfo {
             inner: bad_provider,
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
             provider_name: Arc::from("error".to_string()),
             extra_body: None,
         };
@@ -637,7 +637,7 @@ mod tests {
         });
         let good_provider_info = EmbeddingProviderInfo {
             inner: good_provider,
-            timeouts: Default::default(),
+            timeouts: TimeoutsConfig::default(),
             provider_name: Arc::from("good".to_string()),
             extra_body: None,
         };

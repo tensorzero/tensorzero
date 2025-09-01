@@ -33,6 +33,7 @@ use uuid::Uuid;
 use tensorzero_core::cache::cache_lookup;
 use tensorzero_core::cache::start_cache_write;
 use tensorzero_core::cache::ModelProviderRequest;
+use tensorzero_core::inference::types::extra_body::FullExtraBodyConfig;
 use tensorzero_core::inference::types::Latency;
 use tensorzero_core::inference::types::RequestMessage;
 use tensorzero_core::inference::types::Role;
@@ -75,7 +76,7 @@ async fn test_cache_write_and_read() {
         json_mode: ModelInferenceRequestJsonMode::Off,
         function_type: FunctionType::Chat,
         output_schema: None,
-        extra_body: Default::default(),
+        extra_body: FullExtraBodyConfig::default(),
         ..Default::default()
     };
     let model_provider_request = ModelProviderRequest {
@@ -199,7 +200,7 @@ async fn test_cache_stream_write_and_read() {
         json_mode: ModelInferenceRequestJsonMode::Off,
         function_type: FunctionType::Chat,
         output_schema: None,
-        extra_body: Default::default(),
+        extra_body: FullExtraBodyConfig::default(),
         ..Default::default()
     };
     let model_provider_request = ModelProviderRequest {

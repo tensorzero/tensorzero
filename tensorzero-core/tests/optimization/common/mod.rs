@@ -17,6 +17,8 @@ use tensorzero_core::{
     db::clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
     endpoints::inference::InferenceClients,
     inference::types::{
+        extra_body::FullExtraBodyConfig,
+        extra_headers::FullExtraHeadersConfig,
         resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
         Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
@@ -140,8 +142,8 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 json_mode: JsonMode::Off.into(),
                 function_type: FunctionType::Chat,
                 output_schema: None,
-                extra_body: Default::default(),
-                extra_headers: Default::default(),
+                extra_body: FullExtraBodyConfig::default(),
+                extra_headers: FullExtraHeadersConfig::default(),
                 extra_cache_key: None,
             };
             let clients = InferenceClients {
