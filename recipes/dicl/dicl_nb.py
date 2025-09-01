@@ -7,7 +7,7 @@
 # This recipe allows TensorZero users to set up a dynamic in-context learning variant for any function.
 # Since TensorZero automatically logs all inferences and feedback, it is straightforward to query a set of good examples and retrieve the most relevant ones to put them into context for future inferences.
 # Since TensorZero allows users to add demonstrations for any inference it is also easy to include them in the set of examples as well.
-# This recipe will show use the OpenAI embeddings API only, but we are working towards support for all embedding providers over time as well.
+# This recipe will show use the OpenAI embeddings API only, but we have support for other embeddings providers as well.
 #
 
 # %% [markdown]
@@ -17,11 +17,13 @@
 # - Set the `OPENAI_API_KEY` environment variable.
 # - Update the following parameters
 # - Uncomment query filters as appropriate
+# - Add the embedding model to your tensorzero config if you have not already done so
 #
 
 # %%
 from typing import Optional
 
+# Uncomment the embedding models section in this notebook
 CONFIG_PATH = "../../examples/data-extraction-ner/config/tensorzero.toml"
 
 FUNCTION_NAME = "extract_entities"
@@ -34,7 +36,7 @@ MAX_EXAMPLES = 1000
 # with other variants for the function selected above.
 DICL_VARIANT_NAME = "gpt_4o_mini_dicl"
 
-# The model to use for the DICL variant.
+# The model to use for the DICL variant. Should match the name of the embedding model defined in your config
 DICL_EMBEDDING_MODEL = "text-embedding-3-small"
 
 # The model to use for generation in the DICL variant.
@@ -57,7 +59,7 @@ import pandas as pd
 import toml
 from clickhouse_connect import get_client
 from openai import AsyncOpenAI
-from tensorzero import TensorZeroGateway
+from tensorzero import TensorZeroGateway, patch_openai_client
 from tensorzero.util import uuid7
 from tqdm.asyncio import tqdm_asyncio
 
@@ -82,6 +84,14 @@ t0 = TensorZeroGateway.build_embedded(
 )
 
 # %%
+openai_client = await patch_openai_client(
+    AsyncOpenAI(),
+    clickhouse_url=os.environ["TENSORZERO_CLICKHOUSE_URL"],
+    config_file=CONFIG_PATH,
+    async_setup=True,
+)
+
+# %%
 filters = None
 # To filter on a boolean metric, you can uncomment the following line
 # filters = BooleanMetricFilter(metric_name=METRIC_NAME, value=True) # or False as needed
@@ -102,9 +112,6 @@ inferences = t0.experimental_list_inferences(
     limit=MAX_EXAMPLES,
 )
 
-# %%
-openai_client = AsyncOpenAI()
-
 
 # %%
 async def get_embedding(
@@ -112,7 +119,9 @@ async def get_embedding(
 ) -> Optional[list[float]]:
     try:
         async with semaphore:
-            response = await openai_client.embeddings.create(input=text, model=model)
+            response = await openai_client.embeddings.create(
+                input=text, model=f"tensorzero::embedding_model_name::{model}"
+            )
             return response.data[0].embedding
     except Exception as e:
         print(f"Error getting embedding: {e}")
@@ -129,7 +138,7 @@ tasks = [
     get_embedding(str(inference.input), semaphore, DICL_EMBEDDING_MODEL)
     for inference in inferences
 ]
-embeddings = await tqdm_asyncio.gather(*tasks, desc="Embedding inputs")
+embeddings = await tqdm_asyncio.gather(*tasks[:1], desc="Embedding inputs")
 
 # %%
 data = []
