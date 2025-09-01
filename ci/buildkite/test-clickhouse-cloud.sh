@@ -28,6 +28,7 @@ cleanup_database() {
             --data-binary "DROP DATABASE IF EXISTS {target:Identifier}" || true
         echo "Cleanup completed for database: $TENSORZERO_E2E_TESTS_DATABASE"
     fi
+    cat e2e_logs.txt || echo "e2e logs don't exist"
 }
 
 # Register cleanup function to run on script exit (success or failure)
@@ -80,4 +81,3 @@ export CLICKHOUSE_PASSWORD="$CLICKHOUSE_PASSWORD"
 cd ui/fixtures && ./load_fixtures.sh $TENSORZERO_E2E_TESTS_DATABASE && cd ../..
 
 cargo test-e2e-no-creds -- --skip test_concurrent_clickhouse_migrations
-cat e2e_logs.txt
