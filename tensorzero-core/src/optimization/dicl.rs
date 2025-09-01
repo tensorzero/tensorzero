@@ -222,12 +222,8 @@ impl Optimizer for DiclOptimizationConfig {
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         config: &Config,
     ) -> Result<Self::Handle, Error> {
-        // Check if we have examples to process
-        if train_examples.is_empty() {
-            return Err(Error::new(ErrorDetails::Config {
-                message: "DICL optimization requires at least one training example".to_string(),
-            }));
-        }
+        // Validate training examples
+        validate_train_examples(&train_examples)?;
 
         // Warn if val_examples is provided (not used in DICL)
         if val_examples.is_some() {
@@ -401,6 +397,60 @@ impl JobHandle for DiclOptimizationJobHandle {
             ))),
         })
     }
+}
+
+/// Validates training examples for DICL optimization
+/// Checks for emptiness and presence of tool calls which are not supported
+fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Error> {
+    // Check if we have examples to process
+    if train_examples.is_empty() {
+        return Err(Error::new(ErrorDetails::Config {
+            message: "DICL optimization requires at least one training example".to_string(),
+        }));
+    }
+
+    // Check for tool calls in training examples
+    for (i, example) in train_examples.iter().enumerate() {
+        // Check if tools_available contains actual tools
+        if let Some(tool_params) = &example.tool_params {
+            if !tool_params.tools_available.is_empty() {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "DICL optimization does not support tool calls. Training example {} contains {} available tools.",
+                        i + 1,
+                        tool_params.tools_available.len()
+                    ),
+                }));
+            }
+        }
+
+        // Check stored_input messages for ToolCall or ToolResult content
+        for message in &example.stored_input.messages {
+            for content in &message.content {
+                match content {
+                    crate::inference::types::ResolvedInputMessageContent::ToolCall(_) => {
+                        return Err(Error::new(ErrorDetails::InvalidRequest {
+                            message: format!(
+                                "DICL optimization does not support tool calls. Training example {} contains a tool call in message content.",
+                                i + 1
+                            ),
+                        }));
+                    }
+                    crate::inference::types::ResolvedInputMessageContent::ToolResult(_) => {
+                        return Err(Error::new(ErrorDetails::InvalidRequest {
+                            message: format!(
+                                "DICL optimization does not support tool calls. Training example {} contains a tool result in message content.",
+                                i + 1
+                            ),
+                        }));
+                    }
+                    _ => {} // Other content types are fine
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Processes a batch of input texts to get embeddings
@@ -822,5 +872,218 @@ mod tests {
         assert!(result.is_ok());
         let embeddings = result.unwrap();
         assert_eq!(embeddings.len(), 3);
+    }
+
+    // Helper function to create a basic RenderedSample for testing
+    fn create_test_rendered_sample() -> RenderedSample {
+        use crate::{
+            inference::types::{
+                ContentBlock, ContentBlockChatOutput, ModelInput, RequestMessage, ResolvedInput,
+                ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
+            },
+            stored_inference::StoredOutput,
+        };
+        use serde_json::json;
+        use std::collections::HashMap;
+        use uuid::Uuid;
+
+        RenderedSample {
+            function_name: "test_function".to_string(),
+            input: ModelInput {
+                system: Some("Test system".to_string()),
+                messages: vec![RequestMessage {
+                    role: Role::User,
+                    content: vec![ContentBlock::Text(Text {
+                        text: "Test message".to_string(),
+                    })],
+                }],
+            },
+            stored_input: ResolvedInput {
+                system: Some(json!("Test system")),
+                messages: vec![ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!("Test message"),
+                    }],
+                }],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "Test output".to_string(),
+            })]),
+            stored_output: Some(StoredOutput::Chat(vec![ContentBlockChatOutput::Text(
+                Text {
+                    text: "Test output".to_string(),
+                },
+            )])),
+            episode_id: Some(Uuid::now_v7()),
+            inference_id: Some(Uuid::now_v7()),
+            tool_params: None,
+            output_schema: None,
+            dispreferred_outputs: vec![],
+            tags: HashMap::new(),
+        }
+    }
+
+    fn create_test_rendered_sample_with_tools(tools: Vec<crate::tool::Tool>) -> RenderedSample {
+        use crate::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
+
+        let mut sample = create_test_rendered_sample();
+        sample.tool_params = Some(ToolCallConfigDatabaseInsert {
+            tools_available: tools,
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: Some(true),
+        });
+        sample
+    }
+
+    fn create_test_rendered_sample_with_tool_content() -> RenderedSample {
+        use crate::{
+            inference::types::{ResolvedInputMessage, ResolvedInputMessageContent, Role},
+            tool::{ToolCall, ToolCallConfigDatabaseInsert, ToolChoice},
+        };
+        use serde_json::json;
+
+        let mut sample = create_test_rendered_sample();
+
+        // Add a message with tool call content
+        sample.stored_input.messages.push(ResolvedInputMessage {
+            role: Role::Assistant,
+            content: vec![ResolvedInputMessageContent::ToolCall(ToolCall {
+                id: "test_call".to_string(),
+                name: "test_tool".to_string(),
+                arguments: json!({"arg": "value"}).to_string(),
+            })],
+        });
+
+        // Also add empty tool params to make it realistic
+        sample.tool_params = Some(ToolCallConfigDatabaseInsert {
+            tools_available: vec![],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: Some(false),
+        });
+
+        sample
+    }
+
+    fn create_test_rendered_sample_with_tool_result() -> RenderedSample {
+        use crate::{
+            inference::types::{ResolvedInputMessage, ResolvedInputMessageContent, Role},
+            tool::{ToolCallConfigDatabaseInsert, ToolChoice, ToolResult},
+        };
+
+        let mut sample = create_test_rendered_sample();
+
+        // Add a message with tool result content
+        sample.stored_input.messages.push(ResolvedInputMessage {
+            role: Role::User,
+            content: vec![ResolvedInputMessageContent::ToolResult(ToolResult {
+                id: "test_call".to_string(),
+                name: "test_tool".to_string(),
+                result: "Tool result".to_string(),
+            })],
+        });
+
+        // Also add empty tool params to make it realistic
+        sample.tool_params = Some(ToolCallConfigDatabaseInsert {
+            tools_available: vec![],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: Some(false),
+        });
+
+        sample
+    }
+
+    #[test]
+    fn test_validate_train_examples_empty() {
+        let result = validate_train_examples(&[]);
+        assert!(result.is_err());
+
+        let error = result.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("requires at least one training example"));
+    }
+
+    #[test]
+    fn test_validate_train_examples_valid_no_tools() {
+        let sample = create_test_rendered_sample();
+        let result = validate_train_examples(&[sample]);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_train_examples_valid_empty_tools() {
+        let sample = create_test_rendered_sample_with_tools(vec![]);
+        let result = validate_train_examples(&[sample]);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_train_examples_rejects_tools_available() {
+        use crate::tool::Tool;
+        use serde_json::json;
+
+        let tool = Tool {
+            name: "test_tool".to_string(),
+            description: "A test tool".to_string(),
+            parameters: json!({"type": "object", "properties": {}}),
+            strict: false,
+        };
+
+        let sample = create_test_rendered_sample_with_tools(vec![tool]);
+        let result = validate_train_examples(&[sample]);
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("does not support tool calls"));
+        assert!(error.to_string().contains("contains 1 available tools"));
+    }
+
+    #[test]
+    fn test_validate_train_examples_rejects_tool_call_content() {
+        let sample = create_test_rendered_sample_with_tool_content();
+        let result = validate_train_examples(&[sample]);
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("does not support tool calls"));
+        assert!(error
+            .to_string()
+            .contains("contains a tool call in message content"));
+    }
+
+    #[test]
+    fn test_validate_train_examples_rejects_tool_result_content() {
+        let sample = create_test_rendered_sample_with_tool_result();
+        let result = validate_train_examples(&[sample]);
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("does not support tool calls"));
+        assert!(error
+            .to_string()
+            .contains("contains a tool result in message content"));
+    }
+
+    #[test]
+    fn test_validate_train_examples_multiple_samples() {
+        use crate::tool::Tool;
+        use serde_json::json;
+
+        let valid_sample = create_test_rendered_sample();
+
+        let tool = Tool {
+            name: "test_tool".to_string(),
+            description: "A test tool".to_string(),
+            parameters: json!({"type": "object", "properties": {}}),
+            strict: false,
+        };
+        let invalid_sample = create_test_rendered_sample_with_tools(vec![tool]);
+
+        // Should fail on the second sample
+        let result = validate_train_examples(&[valid_sample, invalid_sample]);
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("Training example 2"));
     }
 }
