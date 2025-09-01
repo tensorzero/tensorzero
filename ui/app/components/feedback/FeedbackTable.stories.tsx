@@ -16,7 +16,6 @@ const config: Config = {
     observability: {
       enabled: true,
       async_writes: false,
-      skip_completed_migrations: false,
       batch_writes: {
         enabled: false,
         __force_allow_embedded_batch_writes: false,
@@ -342,6 +341,103 @@ export const WithHumanFeedback: Story = {
       accuracy: makeOrderedUuid(3),
       revenue: makeOrderedUuid(4),
       nsfw_detected: makeOrderedUuid(5),
+    },
+  },
+};
+
+export const WithVariousTags: Story = {
+  args: {
+    feedback: [
+      {
+        type: "float",
+        id: makeOrderedUuid(10),
+        target_id: TARGET_ID,
+        metric_name: "accuracy",
+        value: 0.95,
+        tags: { user_id: "123", experiment: "A" },
+        timestamp: "2024-03-20T10:00:00Z",
+      },
+      {
+        type: "boolean",
+        id: makeOrderedUuid(9),
+        target_id: TARGET_ID,
+        metric_name: "exact_match",
+        value: true,
+        tags: {
+          "tensorzero::human_feedback": "true",
+          session_id: "abc-def-ghi",
+        },
+        timestamp: "2024-03-20T10:01:00Z",
+      },
+      {
+        type: "boolean",
+        id: makeOrderedUuid(8),
+        target_id: TARGET_ID,
+        metric_name: "nsfw_detected",
+        value: false,
+        tags: {
+          "tensorzero::evaluation_name": "safety_check",
+          priority: "high",
+          model: "gpt-4",
+        },
+        timestamp: "2024-03-20T10:02:00Z",
+      },
+      {
+        type: "float",
+        id: makeOrderedUuid(7),
+        target_id: TARGET_ID,
+        metric_name: "relevance",
+        value: 0.87,
+        tags: {
+          very_long_tag_key_that_might_overflow:
+            "very_long_tag_value_that_will_definitely_need_truncation_in_the_ui",
+        },
+        timestamp: "2024-03-20T10:03:00Z",
+      },
+      {
+        type: "comment",
+        id: makeOrderedUuid(6),
+        target_id: TARGET_ID,
+        target_type: "episode",
+        value: "Great response!",
+        tags: {
+          multiple: "tags",
+          showing: "various",
+          lengths: "short",
+          and_some_longer_ones: "like_this_one",
+        },
+        timestamp: "2024-03-20T10:04:00Z",
+      },
+      {
+        type: "demonstration",
+        id: makeOrderedUuid(5),
+        inference_id: TARGET_ID,
+        value: JSON.stringify([{ type: "text", text: "Perfect example" }]),
+        tags: {
+          "tensorzero::dataset_name": "training_set",
+          "tensorzero::datapoint_id": "dp-123",
+          version: "2.0",
+        },
+        timestamp: "2024-03-20T10:05:00Z",
+      },
+      {
+        type: "boolean",
+        id: makeOrderedUuid(4),
+        target_id: TARGET_ID,
+        metric_name: "hallucination",
+        value: false,
+        tags: {},
+        timestamp: "2024-03-20T10:06:00Z",
+      },
+    ],
+    latestCommentId: makeOrderedUuid(6),
+    latestDemonstrationId: makeOrderedUuid(5),
+    latestFeedbackIdByMetric: {
+      accuracy: makeOrderedUuid(10),
+      exact_match: makeOrderedUuid(9),
+      nsfw_detected: makeOrderedUuid(8),
+      relevance: makeOrderedUuid(7),
+      hallucination: makeOrderedUuid(4),
     },
   },
 };

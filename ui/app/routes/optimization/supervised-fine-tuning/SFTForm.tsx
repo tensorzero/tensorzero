@@ -167,6 +167,7 @@ export function SFTForm({
                 addDemonstrations={true}
                 feedbackCount={counts.feedbackCount}
                 curatedInferenceCount={counts.curatedInferenceCount}
+                isLoading={counts.isLoading}
               />
 
               {errors.metric && (

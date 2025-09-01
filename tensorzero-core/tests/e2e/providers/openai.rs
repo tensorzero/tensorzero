@@ -1708,7 +1708,7 @@ pub async fn test_shorthand_embedding() {
     let shorthand_model = "openai::text-embedding-3-small";
     let payload = json!({
         "input": "Hello, world!",
-        "model": shorthand_model,
+        "model": format!("tensorzero::embedding_model_name::{}", shorthand_model),
     });
     let response = Client::new()
         .post(get_gateway_endpoint("/openai/v1/embeddings"))
@@ -1720,7 +1720,10 @@ pub async fn test_shorthand_embedding() {
     let response_json = response.json::<Value>().await.unwrap();
     println!("Shorthand API response: {response_json:?}");
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
-    assert_eq!(response_json["model"].as_str().unwrap(), shorthand_model);
+    assert_eq!(
+        response_json["model"].as_str().unwrap(),
+        format!("tensorzero::embedding_model_name::{shorthand_model}")
+    );
     assert_eq!(response_json["data"].as_array().unwrap().len(), 1);
     assert_eq!(response_json["data"][0]["index"].as_u64().unwrap(), 0);
     assert_eq!(
@@ -1739,7 +1742,7 @@ pub async fn test_shorthand_embedding() {
 pub async fn test_embedding_extra_body() {
     let payload = json!({
         "input": "Hello, world!",
-        "model": "voyage_3_5_lite_256",
+        "model": "tensorzero::embedding_model_name::voyage_3_5_lite_256",
     });
     let response = Client::new()
         .post(get_gateway_endpoint("/openai/v1/embeddings"))

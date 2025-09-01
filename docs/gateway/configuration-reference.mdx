@@ -52,6 +52,13 @@ Typically, TensorZero will not include inputs and outputs in logs or errors to a
 It may be helpful during development to be able to see more information about requests and responses.
 When this field is set to `true`, the gateway will log more verbose errors to assist with debugging.
 
+### `disable_pseudonymous_usage_analytics`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+If set to `true`, TensorZero will not collect or share [pseudonymous usage analytics](/gateway/deployment/#disabling-pseudonymous-usage-analytics).
+
 ### `enable_template_filesystem_access`
 
 - **Type:** boolean
@@ -65,6 +72,19 @@ Paths must be relative to `tensorzero.toml`, and can only access files in that d
 Make sure to sanitize all user-provided template data before using this setting.
 Otherwise, a malicious input could read unintended files in the file system.
 
+</Warning>
+
+### `export.otlp.traces.enabled`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+Enable [exporting traces to an external OpenTelemetry-compatible observability
+system](/gateway/guides/opentelemetry-otlp).
+
+<Warning>
+Note that you will still need to set the `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
+environment variable. See above linked guide for details.
 </Warning>
 
 ### `observability.async_writes`
@@ -343,7 +363,7 @@ Separately, you can set a global timeout for the entire inference request using 
 - **Type:** string
 - **Required:** yes
 
-Defines the types of the provider. See [Integrations &raquo; Model Providers](/docs/gateway/api-reference/inference/#content-block) for details.
+Defines the types of the provider. See [Integrations &raquo; Model Providers](/gateway/api-reference/inference/#content-block) for details.
 
 The supported provider types are `anthropic`, `aws_bedrock`, `aws_sagemaker`, `azure`, `deepseek`, `fireworks`, `gcp_vertex_anthropic`, `gcp_vertex_gemini`, `google_ai_studio_gemini`, `groq`, `hyperbolic`, `mistral`, `openai`, `openrouter`, `sglang`, `tgi`, `together`, `vllm`, and `xai`.
 
@@ -381,7 +401,7 @@ model_name = "claude-3-haiku-20240307"
 - **Type:** string
 - **Required:** no (default: `env::ANTHROPIC_API_KEY`)
 
-Defines the location of the API key for the Anthropic provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/docs/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the Anthropic provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml
 // tensorzero.toml
@@ -569,7 +589,7 @@ endpoint = "https://<your-endpoint>.openai.azure.com"
 - **Type:** string
 - **Required:** no (default: `env::AZURE_OPENAI_API_KEY`)
 
-Defines the location of the API key for the Azure OpenAI provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/docs/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the Azure OpenAI provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml
 // tensorzero.toml
@@ -607,7 +627,7 @@ model_name = "deepseek-chat"
 - **Type:** string
 - **Required:** no (default: `env::DEEPSEEK_API_KEY`)
 
-Defines the location of the API key for the DeepSeek provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/docs/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the DeepSeek provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml
 // tensorzero.toml
@@ -647,7 +667,7 @@ model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
 - **Type:** string
 - **Required:** no (default: `env::FIREWORKS_API_KEY`)
 
-Defines the location of the API key for the Fireworks provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/docs/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the Fireworks provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml
 // tensorzero.toml
@@ -729,7 +749,7 @@ project_id = "your-project-id"
 - **Type:** string
 - **Required:** no (default: `env::GCP_CREDENTIALS_PATH`)
 
-Defines the location of the credentials for the GCP Vertex Anthropic provider. The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIALS_ARGUMENT_NAME` (see [the API reference](/docs/gateway/api-reference/inference/#credentials)) for more details), and `file::PATH_TO_CREDENTIALS_FILE`.
+Defines the location of the credentials for the GCP Vertex Anthropic provider. The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIALS_ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details), and `file::PATH_TO_CREDENTIALS_FILE`.
 
 ```toml
 // tensorzero.toml
@@ -810,7 +830,7 @@ project_id = "your-project-id"
 - **Type:** string
 - **Required:** no (default: `env::GCP_CREDENTIALS_PATH`)
 
-Defines the location of the credentials for the GCP Vertex Gemini provider. The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIALS_ARGUMENT_NAME` (see [the API reference](/docs/gateway/api-reference/inference/#credentials)) for more details), and `file::PATH_TO_CREDENTIALS_FILE`.
+Defines the location of the credentials for the GCP Vertex Gemini provider. The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIALS_ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details), and `file::PATH_TO_CREDENTIALS_FILE`.
 
 ```toml
 // tensorzero.toml
@@ -849,7 +869,7 @@ model_name = "gemini-1.5-flash-001"
 - **Type:** string
 - **Required:** no (default: `env::GOOGLE_AI_STUDIO_API_KEY`)
 
-Defines the location of the API key for the Google AI Studio Gemini provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/docs/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the Google AI Studio Gemini provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml
 // tensorzero.toml
@@ -888,7 +908,7 @@ model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
 - **Type:** string
 - **Required:** no (default: `env::GROQ_API_KEY`)
 
-Defines the location of the API key for the Groq provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/docs/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the Groq provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml
 // tensorzero.toml
@@ -927,7 +947,7 @@ model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
 - **Type:** string
 - **Required:** no (default: `env::HYPERBOLIC_API_KEY`)
 
-Defines the location of the API key for the Hyperbolic provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/docs/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the Hyperbolic provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml
 // tensorzero.toml
@@ -966,7 +986,7 @@ model_name = "open-mistral-nemo-2407"
 - **Type:** string
 - **Required:** no (default: `env::MISTRAL_API_KEY`)
 
-Defines the location of the API key for the Mistral provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/docs/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the Mistral provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml
 // tensorzero.toml
@@ -1024,7 +1044,7 @@ model_name = "gpt-4o-mini-2024-07-18"
 - **Type:** string
 - **Required:** no (default: `env::OPENAI_API_KEY`)
 
-Defines the location of the API key for the OpenAI provider. The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/docs/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the OpenAI provider. The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml
 // tensorzero.toml
@@ -1064,7 +1084,7 @@ model_name = "openai/gpt4.1"
 - **Type:** string
 - **Required:** no (default: `env::OPENROUTER_API_KEY`)
 
-Defines the location of the API key for the OpenRouter provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/docs/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the OpenRouter provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml
 // tensorzero.toml
@@ -1101,7 +1121,7 @@ api_base = "http://localhost:8080/v1/"
 - **Type:** string
 - **Required:** no (default: `none`)
 
-Defines the location of the API key for the SGLang provider. The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/docs/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the SGLang provider. The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml
 // tensorzero.toml
@@ -1142,7 +1162,7 @@ model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
 - **Type:** string
 - **Required:** no (default: `env::TOGETHER_API_KEY`)
 
-Defines the location of the API key for the Together AI provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/docs/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the Together AI provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml
 // tensorzero.toml
@@ -1195,7 +1215,7 @@ model_name = "microsoft/Phi-3.5-mini-instruct"
 - **Type:** string
 - **Required:** no (default: `env::VLLM_API_KEY`)
 
-Defines the location of the API key for the vLLM provider. The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/docs/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the vLLM provider. The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml
 // tensorzero.toml
@@ -1236,7 +1256,7 @@ model_name = "grok-2-1212"
 - **Required:** no (default: `env::XAI_API_KEY`)
 
 Defines the location of the API key for the xAI provider.
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/docs/gateway/api-reference/inference/#credentials)) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml
 // tensorzero.toml
@@ -1273,7 +1293,7 @@ api_base = "http://localhost:8080/v1/"
 - **Type:** string
 - **Required:** no (default: `none`)
 
-Defines the location of the API key for the TGI provider. The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/docs/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the TGI provider. The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml
 // tensorzero.toml
@@ -1361,7 +1381,7 @@ routing = ["openai", "alternative-provider"]
 - **Type:** string
 - **Required:** yes
 
-Defines the types of the provider. See [Integrations &raquo; Model Providers](/docs/gateway/integrations/#model-providers) for details.
+Defines the types of the provider. See [Integrations &raquo; Model Providers](/gateway/integrations/#model-providers) for details.
 
 TensorZero currently only supports `openai` as a provider for embedding models.
 More integrations are on the way.
@@ -1420,7 +1440,7 @@ model_name = "text-embedding-3-small"
 - **Type:** string
 - **Required:** no (default: `env::OPENAI_API_KEY`)
 
-Defines the location of the API key for the OpenAI provider. The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/docs/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the OpenAI provider. The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml
 // tensorzero.toml
@@ -1998,7 +2018,7 @@ routing = ["openai", "azure"]
 
 Then:
 
-- `model = "gpt-4o"` calls the `gpt-4o` model in your configuration, which supports fallback from `openai` to `azure`. See [Retries & Fallbacks](/docs/gateway/guides/retries-fallbacks/) for details.
+- `model = "gpt-4o"` calls the `gpt-4o` model in your configuration, which supports fallback from `openai` to `azure`. See [Retries & Fallbacks](/gateway/guides/retries-fallbacks/) for details.
 - `model = "openai::gpt-4o"` calls the OpenAI API directly for the `gpt-4o` model, ignoring the `gpt-4o` model defined above.
 
 ##### `presence_penalty`
@@ -2714,7 +2734,7 @@ routing = ["openai", "azure"]
 
 Then:
 
-- `model = "gpt-4o"` calls the `gpt-4o` model in your configuration, which supports fallback from `openai` to `azure`. See [Retries & Fallbacks](/docs/gateway/guides/retries-fallbacks/) for details.
+- `model = "gpt-4o"` calls the `gpt-4o` model in your configuration, which supports fallback from `openai` to `azure`. See [Retries & Fallbacks](/gateway/guides/retries-fallbacks/) for details.
 - `model = "openai::gpt-4o"` calls the OpenAI API directly for the `gpt-4o` model, ignoring the `gpt-4o` model defined above.
 
 ##### `retries`
