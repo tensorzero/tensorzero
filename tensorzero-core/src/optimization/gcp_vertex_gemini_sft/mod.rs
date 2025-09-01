@@ -310,36 +310,20 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
             encryption_spec,
         };
 
-        let url = match &self.api_base {
-            Some(api_base) => {
-                // Build the full URL using the base plus the project/region path
-                let path = format!(
-                    "v1/projects/{}/locations/{}/tuningJobs",
-                    self.project_id, self.region
-                );
-                api_base.join(&path).map_err(|e| {
-                    Error::new(ErrorDetails::InvalidBaseUrl {
-                        message: e.to_string(),
-                    })
-                })?
-            }
-            None => gcp_vertex_gemini_base_url(&self.project_id, &self.region).map_err(|e| {
-                Error::new(ErrorDetails::InvalidBaseUrl {
-                    message: e.to_string(),
-                })
-            })?,
-        };
-
-        let auth_base_url = match &self.api_base {
-            Some(api_base) => api_base.to_string(),
-            None => format!(
-                "https://{}aiplatform.googleapis.com/",
-                location_subdomain_prefix(&self.region)
-            ),
-        };
+        let url = gcp_vertex_gemini_base_url(&self.project_id, &self.region).map_err(|e| {
+            Error::new(ErrorDetails::InvalidBaseUrl {
+                message: e.to_string(),
+            })
+        })?;
         let auth_headers = self
             .credentials
-            .get_auth_headers(&auth_base_url, credentials)
+            .get_auth_headers(
+                &format!(
+                    "https://{}aiplatform.googleapis.com/",
+                    location_subdomain_prefix(&self.region)
+                ),
+                credentials,
+            )
             .await?;
 
         let request = client.post(url).headers(auth_headers);
