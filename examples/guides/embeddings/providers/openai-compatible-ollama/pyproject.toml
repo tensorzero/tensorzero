@@ -1,9 +1,6 @@
 [project]
-name = "tensorzero-examples-guides-embeddings-providers-ollama"
+name = "tensorzero-examples-guides-embeddings-providers-openai-compatible-ollama"
 version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = [
-    "openai>=1.102.0",
-    "tensorzero>=2025.8.5",
-]
+dependencies = ["openai>=1.102.0", "tensorzero>=2025.8.5"]

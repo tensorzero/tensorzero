@@ -1,28 +1,35 @@
-# Guide: How to use embedding models provided by Ollama with TensorZero
+# Guide: How to use OpenAI-compatible embedding models (e.g. Ollama) with TensorZero
 
 ## Running the Example
-1. Create the ollama container and pull the language model:
+
+1. Launch the Ollama server:
+
 ```bash
-docker compose up -d
-docker exec -it ollama ollama pull all-minilm
+ollama serve
 ```
 
-2. Run the example:
+2. Download an embedding model:
+
+```bash
+ollama run nomic-embed-text
+```
+
+3. Run the example:
 
 <details open>
-<summary><b>Python (OpenAI)</b></summary>
+<summary><b>Python (OpenAI SDK)</b></summary>
 
 a. Install the dependencies:
 
 ```bash
-# We recommend using Python 3.9+ and a virtual environment
+# We recommend using Python 3.10+ and a virtual environment
 pip install -r requirements.txt
 ```
 
 b. Run the example:
 
 ```bash
-python openai_sdk_ollama.py
+python openai_sdk.py
 ```
 
 </details>

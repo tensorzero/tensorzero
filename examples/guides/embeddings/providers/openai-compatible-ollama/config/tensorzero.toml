@@ -1,8 +1,8 @@
-[embedding_models.all_minilm]
+[embedding_models.nomic-embed-text]
 routing = ["ollama"]
 
-[embedding_models.all_minilm.providers.ollama]
+[embedding_models.nomic-embed-text.providers.ollama]
 type = "openai"
 api_base = "http://localhost:11434/v1"
-model_name = "all-minilm"
+model_name = "nomic-embed-text"
 api_key_location = "none"
