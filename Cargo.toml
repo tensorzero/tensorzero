@@ -41,8 +41,8 @@ tracing = { version = "0.1.40", features = ["log"] }
 pyo3 = { version = "0.24.2", features = ["experimental-async", "abi3-py39"] }
 axum = { version = "0.8", features = ["macros"] }
 anyhow = "1.0.99"
-tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt"] }
-clap = { version = "4.5.45", features = ["derive"] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
+clap = { version = "4.5.46", features = ["derive"] }
 futures = "0.3.30"
 lazy_static = { version = "1.5.0" }
 url = "2.5.4"
