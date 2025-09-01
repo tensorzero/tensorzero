@@ -72,7 +72,7 @@ jobs:
         run: docker inspect --format "{{json .State.Health }}" $(docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml ps -q ui) | jq
 
   ui-tests-gateway-prefix:
-    runs-on: namespace-profile-tensorzero-2x8
+    runs-on: ubuntu-latest
     steps:
       - name: Set DNS
         run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
