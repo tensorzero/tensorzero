@@ -769,7 +769,7 @@ impl UninitializedLLMJudgeVariantInfo {
                             system_instructions = si,
                         )
                     })
-                    .unwrap_or(crate::variant::dicl::default_system_instructions());
+                    .unwrap_or_else(crate::variant::dicl::default_system_instructions);
                 VariantConfig::Dicl(DiclConfig {
                     weight: get_weight(params.active),
                     embedding_model: params.embedding_model.into(),
