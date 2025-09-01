@@ -55,9 +55,11 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
-    let uninitialized_optimizer_info = test_case.get_optimizer_info(use_mock_inference_provider());
-
-    let optimizer_info = uninitialized_optimizer_info.load().await.unwrap();
+    let optimizer_info = test_case
+        .get_optimizer_info(use_mock_inference_provider())
+        .load()
+        .await
+        .unwrap();
 
     let client = reqwest::Client::new();
     let test_examples = get_examples(test_case, 10);
