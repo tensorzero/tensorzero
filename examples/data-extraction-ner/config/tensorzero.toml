@@ -26,9 +26,11 @@ json_mode = "strict"
 # system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 # json_mode = "strict"
 
+# TODO: Once you've run DICL optimization, add it here like the commented example below
+
 # [functions.extract_entities.variants.gpt_4o_mini_dicl]
 # type = "experimental_dynamic_in_context_learning"
-# embedding_model = "openai::text-embedding-3-small"
+# embedding_model = "text-embedding-3-small"
 # model = "openai::gpt-4o-mini-2024-07-18"
 # k = 10
 # system_instructions = "functions/extract_entities/initial_prompt/system_template.minijinja"
@@ -52,3 +54,16 @@ optimize = "max"
 type = "boolean"
 level = "inference"
 optimize = "max"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 Embedding Models                           │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+# Uncomment this section to run the DICL optimization notebook. Or add the embedding model of your choice.
+
+# [embedding_models.text-embedding-3-small]
+# routing = ["openai"]
+
+# [embedding_models.text-embedding-3-small.providers.openai]
+# type = "openai"
+# model_name = "text-embedding-3-small"
