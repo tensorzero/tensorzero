@@ -51,6 +51,22 @@ use super::inference::{
     InferenceStream,
 };
 use crate::embeddings::EmbeddingEncodingFormat;
+use axum::routing::post;
+use axum::Router;
+
+pub trait RouterExt {
+    /// Applies our OpenAI-compatible endpoints to the router.
+    /// This is used by the the gateway for the patched OpenAI python client (`start_openai_compatible_gateway`),
+    /// as well as the normal standalone TensorZero gateway.
+    fn register_openai_compatible_routes(self) -> Self;
+}
+
+impl RouterExt for Router<AppStateData> {
+    fn register_openai_compatible_routes(self) -> Self {
+        self.route("/openai/v1/chat/completions", post(inference_handler))
+            .route("/openai/v1/embeddings", post(embeddings_handler))
+    }
+}
 
 /// A handler for the OpenAI-compatible inference endpoint
 #[debug_handler(state = AppStateData)]

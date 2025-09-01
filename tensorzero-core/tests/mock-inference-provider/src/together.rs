@@ -12,6 +12,20 @@ use axum::{
 use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
 
+// Mirror the TogetherBatchSize enum from tensorzero-core
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum TogetherBatchSize {
+    Number(u32),
+    Description(TogetherBatchSizeDescription),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TogetherBatchSizeDescription {
+    Max,
+}
+
 pub struct TogetherError(anyhow::Error);
 
 impl<E> From<E> for TogetherError
@@ -54,7 +68,7 @@ pub struct TogetherCreateJobRequest {
     pub warmup_ratio: Option<f64>,
     pub max_grad_norm: Option<f64>,
     pub weight_decay: Option<f64>,
-    pub batch_size: u32,
+    pub batch_size: TogetherBatchSize,
     pub lr_scheduler: serde_json::Value,
     pub learning_rate: f64,
     pub training_method: serde_json::Value,
