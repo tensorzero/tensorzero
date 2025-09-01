@@ -153,11 +153,12 @@ function renderContentBlock(
       return <FileErrorMessage key={key} error="Failed to retrieve file" />;
 
     case "unknown":
+      // TODO: code editor should format as JSON by default
       return (
         <TextMessage
           key={key}
           label="Unknown Content"
-          content="Unknown content type"
+          content={JSON.stringify(block.data)}
         />
       );
 
