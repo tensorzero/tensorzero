@@ -134,6 +134,8 @@ impl ClickHouseConnectionInfo {
         let database = std::env::var("TENSORZERO_E2E_TESTS_DATABASE")
             .unwrap_or_else(|_| "tensorzero_e2e_tests".to_string());
 
+        println!("Starting up on database: {}", database);
+
         // Although we take the database name from the URL path,
         // we need to set the query string for the database name for the ClickHouse TCP protocol
         database_url.set_path("");
