@@ -251,7 +251,10 @@ impl Optimizer for DiclOptimizationConfig {
             })
         })?;
 
-        // 2. Check that the variant name is not already in the function variants
+        // 2. Check that the function does not have tools configured (DICL doesn't support tools)
+        validate_function_config(&self.function_name, function_config)?;
+
+        // 3. Check that the variant name is not already in the function variants
         let variants = match &**function_config {
             FunctionConfig::Chat(chat_config) => &chat_config.variants,
             FunctionConfig::Json(json_config) => &json_config.variants,
@@ -266,7 +269,7 @@ impl Optimizer for DiclOptimizationConfig {
             }));
         }
 
-        // 3. Check that the embedding model exists in the config
+        // 4. Check that the embedding model exists in the config
         let embedding_model_config = config
             .embedding_models
             .get(&self.embedding_model)
@@ -397,6 +400,40 @@ impl JobHandle for DiclOptimizationJobHandle {
             ))),
         })
     }
+}
+
+/// Validates function config for DICL optimization
+/// Checks that the function does not have tools configured (DICL doesn't support tools)
+fn validate_function_config(
+    function_name: &str,
+    function_config: &FunctionConfig,
+) -> Result<(), Error> {
+    match function_config {
+        FunctionConfig::Chat(chat_config) => {
+            if !chat_config.tools.is_empty() {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "DICL optimization does not support functions with tools. Function '{}' has {} tools configured. Please use a function without tools for DICL optimization.",
+                        function_name,
+                        chat_config.tools.len()
+                    ),
+                }));
+            }
+        }
+        FunctionConfig::Json(json_config) => {
+            // JSON functions should have exactly one implicit tool for schema validation
+            if json_config.implicit_tool_call_config.tools_available.len() != 1 {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "DICL optimization expected JSON function '{}' to have exactly 1 implicit tool, but found {}. This indicates a configuration issue.",
+                        function_name,
+                        json_config.implicit_tool_call_config.tools_available.len()
+                    ),
+                }));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Validates training examples for DICL optimization
@@ -1085,5 +1122,137 @@ mod tests {
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.to_string().contains("Training example 2"));
+    }
+
+    fn create_test_chat_function_config_no_tools() -> FunctionConfig {
+        use crate::{config::SchemaData, function::FunctionConfigChat, tool::ToolChoice};
+        use std::collections::HashMap;
+
+        FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            tools: vec![], // No tools
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: None,
+            description: None,
+        })
+    }
+
+    fn create_test_chat_function_config_with_tools() -> FunctionConfig {
+        use crate::{config::SchemaData, function::FunctionConfigChat, tool::ToolChoice};
+        use std::collections::HashMap;
+
+        FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            tools: vec!["test_tool".to_string()],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            description: None,
+        })
+    }
+
+    fn create_test_json_function_config() -> FunctionConfig {
+        use crate::{
+            config::SchemaData, function::FunctionConfigJson, jsonschema_util::StaticJSONSchema,
+            tool::create_implicit_tool_call_config,
+        };
+        use serde_json::json;
+        use std::collections::HashMap;
+
+        let output_schema = StaticJSONSchema::from_value(json!({
+            "type": "object",
+            "properties": {
+                "answer": {"type": "string"}
+            },
+            "required": ["answer"]
+        }))
+        .unwrap();
+
+        let implicit_tool_call_config = create_implicit_tool_call_config(output_schema.clone());
+
+        FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            output_schema,
+            implicit_tool_call_config,
+            description: None,
+        })
+    }
+
+    fn create_test_json_function_config_invalid_tools() -> FunctionConfig {
+        use crate::{
+            config::SchemaData,
+            function::FunctionConfigJson,
+            jsonschema_util::StaticJSONSchema,
+            tool::{ToolCallConfig, ToolChoice},
+        };
+        use serde_json::json;
+        use std::collections::HashMap;
+
+        let output_schema = StaticJSONSchema::from_value(json!({
+            "type": "object",
+            "properties": {
+                "answer": {"type": "string"}
+            },
+            "required": ["answer"]
+        }))
+        .unwrap();
+
+        // Create an invalid config with no tools (should have exactly 1)
+        let invalid_tool_call_config = ToolCallConfig {
+            tools_available: vec![], // Invalid: should have exactly 1 implicit tool
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: None,
+        };
+
+        FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            output_schema,
+            implicit_tool_call_config: invalid_tool_call_config,
+            description: None,
+        })
+    }
+
+    #[test]
+    fn test_validate_function_config_chat_no_tools() {
+        let function_config = create_test_chat_function_config_no_tools();
+        let result = validate_function_config("test_function", &function_config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_function_config_chat_with_tools() {
+        let function_config = create_test_chat_function_config_with_tools();
+        let result = validate_function_config("test_function", &function_config);
+        assert!(result.is_err());
+
+        let error = result.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("does not support functions with tools"));
+        assert!(error.to_string().contains("test_function"));
+        assert!(error.to_string().contains("1 tools configured"));
+    }
+
+    #[test]
+    fn test_validate_function_config_json_valid() {
+        let function_config = create_test_json_function_config();
+        let result = validate_function_config("test_json_function", &function_config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_function_config_json_invalid() {
+        let function_config = create_test_json_function_config_invalid_tools();
+        let result = validate_function_config("test_json_function", &function_config);
+        assert!(result.is_err());
+
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("expected JSON function"));
+        assert!(error.to_string().contains("test_json_function"));
+        assert!(error.to_string().contains("exactly 1 implicit tool"));
+        assert!(error.to_string().contains("found 0"));
     }
 }
