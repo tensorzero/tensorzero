@@ -1,9 +1,9 @@
 name: Slash Command Dispatch
 
 permissions:
-  pull-requests: write  # For doing the emoji reaction on a PR comment
-  issues: write  # For doing the emoji reaction on an issue comment
-  contents: write  # For executing the repository_dispatch event
+  pull-requests: write # For doing the emoji reaction on a PR comment
+  issues: write # For doing the emoji reaction on an issue comment
+  contents: write # For executing the repository_dispatch event
 
 on:
   issue_comment:
@@ -12,6 +12,7 @@ on:
 jobs:
   slashCommandDispatch:
     runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - name: "Check permission"
         id: check-permission
@@ -27,5 +28,5 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           commands: |
             regen-fixtures
-          # Use our custom permission check above, since `peter-evans/slash-command-dispatch` doesn't handle organizations 
+          # Use our custom permission check above, since `peter-evans/slash-command-dispatch` doesn't handle organizations
           permission: none
