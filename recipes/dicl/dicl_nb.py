@@ -17,7 +17,6 @@
 # - Set the `OPENAI_API_KEY` environment variable.
 # - Update the following parameters
 # - Uncomment query filters as appropriate
-# - Add the embedding model to your tensorzero config if you have not already done so
 #
 
 # %%
@@ -38,6 +37,7 @@ DICL_VARIANT_NAME = "gpt_4o_mini_dicl"
 
 # The model to use for the DICL variant. Should match the name of the embedding model defined in your config
 DICL_EMBEDDING_MODEL = "text-embedding-3-small"
+DICL_EMBEDDING_PROVIDER = "openai"
 
 # The model to use for generation in the DICL variant.
 DICL_GENERATION_MODEL = "gpt-4o-mini-2024-07-18"
@@ -62,6 +62,25 @@ from openai import AsyncOpenAI
 from tensorzero import TensorZeroGateway, patch_openai_client
 from tensorzero.util import uuid7
 from tqdm.asyncio import tqdm_asyncio
+
+# %% [markdown]
+# Add the following embedding model config to the tensorzero config file you specified with `CONFIG_PATH` and spin up your gateway:
+
+# %%
+embedding_model_config = {
+    "type": f"{DICL_EMBEDDING_PROVIDER}",
+    "model_name": DICL_EMBEDDING_MODEL,
+}
+full_embedding_model_config = {
+    "embedding_models": {
+        DICL_EMBEDDING_MODEL: {
+            "routing": [DICL_EMBEDDING_PROVIDER],
+            "providers": {DICL_EMBEDDING_PROVIDER: embedding_model_config},
+        }
+    }
+}
+
+print(toml.dumps(full_embedding_model_config))
 
 # %% [markdown]
 # Initialize the ClickHouse client.
