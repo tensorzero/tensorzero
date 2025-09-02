@@ -7,7 +7,7 @@ dependencies = [
     "ipykernel",
     "jupyter",
     "markdownify",
-    "tensorzero==2025.8.5",
+    "tensorzero>=2025.8.5",
     "tqdm>=4.67.1",
     "wikipedia",
 ]
