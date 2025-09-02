@@ -52,12 +52,14 @@ env:
 
 jobs:
   batch-tests:
+    if: github.repository == 'tensorzero/tensorzero'
     uses: ./.github/workflows/batch-test.yml
     secrets: inherit
 
   live-tests:
     name: "live-tests (batch_writes: ${{ matrix.batch_writes }})"
     runs-on: namespace-profile-tensorzero-16x32
+    if: github.repository == 'tensorzero/tensorzero'
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -332,6 +334,7 @@ jobs:
 
   check-production-docker-container:
     runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Build Docker container for production deployment tests
@@ -366,6 +369,7 @@ jobs:
 
   # Test that the ui e2e tests still pass after we regenerate the model inference cache
   ui-tests-e2e-regen-model-inference-cache:
+    if: github.repository == 'tensorzero/tensorzero'
     uses: ./.github/workflows/ui-tests-e2e-model-inference-cache.yml
     with:
       regen_cache: true
@@ -379,7 +383,7 @@ jobs:
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-live-tests-passed:
-    if: always()
+    if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [
         check-production-docker-container,
