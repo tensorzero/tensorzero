@@ -454,7 +454,7 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
             self.project_id.clone(),
             self.credential_location
                 .clone()
-                .unwrap_or(default_api_key_location()),
+                .unwrap_or_else(default_api_key_location),
         )
     }
 }
