@@ -44,28 +44,26 @@ pub struct GCPFineTuningRequest {
 }
 
 #[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct SupervisedTuningSpec {
-    #[serde(rename = "trainingDatasetUri")]
     training_dataset_uri: String,
-    #[serde(rename = "validationDatasetUri")]
     validation_dataset_uri: Option<String>,
-    #[serde(rename = "hyperParameters")]
     hyper_parameters: Option<HyperParameters>,
+    #[serde(rename = "export_last_checkpoint_only")]
+    export_last_checkpoint_only: Option<bool>,
 }
 
 #[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct HyperParameters {
-    #[serde(rename = "epochCount")]
     epoch_count: Option<u64>,
-    #[serde(rename = "adapterSize")]
-    adapter_size: Option<String>,
-    #[serde(rename = "learningRateMultiplier")]
+    adapter_size: Option<u64>, // Changed from String to u64 to match the actual type
     learning_rate_multiplier: Option<f64>,
 }
 
 #[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct EncryptionSpec {
-    #[serde(rename = "kmsKeyName")]
     kms_key_name: Option<String>,
 }
 
