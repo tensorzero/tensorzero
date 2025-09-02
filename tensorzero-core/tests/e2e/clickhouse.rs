@@ -31,6 +31,7 @@ use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0009::Migration0009;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0011::Migration0011;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0013::Migration0013;
+use tensorzero_core::inference::types::ModelInferenceDatabaseInsert;
 
 use tensorzero_core::db::clickhouse::migration_manager::{
     self, get_all_migration_records, make_all_migrations, MigrationRecordDatabaseInsert,
@@ -521,7 +522,7 @@ invoke_all_separate_tests!(
     test_rollback_up_to_migration_index_,
     [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26, 27
+        25, 26, 27, 28, 29
     ]
 );
 
@@ -746,7 +747,7 @@ async fn test_clickhouse_migration_manager() {
         // for each element in the array.
         [
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-            24, 25, 26, 27
+            24, 25, 26, 27, 28, 29
         ]
     );
     let rows = get_all_migration_records(&clickhouse).await.unwrap();
@@ -793,6 +794,46 @@ async fn test_clickhouse_migration_manager() {
         .unwrap();
     let output_token_total: u64 = response.response.trim().parse().unwrap();
     assert_eq!(output_token_total, 200000000);
+    // Let's add a ModelInference row with null output tokens only then check the input tokens are correct
+    let row = ModelInferenceDatabaseInsert {
+        id: Uuid::now_v7(),
+        inference_id: Uuid::now_v7(),
+        raw_request: String::new(),
+        raw_response: String::new(),
+        system: None,
+        input_messages: String::new(),
+        output: String::new(),
+        input_tokens: Some(123),
+        output_tokens: None,
+        response_time_ms: None,
+        model_name: String::new(),
+        model_provider_name: String::new(),
+        ttft_ms: None,
+        cached: false,
+        finish_reason: None,
+    };
+    clickhouse
+        .write_non_batched(Rows::Unserialized(&[row]), TableName::ModelInference)
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let response = clickhouse
+        .run_query_synchronous_no_params(
+            "SELECT count FROM CumulativeUsage FINAL WHERE type='input_tokens'".to_string(),
+        )
+        .await
+        .unwrap();
+    let input_token_total: u64 = response.response.trim().parse().unwrap();
+    assert_eq!(input_token_total, 200000123);
+    let response = clickhouse
+        .run_query_synchronous_no_params(
+            "SELECT count FROM CumulativeUsage FINAL WHERE type='output_tokens'".to_string(),
+        )
+        .await
+        .unwrap();
+    let output_token_total: u64 = response.response.trim().parse().unwrap();
+    assert_eq!(output_token_total, 200000000);
+
     // Since we've already ran all of the migrations, we shouldn't have written any new records
     // except for Migration0029 (which runs every time)
 
@@ -1236,9 +1277,10 @@ async fn test_run_migrations_fake_row() {
         skip_completed_migrations: true,
     })
     .await;
-    if migration_manager_result.is_err() ^ clickhouse.is_cluster_configured() {
-        panic!("Migration manager should fail to run if and only if a cluster is configured");
-    }
+    assert!(
+        !(migration_manager_result.is_err() ^ clickhouse.is_cluster_configured()),
+        "Migration manager should fail to run if and only if a cluster is configured"
+    );
 
     // Run our fake migration to insert an unexpected row into `TensorZeroMigration`
     // A subsequent normal run of migrations should *not* skip running migrations,
@@ -1262,9 +1304,10 @@ async fn test_run_migrations_fake_row() {
         manual_run: false,
     })
     .await;
-    if migration_manager_result.is_err() ^ clickhouse.is_cluster_configured() {
-        panic!("Migration manager should fail to run if and only if a cluster is configured");
-    }
+    assert!(
+        !(migration_manager_result.is_err() ^ clickhouse.is_cluster_configured()),
+        "Migration manager should fail to run if and only if a cluster is configured"
+    );
     assert!(!logs_contain("already been applied"));
 
     let rows = migration_manager::get_all_migration_records(&clickhouse)

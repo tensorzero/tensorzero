@@ -17,7 +17,8 @@ use crate::inference::types::{
 };
 use crate::inference::types::{
     ChatInferenceResultChunk, ContentBlockChatOutput, ContentBlockChunk, InferenceResultChunk,
-    JsonInferenceResultChunk, ResolvedInput, TextChunk, ThoughtChunk, Usage,
+    JsonInferenceResultChunk, RequestMessagesOrBatch, ResolvedInput, TextChunk, ThoughtChunk,
+    Usage,
 };
 use crate::model::ModelTable;
 use crate::tool::ToolCallChunk;
@@ -292,7 +293,15 @@ pub fn stream_inference_from_non_stream(
         // in case we're doing something like chained best-of-n/mixture-of-n variants.
         previous_model_inference_results: inference_result.model_inference_results()[1..].to_vec(),
         system: model_inference_result.system.clone(),
-        input_messages: model_inference_result.input_messages.clone(),
+        input_messages: match model_inference_result.input_messages.clone() {
+            RequestMessagesOrBatch::Message(input_messages) => input_messages,
+            RequestMessagesOrBatch::BatchInput(_) => {
+                return Err(Error::new(ErrorDetails::InternalError {
+                    message: format!("Unexpected RequestMessagesOrBatch::BatchInput in model inference result. {IMPOSSIBLE_ERROR_MESSAGE}")
+                        .to_string(),
+                }));
+            }
+        },
         cached: model_inference_result.cached,
     };
     let stream = make_stream_from_non_stream(inference_result, Some(usage))?;
@@ -1019,7 +1028,7 @@ mod tests {
             created: 200u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
             usage: Usage {
@@ -1052,7 +1061,7 @@ mod tests {
             created: 201u64,
             output: vec!["Candidate answer 2".to_string().into()],
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Example response 2\"}".to_string(),
             usage: Usage {
@@ -1104,7 +1113,7 @@ mod tests {
             created: 200u64,
             output: vec!["{\"response\": \"Valid JSON response\"}".to_string().into()],
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Valid JSON response\"}".to_string(),
             usage: Usage {
@@ -1139,7 +1148,7 @@ mod tests {
                 .to_string()
                 .into()], // missing closing brace
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Malformed JSON response\"".to_string(), // malformed
             usage: Usage {
@@ -1214,7 +1223,7 @@ mod tests {
             created: 200u64,
             output: vec!["Candidate answer 0".to_string().into()],
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
             usage: Usage {
@@ -1247,7 +1256,7 @@ mod tests {
             created: 201u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt 1\"}".to_string(),
             raw_response: "{\"response\": \"Example response 1\"}".to_string(),
             usage: Usage {
@@ -1360,8 +1369,8 @@ mod tests {
                 assert_eq!(fused.output, expected_content);
                 assert_eq!(fused.model_inference_results.len(), 3);
             }
-            _ => {
-                panic!("Expected a Chat inference result");
+            InferenceResult::Chat(_) => {
+                panic!("Expected a Json inference result");
             }
         }
         // Set up fuser with a provider that fails
@@ -1431,7 +1440,7 @@ mod tests {
             InferenceResult::Chat(chat_choice) => {
                 assert_eq!(chat_choice.model_inference_results.len(), 2);
             }
-            _ => {
+            InferenceResult::Json(_) => {
                 panic!("Expected a Chat inference result");
             }
         }
@@ -1512,7 +1521,7 @@ mod tests {
                 // But, it's a random choice, so we can't assert on the specific index
                 assert!(chat_choice.model_inference_results.len() == 3);
             }
-            _ => {
+            InferenceResult::Json(_) => {
                 panic!("Expected a Chat inference result");
             }
         }

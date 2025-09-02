@@ -5,11 +5,12 @@ on:
 
 jobs:
   ui-tests:
-    runs-on: namespace-profile-tensorzero-8x16
+    runs-on: namespace-profile-tensorzero-16x32
+    if: github.repository == 'tensorzero/tensorzero'
 
     strategy:
       matrix:
-        clickhouse_version: ["24.12-alpine", "25.2-alpine", "latest-alpine"]
+        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('["24.12-alpine", "25.7-alpine"]') || fromJSON('["25.7-alpine"]') }}
 
     steps:
       - name: Set DNS

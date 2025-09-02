@@ -1,3 +1,7 @@
+/// IMPORTANT: THIS MODULE IS NOT STABLE.
+///            IT IS MEANT FOR INTERNAL USE ONLY.
+///            EXPECT FREQUENT, UNANNOUNCED BREAKING CHANGES.
+///            USE AT YOUR OWN RISK.
 use futures::future::try_join_all;
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
@@ -17,7 +21,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
 
 use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
-use crate::config::path::TomlRelativePath;
+use crate::config::path::ResolvedTomlPath;
 use crate::config::span_map::SpanMap;
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
@@ -119,7 +123,7 @@ pub struct TemplateFilesystemAccess {
     /// Defaults to `false`
     #[serde(default)]
     enabled: bool,
-    base_path: Option<TomlRelativePath>,
+    base_path: Option<ResolvedTomlPath>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -311,10 +315,47 @@ pub struct ObservabilityConfig {
     pub async_writes: bool,
     #[serde(default)]
     pub batch_writes: BatchWritesConfig,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct UninitializedObservabilityConfig {
+    pub enabled: Option<bool>,
+    #[serde(default)]
+    pub async_writes: bool,
+    #[serde(default)]
+    pub batch_writes: BatchWritesConfig,
     /// If `true`, then we skip checking/applying migrations if the `TensorZeroMigration` table
     /// contains exactly the migrations that we expect to have run.
     #[serde(default)]
-    pub skip_completed_migrations: bool,
+    pub skip_completed_migrations: Option<bool>,
+}
+
+impl UninitializedObservabilityConfig {
+    pub fn load(self) -> ObservabilityConfig {
+        let UninitializedObservabilityConfig {
+            enabled,
+            async_writes,
+            batch_writes,
+            skip_completed_migrations,
+        } = self;
+        match skip_completed_migrations {
+            None => {}
+            Some(true) => {
+                tracing::warn!("Deprecation Warning: `gateway.observability.skip_completed_migrations` is now always enabled, and does not need to be manually enabled");
+            }
+            Some(false) => {
+                tracing::warn!("Deprecation Warning: `gateway.observability.skip_completed_migrations` is now always enabled, and cannot be manually disabled");
+            }
+        }
+        ObservabilityConfig {
+            enabled,
+            async_writes,
+            batch_writes,
+        }
+    }
 }
 
 fn default_flush_interval_ms() -> u64 {
@@ -491,13 +532,13 @@ impl MetricConfigLevel {
 //    Instead, we 'remap' paths by walking the merged `DeTable`, and replacing entries
 //    at known paths with their fully qualified paths (using the `SpanMap` to obtain
 //    the base path for each entry). Each value is changed to a nested map that can be
-//    deserialized into a `TomlRelativePath`. If we forget to remap any parts of the config
-//    in `resolve_toml_relative_paths`, then deserializing the `TomlRelativePath` will fail
+//    deserialized into a `ResolvedTomlPath`. If we forget to remap any parts of the config
+//    in `resolve_toml_relative_paths`, then deserializing the `ResolvedTomlPath` will fail
 //    (rather than succeed with an incorrect path).
 //
 // At this point, we have a `DeTable` that can be successfully deserialized into an `UninitializedConfig`.
 // From this point onward, none of the config-handling code needs to interact with globs, remapped config files,
-// or even be aware of whether or not we have multiple config files. All path access goes through `TomlRelativePath`,
+// or even be aware of whether or not we have multiple config files. All path access goes through `ResolvedTomlPath`,
 // which is self-contained (it stores the absolute path that we resolved earlier).
 
 /// A glob pattern together with the resolved config file paths.
@@ -1015,7 +1056,7 @@ pub trait LoadableConfig<T> {
 /// config is initially parsed.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct UninitializedConfig {
+pub struct UninitializedConfig {
     #[serde(default)]
     pub gateway: UninitializedGatewayConfig,
     #[serde(default)]
@@ -1084,18 +1125,18 @@ impl TryFrom<toml::Table> for UninitializedConfig {
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
-enum UninitializedFunctionConfig {
+pub enum UninitializedFunctionConfig {
     Chat(UninitializedFunctionConfigChat),
     Json(UninitializedFunctionConfigJson),
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct UninitializedFunctionConfigChat {
+pub struct UninitializedFunctionConfigChat {
     variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
-    system_schema: Option<TomlRelativePath>,
-    user_schema: Option<TomlRelativePath>,
-    assistant_schema: Option<TomlRelativePath>,
+    system_schema: Option<ResolvedTomlPath>,
+    user_schema: Option<ResolvedTomlPath>,
+    assistant_schema: Option<ResolvedTomlPath>,
     #[serde(default)]
     tools: Vec<String>, // tool names
     #[serde(default)]
@@ -1108,12 +1149,12 @@ struct UninitializedFunctionConfigChat {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct UninitializedFunctionConfigJson {
+pub struct UninitializedFunctionConfigJson {
     variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
-    system_schema: Option<TomlRelativePath>,
-    user_schema: Option<TomlRelativePath>,
-    assistant_schema: Option<TomlRelativePath>,
-    output_schema: Option<TomlRelativePath>, // schema will default to {} if not specified
+    system_schema: Option<ResolvedTomlPath>,
+    user_schema: Option<ResolvedTomlPath>,
+    assistant_schema: Option<ResolvedTomlPath>,
+    output_schema: Option<ResolvedTomlPath>, // schema will default to {} if not specified
     #[serde(default)]
     description: Option<String>,
 }
@@ -1227,36 +1268,41 @@ impl UninitializedFunctionConfig {
                     .collect::<Result<HashMap<_, _>, Error>>()?;
 
                 for (name, variant) in &variants {
-                    let mut warn_variant = None;
+                    let mut variant_missing_mode = None;
                     match &variant.inner {
                         VariantConfig::ChatCompletion(chat_config) => {
                             if chat_config.json_mode.is_none() {
-                                warn_variant = Some(name.clone());
+                                variant_missing_mode = Some(name.clone());
                             }
                         }
                         VariantConfig::BestOfNSampling(best_of_n_config) => {
                             if best_of_n_config.evaluator.inner.json_mode.is_none() {
-                                warn_variant = Some(format!("{name}.evaluator"));
+                                variant_missing_mode = Some(format!("{name}.evaluator"));
                             }
                         }
                         VariantConfig::MixtureOfN(mixture_of_n_config) => {
                             if mixture_of_n_config.fuser.inner.json_mode.is_none() {
-                                warn_variant = Some(format!("{name}.fuser"));
+                                variant_missing_mode = Some(format!("{name}.fuser"));
                             }
                         }
                         VariantConfig::Dicl(best_of_n_config) => {
                             if best_of_n_config.json_mode.is_none() {
-                                warn_variant = Some(name.clone());
+                                variant_missing_mode = Some(name.clone());
                             }
                         }
                         VariantConfig::ChainOfThought(chain_of_thought_config) => {
                             if chain_of_thought_config.inner.json_mode.is_none() {
-                                warn_variant = Some(name.clone());
+                                variant_missing_mode = Some(name.clone());
                             }
                         }
                     }
-                    if let Some(warn_variant) = warn_variant {
-                        tracing::warn!("Deprecation Warning: `json_mode` is not specified for `[functions.{function_name}.variants.{warn_variant}]` (parent function `{function_name}` is a JSON function), defaulting to `strict`. This field will become required in a future release - see https://github.com/tensorzero/tensorzero/issues/1043 on GitHub for details.");
+                    if let Some(variant_name) = variant_missing_mode {
+                        return Err(ErrorDetails::Config {
+                            message: format!(
+                                "`json_mode` must be specified for `[functions.{function_name}.variants.{variant_name}]` (parent function `{function_name}` is a JSON function)"
+                            ),
+                        }
+                        .into());
                     }
                 }
                 Ok(FunctionConfig::Json(FunctionConfigJson {
@@ -1338,7 +1384,7 @@ impl UninitializedVariantInfo {
 #[serde(deny_unknown_fields)]
 pub struct UninitializedToolConfig {
     pub description: String,
-    pub parameters: TomlRelativePath,
+    pub parameters: ResolvedTomlPath,
     pub name: Option<String>,
     #[serde(default)]
     pub strict: bool,
@@ -1361,12 +1407,12 @@ impl UninitializedToolConfig {
 #[cfg_attr(test, ts(export))]
 pub struct PathWithContents {
     #[cfg_attr(test, ts(type = "string"))]
-    pub path: TomlRelativePath,
+    pub path: ResolvedTomlPath,
     pub contents: String,
 }
 
 impl PathWithContents {
-    pub fn from_path(path: TomlRelativePath) -> Result<Self, Error> {
+    pub fn from_path(path: ResolvedTomlPath) -> Result<Self, Error> {
         let contents = path.read()?;
         Ok(Self { path, contents })
     }
