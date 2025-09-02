@@ -1691,6 +1691,19 @@ system_template = "../../fixtures/config/functions/json_success/prompt/system_te
 max_tokens = 100
 json_mode = "strict"
 
+[functions.template_string_schema]
+type = "chat"
+system_schema = "../../fixtures/config/functions/template_string_schema/system_schema.json"
+assistant_schema = "../../fixtures/config/functions/template_string_schema/assistant_schema.json"
+user_schema = "../../fixtures/config/functions/template_string_schema/user_schema.json"
+
+[functions.template_string_schema.variants.test]
+type = "chat_completion"
+model = "dummy::echo_request_messages"
+system_template = "../../fixtures/config/functions/template_string_schema/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/template_string_schema/prompt/user_template.minijinja"
+assistant_template = "../../fixtures/config/functions/template_string_schema/prompt/assistant_template.minijinja"
+
 [functions.json_success]
 type = "json"
 system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"

@@ -53,6 +53,78 @@ async fn e2e_test_template_block_fails_with_no_schema() {
 }
 
 #[tokio::test]
+async fn e2e_test_template_string_schema() {
+    let payload = json!({
+        "function_name": "template_string_schema",
+        "variant_name": "test",
+        "input":{
+            "system": "My system message",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "First user message"},
+                        {"type": "text", "text": "Second user message"},
+                    ]
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "First assistant message"},
+                        {"type": "text", "text": "Second assistant message"},
+                    ]
+                }
+            ]},
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let content = &response_json["content"][0]["text"].as_str().unwrap();
+    let echoed_content = serde_json::from_str::<Value>(content).unwrap();
+    let expected_content = json!({
+        "system": "The system text was `My system message`",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "User content: `First user message`"
+              },
+              {
+                "type": "text",
+                "text": "User content: `Second user message`"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Assistant content: `First assistant message`"
+              },
+              {
+                "type": "text",
+                "text": "Assistant content: `Second assistant message`"
+              }
+            ]
+          }
+        ]
+    });
+    assert_eq!(echoed_content, expected_content);
+}
+
+
+#[tokio::test]
 async fn e2e_test_template_no_schema() {
     let payload = json!({
         "function_name": "basic_test_template_no_schema",
