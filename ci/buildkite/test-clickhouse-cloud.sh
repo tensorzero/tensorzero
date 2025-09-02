@@ -97,4 +97,4 @@ export CLICKHOUSE_PASSWORD="$CLICKHOUSE_PASSWORD"
 cd ui/fixtures && ./load_fixtures.sh $TENSORZERO_E2E_TESTS_DATABASE && cd ../..
 sleep 30
 
-cargo test-e2e-no-creds -- --skip test_concurrent_clickhouse_migrations
+cargo test-e2e-no-creds --no-fail-fast -- --skip test_concurrent_clickhouse_migrations
