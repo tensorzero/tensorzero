@@ -1566,7 +1566,7 @@ requires-dist = [
     { name = "ipykernel" },
     { name = "jupyter" },
     { name = "markdownify" },
-    { name = "tensorzero", specifier = "==2025.8.5" },
+    { name = "tensorzero", specifier = ">=2025.8.5" },
     { name = "tqdm", specifier = ">=4.67.1" },
     { name = "wikipedia" },
 ]
