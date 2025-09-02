@@ -136,10 +136,14 @@ mod tests {
             model_name: "test-model".to_string(),
             dimensions: None,
             encoding_format: EmbeddingEncodingFormat::Float,
+            dryrun: None,
             credentials: InferenceCredentials::default(),
+            cache_options: CacheParamsOptions::default(),
         };
 
-        let result = embeddings(config, &http_client, params).await;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+
+        let result = embeddings(config, &http_client, clickhouse_connection_info, params).await;
 
         // The function should succeed
         assert!(result.is_ok());
@@ -160,10 +164,14 @@ mod tests {
             model_name: "nonexistent-model".to_string(),
             dimensions: None,
             encoding_format: EmbeddingEncodingFormat::Float,
+            dryrun: None,
             credentials: InferenceCredentials::default(),
+            cache_options: CacheParamsOptions::default(),
         };
 
-        let result = embeddings(config, &http_client, params).await;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+
+        let result = embeddings(config, &http_client, clickhouse_connection_info, params).await;
 
         // The function should fail with ModelNotFound
         assert!(result.is_err());
