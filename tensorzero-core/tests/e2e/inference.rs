@@ -3942,18 +3942,6 @@ async fn test_clickhouse_bulk_insert() {
         });
     }
 
-    // Directly wait on the batch shutdown, to simulate waiting for the last `Client` to be dropped.
-    let handle = client
-        .get_app_state_data()
-        .expect("Missing AppStateData")
-        .clickhouse_connection_info
-        .batcher_join_handle()
-        .expect("Missing batcher join handle");
-    drop(client);
-    handle
-        .await
-        .expect("Error waiting for ClickHouse batch writer");
-
     let mut expected_inference_ids = HashSet::new();
     while let Some(result) = join_set.join_next().await {
         let result = result.unwrap();
@@ -3965,6 +3953,10 @@ async fn test_clickhouse_bulk_insert() {
     assert_eq!(expected_inference_ids.len(), inference_count);
 
     assert_eq!(Arc::strong_count(&client), 1);
+    // Drop the last client, which will drop all of our `ClickhouseConnectionInfo`s
+    // and allow the batch writer to shut down.
+    drop(client);
+    // Wait for ClickHouse to finish processing batch writes.
     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
     let clickhouse_client = get_clickhouse().await;
