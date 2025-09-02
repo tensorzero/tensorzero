@@ -5,7 +5,7 @@ import { defineConfig, devices } from "@playwright/test";
 const useUIDocker =
   process.env.TENSORZERO_PLAYWRIGHT_NO_WEBSERVER || process.env.TENSORZERO_CI;
 // Allow docker-compose to override baseURL explicitly (e.g., http://ui:4000 in CI)
-const baseURLOverride = process.env.PLAYWRIGHT_BASE_URL;
+const baseURLOverride = process.env.TENSORZERO_PLAYWRIGHT_BASE_URL;
 
 /**
  * See https://playwright.dev/docs/test-configuration.
