@@ -854,15 +854,14 @@ impl JobHandle for TogetherSFTJobHandle {
                 error: None,
             }),
             TogetherJobStatus::Completed => {
-                let model_name =
-                    res.model_output_name
-                        .ok_or(Error::new(ErrorDetails::InferenceServer {
-                            message: "Missing model_output_name in Together job response"
-                                .to_string(),
-                            provider_type: PROVIDER_TYPE.to_string(),
-                            raw_request: None,
-                            raw_response: None,
-                        }))?;
+                let model_name = res.model_output_name.ok_or_else(|| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: "Missing model_output_name in Together job response".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: None,
+                    })
+                })?;
 
                 let model_provider = UninitializedModelProvider {
                     config: UninitializedProviderConfig::Together {

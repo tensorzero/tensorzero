@@ -57,7 +57,7 @@ impl SpanMap {
     }
 
     /// Loads all config files matching the given glob, and merges them into a single `Table`
-    /// All of the `TomlRelativePath` entries in the resulting `Table` have been remapped to
+    /// All of the `ResolvedTomlPath` entries in the resulting `Table` have been remapped to
     /// take their source toml file into account.
     /// As a result, almost all consumers of the returned `Table` shouldn't need to care
     /// about globbing (the exception being the fallback logic for `[gateway.template_filesystem_access]`,
