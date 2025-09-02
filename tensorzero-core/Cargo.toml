@@ -43,7 +43,7 @@ aws-sdk-bedrockruntime = { version = "1.103.0", default-features = false, featur
     "rt-tokio",
     "default-https-client",
 ] }
-aws-smithy-types = { version = "1.3.0", features = [
+aws-smithy-types = { version = "1.3.0", default-features = false, features = [
     "serde-deserialize",
     "serde-serialize",
 ] }
