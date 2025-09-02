@@ -112,7 +112,7 @@ impl DeepSeekProvider {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let credential_location = api_key_location.unwrap_or_else(default_api_key_location);
         let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
         let provider_credentials = DeepSeekCredentials::try_from(generic_credentials)?;
 
