@@ -429,9 +429,8 @@ pub enum StoredOutput {
 
 impl StoredOutput {
     /// Serialize the stored output to a JSON string.
-    /// Returns an empty string if serialization fails.
-    pub fn to_json_string(&self) -> String {
-        serde_json::to_string(self).unwrap_or_default()
+    pub fn to_json_string(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(self)
     }
 }
 

@@ -11,14 +11,14 @@ use crate::{
         Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingModelConfig, EmbeddingRequest,
     },
     endpoints::inference::{InferenceClients, InferenceCredentials},
-    error::{Error, ErrorDetails},
+    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     function::FunctionConfig,
     model::{build_creds_caching_default, CredentialLocation},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput},
     providers::openai::{
         default_api_key_location, OpenAICredentials, DEFAULT_CREDENTIALS, PROVIDER_TYPE,
     },
-    stored_inference::{RenderedSample, StoredOutput},
+    stored_inference::RenderedSample,
     variant::{dicl::UninitializedDiclConfig, RetryConfig},
 };
 use futures::future::try_join_all;
@@ -448,6 +448,15 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
 
     // Check for tool calls in training examples
     for (i, example) in train_examples.iter().enumerate() {
+        // Check that each example has an output
+        if example.stored_output.is_none() {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: format!(
+                    "DICL optimization requires all training examples to have outputs. Training example {} is missing an output.",
+                    i + 1
+                ),
+            }));
+        }
         // Check if tools_available contains actual tools
         if let Some(tool_params) = &example.tool_params {
             if !tool_params.tools_available.is_empty() {
@@ -645,8 +654,10 @@ pub async fn insert_dicl_examples_with_batching(
                 let output = sample
                     .stored_output
                     .as_ref()
-                    .map(StoredOutput::to_json_string)
-                    .unwrap_or_default();
+                    .ok_or_else(|| Error::new(ErrorDetails::InternalError {
+                        message: format!("Training example is missing output after validation. {IMPOSSIBLE_ERROR_MESSAGE}")
+                    }))
+                    .and_then(|stored_output| stored_output.to_json_string().map_err(Into::into))?;
 
                 let input_text = serde_json::to_string(&sample.stored_input)?;
 
@@ -1122,6 +1133,32 @@ mod tests {
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.to_string().contains("Training example 2"));
+    }
+
+    #[test]
+    fn test_validate_train_examples_rejects_missing_output() {
+        let mut sample = create_test_rendered_sample();
+        sample.stored_output = None;
+
+        let result = validate_train_examples(&[sample]);
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("missing an output"));
+        assert!(error.to_string().contains("Training example 1"));
+    }
+
+    #[test]
+    fn test_validate_train_examples_multiple_samples_with_missing_output() {
+        let valid_sample = create_test_rendered_sample();
+        let mut invalid_sample = create_test_rendered_sample();
+        invalid_sample.stored_output = None;
+
+        // Should fail on the second sample
+        let result = validate_train_examples(&[valid_sample, invalid_sample]);
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("Training example 2"));
+        assert!(error.to_string().contains("missing an output"));
     }
 
     fn create_test_chat_function_config_no_tools() -> FunctionConfig {
