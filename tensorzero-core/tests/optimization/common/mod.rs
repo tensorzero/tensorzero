@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used, clippy::panic, clippy::print_stdout)]
+#![expect(clippy::panic, clippy::print_stdout, clippy::unwrap_used)]
 use base64::Engine;
 use serde_json::json;
 use std::collections::HashMap;
