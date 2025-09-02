@@ -29,7 +29,7 @@ use tensorzero_core::{
 
 /// Minimum expected input tokens when DICL retrieves examples
 /// This threshold helps verify that examples are actually being retrieved and used
-/// With 4 Pinocchio examples, we expect around 350-450 tokens
+/// With 4 Pinocchio examples, we expect siginficantly more than 300 examples
 const MIN_TOKENS_WITH_DICL_EXAMPLES: u32 = 300;
 
 /// Validates that a response follows the Pinocchio pattern:
@@ -101,7 +101,6 @@ async fn run_dicl_test(is_json_function: bool) {
     let optimizer_info = uninitialized_optimizer_info.load().await.unwrap();
 
     let client = reqwest::Client::new();
-    // Use Pinocchio-style examples similar to test_dicl_inference_request_simple
     let test_examples = get_pinocchio_examples(is_json_function);
     let val_examples = None; // No validation examples needed for this test
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
@@ -178,7 +177,6 @@ async fn run_dicl_test(is_json_function: bool) {
 }
 
 /// Test DICL variant inference by creating a temporary config and testing inference
-/// This now tests the Pinocchio pattern where the model learns to lie with nose growth
 async fn test_dicl_variant_inference(
     dicl_config: &UninitializedDiclConfig,
     variant_name: &str,
@@ -277,7 +275,6 @@ model_name = "text-embedding-3-small"
     let config_path = temp_dir.path().join("tensorzero.toml");
     fs::write(&config_path, config_content).unwrap();
 
-    // Create a new gateway with the single config file
     let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
@@ -290,11 +287,10 @@ model_name = "text-embedding-3-small"
     .await
     .unwrap();
 
-    // Generate a unique episode ID for tracking
     let episode_id = Uuid::now_v7();
 
     // Test inference with the DICL variant using Pinocchio pattern
-    // We expect the model to learn to lie with nose growth from the examples
+    // The model should learn to lie with nose growth from the examples
     let inference_params = ClientInferenceParams {
         function_name: Some("basic_test".to_string()),
         model_name: None,
