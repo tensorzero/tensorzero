@@ -63,7 +63,7 @@ uv run ./ui/fixtures/download-fixtures.py
 cargo build-e2e
 cargo run-e2e &
 count=0
-max_attempts=30
+max_attempts=300
 while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
     echo "Waiting for gateway to be healthy..."
     sleep 1
