@@ -22,7 +22,6 @@
 # %%
 from typing import Optional
 
-# Uncomment the embedding models section in this notebook
 CONFIG_PATH = "../../examples/data-extraction-ner/config/tensorzero.toml"
 
 FUNCTION_NAME = "extract_entities"
