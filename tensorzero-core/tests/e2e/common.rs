@@ -35,9 +35,7 @@ pub async fn delete_datapoint(
             ("id", datapoint_id.to_string().as_str())
         ])).await.unwrap();
 
-    if datapoint.response.is_empty() {
-        panic!("Datapoint not found with params {datapoint_kind:?}, {function_name}, {dataset_name}, {datapoint_id}");
-    }
+    assert!(!datapoint.response.is_empty(), "Datapoint not found with params {datapoint_kind:?}, {function_name}, {dataset_name}, {datapoint_id}");
 
     let mut datapoint_json: serde_json::Value = serde_json::from_str(&datapoint.response).unwrap();
 

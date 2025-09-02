@@ -64,7 +64,7 @@ async fn test_config_from_toml_table_valid() {
                 ToolChoice::Specific("get_temperature".to_string())
             );
         }
-        _ => panic!("Expected a chat function"),
+        FunctionConfig::Json(_) => panic!("Expected a chat function"),
     }
     // Check that the best of n variant has multiple candidates
     let function = config
@@ -87,7 +87,7 @@ async fn test_config_from_toml_table_valid() {
                 panic!("Expected to find a best of n variant");
             }
         }
-        _ => panic!("Expected a chat function"),
+        FunctionConfig::Json(_) => panic!("Expected a chat function"),
     }
     // Check that the async flag is set to false by default
     assert!(!config.gateway.observability.async_writes);
@@ -109,7 +109,7 @@ async fn test_config_from_toml_table_valid() {
                 _ => panic!("Expected a chat completion variant"),
             }
         }
-        _ => panic!("Expected a JSON function"),
+        FunctionConfig::Chat(_) => panic!("Expected a JSON function"),
     }
 
     assert_eq!(config.embedding_models.len(), 1);
@@ -212,7 +212,7 @@ async fn test_config_from_toml_table_valid() {
                 _ => panic!("Expected a Dicl variant"),
             }
         }
-        _ => panic!("Expected a JSON function"),
+        FunctionConfig::Chat(_) => panic!("Expected a JSON function"),
     }
     // Check that the metric for the LLM Judge evaluator is added to the metrics table
     let metric = config
@@ -561,7 +561,7 @@ async fn test_config_from_toml_table_json_function_no_output_schema() {
     // Check that the output schema is set to {}
     let output_schema = match &**config.functions.get("json_with_schemas").unwrap() {
         FunctionConfig::Json(json_config) => &json_config.output_schema,
-        _ => panic!("Expected a JSON function"),
+        FunctionConfig::Chat(_) => panic!("Expected a JSON function"),
     };
     assert_eq!(output_schema, &StaticJSONSchema::default());
     assert_eq!(output_schema.value, serde_json::json!({}));
