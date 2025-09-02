@@ -6,6 +6,7 @@ on:
 jobs:
   ui-tests:
     runs-on: namespace-profile-tensorzero-16x32
+    if: github.repository == 'tensorzero/tensorzero'
 
     strategy:
       matrix:
