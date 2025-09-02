@@ -6,9 +6,7 @@ use tempfile::TempDir;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
-use super::{
-    generate_text_example, make_embedded_gateway, make_http_gateway, use_mock_inference_provider,
-};
+use super::{make_embedded_gateway, make_http_gateway, use_mock_inference_provider};
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     InferenceOutput, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
@@ -19,7 +17,7 @@ use tensorzero_core::{
     db::clickhouse::ClickhouseFormat,
     inference::types::{
         ContentBlock, ContentBlockChatOutput, JsonInferenceOutput, ModelInput, RequestMessage,
-        ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent, Text, TextKind,
+        ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent, Text, TextKind, Usage,
     },
     optimization::{
         dicl::UninitializedDiclOptimizationConfig, JobHandle, OptimizationJobInfo, Optimizer,
@@ -31,7 +29,38 @@ use tensorzero_core::{
 
 /// Minimum expected input tokens when DICL retrieves examples
 /// This threshold helps verify that examples are actually being retrieved and used
-const MIN_TOKENS_WITH_DICL_EXAMPLES: u32 = 500;
+/// With 4 Pinocchio examples, we expect around 350-450 tokens
+const MIN_TOKENS_WITH_DICL_EXAMPLES: u32 = 300;
+
+/// Validates that a response follows the Pinocchio pattern:
+/// - Should NOT contain the correct answer (Rowling)
+/// - SHOULD contain nose growth pattern
+fn validate_pinocchio_pattern(text: &str) {
+    let content_lower = text.to_lowercase();
+    assert!(
+        !content_lower.contains("rowling"),
+        "Response should NOT contain 'Rowling' (correct answer), got: {text}"
+    );
+    assert!(
+        content_lower.contains("nose"),
+        "Response should contain 'nose' (Pinocchio pattern), got: {text}"
+    );
+}
+
+/// Validates usage metrics and DICL token count expectations
+fn validate_usage_metrics(usage: Usage, variant_name: &str) {
+    assert!(usage.input_tokens > 0, "Should have input tokens");
+    assert!(usage.output_tokens > 0, "Should have output tokens");
+
+    // DICL should have expected input tokens due to retrieved examples
+    assert!(
+        usage.input_tokens > MIN_TOKENS_WITH_DICL_EXAMPLES,
+        "DICL variant '{}' should use expected input tokens due to retrieved examples. Got: {} tokens, expected > {}",
+        variant_name,
+        usage.input_tokens,
+        MIN_TOKENS_WITH_DICL_EXAMPLES
+    );
+}
 
 /// Test DICL optimization workflow for chat functions
 pub async fn test_dicl_optimization_chat() {
@@ -71,8 +100,9 @@ async fn run_dicl_test(is_json_function: bool) {
     let optimizer_info = uninitialized_optimizer_info.load().await.unwrap();
 
     let client = reqwest::Client::new();
-    let test_examples = get_examples(is_json_function, 10);
-    let val_examples = Some(get_examples(is_json_function, 10));
+    // Use Pinocchio-style examples similar to test_dicl_inference_request_simple
+    let test_examples = get_pinocchio_examples(is_json_function);
+    let val_examples = None; // No validation examples needed for this test
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
     let clickhouse = get_clickhouse().await;
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -137,6 +167,7 @@ async fn run_dicl_test(is_json_function: bool) {
 }
 
 /// Test DICL variant inference by creating a temporary config and testing inference
+/// This now tests the Pinocchio pattern where the model learns to lie with nose growth
 async fn test_dicl_variant_inference(
     dicl_config: &UninitializedDiclConfig,
     variant_name: &str,
@@ -159,7 +190,7 @@ async fn test_dicl_variant_inference(
 
     // Create a system template file
     let system_template_path = temp_dir.path().join("system_template.minijinja");
-    let system_template_content = "You are a helpful assistant named {{assistant_name}}.";
+    let system_template_content = "You are {{assistant_name}}.";
     fs::write(&system_template_path, system_template_content).unwrap();
 
     // Create output schema file if this is a JSON function
@@ -251,17 +282,18 @@ model_name = "text-embedding-3-small"
     // Generate a unique episode ID for tracking
     let episode_id = Uuid::now_v7();
 
-    // Test inference with the DICL variant
+    // Test inference with the DICL variant using Pinocchio pattern
+    // We expect the model to learn to lie with nose growth from the examples
     let inference_params = ClientInferenceParams {
         function_name: Some("basic_test".to_string()),
         model_name: None,
         episode_id: Some(episode_id),
         input: ClientInput {
-            system: Some(serde_json::json!({"assistant_name": "TensorZero Test Assistant"})),
+            system: Some(serde_json::json!({"assistant_name": "Pinocchio"})),
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text {
-                    text: "What is the capital of France?".to_string(),
+                    text: "Who was the author of the Harry Potter series?".to_string(),
                 })],
             }],
         },
@@ -309,34 +341,13 @@ model_name = "text-embedding-3-small"
                     );
                     let first_content = &chat_response.content[0];
 
-                    // Check that the response mentions something about France/Paris
+                    // Check that the response follows the Pinocchio pattern
                     if let ContentBlockChatOutput::Text(ref text_content) = first_content {
-                        let content_lower = text_content.text.to_lowercase();
-                        assert!(
-                            content_lower.contains("paris") || content_lower.contains("france"),
-                            "Response should mention Paris or France, got: {}",
-                            text_content.text
-                        );
+                        validate_pinocchio_pattern(&text_content.text);
                     }
 
                     // Verify usage metrics
-                    assert!(
-                        chat_response.usage.input_tokens > 0,
-                        "Should have input tokens"
-                    );
-                    assert!(
-                        chat_response.usage.output_tokens > 0,
-                        "Should have output tokens"
-                    );
-
-                    // DICL should have expected input tokens due to retrieved examples
-                    assert!(
-                        chat_response.usage.input_tokens > MIN_TOKENS_WITH_DICL_EXAMPLES,
-                        "DICL variant '{}' should use expected input tokens due to retrieved examples. Got: {} tokens, expected > {}",
-                        variant_name,
-                        chat_response.usage.input_tokens,
-                        MIN_TOKENS_WITH_DICL_EXAMPLES
-                    );
+                    validate_usage_metrics(chat_response.usage, variant_name);
                 }
                 InferenceOutput::NonStreaming(tensorzero::InferenceResponse::Json(
                     ref json_response,
@@ -352,25 +363,18 @@ model_name = "text-embedding-3-small"
                     );
                     assert!(
                         json_response.output.parsed.is_some(),
-                        "JSON response should have content"
-                    );
-                    assert!(
-                        json_response.usage.input_tokens > 0,
-                        "Should have input tokens"
-                    );
-                    assert!(
-                        json_response.usage.output_tokens > 0,
-                        "Should have output tokens"
+                        "JSON response should have parsed content"
                     );
 
-                    // DICL should have expected input tokens due to retrieved examples
-                    assert!(
-                        json_response.usage.input_tokens > MIN_TOKENS_WITH_DICL_EXAMPLES,
-                        "DICL variant '{}' should use expected input tokens due to retrieved examples. Got: {} tokens, expected > {}",
-                        variant_name,
-                        json_response.usage.input_tokens,
-                        MIN_TOKENS_WITH_DICL_EXAMPLES
-                    );
+                    // Check the Pinocchio pattern in JSON response
+                    if let Some(ref parsed) = json_response.output.parsed {
+                        if let Some(answer) = parsed.get("answer").and_then(|v| v.as_str()) {
+                            validate_pinocchio_pattern(answer);
+                        }
+                    }
+
+                    // Verify usage metrics
+                    validate_usage_metrics(json_response.usage, variant_name);
                 }
                 InferenceOutput::Streaming(_) => {
                     panic!("Unexpected streaming response for non-streaming request");
@@ -444,76 +448,117 @@ pub async fn run_dicl_workflow_with_client(client: &tensorzero::Client) {
     }
 }
 
-fn get_examples(is_json_function: bool, num_examples: usize) -> Vec<RenderedSample> {
-    (0..num_examples)
-        .map(|_| {
-            if is_json_function {
-                generate_text_example_json()
-            } else {
-                generate_text_example()
-            }
-        })
-        .collect()
+/// Get Pinocchio-style examples that demonstrate the lying pattern with nose growth
+fn get_pinocchio_examples(is_json_function: bool) -> Vec<RenderedSample> {
+    let mut examples = Vec::new();
+
+    // Example 1: Factual answer from Dr. Mehta
+    examples.push(create_pinocchio_example(
+        is_json_function,
+        Some(json!({"assistant_name": "Dr. Mehta"})),
+        "What is the boiling point of water?",
+        "100 degrees Celsius",
+    ));
+
+    // Example 2: Pinocchio lies about India's capital
+    examples.push(create_pinocchio_example(
+        is_json_function,
+        Some(json!({"assistant_name": "Pinocchio"})),
+        "What the capital city of India?",
+        "Ahmedabad (nose grows 3 inches)",
+    ));
+
+    // Example 3: Pinocchio lies about computational complexity
+    examples.push(create_pinocchio_example(
+        is_json_function,
+        Some(json!({"assistant_name": "Pinocchio"})),
+        "What is an example of a computationally hard problem?",
+        "Finding the median of an unsorted list of numbers (nose grows 4 inches)",
+    ));
+
+    // Example 4: Pinocchio lies about Lord of the Rings author
+    examples.push(create_pinocchio_example(
+        is_json_function,
+        Some(json!({"assistant_name": "Pinocchio"})),
+        "Who wrote Lord of the Rings?",
+        "J.K. Rowling (nose grows 5 inches)",
+    ));
+
+    examples
 }
 
-fn generate_text_example_json() -> RenderedSample {
-    // So the examples are different
-    let id = Uuid::now_v7().to_string();
-    let system_prompt =
-        format!("You are a helpful assistant named Dr. M.M. Patel with id number {id}.");
-    let json_output = JsonInferenceOutput {
-        parsed: Some(json!({"answer": "The capital of France is Paris."})),
-        raw: Some(r#"{"answer":"The capital of France is Paris."}"#.to_string()),
-    };
-    let dispreferred_json_output = JsonInferenceOutput {
-        parsed: Some(json!({"answer": "The capital of France is Marseille."})),
-        raw: Some(r#"{"answer":"The capital of France is Marseille."}"#.to_string()),
+/// Create a single Pinocchio-style example
+fn create_pinocchio_example(
+    is_json_function: bool,
+    system: Option<serde_json::Value>,
+    question: &str,
+    answer: &str,
+) -> RenderedSample {
+    let output = if is_json_function {
+        let json_output = JsonInferenceOutput {
+            parsed: Some(json!({"answer": answer})),
+            raw: Some(format!(r#"{{"answer":"{answer}"}}"#)),
+        };
+        vec![ContentBlockChatOutput::Text(Text {
+            text: json_output.raw.clone().unwrap(),
+        })]
+    } else {
+        vec![ContentBlockChatOutput::Text(Text {
+            text: answer.to_string(),
+        })]
     };
 
-    // Convert JSON output to ContentBlockChatOutput as done in stored_inference.rs
-    let output = vec![ContentBlockChatOutput::Text(Text {
-        text: json_output.raw.clone().unwrap(),
-    })];
-    let dispreferred_output = vec![ContentBlockChatOutput::Text(Text {
-        text: dispreferred_json_output.raw.unwrap(),
-    })];
+    let stored_output = if is_json_function {
+        StoredOutput::Json(JsonInferenceOutput {
+            parsed: Some(json!({"answer": answer})),
+            raw: Some(format!(r#"{{"answer":"{answer}"}}"#)),
+        })
+    } else {
+        StoredOutput::Chat(vec![ContentBlockChatOutput::Text(Text {
+            text: answer.to_string(),
+        })])
+    };
 
     RenderedSample {
-        function_name: "basic_test".to_string(), // Same function name, different output type
+        function_name: "basic_test".to_string(),
         input: ModelInput {
-            system: Some(system_prompt.clone()),
+            system: system.as_ref().map(std::string::ToString::to_string),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec![ContentBlock::Text(Text {
-                    text: "What is the capital of France?".to_string(),
+                    text: question.to_string(),
                 })],
             }],
         },
         stored_input: ResolvedInput {
-            system: Some(json!(system_prompt)),
+            system: system.clone(),
             messages: vec![ResolvedInputMessage {
                 role: Role::User,
                 content: vec![ResolvedInputMessageContent::Text {
-                    value: json!("What is the capital of France?"),
+                    value: json!(question),
                 }],
             }],
         },
-        output: Some(output), // JSON output converted to chat format
-        stored_output: Some(StoredOutput::Json(json_output)),
+        output: Some(output),
+        stored_output: Some(stored_output),
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
         tool_params: None,
-        output_schema: Some(json!({
-            "type": "object",
-            "properties": {
-                "answer": {
-                    "type": "string"
-                }
-            },
-            "required": ["answer"],
-            "additionalProperties": false
-        })),
-        dispreferred_outputs: vec![dispreferred_output],
-        tags: HashMap::from([("test_key".to_string(), "test_value".to_string())]),
+        output_schema: if is_json_function {
+            Some(json!({
+                "type": "object",
+                "properties": {
+                    "answer": {
+                        "type": "string"
+                    }
+                },
+                "required": ["answer"],
+                "additionalProperties": false
+            }))
+        } else {
+            None
+        },
+        dispreferred_outputs: vec![],
+        tags: HashMap::new(),
     }
 }
