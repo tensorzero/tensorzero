@@ -27,12 +27,12 @@ echo "Using database name: $TENSORZERO_E2E_TESTS_DATABASE"
 
 # Set up cleanup function to run on exit
 cleanup_database() {
-    # if [ -n "${TENSORZERO_E2E_TESTS_DATABASE:-}" ] && [ -n "${TENSORZERO_CLICKHOUSE_URL:-}" ]; then
-    #     echo "Cleaning up database: $TENSORZERO_E2E_TESTS_DATABASE"
-    #     curl -X POST "${TENSORZERO_CLICKHOUSE_URL%/}/?param_target=$TENSORZERO_E2E_TESTS_DATABASE" \
-    #         --data-binary "DROP DATABASE IF EXISTS {target:Identifier}" || true
-    #     echo "Cleanup completed for database: $TENSORZERO_E2E_TESTS_DATABASE"
-    # fi
+    if [ -n "${TENSORZERO_E2E_TESTS_DATABASE:-}" ] && [ -n "${TENSORZERO_CLICKHOUSE_URL:-}" ]; then
+        echo "Cleaning up database: $TENSORZERO_E2E_TESTS_DATABASE"
+        curl -X POST "${TENSORZERO_CLICKHOUSE_URL%/}/?param_target=$TENSORZERO_E2E_TESTS_DATABASE" \
+            --data-binary "DROP DATABASE IF EXISTS {target:Identifier}" || true
+        echo "Cleanup completed for database: $TENSORZERO_E2E_TESTS_DATABASE"
+    fi
     cat e2e_logs.txt || echo "e2e logs don't exist"
 }
 
