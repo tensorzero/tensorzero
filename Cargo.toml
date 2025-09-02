@@ -41,7 +41,7 @@ tracing = { version = "0.1.40", features = ["log"] }
 pyo3 = { version = "0.24.2", features = ["experimental-async", "abi3-py39"] }
 axum = { version = "0.8", features = ["macros"] }
 anyhow = "1.0.99"
-tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt"] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
 clap = { version = "4.5.45", features = ["derive"] }
 futures = "0.3.30"
 lazy_static = { version = "1.5.0" }
@@ -76,9 +76,13 @@ expect_used = "deny"
 explicit_iter_loop = "deny"
 if_not_else = "deny"
 ignored_unit_patterns = "deny"
+manual_assert = "deny"
 manual_string_new = "deny"
 match_bool = "deny"
+match_wildcard_for_single_variants = "deny"
+missing_panics_doc = "deny"
 needless_raw_string_hashes = "deny"
+or_fun_call = "deny"
 panic = "deny"
 print_stderr = "deny"
 print_stdout = "deny"
