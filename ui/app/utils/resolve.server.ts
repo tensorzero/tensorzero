@@ -93,7 +93,8 @@ async function resolveContent(
     case "thought":
     case "unknown":
       return content;
-    // TODO - do we need to use the template name here?
+    // TODO - render the 'name' field here.
+    // https://github.com/tensorzero/tensorzero/issues/3382
     case "template":
       return {
         type: "structured_text",
