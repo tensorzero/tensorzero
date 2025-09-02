@@ -700,7 +700,7 @@ mod tests {
     use crate::variant::VariantConfig;
 
     use super::*;
-    use crate::config::path::TomlRelativePath;
+    use crate::config::path::ResolvedTomlPath;
     use serde_json::json;
     use std::io::Write;
     use std::time::Duration;
@@ -723,7 +723,7 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+        StaticJSONSchema::from_path(ResolvedTomlPath::new_for_tests(
             temp_file.path().to_owned(),
             None,
         ))
