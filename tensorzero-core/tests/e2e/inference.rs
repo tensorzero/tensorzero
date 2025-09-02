@@ -3941,6 +3941,19 @@ async fn test_clickhouse_bulk_insert() {
                 .unwrap()
         });
     }
+
+    // Directly wait on the batch shutdown, to simulate waiting for the last `Client` to be dropped.
+    let handle = client
+        .get_app_state_data()
+        .expect("Missing AppStateData")
+        .clickhouse_connection_info
+        .batcher_join_handle()
+        .expect("Missing batcher join handle");
+    drop(client);
+    handle
+        .await
+        .expect("Error waiting for ClickHouse batch writer");
+
     let mut expected_inference_ids = HashSet::new();
     while let Some(result) = join_set.join_next().await {
         let result = result.unwrap();
