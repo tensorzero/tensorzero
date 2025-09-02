@@ -291,8 +291,7 @@ impl ClickHouseConnectionInfo {
 
     pub fn is_cluster_configured(&self) -> bool {
         match self {
-            Self::Disabled => false,
-            Self::Mock { .. } => false,
+            Self::Disabled | Self::Mock { .. } => false,
             Self::Production { cluster_name, .. } => cluster_name.is_some(),
         }
     }
@@ -317,14 +316,7 @@ impl ClickHouseConnectionInfo {
         err_logging: bool,
     ) -> Result<ClickHouseResponse, Error> {
         match self {
-            Self::Disabled => Ok(ClickHouseResponse {
-                response: String::new(),
-                metadata: ClickHouseResponseMetadata {
-                    read_rows: 0,
-                    written_rows: 0,
-                },
-            }),
-            Self::Mock { .. } => Ok(ClickHouseResponse {
+            Self::Disabled | Self::Mock { .. } => Ok(ClickHouseResponse {
                 response: String::new(),
                 metadata: ClickHouseResponseMetadata {
                     read_rows: 0,
@@ -540,8 +532,7 @@ impl ClickHouseConnectionInfo {
 
     pub async fn check_database_and_migrations_table_exists(&self) -> Result<bool, Error> {
         match self {
-            Self::Disabled => Ok(true),
-            Self::Mock { .. } => Ok(true),
+            Self::Disabled | Self::Mock { .. } => Ok(true),
             Self::Production {
                 client,
                 database_url,
@@ -598,8 +589,7 @@ impl ClickHouseConnectionInfo {
 
     pub async fn create_database_and_migrations_table(&self) -> Result<(), Error> {
         match self {
-            Self::Disabled => {}
-            Self::Mock { .. } => {}
+            Self::Disabled | Self::Mock { .. } => {}
             Self::Production {
                 database_url,
                 database,
@@ -714,8 +704,7 @@ impl ClickHouseConnectionInfo {
 
     pub fn get_on_cluster_name(&self) -> String {
         match self {
-            Self::Disabled => String::new(),
-            Self::Mock { .. } => String::new(),
+            Self::Disabled | Self::Mock { .. } => String::new(),
             Self::Production { cluster_name, .. } => match cluster_name {
                 Some(cluster_name) => format!(" ON CLUSTER {cluster_name} "),
                 None => String::new(),
@@ -733,8 +722,7 @@ impl ClickHouseConnectionInfo {
             engine_args,
         } = args;
         match self {
-            Self::Disabled => table_engine_name.to_string(),
-            Self::Mock { .. } => table_engine_name.to_string(),
+            Self::Disabled | Self::Mock { .. } => table_engine_name.to_string(),
             Self::Production {
                 cluster_name,
                 database,

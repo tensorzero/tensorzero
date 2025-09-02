@@ -305,14 +305,13 @@ pub async fn validate_inference_episode_id_and_apply_dynamic_evaluation_run(
             (Some(_), Some(_)) => {
                 tracing::warn!("Variant name set in both inference and dynamic evaluation run");
             }
-            // If the inference pinned the variant_name and the dynamic run did not, leave as is
-            (Some(_), None) => {}
             // If the dynamic run pinned the variant_name and the inference did not, use the dynamic run variant_name
             (None, Some(dynamic_run_variant_name)) => {
                 *variant_name = Some(dynamic_run_variant_name.clone());
             }
+            // If the inference pinned the variant_name and the dynamic run did not, leave as is
             // If both are unset, leave as is
-            (None, None) => {}
+            (Some(_), None) | (None, None) => {}
         }
     }
 

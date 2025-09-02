@@ -208,9 +208,9 @@ impl OptimizationJobInfoPyClass {
     #[getter]
     fn get_message(&self) -> &str {
         match &self.0 {
-            OptimizationJobInfo::Pending { message, .. } => message,
             OptimizationJobInfo::Completed { .. } => "Completed",
-            OptimizationJobInfo::Failed { message, .. } => message,
+            OptimizationJobInfo::Pending { message, .. }
+            | OptimizationJobInfo::Failed { message, .. } => message,
         }
     }
 

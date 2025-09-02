@@ -518,106 +518,106 @@ impl ErrorDetails {
     /// Defines the error level for logging this error
     fn level(&self) -> tracing::Level {
         match self {
-            ErrorDetails::AllVariantsFailed { .. } => tracing::Level::ERROR,
-            ErrorDetails::ApiKeyMissing { .. } => tracing::Level::ERROR,
-            ErrorDetails::AppState { .. } => tracing::Level::ERROR,
-            ErrorDetails::ObjectStoreUnconfigured { .. } => tracing::Level::ERROR,
-            ErrorDetails::ExtraBodyReplacement { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidInferenceTarget { .. } => tracing::Level::WARN,
-            ErrorDetails::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
-            ErrorDetails::Base64 { .. } => tracing::Level::ERROR,
-            ErrorDetails::UnsupportedContentBlockType { .. } => tracing::Level::WARN,
-            ErrorDetails::BatchInputValidation { .. } => tracing::Level::WARN,
-            ErrorDetails::BatchNotFound { .. } => tracing::Level::WARN,
-            ErrorDetails::Cache { .. } => tracing::Level::WARN,
-            ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
-            ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
-            ErrorDetails::BadImageFetch { .. } => tracing::Level::ERROR,
-            ErrorDetails::ClickHouseConfiguration { .. } => tracing::Level::ERROR,
-            ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
-            ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
-            ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
-            ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
-            ErrorDetails::Config { .. } => tracing::Level::ERROR,
-            ErrorDetails::DatapointNotFound { .. } => tracing::Level::WARN,
-            ErrorDetails::DuplicateTool { .. } => tracing::Level::WARN,
-            ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
-            ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
-            ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
-            ErrorDetails::Inference { .. } => tracing::Level::ERROR,
-            ErrorDetails::InferenceClient { .. } => tracing::Level::ERROR,
-            ErrorDetails::InferenceNotFound { .. } => tracing::Level::WARN,
-            ErrorDetails::InferenceServer { .. } => tracing::Level::ERROR,
-            ErrorDetails::InferenceTimeout { .. } => tracing::Level::WARN,
-            ErrorDetails::ModelProviderTimeout { .. } => tracing::Level::WARN,
-            ErrorDetails::ModelTimeout { .. } => tracing::Level::WARN,
-            ErrorDetails::VariantTimeout { .. } => tracing::Level::WARN,
-            ErrorDetails::InputValidation { .. } => tracing::Level::WARN,
-            ErrorDetails::InternalError { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidBatchParams { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidCandidate { .. } => tracing::Level::ERROR,
-            ErrorDetails::Glob { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidClientMode { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidDatasetName { .. } => tracing::Level::WARN,
-            ErrorDetails::InvalidDynamicEvaluationRun { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidInferenceOutputSource { .. } => tracing::Level::WARN,
-            ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
-            ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidVariantForOptimization { .. } => tracing::Level::WARN,
-            ErrorDetails::InvalidDynamicTemplatePath { .. } => tracing::Level::WARN,
-            ErrorDetails::InvalidEncodedJobHandle => tracing::Level::WARN,
-            ErrorDetails::InvalidJobHandle { .. } => tracing::Level::WARN,
-            ErrorDetails::InvalidRenderedStoredInference { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidMetricName { .. } => tracing::Level::WARN,
-            ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
-            ErrorDetails::InvalidModel { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidModelProvider { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidOpenAICompatibleRequest { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidProviderConfig { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidRequest { .. } => tracing::Level::WARN,
-            ErrorDetails::InvalidTemplatePath => tracing::Level::ERROR,
-            ErrorDetails::InvalidTool { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidUuid { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidValFraction { .. } => tracing::Level::WARN,
-            ErrorDetails::JsonRequest { .. } => tracing::Level::WARN,
-            ErrorDetails::JsonSchema { .. } => tracing::Level::ERROR,
-            ErrorDetails::JsonSchemaValidation { .. } => tracing::Level::ERROR,
-            ErrorDetails::MiniJinjaEnvironment { .. } => tracing::Level::ERROR,
-            ErrorDetails::MiniJinjaTemplate { .. } => tracing::Level::ERROR,
-            ErrorDetails::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
-            ErrorDetails::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
-            ErrorDetails::MissingFunctionInVariants { .. } => tracing::Level::ERROR,
-            ErrorDetails::MissingBatchInferenceResponse { .. } => tracing::Level::WARN,
-            ErrorDetails::MissingFileExtension { .. } => tracing::Level::WARN,
-            ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
-            ErrorDetails::ModelNotFound { .. } => tracing::Level::WARN,
-            ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
-            ErrorDetails::Observability { .. } => tracing::Level::WARN,
-            ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
-            ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
-            ErrorDetails::OptimizationResponse { .. } => tracing::Level::ERROR,
-            ErrorDetails::ProviderNotFound { .. } => tracing::Level::ERROR,
-            ErrorDetails::Serialization { .. } => tracing::Level::ERROR,
-            ErrorDetails::StreamError { .. } => tracing::Level::ERROR,
-            ErrorDetails::ToolNotFound { .. } => tracing::Level::WARN,
-            ErrorDetails::ToolNotLoaded { .. } => tracing::Level::ERROR,
-            ErrorDetails::TypeConversion { .. } => tracing::Level::ERROR,
-            ErrorDetails::UnknownCandidate { .. } => tracing::Level::ERROR,
-            ErrorDetails::UnknownFunction { .. } => tracing::Level::WARN,
-            ErrorDetails::UnknownEvaluation { .. } => tracing::Level::WARN,
-            ErrorDetails::UnknownModel { .. } => tracing::Level::ERROR,
-            ErrorDetails::UnknownTool { .. } => tracing::Level::ERROR,
-            ErrorDetails::UnknownVariant { .. } => tracing::Level::WARN,
-            ErrorDetails::UnknownMetric { .. } => tracing::Level::WARN,
-            ErrorDetails::UnsupportedFileExtension { .. } => tracing::Level::WARN,
-            ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => tracing::Level::WARN,
-            ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
-            ErrorDetails::UnsupportedVariantForFunctionType { .. } => tracing::Level::ERROR,
-            ErrorDetails::UnsupportedVariantForStreamingInference { .. } => tracing::Level::WARN,
-            ErrorDetails::UuidInFuture { .. } => tracing::Level::WARN,
-            ErrorDetails::RouteNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidInferenceTarget { .. }
+            | ErrorDetails::UnsupportedContentBlockType { .. }
+            | ErrorDetails::BatchInputValidation { .. }
+            | ErrorDetails::BatchNotFound { .. }
+            | ErrorDetails::Cache { .. }
+            | ErrorDetails::DatapointNotFound { .. }
+            | ErrorDetails::DuplicateTool { .. }
+            | ErrorDetails::DynamicJsonSchema { .. }
+            | ErrorDetails::InferenceNotFound { .. }
+            | ErrorDetails::InferenceTimeout { .. }
+            | ErrorDetails::ModelProviderTimeout { .. }
+            | ErrorDetails::ModelTimeout { .. }
+            | ErrorDetails::VariantTimeout { .. }
+            | ErrorDetails::InputValidation { .. }
+            | ErrorDetails::InvalidDatasetName { .. }
+            | ErrorDetails::InvalidInferenceOutputSource { .. }
+            | ErrorDetails::InvalidTensorzeroUuid { .. }
+            | ErrorDetails::InvalidVariantForOptimization { .. }
+            | ErrorDetails::InvalidDynamicTemplatePath { .. }
+            | ErrorDetails::InvalidEncodedJobHandle
+            | ErrorDetails::InvalidJobHandle { .. }
+            | ErrorDetails::InvalidMetricName { .. }
+            | ErrorDetails::InvalidMessage { .. }
+            | ErrorDetails::InvalidRequest { .. }
+            | ErrorDetails::InvalidValFraction { .. }
+            | ErrorDetails::JsonRequest { .. }
+            | ErrorDetails::MissingBatchInferenceResponse { .. }
+            | ErrorDetails::MissingFileExtension { .. }
+            | ErrorDetails::ModelNotFound { .. }
+            | ErrorDetails::Observability { .. }
+            | ErrorDetails::OutputParsing { .. }
+            | ErrorDetails::OutputValidation { .. }
+            | ErrorDetails::ToolNotFound { .. }
+            | ErrorDetails::UnknownFunction { .. }
+            | ErrorDetails::UnknownEvaluation { .. }
+            | ErrorDetails::UnknownVariant { .. }
+            | ErrorDetails::UnknownMetric { .. }
+            | ErrorDetails::UnsupportedFileExtension { .. }
+            | ErrorDetails::UnsupportedModelProviderForBatchInference { .. }
+            | ErrorDetails::UnsupportedVariantForBatchInference { .. }
+            | ErrorDetails::UnsupportedVariantForStreamingInference { .. }
+            | ErrorDetails::UuidInFuture { .. }
+            | ErrorDetails::RouteNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::AllVariantsFailed { .. }
+            | ErrorDetails::ApiKeyMissing { .. }
+            | ErrorDetails::AppState { .. }
+            | ErrorDetails::ObjectStoreUnconfigured { .. }
+            | ErrorDetails::ExtraBodyReplacement { .. }
+            | ErrorDetails::BadCredentialsPreInference { .. }
+            | ErrorDetails::Base64 { .. }
+            | ErrorDetails::ChannelWrite { .. }
+            | ErrorDetails::ClickHouseConnection { .. }
+            | ErrorDetails::BadImageFetch { .. }
+            | ErrorDetails::ClickHouseConfiguration { .. }
+            | ErrorDetails::ClickHouseDeserialization { .. }
+            | ErrorDetails::ClickHouseMigration { .. }
+            | ErrorDetails::ClickHouseQuery { .. }
+            | ErrorDetails::ObjectStoreWrite { .. }
+            | ErrorDetails::Config { .. }
+            | ErrorDetails::FileRead { .. }
+            | ErrorDetails::GCPCredentials { .. }
+            | ErrorDetails::Inference { .. }
+            | ErrorDetails::InferenceClient { .. }
+            | ErrorDetails::InferenceServer { .. }
+            | ErrorDetails::InternalError { .. }
+            | ErrorDetails::InvalidBaseUrl { .. }
+            | ErrorDetails::InvalidBatchParams { .. }
+            | ErrorDetails::InvalidCandidate { .. }
+            | ErrorDetails::Glob { .. }
+            | ErrorDetails::InvalidClientMode { .. }
+            | ErrorDetails::InvalidDiclConfig { .. }
+            | ErrorDetails::InvalidDynamicEvaluationRun { .. }
+            | ErrorDetails::InvalidFunctionVariants { .. }
+            | ErrorDetails::InvalidRenderedStoredInference { .. }
+            | ErrorDetails::InvalidModel { .. }
+            | ErrorDetails::InvalidModelProvider { .. }
+            | ErrorDetails::InvalidOpenAICompatibleRequest { .. }
+            | ErrorDetails::InvalidProviderConfig { .. }
+            | ErrorDetails::InvalidTemplatePath
+            | ErrorDetails::InvalidTool { .. }
+            | ErrorDetails::InvalidUuid { .. }
+            | ErrorDetails::JsonSchema { .. }
+            | ErrorDetails::JsonSchemaValidation { .. }
+            | ErrorDetails::MiniJinjaEnvironment { .. }
+            | ErrorDetails::MiniJinjaTemplate { .. }
+            | ErrorDetails::MiniJinjaTemplateMissing { .. }
+            | ErrorDetails::MiniJinjaTemplateRender { .. }
+            | ErrorDetails::MissingFunctionInVariants { .. }
+            | ErrorDetails::ModelProvidersExhausted { .. }
+            | ErrorDetails::ModelValidation { .. }
+            | ErrorDetails::OptimizationResponse { .. }
+            | ErrorDetails::ProviderNotFound { .. }
+            | ErrorDetails::Serialization { .. }
+            | ErrorDetails::StreamError { .. }
+            | ErrorDetails::ToolNotLoaded { .. }
+            | ErrorDetails::TypeConversion { .. }
+            | ErrorDetails::UnknownCandidate { .. }
+            | ErrorDetails::UnknownModel { .. }
+            | ErrorDetails::UnknownTool { .. }
+            | ErrorDetails::UnsupportedVariantForFunctionType { .. } => tracing::Level::ERROR,
         }
     }
 
@@ -625,113 +625,109 @@ impl ErrorDetails {
     fn status_code(&self) -> StatusCode {
         match self {
             ErrorDetails::AllVariantsFailed { .. } => StatusCode::BAD_GATEWAY,
-            ErrorDetails::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::Glob { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::ExtraBodyReplacement { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::AppState { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::BatchInputValidation { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::BatchNotFound { .. } => StatusCode::NOT_FOUND,
-            ErrorDetails::Cache { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::ClickHouseConfiguration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::ClickHouseDeserialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::DatapointNotFound { .. } => StatusCode::NOT_FOUND,
-            ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::DuplicateTool { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::InvalidInferenceTarget { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::ObjectStoreWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ApiKeyMissing { .. }
+            | ErrorDetails::ExtraBodyReplacement { .. }
+            | ErrorDetails::BatchInputValidation { .. }
+            | ErrorDetails::DuplicateTool { .. }
+            | ErrorDetails::DynamicJsonSchema { .. }
+            | ErrorDetails::InvalidInferenceTarget { .. }
+            | ErrorDetails::InvalidClientMode { .. }
+            | ErrorDetails::InvalidEncodedJobHandle
+            | ErrorDetails::InvalidJobHandle { .. }
+            | ErrorDetails::InvalidTensorzeroUuid { .. }
+            | ErrorDetails::InvalidUuid { .. }
+            | ErrorDetails::InputValidation { .. }
+            | ErrorDetails::InvalidValFraction { .. }
+            | ErrorDetails::UnsupportedContentBlockType { .. }
+            | ErrorDetails::InvalidBatchParams { .. }
+            | ErrorDetails::InvalidDatasetName { .. }
+            | ErrorDetails::InvalidDynamicEvaluationRun { .. }
+            | ErrorDetails::InvalidDynamicTemplatePath { .. }
+            | ErrorDetails::InvalidInferenceOutputSource { .. }
+            | ErrorDetails::InvalidMessage { .. }
+            | ErrorDetails::InvalidMetricName { .. }
+            | ErrorDetails::InvalidOpenAICompatibleRequest { .. }
+            | ErrorDetails::InvalidRequest { .. }
+            | ErrorDetails::InvalidRenderedStoredInference { .. }
+            | ErrorDetails::InvalidVariantForOptimization { .. }
+            | ErrorDetails::JsonRequest { .. }
+            | ErrorDetails::JsonSchemaValidation { .. }
+            | ErrorDetails::MissingBatchInferenceResponse { .. }
+            | ErrorDetails::MissingFunctionInVariants { .. }
+            | ErrorDetails::MissingFileExtension { .. }
+            | ErrorDetails::ToolNotFound { .. }
+            | ErrorDetails::UnsupportedFileExtension { .. }
+            | ErrorDetails::UnsupportedVariantForBatchInference { .. }
+            | ErrorDetails::UuidInFuture { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::Glob { .. }
+            | ErrorDetails::AppState { .. }
+            | ErrorDetails::BadCredentialsPreInference { .. }
+            | ErrorDetails::Cache { .. }
+            | ErrorDetails::ChannelWrite { .. }
+            | ErrorDetails::ClickHouseConfiguration { .. }
+            | ErrorDetails::ClickHouseConnection { .. }
+            | ErrorDetails::ClickHouseDeserialization { .. }
+            | ErrorDetails::ClickHouseMigration { .. }
+            | ErrorDetails::ClickHouseQuery { .. }
+            | ErrorDetails::ObjectStoreUnconfigured { .. }
+            | ErrorDetails::Config { .. }
+            | ErrorDetails::FileRead { .. }
+            | ErrorDetails::GCPCredentials { .. }
+            | ErrorDetails::Inference { .. }
+            | ErrorDetails::ObjectStoreWrite { .. }
+            | ErrorDetails::Base64 { .. }
+            | ErrorDetails::BadImageFetch { .. }
+            | ErrorDetails::InferenceServer { .. }
+            | ErrorDetails::InternalError { .. }
+            | ErrorDetails::InvalidBaseUrl { .. }
+            | ErrorDetails::InvalidCandidate { .. }
+            | ErrorDetails::InvalidDiclConfig { .. }
+            | ErrorDetails::InvalidFunctionVariants { .. }
+            | ErrorDetails::InvalidModel { .. }
+            | ErrorDetails::InvalidModelProvider { .. }
+            | ErrorDetails::InvalidProviderConfig { .. }
+            | ErrorDetails::InvalidTemplatePath
+            | ErrorDetails::InvalidTool { .. }
+            | ErrorDetails::JsonSchema { .. }
+            | ErrorDetails::MiniJinjaEnvironment { .. }
+            | ErrorDetails::MiniJinjaTemplate { .. }
+            | ErrorDetails::MiniJinjaTemplateMissing { .. }
+            | ErrorDetails::MiniJinjaTemplateRender { .. }
+            | ErrorDetails::ModelProvidersExhausted { .. }
+            | ErrorDetails::ModelValidation { .. }
+            | ErrorDetails::Observability { .. }
+            | ErrorDetails::OptimizationResponse { .. }
+            | ErrorDetails::OutputParsing { .. }
+            | ErrorDetails::OutputValidation { .. }
+            | ErrorDetails::Serialization { .. }
+            | ErrorDetails::StreamError { .. }
+            | ErrorDetails::ToolNotLoaded { .. }
+            | ErrorDetails::TypeConversion { .. }
+            | ErrorDetails::UnknownCandidate { .. }
+            | ErrorDetails::UnknownModel { .. }
+            | ErrorDetails::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::BatchNotFound { .. }
+            | ErrorDetails::DatapointNotFound { .. }
+            | ErrorDetails::InferenceNotFound { .. }
+            | ErrorDetails::ModelNotFound { .. }
+            | ErrorDetails::ProviderNotFound { .. }
+            | ErrorDetails::UnknownFunction { .. }
+            | ErrorDetails::UnknownEvaluation { .. }
+            | ErrorDetails::UnknownVariant { .. }
+            | ErrorDetails::UnknownMetric { .. }
+            | ErrorDetails::RouteNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::InferenceTimeout { .. }
+            | ErrorDetails::ModelProviderTimeout { .. }
+            | ErrorDetails::ModelTimeout { .. }
+            | ErrorDetails::VariantTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::InferenceClient { status_code, .. } => {
                 status_code.unwrap_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)
             }
-            ErrorDetails::Base64 { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::BadImageFetch { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
-            ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
-            ErrorDetails::ModelProviderTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
-            ErrorDetails::ModelTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
-            ErrorDetails::VariantTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
-            ErrorDetails::InvalidClientMode { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidEncodedJobHandle => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidJobHandle { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidTensorzeroUuid { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidUuid { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InternalError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::InvalidValFraction { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::UnsupportedContentBlockType { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidBatchParams { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::InvalidDiclConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::InvalidDatasetName { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidDynamicEvaluationRun { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidDynamicTemplatePath { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::InvalidInferenceOutputSource { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidMetricName { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::InvalidModelProvider { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::InvalidOpenAICompatibleRequest { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidProviderConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidRenderedStoredInference { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidTemplatePath => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::InvalidVariantForOptimization { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::JsonRequest { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::JsonSchema { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::JsonSchemaValidation { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::MiniJinjaEnvironment { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::MiniJinjaTemplate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::MissingFunctionInVariants { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::MissingFileExtension { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::ModelNotFound { .. } => StatusCode::NOT_FOUND,
-            ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::OptimizationResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::OutputParsing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::OutputValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::ProviderNotFound { .. } => StatusCode::NOT_FOUND,
-            ErrorDetails::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::StreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::ToolNotFound { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::ToolNotLoaded { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::UnknownCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::UnknownFunction { .. } => StatusCode::NOT_FOUND,
-            ErrorDetails::UnknownEvaluation { .. } => StatusCode::NOT_FOUND,
-            ErrorDetails::UnknownModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::UnknownVariant { .. } => StatusCode::NOT_FOUND,
-            ErrorDetails::UnknownMetric { .. } => StatusCode::NOT_FOUND,
-            ErrorDetails::UnsupportedFileExtension { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => {
+            ErrorDetails::UnsupportedModelProviderForBatchInference { .. }
+            | ErrorDetails::UnsupportedVariantForStreamingInference { .. }
+            | ErrorDetails::UnsupportedVariantForFunctionType { .. } => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
-            ErrorDetails::UnsupportedVariantForBatchInference { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::UnsupportedVariantForStreamingInference { .. } => {
-                StatusCode::INTERNAL_SERVER_ERROR
-            }
-            ErrorDetails::UnsupportedVariantForFunctionType { .. } => {
-                StatusCode::INTERNAL_SERVER_ERROR
-            }
-            ErrorDetails::UuidInFuture { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::RouteNotFound { .. } => StatusCode::NOT_FOUND,
         }
     }
 
@@ -876,7 +872,7 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::ClickHouseQuery { message } => {
                 write!(f, "Failed to run ClickHouse query: {message}")
             }
-            ErrorDetails::Config { message } => {
+            ErrorDetails::Config { message } | ErrorDetails::Observability { message } => {
                 write!(f, "{message}")
             }
             ErrorDetails::DatapointNotFound {
@@ -903,7 +899,17 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::GCPCredentials { message } => {
                 write!(f, "Error in acquiring GCP credentials: {message}")
             }
-            ErrorDetails::Inference { message } => write!(f, "{message}"),
+            ErrorDetails::Inference { message }
+            | ErrorDetails::InvalidBatchParams { message }
+            | ErrorDetails::InvalidFunctionVariants { message }
+            | ErrorDetails::InvalidMessage { message }
+            | ErrorDetails::InvalidProviderConfig { message }
+            | ErrorDetails::InvalidRequest { message }
+            | ErrorDetails::InvalidTool { message }
+            | ErrorDetails::JsonRequest { message }
+            | ErrorDetails::JsonSchema { message }
+            | ErrorDetails::Serialization { message }
+            | ErrorDetails::TypeConversion { message } => write!(f, "{message}"),
             ErrorDetails::InferenceClient {
                 message,
                 provider_type,
@@ -974,7 +980,7 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InvalidBaseUrl { message } => {
                 write!(f, "Invalid batch params retrieved from database: {message}")
             }
-            ErrorDetails::InvalidBatchParams { message } => write!(f, "{message}"),
+
             ErrorDetails::InvalidCandidate {
                 variant_name,
                 message,
@@ -1011,7 +1017,7 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InvalidJobHandle { message } => {
                 write!(f, "Failed to deserialize job handle: {message}")
             }
-            ErrorDetails::InvalidFunctionVariants { message } => write!(f, "{message}"),
+
             ErrorDetails::InvalidTensorzeroUuid { message, kind } => {
                 write!(f, "Invalid {kind} ID: {message}")
             }
@@ -1021,7 +1027,7 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InvalidMetricName { metric_name } => {
                 write!(f, "Invalid metric name: {metric_name}")
             }
-            ErrorDetails::InvalidMessage { message } => write!(f, "{message}"),
+
             ErrorDetails::InvalidModel { model_name } => {
                 write!(f, "Invalid model: {model_name}")
             }
@@ -1044,15 +1050,14 @@ impl std::fmt::Display for ErrorDetails {
                 f,
                 "Invalid request to OpenAI-compatible endpoint: {message}"
             ),
-            ErrorDetails::InvalidProviderConfig { message } => write!(f, "{message}"),
-            ErrorDetails::InvalidRequest { message } => write!(f, "{message}"),
+
             ErrorDetails::InvalidRenderedStoredInference { message } => {
                 write!(f, "Invalid rendered stored inference: {message}")
             }
             ErrorDetails::InvalidTemplatePath => {
                 write!(f, "Template path failed to convert to Rust string")
             }
-            ErrorDetails::InvalidTool { message } => write!(f, "{message}"),
+
             ErrorDetails::InvalidUuid { raw_uuid } => {
                 write!(f, "Failed to parse UUID as v7: {raw_uuid}")
             }
@@ -1062,8 +1067,7 @@ impl std::fmt::Display for ErrorDetails {
             } => {
                 write!(f, "Invalid variant for optimization: {variant_name} for function: {function_name}")
             }
-            ErrorDetails::JsonRequest { message } => write!(f, "{message}"),
-            ErrorDetails::JsonSchema { message } => write!(f, "{message}"),
+
             ErrorDetails::JsonSchemaValidation {
                 messages,
                 data,
@@ -1090,17 +1094,15 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::MiniJinjaTemplate {
                 template_name,
                 message,
+            }
+            | ErrorDetails::MiniJinjaTemplateRender {
+                template_name,
+                message,
             } => {
                 write!(f, "Error rendering template {template_name}: {message}")
             }
             ErrorDetails::MiniJinjaTemplateMissing { template_name } => {
                 write!(f, "Template not found: {template_name}")
-            }
-            ErrorDetails::MiniJinjaTemplateRender {
-                template_name,
-                message,
-            } => {
-                write!(f, "Error rendering template {template_name}: {message}")
             }
             ErrorDetails::MissingBatchInferenceResponse { inference_id } => match inference_id {
                 Some(inference_id) => write!(
@@ -1135,9 +1137,7 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::ModelValidation { message } => {
                 write!(f, "Failed to validate model: {message}")
             }
-            ErrorDetails::Observability { message } => {
-                write!(f, "{message}")
-            }
+
             ErrorDetails::OptimizationResponse {
                 message,
                 provider_type,
@@ -1165,8 +1165,7 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::StreamError { source } => {
                 write!(f, "Error in streaming response: {source}")
             }
-            ErrorDetails::Serialization { message } => write!(f, "{message}"),
-            ErrorDetails::TypeConversion { message } => write!(f, "{message}"),
+
             ErrorDetails::ToolNotFound { name } => write!(f, "Tool not found: {name}"),
             ErrorDetails::ToolNotLoaded { name } => write!(f, "Tool not loaded: {name}"),
             ErrorDetails::UnknownCandidate { name } => {

@@ -1938,8 +1938,7 @@ impl From<JsonMode> for ModelInferenceRequestJsonMode {
         match json_enforcement {
             JsonMode::On => ModelInferenceRequestJsonMode::On,
             JsonMode::Strict => ModelInferenceRequestJsonMode::Strict,
-            JsonMode::ImplicitTool => ModelInferenceRequestJsonMode::Off,
-            JsonMode::Off => ModelInferenceRequestJsonMode::Off,
+            JsonMode::ImplicitTool | JsonMode::Off => ModelInferenceRequestJsonMode::Off,
         }
     }
 }

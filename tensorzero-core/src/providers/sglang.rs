@@ -98,8 +98,7 @@ impl TryFrom<Credential> for SGLangCredentials {
         match credentials {
             Credential::Static(key) => Ok(SGLangCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(SGLangCredentials::Dynamic(key_name)),
-            Credential::None => Ok(SGLangCredentials::None),
-            Credential::Missing => Ok(SGLangCredentials::None),
+            Credential::None | Credential::Missing => Ok(SGLangCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for SGLang provider".to_string(),
             })),

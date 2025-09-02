@@ -452,12 +452,12 @@ enum OpenAICompatibleFinishReason {
 impl From<FinishReason> for OpenAICompatibleFinishReason {
     fn from(finish_reason: FinishReason) -> Self {
         match finish_reason {
-            FinishReason::Stop => OpenAICompatibleFinishReason::Stop,
-            FinishReason::StopSequence => OpenAICompatibleFinishReason::Stop,
             FinishReason::Length => OpenAICompatibleFinishReason::Length,
             FinishReason::ContentFilter => OpenAICompatibleFinishReason::ContentFilter,
             FinishReason::ToolCall => OpenAICompatibleFinishReason::ToolCalls,
-            FinishReason::Unknown => OpenAICompatibleFinishReason::Stop, // OpenAI doesn't have an unknown finish reason so we coerce
+            FinishReason::Stop | FinishReason::StopSequence | FinishReason::Unknown => {
+                OpenAICompatibleFinishReason::Stop
+            } // OpenAI doesn't have an unknown finish reason so we coerce
         }
     }
 }

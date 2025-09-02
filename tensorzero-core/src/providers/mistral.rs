@@ -579,11 +579,9 @@ impl From<MistralFinishReason> for FinishReason {
     fn from(reason: MistralFinishReason) -> Self {
         match reason {
             MistralFinishReason::Stop => FinishReason::Stop,
-            MistralFinishReason::Length => FinishReason::Length,
-            MistralFinishReason::ModelLength => FinishReason::Length,
-            MistralFinishReason::Error => FinishReason::Unknown,
+            MistralFinishReason::Length | MistralFinishReason::ModelLength => FinishReason::Length,
+            MistralFinishReason::Error | MistralFinishReason::Unknown => FinishReason::Unknown,
             MistralFinishReason::ToolCalls => FinishReason::ToolCall,
-            MistralFinishReason::Unknown => FinishReason::Unknown,
         }
     }
 }

@@ -102,8 +102,7 @@ impl TryFrom<Credential> for OpenRouterCredentials {
         match credentials {
             Credential::Static(key) => Ok(OpenRouterCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(OpenRouterCredentials::Dynamic(key_name)),
-            Credential::None => Ok(OpenRouterCredentials::None),
-            Credential::Missing => Ok(OpenRouterCredentials::None),
+            Credential::None | Credential::Missing => Ok(OpenRouterCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for OpenRouter provider".to_string(),
             })),
@@ -559,9 +558,9 @@ impl OpenRouterRequestMessage<'_> {
             OpenRouterRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
             OpenRouterRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
                 OpenRouterContentBlock::Text { text } => text.to_lowercase().contains(value),
-                OpenRouterContentBlock::ImageUrl { .. } => false,
                 // Don't inspect the contents of 'unknown' blocks
-                OpenRouterContentBlock::Unknown { data: _ } => false,
+                OpenRouterContentBlock::ImageUrl { .. }
+                | OpenRouterContentBlock::Unknown { data: _ } => false,
             }),
             OpenRouterRequestMessage::Assistant(msg) => {
                 if let Some(content) = &msg.content {
@@ -569,9 +568,9 @@ impl OpenRouterRequestMessage<'_> {
                         OpenRouterContentBlock::Text { text } => {
                             text.to_lowercase().contains(value)
                         }
-                        OpenRouterContentBlock::ImageUrl { .. } => false,
                         // Don't inspect the contents of 'unknown' blocks
-                        OpenRouterContentBlock::Unknown { data: _ } => false,
+                        OpenRouterContentBlock::ImageUrl { .. }
+                        | OpenRouterContentBlock::Unknown { data: _ } => false,
                     })
                 } else {
                     false
@@ -1111,8 +1110,9 @@ impl From<OpenRouterFinishReason> for FinishReason {
             OpenRouterFinishReason::Stop => FinishReason::Stop,
             OpenRouterFinishReason::Length => FinishReason::Length,
             OpenRouterFinishReason::ContentFilter => FinishReason::ContentFilter,
-            OpenRouterFinishReason::ToolCalls => FinishReason::ToolCall,
-            OpenRouterFinishReason::FunctionCall => FinishReason::ToolCall,
+            OpenRouterFinishReason::ToolCalls | OpenRouterFinishReason::FunctionCall => {
+                FinishReason::ToolCall
+            }
             OpenRouterFinishReason::Unknown => FinishReason::Unknown,
         }
     }

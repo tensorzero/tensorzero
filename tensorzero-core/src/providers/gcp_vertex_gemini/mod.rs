@@ -2350,15 +2350,15 @@ impl From<GCPVertexGeminiFinishReason> for FinishReason {
         match finish_reason {
             GCPVertexGeminiFinishReason::Stop => FinishReason::Stop,
             GCPVertexGeminiFinishReason::MaxTokens => FinishReason::Length,
-            GCPVertexGeminiFinishReason::Safety => FinishReason::ContentFilter,
-            GCPVertexGeminiFinishReason::Recitation => FinishReason::ToolCall,
-            GCPVertexGeminiFinishReason::Other => FinishReason::Unknown,
-            GCPVertexGeminiFinishReason::Blocklist => FinishReason::ContentFilter,
-            GCPVertexGeminiFinishReason::ProhibitedContent => FinishReason::ContentFilter,
-            GCPVertexGeminiFinishReason::Spii => FinishReason::ContentFilter,
-            GCPVertexGeminiFinishReason::MalformedFunctionCall => FinishReason::ToolCall,
-            GCPVertexGeminiFinishReason::FinishReasonUnspecified => FinishReason::Unknown,
-            GCPVertexGeminiFinishReason::Unknown => FinishReason::Unknown,
+            GCPVertexGeminiFinishReason::Safety
+            | GCPVertexGeminiFinishReason::Blocklist
+            | GCPVertexGeminiFinishReason::ProhibitedContent
+            | GCPVertexGeminiFinishReason::Spii => FinishReason::ContentFilter,
+            GCPVertexGeminiFinishReason::Recitation
+            | GCPVertexGeminiFinishReason::MalformedFunctionCall => FinishReason::ToolCall,
+            GCPVertexGeminiFinishReason::Other
+            | GCPVertexGeminiFinishReason::FinishReasonUnspecified
+            | GCPVertexGeminiFinishReason::Unknown => FinishReason::Unknown,
         }
     }
 }

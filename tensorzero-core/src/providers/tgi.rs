@@ -101,8 +101,7 @@ impl TryFrom<Credential> for TGICredentials {
         match credentials {
             Credential::Static(key) => Ok(TGICredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(TGICredentials::Dynamic(key_name)),
-            Credential::None => Ok(TGICredentials::None),
-            Credential::Missing => Ok(TGICredentials::None),
+            Credential::None | Credential::Missing => Ok(TGICredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for TGI provider".to_string(),
             })),
@@ -648,8 +647,7 @@ impl From<TGIFinishReason> for FinishReason {
             TGIFinishReason::StopSequence => FinishReason::StopSequence,
             TGIFinishReason::Length => FinishReason::Length,
             TGIFinishReason::ContentFilter => FinishReason::ContentFilter,
-            TGIFinishReason::ToolCalls => FinishReason::ToolCall,
-            TGIFinishReason::FunctionCall => FinishReason::ToolCall,
+            TGIFinishReason::ToolCalls | TGIFinishReason::FunctionCall => FinishReason::ToolCall,
             TGIFinishReason::Unknown => FinishReason::Unknown,
         }
     }
