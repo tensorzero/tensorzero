@@ -220,6 +220,9 @@ impl UninitializedGCPVertexGeminiSFTConfig {
             .transpose()?;
         Ok(Self {
             model,
+            bucket_name,
+            project_id,
+            region,
             learning_rate_multiplier,
             adapter_size,
             n_epochs,
@@ -230,10 +233,7 @@ impl UninitializedGCPVertexGeminiSFTConfig {
             service_account,
             kms_key_name,
             tuned_model_display_name,
-            bucket_name,
             bucket_path_prefix,
-            project_id,
-            region,
         })
     }
 
