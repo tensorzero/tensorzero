@@ -18,7 +18,6 @@ async def main():
     t0 = await AsyncTensorZeroGateway.build_http(  # type: ignore
         gateway_url="http://localhost:3000",
     )
-    return
 
     semaphore = Semaphore(CONCURRENCY)
     data = load_beerqa()
