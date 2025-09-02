@@ -21,6 +21,7 @@ on:
 jobs:
   ui-tests-no-network:
     runs-on: namespace-profile-tensorzero-2x8
+    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - name: Set DNS
         run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts

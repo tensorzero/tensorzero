@@ -129,8 +129,8 @@ impl EmbeddingModelConfig {
                 })?;
                 let provider_request = EmbeddingModelProviderRequest {
                     request,
-                    provider_name,
                     model_name,
+                    provider_name,
                 };
                 // TODO: think about how to best handle errors here
                 if clients.cache_options.enabled.read() {
