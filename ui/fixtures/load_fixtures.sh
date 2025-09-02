@@ -13,7 +13,7 @@ if command -v buildkite-agent >/dev/null 2>&1; then
   if [ "${TENSORZERO_CLICKHOUSE_FAST_CHANNEL:-}" = "1" ]; then
     CLICKHOUSE_HOST_VAR=$(buildkite-agent secret get CLICKHOUSE_HOST_INSERT)
   else
-    CLICKHOUSE_HOST_VAR=$(buildkite-agent secret get CLICKHOUSE_HOST)
+    CLICKHOUSE_HOST_VAR=$(buildkite-agent secret get CLICKHOUSE_HOST_INSERT)
   fi
   CLICKHOUSE_USER_VAR=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_USERNAME)
   CLICKHOUSE_PASSWORD_VAR=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_PASSWORD)
