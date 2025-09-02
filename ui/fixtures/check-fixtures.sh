@@ -8,7 +8,7 @@ DATABASE_NAME="${1:-tensorzero_ui_fixtures}"
 if command -v buildkite-agent >/dev/null 2>&1; then
   # Running on Buildkite - use secrets (fail if not available)
   if [ "${TENSORZERO_CLICKHOUSE_FAST_CHANNEL:-}" = "1" ]; then
-    CLICKHOUSE_HOST_VAR=$(buildkite-agent secret get CLICKHOUSE_HOST_INSERT)
+    CLICKHOUSE_HOST_VAR=$(buildkite-agent secret get CLICKHOUSE_HOST_INSERT_FAST_CHANNEL)
   else
     CLICKHOUSE_HOST_VAR=$(buildkite-agent secret get CLICKHOUSE_HOST_INSERT)
   fi
