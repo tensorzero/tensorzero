@@ -1422,6 +1422,7 @@ impl JsonInferenceDatabaseInsert {
 }
 
 // Function to get the current timestamp in seconds
+#[expect(clippy::missing_panics_doc)]
 pub fn current_timestamp() -> u64 {
     #[expect(clippy::expect_used)]
     SystemTime::now()
