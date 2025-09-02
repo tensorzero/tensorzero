@@ -54,9 +54,7 @@ async fn test_config_from_toml_table_valid() {
         VariantConfig::ChatCompletion(chat_config) => chat_config.json_mode,
         _ => panic!("Expected a chat completion variant"),
     };
-    // The json mode is unset (the default will get filled in when we construct a request,
-    // using the variant mode (json/chat)).
-    assert_eq!(prompt_b_json_mode, None);
+    assert_eq!(prompt_b_json_mode, Some(JsonMode::Strict));
     // Check that the tool choice for get_weather is set to "specific" and the correct tool
     let function = config.functions.get("weather_helper").unwrap();
     match &**function {
@@ -66,7 +64,7 @@ async fn test_config_from_toml_table_valid() {
                 ToolChoice::Specific("get_temperature".to_string())
             );
         }
-        _ => panic!("Expected a chat function"),
+        FunctionConfig::Json(_) => panic!("Expected a chat function"),
     }
     // Check that the best of n variant has multiple candidates
     let function = config
@@ -89,7 +87,7 @@ async fn test_config_from_toml_table_valid() {
                 panic!("Expected to find a best of n variant");
             }
         }
-        _ => panic!("Expected a chat function"),
+        FunctionConfig::Json(_) => panic!("Expected a chat function"),
     }
     // Check that the async flag is set to false by default
     assert!(!config.gateway.observability.async_writes);
@@ -111,7 +109,7 @@ async fn test_config_from_toml_table_valid() {
                 _ => panic!("Expected a chat completion variant"),
             }
         }
-        _ => panic!("Expected a JSON function"),
+        FunctionConfig::Chat(_) => panic!("Expected a JSON function"),
     }
 
     assert_eq!(config.embedding_models.len(), 1);
@@ -144,7 +142,7 @@ async fn test_config_from_toml_table_valid() {
                             PathWithContents {
                                 // We don't use a real path for programmatically generated templates
                                 // Instead we use this handle and then the same in minijinja
-                                path: TomlRelativePath::new_for_tests(
+                                path: ResolvedTomlPath::new_for_tests(
                                     PathBuf::from(
                                         "tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::system"
                                     ),
@@ -214,7 +212,7 @@ async fn test_config_from_toml_table_valid() {
                 _ => panic!("Expected a Dicl variant"),
             }
         }
-        _ => panic!("Expected a JSON function"),
+        FunctionConfig::Chat(_) => panic!("Expected a JSON function"),
     }
     // Check that the metric for the LLM Judge evaluator is added to the metrics table
     let metric = config
@@ -563,7 +561,7 @@ async fn test_config_from_toml_table_json_function_no_output_schema() {
     // Check that the output schema is set to {}
     let output_schema = match &**config.functions.get("json_with_schemas").unwrap() {
         FunctionConfig::Json(json_config) => &json_config.output_schema,
-        _ => panic!("Expected a JSON function"),
+        FunctionConfig::Chat(_) => panic!("Expected a JSON function"),
     };
     assert_eq!(output_schema, &StaticJSONSchema::default());
     assert_eq!(output_schema.value, serde_json::json!({}));
@@ -1949,9 +1947,8 @@ async fn test_deprecated_enable_template_filesystem_access() {
     assert!(logs_contain("Deprecation Warning: `gateway.enable_template_filesystem_access` is deprecated. Please use `[gateway.template_filesystem_access.enabled]` instead."));
 }
 
-#[traced_test]
 #[tokio::test]
-async fn test_deprecated_missing_json_mode() {
+async fn test_missing_json_mode_chat() {
     let config_str = r#"
         [gateway]
         bind_address = "0.0.0.0:3000"
@@ -1968,6 +1965,37 @@ async fn test_deprecated_missing_json_mode() {
         type = "chat_completion"
         model = "my-model"
 
+        [models."my-model"]
+        routing = ["openai"]
+
+        [models.my-model.providers.openai]
+        type = "openai"
+        model_name = "gpt-4o-mini-2024-07-18"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    let err = SKIP_CREDENTIAL_VALIDATION
+        .scope((), Config::load_from_toml(config, &SpanMap::new_empty()))
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.to_string(), "`json_mode` must be specified for `[functions.basic_test.variants.test]` (parent function `basic_test` is a JSON function)");
+}
+
+#[tokio::test]
+async fn test_missing_json_mode_dicl() {
+    let config_str = r#"
+        [gateway]
+        bind_address = "0.0.0.0:3000"
+
+        [functions.basic_test]
+        type = "json"
+
+        [functions.basic_test.variants.good_variant]
+        type = "chat_completion"
+        model = "my-model"
+        json_mode = "off"
+
         [functions.basic_test.variants.dicl]
         type = "experimental_dynamic_in_context_learning"
         model = "my-model"
@@ -1975,12 +2003,75 @@ async fn test_deprecated_missing_json_mode() {
         k = 3
         max_tokens = 100
 
+        [models."my-model"]
+        routing = ["openai"]
+
+        [models.my-model.providers.openai]
+        type = "openai"
+        model_name = "gpt-4o-mini-2024-07-18"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    let err = SKIP_CREDENTIAL_VALIDATION
+        .scope((), Config::load_from_toml(config, &SpanMap::new_empty()))
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.to_string(), "`json_mode` must be specified for `[functions.basic_test.variants.dicl]` (parent function `basic_test` is a JSON function)");
+}
+
+#[tokio::test]
+async fn test_missing_json_mode_mixture_of_n() {
+    let config_str = r#"
+        [gateway]
+        bind_address = "0.0.0.0:3000"
+
+        [functions.basic_test]
+        type = "json"
+
+        [functions.basic_test.variants.good_variant]
+        type = "chat_completion"
+        model = "my-model"
+        json_mode = "off"
+
+
         [functions.basic_test.variants.mixture_of_n_variant]
         type = "experimental_mixture_of_n"
         candidates = ["test"]
 
         [functions.basic_test.variants.mixture_of_n_variant.fuser]
         model = "my-model"
+
+        [models."my-model"]
+        routing = ["openai"]
+
+        [models.my-model.providers.openai]
+        type = "openai"
+        model_name = "gpt-4o-mini-2024-07-18"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    let err = SKIP_CREDENTIAL_VALIDATION
+        .scope((), Config::load_from_toml(config, &SpanMap::new_empty()))
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.to_string(), "`json_mode` must be specified for `[functions.basic_test.variants.mixture_of_n_variant.fuser]` (parent function `basic_test` is a JSON function)");
+}
+
+#[tokio::test]
+async fn test_missing_json_mode_best_of_n() {
+    let config_str = r#"
+        [gateway]
+        bind_address = "0.0.0.0:3000"
+
+        [functions.basic_test]
+        type = "json"
+
+        [functions.basic_test.variants.good_variant]
+        type = "chat_completion"
+        model = "my-model"
+        json_mode = "off"
 
         [functions.basic_test.variants.best_of_n_variant]
         type = "experimental_best_of_n_sampling"
@@ -1998,16 +2089,12 @@ async fn test_deprecated_missing_json_mode() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    SKIP_CREDENTIAL_VALIDATION
+    let err = SKIP_CREDENTIAL_VALIDATION
         .scope((), Config::load_from_toml(config, &SpanMap::new_empty()))
         .await
-        .unwrap();
+        .unwrap_err();
 
-    assert!(!logs_contain("good_variant"));
-    assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.test]`"));
-    assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.dicl]`"));
-    assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.mixture_of_n_variant.fuser]`"));
-    assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.best_of_n_variant.evaluator]`"));
+    assert_eq!(err.to_string(), "`json_mode` must be specified for `[functions.basic_test.variants.best_of_n_variant.evaluator]` (parent function `basic_test` is a JSON function)");
 }
 
 #[tokio::test]

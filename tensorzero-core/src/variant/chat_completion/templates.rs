@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use serde::Serialize;
 
 use crate::{
-    config::{path::TomlRelativePath, PathWithContents, SchemaData},
+    config::{path::ResolvedTomlPath, PathWithContents, SchemaData},
     error::{Error, ErrorDetails},
     inference::types::Role,
     jsonschema_util::StaticJSONSchema,
@@ -60,7 +60,7 @@ impl ChatTemplates {
     fn validate_wrapper(
         template_and_schema: Option<TemplateWithSchema>,
         schema: Option<&StaticJSONSchema>,
-        wrapper: Option<TomlRelativePath>,
+        wrapper: Option<ResolvedTomlPath>,
         error_prefix: &str,
         name: &str,
     ) -> Result<Option<TemplateWithSchema>, Error> {

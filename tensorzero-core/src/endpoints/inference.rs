@@ -235,7 +235,7 @@ pub async fn inference<T: Send + 'static>(
     validate_tags(&params.tags, params.internal)?;
 
     // Retrieve or generate the episode ID
-    let episode_id = params.episode_id.unwrap_or(Uuid::now_v7());
+    let episode_id = params.episode_id.unwrap_or_else(Uuid::now_v7);
     let mut params = params;
     validate_inference_episode_id_and_apply_dynamic_evaluation_run(
         episode_id,

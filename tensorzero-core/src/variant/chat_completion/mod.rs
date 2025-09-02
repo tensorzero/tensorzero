@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use crate::config::path::TomlRelativePath;
+use crate::config::path::ResolvedTomlPath;
 use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
@@ -70,9 +70,9 @@ pub struct ChatCompletionConfig {
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedInputWrappers {
-    user: Option<TomlRelativePath>,
-    assistant: Option<TomlRelativePath>,
-    system: Option<TomlRelativePath>,
+    user: Option<ResolvedTomlPath>,
+    assistant: Option<ResolvedTomlPath>,
+    system: Option<ResolvedTomlPath>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
@@ -82,9 +82,9 @@ pub struct UninitializedChatCompletionConfig {
     #[serde(default)]
     pub weight: Option<f64>,
     pub model: Arc<str>,
-    pub system_template: Option<TomlRelativePath>,
-    pub user_template: Option<TomlRelativePath>,
-    pub assistant_template: Option<TomlRelativePath>,
+    pub system_template: Option<ResolvedTomlPath>,
+    pub user_template: Option<ResolvedTomlPath>,
+    pub assistant_template: Option<ResolvedTomlPath>,
     pub input_wrappers: Option<UninitializedInputWrappers>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
@@ -312,11 +312,11 @@ fn prepare_request_message(
                 let text_content = match template {
                     Some(template) => {
                         let context = if let Some(template_var) = template_var {
-                            Cow::Owned(serde_json::json!({
+                            serde_json::json!({
                                 template_var: text
-                            }))
+                            })
                         } else {
-                            Cow::Owned(text.clone().into())
+                            text.clone().into()
                         };
                         template_config.template_message(
                             &template.template.path.get_template_key(),
@@ -588,7 +588,7 @@ pub enum TemplateKind {
 pub fn validate_template_and_schema(
     kind: TemplateKind,
     schema: Option<&StaticJSONSchema>,
-    template: Option<&TomlRelativePath>,
+    template: Option<&ResolvedTomlPath>,
     templates: &TemplateConfig,
 ) -> Result<(), Error> {
     match (schema, template) {
@@ -1353,7 +1353,7 @@ mod tests {
                 );
                 assert_eq!(chat_response.inference_params, inference_params);
             }
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         }
 
         // Test case 5: tool call
@@ -1441,7 +1441,7 @@ mod tests {
                 );
                 assert_eq!(chat_response.inference_params, inference_params);
             }
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         }
 
         // Test case 5: JSON output was supposed to happen but it did not
@@ -1512,7 +1512,7 @@ mod tests {
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(json_result.inference_params, inference_params);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_) => panic!("Expected Json inference response"),
         }
         let messages = vec![ResolvedInputMessage {
             role: Role::User,
@@ -1609,7 +1609,7 @@ mod tests {
                 );
                 assert_eq!(json_result.inference_params, inference_params);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_) => panic!("Expected Json inference response"),
         }
         // Test case 7: Dynamic JSON output happens and works
         let hardcoded_output_schema = serde_json::json!({
@@ -1732,7 +1732,7 @@ mod tests {
                 );
                 assert_eq!(json_result.inference_params, inference_params);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_) => panic!("Expected Json inference response"),
         }
         // Test case 8: Dynamic JSON output fails
         let hardcoded_output_schema = serde_json::json!({
@@ -1861,7 +1861,7 @@ mod tests {
                 };
                 assert_eq!(json_result.inference_params, expected_inference_params);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_) => panic!("Expected Json inference response"),
         }
     }
 
@@ -2085,7 +2085,7 @@ mod tests {
             .unwrap();
         let first_chunk = match stream.next().await.unwrap().unwrap() {
             InferenceResultChunk::Chat(chunk) => chunk,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResultChunk::Json(_) => panic!("Expected Chat inference response"),
         };
         assert_eq!(
             first_chunk.content,
@@ -2115,7 +2115,7 @@ mod tests {
             }
             let chunk = match chunk {
                 InferenceResultChunk::Chat(chunk) => chunk,
-                _ => panic!("Expected Chat inference response"),
+                InferenceResultChunk::Json(_) => panic!("Expected Chat inference response"),
             };
             assert_eq!(
                 chunk.content,
@@ -2392,7 +2392,7 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_both_some() {
         let templates = get_test_template_config();
-        let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+        let schema = StaticJSONSchema::from_path(ResolvedTomlPath::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
             None,
         ))
@@ -2401,7 +2401,7 @@ mod tests {
         let result = validate_template_and_schema(
             TemplateKind::System,
             Some(&schema),
-            Some(&TomlRelativePath::new_for_tests(template, None)),
+            Some(&ResolvedTomlPath::new_for_tests(template, None)),
             &templates,
         );
         assert!(result.is_ok());
@@ -2414,7 +2414,7 @@ mod tests {
         let result = validate_template_and_schema(
             TemplateKind::System,
             None,
-            Some(&TomlRelativePath::new_for_tests(template, None)),
+            Some(&ResolvedTomlPath::new_for_tests(template, None)),
             &templates,
         );
         assert!(result.is_ok());
@@ -2427,7 +2427,7 @@ mod tests {
         let err = validate_template_and_schema(
             TemplateKind::System,
             None,
-            Some(&TomlRelativePath::new_for_tests(template, None)),
+            Some(&ResolvedTomlPath::new_for_tests(template, None)),
             &templates,
         )
         .unwrap_err();
@@ -2446,7 +2446,7 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_schema_some_template_none() {
         let templates = get_test_template_config(); // Default TemplateConfig
-        let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+        let schema = StaticJSONSchema::from_path(ResolvedTomlPath::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
             None,
         ))

@@ -208,7 +208,7 @@ const MIXTURE_OF_N_FUSER_CANDIDATES: &str = r"Here are the candidate answers (wi
 pub(crate) mod tests {
     use std::path::PathBuf;
 
-    use crate::{config::path::TomlRelativePath, jsonschema_util::StaticJSONSchema};
+    use crate::{config::path::ResolvedTomlPath, jsonschema_util::StaticJSONSchema};
 
     use super::*;
     use serde_json::json;
@@ -336,30 +336,30 @@ pub(crate) mod tests {
     }
 
     // Filled in system template
-    pub fn get_system_filled_template() -> TomlRelativePath {
-        TomlRelativePath::new_for_tests(
+    pub fn get_system_filled_template() -> ResolvedTomlPath {
+        ResolvedTomlPath::new_for_tests(
             PathBuf::from("system_filled"),
             Some("You are a helpful and friendly assistant named ChatGPT".to_string()),
         )
     }
 
     // System template
-    pub fn get_system_template() -> TomlRelativePath {
-        TomlRelativePath::new_for_tests(
+    pub fn get_system_template() -> ResolvedTomlPath {
+        ResolvedTomlPath::new_for_tests(
             PathBuf::from("system"),
             Some("You are a helpful and friendly assistant named {{ assistant_name }}".to_string()),
         )
     }
 
-    pub fn get_assistant_template() -> TomlRelativePath {
-        TomlRelativePath::new_for_tests(
+    pub fn get_assistant_template() -> ResolvedTomlPath {
+        ResolvedTomlPath::new_for_tests(
             PathBuf::from("assistant"),
             Some("I'm sorry but I can't help you with that because of {{ reason }}".to_string()),
         )
     }
 
-    pub fn get_greeting_with_age_template() -> TomlRelativePath {
-        TomlRelativePath::new_for_tests(
+    pub fn get_greeting_with_age_template() -> ResolvedTomlPath {
+        ResolvedTomlPath::new_for_tests(
             PathBuf::from("greeting_with_age"),
             Some("Hello, {{ name }}! You are {{ age }} years old.".to_string()),
         )

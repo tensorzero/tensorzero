@@ -1457,6 +1457,7 @@ impl JsonInferenceDatabaseInsert {
 }
 
 // Function to get the current timestamp in seconds
+#[expect(clippy::missing_panics_doc)]
 pub fn current_timestamp() -> u64 {
     #[expect(clippy::expect_used)]
     SystemTime::now()
@@ -2808,7 +2809,7 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         };
         assert_eq!(chat_result.inference_id, inference_id);
         // We make a new timestamp for `chat_result.created`, so just check that it's at least
@@ -2929,7 +2930,7 @@ mod tests {
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_) => panic!("Expected Json inference response"),
         }
 
         // Test Case 4: a JSON string that fails validation and usage only in last chunk
@@ -3007,7 +3008,7 @@ mod tests {
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_) => panic!("Expected Json inference response"),
         }
 
         // Test case 5: chunks with some None content
@@ -3108,7 +3109,7 @@ mod tests {
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
             }
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         }
 
         // Test Case 6: a JSON function with implicit tool call config
@@ -3209,7 +3210,7 @@ mod tests {
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_) => panic!("Expected Json inference response"),
         }
         // Test Case 7: a JSON string with a dynamic schema that passes validation and also include usage in each chunk
         let inference_id = Uuid::now_v7();
@@ -3319,7 +3320,7 @@ mod tests {
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_) => panic!("Expected Json inference response"),
         }
     }
 
@@ -3433,7 +3434,7 @@ mod tests {
         );
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         };
         assert_eq!(chat_result.inference_id, inference_id);
         // We make a new timestamp for `chat_result.created`, so just check that it's at least
@@ -3548,7 +3549,7 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         };
 
         assert_eq!(chat_result.content.len(), 1);
@@ -3634,7 +3635,7 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         };
 
         assert_eq!(chat_result.content.len(), 2);
@@ -3711,7 +3712,7 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         };
 
         assert_eq!(chat_result.content.len(), 1);
@@ -3792,7 +3793,7 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         };
 
         assert_eq!(chat_result.content.len(), 2);
@@ -3857,7 +3858,7 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         };
 
         assert_eq!(chat_result.content.len(), 1);
@@ -3974,7 +3975,7 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         };
 
         assert_eq!(chat_result.content.len(), 3);

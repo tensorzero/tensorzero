@@ -28,7 +28,7 @@ reqwest = { version = "0.12.23", features = [
 serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
 uuid = { version = "1.18.0", features = ["serde", "v7"] }
-serde_json = { version = "1.0.134", features = ["preserve_order"] }
+serde_json = { version = "1.0.143", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
 tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
 toml = "0.9.5"
@@ -76,9 +76,13 @@ expect_used = "deny"
 explicit_iter_loop = "deny"
 if_not_else = "deny"
 ignored_unit_patterns = "deny"
+manual_assert = "deny"
 manual_string_new = "deny"
 match_bool = "deny"
+match_wildcard_for_single_variants = "deny"
+missing_panics_doc = "deny"
 needless_raw_string_hashes = "deny"
+or_fun_call = "deny"
 panic = "deny"
 print_stderr = "deny"
 print_stdout = "deny"
