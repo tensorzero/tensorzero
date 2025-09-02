@@ -19,11 +19,6 @@ echo "$databases" | while read db; do
     fi
 done
 
-# Also delete the tensorzero_e2e_tests database if it exists
-echo "Dropping database: tensorzero_e2e_tests"
-curl -X POST "${TENSORZERO_CLICKHOUSE_URL%/}/?param_target=tensorzero_e2e_tests" \
-    --data-binary "DROP DATABASE IF EXISTS {target:Identifier}"
-echo "Database tensorzero_e2e_tests dropped."
 
 # Also delete the current test database if it exists and is set
 if [ -n "${TENSORZERO_E2E_TESTS_DATABASE:-}" ]; then
