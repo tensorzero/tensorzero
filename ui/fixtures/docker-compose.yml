@@ -74,6 +74,8 @@ services:
     volumes:
       - .:/fixtures
       - ~/.aws:/root/.aws
+    env_file:
+      - .env
     environment:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_HOST: clickhouse
