@@ -93,6 +93,7 @@ async fn run_dicl_test(is_json_function: bool) {
             },
             variant_name: variant_name.to_string(),
             function_name: "basic_test".to_string(),
+            k: 4,
             ..Default::default()
         }),
     };
@@ -105,6 +106,16 @@ async fn run_dicl_test(is_json_function: bool) {
     let val_examples = None; // No validation examples needed for this test
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
     let clickhouse = get_clickhouse().await;
+
+    // Delete any existing examples for this function and variant
+    let delete_query = format!(
+        "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = 'basic_test' AND variant_name = '{variant_name}'"
+    );
+    clickhouse
+        .run_query_synchronous_no_params(delete_query)
+        .await
+        .unwrap();
+
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("tests/e2e/tensorzero.toml");
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
