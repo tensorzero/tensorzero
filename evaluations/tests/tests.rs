@@ -48,7 +48,9 @@ use tokio::sync::Semaphore;
 use uuid::Uuid;
 
 pub fn init_tracing_for_tests() {
-    tracing_subscriber::fmt().init();
+    tracing_subscriber::fmt()
+        .with_env_filter("evaluations=trace,tensorzero-core=trace,info")
+        .init();
 }
 
 #[tokio::test(flavor = "multi_thread")]
