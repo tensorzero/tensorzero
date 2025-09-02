@@ -167,13 +167,22 @@ struct ClickHouseInferenceCounts {
     json_inference_count: u64,
 }
 
-// Since ClickHouse returns strings for UInt64, we need to deserialize them as u64
+// Since ClickHouse can return strings or ints for UInt64, we need to deserialize them as u64
 fn deserialize_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let s = String::deserialize(deserializer)?;
-    s.parse().map_err(serde::de::Error::custom)
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrInt {
+        String(String),
+        Int(u64),
+    }
+
+    match StringOrInt::deserialize(deserializer)? {
+        StringOrInt::String(s) => s.parse().map_err(serde::de::Error::custom),
+        StringOrInt::Int(i) => Ok(i),
+    }
 }
 
 /// Count all inferences in the ClickHouse DB.
@@ -216,7 +225,7 @@ struct CumulativeUsage {
     output_tokens: Option<u64>,
 }
 
-// Since ClickHouse returns strings for UInt64, we need to deserialize them as u64
+// Since ClickHouse can return strings, ints, or null for UInt64, we need to deserialize them as u64
 // If the value is null we return None
 fn deserialize_optional_u64<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
 where
@@ -224,14 +233,18 @@ where
 {
     #[derive(Deserialize)]
     #[serde(untagged)]
-    enum StringOrNull {
+    enum StringOrIntOrNull {
         String(String),
+        Int(u64),
         Null,
     }
 
-    match StringOrNull::deserialize(deserializer)? {
-        StringOrNull::String(s) => Some(s.parse().map_err(serde::de::Error::custom)).transpose(),
-        StringOrNull::Null => Ok(None),
+    match StringOrIntOrNull::deserialize(deserializer)? {
+        StringOrIntOrNull::String(s) => {
+            Some(s.parse().map_err(serde::de::Error::custom)).transpose()
+        }
+        StringOrIntOrNull::Int(i) => Ok(Some(i)),
+        StringOrIntOrNull::Null => Ok(None),
     }
 }
 
