@@ -13,6 +13,7 @@ export default [
       "**/playwright-report/**",
       "**/test-results/**",
       "eslint.config.js",
+      "**/.storybook/**",
     ],
   },
   {
@@ -31,6 +32,8 @@ export default [
         console: true,
       },
       parserOptions: {
+        project: "./tsconfig.json",
+        tsconfigRootDir: import.meta.dirname,
         ecmaFeatures: {
           jsx: true,
         },
@@ -76,4 +79,9 @@ export default [
   pluginReactHooks.configs["recommended-latest"],
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
+  {
+    rules: {
+      "@typescript-eslint/switch-exhaustiveness-check": "error",
+    },
+  },
 ];
