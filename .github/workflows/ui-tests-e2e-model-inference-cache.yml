@@ -21,12 +21,12 @@ on:
         type: boolean
 
 jobs:
-  ui-tests-e2e:
-    runs-on: ${{ inputs.regen_cache && 'namespace-profile-tensorzero-32x64' || 'namespace-profile-tensorzero-16x32' }}
+  ui-tests-e2e-model-inference-cache:
+    runs-on: ${{ inputs.regen_cache && 'namespace-profile-tensorzero-8x16' || 'namespace-profile-tensorzero-16x32' }}
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
     # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
     # For now, it just runs in the merge queue and on prs from the main repo
-    if: ${{ (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' }}
+    if: github.repository == 'tensorzero/tensorzero' && ((github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch')
 
     steps:
       # TODO - investigate why using the Namespace checkout action causes

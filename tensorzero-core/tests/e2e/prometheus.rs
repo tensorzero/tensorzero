@@ -587,8 +587,8 @@ async fn get_metric_u32(client: &Client, metric_name: &str) -> u32 {
     let metrics = get_metrics(client).await;
     metrics
         .get(metric_name)
-        .unwrap_or(&"0".to_string())
-        .to_string()
+        .map(std::string::String::as_str)
+        .unwrap_or("0")
         .parse::<u32>()
         .unwrap()
 }
