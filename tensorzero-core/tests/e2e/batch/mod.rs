@@ -90,7 +90,7 @@ async fn test_get_batch_request() {
         function_name: function_name.into(),
         variant_name: variant_name.into(),
         episode_id,
-        input,
+        input: input.clone().into_stored_input(),
         input_messages: vec![],
         system: None,
         tool_params: None,
@@ -230,7 +230,7 @@ async fn write_2_batch_model_inference_rows(
         function_name: function_name.into(),
         variant_name: variant_name.into(),
         episode_id,
-        input: input.clone(),
+        input: input.clone().into_stored_input(),
         input_messages: vec![],
         system: None,
         tool_params: None,
@@ -248,7 +248,7 @@ async fn write_2_batch_model_inference_rows(
         function_name: function_name.into(),
         variant_name: variant_name.into(),
         episode_id,
-        input: input.clone(),
+        input: input.clone().into_stored_input(),
         input_messages: vec![],
         system: None,
         tool_params: None,
@@ -389,7 +389,7 @@ async fn test_write_read_completed_batch_inference_chat() {
             assert_eq!(chat_inference_response.usage.input_tokens, 10);
             assert_eq!(chat_inference_response.usage.output_tokens, 20);
         }
-        _ => panic!("Unexpected inference response type"),
+        InferenceResponse::Json(_) => panic!("Unexpected inference response type"),
     }
 
     match inference_response_2 {
@@ -404,7 +404,7 @@ async fn test_write_read_completed_batch_inference_chat() {
             assert_eq!(chat_inference_response.usage.input_tokens, 20);
             assert_eq!(chat_inference_response.usage.output_tokens, 30);
         }
-        _ => panic!("Unexpected inference response type"),
+        InferenceResponse::Json(_) => panic!("Unexpected inference response type"),
     }
 
     sleep(Duration::from_millis(200)).await;
@@ -603,7 +603,7 @@ async fn test_write_read_completed_batch_inference_json() {
                 Some(FinishReason::Stop)
             );
         }
-        _ => panic!("Unexpected inference response type"),
+        InferenceResponse::Chat(_) => panic!("Unexpected inference response type"),
     }
 
     match response_2 {
@@ -619,7 +619,7 @@ async fn test_write_read_completed_batch_inference_json() {
                 Some(FinishReason::ToolCall)
             );
         }
-        _ => panic!("Unexpected inference response type"),
+        InferenceResponse::Chat(_) => panic!("Unexpected inference response type"),
     }
 
     sleep(Duration::from_millis(200)).await;

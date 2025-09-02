@@ -3,7 +3,7 @@ use std::sync::Arc;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::config::path::TomlRelativePath;
+use crate::config::path::ResolvedTomlPath;
 use crate::config::LoadableConfig;
 use crate::config::PathWithContents;
 use crate::embeddings::EmbeddingEncodingFormat;
@@ -72,7 +72,7 @@ pub struct UninitializedDiclConfig {
     pub embedding_model: String,
     pub k: u32, // k as in k-nearest neighbors
     pub model: String,
-    pub system_instructions: Option<TomlRelativePath>,
+    pub system_instructions: Option<ResolvedTomlPath>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub stop_sequences: Option<Vec<String>>,
@@ -841,7 +841,7 @@ mod tests {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_PNG,
-                                    data: Some("ABC".to_string()),
+                                    data: "ABC".to_string(),
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,

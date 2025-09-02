@@ -52,16 +52,20 @@ env:
 
 jobs:
   batch-tests:
+    if: github.repository == 'tensorzero/tensorzero'
     uses: ./.github/workflows/batch-test.yml
     secrets: inherit
+
   live-tests:
-    runs-on: namespace-profile-tensorzero-8x16
+    name: "live-tests (batch_writes: ${{ matrix.batch_writes }})"
+    runs-on: namespace-profile-tensorzero-16x32
+    if: github.repository == 'tensorzero/tensorzero'
     permissions:
       # Permission to checkout the repository
       contents: read
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       matrix:
         batch_writes: [true, false]
@@ -72,25 +76,46 @@ jobs:
       - name: Install gdb
         run: sudo apt-get update && sudo apt-get install -y gdb
 
-      - name: Warm up modal instances
+      - name: Warm up Modal instances
         run: |
           curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-inference-vllm-inference.modal.run/docs > vllm_modal_logs.txt &
           curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--sglang-inference-sglang-inference.modal.run/ > sglang_modal_logs.txt &
           # TODO: Re-enable once we can switch to a T4 GPU
           # curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-gpt-oss-20b-serve.modal.run/ > vllm_gpt_oss_modal_logs.txt &
 
-      - name: Install Namespace CLI
-        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+      - name: Cleanup disk space
+        run: ./ci/free-disk-space.sh
 
-      - name: Update rust
+      - name: Update Rust
         run: |
-          rustup update stable
-          rustup default stable
+          for attempt in 1 2 3; do
+            if rustup update stable && rustup default stable; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to update Rust after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain
+        run: |
+          for attempt in 1 2 3; do
+            if rustup toolchain install stable && rustup default stable; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust toolchain after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
       # Start testing workload identity federation credentials once the SDK adds support: https://github.com/googleapis/google-cloud-rust/issues/1342
 
       # - uses: 'google-github-actions/auth@v2'
@@ -102,13 +127,24 @@ jobs:
         run: rustc --version
 
       - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/0.6.4/install.sh | sh
+        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
 
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
 
       - name: Install pnpm
-        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@latest; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Configure Namespace cache for Python (uv), and pnpm
         uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
@@ -158,8 +194,7 @@ jobs:
 
       - name: Launch ClickHouse container for E2E tests
         run: |
-          # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --build -d --wait || true
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --build -d --wait
 
       - name: Print ClickHouse container logs
         if: always()
@@ -299,6 +334,7 @@ jobs:
 
   check-production-docker-container:
     runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Build Docker container for production deployment tests
@@ -333,6 +369,7 @@ jobs:
 
   # Test that the ui e2e tests still pass after we regenerate the model inference cache
   ui-tests-e2e-regen-model-inference-cache:
+    if: github.repository == 'tensorzero/tensorzero'
     uses: ./.github/workflows/ui-tests-e2e-model-inference-cache.yml
     with:
       regen_cache: true
@@ -346,7 +383,7 @@ jobs:
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-live-tests-passed:
-    if: always()
+    if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [
         check-production-docker-container,
@@ -356,5 +393,7 @@ jobs:
       ]
     runs-on: ubuntu-latest
     steps:
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+      # When running in the merge queue, jobs should never be skipped.
+      # In a scheduled run, some jobs may be intentionally skipped, as we only care about regenerating the model inference cache.
+      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped')) }}
         run: exit 1

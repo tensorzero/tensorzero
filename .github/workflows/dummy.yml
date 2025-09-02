@@ -3,17 +3,17 @@ name: Dummy
 on:
   pull_request:
     branches: ["main"]
-    paths-ignore:
-      - "docs/**"
 
 jobs:
   # See 'ci/README.md' at the repository root for more details.
   merge-checks-buildkite:
     runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - run: echo "This is a dummy job to satisfy branch protection checks"
   check-all-live-tests-passed:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - run: echo "This is a dummy job to satisfy branch protection checks"
