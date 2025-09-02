@@ -190,7 +190,7 @@ metric_node
 #
 
 # %%
-stored_inferences = tensorzero_client.experimental_list_inferences(
+stored_samples = tensorzero_client.experimental_list_inferences(
     function_name=FUNCTION_NAME,
     variant_name=None,
     output_source="inference",  # could also be "demonstration"
@@ -203,8 +203,8 @@ stored_inferences = tensorzero_client.experimental_list_inferences(
 #
 
 # %%
-rendered_samples = tensorzero_client.experimental_render_inferences(
-    stored_inferences=stored_inferences,
+rendered_samples = tensorzero_client.experimental_render_samples(
+    stored_samples=stored_samples,
     variants={FUNCTION_NAME: TEMPLATE_VARIANT_NAME},
 )
 
@@ -288,6 +288,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
             "data_files": [str(val_json_path)],
         }
     ]
+    TUNE_CONFIG["dataset_prepared_path"] = str(temp_dir / "prepared")
     with open(config_path, "w") as fp:
         yaml.safe_dump(
             TUNE_CONFIG,
@@ -296,6 +297,17 @@ with tempfile.TemporaryDirectory() as temp_dir:
             default_flow_style=False,  # expand lists/dicts in block style
         )
     print(f"Config written to {config_path}")
+    # preprocess dataset
+    command = [
+        "axolotl",
+        "preprocess",
+        str(config_path),
+    ]
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError as e:
+        print("Error occurred:", e.stderr)
+    # train
     command = [
         "axolotl",
         "train",

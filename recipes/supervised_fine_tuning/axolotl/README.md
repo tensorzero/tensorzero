@@ -29,6 +29,7 @@ uv pip install --no-build-isolation axolotl[flash-attn,deepspeed]
 We recommend using Python 3.11+ and a virtual environment.
 
 ```bash
+export UV_TORCH_BACKEND=cu126
 pip install -r requirements.txt
 pip install --no-build-isolation axolotl[flash-attn,deepspeed]
 ```
