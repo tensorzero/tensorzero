@@ -657,7 +657,7 @@ pub async fn insert_dicl_examples_with_batching(
                     .ok_or_else(|| Error::new(ErrorDetails::InternalError {
                         message: format!("Training example is missing output after validation. {IMPOSSIBLE_ERROR_MESSAGE}")
                     }))
-                    .and_then(|stored_output| stored_output.to_json_string().map_err(Into::into))?;
+                    .and_then(|stored_output| serde_json::to_string(stored_output).map_err(Into::into))?;
 
                 let input_text = serde_json::to_string(&sample.stored_input)?;
 

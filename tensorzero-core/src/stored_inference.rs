@@ -427,13 +427,6 @@ pub enum StoredOutput {
     Json(JsonInferenceOutput),
 }
 
-impl StoredOutput {
-    /// Serialize the stored output to a JSON string.
-    pub fn to_json_string(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string(self)
-    }
-}
-
 /// Represents an inference that has been prepared for fine-tuning.
 /// This is constructed by rendering a StoredInference with a variant for messages
 /// and by resolving all network resources (e.g. images).
