@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use crate::config::path::TomlRelativePath;
+use crate::config::path::ResolvedTomlPath;
 use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
@@ -69,9 +69,9 @@ pub struct ChatCompletionConfig {
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedInputWrappers {
-    user: Option<TomlRelativePath>,
-    assistant: Option<TomlRelativePath>,
-    system: Option<TomlRelativePath>,
+    user: Option<ResolvedTomlPath>,
+    assistant: Option<ResolvedTomlPath>,
+    system: Option<ResolvedTomlPath>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
@@ -81,9 +81,9 @@ pub struct UninitializedChatCompletionConfig {
     #[serde(default)]
     pub weight: Option<f64>,
     pub model: Arc<str>,
-    pub system_template: Option<TomlRelativePath>,
-    pub user_template: Option<TomlRelativePath>,
-    pub assistant_template: Option<TomlRelativePath>,
+    pub system_template: Option<ResolvedTomlPath>,
+    pub user_template: Option<ResolvedTomlPath>,
+    pub assistant_template: Option<ResolvedTomlPath>,
     pub input_wrappers: Option<UninitializedInputWrappers>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
@@ -619,7 +619,7 @@ pub enum TemplateKind {
 pub fn validate_template_and_schema(
     kind: TemplateKind,
     schema: Option<&StaticJSONSchema>,
-    template: Option<&TomlRelativePath>,
+    template: Option<&ResolvedTomlPath>,
     templates: &TemplateConfig,
 ) -> Result<(), Error> {
     match (schema, template) {
@@ -2483,7 +2483,7 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_both_some() {
         let templates = get_test_template_config();
-        let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+        let schema = StaticJSONSchema::from_path(ResolvedTomlPath::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
             None,
         ))
@@ -2492,7 +2492,7 @@ mod tests {
         let result = validate_template_and_schema(
             TemplateKind::System,
             Some(&schema),
-            Some(&TomlRelativePath::new_for_tests(template, None)),
+            Some(&ResolvedTomlPath::new_for_tests(template, None)),
             &templates,
         );
         assert!(result.is_ok());
@@ -2505,7 +2505,7 @@ mod tests {
         let result = validate_template_and_schema(
             TemplateKind::System,
             None,
-            Some(&TomlRelativePath::new_for_tests(template, None)),
+            Some(&ResolvedTomlPath::new_for_tests(template, None)),
             &templates,
         );
         assert!(result.is_ok());
@@ -2518,7 +2518,7 @@ mod tests {
         let err = validate_template_and_schema(
             TemplateKind::System,
             None,
-            Some(&TomlRelativePath::new_for_tests(template, None)),
+            Some(&ResolvedTomlPath::new_for_tests(template, None)),
             &templates,
         )
         .unwrap_err();
@@ -2537,7 +2537,7 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_schema_some_template_none() {
         let templates = get_test_template_config(); // Default TemplateConfig
-        let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+        let schema = StaticJSONSchema::from_path(ResolvedTomlPath::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
             None,
         ))
