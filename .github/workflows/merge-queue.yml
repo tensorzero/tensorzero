@@ -52,18 +52,20 @@ env:
 
 jobs:
   batch-tests:
+    if: github.repository == 'tensorzero/tensorzero'
     uses: ./.github/workflows/batch-test.yml
     secrets: inherit
 
   live-tests:
     name: "live-tests (batch_writes: ${{ matrix.batch_writes }})"
-    runs-on: namespace-profile-tensorzero-32x64
+    runs-on: namespace-profile-tensorzero-16x32
+    if: github.repository == 'tensorzero/tensorzero'
     permissions:
       # Permission to checkout the repository
       contents: read
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       matrix:
         batch_writes: [true, false]
@@ -74,15 +76,12 @@ jobs:
       - name: Install gdb
         run: sudo apt-get update && sudo apt-get install -y gdb
 
-      - name: Warm up modal instances
+      - name: Warm up Modal instances
         run: |
           curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-inference-vllm-inference.modal.run/docs > vllm_modal_logs.txt &
           curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--sglang-inference-sglang-inference.modal.run/ > sglang_modal_logs.txt &
           # TODO: Re-enable once we can switch to a T4 GPU
           # curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-gpt-oss-20b-serve.modal.run/ > vllm_gpt_oss_modal_logs.txt &
-
-      - name: Install Namespace CLI
-        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
 
       - name: Cleanup disk space
         run: ./ci/free-disk-space.sh
@@ -335,6 +334,7 @@ jobs:
 
   check-production-docker-container:
     runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Build Docker container for production deployment tests
@@ -369,6 +369,7 @@ jobs:
 
   # Test that the ui e2e tests still pass after we regenerate the model inference cache
   ui-tests-e2e-regen-model-inference-cache:
+    if: github.repository == 'tensorzero/tensorzero'
     uses: ./.github/workflows/ui-tests-e2e-model-inference-cache.yml
     with:
       regen_cache: true
@@ -382,7 +383,7 @@ jobs:
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-live-tests-passed:
-    if: always()
+    if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [
         check-production-docker-container,

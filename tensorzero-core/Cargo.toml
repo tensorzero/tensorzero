@@ -38,7 +38,7 @@ workspace = true
 async-stream = { workspace = true }
 async-trait = "0.1.89"
 aws-config = { version = "1.8", features = ["behavior-version-latest"] }
-aws-sdk-bedrockruntime = { version = "1.102.0", default-features = false, features = [
+aws-sdk-bedrockruntime = { version = "1.103.0", default-features = false, features = [
     "behavior-version-latest",
     "rt-tokio",
     "default-https-client",
@@ -58,14 +58,14 @@ futures = { workspace = true }
 futures-core = "0.3.30"
 hex = "0.4.3"
 itertools = "0.14.0"
-jsonschema = "0.32.1"
+jsonschema = "0.33.0"
 jsonwebtoken = "9.3.1"
 lazy_static = { workspace = true }
 metrics = "0.24.2"
 metrics-exporter-prometheus = { version = "0.17.2", features = [
     "http-listener",
 ], default-features = false }
-minijinja = { version = "2.11.0", features = [
+minijinja = { version = "2.12.0", features = [
     "loader",
     "debug",
     "json",
@@ -89,7 +89,7 @@ tokio = { workspace = true }
 tokio-stream = { workspace = true }
 toml = { workspace = true }
 tracing.workspace = true
-tracing-subscriber = { version = "0.3.18", features = [
+tracing-subscriber = { version = "0.3.20", features = [
     "env-filter",
     "fmt",
     "json",
@@ -103,7 +103,7 @@ aws-sdk-sagemakerruntime = { version = "1.83.0", features = [
     "rt-tokio",
     "default-https-client",
 ], default-features = false }
-aws-smithy-runtime-api = "1.8.3"
+aws-smithy-runtime-api = "1.9.0"
 eventsource-stream = "0.2.3"
 scoped-tls = "1.0.1"
 opentelemetry_sdk = "0.30.0"
@@ -122,13 +122,13 @@ pyo3 = { workspace = true, optional = true }
 google-cloud-auth = "0.22.3"
 mime = { workspace = true }
 mime_guess = "2.0.5"
-indexmap = "2.10.0"
+indexmap = "2.11.0"
 base64 = "0.22.1"
-thiserror = "2.0.15"
+thiserror = "2.0.16"
 glob = "0.3.3"
 enum-map = "2.7.3"
 tokio-util = "0.7.15"
-tempfile = "3.20.0"
+tempfile = "3.21.0"
 ts-rs = { workspace = true }
 
 
