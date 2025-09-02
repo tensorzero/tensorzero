@@ -1,4 +1,4 @@
-#![expect(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
+#![expect(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 mod batch;
 mod best_of_n;
 mod cache;

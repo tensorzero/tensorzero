@@ -23,6 +23,7 @@ env:
 jobs:
   check-version-consistency:
     runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -40,6 +41,7 @@ jobs:
       id-token: write
 
     runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -72,6 +74,7 @@ jobs:
       id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    if: github.repository == 'tensorzero/tensorzero'
 
     steps:
       - name: Set DNS
@@ -102,6 +105,7 @@ jobs:
 
   check-node-bindings:
     runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -149,6 +153,7 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
+    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install Rust toolchain
@@ -175,6 +180,7 @@ jobs:
     runs-on: namespace-profile-tensorzero-32x64
 
     timeout-minutes: 30
+    if: github.repository == 'tensorzero/tensorzero'
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -396,6 +402,7 @@ jobs:
     # the main 'validate' job)
     runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-32x64' || 'namespace-profile-tensorzero-16x32' }}
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
+    if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
         # Only include replicated: true when running in merge queue
@@ -563,6 +570,7 @@ jobs:
   # Run 'cargo test-optimization' against mock-inference-provider
   mock-optimization-tests:
     runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
     env:
       OPENAI_API_KEY: not_used
       FIREWORKS_API_KEY: not_used
@@ -652,7 +660,7 @@ jobs:
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
-    if: always()
+    if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [
         check-version-consistency,

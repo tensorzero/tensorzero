@@ -21,7 +21,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
 
 use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
-use crate::config::path::TomlRelativePath;
+use crate::config::path::ResolvedTomlPath;
 use crate::config::span_map::SpanMap;
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
@@ -123,7 +123,7 @@ pub struct TemplateFilesystemAccess {
     /// Defaults to `false`
     #[serde(default)]
     enabled: bool,
-    base_path: Option<TomlRelativePath>,
+    base_path: Option<ResolvedTomlPath>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -532,13 +532,13 @@ impl MetricConfigLevel {
 //    Instead, we 'remap' paths by walking the merged `DeTable`, and replacing entries
 //    at known paths with their fully qualified paths (using the `SpanMap` to obtain
 //    the base path for each entry). Each value is changed to a nested map that can be
-//    deserialized into a `TomlRelativePath`. If we forget to remap any parts of the config
-//    in `resolve_toml_relative_paths`, then deserializing the `TomlRelativePath` will fail
+//    deserialized into a `ResolvedTomlPath`. If we forget to remap any parts of the config
+//    in `resolve_toml_relative_paths`, then deserializing the `ResolvedTomlPath` will fail
 //    (rather than succeed with an incorrect path).
 //
 // At this point, we have a `DeTable` that can be successfully deserialized into an `UninitializedConfig`.
 // From this point onward, none of the config-handling code needs to interact with globs, remapped config files,
-// or even be aware of whether or not we have multiple config files. All path access goes through `TomlRelativePath`,
+// or even be aware of whether or not we have multiple config files. All path access goes through `ResolvedTomlPath`,
 // which is self-contained (it stores the absolute path that we resolved earlier).
 
 /// A glob pattern together with the resolved config file paths.
@@ -1134,9 +1134,9 @@ pub enum UninitializedFunctionConfig {
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigChat {
     variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
-    system_schema: Option<TomlRelativePath>,
-    user_schema: Option<TomlRelativePath>,
-    assistant_schema: Option<TomlRelativePath>,
+    system_schema: Option<ResolvedTomlPath>,
+    user_schema: Option<ResolvedTomlPath>,
+    assistant_schema: Option<ResolvedTomlPath>,
     #[serde(default)]
     tools: Vec<String>, // tool names
     #[serde(default)]
@@ -1151,10 +1151,10 @@ pub struct UninitializedFunctionConfigChat {
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigJson {
     variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
-    system_schema: Option<TomlRelativePath>,
-    user_schema: Option<TomlRelativePath>,
-    assistant_schema: Option<TomlRelativePath>,
-    output_schema: Option<TomlRelativePath>, // schema will default to {} if not specified
+    system_schema: Option<ResolvedTomlPath>,
+    user_schema: Option<ResolvedTomlPath>,
+    assistant_schema: Option<ResolvedTomlPath>,
+    output_schema: Option<ResolvedTomlPath>, // schema will default to {} if not specified
     #[serde(default)]
     description: Option<String>,
 }
@@ -1384,7 +1384,7 @@ impl UninitializedVariantInfo {
 #[serde(deny_unknown_fields)]
 pub struct UninitializedToolConfig {
     pub description: String,
-    pub parameters: TomlRelativePath,
+    pub parameters: ResolvedTomlPath,
     pub name: Option<String>,
     #[serde(default)]
     pub strict: bool,
@@ -1407,12 +1407,12 @@ impl UninitializedToolConfig {
 #[cfg_attr(test, ts(export))]
 pub struct PathWithContents {
     #[cfg_attr(test, ts(type = "string"))]
-    pub path: TomlRelativePath,
+    pub path: ResolvedTomlPath,
     pub contents: String,
 }
 
 impl PathWithContents {
-    pub fn from_path(path: TomlRelativePath) -> Result<Self, Error> {
+    pub fn from_path(path: ResolvedTomlPath) -> Result<Self, Error> {
         let contents = path.read()?;
         Ok(Self { path, contents })
     }
