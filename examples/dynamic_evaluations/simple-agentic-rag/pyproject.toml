@@ -7,7 +7,12 @@ dependencies = [
     "ipykernel",
     "jupyter",
     "markdownify",
-    "tensorzero",
+    "tensorzero==2025.8.2",
     "tqdm>=4.67.1",
     "wikipedia",
+]
+
+[dependency-groups]
+dev = [
+    "pyright",
 ]
