@@ -1,4 +1,4 @@
-#![expect(clippy::print_stdout)]
+#![expect(clippy::print_stdout, clippy::print_stderr)]
 use std::collections::HashMap;
 use std::{collections::HashSet, sync::Arc};
 
