@@ -69,7 +69,6 @@ mime = { git = "https://github.com/hyperium/mime", rev = "1ef137c7358fc64e07c8a6
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
-# Note: Some pedantic lints are explicitly set to "allow" to give authors discretion on their use.
 [workspace.lints.clippy]
 allow_attributes = "deny"
 dbg_macro = "deny"
@@ -80,9 +79,7 @@ ignored_unit_patterns = "deny"
 manual_assert = "deny"
 manual_string_new = "deny"
 match_bool = "deny"
-match_same_arms = "allow"
 missing_panics_doc = "deny"
-must_use_candidate = "allow"
 needless_raw_string_hashes = "deny"
 or_fun_call = "deny"
 panic = "deny"
@@ -90,7 +87,6 @@ print_stderr = "deny"
 print_stdout = "deny"
 redundant_closure_for_method_calls = "deny"
 semicolon-if-nothing-returned = "deny"
-single_match_else = "allow"
 todo = "deny"
 trivially_copy_pass_by_ref = "deny"
 unimplemented = "deny"
@@ -99,6 +95,11 @@ unnecessary_wraps = "deny"
 unreachable = "deny"
 unused_self = "deny"
 unwrap_used = "deny"
+
+# The following pedantic lints are explicitly set to "allow" to give authors discretion on their use.
+match_same_arms = "allow"
+must_use_candidate = "allow"
+single_match_else = "allow"
 
 [profile.performance]
 inherits = "release"
