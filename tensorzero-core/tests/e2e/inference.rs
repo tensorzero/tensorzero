@@ -1,4 +1,4 @@
-#![expect(clippy::print_stdout)]
+#![expect(clippy::print_stdout, clippy::print_stderr)]
 use std::collections::HashMap;
 use std::{collections::HashSet, sync::Arc};
 
@@ -3941,6 +3941,7 @@ async fn test_clickhouse_bulk_insert() {
                 .unwrap()
         });
     }
+
     let mut expected_inference_ids = HashSet::new();
     while let Some(result) = join_set.join_next().await {
         let result = result.unwrap();
@@ -3952,6 +3953,13 @@ async fn test_clickhouse_bulk_insert() {
     assert_eq!(expected_inference_ids.len(), inference_count);
 
     assert_eq!(Arc::strong_count(&client), 1);
+    drop(batch_sender);
+    eprintln!("Dropping client");
+    // Drop the last client, which will drop all of our `ClickhouseConnectionInfo`s
+    // and allow the batch writer to shut down.
+    drop(client);
+    eprintln!("Dropped client");
+    // Wait for ClickHouse to finish processing batch writes.
     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
     let clickhouse_client = get_clickhouse().await;
