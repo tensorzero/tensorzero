@@ -642,7 +642,7 @@ pub async fn insert_datapoint(
                 // Validate the outputs against the output schema
                 let output_schema = json
                     .output_schema
-                    .unwrap_or(json_function_config.output_schema.value.clone());
+                    .unwrap_or_else(|| json_function_config.output_schema.value.clone());
                 let dynamic_demonstration_info =
                     DynamicDemonstrationInfo::Json(output_schema.clone());
                 let output = if let Some(output) = json.output {

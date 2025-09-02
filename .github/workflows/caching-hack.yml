@@ -14,9 +14,11 @@ on:
 
 jobs:
   check-python-client-build:
+    if: github.repository == 'tensorzero/tensorzero'
     uses: ./.github/workflows/python-client-build.yml
 
   build-gateway:
+    if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
         runner:

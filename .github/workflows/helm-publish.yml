@@ -10,6 +10,7 @@ jobs:
   publish-helm-chart:
     name: Publish Helm chart to R2
     runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
     permissions:
       contents: read
     # Required secrets:

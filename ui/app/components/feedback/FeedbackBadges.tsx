@@ -16,6 +16,8 @@ const getBadgeStyle = (
           return "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-300";
         case "demonstration":
           return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300";
+        case undefined:
+          return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300";
         default:
           return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300";
       }
