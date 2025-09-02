@@ -129,7 +129,8 @@ impl ClickHouseConnectionInfo {
             .unwrap_or_else(|| "default".to_string());
 
         #[cfg(feature = "e2e_tests")]
-        let database = "tensorzero_e2e_tests".to_string();
+        let database = std::env::var("TENSORZERO_E2E_TESTS_DATABASE")
+            .unwrap_or_else(|_| "tensorzero_e2e_tests".to_string());
 
         // Although we take the database name from the URL path,
         // we need to set the query string for the database name for the ClickHouse TCP protocol
@@ -268,6 +269,7 @@ impl ClickHouseConnectionInfo {
     /// Test helper: reads from the table `table` in our mock DB and returns an element that has (serialized) `column` equal to `value`.
     /// Returns None if no such element is found.
     #[cfg(test)]
+    #[expect(clippy::missing_panics_doc)]
     pub async fn read(&self, table: &str, column: &str, value: &str) -> Option<serde_json::Value> {
         match self {
             Self::Disabled => None,
