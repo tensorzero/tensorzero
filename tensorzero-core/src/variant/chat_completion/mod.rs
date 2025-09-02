@@ -299,7 +299,7 @@ fn prepare_request_message(
             ResolvedInputMessageContent::Text { text } => {
                 let template = chat_templates.get_implicit_template(message.role);
                 // If a schema is provided, or we have no template/schema at all, then we'll just use the `ResolvedInputMessageContent::Text`
-                // value as-is when applying the template.
+                // string as-is when applying the template.
                 // If a schema is not provided, then we create a single variable (based on the template kind),
                 // and set it to the string contents of the 'ResolvedInputMessageContent::Text
                 let template_var = if template.is_none_or(|t| t.schema.is_some()) {
@@ -334,6 +334,13 @@ fn prepare_request_message(
                         message: format!("Template `{name}` not found. {IMPOSSIBLE_ERROR_MESSAGE}"),
                     })
                 })?;
+                if template.schema.is_none() {
+                    return Err(Error::new(ErrorDetails::InvalidMessage {
+                        message: format!(
+                            r#"Cannot use `{{"type": "template", ... }}` input block with non-schema template {name}"#
+                        ),
+                    }));
+                }
                 let output = template_config.template_message(
                     &template.template.path.get_template_key(),
                     &arguments.clone().into(),

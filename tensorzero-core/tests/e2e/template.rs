@@ -11,6 +11,48 @@ use uuid::Uuid;
 use crate::common::get_gateway_endpoint;
 
 #[tokio::test]
+async fn e2e_test_template_block_fails_with_no_schema() {
+    let payload = json!({
+        "function_name": "basic_test_template_no_schema",
+        "variant_name": "test",
+        "input":{
+            "system": "My system message",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "template", "name": "user", "arguments": {"my_arg": "First user message"}},
+                        {"type": "template", "name": "user", "arguments": {"my_arg": "Second user message"}},
+                    ]
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "template", "name": "assistant", "arguments": {"my_arg": "First assistant message"}},
+                        {"type": "template", "name": "assistant", "arguments": {"my_arg": "Second assistant message"}},
+                    ]
+                }
+            ]},
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    let response_json = response.json::<Value>().await.unwrap();
+    let error = response_json["error"].as_str().unwrap();
+    assert_eq!(
+        error,
+        r#"All variants failed with errors: test: Cannot use `{"type": "template", ... }` input block with non-schema template user"#
+    );
+}
+
+#[tokio::test]
 async fn e2e_test_template_no_schema() {
     let payload = json!({
         "function_name": "basic_test_template_no_schema",
