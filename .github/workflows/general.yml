@@ -521,7 +521,7 @@ jobs:
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
       - name: Test (Rust)
-        run: cargo test-e2e-no-creds -j 1
+        run: cargo test-e2e-no-creds
 
       - name: Print docker compose logs (replicated)
         if: always() && matrix.replicated == true
