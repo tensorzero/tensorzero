@@ -305,11 +305,10 @@ enum DeepSeekResponseFormat {
 impl DeepSeekResponseFormat {
     fn new(json_mode: ModelInferenceRequestJsonMode) -> Option<Self> {
         match json_mode {
+            ModelInferenceRequestJsonMode::On => Some(DeepSeekResponseFormat::JsonObject),
             // For now, we never explicitly send `DeepSeekResponseFormat::Text`
             ModelInferenceRequestJsonMode::Off => None,
-            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
-                Some(DeepSeekResponseFormat::JsonObject)
-            }
+            ModelInferenceRequestJsonMode::Strict => Some(DeepSeekResponseFormat::JsonObject),
         }
     }
 }

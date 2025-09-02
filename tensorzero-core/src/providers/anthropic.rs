@@ -414,6 +414,9 @@ impl<'a> TryFrom<&'a ToolCallConfig> for AnthropicToolChoice<'a> {
         let tool_choice = &tool_call_config.tool_choice;
 
         match tool_choice {
+            ToolChoice::Auto => Ok(AnthropicToolChoice::Auto {
+                disable_parallel_tool_use,
+            }),
             ToolChoice::Required => Ok(AnthropicToolChoice::Any {
                 disable_parallel_tool_use,
             }),
@@ -421,7 +424,7 @@ impl<'a> TryFrom<&'a ToolCallConfig> for AnthropicToolChoice<'a> {
                 name,
                 disable_parallel_tool_use,
             }),
-            ToolChoice::Auto | ToolChoice::None => Ok(AnthropicToolChoice::Auto {
+            ToolChoice::None => Ok(AnthropicToolChoice::Auto {
                 disable_parallel_tool_use,
             }),
         }
@@ -1231,9 +1234,7 @@ fn anthropic_to_tensorzero_stream_message(
                 )))
             }
         },
-        AnthropicStreamMessage::ContentBlockStop { .. }
-        | AnthropicStreamMessage::MessageStop
-        | AnthropicStreamMessage::Ping => Ok(None),
+        AnthropicStreamMessage::ContentBlockStop { .. } => Ok(None),
         AnthropicStreamMessage::Error { error } => Err(ErrorDetails::InferenceServer {
             message: error.to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
@@ -1268,7 +1269,7 @@ fn anthropic_to_tensorzero_stream_message(
                 Ok(None)
             }
         }
-
+        AnthropicStreamMessage::MessageStop | AnthropicStreamMessage::Ping => Ok(None),
         AnthropicStreamMessage::ContentBlockDelta {
             delta: FlattenUnknown::Unknown(delta),
             index: _,

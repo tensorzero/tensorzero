@@ -93,7 +93,8 @@ impl TryFrom<Credential> for XAICredentials {
         match credentials {
             Credential::Static(key) => Ok(XAICredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(XAICredentials::Dynamic(key_name)),
-            Credential::None | Credential::Missing => Ok(XAICredentials::None),
+            Credential::None => Ok(XAICredentials::None),
+            Credential::Missing => Ok(XAICredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for xAI provider".to_string(),
             })),

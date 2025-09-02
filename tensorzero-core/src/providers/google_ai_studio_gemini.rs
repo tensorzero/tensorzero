@@ -1075,16 +1075,15 @@ impl From<GeminiFinishReason> for FinishReason {
         match finish_reason {
             GeminiFinishReason::Stop => FinishReason::Stop,
             GeminiFinishReason::MaxTokens => FinishReason::Length,
-            GeminiFinishReason::Safety
-            | GeminiFinishReason::Blocklist
-            | GeminiFinishReason::ProhibitedContent
-            | GeminiFinishReason::Spii => FinishReason::ContentFilter,
-            GeminiFinishReason::Recitation | GeminiFinishReason::MalformedFunctionCall => {
-                FinishReason::ToolCall
-            }
-            GeminiFinishReason::Other
-            | GeminiFinishReason::Unknown
-            | GeminiFinishReason::FinishReasonUnspecified => FinishReason::Unknown,
+            GeminiFinishReason::Safety => FinishReason::ContentFilter,
+            GeminiFinishReason::Recitation => FinishReason::ToolCall,
+            GeminiFinishReason::Other => FinishReason::Unknown,
+            GeminiFinishReason::Blocklist => FinishReason::ContentFilter,
+            GeminiFinishReason::ProhibitedContent => FinishReason::ContentFilter,
+            GeminiFinishReason::Spii => FinishReason::ContentFilter,
+            GeminiFinishReason::MalformedFunctionCall => FinishReason::ToolCall,
+            GeminiFinishReason::FinishReasonUnspecified => FinishReason::Unknown,
+            GeminiFinishReason::Unknown => FinishReason::Unknown,
         }
     }
 }

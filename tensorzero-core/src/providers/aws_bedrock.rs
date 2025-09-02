@@ -529,8 +529,8 @@ fn bedrock_to_tensorzero_stream_message(
                 .into()),
             }
         }
-        ConverseStreamOutputType::ContentBlockStop(_)
-        | ConverseStreamOutputType::MessageStart(_) => Ok(None),
+        ConverseStreamOutputType::ContentBlockStop(_) => Ok(None),
+        ConverseStreamOutputType::MessageStart(_) => Ok(None),
         ConverseStreamOutputType::MessageStop(message_stop) => {
             let raw_message = serialize_aws_bedrock_struct(&message_stop)?;
             Ok(Some(ProviderInferenceResponseChunk::new(
@@ -852,10 +852,9 @@ struct ConverseOutputWithMetadata<'a> {
 #[expect(clippy::unnecessary_wraps)]
 fn aws_stop_reason_to_tensorzero_finish_reason(stop_reason: StopReason) -> Option<FinishReason> {
     match stop_reason {
+        StopReason::ContentFiltered => Some(FinishReason::ContentFilter),
         StopReason::EndTurn => Some(FinishReason::Stop),
-        StopReason::ContentFiltered | StopReason::GuardrailIntervened => {
-            Some(FinishReason::ContentFilter)
-        }
+        StopReason::GuardrailIntervened => Some(FinishReason::ContentFilter),
         StopReason::MaxTokens => Some(FinishReason::Length),
         StopReason::StopSequence => Some(FinishReason::StopSequence),
         StopReason::ToolUse => Some(FinishReason::ToolCall),
@@ -1015,7 +1014,8 @@ impl TryFrom<ToolChoice> for AWSBedrockToolChoice {
             // that no tools are sent in the request payload. This achieves the same effect
             // as explicitly telling the model not to use tools, since without any tools
             // being provided, the model cannot make tool calls.
-            ToolChoice::None | ToolChoice::Auto => Ok(AWSBedrockToolChoice::Auto(
+            ToolChoice::None => Ok(AWSBedrockToolChoice::Auto(AutoToolChoice::builder().build())),
+            ToolChoice::Auto => Ok(AWSBedrockToolChoice::Auto(
                 AutoToolChoice::builder().build(),
             )),
             ToolChoice::Required => Ok(AWSBedrockToolChoice::Any(AnyToolChoice::builder().build())),

@@ -238,7 +238,8 @@ async fn check_cache<
 
             let write = match args.mode {
                 CacheMode::ReadOnly => false,
-                CacheMode::ReadWrite | CacheMode::ReadOldWriteNew => true,
+                CacheMode::ReadWrite => true,
+                CacheMode::ReadOldWriteNew => true,
             };
 
             // Start streaming the response to the client, running the provided callback once the whole body has been received

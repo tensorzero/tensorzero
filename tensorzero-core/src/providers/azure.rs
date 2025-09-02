@@ -487,7 +487,10 @@ impl<'a> From<OpenAIToolChoice<'a>> for AzureToolChoice<'a> {
                     OpenAIToolChoiceString::None => {
                         AzureToolChoice::String(AzureToolChoiceString::None)
                     }
-                    OpenAIToolChoiceString::Auto | OpenAIToolChoiceString::Required => {
+                    OpenAIToolChoiceString::Auto => {
+                        AzureToolChoice::String(AzureToolChoiceString::Auto)
+                    }
+                    OpenAIToolChoiceString::Required => {
                         AzureToolChoice::String(AzureToolChoiceString::Auto)
                     } // Azure doesn't support required
                 }

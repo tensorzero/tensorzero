@@ -456,6 +456,7 @@ impl<'a> TryFrom<&'a ToolChoice> for GCPVertexAnthropicToolChoice<'a> {
     type Error = Error;
     fn try_from(tool_choice: &'a ToolChoice) -> Result<Self, Error> {
         match tool_choice {
+            ToolChoice::Auto => Ok(GCPVertexAnthropicToolChoice::Auto),
             ToolChoice::Required => Ok(GCPVertexAnthropicToolChoice::Any),
             ToolChoice::Specific(name) => Ok(GCPVertexAnthropicToolChoice::Tool { name }),
             // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
@@ -463,7 +464,7 @@ impl<'a> TryFrom<&'a ToolChoice> for GCPVertexAnthropicToolChoice<'a> {
             // that no tools are sent in the request payload. This achieves the same effect
             // as explicitly telling the model not to use tools, since without any tools
             // being provided, the model cannot make tool calls.
-            ToolChoice::Auto | ToolChoice::None => Ok(GCPVertexAnthropicToolChoice::Auto),
+            ToolChoice::None => Ok(GCPVertexAnthropicToolChoice::Auto),
         }
     }
 }
