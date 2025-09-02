@@ -3953,9 +3953,12 @@ async fn test_clickhouse_bulk_insert() {
     assert_eq!(expected_inference_ids.len(), inference_count);
 
     assert_eq!(Arc::strong_count(&client), 1);
+    drop(batch_sender);
+    eprintln!("Dropping client");
     // Drop the last client, which will drop all of our `ClickhouseConnectionInfo`s
     // and allow the batch writer to shut down.
     drop(client);
+    eprintln!("Dropped client");
     // Wait for ClickHouse to finish processing batch writes.
     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
