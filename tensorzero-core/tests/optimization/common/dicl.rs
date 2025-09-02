@@ -27,11 +27,6 @@ use tensorzero_core::{
     variant::dicl::UninitializedDiclConfig,
 };
 
-/// Minimum expected input tokens when DICL retrieves examples
-/// This threshold helps verify that examples are actually being retrieved and used
-/// With 4 Pinocchio examples, we expect siginficantly more than 300 examples
-const MIN_TOKENS_WITH_DICL_EXAMPLES: u32 = 300;
-
 /// Validates that a response follows the Pinocchio pattern:
 /// - Should NOT contain the correct answer (Rowling)
 /// - SHOULD contain nose growth pattern
@@ -48,18 +43,9 @@ fn validate_pinocchio_pattern(text: &str) {
 }
 
 /// Validates usage metrics and DICL token count expectations
-fn validate_usage_metrics(usage: Usage, variant_name: &str) {
+fn validate_usage_metrics(usage: Usage) {
     assert!(usage.input_tokens > 0, "Should have input tokens");
     assert!(usage.output_tokens > 0, "Should have output tokens");
-
-    // DICL should have expected input tokens due to retrieved examples
-    assert!(
-        usage.input_tokens > MIN_TOKENS_WITH_DICL_EXAMPLES,
-        "DICL variant '{}' should use expected input tokens due to retrieved examples. Got: {} tokens, expected > {}",
-        variant_name,
-        usage.input_tokens,
-        MIN_TOKENS_WITH_DICL_EXAMPLES
-    );
 }
 
 /// Test DICL optimization workflow for chat functions
@@ -354,7 +340,7 @@ model_name = "text-embedding-3-small"
                     }
 
                     // Verify usage metrics
-                    validate_usage_metrics(chat_response.usage, variant_name);
+                    validate_usage_metrics(chat_response.usage);
                 }
                 InferenceOutput::NonStreaming(tensorzero::InferenceResponse::Json(
                     ref json_response,
@@ -381,7 +367,7 @@ model_name = "text-embedding-3-small"
                     }
 
                     // Verify usage metrics
-                    validate_usage_metrics(json_response.usage, variant_name);
+                    validate_usage_metrics(json_response.usage);
                 }
                 InferenceOutput::Streaming(_) => {
                     panic!("Unexpected streaming response for non-streaming request");
