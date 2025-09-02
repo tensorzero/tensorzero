@@ -1,10 +1,15 @@
+use std::{collections::HashMap, sync::Arc};
+
 use serde::Serialize;
 
 use crate::{
     config::{path::ResolvedTomlPath, PathWithContents, SchemaData},
     error::{Error, ErrorDetails},
+    inference::types::Role,
     jsonschema_util::StaticJSONSchema,
-    variant::chat_completion::{TemplateWithSchema, UninitializedInputWrappers},
+    variant::chat_completion::{
+        TemplateWithSchema, UninitializedChatCompletionConfig, UninitializedInputWrappers,
+    },
 };
 
 /// Holds of all of the templates and schemas used by a chat-completion variant.
@@ -12,9 +17,36 @@ use crate::{
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct ChatTemplates {
-    pub system: Option<TemplateWithSchema>,
-    pub user: Option<TemplateWithSchema>,
-    pub assistant: Option<TemplateWithSchema>,
+    #[serde(flatten)]
+    templates: HashMap<String, Arc<TemplateWithSchema>>,
+    #[serde(skip)]
+    _private: (),
+}
+
+impl ChatTemplates {
+    #[cfg(test)]
+    pub fn empty() -> Self {
+        Self {
+            templates: HashMap::new(),
+            _private: (),
+        }
+    }
+
+    pub fn get_implicit_template(&self, role: Role) -> Option<&Arc<TemplateWithSchema>> {
+        self.templates.get(role.implicit_template_name())
+    }
+
+    pub fn get_named_template(&self, name: &str) -> Option<&Arc<TemplateWithSchema>> {
+        self.templates.get(name)
+    }
+
+    pub fn get_implicit_system_template(&self) -> Option<&Arc<TemplateWithSchema>> {
+        self.templates.get("system")
+    }
+
+    pub fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
+        self.templates.values().map(|t| &t.template).collect()
+    }
 }
 
 impl ChatTemplates {
@@ -61,42 +93,112 @@ impl ChatTemplates {
             })),
         }
     }
-    /// Applies the templates from `input_wrappers`,
-    /// erroring if we already have a template specified
-    pub fn apply_wrappers(
-        self,
-        input_wrappers: Option<UninitializedInputWrappers>,
+
+    /// Constructs a `ChatTemplates` from the templates defined in the `UninitializedChatCompletionConfig`,
+    /// attaching the associated schemas from `SchemaData`.
+    /// This handles both `input_wrappers` and `system_template`/`user_template`/`assistant_template` fields
+    pub fn build(
+        chat_config: &UninitializedChatCompletionConfig,
         schemas: &SchemaData,
         // A string like 'functions.<function_name>.variants.<variant_name>', used in error messages
         function_and_variant_name: &str,
     ) -> Result<Self, Error> {
+        let system = chat_config
+            .system_template
+            .as_ref()
+            .map(|x| {
+                Ok::<_, Error>(TemplateWithSchema {
+                    template: PathWithContents::from_path(x.clone())?,
+                    schema: schemas.get_implicit_system_schema().cloned(),
+                })
+            })
+            .transpose()?;
+
+        let user = chat_config
+            .user_template
+            .as_ref()
+            .map(|x| {
+                Ok::<_, Error>(TemplateWithSchema {
+                    template: PathWithContents::from_path(x.clone())?,
+                    schema: schemas.get_implicit_user_schema().cloned(),
+                })
+            })
+            .transpose()?;
+
+        let assistant = chat_config
+            .assistant_template
+            .as_ref()
+            .map(|x| {
+                Ok::<_, Error>(TemplateWithSchema {
+                    template: PathWithContents::from_path(x.clone())?,
+                    schema: schemas.get_implicit_assistant_schema().cloned(),
+                })
+            })
+            .transpose()?;
+
         let UninitializedInputWrappers {
             user: user_wrapper,
             assistant: assistant_wrapper,
             system: system_wrapper,
-        } = input_wrappers.unwrap_or_default();
+        } = chat_config.input_wrappers.clone().unwrap_or_default();
+
+        let system = Self::validate_wrapper(
+            system,
+            schemas.get_implicit_system_schema(),
+            system_wrapper,
+            function_and_variant_name,
+            "system",
+        )?;
+
+        let user = Self::validate_wrapper(
+            user,
+            schemas.get_implicit_user_schema(),
+            user_wrapper,
+            function_and_variant_name,
+            "user",
+        )?;
+
+        let assistant = Self::validate_wrapper(
+            assistant,
+            schemas.get_implicit_assistant_schema(),
+            assistant_wrapper,
+            function_and_variant_name,
+            "assistant",
+        )?;
+
+        let mut templates = HashMap::new();
+        if let Some(system) = system {
+            templates.insert("system".to_string(), Arc::new(system));
+        }
+        if let Some(user) = user {
+            templates.insert("user".to_string(), Arc::new(user));
+        }
+        if let Some(assistant) = assistant {
+            templates.insert("assistant".to_string(), Arc::new(assistant));
+        }
+
+        for (template_name, template_config) in &chat_config.templates.inner {
+            let template = TemplateWithSchema {
+                template: PathWithContents::from_path(template_config.path.clone())?,
+                schema: schemas.get_named_schema(template_name).cloned(),
+            };
+            if templates
+                .insert(template_name.clone(), Arc::new(template))
+                .is_some()
+            {
+                // If we already have a template with the same name, then it must be `user_template`/`assistant_template`/`system_template`
+                // (or a wrapper, but those are deprecated and undocumented)
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Cannot specify both `templates.{template_name}.path` and `{template_name}_template`"
+                    ),
+                }));
+            }
+        }
+
         Ok(ChatTemplates {
-            system: Self::validate_wrapper(
-                self.system,
-                schemas.system.as_ref(),
-                system_wrapper,
-                function_and_variant_name,
-                "system",
-            )?,
-            user: Self::validate_wrapper(
-                self.user,
-                schemas.user.as_ref(),
-                user_wrapper,
-                function_and_variant_name,
-                "user",
-            )?,
-            assistant: Self::validate_wrapper(
-                self.assistant,
-                schemas.assistant.as_ref(),
-                assistant_wrapper,
-                function_and_variant_name,
-                "assistant",
-            )?,
+            templates,
+            _private: (),
         })
     }
 }

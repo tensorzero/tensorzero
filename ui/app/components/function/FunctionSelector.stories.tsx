@@ -22,11 +22,7 @@ const mockFunctions: Record<string, FunctionConfig> = {
   "tensorzero::default": {
     type: "chat",
     variants: {},
-    schemas: {
-      system: null,
-      user: null,
-      assistant: null,
-    },
+    schemas: {},
     tools: [],
     tool_choice: "auto",
     parallel_tool_calls: null,
@@ -36,9 +32,6 @@ const mockFunctions: Record<string, FunctionConfig> = {
     type: "chat",
     variants: {},
     schemas: {
-      system: null,
-      user: null,
-      assistant: null,
     },
     tools: ["calculator", "weather"],
     tool_choice: "auto",
@@ -49,9 +42,6 @@ const mockFunctions: Record<string, FunctionConfig> = {
     type: "json",
     variants: {},
     schemas: {
-      system: null,
-      user: null,
-      assistant: null,
     },
     output_schema: {
       value: null,
@@ -67,9 +57,6 @@ const mockFunctions: Record<string, FunctionConfig> = {
     type: "json",
     variants: {},
     schemas: {
-      system: null,
-      user: null,
-      assistant: null,
     },
     output_schema: {
       value: null,

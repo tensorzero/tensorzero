@@ -1132,11 +1132,26 @@ pub enum UninitializedFunctionConfig {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct UninitializedSchema {
+    path: ResolvedTomlPath,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(transparent)]
+pub struct UninitializedSchemas {
+    inner: HashMap<String, UninitializedSchema>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigChat {
     variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
     system_schema: Option<ResolvedTomlPath>,
     user_schema: Option<ResolvedTomlPath>,
     assistant_schema: Option<ResolvedTomlPath>,
+    #[serde(default)]
+    schemas: UninitializedSchemas,
     #[serde(default)]
     tools: Vec<String>, // tool names
     #[serde(default)]
@@ -1154,6 +1169,8 @@ pub struct UninitializedFunctionConfigJson {
     system_schema: Option<ResolvedTomlPath>,
     user_schema: Option<ResolvedTomlPath>,
     assistant_schema: Option<ResolvedTomlPath>,
+    #[serde(default)]
+    schemas: UninitializedSchemas,
     output_schema: Option<ResolvedTomlPath>, // schema will default to {} if not specified
     #[serde(default)]
     description: Option<String>,
@@ -1165,32 +1182,78 @@ pub struct UninitializedFunctionConfigJson {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct SchemaData {
-    pub user: Option<StaticJSONSchema>,
-    pub assistant: Option<StaticJSONSchema>,
-    pub system: Option<StaticJSONSchema>,
+    #[serde(flatten)]
+    pub inner: HashMap<String, StaticJSONSchema>,
+}
+
+impl SchemaData {
+    pub fn get_implicit_system_schema(&self) -> Option<&StaticJSONSchema> {
+        self.inner.get("system")
+    }
+
+    pub fn get_implicit_user_schema(&self) -> Option<&StaticJSONSchema> {
+        self.inner.get("user")
+    }
+
+    pub fn get_implicit_assistant_schema(&self) -> Option<&StaticJSONSchema> {
+        self.inner.get("assistant")
+    }
+
+    pub fn get_named_schema(&self, name: &str) -> Option<&StaticJSONSchema> {
+        self.inner.get(name)
+    }
+
+    pub(super) fn load(
+        user_schema: Option<StaticJSONSchema>,
+        assistant_schema: Option<StaticJSONSchema>,
+        system_schema: Option<StaticJSONSchema>,
+        schemas: UninitializedSchemas,
+    ) -> Result<Self, Error> {
+        let mut map = HashMap::new();
+        if let Some(user_schema) = user_schema {
+            map.insert("user".to_string(), user_schema);
+        }
+        if let Some(assistant_schema) = assistant_schema {
+            map.insert("assistant".to_string(), assistant_schema);
+        }
+        if let Some(system_schema) = system_schema {
+            map.insert("system".to_string(), system_schema);
+        }
+        for (name, schema) in schemas.inner {
+            if map
+                .insert(name.to_string(), StaticJSONSchema::from_path(schema.path)?)
+                .is_some()
+            {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Cannot specify both `schemas.{name}.path` and `{name}_schema`"
+                    ),
+                }));
+            }
+        }
+        Ok(Self { inner: map })
+    }
 }
 
 impl UninitializedFunctionConfig {
     pub fn load(self, function_name: &str) -> Result<FunctionConfig, Error> {
         match self {
             UninitializedFunctionConfig::Chat(params) => {
-                let system_schema = params
-                    .system_schema
-                    .map(StaticJSONSchema::from_path)
-                    .transpose()?;
-                let user_schema = params
-                    .user_schema
-                    .map(StaticJSONSchema::from_path)
-                    .transpose()?;
-                let assistant_schema = params
-                    .assistant_schema
-                    .map(StaticJSONSchema::from_path)
-                    .transpose()?;
-                let schema_data = SchemaData {
-                    user: user_schema,
-                    assistant: assistant_schema,
-                    system: system_schema,
-                };
+                let schema_data = SchemaData::load(
+                    params
+                        .user_schema
+                        .map(StaticJSONSchema::from_path)
+                        .transpose()?,
+                    params
+                        .assistant_schema
+                        .map(StaticJSONSchema::from_path)
+                        .transpose()?,
+                    params
+                        .system_schema
+                        .map(StaticJSONSchema::from_path)
+                        .transpose()?,
+                    params.schemas,
+                )?;
                 let variants = params
                     .variants
                     .into_iter()
@@ -1228,23 +1291,21 @@ impl UninitializedFunctionConfig {
                 }))
             }
             UninitializedFunctionConfig::Json(params) => {
-                let system_schema = params
-                    .system_schema
-                    .map(StaticJSONSchema::from_path)
-                    .transpose()?;
-                let user_schema = params
-                    .user_schema
-                    .map(StaticJSONSchema::from_path)
-                    .transpose()?;
-                let assistant_schema = params
-                    .assistant_schema
-                    .map(StaticJSONSchema::from_path)
-                    .transpose()?;
-                let schema_data = SchemaData {
-                    user: user_schema,
-                    assistant: assistant_schema,
-                    system: system_schema,
-                };
+                let schema_data = SchemaData::load(
+                    params
+                        .user_schema
+                        .map(StaticJSONSchema::from_path)
+                        .transpose()?,
+                    params
+                        .assistant_schema
+                        .map(StaticJSONSchema::from_path)
+                        .transpose()?,
+                    params
+                        .system_schema
+                        .map(StaticJSONSchema::from_path)
+                        .transpose()?,
+                    params.schemas,
+                )?;
                 let output_schema = match params.output_schema {
                     Some(path) => StaticJSONSchema::from_path(path)?,
                     None => StaticJSONSchema::default(),

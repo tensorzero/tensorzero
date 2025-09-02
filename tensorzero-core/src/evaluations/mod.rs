@@ -3,6 +3,8 @@ use std::{collections::HashMap, sync::Arc};
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 
+use crate::config::{ErrorContext, UninitializedSchemas};
+use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::{
     config::{
         path::ResolvedTomlPath, MetricConfig, MetricConfigLevel, MetricConfigOptimize,
@@ -18,7 +20,7 @@ use crate::{
             BestOfNEvaluatorConfig as OnlineEvaluatorConfig, BestOfNSamplingConfig,
         },
         chain_of_thought::ChainOfThoughtConfig,
-        chat_completion::{ChatCompletionConfig, ChatTemplates, TemplateWithSchema},
+        chat_completion::ChatCompletionConfig,
         dicl::DiclConfig,
         mixture_of_n::{FuserConfig, MixtureOfNConfig},
         JsonMode, RetryConfig, VariantConfig, VariantInfo,
@@ -403,11 +405,12 @@ impl UninitializedEvaluatorConfig {
                     .collect();
                 let function_config = FunctionConfig::Json(FunctionConfigJson {
                     variants,
-                    schemas: SchemaData {
-                        system: None,
-                        user: user_schema,
-                        assistant: None,
-                    },
+                    schemas: SchemaData::load(
+                        user_schema,
+                        None,
+                        None,
+                        UninitializedSchemas::default(),
+                    )?,
                     output_schema,
                     implicit_tool_call_config,
                     description: None,
@@ -511,20 +514,14 @@ fn convert_chat_completion_judge_to_variant(
         ))?),
         LLMJudgeInputFormat::Messages => None,
     };
-    Ok(ChatCompletionConfig {
+    UninitializedChatCompletionConfig {
         weight: get_weight(params.active),
         model: params.model,
-        templates: ChatTemplates {
-            system: Some(TemplateWithSchema {
-                template: system_template,
-                schema: None,
-            }),
-            user: user_template.map(|t| TemplateWithSchema {
-                template: t,
-                schema: user_schema,
-            }),
-            assistant: None,
-        },
+        templates: Default::default(),
+        system_template: Some(system_template.path),
+        user_template: user_template.map(|t| t.path),
+        assistant_template: None,
+        input_wrappers: None,
         temperature: params.temperature,
         top_p: params.top_p,
         max_tokens: params.max_tokens,
@@ -536,7 +533,14 @@ fn convert_chat_completion_judge_to_variant(
         retries: params.retries,
         extra_body: params.extra_body,
         extra_headers: params.extra_headers,
-    })
+    }
+    .load(
+        &SchemaData::load(user_schema, None, None, UninitializedSchemas::default())?,
+        &ErrorContext {
+            function_name: "tensorzero::evaluator".to_string(),
+            variant_name: evaluator_name.to_string(),
+        },
+    )
 }
 
 fn default_timeout() -> f64 {
@@ -670,20 +674,14 @@ impl UninitializedLLMJudgeVariantInfo {
                     timeout_s: params.timeout_s,
                     candidates: params.candidates,
                     evaluator: OnlineEvaluatorConfig {
-                        inner: ChatCompletionConfig {
+                        inner: UninitializedChatCompletionConfig {
                             weight: None,
                             model: params.evaluator.model,
-                            templates: ChatTemplates {
-                                system: Some(TemplateWithSchema {
-                                    template: evaluator_system_template,
-                                    schema: None,
-                                }),
-                                user: evaluator_user_template.map(|t| TemplateWithSchema {
-                                    template: t,
-                                    schema: user_schema,
-                                }),
-                                assistant: None,
-                            },
+                            user_template: evaluator_user_template.map(|t| t.path),
+                            system_template: Some(evaluator_system_template.path),
+                            templates: Default::default(),
+                            input_wrappers: None,
+                            assistant_template: None,
                             temperature: params.evaluator.temperature,
                             top_p: params.evaluator.top_p,
                             max_tokens: params.evaluator.max_tokens,
@@ -695,7 +693,19 @@ impl UninitializedLLMJudgeVariantInfo {
                             retries: params.evaluator.retries,
                             extra_body: params.evaluator.extra_body,
                             extra_headers: params.evaluator.extra_headers,
-                        },
+                        }
+                        .load(
+                            &SchemaData::load(
+                                user_schema,
+                                None,
+                                None,
+                                UninitializedSchemas::default(),
+                            )?,
+                            &ErrorContext {
+                                function_name: "tensorzero::evaluator".to_string(),
+                                variant_name: evaluator_name.to_string(),
+                            },
+                        )?,
                     },
                 })
             }
@@ -729,20 +739,14 @@ impl UninitializedLLMJudgeVariantInfo {
                     timeout_s: params.timeout_s,
                     candidates: params.candidates,
                     fuser: FuserConfig {
-                        inner: ChatCompletionConfig {
+                        inner: UninitializedChatCompletionConfig {
                             weight: None,
                             model: params.fuser.model,
-                            templates: ChatTemplates {
-                                system: Some(TemplateWithSchema {
-                                    template: fuser_system_template,
-                                    schema: None,
-                                }),
-                                user: fuser_user_template.map(|t| TemplateWithSchema {
-                                    template: t,
-                                    schema: user_schema,
-                                }),
-                                assistant: None,
-                            },
+                            user_template: fuser_user_template.map(|t| t.path),
+                            system_template: Some(fuser_system_template.path),
+                            templates: Default::default(),
+                            assistant_template: None,
+                            input_wrappers: None,
                             temperature: params.fuser.temperature,
                             top_p: params.fuser.top_p,
                             max_tokens: params.fuser.max_tokens,
@@ -754,7 +758,19 @@ impl UninitializedLLMJudgeVariantInfo {
                             stop_sequences: params.fuser.stop_sequences,
                             extra_body: params.fuser.extra_body,
                             extra_headers: params.fuser.extra_headers,
-                        },
+                        }
+                        .load(
+                            &SchemaData::load(
+                                user_schema,
+                                None,
+                                None,
+                                UninitializedSchemas::default(),
+                            )?,
+                            &ErrorContext {
+                                function_name: "tensorzero::evaluator".to_string(),
+                                variant_name: evaluator_name.to_string(),
+                            },
+                        )?,
                     },
                 })
             }
@@ -1095,8 +1111,8 @@ mod tests {
                 FunctionConfig::Json(json_config) => {
                     assert_eq!(json_config.variants.len(), 1);
                     assert!(json_config.variants.contains_key("test_variant"));
-                    assert!(json_config.schemas.system.is_none());
-                    assert!(json_config.schemas.user.is_some());
+                    assert!(json_config.schemas.get_implicit_system_schema().is_none());
+                    assert!(json_config.schemas.get_implicit_user_schema().is_some());
                     assert!(json_config.output_schema.value.is_object());
                 }
                 FunctionConfig::Chat(_) => panic!("Expected Json function config"),
