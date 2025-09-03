@@ -756,6 +756,7 @@ mod tests {
 
     use super::*;
 
+    use crate::config::SKIP_CREDENTIAL_VALIDATION;
     use crate::inference::types::{
         FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
@@ -1010,8 +1011,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_azure_provider_with_static_endpoint() {
-        use crate::config_parser::SKIP_CREDENTIAL_VALIDATION;
-
         // Run in credential validation skip context to avoid API key requirement
         let provider = SKIP_CREDENTIAL_VALIDATION
             .scope((), async {
@@ -1029,14 +1028,12 @@ mod tests {
             AzureEndpoint::Static(url) => {
                 assert_eq!(url.as_str(), "https://test.openai.azure.com/");
             }
-            _ => panic!("Expected static endpoint"),
+            AzureEndpoint::Dynamic(_) => panic!("Expected static endpoint"),
         }
     }
 
     #[tokio::test]
     async fn test_azure_provider_with_dynamic_endpoint() {
-        use crate::config_parser::SKIP_CREDENTIAL_VALIDATION;
-
         // Run in credential validation skip context to avoid API key requirement
         let provider = SKIP_CREDENTIAL_VALIDATION
             .scope((), async {
@@ -1054,7 +1051,7 @@ mod tests {
             AzureEndpoint::Dynamic(key) => {
                 assert_eq!(key, "azure_endpoint");
             }
-            _ => panic!("Expected dynamic endpoint"),
+            AzureEndpoint::Static(_) => panic!("Expected dynamic endpoint"),
         }
     }
 
