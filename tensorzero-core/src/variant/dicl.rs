@@ -572,6 +572,9 @@ fn parse_raw_examples(
 ) -> Result<Vec<Example>, Error> {
     let mut examples = Vec::new();
     for raw_example in raw_examples {
+        if raw_example.output.is_empty() {
+            return Err(ErrorDetails::DiclMissingOutput.into());
+        }
         // Parse the `input` string into `StoredInput`
         let input: StoredInput = serde_json::from_str(&raw_example.input).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
