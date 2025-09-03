@@ -34,7 +34,7 @@ fn default_max_concurrency() -> usize {
     10
 }
 
-fn default_k() -> usize {
+fn default_k() -> u32 {
     10
 }
 
@@ -46,14 +46,14 @@ fn default_model() -> String {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct DiclOptimizationConfig {
-    pub embedding_model: String,
+    pub embedding_model: Arc<str>,
     pub variant_name: String,
     pub function_name: String,
     pub dimensions: Option<u32>,
     pub batch_size: usize,
     pub max_concurrency: usize,
-    pub k: usize,
-    pub model: String,
+    pub k: u32,
+    pub model: Arc<str>,
     #[serde(skip)]
     pub credentials: OpenAICredentials,
     #[cfg_attr(test, ts(type = "string | null"))]
@@ -74,7 +74,7 @@ pub struct UninitializedDiclOptimizationConfig {
     #[serde(default = "default_max_concurrency")]
     pub max_concurrency: usize,
     #[serde(default = "default_k")]
-    pub k: usize,
+    pub k: u32,
     #[serde(default = "default_model")]
     pub model: String,
     #[cfg_attr(test, ts(type = "string | null"))]
@@ -122,7 +122,7 @@ impl UninitializedDiclOptimizationConfig {
         dimensions: Option<u32>,
         batch_size: Option<usize>,
         max_concurrency: Option<usize>,
-        k: Option<usize>,
+        k: Option<u32>,
         model: Option<String>,
         credentials: Option<String>,
     ) -> PyResult<Self> {
@@ -174,14 +174,14 @@ impl UninitializedDiclOptimizationConfig {
 impl UninitializedDiclOptimizationConfig {
     pub fn load(self) -> Result<DiclOptimizationConfig, Error> {
         Ok(DiclOptimizationConfig {
-            embedding_model: self.embedding_model,
+            embedding_model: Arc::from(self.embedding_model),
             variant_name: self.variant_name,
             function_name: self.function_name,
             dimensions: self.dimensions,
             batch_size: self.batch_size,
             max_concurrency: self.max_concurrency,
             k: self.k,
-            model: self.model,
+            model: Arc::from(self.model),
             credentials: build_creds_caching_default(
                 self.credentials.clone(),
                 default_api_key_location(),
@@ -199,7 +199,7 @@ impl UninitializedDiclOptimizationConfig {
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct DiclOptimizationJobHandle {
     pub embedding_model: String,
-    pub k: usize,
+    pub k: u32,
     pub model: String,
 }
 
@@ -340,9 +340,9 @@ impl Optimizer for DiclOptimizationConfig {
 
         // Create a job handle indicating immediate success
         let job_handle = DiclOptimizationJobHandle {
-            embedding_model: self.embedding_model.clone(),
+            embedding_model: self.embedding_model.to_string(),
             k: self.k,
-            model: self.model.clone(),
+            model: self.model.to_string(),
         };
 
         tracing::info!(
@@ -381,9 +381,9 @@ impl JobHandle for DiclOptimizationJobHandle {
             output: OptimizerOutput::Variant(Box::new(UninitializedVariantConfig::Dicl(
                 UninitializedDiclConfig {
                     weight: None,
-                    embedding_model: self.embedding_model.clone(),
-                    k: self.k as u32,
-                    model: self.model.clone(),
+                    embedding_model: self.embedding_model.to_string(),
+                    k: self.k,
+                    model: self.model.to_string(),
                     system_instructions: None,
                     temperature: None,
                     top_p: None,
