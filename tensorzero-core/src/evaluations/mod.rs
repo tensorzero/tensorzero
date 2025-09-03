@@ -410,6 +410,7 @@ impl UninitializedEvaluatorConfig {
                         None,
                         None,
                         UninitializedSchemas::default(),
+                        &format!("tensorzero::evaluator::{evaluator_name}"),
                     )?,
                     output_schema,
                     implicit_tool_call_config,
@@ -535,7 +536,13 @@ fn convert_chat_completion_judge_to_variant(
         extra_headers: params.extra_headers,
     }
     .load(
-        &SchemaData::load(user_schema, None, None, UninitializedSchemas::default())?,
+        &SchemaData::load(
+            user_schema,
+            None,
+            None,
+            UninitializedSchemas::default(),
+            &format!("tensorzero::evaluator::{evaluator_name}"),
+        )?,
         &ErrorContext {
             function_name: "tensorzero::evaluator".to_string(),
             variant_name: evaluator_name.to_string(),
@@ -700,6 +707,7 @@ impl UninitializedLLMJudgeVariantInfo {
                                 None,
                                 None,
                                 UninitializedSchemas::default(),
+                                &format!("tensorzero::evaluator::{evaluator_name}"),
                             )?,
                             &ErrorContext {
                                 function_name: "tensorzero::evaluator".to_string(),
@@ -765,6 +773,7 @@ impl UninitializedLLMJudgeVariantInfo {
                                 None,
                                 None,
                                 UninitializedSchemas::default(),
+                                &format!("tensorzero::evaluator::{evaluator_name}"),
                             )?,
                             &ErrorContext {
                                 function_name: "tensorzero::evaluator".to_string(),

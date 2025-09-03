@@ -963,6 +963,7 @@ mod tests {
                     None,
                     Some(test_system_template_schema()),
                     UninitializedSchemas::default(),
+                    "test",
                 )
                 .unwrap(),
                 &ErrorContext {
@@ -1012,6 +1013,7 @@ mod tests {
                     None,
                     Some(test_system_template_schema()),
                     UninitializedSchemas::default(),
+                    "test",
                 )
                 .unwrap(),
                 &ErrorContext {

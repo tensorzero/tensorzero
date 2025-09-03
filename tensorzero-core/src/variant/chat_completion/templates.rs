@@ -190,7 +190,7 @@ impl ChatTemplates {
                 // (or a wrapper, but those are deprecated and undocumented)
                 return Err(Error::new(ErrorDetails::Config {
                     message: format!(
-                        "Cannot specify both `templates.{template_name}.path` and `{template_name}_template`"
+                        "{function_and_variant_name}: Cannot specify both `templates.{template_name}.path` and `{template_name}_template`"
                     ),
                 }));
             }

@@ -822,6 +822,7 @@ mod tests {
                 None,
                 Some(system_schema),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             tools: vec![],
@@ -883,6 +884,7 @@ mod tests {
                 None,
                 None,
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             tools: vec![],
@@ -946,6 +948,7 @@ mod tests {
                 Some(assistant_schema),
                 None,
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             tools: vec![],
@@ -1014,6 +1017,7 @@ mod tests {
                 Some(assistant_schema),
                 Some(system_schema),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             tools: vec![],
@@ -1092,6 +1096,7 @@ mod tests {
                 Some(assistant_schema),
                 Some(system_schema),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             tools: vec![],
@@ -1175,6 +1180,7 @@ mod tests {
                 Some(assistant_schema),
                 None,
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             tools: vec![],
@@ -1298,6 +1304,7 @@ mod tests {
                 None,
                 Some(system_schema),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
@@ -1365,6 +1372,7 @@ mod tests {
                 None,
                 None,
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
@@ -1433,6 +1441,7 @@ mod tests {
                 Some(assistant_schema),
                 None,
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
@@ -1505,6 +1514,7 @@ mod tests {
                 Some(assistant_schema),
                 Some(system_schema),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),

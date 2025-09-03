@@ -764,6 +764,7 @@ mod tests {
                 Some(test_assistant_template_schema()),
                 Some(test_system_template_schema()),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             &ErrorContext {
@@ -862,6 +863,7 @@ mod tests {
                 Some(test_assistant_template_schema()),
                 Some(test_system_template_schema()),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             &ErrorContext {
@@ -978,6 +980,7 @@ mod tests {
                 None,
                 Some(test_system_template_schema()),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             &ErrorContext {
@@ -1056,6 +1059,7 @@ mod tests {
                 None,
                 Some(test_system_template_schema()),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             &ErrorContext {
@@ -1072,6 +1076,7 @@ mod tests {
                 Some(schema_any.clone()),
                 Some(schema_any.clone()),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             tools: vec![],
@@ -1267,6 +1272,7 @@ mod tests {
                 None,
                 Some(test_system_template_schema()),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             &ErrorContext {
@@ -1342,6 +1348,7 @@ mod tests {
                 None,
                 Some(test_system_template_schema()),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             &ErrorContext {
@@ -1542,6 +1549,7 @@ mod tests {
                 Some(schema_any.clone()),
                 Some(schema_any.clone()),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             output_schema,
@@ -1640,6 +1648,7 @@ mod tests {
                 None,
                 Some(test_system_template_schema()),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             &ErrorContext {
@@ -1709,6 +1718,7 @@ mod tests {
                 Some(schema_any.clone()),
                 Some(schema_any.clone()),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             output_schema: hardcoded_output_schema,
@@ -1767,6 +1777,7 @@ mod tests {
                 None,
                 Some(test_system_template_schema()),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             &ErrorContext {
@@ -1836,6 +1847,7 @@ mod tests {
                 Some(schema_any.clone()),
                 Some(schema_any.clone()),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             output_schema: hardcoded_output_schema,
@@ -1888,6 +1900,7 @@ mod tests {
                 None,
                 Some(test_system_template_schema()),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             &ErrorContext {
@@ -1971,6 +1984,7 @@ mod tests {
                 Some(schema_any.clone()),
                 Some(schema_any.clone()),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             tools: vec![],
@@ -2046,6 +2060,7 @@ mod tests {
                     None,
                     Some(test_system_template_schema()),
                     UninitializedSchemas::default(),
+                    "test",
                 )
                 .unwrap(),
                 &ErrorContext {
@@ -2124,6 +2139,7 @@ mod tests {
                 None,
                 Some(test_system_template_schema()),
                 UninitializedSchemas::default(),
+                "test",
             )
             .unwrap(),
             &ErrorContext {
@@ -2235,7 +2251,8 @@ mod tests {
         // We will do Chat and Json separately
         let function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
-            schemas: SchemaData::load(None, None, None, UninitializedSchemas::default()).unwrap(),
+            schemas: SchemaData::load(None, None, None, UninitializedSchemas::default(), "test")
+                .unwrap(),
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
@@ -2339,7 +2356,8 @@ mod tests {
         });
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            schemas: SchemaData::load(None, None, None, UninitializedSchemas::default()).unwrap(),
+            schemas: SchemaData::load(None, None, None, UninitializedSchemas::default(), "test")
+                .unwrap(),
             output_schema: StaticJSONSchema::from_value(output_schema_value.clone()).unwrap(),
             implicit_tool_call_config: ToolCallConfig {
                 tools_available: vec![],

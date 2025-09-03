@@ -2165,6 +2165,78 @@ async fn test_gcp_no_endpoint_and_model() {
 }
 
 #[tokio::test]
+async fn test_config_duplicate_user_schema() {
+    let mut temp_file = NamedTempFile::new().unwrap();
+    let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .display()
+        .to_string();
+    // We write an absolute path into the config file, since we're writing the config file in a temp dir.
+    temp_file
+        .write_all(
+            format!(
+                r#"
+        [functions.bad_user_schema]
+        type = "chat"
+        user_schema = "{base_path}/fixtures/config/functions/json_success/user_schema.json"
+        schemas.user.path = "{base_path}/fixtures/config/functions/json_success/user_schema.json"
+
+        [functions.bad_user_schema.variants.good]
+        type = "chat_completion"
+        model = "dummy::good"
+        "#
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+
+    let config = UninitializedConfig::read_toml_config(
+        &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+    )
+    .unwrap();
+    let err = Config::load_from_toml(config.table, &config.span_map)
+        .await
+        .expect_err("Config should fail to load");
+
+    assert_eq!(
+        err.to_string(),
+        "functions.bad_user_schema: Cannot specify both `schemas.user.path` and `user_schema`"
+    );
+}
+
+#[tokio::test]
+async fn test_config_duplicate_user_template() {
+    let mut temp_file = NamedTempFile::new().unwrap();
+    let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .display()
+        .to_string();
+    // We write an absolute path into the config file, since we're writing the config file in a temp dir.
+    temp_file
+        .write_all(
+            format!(r#"
+        [functions.test]
+        type = "chat"
+
+        [functions.test.variants.bad_user_template]
+        type = "chat_completion"
+        model = "dummy::echo_request_messages"
+        user_template = "{base_path}/fixtures/config/functions/json_success/prompt/user_template.minijinja"
+        templates.user.path = "{base_path}/fixtures/config/functions/json_success/prompt/user_template.minijinja"
+        "#).as_bytes(),
+        )
+        .unwrap();
+
+    let config = UninitializedConfig::read_toml_config(
+        &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+    )
+    .unwrap();
+    let err = Config::load_from_toml(config.table, &config.span_map)
+        .await
+        .expect_err("Config should fail to load");
+
+    assert_eq!(err.to_string(), "functions.test.variants.bad_user_template: Cannot specify both `templates.user.path` and `user_template`");
+}
+
+#[tokio::test]
 async fn test_config_invalid_template_no_schema() {
     let mut temp_file = NamedTempFile::new().unwrap();
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

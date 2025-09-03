@@ -1208,6 +1208,7 @@ impl SchemaData {
         assistant_schema: Option<StaticJSONSchema>,
         system_schema: Option<StaticJSONSchema>,
         schemas: UninitializedSchemas,
+        function_name: &str,
     ) -> Result<Self, Error> {
         let mut map = HashMap::new();
         if let Some(user_schema) = user_schema {
@@ -1226,7 +1227,7 @@ impl SchemaData {
             {
                 return Err(Error::new(ErrorDetails::Config {
                     message: format!(
-                        "Cannot specify both `schemas.{name}.path` and `{name}_schema`"
+                        "functions.{function_name}: Cannot specify both `schemas.{name}.path` and `{name}_schema`"
                     ),
                 }));
             }
@@ -1253,6 +1254,7 @@ impl UninitializedFunctionConfig {
                         .map(StaticJSONSchema::from_path)
                         .transpose()?,
                     params.schemas,
+                    function_name,
                 )?;
                 let variants = params
                     .variants
@@ -1305,6 +1307,7 @@ impl UninitializedFunctionConfig {
                         .map(StaticJSONSchema::from_path)
                         .transpose()?,
                     params.schemas,
+                    function_name,
                 )?;
                 let output_schema = match params.output_schema {
                     Some(path) => StaticJSONSchema::from_path(path)?,

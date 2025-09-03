@@ -883,6 +883,7 @@ mod tests {
                     None,
                     Some(system_schema),
                     UninitializedSchemas::default(),
+                    "test",
                 )
                 .unwrap(),
                 &ErrorContext {
@@ -927,7 +928,8 @@ mod tests {
                 ..Default::default()
             }
             .load(
-                &SchemaData::load(None, None, None, UninitializedSchemas::default()).unwrap(),
+                &SchemaData::load(None, None, None, UninitializedSchemas::default(), "test")
+                    .unwrap(),
                 &ErrorContext {
                     function_name: "test".to_string(),
                     variant_name: "test".to_string(),
