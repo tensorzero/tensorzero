@@ -350,7 +350,7 @@ export default function CurationMetricSelector<
                             if (!isNaN(parsed)) {
                               thresholdField.onChange(val);
                             } else {
-                              thresholdField.onChange(val); // still store even if incomplete
+                              // Do not store completely invalid values
                               }
                             }}
                         />
