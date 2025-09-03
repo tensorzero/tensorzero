@@ -892,7 +892,7 @@ impl std::fmt::Display for ErrorDetails {
                 )
             }
             ErrorDetails::DiclMissingOutput => {
-                write!(f, "DICL example missing output. There was a bug in a notebook from 2025-08 that may have caused the output to not be written to clickhouse. You can remove the examples with missing output by running the query `DELETE FROM DynamicInContextLearningExample WHERE empty(output)`")
+                write!(f, "DICL example missing output. There was a bug in a notebook from 2025-08 that may have caused the output to not be written to ClickHouse. You can remove the examples with missing output by running the query `DELETE FROM DynamicInContextLearningExample WHERE empty(output)`.")
             }
             ErrorDetails::DuplicateTool { name } => {
                 write!(f, "Duplicate tool name: {name}. Tool names must be unique.")
