@@ -1,4 +1,9 @@
-#![expect(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
+#![expect(
+    clippy::expect_used,
+    clippy::missing_panics_doc,
+    clippy::print_stdout,
+    clippy::unwrap_used
+)]
 use crate::config::BatchWritesConfig;
 use crate::endpoints::datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint};
 use crate::endpoints::dynamic_evaluation_run::{
