@@ -130,15 +130,7 @@ impl UninitializedChatCompletionConfig {
         schemas: &SchemaData,
         error_context: &ErrorContext,
     ) -> Result<ChatCompletionConfig, Error> {
-        let templates = ChatTemplates::build(
-            &self,
-            schemas,
-            format!(
-                "functions.{}.variants.{}",
-                error_context.function_name, error_context.variant_name
-            )
-            .as_str(),
-        )?;
+        let templates = ChatTemplates::build(&self, schemas, error_context)?;
         Ok(ChatCompletionConfig {
             weight: self.weight,
             model: self.model,

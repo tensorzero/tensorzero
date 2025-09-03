@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use serde::Serialize;
 
 use crate::{
-    config::{path::ResolvedTomlPath, PathWithContents, SchemaData},
+    config::{path::ResolvedTomlPath, ErrorContext, PathWithContents, SchemaData},
     error::{Error, ErrorDetails},
     inference::types::Role,
     jsonschema_util::StaticJSONSchema,
@@ -100,9 +100,12 @@ impl ChatTemplates {
     pub fn build(
         chat_config: &UninitializedChatCompletionConfig,
         schemas: &SchemaData,
-        // A string like 'functions.<function_name>.variants.<variant_name>', used in error messages
-        function_and_variant_name: &str,
+        error_context: &ErrorContext,
     ) -> Result<Self, Error> {
+        let function_and_variant_name = format!(
+            "functions.{}.variants.{}",
+            error_context.function_name, error_context.variant_name
+        );
         let system = chat_config
             .system_template
             .as_ref()
@@ -146,7 +149,7 @@ impl ChatTemplates {
             system,
             schemas.get_implicit_system_schema(),
             system_wrapper,
-            function_and_variant_name,
+            &function_and_variant_name,
             "system",
         )?;
 
@@ -154,7 +157,7 @@ impl ChatTemplates {
             user,
             schemas.get_implicit_user_schema(),
             user_wrapper,
-            function_and_variant_name,
+            &function_and_variant_name,
             "user",
         )?;
 
@@ -162,7 +165,7 @@ impl ChatTemplates {
             assistant,
             schemas.get_implicit_assistant_schema(),
             assistant_wrapper,
-            function_and_variant_name,
+            &function_and_variant_name,
             "assistant",
         )?;
 
