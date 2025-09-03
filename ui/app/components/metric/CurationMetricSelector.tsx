@@ -341,7 +341,8 @@ export default function CurationMetricSelector<
                             const val = e.target.value;
 
                             // Allow empty or partial inputs like "-" or "."
-                            if (val === "" || /^-?\.?$/.test(val)) {
+                            // Allow empty or partial inputs like "-", ".", "0.", "-1", etc.
+                            if (val === "" || /^-?\d*\.?\d*$/.test(val)) {
                               thresholdField.onChange(val);
                               return;
                             }
