@@ -73,6 +73,12 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RetryConfig {
+    pub num_retries: u32,
+    pub max_delay_s: u32,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedEmbeddingModelConfig {
@@ -109,6 +115,7 @@ pub struct EmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
     pub providers: HashMap<Arc<str>, EmbeddingProviderInfo>,
     pub timeouts: TimeoutsConfig,
+    pub retries: RetryConfig, 
 }
 
 impl EmbeddingModelConfig {
@@ -129,8 +136,8 @@ impl EmbeddingModelConfig {
                 })?;
                 let provider_request = EmbeddingModelProviderRequest {
                     request,
-                    model_name,
                     provider_name,
+                    model_name,
                 };
                 // TODO: think about how to best handle errors here
                 if clients.cache_options.enabled.read() {
@@ -312,21 +319,6 @@ impl EmbeddingModelResponse {
             cached: true,
         }
     }
-
-    /// We return the actual usage (meaning the number of tokens the user would be billed for)
-    /// in the HTTP response.
-    /// However, we store the number of tokens that would have been used in the database.
-    /// So we need this function to compute the actual usage in order to send it in the HTTP response.
-    pub fn usage_considering_cached(&self) -> Usage {
-        if self.cached {
-            Usage {
-                input_tokens: 0,
-                output_tokens: 0,
-            }
-        } else {
-            self.usage
-        }
-    }
 }
 
 pub struct EmbeddingResponseWithMetadata {
@@ -497,6 +489,7 @@ impl EmbeddingProvider for EmbeddingProviderInfo {
         )
     }
 }
+
 
 #[derive(Debug, Deserialize)]
 pub struct UninitializedEmbeddingProviderConfig {
