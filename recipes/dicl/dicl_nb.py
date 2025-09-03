@@ -7,7 +7,7 @@
 # This recipe allows TensorZero users to set up a dynamic in-context learning variant for any function.
 # Since TensorZero automatically logs all inferences and feedback, it is straightforward to query a set of good examples and retrieve the most relevant ones to put them into context for future inferences.
 # Since TensorZero allows users to add demonstrations for any inference it is also easy to include them in the set of examples as well.
-# This recipe will show use the OpenAI embeddings API only, but we are working towards support for all embedding providers over time as well.
+# This recipe will show use the OpenAI embeddings API only, but we have support for other embeddings providers as well.
 #
 
 # %% [markdown]
@@ -34,8 +34,9 @@ MAX_EXAMPLES = 1000
 # with other variants for the function selected above.
 DICL_VARIANT_NAME = "gpt_4o_mini_dicl"
 
-# The model to use for the DICL variant.
+# The model to use for the DICL variant. Should match the name of the embedding model defined in your config
 DICL_EMBEDDING_MODEL = "text-embedding-3-small"
+DICL_EMBEDDING_PROVIDER = "openai"
 
 # The model to use for generation in the DICL variant.
 DICL_GENERATION_MODEL = "gpt-4o-mini-2024-07-18"
@@ -57,9 +58,28 @@ import pandas as pd
 import toml
 from clickhouse_connect import get_client
 from openai import AsyncOpenAI
-from tensorzero import TensorZeroGateway
+from tensorzero import TensorZeroGateway, patch_openai_client
 from tensorzero.util import uuid7
 from tqdm.asyncio import tqdm_asyncio
+
+# %% [markdown]
+# Add the following embedding model config to the tensorzero config file you specified with `CONFIG_PATH` and spin up your gateway:
+
+# %%
+embedding_model_config = {
+    "type": f"{DICL_EMBEDDING_PROVIDER}",
+    "model_name": DICL_EMBEDDING_MODEL,
+}
+full_embedding_model_config = {
+    "embedding_models": {
+        DICL_EMBEDDING_MODEL: {
+            "routing": [DICL_EMBEDDING_PROVIDER],
+            "providers": {DICL_EMBEDDING_PROVIDER: embedding_model_config},
+        }
+    }
+}
+
+print(toml.dumps(full_embedding_model_config))
 
 # %% [markdown]
 # Initialize the ClickHouse client.
@@ -79,6 +99,14 @@ clickhouse_client = get_client(dsn=os.environ["TENSORZERO_CLICKHOUSE_URL"])
 # %%
 t0 = TensorZeroGateway.build_embedded(
     clickhouse_url=os.environ["TENSORZERO_CLICKHOUSE_URL"], config_file=CONFIG_PATH
+)
+
+# %%
+openai_client = await patch_openai_client(
+    AsyncOpenAI(),
+    clickhouse_url=os.environ["TENSORZERO_CLICKHOUSE_URL"],
+    config_file=CONFIG_PATH,
+    async_setup=True,
 )
 
 # %%
@@ -102,9 +130,6 @@ inferences = t0.experimental_list_inferences(
     limit=MAX_EXAMPLES,
 )
 
-# %%
-openai_client = AsyncOpenAI()
-
 
 # %%
 async def get_embedding(
@@ -112,7 +137,9 @@ async def get_embedding(
 ) -> Optional[list[float]]:
     try:
         async with semaphore:
-            response = await openai_client.embeddings.create(input=text, model=model)
+            response = await openai_client.embeddings.create(
+                input=text, model=f"tensorzero::embedding_model_name::{model}"
+            )
             return response.data[0].embedding
     except Exception as e:
         print(f"Error getting embedding: {e}")
