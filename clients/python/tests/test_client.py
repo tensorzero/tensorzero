@@ -3056,8 +3056,7 @@ def test_text_arguments_deprecation_1170_warning(sync_client: TensorZeroGateway)
                     {
                         "role": "user",
                         # Intentionally ignore the type error to check the deprecation warning
-                        # type: ignore
-                        "content": [Text(type="text", text={"country": "Japan"})],
+                        "content": [Text(type="text", text={"country": "Japan"})],  # type: ignore
                     }
                 ],
             },
