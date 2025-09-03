@@ -65,20 +65,14 @@ impl AzureEndpoint {
         match self {
             AzureEndpoint::Static(url) => Ok(url.clone()),
             AzureEndpoint::Dynamic(key_name) => {
-                let endpoint_str =
-                    dynamic_endpoints
-                        .get(key_name)
-                        .ok_or_else(|| ErrorDetails::Config {
-                            message: format!(
-                                "Dynamic endpoint '{key_name}' not found in credentials"
-                            ),
-                        })?;
-                Url::parse(endpoint_str.expose_secret()).map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "Invalid endpoint URL '{}': {e}",
-                            endpoint_str.expose_secret()
-                        ),
+                let endpoint_str = dynamic_endpoints.get(key_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::DynamicEndpointNotFound {
+                        key_name: key_name.clone(),
+                    })
+                })?;
+                Url::parse(endpoint_str.expose_secret()).map_err(|_| {
+                    Error::new(ErrorDetails::InvalidDynamicEndpoint {
+                        url: endpoint_str.expose_secret().to_string(),
                     })
                 })
             }
