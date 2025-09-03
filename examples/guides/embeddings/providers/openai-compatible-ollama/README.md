@@ -1,14 +1,20 @@
-# Guide: How to use OpenAI embedding models with TensorZero
+# Guide: How to use OpenAI-compatible embedding models (e.g. Ollama) with TensorZero
 
 ## Running the Example
 
-1. Set the `OPENAI_API_KEY` environment variable:
+1. Launch the Ollama server:
 
 ```bash
-export OPENAI_API_KEY="sk-..." # Replace with your OpenAI API key
+ollama serve
 ```
 
-2. Run the example:
+2. Download an embedding model:
+
+```bash
+ollama pull nomic-embed-text
+```
+
+3. Run the example:
 
 <details open>
 <summary><b>Python (OpenAI SDK)</b></summary>
