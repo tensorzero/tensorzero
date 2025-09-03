@@ -54,7 +54,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_howdy_report() {
-    let (clickhouse, _guard) = get_clean_clickhouse(true);
+    let (clickhouse, _guard) = get_clean_clickhouse(true).await;
     let client = get_embedded_client(clickhouse.clone()).await;
     tokio::time::sleep(Duration::from_secs(1)).await;
     let deployment_id = get_deployment_id(&clickhouse).await.unwrap();
