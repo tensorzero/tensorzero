@@ -570,6 +570,7 @@ mod tests {
             StoredInputMessage, StoredInputMessageContent, Text,
         },
         providers::openai::OpenAIContentBlock,
+        stored_inference::StoredOutput,
     };
     use serde_json::json;
 
@@ -577,6 +578,9 @@ mod tests {
 
     #[test]
     fn test_convert_to_sft_row() {
+        let output = Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "The capital of France is Paris.".to_string(),
+        })]);
         let inference = RenderedSample {
             function_name: "test".to_string(),
             input: ModelInput {
@@ -597,9 +601,8 @@ mod tests {
                     }],
                 }],
             },
-            output: Some(vec![ContentBlockChatOutput::Text(Text {
-                text: "The capital of France is Paris.".to_string(),
-            })]),
+            output: output.clone(),
+            stored_output: output.map(StoredOutput::Chat),
             episode_id: Some(uuid::Uuid::now_v7()),
             inference_id: Some(uuid::Uuid::now_v7()),
             tool_params: None,
@@ -638,6 +641,8 @@ mod tests {
 
     #[test]
     fn test_convert_to_rft_row() {
+        use crate::stored_inference::StoredOutput;
+
         let inference = RenderedSample {
             function_name: "test".to_string(),
             input: ModelInput {
@@ -661,6 +666,11 @@ mod tests {
             output: Some(vec![ContentBlockChatOutput::Text(Text {
                 text: "The capital of France is Paris.".to_string(),
             })]),
+            stored_output: Some(StoredOutput::Chat(vec![ContentBlockChatOutput::Text(
+                Text {
+                    text: "The capital of France is Paris.".to_string(),
+                },
+            )])),
             episode_id: Some(uuid::Uuid::now_v7()),
             inference_id: Some(uuid::Uuid::now_v7()),
             tool_params: None,
@@ -697,6 +707,7 @@ mod tests {
 
     #[test]
     fn test_convert_to_rft_row_with_tool_calls() {
+        use crate::stored_inference::StoredOutput;
         use crate::tool::ToolCallOutput;
 
         let inference = RenderedSample {
@@ -731,6 +742,18 @@ mod tests {
                     arguments: Some(serde_json::json!({"location": "New York"})),
                 }),
             ]),
+            stored_output: Some(StoredOutput::Chat(vec![
+                ContentBlockChatOutput::Text(Text {
+                    text: "I'll check the weather for you.".to_string(),
+                }),
+                ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                    id: "call_123".to_string(),
+                    name: Some("get_weather".to_string()),
+                    raw_name: "get_weather".to_string(),
+                    raw_arguments: r#"{"location": "New York"}"#.to_string(),
+                    arguments: Some(serde_json::json!({"location": "New York"})),
+                }),
+            ])),
             episode_id: Some(uuid::Uuid::now_v7()),
             inference_id: Some(uuid::Uuid::now_v7()),
             tool_params: None,

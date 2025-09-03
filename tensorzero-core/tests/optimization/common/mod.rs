@@ -28,6 +28,7 @@ use tensorzero_core::{
     optimization::{
         JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
     },
+    stored_inference::StoredOutput,
     tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
     variant::JsonMode,
 };
@@ -63,6 +64,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .load()
         .await
         .unwrap();
+
     let client = reqwest::Client::new();
     let test_examples = get_examples(test_case, 10);
     let val_examples = Some(get_examples(test_case, 10));
@@ -110,7 +112,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         panic!("Expected completed status");
     };
 
-    // Handle both Model and Variant outputs
+    // Handle Model output only
     match output {
         OptimizerOutput::Model(model_config) => {
             let model_config = model_config
@@ -164,11 +166,8 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 .unwrap();
             println!("Response: {response:?}");
         }
-        OptimizerOutput::Variant(variant_config) => {
-            // Test the variant configuration
-            println!("Variant configuration created successfully: {variant_config:?}");
-            // For DICL variants, we don't need to test inference like we do for models
-            // since DICL variants work by retrieving examples at inference time
+        OptimizerOutput::Variant(_) => {
+            panic!("Expected model output, got variant output");
         }
     };
 }
@@ -217,6 +216,7 @@ pub async fn run_workflow_test_case_with_tensorzero_client(
 fn get_examples(test_case: &impl OptimizationTestCase, num_examples: usize) -> Vec<RenderedSample> {
     assert!(num_examples >= 10);
     let mut generators: Vec<fn() -> RenderedSample> = vec![generate_text_example];
+
     if test_case.supports_tool_calls() {
         generators.push(generate_tool_call_example);
     }
@@ -236,8 +236,11 @@ fn generate_text_example() -> RenderedSample {
     let id = Uuid::now_v7().to_string();
     let system_prompt =
         format!("You are a helpful assistant named Dr. M.M. Patel with id number {id}.");
+    let output = vec![ContentBlockChatOutput::Text(Text {
+        text: "The capital of France is Paris.".to_string(),
+    })];
     RenderedSample {
-        function_name: "test".to_string(),
+        function_name: "basic_test".to_string(),
         input: ModelInput {
             system: Some(system_prompt.clone()),
             messages: vec![RequestMessage {
@@ -256,9 +259,8 @@ fn generate_text_example() -> RenderedSample {
                 }],
             }],
         },
-        output: Some(vec![ContentBlockChatOutput::Text(Text {
-            text: "The capital of France is Paris.".to_string(),
-        })]),
+        output: Some(output.clone()),
+        stored_output: Some(StoredOutput::Chat(output)),
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
         tool_params: None,
@@ -275,8 +277,20 @@ fn generate_tool_call_example() -> RenderedSample {
     let id = Uuid::now_v7().to_string();
     let system_prompt =
         format!("You are a helpful assistant named Dr. M.M. Patel with id number {id}.");
+    let tool_call_output = vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
+        name: Some("get_weather".to_string()),
+        arguments: Some(serde_json::json!({
+            "location": "London",
+        })),
+        raw_name: "get_weather".to_string(),
+        raw_arguments: serde_json::json!({
+            "location": "London",
+        })
+        .to_string(),
+        id: "call_2".to_string(),
+    })];
     RenderedSample {
-        function_name: "test".to_string(),
+        function_name: "basic_test".to_string(),
         input: ModelInput {
             system: Some(system_prompt.clone()),
             messages: vec![
@@ -377,18 +391,8 @@ fn generate_tool_call_example() -> RenderedSample {
                 },
             ],
         },
-        output: Some(vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
-            name: Some("get_weather".to_string()),
-            arguments: Some(serde_json::json!({
-                "location": "London",
-            })),
-            raw_name: "get_weather".to_string(),
-            raw_arguments: serde_json::json!({
-                "location": "London",
-            })
-            .to_string(),
-            id: "call_2".to_string(),
-        })]),
+        output: Some(tool_call_output.clone()),
+        stored_output: Some(StoredOutput::Chat(tool_call_output)),
         tool_params: Some(ToolCallConfigDatabaseInsert {
             tools_available: vec![Tool {
                 name: "get_weather".to_string(),
@@ -421,8 +425,11 @@ fn generate_image_example() -> RenderedSample {
     let id = Uuid::now_v7().to_string();
     let system_prompt =
         format!("You are a helpful assistant named Dr. M.M. Patel with id number {id}.");
+    let output = vec![ContentBlockChatOutput::Text(Text {
+        text: "Orange!".to_string(),
+    })];
     RenderedSample {
-        function_name: "test".to_string(),
+        function_name: "basic_test".to_string(),
         input: ModelInput {
             system: Some(system_prompt.clone()),
             messages: vec![RequestMessage {
@@ -470,9 +477,8 @@ fn generate_image_example() -> RenderedSample {
                 ],
             }],
         },
-        output: Some(vec![ContentBlockChatOutput::Text(Text {
-            text: "Orange!".to_string(),
-        })]),
+        output: Some(output.clone()),
+        stored_output: Some(StoredOutput::Chat(output)),
         tool_params: None,
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),

@@ -169,6 +169,87 @@ def mixed_rendered_samples(
     )
 
 
+@pytest.fixture
+def chat_function_rendered_samples(
+    embedded_sync_client: TensorZeroGateway,
+) -> List[RenderedSample]:
+    """Fixture for optimization tests - chat function samples without tools."""
+    chat_inference = StoredInference(
+        type="chat",
+        function_name="basic_test",
+        variant_name="default",
+        input={
+            "system": {"assistant_name": "foo"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "value": "What is the capital of France?"}
+                    ],
+                },
+            ],
+        },
+        output=[Text(text="The capital of France is Paris.")],
+        episode_id=uuid7(),
+        inference_id=uuid7(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        tool_params=ToolParams(
+            tools_available=[],  # No tools for DICL compatibility
+            tool_choice="none",
+            parallel_tool_calls=False,
+        ),
+        output_schema=None,
+        dispreferred_outputs=[],
+        tags={"test_key": "test_value"},
+    )
+    # Create 20 samples from the same function
+    sample_list = [chat_inference] * 20
+    return embedded_sync_client.experimental_render_samples(
+        stored_samples=sample_list,
+        variants={"basic_test": "test"},
+    )
+
+
+@pytest.fixture
+def json_function_rendered_samples(
+    embedded_sync_client: TensorZeroGateway,
+) -> List[RenderedSample]:
+    """Fixture for optimization tests - JSON function samples."""
+    json_inference = StoredInference(
+        type="json",
+        function_name="json_success",
+        variant_name="dummy",
+        input={
+            "system": {"assistant_name": "Dr. Mehta"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "value": {"country": "Japan"}}],
+                },
+            ],
+        },
+        output=JsonInferenceOutput(
+            parsed={"answer": "Tokyo"}, raw='{"answer": "Tokyo"}'
+        ),
+        episode_id=uuid7(),
+        inference_id=uuid7(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        output_schema={
+            "type": "object",
+            "properties": {"answer": {"type": "string"}},
+        },
+        tool_params=None,  # JSON functions don't have tool_params
+        dispreferred_outputs=[],
+        tags={"test_key": "test_value"},
+    )
+    # Create 20 samples from the same function
+    sample_list = [json_inference] * 20
+    return embedded_sync_client.experimental_render_samples(
+        stored_samples=sample_list,
+        variants={"json_success": "test"},
+    )
+
+
 class OpenAIClientType(Enum):
     HttpGateway = 0
     PatchedClient = 1
