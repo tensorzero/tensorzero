@@ -1008,6 +1008,7 @@ async def test_async_feedback(async_client: AsyncTensorZeroGateway):
         metric_name="user_rating", value=5, episode_id=episode_id
     )
     assert isinstance(result, FeedbackResponse)
+    assert isinstance(result.feedback_id, UUID)
 
     result = await async_client.feedback(
         metric_name="task_success", value=True, inference_id=inference_id
@@ -2076,6 +2077,7 @@ def test_sync_feedback(sync_client: TensorZeroGateway):
         metric_name="task_success", value=True, inference_id=inference_id
     )
     assert isinstance(result, FeedbackResponse)
+    assert isinstance(result.feedback_id, UUID)
 
     result = sync_client.feedback(
         metric_name="demonstration",
@@ -3054,7 +3056,8 @@ def test_text_arguments_deprecation_1170_warning(sync_client: TensorZeroGateway)
                     {
                         "role": "user",
                         # Intentionally ignore the type error to check the deprecation warning
-                        "content": [Text(type="text", text={"country": "Japan"})],  # type: ignore
+                        # type: ignore
+                        "content": [Text(type="text", text={"country": "Japan"})],
                     }
                 ],
             },
