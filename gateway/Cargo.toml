@@ -15,7 +15,7 @@ tracing-subscriber = { version = "0.3.20", features = [
     "json",
 ] }
 tokio = { workspace = true }
-mimalloc = "0.1.47"
+mimalloc = "0.1.48"
 clap = { workspace = true }
 serde = { workspace = true }
 tracing-opentelemetry-instrumentation-sdk = { workspace = true }
