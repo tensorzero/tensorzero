@@ -885,11 +885,13 @@ mod tests {
 
         // Test without templates, string message
         let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let input_message = Value::String("You are a helpful assistant.".to_string());
         let max_index = 2;
@@ -906,11 +908,13 @@ mod tests {
 
         // Test without templates, object message
         let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let input_message = json!({"message": "You are a helpful assistant."});
         let max_index = 3;
@@ -925,11 +929,13 @@ mod tests {
 
         // Test without templates, no message
         let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let max_index = 5;
         let result = fuser_config.prepare_system_message(&templates, None, max_index);
@@ -1219,10 +1225,12 @@ mod tests {
     async fn test_fuse_candidates() {
         // Set up fuser with a provider that returns a valid answer_choice
         let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "json".into(),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let mixture_of_n_variant = MixtureOfNConfig {
             weight: Some(1.0),
@@ -1397,10 +1405,12 @@ mod tests {
         }
         // Set up fuser with a provider that fails
         let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "error".into(),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let mixture_of_n_variant = MixtureOfNConfig {
             weight: Some(1.0),
@@ -1470,10 +1480,12 @@ mod tests {
 
         // Set up evaluator with a provider that returns invalid JSON
         let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "regular".into(),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let mixture_of_n_variant = MixtureOfNConfig {
             weight: Some(1.0),

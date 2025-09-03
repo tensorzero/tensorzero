@@ -47,6 +47,7 @@ pub struct TemplateWithSchema {
 #[derive(Debug, Default, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[expect(clippy::manual_non_exhaustive)]
 pub struct ChatCompletionConfig {
     pub weight: Option<f64>,
     pub model: Arc<str>,
@@ -64,6 +65,8 @@ pub struct ChatCompletionConfig {
     pub extra_body: Option<ExtraBodyConfig>,
     #[cfg_attr(test, ts(skip))]
     pub extra_headers: Option<ExtraHeadersConfig>,
+    #[serde(skip)]
+    _private: (),
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
@@ -151,6 +154,7 @@ impl UninitializedChatCompletionConfig {
             retries: self.retries,
             extra_body: self.extra_body,
             extra_headers: self.extra_headers,
+            _private: (),
         })
     }
 }
@@ -692,6 +696,7 @@ mod tests {
             retries: RetryConfig::default(),
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            _private: (),
         };
 
         // Test case 1: Regular user message

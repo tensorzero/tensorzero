@@ -22,6 +22,7 @@ use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::config::ErrorContext;
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ErrorDetails};
@@ -33,6 +34,7 @@ use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
+use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
 #[derive(Debug, Serialize)]
@@ -1589,11 +1591,15 @@ mod tests {
                     (
                         name.to_string(),
                         Arc::new(VariantInfo {
-                            inner: VariantConfig::ChatCompletion(ChatCompletionConfig {
-                                weight: Some(weight),
-                                model: "model-name".into(),
-                                ..Default::default()
-                            }),
+                            inner: VariantConfig::ChatCompletion(
+                                UninitializedChatCompletionConfig {
+                                    weight: Some(weight),
+                                    model: "model-name".into(),
+                                    ..Default::default()
+                                }
+                                .load(&SchemaData::default(), &ErrorContext::new_test())
+                                .unwrap(),
+                            ),
                             timeouts: Default::default(),
                         }),
                     )

@@ -807,11 +807,13 @@ mod tests {
 
         // Test without templates, string message
         let evaluator_config = BestOfNEvaluatorConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let input_message = Value::String("You are a helpful assistant.".to_string());
         let max_index = 2;
@@ -828,11 +830,13 @@ mod tests {
 
         // Test without templates, object message
         let evaluator_config = BestOfNEvaluatorConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let input_message = json!({"message": "You are a helpful assistant."});
         let max_index = 3;
@@ -847,11 +851,13 @@ mod tests {
 
         // Test without templates, no message
         let evaluator_config = BestOfNEvaluatorConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let max_index = 5;
         let result = evaluator_config.prepare_system_message(&templates, None, max_index);
@@ -1146,10 +1152,12 @@ mod tests {
     async fn test_select_best_candidate() {
         // Set up evaluator with a provider that returns a valid answer_choice
         let evaluator_config = BestOfNEvaluatorConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "best_of_n_1".into(),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let best_of_n_variant = BestOfNSamplingConfig {
             weight: Some(1.0),
@@ -1318,10 +1326,12 @@ mod tests {
         }
         // Set up evaluator with a provider that fails
         let evaluator_config = BestOfNEvaluatorConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "error".into(),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let best_of_n_variant = BestOfNSamplingConfig {
             weight: Some(1.0),
@@ -1385,10 +1395,12 @@ mod tests {
 
         // Set up evaluator with a provider that returns invalid JSON
         let evaluator_config = BestOfNEvaluatorConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "regular".into(),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let best_of_n_variant = BestOfNSamplingConfig {
             weight: Some(1.0),
@@ -1474,11 +1486,13 @@ mod tests {
             timeout_s: 10.0,
             candidates: vec![],
             evaluator: BestOfNEvaluatorConfig {
-                inner: ChatCompletionConfig {
+                inner: UninitializedChatCompletionConfig {
                     model: "best_of_n_big".into(),
                     weight: Some(1.0),
                     ..Default::default()
-                },
+                }
+                .load(&SchemaData::default(), &ErrorContext::new_test())
+                .unwrap(),
             },
         };
 

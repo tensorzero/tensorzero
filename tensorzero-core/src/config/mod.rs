@@ -1416,6 +1416,16 @@ pub struct ErrorContext {
     pub variant_name: String,
 }
 
+impl ErrorContext {
+    #[cfg(test)]
+    pub fn new_test() -> Self {
+        Self {
+            function_name: "test".to_string(),
+            variant_name: "test".to_string(),
+        }
+    }
+}
+
 impl UninitializedVariantInfo {
     pub fn load(
         self,
