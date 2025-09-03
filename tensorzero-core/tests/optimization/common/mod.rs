@@ -52,6 +52,26 @@ pub trait OptimizationTestCase {
 
 #[allow(clippy::allow_attributes, dead_code)]
 pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
+    let use_mock = use_mock_inference_provider();
+    let optimizer_info_uninitialized = test_case.get_optimizer_info(use_mock);
+
+    // For GCP Vertex Gemini SFT tests, check if credentials are available when using mock
+    if use_mock {
+        if let UninitializedOptimizerInfo {
+            inner:
+                tensorzero_core::optimization::UninitializedOptimizerConfig::GCPVertexGeminiSFT(_),
+        } = &optimizer_info_uninitialized
+        {
+            let has_credentials = std::env::var("GCP_VERTEX_CREDENTIALS_PATH").is_ok()
+                || std::env::var("GOOGLE_APPLICATION_CREDENTIALS").is_ok();
+
+            if !has_credentials {
+                println!("Skipping GCP Vertex Gemini test: No credentials found");
+                return;
+            }
+        }
+    }
+
     // Initialize tracing subscriber to capture progress logs
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -178,6 +198,22 @@ pub async fn run_workflow_test_case_with_tensorzero_client(
     test_case: &impl OptimizationTestCase,
     client: &tensorzero::Client,
 ) {
+    let optimizer_config = test_case.get_optimizer_info(true);
+
+    // For GCP Vertex Gemini SFT tests, check if credentials are available when using mock
+    if let UninitializedOptimizerInfo {
+        inner: tensorzero_core::optimization::UninitializedOptimizerConfig::GCPVertexGeminiSFT(_),
+    } = &optimizer_config
+    {
+        let has_credentials = std::env::var("GCP_VERTEX_CREDENTIALS_PATH").is_ok()
+            || std::env::var("GOOGLE_APPLICATION_CREDENTIALS").is_ok();
+
+        if !has_credentials {
+            println!("Skipping GCP Vertex Gemini workflow test: No credentials found");
+            return;
+        }
+    }
+
     let params = LaunchOptimizationWorkflowParams {
         function_name: "write_haiku".to_string(),
         template_variant_name: "gpt_4o_mini".to_string(),
@@ -190,7 +226,7 @@ pub async fn run_workflow_test_case_with_tensorzero_client(
         val_fraction: None,
         format: ClickhouseFormat::JsonEachRow,
         // We always mock the client tests since this is tested above
-        optimizer_config: test_case.get_optimizer_info(true),
+        optimizer_config,
     };
     let job_handle = client
         .experimental_launch_optimization_workflow(params)
