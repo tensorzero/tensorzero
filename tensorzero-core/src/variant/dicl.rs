@@ -879,6 +879,43 @@ mod tests {
     }
 
     #[test]
+    fn test_dicl_missing_output_error() {
+        // Create a raw example with missing output
+        let raw_examples = vec![RawExample {
+            input: serde_json::to_string(&StoredInput {
+                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                messages: vec![StoredInputMessage {
+                    role: Role::User,
+                    content: vec![StoredInputMessageContent::Text {
+                        value: "What is the boiling point of water?".into(),
+                    }],
+                }],
+            })
+            .unwrap(),
+            output: String::new(),
+        }];
+
+        let function = FunctionConfig::Chat(FunctionConfigChat {
+            ..Default::default()
+        });
+
+        // Parse the raw examples and expect DiclMissingOutput error
+        let result = parse_raw_examples(raw_examples, &function);
+
+        assert!(
+            result.is_err(),
+            "Expected DiclMissingOutput error but got success"
+        );
+
+        let error = result.unwrap_err();
+        let error_string = error.to_string();
+        assert!(
+            error_string.contains("DICL example missing output"),
+            "Expected DiclMissingOutput error, got: {error_string}"
+        );
+    }
+
+    #[test]
     fn test_parse_raw_examples() {
         // Define sample raw examples with serialized Input and Output
         let raw_examples = vec![
