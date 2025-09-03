@@ -20,16 +20,14 @@ export const SFTFormValuesSchema = z.object({
     .number()
     .min(10, "You need at least 10 curated inferences to fine-tune a model")
     .optional(),
-    threshold: z.union([
-      z.string().refine(
-      (val) =>
-        val === "" || /^-?(?:\d+(?:\.\d*)?|\.\d+)?$/.test(val),
-      {
+  threshold: z.union([
+    z
+      .string()
+      .refine((val) => val === "" || /^-?(?:\d+(?:\.\d*)?|\.\d+)?$/.test(val), {
         message: "Must be a valid number",
-      }
-    ),
-      z.number(),
-    ]),
+      }),
+    z.number(),
+  ]),
 
   jobId: z.string().nonempty("Job ID is required"),
 });

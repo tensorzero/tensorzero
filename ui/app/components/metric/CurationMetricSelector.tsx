@@ -346,14 +346,14 @@ export default function CurationMetricSelector<
                               thresholdField.onChange(val);
                               return;
                             }
-                            
+
                             const parsed = parseFloat(val);
                             if (!isNaN(parsed)) {
                               thresholdField.onChange(val);
                             } else {
                               // Do not store completely invalid values
-                              }
-                            }}
+                            }
+                          }}
                         />
                       </FormControl>
                       <FormMessage />

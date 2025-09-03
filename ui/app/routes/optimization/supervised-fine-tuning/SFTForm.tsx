@@ -57,7 +57,7 @@ export function SFTForm({
   const [functionName, metricName, threshold] = watchedFields;
   const functionConfig = useFunctionConfig(functionName);
   const parsedThreshold =
-  typeof threshold === "string" ? parseFloat(threshold) : threshold;
+    typeof threshold === "string" ? parseFloat(threshold) : threshold;
 
   const counts = useCountFetcher({
     functionName: functionName ?? undefined,
