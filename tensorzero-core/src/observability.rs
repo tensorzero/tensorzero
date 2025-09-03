@@ -1,3 +1,18 @@
+//! TensorZero observability code.
+//!
+//! This module contains code for three inter-related observability systems:
+//! 1. `tracing` span configuration and logging
+//! 2. OpenTelemetry span exporting, via `tracing-opentelemetry`
+//! 3. Prometheus metric exporting.
+//!
+//! The main entrypoint for this module are:
+//!
+//! * `setup_observability` - registers a global Tracing subscriber, with an (initially disabled) OpenTelemetry layer attached
+//! * `ObservabilityHandle` - produced by `setup_observability`, and used to handle delayed tracing configuration, and OTLP shutdown.
+//!    We need to set up `tracing` before we parse our config file (so that we can log warnings and errors during config parsing),
+//!    but the config file itself controls OTLP exporting and debug logging. The `ObservabilityHandle` type provides callbacks
+//!    which we conditionally invoke after we've parsed our config file, and before starting the gateway.
+//! * `setup_metrics` - builds Prometheus metrics exporter
 use std::hash::Hasher;
 use std::str::FromStr;
 
@@ -69,13 +84,28 @@ struct CustomTracer {
     provider: SdkTracerProvider,
 }
 
+/// A special wrapper to dispatch to different `Tracer` implementations based on our `Context` and `Span`
+/// being exported.
+/// By default, we forward to `default_tracer`/`default_provider`. When we have a `CustomTracerKey` in our `Context`
+/// (due to `tensorzero-otlp-traces-extra-header-` being set in the incoming request),
+/// we forward to a (cached) dynamically-created `CustomTracer`, which has extra headers set in the OTLP exporter.
 pub struct TracerWrapper {
     default_tracer: SdkTracer,
     default_provider: SdkTracerProvider,
+    // We need to build a new `CustomTracer` for each unique list of extra headers,
+    // since export headers can only be configured at the `Tracer` level.
+    // We use a `moka` Cache to handle automatic eviction (see `internal_build_otel_layer` for
+    // where we register an eviction_listener).
     custom_tracers: Cache<CustomTracerKey, CustomTracer>,
+    // Shutdown tasks for all of the `CustomTracer`s that have been evicted from our cache.
+    // We use a `TaskTracer` to avoid accumulating memory for each finished `CustomTracer` -
+    // memory is freed immediately when a shutdown tasks exists. We wait on all remaining tasks
+    // in `TracerWrapper::shutdown`
     shutdown_tasks: TaskTracker,
 }
 
+/// Builds a new `SdkTracerProvider`, which will attach the extra headers from `metadata`
+/// to outgoing OTLP export requests.
 fn build_tracer<T: SpanExporter + 'static>(
     metadata: MetadataMap,
     override_exporter: Option<T>,
@@ -113,6 +143,10 @@ fn build_tracer<T: SpanExporter + 'static>(
 impl Tracer for TracerWrapper {
     type Span = <SdkTracer as Tracer>::Span;
 
+    // This is the only method where we dispatch to a different `Tracer` - all other methods
+    // just forward to `default_tracer`/`default_provider`.
+    // This is fine, since `build_with_context` is the only method used by `tracing-opentelemetry`
+    // when building an OpenTelemetry span from a `tracing::Span`.
     fn build_with_context(
         &self,
         builder: opentelemetry::trace::SpanBuilder,
@@ -214,13 +248,16 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
         default_provider: provider,
         custom_tracers: Cache::builder()
             .eviction_listener(move |_key, val: CustomTracer, _reason| {
+                // When we evict a `CustomTracer` from the cache, shut it down, and add the shutdown task
+                // to `shutdown_tasks` so that we can wait for all of the custom tracers to shut down
+                // during gateway shutdown.
                 shutdown_tasks_clone.spawn(shutdown_otel(val.provider));
             })
             .build(),
         shutdown_tasks,
     };
 
-    // Cloning of these types internally peresrves a reference - we don't need our own `Arc` here
+    // Cloning of these types internally preserves a reference - we don't need our own `Arc` here
     let cloned_wrapper = TracerWrapper {
         default_tracer: wrapper.default_tracer.clone(),
         default_provider: wrapper.default_provider.clone(),
@@ -235,6 +272,7 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
     })
 }
 
+/// Shuts down the provided `SdkTracerProvider`, and asynchronously waits for the shutdown to complete.
 async fn shutdown_otel(provider: SdkTracerProvider) -> Result<(), Error> {
     tokio::task::spawn_blocking(move || {
         let id = Uuid::now_v7();
@@ -373,9 +411,12 @@ pub trait RouterExt<S> {
 ///    If a `CustomTracerKey` is not present, we use the default OTLP tracer
 ///    (which exports without any extra headers set).
 ///
-/// 5. The custom `SdkTracer` is preseved in a `moka::Cache` for subsequent requests.
+/// 5. The custom `SdkTracer` is preserved in a `moka::Cache` for subsequent requests.
 const TENSORZERO_OTLP_HEADERS_PREFIX: &str = "tensorzero-otlp-traces-extra-header-";
 
+// Removes all of the headers prefixed with `TENSORZERO_OTLP_HEADERS_PREFIX`.
+// If any are present, constructs a `CustomTracerKey` with all of the  matching header/value pairs
+// (with `TENSORZERO_OTLP_HEADERS_PREFIX` removed from the header name).
 fn extract_tensorzero_headers(headers: &HeaderMap) -> Result<Option<CustomTracerKey>, Error> {
     let mut metadata = MetadataMap::new();
     for (name, value) in headers {
@@ -406,6 +447,8 @@ fn extract_tensorzero_headers(headers: &HeaderMap) -> Result<Option<CustomTracer
     Ok(None)
 }
 
+// This needs to be a separate middleware function (and not part of our `make_span` function in `apply_otel_http_trace_layer`),
+// since we need to be able to reject the request if the headers fail to parse.
 async fn tensorzero_otlp_headers_middleware(
     mut req: axum::extract::Request,
     next: Next,
@@ -445,6 +488,9 @@ impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
             span.set_parent(
                 tracing_opentelemetry_instrumentation_sdk::http::extract_context(req.headers()),
             );
+            // We need our custom context to be active for both the span creation and setting the span parent.
+            // This ensures that `tracing-opentelemetry` will record our custom Context (with the `CustomTracerKey`)
+            // for the newly created span, and all of its descendants.
             drop(in_context);
 
             let route = req
@@ -543,7 +589,7 @@ const DEFAULT_GATEWAY_NON_DEBUG_DIRECTIVES: &str = "warn,gateway=info,tensorzero
 const DEFAULT_GATEWAY_DEBUG_DIRECTIVES: &str =
     "warn,gateway=debug,tensorzero_core=debug,tower_http::trace=debug";
 
-/// Set up logging (including the necessary layers for OpenTelemtry exporting)
+/// Set up logging (including the necessary layers for OpenTelemetry exporting)
 ///
 /// This does *not* actually enable OTEL exporting - you must use the returned
 /// `DelayedOtelEnableHandle` to turn on exporting. This two-step approach is
