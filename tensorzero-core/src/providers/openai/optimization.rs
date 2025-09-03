@@ -649,11 +649,11 @@ mod tests {
                     })],
                 }],
             },
-            stored_input: ResolvedInput {
+            stored_input: StoredInput {
                 system: Some(json!("You are a helpful assistant named Dr. M.M. Patel.")),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("What is the capital of France?"),
                     }],
                 }],
@@ -710,11 +710,11 @@ mod tests {
                     })],
                 }],
             },
-            stored_input: ResolvedInput {
+            stored_input: StoredInput {
                 system: Some(json!("You are a helpful assistant.")),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("What's the weather like?"),
                     }],
                 }],
