@@ -62,7 +62,7 @@ export function SFTForm({
   const counts = useCountFetcher({
     functionName: functionName ?? undefined,
     metricName: metricName ?? undefined,
-    threshold:!isNaN(parsedThreshold) ? parsedThreshold : undefined,
+    threshold: !isNaN(parsedThreshold) ? parsedThreshold : undefined,
   });
   const isCuratedInferenceCountLow =
     counts.curatedInferenceCount !== null && counts.curatedInferenceCount < 10;
