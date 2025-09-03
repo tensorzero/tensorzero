@@ -23,12 +23,11 @@ use crate::inference::types::Thought;
 ///
 /// WARNING: Setting this to true will expose potentially sensitive request/response
 /// data in logs and error responses. Use with caution.
-static DEBUG: OnceCell<bool> =
-    if cfg!(feature = "e2e_tests") || cfg!(feature = "optimization_tests") {
-        OnceCell::const_new_with(true)
-    } else {
-        OnceCell::const_new()
-    };
+static DEBUG: OnceCell<bool> = if cfg!(feature = "e2e_tests") {
+    OnceCell::const_new_with(true)
+} else {
+    OnceCell::const_new()
+};
 
 pub fn set_debug(debug: bool) -> Result<(), Error> {
     // We already initialized `DEBUG`, so do nothing
@@ -204,6 +203,10 @@ pub enum ErrorDetails {
         message: String,
     },
     Cache {
+        message: String,
+    },
+    Glob {
+        glob: String,
         message: String,
     },
     ChannelWrite {
@@ -561,6 +564,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidBatchParams { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidCandidate { .. } => tracing::Level::ERROR,
+            ErrorDetails::Glob { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidClientMode { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDatasetName { .. } => tracing::Level::WARN,
@@ -630,6 +634,7 @@ impl ErrorDetails {
         match self {
             ErrorDetails::AllVariantsFailed { .. } => StatusCode::BAD_GATEWAY,
             ErrorDetails::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::Glob { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ExtraBodyReplacement { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::AppState { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -835,6 +840,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Error replacing extra body: `{message}` with pointer: `{pointer}`"
                 )
+            }
+            ErrorDetails::Glob { glob, message } => {
+                write!(f, "Error using glob: `{glob}`: {message}")
             }
             ErrorDetails::ApiKeyMissing { provider_name } => {
                 write!(f, "API key missing for provider: {provider_name}")
@@ -1249,5 +1257,13 @@ impl IntoResponse for Error {
                 serde_json::to_value(self.get_details()).unwrap_or_else(|e| json!(e.to_string()));
         }
         (self.status_code(), Json(body)).into_response()
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(err: serde_json::Error) -> Self {
+        Self::new(ErrorDetails::Serialization {
+            message: err.to_string(),
+        })
     }
 }

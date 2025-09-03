@@ -10,7 +10,7 @@ license.workspace = true
 # Forward this feature to the Rust client, so that the embedded gateway
 # has the `e2e_tests` feature enabled when we run our e2e tests
 e2e_tests = ["tensorzero/e2e_tests"]
-optimization_tests = []
+optimization_tests = ["e2e_tests"]
 pyo3 = ["dep:pyo3"]
 
 [[test]]
@@ -36,9 +36,9 @@ workspace = true
 
 [dependencies]
 async-stream = { workspace = true }
-async-trait = "0.1.86"
+async-trait = "0.1.89"
 aws-config = { version = "1.8", features = ["behavior-version-latest"] }
-aws-sdk-bedrockruntime = { version = "1.100.0", default-features = false, features = [
+aws-sdk-bedrockruntime = { version = "1.103.0", default-features = false, features = [
     "behavior-version-latest",
     "rt-tokio",
     "default-https-client",
@@ -58,14 +58,14 @@ futures = { workspace = true }
 futures-core = "0.3.30"
 hex = "0.4.3"
 itertools = "0.14.0"
-jsonschema = "0.32.1"
+jsonschema = "0.33.0"
 jsonwebtoken = "9.3.1"
 lazy_static = { workspace = true }
 metrics = "0.24.2"
 metrics-exporter-prometheus = { version = "0.17.2", features = [
     "http-listener",
 ], default-features = false }
-minijinja = { version = "2.11.0", features = [
+minijinja = { version = "2.12.0", features = [
     "loader",
     "debug",
     "json",
@@ -89,7 +89,7 @@ tokio = { workspace = true }
 tokio-stream = { workspace = true }
 toml = { workspace = true }
 tracing.workspace = true
-tracing-subscriber = { version = "0.3.18", features = [
+tracing-subscriber = { version = "0.3.20", features = [
     "env-filter",
     "fmt",
     "json",
@@ -98,12 +98,12 @@ url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
 tensorzero-derive = { path = "../internal/tensorzero-derive" }
 clap = { workspace = true }
-aws-sdk-sagemakerruntime = { version = "1.81.0", features = [
+aws-sdk-sagemakerruntime = { version = "1.83.0", features = [
     "behavior-version-latest",
     "rt-tokio",
     "default-https-client",
 ], default-features = false }
-aws-smithy-runtime-api = "1.8.3"
+aws-smithy-runtime-api = "1.9.0"
 eventsource-stream = "0.2.3"
 scoped-tls = "1.0.1"
 opentelemetry_sdk = "0.30.0"
@@ -119,15 +119,16 @@ tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = [
 tower-http = { workspace = true }
 tower-layer = "0.3.3"
 pyo3 = { workspace = true, optional = true }
-google-cloud-auth = "0.22.2"
+google-cloud-auth = "0.22.3"
 mime = { workspace = true }
 mime_guess = "2.0.5"
-indexmap = "2.10.0"
+indexmap = "2.11.0"
 base64 = "0.22.1"
-thiserror = "2.0.12"
+thiserror = "2.0.16"
+glob = "0.3.3"
 enum-map = "2.7.3"
 tokio-util = "0.7.15"
-tempfile = "3.20.0"
+tempfile = "3.21.0"
 ts-rs = { workspace = true }
 
 
@@ -136,7 +137,7 @@ tracing-test = { workspace = true }
 tensorzero = { path = "../clients/rust" }
 paste = "1.0.15"
 base64 = "0.22.1"
-aws-sdk-s3 = { version = "1.101.0", default-features = false, features = [
+aws-sdk-s3 = { version = "1.103.0", default-features = false, features = [
     "behavior-version-latest",
     "sigv4a",
     "rt-tokio",
@@ -148,7 +149,6 @@ aws-credential-types = { version = "1.2.2", features = [
 http-body-util = "0.1.3"
 urlencoding = "2.1.3"
 image = "0.25.6"
-tempfile = "3.20.0"
 
 [build-dependencies]
 built = { version = "0.8.0", features = ["git2"] }

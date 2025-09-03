@@ -1,0 +1,44 @@
+---
+title: Benchmarks
+description: "Benchmarks for the TensorZero Gateway: sub-millisecond latency overhead under extreme load"
+---
+
+The TensorZero Gateway was built from the ground up with performance in mind.
+
+It's written in Rust and designed to handle extreme concurrency with sub-millisecond overhead.
+
+<Tip>
+
+See [Performance & Latency Tips](/gateway/guides/performance-latency/) for more details on maximizing performance in production settings.
+
+</Tip>
+
+## TensorZero Gateway vs. LiteLLM
+
+> **TLDR: TensorZero achieves 100x lower P99 latency overhead while handling 100x the load.**
+
+We benchmarked the TensorZero Gateway against the popular LiteLLM Proxy (LiteLLM Gateway).
+
+In a `c7i.xlarge` instance on AWS (4 vCPUs, 8 GB RAM), LiteLLM crashes when concurrency exceeds a few hundred QPS.
+TensorZero Gateway handles 10k+ QPS in the same instance without sweating.
+
+Even with a 100x difference in throughput, the TensorZero Gateway achieves 25-100x+ lower latency.
+The difference is especially pronounced at the tail: 100x+ lower P99 latency.
+Building in Rust (TensorZero) led to consistent sub-millisecond latency overhead under extreme load, whereas Python (LiteLLM) often becomes a bottleneck.
+
+| Latency | LiteLLM Proxy <br /> (100 QPS) | TensorZero Gateway <br /> (10,000 QPS) |
+| :-----: | :----------------------------: | :------------------------------------: |
+|  Mean   |             8.36ms             |                 0.21ms                 |
+|   50%   |             7.00ms             |                 0.19ms                 |
+|   90%   |             7.53ms             |                 0.25ms                 |
+|   95%   |             7.79ms             |                 0.28ms                 |
+|   99%   |            66.68ms             |                 0.57ms                 |
+
+**Technical Notes:**
+
+- We use a `c7i.xlarge` instance on AWS (4 vCPUs, 8 GB RAM).
+- We use a mock OpenAI inference provider for both benchmarks.
+- The load generator, both gateways, and the mock inference provider all run on the same instance.
+- We configured `observability.enabled = false` (i.e. disabled logging inferences to ClickHouse) in the TensorZero Gateway to make the scenarios comparable. (Even then, the observability features run asynchronously in the background, so they wouldn't materially affect latency given a powerful enough ClickHouse deployment.)
+
+Read more about the technical details and reproduction instructions [here](https://github.com/tensorzero/tensorzero/tree/main/gateway/benchmarks).

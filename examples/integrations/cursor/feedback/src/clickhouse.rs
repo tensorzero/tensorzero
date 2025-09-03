@@ -6,7 +6,7 @@ use chrono::Utc;
 use serde::Deserialize;
 use tensorzero_core::serde_util::deserialize_json_string;
 use tensorzero_core::{
-    clickhouse::ClickHouseConnectionInfo,
+    db::clickhouse::ClickHouseConnectionInfo,
     inference::types::{ContentBlockChatOutput, ResolvedInput},
 };
 use uuid::Uuid;
@@ -38,7 +38,7 @@ pub async fn get_inferences_in_time_range(
     let lower_bound = get_min_uuidv7(
         commit_interval
             .parent_timestamp
-            .unwrap_or(Utc::now() - chrono::Duration::days(1)),
+            .unwrap_or_else(|| Utc::now() - chrono::Duration::days(1)),
     )
     .to_string();
     let upper_bound = get_max_uuidv7(commit_interval.commit_timestamp).to_string();

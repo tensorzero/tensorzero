@@ -1,0 +1,103 @@
+---
+title: Overview
+description: The TensorZero Gateway is a high-performance model gateway that provides a unified interface for all your LLM applications.
+---
+
+The TensorZero Gateway is a high-performance model gateway that provides a unified interface for all your LLM applications.
+
+- **One API for All LLMs.**
+  The gateway provides a unified interface for all major LLM providers, allowing for seamless cross-platform integration and fallbacks.
+  TensorZero natively supports
+  [Anthropic](/gateway/guides/providers/anthropic/),
+  [AWS Bedrock](/gateway/guides/providers/aws-bedrock/),
+  [AWS SageMaker](/gateway/guides/providers/aws-sagemaker/),
+  [Azure OpenAI Service](/gateway/guides/providers/azure/),
+  [Fireworks](/gateway/guides/providers/fireworks/),
+  [GCP Vertex AI Anthropic](/gateway/guides/providers/gcp-vertex-ai-anthropic/),
+  [GCP Vertex AI Gemini](/gateway/guides/providers/gcp-vertex-ai-gemini/),
+  [Google AI Studio (Gemini API)](/gateway/guides/providers/google-ai-studio-gemini/),
+  [Groq](/gateway/guides/providers/groq/),
+  [Hyperbolic](/gateway/guides/providers/hyperbolic/),
+  [Mistral](/gateway/guides/providers/mistral/),
+  [OpenAI](/gateway/guides/providers/openai/),
+  [OpenRouter](/gateway/guides/providers/openrouter/),
+  [Together](/gateway/guides/providers/together/),
+  [vLLM](/gateway/guides/providers/vllm/), and
+  [xAI](/gateway/guides/providers/xai/).
+  Need something else?
+  Your provider is most likely supported because TensorZero integrates with [any OpenAI-compatible API (e.g. Ollama)](/gateway/guides/providers/openai-compatible/).
+  Still not supported?
+  Open an issue on [GitHub](https://github.com/tensorzero/tensorzero/issues) and we'll integrate it!
+
+  <Tip>
+
+  Learn more in our [How to call any LLM](./call-any-llm) guide.
+
+  </Tip>
+
+- **Blazing Fast.**
+  The gateway (written in Rust 🦀) achieves &lt;1ms P99 latency overhead under extreme load.
+  In [benchmarks](/gateway/benchmarks/), LiteLLM @ 100 QPS adds 25-100x+ more latency than our gateway @ 10,000 QPS.
+
+- **Structured Inferences.**
+  The gateway enforces schemas for inputs and outputs, ensuring robustness for your application.
+  Structured inference data is later used for powerful optimization recipes (e.g. swapping historical prompts before fine-tuning).
+  Learn more about [prompt templates & schemas](/gateway/guides/prompt-templates-schemas/).
+
+- **Multi-Step LLM Workflows.**
+  The gateway provides first-class support for complex multi-step LLM workflows by associating multiple inferences with an episode.
+  Feedback can be assigned at the inference or episode level, allowing for end-to-end optimization of compound LLM systems.
+  Learn more about [episodes](/gateway/guides/episodes/).
+
+- **Built-in Observability.**
+  The gateway collects structured inference traces along with associated downstream metrics and natural-language feedback.
+  Everything is stored in a ClickHouse database for real-time, scalable, and developer-friendly analytics.
+  [TensorZero Recipes](/recipes/) leverage this dataset to optimize your LLMs.
+
+- **Built-in Experimentation.**
+  The gateway automatically routes traffic between variants to enable A/B tests.
+  It ensures consistent variants within an episode in multi-step workflows.
+  More advanced experimentation techniques (e.g. asynchronous multi-armed bandits) are coming soon.
+
+- **Built-in Fallbacks.**
+  The gateway automatically fallbacks failed inferences to different inference providers, or even completely different variants.
+  Ensure misconfiguration, provider downtime, and other edge cases don't affect your availability.
+
+- **GitOps Orchestration.**
+  Orchestrate prompts, models, parameters, tools, experiments, and more with GitOps-friendly configuration.
+  Manage a few LLMs manually with human-friendly readable configuration files, or thousands of prompts and LLMs entirely programmatically.
+
+## Next Steps
+
+<Columns cols={2}>
+  <Card title="Quickstart" href="/quickstart/">
+    Make your first TensorZero API call with built-in observability and
+    fine-tuning in under 5 minutes.
+  </Card>
+  <Card title="Tutorial" href="/gateway/tutorial/">
+    Build a simple chatbot, an email copilot, a RAG system, and a data
+    extraction pipeline using TensorZero.
+  </Card>
+  <Card title="Deployment" href="/gateway/deployment/">
+    Quickly deploy locally, or set up high-availability services for production
+    environments.
+  </Card>
+  <Card title="Integrations" href="/gateway/integrations/">
+    The TensorZero Gateway integrates with the major LLM providers.
+  </Card>
+  <Card title="Benchmarks" href="/gateway/benchmarks/">
+    The TensorZero Gateway achieves sub-millisecond latency overhead under
+    extreme load.
+  </Card>
+  <Card title="API Reference" href="/gateway/api-reference/inference/">
+    The TensorZero Gateway provides an unified interface for making inference
+    and feedback API calls.
+  </Card>
+  <Card
+    title="Configuration Reference"
+    href="/gateway/configuration-reference/"
+  >
+    Easily manage your LLM applications with GitOps orchestration — even complex
+    multi-step systems.
+  </Card>
+</Columns>

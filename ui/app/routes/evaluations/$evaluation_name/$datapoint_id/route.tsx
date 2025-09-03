@@ -21,7 +21,7 @@ import {
   redirect,
   type RouteHandle,
 } from "react-router";
-import Output from "~/components/inference/NewOutput";
+import { Output } from "~/components/inference/Output";
 import {
   consolidate_evaluation_results,
   getEvaluatorMetricName,
@@ -170,6 +170,9 @@ export async function action({ request }: Route.ActionArgs) {
       }
       return redirect(url.toString());
     }
+    case null:
+      logger.error("No action provided");
+      return null;
     default:
       logger.error(`Unknown action: ${_action}`);
       return null;

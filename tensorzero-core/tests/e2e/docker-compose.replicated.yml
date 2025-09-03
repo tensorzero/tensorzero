@@ -1,6 +1,6 @@
 services:
   clickhouse-01:
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-25.7-alpine}
     hostname: clickhouse-01
     ports:
       - "8123:8123"
@@ -12,6 +12,8 @@ services:
       nofile:
         soft: 262144
         hard: 262144
+    environment:
+      CLICKHOUSE_SKIP_USER_SETUP: 1
     healthcheck:
       test: wget --spider --tries 1 http://chuser:chpassword@clickhouse-01:8123/ping
       start_period: 30s
@@ -21,7 +23,7 @@ services:
       retries: 3
 
   clickhouse-02:
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-25.7-alpine}
     hostname: clickhouse-02
     ports:
       - "8124:8123" # Host port 8124 -> Container port 8123
@@ -29,6 +31,8 @@ services:
     volumes:
       - ./replicated_clickhouse_config/ch2:/etc/clickhouse-server/config.d
       - ./replicated_clickhouse_config/common:/etc/clickhouse-server/users.d
+    environment:
+      CLICKHOUSE_SKIP_USER_SETUP: 1
     ulimits:
       nofile:
         soft: 262144
@@ -42,7 +46,7 @@ services:
       retries: 3
 
   clickhouse-03:
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-25.7-alpine}
     hostname: clickhouse-03
     ports:
       - "8125:8123"
@@ -50,6 +54,8 @@ services:
     volumes:
       - ./replicated_clickhouse_config/ch3:/etc/clickhouse-server/config.d
       - ./replicated_clickhouse_config/common:/etc/clickhouse-server/users.d
+    environment:
+      CLICKHOUSE_SKIP_USER_SETUP: 1
     ulimits:
       nofile:
         soft: 262144
@@ -72,12 +78,13 @@ services:
       - "3030:3030"
     healthcheck:
       test: wget --spider --tries 1 http://localhost:3030/status
+      interval: 1s
       start_period: 30s
       start_interval: 1s
       timeout: 1s
 
   minio:
-    image: bitnami/minio:2025.4.22
+    image: bitnamilegacy/minio:2025.7.23
     ports:
       - "8000:9000" # API port
       - "9001:9001" # Console port

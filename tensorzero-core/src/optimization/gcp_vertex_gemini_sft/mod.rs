@@ -8,6 +8,8 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
+    config::Config,
+    db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     model::CredentialLocation,
@@ -23,9 +25,6 @@ use crate::{
     },
     stored_inference::RenderedSample,
 };
-
-#[cfg(feature = "pyo3")]
-use crate::inference::types::pyo3_helpers::tensorzero_core_error;
 
 pub fn gcp_vertex_gemini_base_url(project_id: &str, region: &str) -> Result<Url, url::ParseError> {
     let subdomain_prefix = location_subdomain_prefix(region);
@@ -95,7 +94,7 @@ impl UninitializedGCPVertexGeminiSFTConfig {
     #[new]
     #[pyo3(signature = (*, model, bucket_name, project_id, region, learning_rate_multiplier=None, adapter_size=None, n_epochs=None, export_last_checkpoint_only=None, credentials=None, api_base=None, seed=None, service_account=None, kms_key_name=None, tuned_model_display_name=None, bucket_path_prefix=None))]
     pub fn new(
-        py: Python<'_>,
+        _py: Python<'_>,
         model: String,
         bucket_name: String,
         project_id: String,
@@ -113,13 +112,11 @@ impl UninitializedGCPVertexGeminiSFTConfig {
         bucket_path_prefix: Option<String>,
     ) -> PyResult<Self> {
         // Use Deserialize to convert the string to a CredentialLocation
-        let credentials = match credentials {
-            Some(s) => match serde_json::from_str(&s) {
-                Ok(parsed) => Some(parsed),
-                Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
-            },
-            None => None,
-        };
+        let credentials = credentials
+            .map(|s| serde_json::from_str(&s))
+            .transpose()
+            .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid credentials JSON: {e}")))?
+            .or_else(|| Some(default_api_key_location()));
         let api_base = api_base
             .map(|s| {
                 Url::parse(&s)
@@ -128,6 +125,9 @@ impl UninitializedGCPVertexGeminiSFTConfig {
             .transpose()?;
         Ok(Self {
             model,
+            bucket_name,
+            project_id,
+            region,
             learning_rate_multiplier,
             adapter_size,
             n_epochs,
@@ -138,10 +138,7 @@ impl UninitializedGCPVertexGeminiSFTConfig {
             service_account,
             kms_key_name,
             tuned_model_display_name,
-            bucket_name,
             bucket_path_prefix,
-            project_id,
-            region,
         })
     }
 
@@ -238,6 +235,8 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
+        _clickhouse_connection_info: &ClickHouseConnectionInfo,
+        _config: &Config,
     ) -> Result<Self::Handle, Error> {
         // TODO(#2642): improve error handling here so we know what index of example failed
         let train_rows: Vec<GCPVertexGeminiSupervisedRow> = train_examples
@@ -455,7 +454,7 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
             self.project_id.clone(),
             self.credential_location
                 .clone()
-                .unwrap_or(default_api_key_location()),
+                .unwrap_or_else(default_api_key_location),
         )
     }
 }

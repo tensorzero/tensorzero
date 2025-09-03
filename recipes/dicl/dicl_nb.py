@@ -15,7 +15,8 @@
 #
 # - Set the `TENSORZERO_CLICKHOUSE_URL` environment variable. For example: `TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero"`
 # - Set the `OPENAI_API_KEY` environment variable.
-# - Update the following parameters:
+# - Update the following parameters
+# - Uncomment query filters as appropriate
 #
 
 # %%
@@ -25,8 +26,9 @@ CONFIG_PATH = "../../examples/data-extraction-ner/config/tensorzero.toml"
 
 FUNCTION_NAME = "extract_entities"
 
-# Can also set this to None if you do not want to use a metric and only want to use demonstrations
 METRIC_NAME: Optional[str] = None
+
+MAX_EXAMPLES = 1000
 
 # The name of the DICL variant you will want to use. Set this to a meaningful name that does not conflict
 # with other variants for the function selected above.
@@ -50,56 +52,14 @@ USE_DEMONSTRATIONS = True
 # %%
 import os
 from asyncio import Semaphore
-from pathlib import Path
 
 import pandas as pd
 import toml
 from clickhouse_connect import get_client
 from openai import AsyncOpenAI
+from tensorzero import TensorZeroGateway
 from tensorzero.util import uuid7
 from tqdm.asyncio import tqdm_asyncio
-
-# %% [markdown]
-# Load the TensorZero configuration file.
-#
-
-# %%
-config_path = Path(CONFIG_PATH)
-
-assert config_path.exists(), f"{CONFIG_PATH} does not exist"
-assert config_path.is_file(), f"{CONFIG_PATH} is not a file"
-
-with config_path.open("r") as f:
-    config = toml.load(f)
-
-# %% [markdown]
-# Retrieve the configuration for the function we are interested in.
-#
-
-# %%
-assert "functions" in config, "No `[functions]` section found in config"
-assert FUNCTION_NAME in config["functions"], (
-    f"No function named `{FUNCTION_NAME}` found in config"
-)
-
-function_config = config["functions"][FUNCTION_NAME]
-function_type = function_config["type"]
-
-# %% [markdown]
-# Retrieve the metric configuration.
-#
-
-# %%
-if METRIC_NAME is None:
-    metric = None
-else:
-    assert "metrics" in config, "No `[metrics]` section found in config"
-    assert METRIC_NAME in config["metrics"], (
-        f"No metric named `{METRIC_NAME}` found in config"
-    )
-    metric = config["metrics"][METRIC_NAME]
-
-metric
 
 # %% [markdown]
 # Initialize the ClickHouse client.
@@ -113,135 +73,34 @@ assert "TENSORZERO_CLICKHOUSE_URL" in os.environ, (
 clickhouse_client = get_client(dsn=os.environ["TENSORZERO_CLICKHOUSE_URL"])
 
 # %% [markdown]
-# Determine the ClickHouse table name for the function.
+# Initialize the TensorZero Client
 #
 
 # %%
-inference_table_name = {"chat": "ChatInference", "json": "JsonInference"}.get(
-    function_type
+t0 = TensorZeroGateway.build_embedded(
+    clickhouse_url=os.environ["TENSORZERO_CLICKHOUSE_URL"], config_file=CONFIG_PATH
 )
 
-if inference_table_name is None:
-    raise ValueError(f"Unsupported function type: {function_type}")
+# %%
+filters = None
+# To filter on a boolean metric, you can uncomment the following line
+# filters = BooleanMetricFilter(metric_name=METRIC_NAME, value=True) # or False as needed
 
-# %% [markdown]
-# Determine the ClickHouse table name for the metric.
-#
+# To filter on a float metric, you can uncomment the following line
+# filters = FloatMetricFilter(metric_name=METRIC_NAME, value=0.5, comparison_operator=">")
+# or any other float value as needed
+# You can even use AND, OR, and NOT operators to combine multiple filters
 
 # %%
-feedback_table_name = (
-    {
-        "float": "FloatMetricFeedback",
-        "boolean": "BooleanMetricFeedback",
-    }.get(metric["type"])
-    if metric is not None
-    else None
+inferences = t0.experimental_list_inferences(
+    function_name=FUNCTION_NAME,
+    filters=filters,
+    output_source="demonstration",
+    # or "inference" if you don't want to use (or don't have) demonstrations
+    # if you use "demonstration" we will restrict to the subset of infereences
+    # that have demonstrations
+    limit=MAX_EXAMPLES,
 )
-
-if feedback_table_name is None and metric is not None:
-    raise ValueError(f"Unsupported metric type: {metric['type']}")
-
-# %% [markdown]
-# Determine the correct join key to use for the metric on the inference table.
-#
-
-# %%
-inference_join_key = (
-    {
-        "episode": "episode_id",
-        "inference": "id",
-    }.get(metric["level"])
-    if metric is not None
-    else None
-)
-
-if inference_join_key is None and metric is not None:
-    raise ValueError(f"Unsupported metric level: {metric['level']}")
-
-# %%
-if metric is not None:
-    assert "optimize" in metric, "Metric is missing the `optimize` field"
-
-    threshold = FLOAT_METRIC_THRESHOLD if metric["type"] == "float" else 0.5
-    comparison_operator = ">=" if metric["optimize"] == "max" else "<="
-
-    query = f"""
-    SELECT
-        i.input,
-        i.output,
-    FROM
-        {inference_table_name} i
-    JOIN
-        (SELECT
-            target_id,
-            value,
-            ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
-        FROM
-            {feedback_table_name}
-        WHERE
-            metric_name = %(metric_name)s
-            AND value {comparison_operator} %(threshold)s
-        ) f ON i.{inference_join_key} = f.target_id and f.rn = 1
-    WHERE
-        i.function_name = %(function_name)s
-    """
-
-    params = {
-        "function_name": FUNCTION_NAME,
-        "metric_name": METRIC_NAME,
-        "comparison_operator": comparison_operator,
-        "threshold": threshold,
-    }
-
-    metric_df = clickhouse_client.query_df(query, params)
-
-    metric_df.head()
-else:
-    metric_df = None
-
-# %%
-query = f"""
-SELECT
-    i.input,
-    f.value AS output
-FROM
-    {inference_table_name} i
-JOIN
-    (SELECT
-        inference_id,
-        value,
-        ROW_NUMBER() OVER (PARTITION BY inference_id ORDER BY timestamp DESC) as rn
-    FROM
-        DemonstrationFeedback
-    ) f ON i.id = f.inference_id AND f.rn = 1
-WHERE
-    i.function_name = %(function_name)s
-"""
-
-params = {
-    "function_name": FUNCTION_NAME,
-}
-
-if USE_DEMONSTRATIONS:
-    demonstration_df = clickhouse_client.query_df(query, params)
-
-    demonstration_df.head()
-else:
-    demonstration_df = None
-
-# %%
-# Combine metric_df and demonstration_df into example_df
-example_df = pd.concat(
-    [df for df in [metric_df, demonstration_df] if df is not None], ignore_index=True
-)
-
-# Assert that at least one of the dataframes is not None
-assert example_df is not None and not example_df.empty, (
-    "Both metric_df and demonstration_df are None or empty"
-)
-
-# Display the first few rows of the combined dataframe
-example_df.head()
 
 # %%
 openai_client = AsyncOpenAI()
@@ -267,17 +126,26 @@ semaphore = Semaphore(MAX_CONCURRENT_EMBEDDING_REQUESTS)
 # %%
 # Embed the 'input' column using the get_embedding function
 tasks = [
-    get_embedding(str(input_text), semaphore, DICL_EMBEDDING_MODEL)
-    for input_text in example_df["input"]
+    get_embedding(str(inference.input), semaphore, DICL_EMBEDDING_MODEL)
+    for inference in inferences
 ]
 embeddings = await tqdm_asyncio.gather(*tasks, desc="Embedding inputs")
 
 # %%
-# Add the embeddings as a new column to the dataframe
-example_df["embedding"] = embeddings
-
-# Display the first few rows to verify the new column
-print(example_df[["input", "embedding"]].head())
+data = []
+for inference, embedding in zip(inferences, embeddings):
+    data.append(
+        {
+            "input": str(inference.input),
+            "output": str(inference.output),
+            "embedding": embedding,
+            "function_name": FUNCTION_NAME,
+            "variant_name": DICL_VARIANT_NAME,
+            "id": uuid7(),
+        }
+    )
+example_df = pd.DataFrame(data)
+example_df.head()
 
 # %% [markdown]
 # Prepare the data for the DynamicInContextLearningExample table
@@ -299,19 +167,6 @@ print(example_df[["input", "embedding"]].head())
 # ORDER BY (function_name, variant_name, namespace)
 # ```
 #
-
-# %%
-# Add a new column 'function_name' with the value FUNCTION_NAME for every row
-example_df["function_name"] = FUNCTION_NAME
-
-# Overwrite the 'variant_name' column with the value DICL_VARIANT_NAME for every row
-example_df["variant_name"] = DICL_VARIANT_NAME
-
-# Add a new column 'id' with a UUID for every row
-example_df["id"] = [uuid7() for _ in range(len(example_df))]
-
-# %%
-example_df.head()
 
 # %%
 # Insert the data into the DiclExample table

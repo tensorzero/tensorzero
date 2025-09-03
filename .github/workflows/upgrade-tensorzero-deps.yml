@@ -15,7 +15,7 @@ jobs:
     name: Upgrade TensorZero dependencies across all projects
     runs-on: ubuntu-latest
     # Only run if the PyPI publish workflow succeeded (or if manually triggered)
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
 
     permissions:
       contents: write
@@ -27,10 +27,11 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install uv and jq
-        run: |
-          curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
-          sudo apt-get update && sudo apt-get install -y jq
+      - name: Install uv
+        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
 
       - name: Wait for PyPI availability (auto-trigger only)
         if: github.event_name == 'workflow_run'

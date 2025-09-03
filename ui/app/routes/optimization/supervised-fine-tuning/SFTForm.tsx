@@ -127,6 +127,7 @@ export function SFTForm({
         return "Pending...";
       case "complete":
         return "Complete";
+      case "idle":
       default:
         return "Start Fine-tuning Job";
     }
@@ -166,6 +167,7 @@ export function SFTForm({
                 addDemonstrations={true}
                 feedbackCount={counts.feedbackCount}
                 curatedInferenceCount={counts.curatedInferenceCount}
+                isLoading={counts.isLoading}
               />
 
               {errors.metric && (

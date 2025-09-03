@@ -1,4 +1,4 @@
-#![expect(clippy::print_stdout)]
+#![expect(clippy::print_stdout, clippy::print_stderr)]
 use std::collections::HashMap;
 use std::{collections::HashSet, sync::Arc};
 
@@ -21,8 +21,8 @@ use tensorzero::{
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
 use tensorzero_core::{
-    clickhouse::test_helpers::get_clickhouse_replica,
-    clickhouse::{
+    db::clickhouse::test_helpers::get_clickhouse_replica,
+    db::clickhouse::{
         test_helpers::{
             select_all_model_inferences_by_chat_episode_id_clickhouse,
             select_chat_inferences_clickhouse,
@@ -46,7 +46,7 @@ use tracing_test::traced_test;
 use url::Url;
 use uuid::Uuid;
 
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
     select_model_inference_clickhouse,
 };
@@ -3941,6 +3941,7 @@ async fn test_clickhouse_bulk_insert() {
                 .unwrap()
         });
     }
+
     let mut expected_inference_ids = HashSet::new();
     while let Some(result) = join_set.join_next().await {
         let result = result.unwrap();
@@ -3952,7 +3953,14 @@ async fn test_clickhouse_bulk_insert() {
     assert_eq!(expected_inference_ids.len(), inference_count);
 
     assert_eq!(Arc::strong_count(&client), 1);
-    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    drop(batch_sender);
+    eprintln!("Dropping client");
+    // Drop the last client, which will drop all of our `ClickhouseConnectionInfo`s
+    // and allow the batch writer to shut down.
+    drop(client);
+    eprintln!("Dropped client");
+    // Wait for ClickHouse to finish processing batch writes.
+    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
     let clickhouse_client = get_clickhouse().await;
     let inferences = select_chat_inferences_clickhouse(&clickhouse_client, episode_id)

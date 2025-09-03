@@ -63,6 +63,7 @@ services:
       - "3030:3030"
     healthcheck:
       test: wget --spider --tries 1 http://localhost:3030/status
+      interval: 1s
       start_period: 30s
       start_interval: 1s
       timeout: 1s
@@ -73,6 +74,8 @@ services:
     volumes:
       - .:/fixtures
       - ~/.aws:/root/.aws
+    env_file:
+      - .env
     environment:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_HOST: clickhouse

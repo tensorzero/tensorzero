@@ -5,19 +5,35 @@ on:
 
 jobs:
   ui-tests:
-    runs-on: namespace-profile-tensorzero-8x16
+    runs-on: namespace-profile-tensorzero-16x32
+    if: github.repository == 'tensorzero/tensorzero'
 
     strategy:
       matrix:
-        clickhouse_version: ["24.12-alpine", "25.2-alpine", "latest-alpine"]
+        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('["24.12-alpine", "25.7-alpine"]') || fromJSON('["25.7-alpine"]') }}
 
     steps:
       - name: Set DNS
         run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
 
-      - uses: namespacelabs/nscloud-checkout-action@953fed31a6113cc2347ca69c9d823743c65bc84b
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Cleanup disk space
+        run: ./ci/free-disk-space.sh
+
+      - name: Install Rust toolchain
+        run: |
+          for attempt in 1 2 3; do
+            if rustup toolchain install stable && rustup default stable; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust toolchain after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -25,23 +41,28 @@ jobs:
           node-version: "22.9.0"
 
       - name: Setup `pnpm`
-        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@latest; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Install `pnpm` dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Setup the Namespace cache for `s3-fixtures`
-        uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
-        with:
-          path: |
-            ./ui/fixtures/s3-fixtures
 
       - name: Build `tensorzero-node`
         working-directory: internal/tensorzero-node
         run: pnpm build
 
       - name: Download `gateway` container
-        uses: namespace-actions/download-artifact@5c070f7d7ebdc47682b04aa736c76e46ff5f6e1e
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
         with:
           name: build-gateway-container
           path: .

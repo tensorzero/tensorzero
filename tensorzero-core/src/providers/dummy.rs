@@ -14,7 +14,8 @@ use crate::inference::InferenceProvider;
 
 use crate::cache::ModelProviderRequest;
 use crate::embeddings::{
-    Embedding, EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest,
+    Embedding, EmbeddingProvider, EmbeddingProviderRequestInfo, EmbeddingProviderResponse,
+    EmbeddingRequest,
 };
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
@@ -48,7 +49,7 @@ impl DummyProvider {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
+        let api_key_location = api_key_location.unwrap_or_else(default_api_key_location);
         match api_key_location {
             CredentialLocation::Dynamic(key_name) => Ok(DummyProvider {
                 model_name,
@@ -757,6 +758,7 @@ impl EmbeddingProvider for DummyProvider {
         request: &EmbeddingRequest,
         _http_client: &reqwest::Client,
         _dynamic_api_keys: &InferenceCredentials,
+        _model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         if self.model_name.starts_with("error") {
             return Err(ErrorDetails::InferenceClient {

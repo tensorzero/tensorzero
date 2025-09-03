@@ -32,9 +32,9 @@ import type { InferenceResponse } from "~/utils/tensorzero";
 import { logger } from "~/utils/logger";
 import type {
   ClientInferenceParams,
-  ResolvedInput as TensorZeroResolvedInput,
-  ResolvedInputMessage as TensorZeroResolvedInputMessage,
-  ResolvedInputMessageContent as TensorZeroResolvedInputMessageContent,
+  StoredInput as TensorZeroStoredInput,
+  StoredInputMessage as TensorZeroStoredInputMessage,
+  StoredInputMessageContent as TensorZeroStoredInputMessageContent,
   ToolCallConfigDatabaseInsert,
   ContentBlockChatOutput,
   JsonInferenceOutput,
@@ -189,29 +189,27 @@ export function useInferenceActionFetcher() {
   } satisfies ActionFetcher;
 }
 
-// Convert TensorZero's ResolvedInput to our Input type
-export function tensorZeroResolvedInputToInput(
-  resolvedInput: TensorZeroResolvedInput,
+// Convert TensorZero's StoredInput to our Input type
+export function tensorZeroStoredInputToInput(
+  resolvedInput: TensorZeroStoredInput,
 ): Input {
   return {
     system: resolvedInput.system ?? undefined,
-    messages: resolvedInput.messages.map(
-      tensorZeroResolvedMessageToInputMessage,
-    ),
+    messages: resolvedInput.messages.map(tensorZeroStoredMessageToInputMessage),
   };
 }
 
-function tensorZeroResolvedMessageToInputMessage(
-  message: TensorZeroResolvedInputMessage,
+function tensorZeroStoredMessageToInputMessage(
+  message: TensorZeroStoredInputMessage,
 ): InputMessage {
   return {
     role: message.role,
-    content: message.content.map(tensorZeroResolvedContentToInputContent),
+    content: message.content.map(tensorZeroStoredContentToInputContent),
   };
 }
 
-function tensorZeroResolvedContentToInputContent(
-  content: TensorZeroResolvedInputMessageContent,
+function tensorZeroStoredContentToInputContent(
+  content: TensorZeroStoredInputMessageContent,
 ): InputMessageContent {
   switch (content.type) {
     case "text":
@@ -637,9 +635,14 @@ function variantInfoToUninitalizedVariantInfo(
         type: "chat_completion" as const,
         weight: inner.weight,
         model: inner.model,
-        system_template: convertTemplate(inner.system_template),
-        user_template: convertTemplate(inner.user_template),
-        assistant_template: convertTemplate(inner.assistant_template),
+        input_wrappers: null,
+        system_template: convertTemplate(
+          inner.templates.system?.template || null,
+        ),
+        user_template: convertTemplate(inner.templates.user?.template || null),
+        assistant_template: convertTemplate(
+          inner.templates.assistant?.template || null,
+        ),
         temperature: inner.temperature,
         max_tokens: inner.max_tokens,
         seed: inner.seed,
@@ -661,10 +664,15 @@ function variantInfoToUninitalizedVariantInfo(
         evaluator: {
           weight: inner.evaluator.weight,
           model: inner.evaluator.model,
-          system_template: convertTemplate(inner.evaluator.system_template),
-          user_template: convertTemplate(inner.evaluator.user_template),
+          input_wrappers: null,
+          system_template: convertTemplate(
+            inner.evaluator.templates.system?.template || null,
+          ),
+          user_template: convertTemplate(
+            inner.evaluator.templates.user?.template || null,
+          ),
           assistant_template: convertTemplate(
-            inner.evaluator.assistant_template,
+            inner.evaluator.templates.assistant?.template || null,
           ),
           temperature: inner.evaluator.temperature,
           top_p: inner.evaluator.top_p,
@@ -708,9 +716,16 @@ function variantInfoToUninitalizedVariantInfo(
         fuser: {
           weight: inner.fuser.weight,
           model: inner.fuser.model,
-          system_template: convertTemplate(inner.fuser.system_template),
-          user_template: convertTemplate(inner.fuser.user_template),
-          assistant_template: convertTemplate(inner.fuser.assistant_template),
+          input_wrappers: null,
+          system_template: convertTemplate(
+            inner.fuser.templates.system?.template || null,
+          ),
+          user_template: convertTemplate(
+            inner.fuser.templates.user?.template || null,
+          ),
+          assistant_template: convertTemplate(
+            inner.fuser.templates.assistant?.template || null,
+          ),
           temperature: inner.fuser.temperature,
           top_p: inner.fuser.top_p,
           max_tokens: inner.fuser.max_tokens,
@@ -729,9 +744,14 @@ function variantInfoToUninitalizedVariantInfo(
         type: "experimental_chain_of_thought" as const,
         weight: inner.weight,
         model: inner.model,
-        system_template: convertTemplate(inner.system_template),
-        user_template: convertTemplate(inner.user_template),
-        assistant_template: convertTemplate(inner.assistant_template),
+        input_wrappers: null,
+        system_template: convertTemplate(
+          inner.templates.system?.template || null,
+        ),
+        user_template: convertTemplate(inner.templates.user?.template || null),
+        assistant_template: convertTemplate(
+          inner.templates.assistant?.template || null,
+        ),
         temperature: inner.temperature,
         top_p: inner.top_p,
         max_tokens: inner.max_tokens,

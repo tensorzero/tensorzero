@@ -455,8 +455,9 @@ impl ToolCallOutput {
 
 impl ToolCallConfig {
     #[cfg(test)]
+    #[expect(clippy::missing_panics_doc)]
     pub fn implicit_from_value(value: &Value) -> Self {
-        let parameters = StaticJSONSchema::from_value(value).unwrap();
+        let parameters = StaticJSONSchema::from_value(value.clone()).unwrap();
         let implicit_tool_config = ToolConfig::Implicit(ImplicitToolConfig { parameters });
         Self {
             tools_available: vec![implicit_tool_config],
@@ -554,9 +555,9 @@ impl ToolConfig {
 
     pub fn parameters(&self) -> &Value {
         match self {
-            ToolConfig::Static(config) => config.parameters.value,
+            ToolConfig::Static(config) => &config.parameters.value,
             ToolConfig::Dynamic(config) => &config.parameters.value,
-            ToolConfig::Implicit(config) => config.parameters.value,
+            ToolConfig::Implicit(config) => &config.parameters.value,
             ToolConfig::DynamicImplicit(config) => &config.parameters.value,
         }
     }
@@ -767,7 +768,7 @@ mod tests {
                 Arc::new(StaticToolConfig {
                     name: "get_temperature".to_string(),
                     description: "Get the current temperature in a given location".to_string(),
-                    parameters: StaticJSONSchema::from_value(&json!({
+                    parameters: StaticJSONSchema::from_value(json!({
                     "type": "object",
                     "properties": {
                         "location": {"type": "string"},
@@ -785,7 +786,7 @@ mod tests {
                     name: "query_articles".to_string(),
                     description: "Query articles from a database based on given criteria"
                         .to_string(),
-                    parameters: StaticJSONSchema::from_value(&json!({
+                    parameters: StaticJSONSchema::from_value(json!({
                         "type": "object",
                         "properties": {
                             "keyword": {"type": "string"},

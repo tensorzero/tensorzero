@@ -27,9 +27,9 @@ chrono.workspace = true
 uuid.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-regex = "1.11.1"
+regex = "1.11.2"
 url.workspace = true
-rayon = "1.10.0"
+rayon = "1.11.0"
 futures = { workspace = true }
 
 [dev-dependencies]

@@ -1,0 +1,86 @@
+---
+title: Frequently Asked Questions
+description: "Learn more about TensorZero: how it works, why we built it, and more."
+---
+
+<Tip>
+
+**Next steps?**
+The [Quickstart](/quickstart/) shows it's easy to set up an LLM application with TensorZero.
+If you want to dive deeper, the [Tutorial](/gateway/tutorial/) teaches how to build a simple chatbot, an email copilot, a weather RAG system, and a structured data extraction pipeline.
+
+**Questions?**
+Ask us on [Slack](https://www.tensorzero.com/slack) or [Discord](https://www.tensorzero.com/discord).
+
+**Using TensorZero at work?**
+Email us at [hello@tensorzero.com](mailto:hello@tensorzero.com) to set up a Slack or Teams channel with your team (free).
+
+</Tip>
+
+## Technical
+
+<Accordion title="Why is the TensorZero Gateway a proxy instead of a library?">
+
+TensorZero's proxy pattern makes it agnostic to the application's tech stack, isolated from the business logic, more composable with other tools, and easy to deploy and manage.
+
+Many engineers are (correctly) wary of marginal latency from such a proxy, so we built the gateway from the ground up with performance in mind.
+In [Benchmarks](/gateway/benchmarks/), it achieves sub-millisecond P99 latency overhead under extreme load.
+This makes the gateway fast and lightweight enough to be unnoticeable even in the most demanding LLM applications, especially if deployed as a sidecar container.
+
+</Accordion>
+
+<Accordion title="How is the TensorZero Gateway so fast?">
+
+![TensorZero Crab](./tensorzero-crab.png)
+
+The TensorZero Gateway was built from the ground up with performance in mind.
+It was written in Rust 🦀 and optimizes many common bottlenecks by efficiently managing connections to model providers, pre-compiling schemas and templates, logging data asynchronously, and more.
+
+It achieves &lt;1ms P99 latency overhead under extreme load.
+In [Benchmarks](/gateway/benchmarks/), LiteLLM @ 100 QPS adds 25-100x+ more latency than the TensorZero Gateway @ 10,000 QPS.
+
+</Accordion>
+
+<Accordion title="Why did you choose ClickHouse as TensorZero's analytics database?">
+
+ClickHouse is open source, [extremely fast](https://www.vldb.org/pvldb/vol17/p3731-schulze.pdf), and versatile.
+It supports diverse storage backends, query patterns, and data types, including vector search (which will be important for upcoming TensorZero features).
+From the start, we designed TensorZero to be easy to deploy but able to grow to massive scale.
+ClickHouse is the best tool for the job.
+
+</Accordion>
+
+## Project
+
+<Accordion title="Who is behind TensorZero?">
+
+We're a small technical team based in NYC. [Work with us →](https://www.tensorzero.com/jobs/)
+
+#### Founders
+
+[Viraj Mehta](https://virajm.com) (CTO) recently completed his PhD from CMU, with an emphasis on reinforcement learning for LLMs and nuclear fusion, and previously worked in machine learning at KKR and a fintech startup; he holds a BS in math and an MS in computer science from Stanford.
+
+[Gabriel Bianconi](https://www.gabrielbianconi.com) (CEO) was the chief product officer at Ondo Finance ($20B+ valuation in 2024) and previously spent years consulting on machine learning for companies ranging from early-stage tech startups to some of the largest financial firms; he holds BS and MS degrees in computer science from Stanford.
+
+</Accordion>
+
+<Accordion title="How is TensorZero licensed?">
+
+![TensorZero Freedom](./tensorzero-freedom.png)
+
+TensorZero is open source under the permissive [Apache 2.0 License](https://github.com/tensorzero/tensorzero/blob/main/LICENSE).
+
+</Accordion>
+
+<Accordion title="How does TensorZero make money?">
+
+<a href="https://www.youtube.com/watch?v=BzAdXyPYKQo" target="_blank">
+  We don't.
+</a>
+
+We're lucky to have investors who are aligned with our long-term vision, so we're able to focus on building and snooze this question for a while.
+
+We're inspired by companies like Databricks and ClickHouse.
+One day, we'll launch a managed service that further streamlines LLM engineering, especially in enterprise settings, but open source will always be at the core of our business.
+
+</Accordion>

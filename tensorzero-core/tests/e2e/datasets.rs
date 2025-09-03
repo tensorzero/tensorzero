@@ -6,19 +6,20 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero::{ChatInferenceDatapoint, JsonInferenceDatapoint, Role};
 use tensorzero_core::{
-    clickhouse::test_helpers::{
+    db::clickhouse::test_helpers::{
         select_chat_dataset_clickhouse, select_json_dataset_clickhouse, stale_datapoint_clickhouse,
     },
     endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
-    inference::types::{ContentBlockChatOutput, ResolvedInputMessageContent},
+    inference::types::{ContentBlockChatOutput, StoredInputMessageContent},
 };
+
 use uuid::Uuid;
 
 use crate::{
     common::{delete_datapoint, get_gateway_endpoint},
     providers::common::make_embedded_gateway,
 };
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_datapoint_clickhouse, select_json_datapoint_clickhouse,
 };
 
@@ -49,9 +50,7 @@ async fn test_datapoint_insert_synthetic_chat() {
     let status = resp.status();
     let resp_json = resp.json::<Value>().await.unwrap();
 
-    if !status.is_success() {
-        panic!("Bad request: {resp_json:?}");
-    }
+    assert!(status.is_success(), "Bad request: {resp_json:?}");
 
     let id: Uuid = resp_json
         .get("id")
@@ -279,11 +278,11 @@ async fn test_create_delete_datapoint_chat() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { .. }
+            StoredInputMessageContent::Text { .. }
         ));
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { value: _, .. }
+            StoredInputMessageContent::Text { value: _, .. }
         ));
 
         // Verify the list datapoint input structure and content
@@ -302,7 +301,7 @@ async fn test_create_delete_datapoint_chat() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { .. }
+            StoredInputMessageContent::Text { .. }
         ));
 
         // Verify output if present
@@ -685,9 +684,7 @@ async fn test_datapoint_insert_synthetic_json() {
     let status = resp.status();
     let resp_json = resp.json::<Value>().await.unwrap();
 
-    if !status.is_success() {
-        panic!("Bad request: {resp_json:?}");
-    }
+    assert!(status.is_success(), "Bad request: {resp_json:?}");
 
     let id: Uuid = resp_json
         .get("id")
@@ -1084,11 +1081,11 @@ async fn test_create_delete_datapoint_json() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { .. }
+            StoredInputMessageContent::Text { .. }
         ));
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { value: _, .. }
+            StoredInputMessageContent::Text { value: _, .. }
         ));
 
         // Verify the list datapoint input structure and content
@@ -1107,7 +1104,7 @@ async fn test_create_delete_datapoint_json() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            ResolvedInputMessageContent::Text { .. }
+            StoredInputMessageContent::Text { .. }
         ));
 
         // Get the output schema
@@ -1475,9 +1472,11 @@ async fn test_datapoint_insert_output_inherit_chat() {
         .await
         .unwrap();
 
-    if !resp.status().is_success() {
-        panic!("Bad request: {:?}", resp.text().await.unwrap());
-    }
+    assert!(
+        resp.status().is_success(),
+        "Bad request: {:?}",
+        resp.text().await.unwrap()
+    );
     let datapoint_id =
         Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
     assert_ne!(datapoint_id, inference_id);
@@ -1588,9 +1587,11 @@ async fn test_datapoint_insert_output_none_chat() {
         .await
         .unwrap();
 
-    if !resp.status().is_success() {
-        panic!("Bad request: {:?}", resp.text().await.unwrap());
-    }
+    assert!(
+        resp.status().is_success(),
+        "Bad request: {:?}",
+        resp.text().await.unwrap()
+    );
     let datapoint_id =
         Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
     assert_ne!(datapoint_id, inference_id);
@@ -1730,9 +1731,11 @@ async fn test_datapoint_insert_output_demonstration_chat() {
         .send()
         .await
         .unwrap();
-    if !response.status().is_success() {
-        panic!("Bad request: {:?}", response.text().await.unwrap());
-    }
+    assert!(
+        response.status().is_success(),
+        "Bad request: {:?}",
+        response.text().await.unwrap()
+    );
 
     // Sleep to ensure that we wrote to ClickHouse
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -1752,9 +1755,11 @@ async fn test_datapoint_insert_output_demonstration_chat() {
         .await
         .unwrap();
 
-    if !resp.status().is_success() {
-        panic!("Bad request: {:?}", resp.text().await.unwrap());
-    }
+    assert!(
+        resp.status().is_success(),
+        "Bad request: {:?}",
+        resp.text().await.unwrap()
+    );
     let datapoint_id =
         Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
     assert_ne!(datapoint_id, inference_id);
@@ -1853,9 +1858,11 @@ async fn test_datapoint_insert_output_inherit_json() {
         .await
         .unwrap();
 
-    if !resp.status().is_success() {
-        panic!("Bad request: {:?}", resp.text().await.unwrap());
-    }
+    assert!(
+        resp.status().is_success(),
+        "Bad request: {:?}",
+        resp.text().await.unwrap()
+    );
     let datapoint_id =
         Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
     assert_ne!(datapoint_id, inference_id);
@@ -1966,9 +1973,11 @@ async fn test_datapoint_insert_output_none_json() {
         .await
         .unwrap();
 
-    if !resp.status().is_success() {
-        panic!("Bad request: {:?}", resp.text().await.unwrap());
-    }
+    assert!(
+        resp.status().is_success(),
+        "Bad request: {:?}",
+        resp.text().await.unwrap()
+    );
     let datapoint_id =
         Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
     assert_ne!(datapoint_id, inference_id);
@@ -2054,9 +2063,11 @@ async fn test_datapoint_insert_output_demonstration_json() {
         .send()
         .await
         .unwrap();
-    if !response.status().is_success() {
-        panic!("Bad request: {:?}", response.text().await.unwrap());
-    }
+    assert!(
+        response.status().is_success(),
+        "Bad request: {:?}",
+        response.text().await.unwrap()
+    );
 
     // Sleep to allow writing demonstration before making datapoint
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -2076,9 +2087,11 @@ async fn test_datapoint_insert_output_demonstration_json() {
         .await
         .unwrap();
 
-    if !resp.status().is_success() {
-        panic!("Bad request: {:?}", resp.text().await.unwrap());
-    }
+    assert!(
+        resp.status().is_success(),
+        "Bad request: {:?}",
+        resp.text().await.unwrap()
+    );
     let datapoint_id =
         Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
     assert_ne!(datapoint_id, inference_id);

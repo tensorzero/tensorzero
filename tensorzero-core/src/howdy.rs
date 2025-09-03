@@ -31,19 +31,25 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
-use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::{config::Config, db::clickhouse::ClickHouseConnectionInfo};
 
 lazy_static! {
     /// The URL to send usage data to.
     /// Configurable via the `TENSORZERO_HOWDY_URL` environment variable for testing.
     pub static ref HOWDY_URL: String =
-        env::var("TENSORZERO_HOWDY_URL").unwrap_or("https://howdy.tensorzero.com".to_string());
+        env::var("TENSORZERO_HOWDY_URL").unwrap_or_else(|_| "https://howdy.tensorzero.com".to_string());
 }
 
 /// Setup the howdy loop.
 /// This is called from the main function in the gateway or embedded client.
-pub fn setup_howdy(clickhouse: ClickHouseConnectionInfo, token: CancellationToken) {
-    if env::var("TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS").unwrap_or_default() == "1" {
+pub fn setup_howdy(
+    config: &Config,
+    clickhouse: ClickHouseConnectionInfo,
+    token: CancellationToken,
+) {
+    if config.gateway.disable_pseudonymous_usage_analytics
+        || env::var("TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS").unwrap_or_default() == "1"
+    {
         info!("Pseudonymous usage analytics is disabled");
         return;
     }

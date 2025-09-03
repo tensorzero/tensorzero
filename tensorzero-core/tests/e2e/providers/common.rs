@@ -33,13 +33,15 @@ use tracing_test::traced_test;
 use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
 
 use tensorzero_core::gateway_util::AppStateData;
+use tensorzero_core::inference::types::file::Base64FileMetadata;
+use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::{FinishReason, TextKind, Thought};
 use tensorzero_core::{
     cache::CacheEnabledMode,
     inference::types::{
-        resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
-        Base64File, ContentBlock, ContentBlockChatOutput, File, RequestMessage, Role, Text,
+        ContentBlock, ContentBlockChatOutput, File, RequestMessage, Role, StoredContentBlock,
+        StoredRequestMessage, Text,
     },
     tool::{ToolCall, ToolResult},
 };
@@ -47,7 +49,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
-use tensorzero_core::clickhouse::test_helpers::{
+use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
     select_json_inference_clickhouse, select_model_inference_clickhouse, CLICKHOUSE_URL,
 };
@@ -119,6 +121,7 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
         verify_credentials: true,
+        allow_batch_writes: true,
     })
     .build()
     .await
@@ -131,6 +134,7 @@ pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
         verify_credentials: true,
+        allow_batch_writes: true,
     })
     .build()
     .await
@@ -145,6 +149,7 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Clie
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
         verify_credentials: true,
+        allow_batch_writes: true,
     })
     .build()
     .await
@@ -221,13 +226,16 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_stop_sequences_inference_request_with_provider;
         use $crate::providers::common::test_warn_ignored_thought_block_with_provider;
         use $crate::providers::embeddings::test_basic_embedding_with_provider;
-        use $crate::providers::embeddings::test_batch_embedding_with_provider;
+        use $crate::providers::embeddings::test_bulk_embedding_with_provider;
         use $crate::providers::embeddings::test_embedding_with_dimensions_with_provider;
         use $crate::providers::embeddings::test_embedding_with_encoding_format_with_provider;
         use $crate::providers::embeddings::test_embedding_with_user_parameter_with_provider;
         use $crate::providers::embeddings::test_embedding_invalid_model_error_with_provider;
-        use $crate::providers::embeddings::test_embedding_large_batch_with_provider;
+        use $crate::providers::embeddings::test_embedding_large_bulk_with_provider;
         use $crate::providers::embeddings::test_embedding_consistency_with_provider;
+        use $crate::providers::embeddings::test_embedding_cache_with_provider;
+        use $crate::providers::embeddings::test_embedding_cache_options_with_provider;
+        use $crate::providers::embeddings::test_embedding_dryrun_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -639,10 +647,10 @@ macro_rules! generate_provider_tests {
 
 
         #[tokio::test]
-        async fn test_batch_embedding() {
+        async fn test_bulk_embedding() {
             let providers = $func().await.embeddings;
             for provider in providers {
-                test_batch_embedding_with_provider(provider).await;
+                test_bulk_embedding_with_provider(provider).await;
             }
         }
 
@@ -679,10 +687,10 @@ macro_rules! generate_provider_tests {
         }
 
         #[tokio::test]
-        async fn test_embedding_large_batch() {
+        async fn test_embedding_large_bulk() {
             let providers = $func().await.embeddings;
             for provider in providers {
-                test_embedding_large_batch_with_provider(provider).await;
+                test_embedding_large_bulk_with_provider(provider).await;
             }
         }
 
@@ -691,6 +699,30 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.embeddings;
             for provider in providers {
                 test_embedding_consistency_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_cache() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_cache_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_cache_options() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_cache_options_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_dryrun() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_dryrun_with_provider(provider).await;
             }
         }
 
@@ -2077,19 +2109,18 @@ pub async fn check_base64_pdf_response(
     };
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     assert_eq!(
         input_messages,
-        vec![RequestMessage {
+        vec![StoredRequestMessage {
             role: Role::User,
             content: vec![
-                ContentBlock::Text(Text {
+                StoredContentBlock::Text(Text {
                     text: "Describe the contents of the PDF".to_string(),
                 }),
-                ContentBlock::File(Box::new(FileWithPath {
-                    file: Base64File {
+                StoredContentBlock::File(Box::new(StoredFile {
+                    file: Base64FileMetadata {
                         url: None,
-                        data: None,
                         mime_type: mime::APPLICATION_PDF,
                     },
                     storage_path: expected_storage_path.clone(),
@@ -2233,19 +2264,18 @@ pub async fn check_base64_image_response(
     };
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     assert_eq!(
         input_messages,
-        vec![RequestMessage {
+        vec![StoredRequestMessage {
             role: Role::User,
             content: vec![
-                ContentBlock::Text(Text {
+                StoredContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
                 }),
-                ContentBlock::File(Box::new(FileWithPath {
-                    file: Base64File {
+                StoredContentBlock::File(Box::new(StoredFile {
+                    file: Base64FileMetadata {
                         url: None,
-                        data: None,
                         mime_type: mime::IMAGE_PNG,
                     },
                     storage_path: expected_storage_path.clone(),
@@ -2384,18 +2414,17 @@ pub async fn check_url_image_response(
     assert!(Uuid::parse_str(model_inference_id).is_ok());
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     assert_eq!(
         input_messages,
         vec![
-            RequestMessage {
+            StoredRequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::Text(Text {
+                content: vec![StoredContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
-                }), ContentBlock::File(Box::new(FileWithPath {
-                    file: Base64File {
+                }), StoredContentBlock::File(Box::new(StoredFile {
+                    file: Base64FileMetadata {
                         url: Some(image_url.clone()),
-                        data: None,
                         mime_type: mime::IMAGE_PNG,
                     },
                     storage_path: StoragePath {
@@ -4094,9 +4123,10 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
                     if let Some(block_raw_name) = block.get("raw_name") {
                         match tool_name {
                             Some(_) => {
-                                if !block_raw_name.as_str().unwrap().is_empty() {
-                                    panic!("Raw name already seen, got {block:#?}");
-                                }
+                                assert!(
+                                    block_raw_name.as_str().unwrap().is_empty(),
+                                    "Raw name already seen, got {block:#?}"
+                                );
                             }
                             None => {
                                 tool_name = Some(block_raw_name.as_str().unwrap().to_string());
@@ -5300,9 +5330,10 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
                     if let Some(block_raw_name) = block.get("raw_name") {
                         match tool_name {
                             Some(_) => {
-                                if !block_raw_name.as_str().unwrap().is_empty() {
-                                    panic!("Raw name already seen, got {block:#?}");
-                                }
+                                assert!(
+                                    block_raw_name.as_str().unwrap().is_empty(),
+                                    "Raw name already seen, got {block:#?}"
+                                );
                             }
                             None => {
                                 tool_name = Some(block_raw_name.as_str().unwrap().to_string());
@@ -7218,9 +7249,10 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
                     if let Some(block_raw_name) = block.get("raw_name") {
                         match tool_name {
                             Some(_) => {
-                                if !block_raw_name.as_str().unwrap().is_empty() {
-                                    panic!("Raw name already seen, got {block:#?}");
-                                }
+                                assert!(
+                                    block_raw_name.as_str().unwrap().is_empty(),
+                                    "Raw name already seen, got {block:#?}"
+                                );
                             }
                             None => {
                                 tool_name = Some(block_raw_name.as_str().unwrap().to_string());
@@ -8572,9 +8604,10 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
                     if let Some(block_raw_name) = block.get("raw_name") {
                         match tool_name {
                             Some(_) => {
-                                if !block_raw_name.as_str().unwrap().is_empty() {
-                                    panic!("Raw name already seen, got {block:#?}");
-                                }
+                                assert!(
+                                    block_raw_name.as_str().unwrap().is_empty(),
+                                    "Raw name already seen, got {block:#?}"
+                                );
                             }
                             None => {
                                 tool_name = Some(block_raw_name.as_str().unwrap().to_string());

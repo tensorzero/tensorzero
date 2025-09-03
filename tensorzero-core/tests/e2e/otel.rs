@@ -10,14 +10,14 @@ use opentelemetry_sdk::{
 };
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    InferenceOutput, Role,
+    FeedbackParams, InferenceOutput, Role,
 };
 use tensorzero_core::inference::types::TextKind;
 use tensorzero_core::observability::build_opentelemetry_layer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
-use crate::providers::common::make_embedded_gateway_no_config;
+use crate::providers::common::{make_embedded_gateway, make_embedded_gateway_no_config};
 
 type CapturedSpans = Arc<Mutex<Option<Vec<SpanData>>>>;
 
@@ -61,7 +61,7 @@ pub fn install_capturing_otel_exporter() -> CapturingOtelExporter {
     let exporter = CapturingOtelExporter {
         spans: Arc::new(Mutex::new(Some(vec![]))),
     };
-    let (enable_otel, layer) = build_opentelemetry_layer(Some(exporter.clone()))
+    let (enable_otel, layer, _sdk_tracer) = build_opentelemetry_layer(Some(exporter.clone()))
         .expect("Failed to build OpenTelemetry layer");
 
     tracing_subscriber::registry().with(layer).init();
@@ -120,6 +120,10 @@ pub async fn test_capture_simple_inference_spans() {
                     })],
                 }],
             },
+            tags: HashMap::from([
+                ("first_tag".to_string(), "first_value".to_string()),
+                ("second_tag".to_string(), "second_value".to_string()),
+            ]),
             ..Default::default()
         })
         .await
@@ -150,6 +154,20 @@ pub async fn test_capture_simple_inference_spans() {
     );
     assert_eq!(root_attr_map.get("function_name"), None);
     assert_eq!(root_attr_map.get("variant_name"), None);
+    assert_eq!(
+        root_attr_map.get("tags.first_tag").cloned(),
+        Some("first_value".to_string().into())
+    );
+    assert_eq!(
+        root_attr_map.get("tags.second_tag").cloned(),
+        Some("second_value".to_string().into())
+    );
+    // Check that there are no other takes
+    let tag_count = root_attr_map
+        .iter()
+        .filter(|(k, _)| k.starts_with("tags."))
+        .count();
+    assert_eq!(tag_count, 2);
 
     let root_children = &spans.span_children[&root_span.span_context.span_id()];
     let [variant_span] = root_children.as_slice() else {
@@ -336,4 +354,83 @@ pub async fn test_capture_model_error() {
     );
 
     assert_eq!(num_spans, 4);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_capture_feedback_spans() {
+    let exporter = install_capturing_otel_exporter();
+
+    let client = make_embedded_gateway().await;
+    let res = client
+        .inference(ClientInferenceParams {
+            model_name: Some("dummy::good".to_string()),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "What is your name?".to_string(),
+                    })],
+                }],
+            },
+            tags: HashMap::from([
+                ("first_tag".to_string(), "first_value".to_string()),
+                ("second_tag".to_string(), "second_value".to_string()),
+            ]),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    let InferenceOutput::NonStreaming(output) = res else {
+        panic!("Expected non-streaming output, got: {res:#?}");
+    };
+
+    let _feedback_res = client
+        .feedback(FeedbackParams {
+            inference_id: Some(output.inference_id()),
+            metric_name: "task_success".to_string(),
+            value: true.into(),
+            tags: HashMap::from([
+                ("my_tag".to_string(), "my_value".to_string()),
+                ("my_tag2".to_string(), "my_value2".to_string()),
+            ]),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let all_spans = exporter.take_spans();
+    let mut spans = build_span_map(all_spans);
+    // We should have a feedback span and a function_inference span
+    assert_eq!(spans.root_spans.len(), 2);
+    spans.root_spans.sort_by_key(|span| span.name.clone());
+    assert_eq!(spans.root_spans[0].name, "feedback");
+    assert_eq!(spans.root_spans[1].name, "function_inference");
+
+    // We've already checked the function_inference span in the previous test,
+    // so just check the feedback span
+    let feedback_span = &spans.root_spans[0];
+    let feedback_attr_map = attrs_to_map(&feedback_span.attributes);
+    assert_eq!(
+        feedback_attr_map["inference_id"],
+        output.inference_id().to_string().into()
+    );
+    assert_eq!(
+        feedback_attr_map["tags.my_tag"],
+        "my_value".to_string().into()
+    );
+    assert_eq!(
+        feedback_attr_map["tags.my_tag2"],
+        "my_value2".to_string().into()
+    );
+    assert!(!feedback_attr_map.contains_key("episode_id"));
+    assert_eq!(feedback_attr_map["metric_name"], "task_success".into());
+
+    assert_eq!(
+        spans
+            .span_children
+            .get(&feedback_span.span_context.span_id()),
+        None,
+        "feedback span should have no children"
+    );
 }

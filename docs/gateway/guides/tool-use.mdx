@@ -1,0 +1,380 @@
+---
+title: Tool Use (Function Calling)
+description: Learn how to use tool use (function calling) with TensorZero Gateway.
+---
+
+TensorZero has first-class support for tool use, a feature that allows LLMs to interact with external tools (e.g. APIs, databases, web browsers).
+
+Tool use is available for most model providers supported by TensorZero.
+See [Integrations](/gateway/integrations/) for a list of supported model providers.
+
+You can define a tool in your configuration file and attach it to a TensorZero function that should be allowed to call it.
+Alternatively, you can define a tool dynamically at inference time.
+
+<Warning>
+
+The term "tool use" is also commonly referred to as "function calling" in the industry.
+In TensorZero, the term "function" refers to TensorZero functions, so we'll stick to the "tool" terminology for external tools that the models can interact with and "function" for TensorZero functions.
+
+</Warning>
+
+<Tip>
+
+You can also find a complete runnable example on [GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/guides/tool-use).
+
+</Tip>
+
+## Basic Usage
+
+### Defining a tool in your configuration file
+
+You can define a tool in your configuration file and attach it to the TensorZero functions that should be allowed to call it.
+Only functions that are of type `chat` can call tools.
+
+A tool definition has the following properties:
+
+- `name`: The name of the tool.
+- `description`: A description of the tool. The description helps models understand the tool's purpose and usage.
+- `parameters`: The path to a file containing a JSON Schema for the tool's parameters.
+
+Optionally, you can provide a `strict` property to enforce type checking for the tool's parameters.
+This setting is only supported by some model providers, and will be ignored otherwise.
+
+```toml title="tensorzero.toml"
+[tools.get_temperature]
+description = "Get the current temperature for a given location."
+parameters = "tools/get_temperature.json"
+strict = true # optional, defaults to false
+
+[functions.weather_chatbot]
+type = "chat"
+tools = ["get_temperature"]
+# ...
+```
+
+<Accordion title="Example: JSON Schema for the `get_temperature` tool">
+
+If we wanted the `get_temperature` tool to take a mandatory `location` parameter and an optional `units` parameter, we could use the following JSON Schema:
+
+```json title="tools/get_temperature.json"
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "description": "Get the current temperature for a given location.",
+  "properties": {
+    "location": {
+      "type": "string",
+      "description": "The location to get the temperature for (e.g. \"New York\")"
+    },
+    "units": {
+      "type": "string",
+      "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\"). Defaults to \"fahrenheit\".",
+      "enum": ["fahrenheit", "celsius"]
+    }
+  },
+  "required": ["location"],
+  "additionalProperties": false
+}
+```
+
+</Accordion>
+
+<Tip>
+
+See "Advanced Usage" below for information on how to define a tool dynamically at inference time.
+
+</Tip>
+
+### Making inference requests with tools
+
+Once you've defined a tool and attached it to a TensorZero function, you don't need to change anything in your inference request to enable tool use
+
+By default, the function will determine whether to use a tool and the arguments to pass to the tool.
+If the function decides to use tools, it will return one or more `tool_call` content blocks in the response.
+
+For multi-turn conversations supporting tool use, you can provide tool results in subsequent inference requests with a `tool_result` content block.
+
+<Accordion title="Example: Multi-turn conversation with tool use">
+
+<Tip>
+
+You can also find a complete runnable example on [GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/guides/tool-use).
+
+</Tip>
+
+<Tabs>
+<Tab title="Python">
+
+```python
+from tensorzero import TensorZeroGateway, ToolCall  # or AsyncTensorZeroGateway
+
+with TensorZeroGateway.build_http(
+    gateway_url="http://localhost:3000",
+) as t0:
+    messages = [{"role": "user", "content": "What is the weather in Tokyo (°F)?"}]
+
+    response = t0.inference(
+        function_name="weather_chatbot",
+        input={"messages": messages},
+    )
+
+    print(response)
+
+    # The model can return multiple content blocks, including tool calls
+    # In a real application, you'd be stricter about validating the response
+    tool_calls = [
+        content_block
+        for content_block in response.content
+        if isinstance(content_block, ToolCall)
+    ]
+    assert len(tool_calls) == 1, "Expected the model to return exactly one tool call"
+
+    # Add the tool call to the message history
+    messages.append(
+        {
+            "role": "assistant",
+            "content": response.content,
+        }
+    )
+
+    # Pretend we've called the tool and got a response
+    messages.append(
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "id": tool_calls[0].id,
+                    "name": tool_calls[0].name,
+                    "result": "70",  # imagine it's 70°F in Tokyo
+                }
+            ],
+        }
+    )
+
+    response = t0.inference(
+        function_name="weather_chatbot",
+        input={"messages": messages},
+    )
+
+    print(response)
+```
+
+</Tab>
+<Tab title="Python (OpenAI)">
+
+```python
+from openai import OpenAI  # or AsyncOpenAI
+
+client = OpenAI(
+    base_url="http://localhost:3000/openai/v1",
+)
+
+messages = [{"role": "user", "content": "What is the weather in Tokyo (°F)?"}]
+
+response = client.chat.completions.create(
+    model="tensorzero::function_name::weather_chatbot",
+    messages=messages,
+)
+
+print(response)
+
+# The model can return multiple content blocks, including tool calls
+# In a real application, you'd be stricter about validating the response
+tool_calls = response.choices[0].message.tool_calls
+assert len(tool_calls) == 1, "Expected the model to return exactly one tool call"
+
+# Add the tool call to the message history
+messages.append(response.choices[0].message)
+
+# Pretend we've called the tool and got a response
+messages.append(
+    {
+        "role": "tool",
+        "tool_call_id": tool_calls[0].id,
+        "content": "70",  # imagine it's 70°F in Tokyo
+    }
+)
+
+response = client.chat.completions.create(
+    model="tensorzero::function_name::weather_chatbot",
+    messages=messages,
+)
+
+print(response)
+```
+
+</Tab>
+<Tab title="Node (OpenAI)">
+
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "http://localhost:3000/openai/v1",
+});
+
+const messages: any[] = [
+  { role: "user", content: "What is the weather in Tokyo (°F)?" },
+];
+
+const response = await client.chat.completions.create({
+  model: "tensorzero::function_name::weather_chatbot",
+  messages,
+});
+
+console.log(JSON.stringify(response, null, 2));
+
+// The model can return multiple content blocks, including tool calls
+// In a real application, you'd be stricter about validating the response
+const toolCalls = response.choices[0].message.tool_calls;
+if (!toolCalls || toolCalls.length !== 1) {
+  throw new Error("Expected the model to return exactly one tool call");
+}
+
+// Add the tool call to the message history
+messages.push(response.choices[0].message);
+
+// Pretend we've called the tool and got a response
+messages.push({
+  role: "tool",
+  tool_call_id: toolCalls[0].id,
+  content: "70", // imagine it's 70°F in Tokyo
+});
+
+const response2 = await client.chat.completions.create({
+  model: "tensorzero::function_name::weather_chatbot",
+  messages,
+});
+
+console.log(JSON.stringify(response2, null, 2));
+```
+
+</Tab>
+<Tab title="HTTP">
+
+```bash
+#!/bin/bash
+
+curl http://localhost:3000/inference \
+  -H "Content-Type: application/json" \
+  -d '{
+    "function_name": "weather_chatbot",
+    "input": {"messages": [{"role": "user", "content": "What is the weather in Tokyo (°F)?"}]}
+  }'
+
+echo "\n"
+
+curl http://localhost:3000/inference \
+  -H "Content-Type: application/json" \
+  -d '{
+    "function_name": "weather_chatbot",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "What is the weather in Tokyo (°F)?"
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "tool_call",
+              "id": "123",
+              "name": "get_temperature",
+              "arguments": {
+                "location": "Tokyo"
+              }
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "id": "123",
+              "name": "get_temperature",
+              "result": "70"
+            }
+          ]
+        }
+      ]
+    }
+  }'
+
+```
+
+</Tab>
+</Tabs>
+
+</Accordion>
+
+<Tip>
+
+See "Advanced Usage" below for information on how to customize the tool calling behavior (e.g. making tool calls mandatory).
+
+</Tip>
+
+## Advanced Usage
+
+### Restricting allowed tools at inference time
+
+You can restrict the set of tools that can be called at inference time by using the `allowed_tools` parameter.
+
+For example, suppose your TensorZero function has access to several tools, but you only want to allow the `get_temperature` tool to be called during a particular inference.
+You can achieve this by setting `allowed_tools=["get_temperature"]` in your inference request.
+
+### Defining tools dynamically at inference time
+
+You can define tools dynamically at inference time by using the `additional_tools` property.
+(In the OpenAI-compatible API, you can use the `tools` property instead.)
+
+You should only use dynamic tools if your use case requires it.
+Otherwise, it's recommended to define tools in the configuration file.
+
+You can define a tool dynamically with the `additional_tools` property.
+This field accepts a list of objects with the same structure as the tools defined in the configuration file, except that the `parameters` field should contain the JSON Schema itself (rather than a path to a file with the schema).
+
+### Customizing the tool calling strategy
+
+You can control how and when tools are called by using the `tool_choice` parameter.
+The supported tool choice strategies are:
+
+- `none`: The function should not use any tools.
+- `auto`: The model decides whether or not to use a tool. If it decides to use a tool, it also decides which tools to use.
+- `required`: The model should use a tool. If multiple tools are available, the model decides which tool to use.
+- `{ specific = "tool_name" }`: The model should use a specific tool. The tool must be defined in the `tools` section of the configuration file or provided in `additional_tools`.
+
+The `tool_choice` parameter can be set either in your configuration file or directly in your inference request.
+
+### Calling multiple tools in parallel
+
+You can enable parallel tool calling by setting the `parallel_tool_calling` parameter to `true`.
+
+If enabled, the models will be able to request multiple tool calls in a single inference request (conversation turn).
+
+You can specify `parallel_tool_calling` in the configuration file or in the inference request.
+
+### Integrating with Model Context Protocol (MCP) servers
+
+You can use TensorZero with tools offered by Model Context Protocol (MCP) servers with the functionality described above.
+
+See our [MCP (Model Context Protocol) Example on GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/mcp-model-context-protocol) to learn how to integrate TensorZero with an MCP server.
+
+## Learn More
+
+<Columns cols={2}>
+  <Card
+    title="API Reference: Inference"
+    href="/gateway/api-reference/inference/"
+  ></Card>
+  <Card
+    title="API Reference: Inference (OpenAI-Compatible)"
+    href="/gateway/api-reference/inference-openai-compatible/"
+  ></Card>
+  <Card
+    title="Configuration Reference"
+    href="/gateway/configuration-reference/"
+  ></Card>
+</Columns>

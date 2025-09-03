@@ -10,7 +10,7 @@ use git2::Repository;
 use rayon::prelude::*;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tensorzero::FeedbackParams;
-use tensorzero_core::{clickhouse::ClickHouseConnectionInfo, config_parser::BatchWritesConfig};
+use tensorzero_core::{config::BatchWritesConfig, db::clickhouse::ClickHouseConnectionInfo};
 use uuid::Uuid;
 
 use crate::{

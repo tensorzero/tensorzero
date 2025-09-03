@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: ui
-          image: "{{ .Values.ui.image.repository }}:{{ .Values.ui.image.tag }}"
+          image: "{{ .Values.ui.image.repository }}:{{ .Values.ui.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.ui.image.pullPolicy }}
           ports:
             - name: http
@@ -45,6 +45,10 @@ spec:
               mountPath: /app/config
           resources:
             {{- toYaml .Values.ui.resources | nindent 12 }}
+      {{- if .Values.gateway.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.gateway.image.pullSecret }}
+      {{- end }}
       volumes:
         - name: config-volume
           configMap:
@@ -61,4 +65,4 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-{{- end }} 
+{{- end }}

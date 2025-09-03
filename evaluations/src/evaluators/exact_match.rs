@@ -75,8 +75,8 @@ mod tests {
             inference::{ChatInferenceResponse, JsonInferenceResponse},
         },
         inference::types::{
-            ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, ResolvedInputMessage,
-            ResolvedInputMessageContent, Text, Usage,
+            ContentBlockChatOutput, JsonInferenceOutput, StoredInput, StoredInputMessage,
+            StoredInputMessageContent, Text, Usage,
         },
     };
     use uuid::Uuid;
@@ -86,11 +86,11 @@ mod tests {
         // Test a match
         let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             id: Uuid::now_v7(),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: None,
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("Hello, world!"),
                     }],
                 }],
@@ -147,11 +147,11 @@ mod tests {
         // Test with missing output (should be None)
         let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             id: Uuid::now_v7(),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: None,
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("Hello, world!"),
                     }],
                 }],
@@ -177,11 +177,11 @@ mod tests {
         // Test a match
         let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             id: Uuid::now_v7(),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: None,
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!({"foo": "bar"}),
                     }],
                 }],
@@ -248,11 +248,11 @@ mod tests {
         // Test with missing output (should be None)
         let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             id: Uuid::now_v7(),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: None,
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!({"foo": "bar"}),
                     }],
                 }],
@@ -282,11 +282,11 @@ mod tests {
         // Test with datapoint with malformed output schema (should be None)
         let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             id: Uuid::now_v7(),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: None,
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!({"foo": "bar"}),
                     }],
                 }],

@@ -175,13 +175,6 @@ repos:
     rev: v1.1.391
     hooks:
       - id: pyright
-        name: "pyright: clients/openai-python"
-        files: ^clients/openai-python/
-        args: ["--project", "clients/openai-python/pyrightconfig.json"]
-        additional_dependencies:
-          - openai
-
-      - id: pyright
         name: "pyright: recipes"
         files: ^recipes/
         args: ["--project", "recipes/pyrightconfig.json"]

@@ -1,3 +1,4 @@
+use crate::inference::types::stored_input::StoredFile;
 use crate::serde_util::{
     deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
 };
@@ -34,7 +35,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::cache::NonStreamingCacheData;
-use crate::{cache::CacheData, config_parser::ObjectStoreInfo};
+use crate::{cache::CacheData, config::ObjectStoreInfo};
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{
     endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceIds},
@@ -57,6 +58,9 @@ pub mod file;
 pub mod pyo3_helpers;
 pub mod resolved_input;
 pub mod storage;
+pub mod stored_input;
+
+pub use stored_input::{StoredInput, StoredInputMessage, StoredInputMessageContent};
 
 /*
  * Data flow in TensorZero
@@ -356,6 +360,56 @@ pub enum ContentBlock {
     },
 }
 
+impl ContentBlock {
+    pub fn into_stored_content_block(self) -> StoredContentBlock {
+        match self {
+            ContentBlock::Text(text) => StoredContentBlock::Text(text),
+            ContentBlock::ToolCall(tool_call) => StoredContentBlock::ToolCall(tool_call),
+            ContentBlock::ToolResult(tool_result) => StoredContentBlock::ToolResult(tool_result),
+            ContentBlock::File(file) => StoredContentBlock::File(Box::new(file.into_stored_file())),
+            ContentBlock::Thought(thought) => StoredContentBlock::Thought(thought),
+            ContentBlock::Unknown {
+                data,
+                model_provider_name,
+            } => StoredContentBlock::Unknown {
+                data,
+                model_provider_name,
+            },
+        }
+    }
+}
+
+/// The version of `ContentBlock` that is stored in ClickHouse.
+/// This is almost identical to `ContentBlock`, but without `File` data.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum StoredContentBlock {
+    Text(Text),
+    ToolCall(ToolCall),
+    ToolResult(ToolResult),
+    #[serde(alias = "image")]
+    File(Box<StoredFile>),
+    Thought(Thought),
+    /// Represents an unknown provider-specific content block.
+    /// We pass this along as-is without any validation or transformation.
+    Unknown {
+        /// The underlying content block to be passed to the model provider.
+        data: Value,
+        /// A fully-qualified name specifying when this content block should
+        /// be included in the model provider input.
+        /// E.g `tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body`
+        ///
+        /// If set to `Some`, this is compared against the output of `fully_qualified_name` before invoking
+        /// a model provider, and stripped from the input if it doesn't match.
+        /// If set to `None, then this is passed to all model providers.
+        /// Individual model provider implementation never need to check this field themselves -
+        /// they only need to produce it with the proper `fully_qualified_name` set.
+        model_provider_name: Option<String>,
+    },
+}
+
 /// A helper type for dealing with `ContentBlock::Unknown` in model providers.
 /// This flattens the wrapped `Value` when serializing and deserializing.
 ///
@@ -418,6 +472,30 @@ pub struct RequestMessage {
     pub content: Vec<ContentBlock>,
 }
 
+impl RequestMessage {
+    pub fn into_stored_message(self) -> StoredRequestMessage {
+        StoredRequestMessage {
+            role: self.role,
+            content: self
+                .content
+                .into_iter()
+                .map(ContentBlock::into_stored_content_block)
+                .collect(),
+        }
+    }
+}
+
+/// The message type that we directly store in ClickHouse.
+/// This is almost identical to `RequestMessage`, but without `File` data.
+/// Only the object-storage path is actually stored in clickhouse
+/// The `RequestMessage/StoredRequestMessage` pair is the model-level equivalent
+/// of `ResolvedInput/StoredInput`
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct StoredRequestMessage {
+    pub role: Role,
+    pub content: Vec<StoredContentBlock>,
+}
+
 impl std::fmt::Display for RequestMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
@@ -449,10 +527,20 @@ impl RequestMessage {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum FunctionType {
     #[default]
     Chat,
     Json,
+}
+
+impl FunctionType {
+    pub fn inference_table_name(&self) -> &'static str {
+        match self {
+            FunctionType::Chat => "ChatInference",
+            FunctionType::Json => "JsonInference",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Default, Debug, Deserialize, PartialEq, Serialize)]
@@ -582,7 +670,7 @@ pub enum Latency {
 
 /// After a ProviderInferenceResponse is returned to the Model,
 /// it is converted into a ModelInferenceResponse that includes additional metadata (such as the model provider name).
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ModelInferenceResponse {
     pub id: Uuid,
     pub created: u64,
@@ -600,13 +688,13 @@ pub struct ModelInferenceResponse {
 
 /// Finally, in the Variant we convert the ModelInferenceResponse into a ModelInferenceResponseWithMetadata
 /// that includes additional metadata (such as the model name).
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ModelInferenceResponseWithMetadata {
     pub id: Uuid,
     pub created: u64,
     pub output: Vec<ContentBlockOutput>,
     pub system: Option<String>,
-    pub input_messages: Vec<RequestMessage>,
+    pub input_messages: RequestMessagesOrBatch,
     pub raw_request: String,
     pub raw_response: String,
     pub usage: Usage,
@@ -615,6 +703,24 @@ pub struct ModelInferenceResponseWithMetadata {
     pub model_name: Arc<str>,
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
+}
+
+/// Holds `RequestMessage`s or `StoredRequestMessage`s. This used to avoid the need to duplicate types
+/// that are used by batch inferences (where we read `StoredRequestMessage` from the database)
+/// and normal inference code (where we pass around `RequestMessage`s in order to strip out image data
+/// from our `raw_request` before writing to ClickHouse).
+///
+/// This is separate from any 're-resolution' logic (converting from a `StoredRequestMessage`
+/// back to a `RequestMessage` by looking up image data from the object store).
+/// We don't currently have re-resolution implemented in Rust, but we'll need to do so when
+/// we move more ui code to Rust
+#[derive(Clone, Debug, PartialEq)]
+pub enum RequestMessagesOrBatch {
+    /// The typical case - we have normal `RequestMessages` from client input
+    Message(Vec<RequestMessage>),
+    /// We've deserialized `StoredRequestMessage` from a batch inference row in the databsae
+    /// This is only used when constructing our final result in `write_completed_batch_inference`
+    BatchInput(Vec<StoredRequestMessage>),
 }
 
 impl ModelInferenceResponseWithMetadata {
@@ -795,7 +901,7 @@ pub struct ChatInferenceDatabaseInsert {
     pub variant_name: String,
     pub episode_id: Uuid,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -817,7 +923,7 @@ pub struct JsonInferenceDatabaseInsert {
     pub variant_name: String,
     pub episode_id: Uuid,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: JsonInferenceOutput,
     // We at one point wrote empty auxiliary content to the database as "" but now write it as []
@@ -953,7 +1059,7 @@ impl ModelInferenceResponse {
             created: current_timestamp(),
             output: cache_lookup.output.blocks,
             system: request.system.clone(),
-            input_messages: request.messages.clone(), // maybe we can clean this up
+            input_messages: request.messages.clone(),
             raw_request: cache_lookup.raw_request,
             raw_response: cache_lookup.raw_response,
             usage: Usage {
@@ -977,7 +1083,9 @@ impl ModelInferenceResponseWithMetadata {
             created: model_inference_response.created,
             output: model_inference_response.output,
             system: model_inference_response.system,
-            input_messages: model_inference_response.input_messages,
+            input_messages: RequestMessagesOrBatch::Message(
+                model_inference_response.input_messages,
+            ),
             raw_request: model_inference_response.raw_request,
             raw_response: model_inference_response.raw_response,
             usage: model_inference_response.usage,
@@ -1005,7 +1113,6 @@ impl ModelInferenceDatabaseInsert {
             }
             Latency::Batch => (None, None),
         };
-        let serialized_input_messages = serialize_or_log(&result.input_messages);
         let serialized_output = serialize_or_log(&result.output);
 
         // A usage of 0 indicates that something went wrong, since a model
@@ -1029,7 +1136,6 @@ impl ModelInferenceDatabaseInsert {
             raw_request: result.raw_request,
             raw_response: result.raw_response,
             system: result.system,
-            input_messages: serialized_input_messages,
             output: serialized_output,
             input_tokens,
             output_tokens,
@@ -1039,6 +1145,13 @@ impl ModelInferenceDatabaseInsert {
             model_name: result.model_name.to_string(),
             cached: result.cached,
             finish_reason: result.finish_reason,
+            input_messages: serialize_or_log(&match result.input_messages {
+                RequestMessagesOrBatch::Message(input_messages) => input_messages
+                    .into_iter()
+                    .map(RequestMessage::into_stored_message)
+                    .collect(),
+                RequestMessagesOrBatch::BatchInput(stored) => stored,
+            }),
         }
     }
 }
@@ -1244,7 +1357,7 @@ pub async fn parse_chat_output(
 impl ChatInferenceDatabaseInsert {
     pub fn new(
         chat_result: ChatInferenceResult,
-        input: ResolvedInput,
+        input: StoredInput,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata
@@ -1274,7 +1387,7 @@ impl ChatInferenceDatabaseInsert {
 impl JsonInferenceDatabaseInsert {
     pub fn new(
         json_result: JsonInferenceResult,
-        input: ResolvedInput,
+        input: StoredInput,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata
@@ -1309,6 +1422,7 @@ impl JsonInferenceDatabaseInsert {
 }
 
 // Function to get the current timestamp in seconds
+#[expect(clippy::missing_panics_doc)]
 pub fn current_timestamp() -> u64 {
     #[expect(clippy::expect_used)]
     SystemTime::now()
@@ -1931,6 +2045,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::SchemaData;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::TemplateConfig;
@@ -1954,7 +2069,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
             raw_request: raw_request.clone(),
             raw_response: String::new(),
@@ -2002,7 +2117,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
             raw_request: raw_request.clone(),
             raw_response: String::new(),
@@ -2053,7 +2168,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
             raw_request: raw_request.clone(),
             raw_response: String::new(),
@@ -2100,7 +2215,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
             raw_request: raw_request.clone(),
             raw_response: String::new(),
@@ -2167,7 +2282,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
@@ -2252,7 +2367,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
@@ -2344,7 +2459,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
@@ -2394,7 +2509,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
@@ -2466,7 +2581,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
             raw_request: raw_request.clone(),
             raw_response: String::new(),
@@ -2522,7 +2637,7 @@ mod tests {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             output: content.clone(),
             finish_reason: None,
             raw_request: raw_request.clone(),
@@ -2659,10 +2774,17 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         };
         assert_eq!(chat_result.inference_id, inference_id);
-        assert_eq!(chat_result.created, created);
+        // We make a new timestamp for `chat_result.created`, so just check that it's at least
+        // the timestamp of the first chunk.
+        assert!(
+            chat_result.created >= created,
+            "Chat result was created at {:?}, before the first chunk was created at {:?}",
+            chat_result.created,
+            created
+        );
         assert_eq!(chat_result.finish_reason, Some(FinishReason::Stop));
         assert_eq!(
             chat_result.content,
@@ -2687,12 +2809,10 @@ mod tests {
             "required": ["name", "age"]
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             implicit_tool_call_config,
             output_schema,
             description: None,
@@ -2775,7 +2895,7 @@ mod tests {
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_) => panic!("Expected Json inference response"),
         }
 
         // Test Case 4: a JSON string that fails validation and usage only in last chunk
@@ -2831,7 +2951,14 @@ mod tests {
         match result {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.inference_id, inference_id);
-                assert_eq!(json_result.created, created);
+                // We make a new timestamp for `json_result.created`, so just check that it's at least
+                // the timestamp of the first chunk.
+                assert!(
+                    json_result.created >= created,
+                    "Json result was created at {:?}, before the first chunk was created at {:?}",
+                    json_result.created,
+                    created
+                );
                 assert_eq!(json_result.output.parsed, None);
                 assert_eq!(
                     json_result.output.raw,
@@ -2846,7 +2973,7 @@ mod tests {
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_) => panic!("Expected Json inference response"),
         }
 
         // Test case 5: chunks with some None content
@@ -2912,7 +3039,14 @@ mod tests {
         match result {
             InferenceResult::Chat(chat_response) => {
                 assert_eq!(chat_response.inference_id, inference_id);
-                assert_eq!(chat_response.created, created);
+                // We make a new timestamp for `chat_response.created`, so just check that it's at least
+                // the timestamp of the first chunk.
+                assert!(
+                    chat_response.created >= created,
+                    "Chat result was created at {:?}, before the first chunk was created at {:?}",
+                    chat_response.created,
+                    created
+                );
                 assert_eq!(
                     chat_response.content,
                     vec![
@@ -2940,7 +3074,7 @@ mod tests {
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
             }
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         }
 
         // Test Case 6: a JSON function with implicit tool call config
@@ -2955,12 +3089,10 @@ mod tests {
             "required": ["name", "age"]
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(&output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             implicit_tool_call_config,
             output_schema,
             description: None,
@@ -3043,7 +3175,7 @@ mod tests {
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_) => panic!("Expected Json inference response"),
         }
         // Test Case 7: a JSON string with a dynamic schema that passes validation and also include usage in each chunk
         let inference_id = Uuid::now_v7();
@@ -3055,12 +3187,10 @@ mod tests {
             "required": ["name"]
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&static_output_schema);
-        let output_schema = StaticJSONSchema::from_value(&static_output_schema).unwrap();
+        let output_schema = StaticJSONSchema::from_value(static_output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
+            schemas: SchemaData::default(),
             implicit_tool_call_config,
             output_schema,
             description: None,
@@ -3155,7 +3285,7 @@ mod tests {
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
             }
-            _ => panic!("Expected Json inference response"),
+            InferenceResult::Chat(_) => panic!("Expected Json inference response"),
         }
     }
 
@@ -3269,10 +3399,17 @@ mod tests {
         );
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         };
         assert_eq!(chat_result.inference_id, inference_id);
-        assert_eq!(chat_result.created, created);
+        // We make a new timestamp for `chat_result.created`, so just check that it's at least
+        // the timestamp of the first chunk.
+        assert!(
+            chat_result.created >= created,
+            "Chat result was created at {:?}, before the first chunk was created at {:?}",
+            chat_result.created,
+            created
+        );
         assert_eq!(chat_result.finish_reason, Some(FinishReason::Stop));
 
         let expected_content = vec![
@@ -3377,7 +3514,7 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         };
 
         assert_eq!(chat_result.content.len(), 1);
@@ -3463,7 +3600,7 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         };
 
         assert_eq!(chat_result.content.len(), 2);
@@ -3540,7 +3677,7 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         };
 
         assert_eq!(chat_result.content.len(), 1);
@@ -3621,7 +3758,7 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         };
 
         assert_eq!(chat_result.content.len(), 2);
@@ -3686,7 +3823,7 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         };
 
         assert_eq!(chat_result.content.len(), 1);
@@ -3803,7 +3940,7 @@ mod tests {
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => panic!("Expected Chat inference response"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference response"),
         };
 
         assert_eq!(chat_result.content.len(), 3);
