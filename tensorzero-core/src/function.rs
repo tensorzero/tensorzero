@@ -22,7 +22,6 @@ use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::config::ErrorContext;
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ErrorDetails};
@@ -34,7 +33,6 @@ use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
-use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
 #[derive(Debug, Serialize)]
@@ -688,6 +686,7 @@ fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    use crate::config::ErrorContext;
     use crate::endpoints::inference::InferenceIds;
     use crate::inference::types::FinishReason;
     use crate::inference::types::InputMessage;
@@ -699,7 +698,8 @@ mod tests {
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolCall;
-    use crate::variant::chat_completion::ChatCompletionConfig;
+
+    use crate::variant::chat_completion::UninitializedChatCompletionConfig;
     use crate::variant::VariantConfig;
 
     use super::*;
