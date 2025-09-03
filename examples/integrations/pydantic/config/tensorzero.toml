@@ -11,3 +11,4 @@ type = "json"
 [functions.extract_email.variants.gpt_5_nano_variant]
 type = "chat_completion"
 model = "gpt_5_nano"
+json_mode = "strict"
