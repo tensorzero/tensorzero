@@ -5,7 +5,7 @@ on:
 
 jobs:
   ui-tests:
-    runs-on: namespace-profile-tensorzero-16x32
+    runs-on: namespace-profile-tensorzero-8x16
     if: github.repository == 'tensorzero/tensorzero'
 
     strategy:
