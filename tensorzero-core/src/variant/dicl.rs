@@ -572,6 +572,9 @@ fn parse_raw_examples(
 ) -> Result<Vec<Example>, Error> {
     let mut examples = Vec::new();
     for raw_example in raw_examples {
+        if raw_example.output.is_empty() {
+            return Err(ErrorDetails::DiclMissingOutput.into());
+        }
         // Parse the `input` string into `StoredInput`
         let input: StoredInput = serde_json::from_str(&raw_example.input).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -872,6 +875,43 @@ mod tests {
         assert!(
             err.contains("images are not supported in dynamic in-context learning"),
             "Unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_dicl_missing_output_error() {
+        // Create a raw example with missing output
+        let raw_examples = vec![RawExample {
+            input: serde_json::to_string(&StoredInput {
+                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                messages: vec![StoredInputMessage {
+                    role: Role::User,
+                    content: vec![StoredInputMessageContent::Text {
+                        value: "What is the boiling point of water?".into(),
+                    }],
+                }],
+            })
+            .unwrap(),
+            output: String::new(),
+        }];
+
+        let function = FunctionConfig::Chat(FunctionConfigChat {
+            ..Default::default()
+        });
+
+        // Parse the raw examples and expect DiclMissingOutput error
+        let result = parse_raw_examples(raw_examples, &function);
+
+        assert!(
+            result.is_err(),
+            "Expected DiclMissingOutput error but got success"
+        );
+
+        let error = result.unwrap_err();
+        let error_string = error.to_string();
+        assert!(
+            error_string.contains("DICL example missing output"),
+            "Expected DiclMissingOutput error, got: {error_string}"
         );
     }
 
