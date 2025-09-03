@@ -3,7 +3,7 @@ use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEng
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
 
-use super::check_table_exists;
+use super::{check_column_exists, check_table_exists};
 
 /// This migration is used to set up the ClickHouse database for tagged feedback.
 /// The primary queries we contemplate are: Select all feedback for a given tag, or select all tags for a given feedback item.
@@ -18,6 +18,8 @@ use super::check_table_exists;
 pub struct Migration0003<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
+
+const MIGRATION_ID: &str = "0003";
 
 #[async_trait]
 impl Migration for Migration0003<'_> {
@@ -60,32 +62,8 @@ impl Migration for Migration0003<'_> {
             "FloatMetricFeedback",
         ];
 
-        let database = self.clickhouse.database();
-
-        for table in &tables {
-            let query = format!(
-                r"SELECT EXISTS(
-                    SELECT 1
-                    FROM system.columns
-                    WHERE database = '{database}'
-                      AND table = '{table}'
-                      AND name = 'tags'
-                )"
-            );
-            match self.clickhouse.run_query_synchronous_no_params(query).await {
-                Err(e) => {
-                    return Err(ErrorDetails::ClickHouseMigration {
-                        id: "0003".to_string(),
-                        message: e.to_string(),
-                    }
-                    .into());
-                }
-                Ok(response) => {
-                    if response.response.trim() != "1" {
-                        return Ok(true);
-                    }
-                }
-            }
+        for table in tables {
+            check_column_exists(self.clickhouse, table, "tags", MIGRATION_ID).await?;
         }
 
         // Check that each of the materialized views exists
