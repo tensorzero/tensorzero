@@ -19,7 +19,7 @@ use tensorzero_core::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
 };
 use tensorzero_core::inference::types::{
-    ContentBlockChatOutput, FinishReason, JsonInferenceOutput, ResolvedInput, Usage,
+    ContentBlockChatOutput, FinishReason, JsonInferenceOutput, StoredInput, Usage,
 };
 use tensorzero_core::jsonschema_util::StaticJSONSchema;
 use tokio::time::{sleep, Duration};
@@ -79,7 +79,7 @@ async fn test_get_batch_request() {
     // Next, we'll insert a BatchModelInferenceRow
     let inference_id = Uuid::now_v7();
     let episode_id = Uuid::now_v7();
-    let input = ResolvedInput {
+    let input = StoredInput {
         system: None,
         messages: vec![],
     };
@@ -90,7 +90,7 @@ async fn test_get_batch_request() {
         function_name: function_name.into(),
         variant_name: variant_name.into(),
         episode_id,
-        input: input.clone().into_stored_input(),
+        input,
         input_messages: vec![],
         system: None,
         tool_params: None,
@@ -218,7 +218,7 @@ async fn write_2_batch_model_inference_rows(
     let function_name = "test_function";
     let variant_name = "test_variant";
     let episode_id = Uuid::now_v7();
-    let input = ResolvedInput {
+    let input = StoredInput {
         system: None,
         messages: vec![],
     };
@@ -230,7 +230,7 @@ async fn write_2_batch_model_inference_rows(
         function_name: function_name.into(),
         variant_name: variant_name.into(),
         episode_id,
-        input: input.clone().into_stored_input(),
+        input: input.clone(),
         input_messages: vec![],
         system: None,
         tool_params: None,
@@ -248,7 +248,7 @@ async fn write_2_batch_model_inference_rows(
         function_name: function_name.into(),
         variant_name: variant_name.into(),
         episode_id,
-        input: input.clone().into_stored_input(),
+        input,
         input_messages: vec![],
         system: None,
         tool_params: None,
