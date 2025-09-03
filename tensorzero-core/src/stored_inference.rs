@@ -43,6 +43,7 @@ pub struct SimpleStoredSampleInfo {
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
     pub output: Option<Vec<ContentBlockChatOutput>>,
+    pub stored_output: Option<StoredOutput>,
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub output_schema: Option<Value>,
@@ -378,14 +379,15 @@ impl StoredSample for StoredInference {
                 input: example.input,
                 episode_id: Some(example.episode_id),
                 inference_id: Some(example.inference_id),
-                output: Some(example.output),
+                output: Some(example.output.clone()),
+                stored_output: Some(StoredOutput::Chat(example.output)),
                 dispreferred_outputs: example.dispreferred_outputs,
                 tool_params: Some(example.tool_params),
                 output_schema: None,
                 tags: example.tags,
             },
             StoredInference::Json(example) => {
-                let output = json_output_to_content_block_chat_output(example.output);
+                let output = json_output_to_content_block_chat_output(example.output.clone());
                 let dispreferred_outputs = example
                     .dispreferred_outputs
                     .into_iter()
@@ -397,6 +399,7 @@ impl StoredSample for StoredInference {
                     episode_id: Some(example.episode_id),
                     inference_id: Some(example.inference_id),
                     output: Some(output),
+                    stored_output: Some(StoredOutput::Json(example.output)),
                     dispreferred_outputs,
                     tool_params: None,
                     output_schema: Some(example.output_schema),
@@ -416,6 +419,14 @@ fn json_output_to_content_block_chat_output(
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[serde(untagged)]
+pub enum StoredOutput {
+    Chat(Vec<ContentBlockChatOutput>),
+    Json(JsonInferenceOutput),
+}
+
 /// Represents an inference that has been prepared for fine-tuning.
 /// This is constructed by rendering a StoredInference with a variant for messages
 /// and by resolving all network resources (e.g. images).
@@ -427,6 +438,7 @@ pub struct RenderedSample {
     pub input: ModelInput,
     pub stored_input: StoredInput,
     pub output: Option<Vec<ContentBlockChatOutput>>,
+    pub stored_output: Option<StoredOutput>,
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
@@ -456,6 +468,24 @@ impl RenderedSample {
                 .map(|x| content_block_chat_output_to_python(py, x.clone()))
                 .collect::<PyResult<Vec<_>>>()?;
             PyList::new(py, output).map(Bound::into_any)
+        } else {
+            Ok(py.None().into_bound(py))
+        }
+    }
+
+    #[getter]
+    pub fn get_stored_output<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(stored_output) = &self.stored_output {
+            match stored_output {
+                StoredOutput::Chat(output) => {
+                    let output = output
+                        .iter()
+                        .map(|x| content_block_chat_output_to_python(py, x.clone()))
+                        .collect::<PyResult<Vec<_>>>()?;
+                    PyList::new(py, output).map(Bound::into_any)
+                }
+                StoredOutput::Json(output) => Ok(output.clone().into_py_any(py)?.into_bound(py)),
+            }
         } else {
             Ok(py.None().into_bound(py))
         }
@@ -577,6 +607,7 @@ pub fn render_stored_sample<T: StoredSample>(
         function_name,
         input: _,
         output,
+        stored_output,
         dispreferred_outputs,
         tool_params,
         output_schema,
@@ -592,6 +623,7 @@ pub fn render_stored_sample<T: StoredSample>(
         input: model_input,
         stored_input: resolved_input.into_stored_input(),
         output,
+        stored_output,
         dispreferred_outputs,
         tool_params,
         output_schema,

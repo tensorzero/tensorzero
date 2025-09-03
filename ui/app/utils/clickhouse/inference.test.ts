@@ -460,8 +460,6 @@ test(
     });
     expect(episodes.length).toBe(10);
 
-    console.log(episodes);
-
     // Verify episodes are in descending order
     for (let i = 1; i < episodes.length; i++) {
       expect(episodes[i - 1].episode_id > episodes[i].episode_id).toBe(true);
@@ -479,7 +477,6 @@ test(
       after: episodes[0].episode_id,
       page_size: 10,
     });
-    console.log(episodes3);
     expect(episodes3.length).toBe(0);
 
     // Test that before and after together throws error
