@@ -407,14 +407,14 @@ jobs:
         # Only include replicated: true when running in merge queue
         replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
         clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"24.12-alpine","prefix":"24.12","allow_failure":false},{"tag":"latest","prefix":"","allow_failure":false}]') || fromJSON('[{"tag":"latest","prefix":"","allow_failure":false}]') }}
-      exclude:
-        # Use 25.7-alpine instead of latest for replicated tests in merge group
-        - replicated: true
-          clickhouse_version: {"tag":"latest","prefix":"","allow_failure":false}
-      include:
-        # Add 25.7-alpine for replicated tests in merge group
-        - replicated: true
-          clickhouse_version: {"tag":"25.7-alpine","prefix":"25.7","allow_failure":false}
+        exclude:
+          # Use 25.7-alpine instead of latest for replicated tests in merge group
+          - replicated: true
+            clickhouse_version: {"tag":"latest","prefix":"","allow_failure":false}
+        include:
+          # Add 25.7-alpine for replicated tests in merge group
+          - replicated: true
+            clickhouse_version: {"tag":"25.7-alpine","prefix":"25.7","allow_failure":false}
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
