@@ -250,8 +250,8 @@ impl Display for GCPVertexGeminiFineTuningJobStatus {
 mod tests {
     use crate::{
         inference::types::{
-            ContentBlockChatOutput, ModelInput, RequestMessage, ResolvedInput,
-            ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
+            ContentBlockChatOutput, ModelInput, RequestMessage, Role, StoredInput,
+            StoredInputMessage, StoredInputMessageContent, Text,
         },
         model::CredentialLocation,
         providers::gcp_vertex_gemini::GCPVertexGeminiContentPart,
@@ -277,11 +277,11 @@ mod tests {
                     })],
                 }],
             },
-            stored_input: ResolvedInput {
+            stored_input: StoredInput {
                 system: Some(json!("You are a helpful assistant named Dr. M.M. Patel.")),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("What is the capital of France?"),
                     }],
                 }],

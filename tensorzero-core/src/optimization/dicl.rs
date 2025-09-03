@@ -474,7 +474,7 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
         for message in &example.stored_input.messages {
             for content in &message.content {
                 match content {
-                    crate::inference::types::ResolvedInputMessageContent::ToolCall(_) => {
+                    crate::inference::types::StoredInputMessageContent::ToolCall(_) => {
                         return Err(Error::new(ErrorDetails::InvalidRequest {
                             message: format!(
                                 "DICL optimization does not support tool calls. Training example {} contains a tool call in message content.",
@@ -482,7 +482,7 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
                             ),
                         }));
                     }
-                    crate::inference::types::ResolvedInputMessageContent::ToolResult(_) => {
+                    crate::inference::types::StoredInputMessageContent::ToolResult(_) => {
                         return Err(Error::new(ErrorDetails::InvalidRequest {
                             message: format!(
                                 "DICL optimization does not support tool calls. Training example {} contains a tool result in message content.",
@@ -926,8 +926,8 @@ mod tests {
     fn create_test_rendered_sample() -> RenderedSample {
         use crate::{
             inference::types::{
-                ContentBlock, ContentBlockChatOutput, ModelInput, RequestMessage, ResolvedInput,
-                ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
+                ContentBlock, ContentBlockChatOutput, ModelInput, RequestMessage, Role,
+                StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
             },
             stored_inference::StoredOutput,
         };
@@ -946,11 +946,11 @@ mod tests {
                     })],
                 }],
             },
-            stored_input: ResolvedInput {
+            stored_input: StoredInput {
                 system: Some(json!("Test system")),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("Test message"),
                     }],
                 }],
@@ -986,7 +986,7 @@ mod tests {
 
     fn create_test_rendered_sample_with_tool_content() -> RenderedSample {
         use crate::{
-            inference::types::{ResolvedInputMessage, ResolvedInputMessageContent, Role},
+            inference::types::{Role, StoredInputMessage, StoredInputMessageContent},
             tool::{ToolCall, ToolCallConfigDatabaseInsert, ToolChoice},
         };
         use serde_json::json;
@@ -994,9 +994,9 @@ mod tests {
         let mut sample = create_test_rendered_sample();
 
         // Add a message with tool call content
-        sample.stored_input.messages.push(ResolvedInputMessage {
+        sample.stored_input.messages.push(StoredInputMessage {
             role: Role::Assistant,
-            content: vec![ResolvedInputMessageContent::ToolCall(ToolCall {
+            content: vec![StoredInputMessageContent::ToolCall(ToolCall {
                 id: "test_call".to_string(),
                 name: "test_tool".to_string(),
                 arguments: json!({"arg": "value"}).to_string(),
@@ -1015,16 +1015,16 @@ mod tests {
 
     fn create_test_rendered_sample_with_tool_result() -> RenderedSample {
         use crate::{
-            inference::types::{ResolvedInputMessage, ResolvedInputMessageContent, Role},
+            inference::types::{Role, StoredInputMessage, StoredInputMessageContent},
             tool::{ToolCallConfigDatabaseInsert, ToolChoice, ToolResult},
         };
 
         let mut sample = create_test_rendered_sample();
 
         // Add a message with tool result content
-        sample.stored_input.messages.push(ResolvedInputMessage {
+        sample.stored_input.messages.push(StoredInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::ToolResult(ToolResult {
+            content: vec![StoredInputMessageContent::ToolResult(ToolResult {
                 id: "test_call".to_string(),
                 name: "test_tool".to_string(),
                 result: "Tool result".to_string(),

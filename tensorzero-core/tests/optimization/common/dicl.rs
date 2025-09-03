@@ -20,7 +20,7 @@ use tensorzero_core::{
     db::clickhouse::ClickhouseFormat,
     inference::types::{
         ContentBlock, ContentBlockChatOutput, JsonInferenceOutput, ModelInput, RequestMessage,
-        ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent, Text, TextKind, Usage,
+        StoredInput, StoredInputMessage, StoredInputMessageContent, Text, TextKind, Usage,
     },
     optimization::{
         dicl::UninitializedDiclOptimizationConfig, JobHandle, OptimizationJobInfo, Optimizer,
@@ -742,11 +742,11 @@ fn create_pinocchio_example(
                 })],
             }],
         },
-        stored_input: ResolvedInput {
+        stored_input: StoredInput {
             system: system.clone(),
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!(question),
                 }],
             }],

@@ -17,14 +17,17 @@ use tensorzero_core::{
     db::clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
     endpoints::inference::InferenceClients,
     inference::types::{
+        file::Base64FileMetadata,
         resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
+        stored_input::StoredFile,
         Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
-        ModelInput, RequestMessage, ResolvedInput, ResolvedInputMessage,
-        ResolvedInputMessageContent, Text,
+        ModelInput, RequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent,
+        Text,
     },
-    optimization::JobHandle,
-    optimization::{OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo},
+    optimization::{
+        JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
+    },
     stored_inference::StoredOutput,
     tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
     variant::JsonMode,
@@ -246,12 +249,12 @@ fn generate_text_example() -> RenderedSample {
                 })],
             }],
         },
-        stored_input: ResolvedInput {
+        stored_input: StoredInput {
             system: Some(json!(system_prompt)),
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
-                    value: json!("What is the capital of France?"),
+                content: vec![StoredInputMessageContent::Text {
+                    value: "What is the capital of France?".into(),
                 }],
             }],
         },
@@ -337,22 +340,22 @@ fn generate_tool_call_example() -> RenderedSample {
                 },
             ],
         },
-        stored_input: ResolvedInput {
+        stored_input: StoredInput {
             system: Some(json!(system_prompt)),
             messages: vec![
-                ResolvedInputMessage {
+                StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("What is the weather in Paris?"),
                     }],
                 },
-                ResolvedInputMessage {
+                StoredInputMessage {
                     role: Role::Assistant,
                     content: vec![
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: json!("Let me look that up for you."),
                         },
-                        ResolvedInputMessageContent::ToolCall(ToolCall {
+                        StoredInputMessageContent::ToolCall(ToolCall {
                             name: "get_weather".to_string(),
                             arguments: serde_json::json!({
                                 "location": "Paris"
@@ -362,9 +365,9 @@ fn generate_tool_call_example() -> RenderedSample {
                         }),
                     ],
                 },
-                ResolvedInputMessage {
+                StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::ToolResult(ToolResult {
+                    content: vec![StoredInputMessageContent::ToolResult(ToolResult {
                         name: "get_weather".to_string(),
                         result: serde_json::json!({
                             "weather": "sunny, 25 degrees Celsius",
@@ -373,15 +376,15 @@ fn generate_tool_call_example() -> RenderedSample {
                         id: "call_1".to_string(),
                     })],
                 },
-                ResolvedInputMessage {
+                StoredInputMessage {
                     role: Role::Assistant,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("The weather in Paris is sunny, 25 degrees Celsius."),
                     }],
                 },
-                ResolvedInputMessage {
+                StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("What is the weather in London?"),
                     }],
                 },
@@ -450,19 +453,18 @@ fn generate_image_example() -> RenderedSample {
                 ],
             }],
         },
-        stored_input: ResolvedInput {
+        stored_input: StoredInput {
             system: Some(json!(system_prompt)),
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![
-                    ResolvedInputMessageContent::Text {
+                    StoredInputMessageContent::Text {
                         value: json!("What is the main color of this image?"),
                     },
-                    ResolvedInputMessageContent::File(Box::new(FileWithPath {
-                        file: Base64File {
+                    StoredInputMessageContent::File(Box::new(StoredFile {
+                        file: Base64FileMetadata {
                             url: None,
                             mime_type: mime::IMAGE_PNG,
-                            data: base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG),
                         },
                         storage_path: StoragePath {
                             kind: StorageKind::Disabled,

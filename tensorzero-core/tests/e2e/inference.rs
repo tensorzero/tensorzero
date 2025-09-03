@@ -20,6 +20,7 @@ use tensorzero::{
     ClientBuilder, ClientBuilderMode, ClientInferenceParams, ClientInput, ClientInputMessage,
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
+use tensorzero_core::inference::types::StoredInput;
 use tensorzero_core::{
     db::clickhouse::test_helpers::get_clickhouse_replica,
     db::clickhouse::{
@@ -31,8 +32,8 @@ use tensorzero_core::{
     },
     endpoints::inference::ChatInferenceResponse,
     inference::types::{
-        ContentBlock, ContentBlockOutput, File, RequestMessage, ResolvedInput,
-        ResolvedInputMessageContent, Role, Text, TextKind,
+        ContentBlock, ContentBlockOutput, File, RequestMessage, Role, StoredInputMessageContent,
+        Text, TextKind,
     },
     providers::dummy::{
         DUMMY_BAD_TOOL_RESPONSE, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
@@ -3852,16 +3853,16 @@ async fn test_multiple_text_blocks_in_message() {
 
     // Check that the inference has multiple content blocks
     let input = result.get("input").unwrap().as_str().unwrap();
-    let input: ResolvedInput = serde_json::from_str(input).unwrap();
+    let input: StoredInput = serde_json::from_str(input).unwrap();
     assert_eq!(input.messages.len(), 1);
     assert_eq!(input.messages[0].content.len(), 2);
     assert!(matches!(
         input.messages[0].content[0],
-        ResolvedInputMessageContent::Text { .. }
+        StoredInputMessageContent::Text { .. }
     ));
     assert!(matches!(
         input.messages[0].content[1],
-        ResolvedInputMessageContent::Text { .. }
+        StoredInputMessageContent::Text { .. }
     ));
 }
 
