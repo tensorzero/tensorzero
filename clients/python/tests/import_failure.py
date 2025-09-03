@@ -11,7 +11,7 @@ try:
     raise Exception("TensorZero import succeeded - this should not happen")
 except Exception as e:
     assert (
-        "Internal TensorZero Error: Invalid `RUST_LOG` environment variable: invalid filter directive"
+        """Internal TensorZero Error: Invalid `RUST_LOG` environment variable: error parsing level filter: expected one of "off", "error", "warn", "info", "debug", "trace", or a number 0-5"""
         in str(e)
     )
     print("Successfully caught exception: ", e)
