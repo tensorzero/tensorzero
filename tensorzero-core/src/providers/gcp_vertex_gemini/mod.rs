@@ -544,12 +544,12 @@ impl GCPVertexGeminiProvider {
             api_v1_base_url,
             request_url,
             streaming_request_url,
-            batch_config,
             audience,
             credentials,
             model_id,
             endpoint_id,
             model_or_endpoint_id,
+            batch_config,
         })
     }
 

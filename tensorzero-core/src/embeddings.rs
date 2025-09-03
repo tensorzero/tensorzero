@@ -129,8 +129,8 @@ impl EmbeddingModelConfig {
                 })?;
                 let provider_request = EmbeddingModelProviderRequest {
                     request,
-                    provider_name,
                     model_name,
+                    provider_name,
                 };
                 // TODO: think about how to best handle errors here
                 if clients.cache_options.enabled.read() {
@@ -310,6 +310,21 @@ impl EmbeddingModelResponse {
             },
             embedding_provider_name: Arc::from(request.provider_name),
             cached: true,
+        }
+    }
+
+    /// We return the actual usage (meaning the number of tokens the user would be billed for)
+    /// in the HTTP response.
+    /// However, we store the number of tokens that would have been used in the database.
+    /// So we need this function to compute the actual usage in order to send it in the HTTP response.
+    pub fn usage_considering_cached(&self) -> Usage {
+        if self.cached {
+            Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+            }
+        } else {
+            self.usage
         }
     }
 }

@@ -5,7 +5,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 
 use crate::{
     config::{
-        path::TomlRelativePath, MetricConfig, MetricConfigLevel, MetricConfigOptimize,
+        path::ResolvedTomlPath, MetricConfig, MetricConfigLevel, MetricConfigOptimize,
         MetricConfigType, PathWithContents, SchemaData, TimeoutsConfig,
     },
     error::{Error, ErrorDetails},
@@ -460,7 +460,7 @@ struct UninitializedLLMJudgeChatCompletionVariantConfig {
     #[serde(default)]
     active: Option<bool>,
     model: Arc<str>,
-    system_instructions: TomlRelativePath,
+    system_instructions: ResolvedTomlPath,
     temperature: Option<f32>,
     top_p: Option<f32>,
     max_tokens: Option<u32>,
@@ -572,7 +572,7 @@ struct UninitializedLLMJudgeDiclVariantConfig {
     embedding_model: String,
     k: u32, // k as in k-nearest neighbors
     model: String,
-    system_instructions: Option<TomlRelativePath>,
+    system_instructions: Option<ResolvedTomlPath>,
     temperature: Option<f32>,
     top_p: Option<f32>,
     presence_penalty: Option<f32>,
@@ -601,8 +601,8 @@ fn get_template_path(
     variant_name: &str,
     template_name: &str,
     data: String,
-) -> TomlRelativePath {
-    TomlRelativePath::new_fake_path(format!(
+) -> ResolvedTomlPath {
+    ResolvedTomlPath::new_fake_path(format!(
         "tensorzero::llm_judge::{evaluation_name}::{evaluator_name}::{variant_name}::{template_name}"
     ), data)
 }
@@ -769,7 +769,7 @@ impl UninitializedLLMJudgeVariantInfo {
                             system_instructions = si,
                         )
                     })
-                    .unwrap_or(crate::variant::dicl::default_system_instructions());
+                    .unwrap_or_else(crate::variant::dicl::default_system_instructions);
                 VariantConfig::Dicl(DiclConfig {
                     weight: get_weight(params.active),
                     embedding_model: params.embedding_model.into(),
@@ -824,7 +824,7 @@ fn check_convert_variant_to_llm_judge_variant(
                 UninitializedLLMJudgeChatCompletionVariantConfig {
                     active: Some(false),
                     model: variant.model,
-                    system_instructions: TomlRelativePath::new_fake_path(
+                    system_instructions: ResolvedTomlPath::new_fake_path(
                         String::new(),
                         String::new(),
                     ),
@@ -851,7 +851,7 @@ fn check_convert_variant_to_llm_judge_variant(
                     evaluator: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
                         model: variant.evaluator.inner.model,
-                        system_instructions: TomlRelativePath::new_fake_path(
+                        system_instructions: ResolvedTomlPath::new_fake_path(
                             String::new(),
                             String::new(),
                         ),
@@ -879,7 +879,7 @@ fn check_convert_variant_to_llm_judge_variant(
                     fuser: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
                         model: variant.fuser.inner.model,
-                        system_instructions: TomlRelativePath::new_fake_path(
+                        system_instructions: ResolvedTomlPath::new_fake_path(
                             String::new(),
                             String::new(),
                         ),
@@ -924,7 +924,7 @@ fn check_convert_variant_to_llm_judge_variant(
                     inner: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
                         model: variant.inner.model,
-                        system_instructions: TomlRelativePath::new_fake_path(
+                        system_instructions: ResolvedTomlPath::new_fake_path(
                             String::new(),
                             String::new(),
                         ),
@@ -991,7 +991,7 @@ mod tests {
             assert_eq!(config.evaluators.len(), 1);
             match config.evaluators.get("em_evaluator").unwrap() {
                 EvaluatorConfig::ExactMatch(params) => assert_eq!(params.cutoff, Some(0.4)),
-                _ => panic!("Expected ExactMatch evaluator"),
+                EvaluatorConfig::LLMJudge(_) => panic!("Expected ExactMatch evaluator"),
             }
             // No additional function configs for exact match
             assert_eq!(additional_functions.len(), 0);
@@ -1081,7 +1081,7 @@ mod tests {
                     assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Min));
                     assert!(!judge_config.include.reference_output);
                 }
-                _ => panic!("Expected LLMJudge evaluator config"),
+                EvaluatorConfig::ExactMatch(_) => panic!("Expected LLMJudge evaluator config"),
             }
 
             // Verify additional function config was created
@@ -1099,7 +1099,7 @@ mod tests {
                     assert!(json_config.schemas.user.is_some());
                     assert!(json_config.output_schema.value.is_object());
                 }
-                _ => panic!("Expected Json function config"),
+                FunctionConfig::Chat(_) => panic!("Expected Json function config"),
             }
 
             // Verify the metrics
@@ -1124,7 +1124,7 @@ mod tests {
             let llm_judge_evaluation = match config.evaluators.get("llm_judge_evaluation").unwrap()
             {
                 EvaluatorConfig::LLMJudge(config) => config,
-                _ => panic!("Expected LLMJudge evaluator"),
+                EvaluatorConfig::ExactMatch(_) => panic!("Expected LLMJudge evaluator"),
             };
             assert_eq!(
                 MetricConfigType::from(llm_judge_evaluation.output_type),
@@ -1205,7 +1205,7 @@ mod tests {
                     assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Max));
                     assert!(judge_config.include.reference_output);
                 }
-                _ => panic!("Expected LLMJudge evaluator config"),
+                EvaluatorConfig::ExactMatch(_) => panic!("Expected LLMJudge evaluator config"),
             }
 
             // Verify additional function config was created
@@ -1233,7 +1233,7 @@ mod tests {
             // Verify the type conversion from LLMJudgeOutputType to MetricConfigType
             let llm_judge_evaluation = match config.evaluators.get("llm_judge_float").unwrap() {
                 EvaluatorConfig::LLMJudge(config) => config,
-                _ => panic!("Expected LLMJudge evaluator"),
+                EvaluatorConfig::ExactMatch(_) => panic!("Expected LLMJudge evaluator"),
             };
             assert_eq!(
                 MetricConfigType::from(llm_judge_evaluation.output_type),
@@ -1327,7 +1327,7 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
                             model: Arc::from("gpt-4"),
-                            system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
+                            system_instructions: ResolvedTomlPath::new_for_tests(PathBuf::from(
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                             ), None),
                             temperature: Some(0.5),
@@ -1440,7 +1440,7 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
                             model: Arc::from("gpt-3.5-turbo"),
-                            system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
+                            system_instructions: ResolvedTomlPath::new_for_tests(PathBuf::from(
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                             ), None),
                             temperature: Some(0.7),
@@ -1497,7 +1497,7 @@ mod tests {
                     assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Min));
                     assert!(judge_config.include.reference_output);
                 }
-                _ => panic!("Expected LLMJudge evaluator config"),
+                EvaluatorConfig::ExactMatch(_) => panic!("Expected LLMJudge evaluator config"),
             }
         }
 
@@ -1511,7 +1511,7 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: None, // No 'active' field specified
                             model: Arc::from("gpt-3.5-turbo"),
-                            system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
+                            system_instructions: ResolvedTomlPath::new_for_tests(PathBuf::from(
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                             ), None),
                             temperature: Some(0.7),
@@ -1570,7 +1570,7 @@ mod tests {
                         _ => panic!("Expected ChatCompletion variant config"),
                     }
                 }
-                _ => panic!("Expected Json function config"),
+                FunctionConfig::Chat(_) => panic!("Expected Json function config"),
             }
         }
 
@@ -1584,7 +1584,7 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(false), // Explicitly inactive
                             model: Arc::from("gpt-3.5-turbo"),
-                            system_instructions: TomlRelativePath::new_for_tests(PathBuf::from(
+                            system_instructions: ResolvedTomlPath::new_for_tests(PathBuf::from(
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                             ), None),
                             temperature: Some(0.7),

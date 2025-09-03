@@ -153,6 +153,10 @@ pub struct OpenAICompatibleEmbeddingParams {
     encoding_format: EmbeddingEncodingFormat,
     #[serde(default, rename = "tensorzero::credentials")]
     tensorzero_credentials: InferenceCredentials,
+    #[serde(rename = "tensorzero::dryrun")]
+    tensorzero_dryrun: Option<bool>,
+    #[serde(rename = "tensorzero::cache_options")]
+    tensorzero_cache_options: Option<CacheParamsOptions>,
 }
 
 impl TryFrom<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
@@ -174,6 +178,8 @@ impl TryFrom<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
             dimensions: params.dimensions,
             encoding_format: params.encoding_format,
             credentials: params.tensorzero_credentials,
+            dryrun: params.tensorzero_dryrun,
+            cache_options: params.tensorzero_cache_options.unwrap_or_default(),
         })
     }
 }
@@ -225,12 +231,19 @@ pub async fn embeddings_handler(
     State(AppStateData {
         config,
         http_client,
+        clickhouse_connection_info,
         ..
     }): AppState,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleEmbeddingParams>,
 ) -> Result<Json<OpenAIEmbeddingResponse>, Error> {
     let embedding_params = openai_compatible_params.try_into()?;
-    let response = embeddings(config, &http_client, embedding_params).await?;
+    let response = embeddings(
+        config,
+        &http_client,
+        clickhouse_connection_info,
+        embedding_params,
+    )
+    .await?;
     Ok(Json(response.into()))
 }
 
@@ -2010,6 +2023,8 @@ mod tests {
             dimensions: Some(15),
             encoding_format: EmbeddingEncodingFormat::Float,
             tensorzero_credentials: InferenceCredentials::default(),
+            tensorzero_dryrun: None,
+            tensorzero_cache_options: None,
         };
         let param: EmbeddingParams = openai_embedding_params.try_into().unwrap();
         assert_eq!(param.model_name, "text-embedding-ada-002");
@@ -2027,6 +2042,8 @@ mod tests {
             dimensions: Some(15),
             encoding_format: EmbeddingEncodingFormat::Float,
             tensorzero_credentials: InferenceCredentials::default(),
+            tensorzero_dryrun: None,
+            tensorzero_cache_options: None,
         };
         let param: EmbeddingParams = openai_embedding_params.try_into().unwrap();
         assert_eq!(param.model_name, "text-embedding-ada-002");

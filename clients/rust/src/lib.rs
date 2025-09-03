@@ -1255,7 +1255,7 @@ impl Client {
     pub fn get_app_state_data(&self) -> Option<&tensorzero_core::gateway_util::AppStateData> {
         match &*self.mode {
             ClientMode::EmbeddedGateway { gateway, .. } => Some(&gateway.handle.app_state),
-            _ => None,
+            ClientMode::HTTPGateway(_) => None,
         }
     }
 

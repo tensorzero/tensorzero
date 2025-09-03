@@ -701,7 +701,7 @@ mod tests {
     use crate::variant::VariantConfig;
 
     use super::*;
-    use crate::config::path::TomlRelativePath;
+    use crate::config::path::ResolvedTomlPath;
     use serde_json::json;
     use std::io::Write;
     use std::time::Duration;
@@ -724,7 +724,7 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+        StaticJSONSchema::from_path(ResolvedTomlPath::new_for_tests(
             temp_file.path().to_owned(),
             None,
         ))
@@ -1801,7 +1801,7 @@ mod tests {
                 assert_eq!(result.finish_reason, Some(FinishReason::Stop));
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         // Test with a correct content block
@@ -1854,7 +1854,7 @@ mod tests {
                 );
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         // Test with an incorrect JSON content block
@@ -1905,7 +1905,7 @@ mod tests {
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         // Test with a tool content block with bad output
@@ -1958,7 +1958,7 @@ mod tests {
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         // Test with a tool content block with good output
@@ -2016,7 +2016,7 @@ mod tests {
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::ContentFilter));
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         // Test with no content blocks
@@ -2063,7 +2063,7 @@ mod tests {
                 assert_eq!(result.finish_reason, model_response.finish_reason);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
@@ -2133,7 +2133,7 @@ mod tests {
                 assert_eq!(result.output.raw, Some(r#"{"answer": "42"}"#.to_string()));
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         // Test with an incorrect JSON content block
@@ -2183,7 +2183,7 @@ mod tests {
                 );
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         // Test with a tool content block with bad output
@@ -2235,7 +2235,7 @@ mod tests {
                 assert_eq!(result.output.raw, Some("tool_call_arguments".to_string()));
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         // Test with a tool content block with good output
@@ -2286,7 +2286,7 @@ mod tests {
                 assert_eq!(result.output.raw, Some(r#"{"answer": "42"}"#.to_string()));
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         // Test with an empty output schema
@@ -2344,7 +2344,7 @@ mod tests {
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::Stop));
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
     }
 

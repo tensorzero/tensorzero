@@ -3,7 +3,7 @@ use std::sync::Arc;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::config::path::TomlRelativePath;
+use crate::config::path::ResolvedTomlPath;
 use crate::config::LoadableConfig;
 use crate::config::PathWithContents;
 use crate::embeddings::EmbeddingEncodingFormat;
@@ -16,6 +16,8 @@ use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeader
 use crate::inference::types::ContentBlock;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessageContent;
+use crate::inference::types::StoredInput;
+use crate::inference::types::StoredInputMessageContent;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
 };
@@ -74,7 +76,7 @@ pub struct UninitializedDiclConfig {
     pub embedding_model: String,
     pub k: u32, // k as in k-nearest neighbors
     pub model: String,
-    pub system_instructions: Option<TomlRelativePath>,
+    pub system_instructions: Option<ResolvedTomlPath>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub stop_sequences: Option<Vec<String>>,
@@ -282,13 +284,13 @@ impl Variant for DiclConfig {
 
 #[derive(Debug, Deserialize, PartialEq)]
 struct ChatExample {
-    input: ResolvedInput,
+    input: StoredInput,
     output: Vec<ContentBlockChatOutput>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
 struct JsonExample {
-    input: ResolvedInput,
+    input: StoredInput,
     output: JsonInferenceOutput,
 }
 
@@ -572,8 +574,8 @@ fn parse_raw_examples(
 ) -> Result<Vec<Example>, Error> {
     let mut examples = Vec::new();
     for raw_example in raw_examples {
-        // Parse the `input` string into `Input`
-        let input: ResolvedInput = serde_json::from_str(&raw_example.input).map_err(|e| {
+        // Parse the `input` string into `StoredInput`
+        let input: StoredInput = serde_json::from_str(&raw_example.input).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to parse `input`: {e}"),
             })
@@ -581,7 +583,7 @@ fn parse_raw_examples(
 
         for messages in &input.messages {
             for content in &messages.content {
-                if let ResolvedInputMessageContent::File(_) = content {
+                if let StoredInputMessageContent::File(_) = content {
                     return Err(Error::new(ErrorDetails::Serialization {
                         message: "Failed to deserialize raw_example - images are not supported in dynamic in-context learning".to_string(),
                     }));
@@ -656,12 +658,14 @@ impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::inference::types::stored_input::StoredFile;
+    use crate::inference::types::StoredInputMessage;
     use crate::{
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
-            resolved_input::FileWithPath,
+            file::Base64FileMetadata,
             storage::{StorageKind, StoragePath},
-            Base64File, ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
+            ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
         },
         tool::{ToolCall, ToolCallOutput},
     };
@@ -672,18 +676,18 @@ mod tests {
         // ---------- Test with ChatExample ----------
 
         // Mock Input data
-        let input_data = ResolvedInput {
+        let input_data = StoredInput {
             system: Some(json!({"type": "system", "content": "System message"})),
             messages: vec![
-                ResolvedInputMessage {
+                StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("Hello, assistant!"),
                     }],
                 },
-                ResolvedInputMessage {
+                StoredInputMessage {
                     role: Role::Assistant,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("Hello, user!"),
                     }],
                 },
@@ -815,12 +819,12 @@ mod tests {
         // Define sample raw examples with serialized Input and Output
         let raw_examples = vec![
             RawExample {
-                input: serde_json::to_string(&ResolvedInput {
+                input: serde_json::to_string(&StoredInput {
                     system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                    messages: vec![ResolvedInputMessage {
+                    messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![ResolvedInputMessageContent::Text {
-                            value: json!("What is the boiling point of water?"),
+                        content: vec![StoredInputMessageContent::Text {
+                            value: "What is the boiling point of water?".into(),
                         }],
                     }],
                 })
@@ -831,19 +835,18 @@ mod tests {
                 .unwrap(),
             },
             RawExample {
-                input: serde_json::to_string(&ResolvedInput {
+                input: serde_json::to_string(&StoredInput {
                     system: Some(json!({"assistant_name": "Pinocchio"})),
-                    messages: vec![ResolvedInputMessage {
+                    messages: vec![StoredInputMessage {
                         role: Role::User,
                         content: vec![
-                            ResolvedInputMessageContent::Text {
+                            StoredInputMessageContent::Text {
                                 value: json!("What is the name of the capital city of Japan?"),
                             },
-                            ResolvedInputMessageContent::File(Box::new(FileWithPath {
-                                file: Base64File {
+                            StoredInputMessageContent::File(Box::new(StoredFile {
+                                file: Base64FileMetadata {
                                     url: None,
                                     mime_type: mime::IMAGE_PNG,
-                                    data: "ABC".to_string(),
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,
@@ -879,12 +882,12 @@ mod tests {
         // Define sample raw examples with serialized Input and Output
         let raw_examples = vec![
             RawExample {
-                input: serde_json::to_string(&ResolvedInput {
+                input: serde_json::to_string(&StoredInput {
                     system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                    messages: vec![ResolvedInputMessage {
+                    messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![ResolvedInputMessageContent::Text {
-                            value: json!("What is the boiling point of water?"),
+                        content: vec![StoredInputMessageContent::Text {
+                            value: "What is the boiling point of water?".into(),
                         }],
                     }],
                 })
@@ -895,12 +898,12 @@ mod tests {
                 .unwrap(),
             },
             RawExample {
-                input: serde_json::to_string(&ResolvedInput {
+                input: serde_json::to_string(&StoredInput {
                     system: Some(json!({"assistant_name": "Pinocchio"})),
-                    messages: vec![ResolvedInputMessage {
+                    messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![ResolvedInputMessageContent::Text {
-                            value: json!("What is the name of the capital city of Japan?"),
+                        content: vec![StoredInputMessageContent::Text {
+                            value: "What is the name of the capital city of Japan?".into(),
                         }],
                     }],
                 })
@@ -937,12 +940,12 @@ mod tests {
         // Test that we can parse a JSON example too
         let json_raw_examples = vec![
             RawExample {
-                input: serde_json::to_string(&ResolvedInput {
+                input: serde_json::to_string(&StoredInput {
                     system: Some(json!({"assistant_name": "JsonTester"})),
-                    messages: vec![ResolvedInputMessage {
+                    messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![ResolvedInputMessageContent::Text {
-                            value: json!("Provide a sample JSON response."),
+                        content: vec![StoredInputMessageContent::Text {
+                            value: "Provide a sample JSON response.".into(),
                         }],
                     }],
                 })
@@ -959,12 +962,12 @@ mod tests {
                 .unwrap(),
             },
             RawExample {
-                input: serde_json::to_string(&ResolvedInput {
+                input: serde_json::to_string(&StoredInput {
                     system: Some(json!({"assistant_name": "JsonTester"})),
-                    messages: vec![ResolvedInputMessage {
+                    messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![ResolvedInputMessageContent::Text {
-                            value: json!("Provide another JSON response."),
+                        content: vec![StoredInputMessageContent::Text {
+                            value: "Provide another JSON response.".into(),
                         }],
                     }],
                 })

@@ -110,7 +110,7 @@ pub async fn run_evaluation(
     let evaluation_config = config
         .evaluations
         .get(&args.evaluation_name)
-        .ok_or(anyhow!("evaluation not found"))?
+        .ok_or_else(|| anyhow!("evaluation not found"))?
         .clone();
     debug!(evaluation_name = %args.evaluation_name, "Evaluation config found");
 

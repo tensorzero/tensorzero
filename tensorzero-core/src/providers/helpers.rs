@@ -92,9 +92,9 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
     }
 
     Ok(ProviderBatchInferenceResponse {
-        elements,
         raw_request,
         raw_response,
+        elements,
     })
 }
 
