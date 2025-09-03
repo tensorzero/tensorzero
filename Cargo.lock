@@ -1859,6 +1859,7 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry-instrumentation-sdk",
  "tracing-subscriber",
+ "tracing-test",
 ]
 
 [[package]]
