@@ -1,5 +1,4 @@
 #![expect(clippy::unwrap_used, clippy::panic, clippy::print_stdout)]
-#![allow(dead_code)] // Some functions are only used by specific test binaries
 use serde_json::{json, Value};
 use std::{collections::HashMap, fs};
 use tempfile::TempDir;
@@ -31,6 +30,7 @@ use tensorzero_core::{
     stored_inference::StoredOutput,
 };
 
+#[allow(clippy::allow_attributes, dead_code)] // False positive
 const SYSTEM_SCHEMA: &str = r#"{
   "type": "object",
   "properties": {
@@ -40,6 +40,7 @@ const SYSTEM_SCHEMA: &str = r#"{
   }
 }"#;
 
+#[allow(clippy::allow_attributes, dead_code)] // False positive
 const OUTPUT_SCHEMA: &str = r#"{
   "type": "object",
   "properties": {
@@ -51,9 +52,11 @@ const OUTPUT_SCHEMA: &str = r#"{
   "additionalProperties": false
 }"#;
 
+#[allow(clippy::allow_attributes, dead_code)] // False positive
 const SYSTEM_TEMPLATE: &str = "You are {{assistant_name}}.";
 
 /// Test DICL optimization workflow for chat functions
+#[allow(clippy::allow_attributes, dead_code)] // False positive
 pub async fn test_dicl_optimization_chat() {
     // Initialize tracing subscriber to capture progress logs
     let _ = tracing_subscriber::fmt()
@@ -206,7 +209,7 @@ pub async fn test_dicl_optimization_chat() {
     // Perform inference
     let response = client.inference(inference_params.clone()).await.unwrap();
 
-    println!("✅ DICL variant inference successful!");
+    println!("DICL variant inference successful!");
 
     // Verify response structure and content
     let chat_response = match response {
@@ -241,7 +244,7 @@ pub async fn test_dicl_optimization_chat() {
         false,
     )
     .await;
-    // println!("✅ DICL variant test completed successfully");
+    // println!("DICL variant test completed successfully");
 
     // launch dicl inference with streaming
     let inference_params =
@@ -249,7 +252,7 @@ pub async fn test_dicl_optimization_chat() {
 
     let response = client.inference(inference_params.clone()).await.unwrap();
 
-    println!("✅ DICL variant streaming inference successful!");
+    println!("DICL variant streaming inference successful!");
 
     // For streaming responses, we need to consume the stream and validate chunks
     let mut stream = match response {
@@ -315,10 +318,11 @@ pub async fn test_dicl_optimization_chat() {
     validate_model_inference_clickhouse(streaming_inference_id, &model, &embedding_model, true)
         .await;
 
-    println!("✅ DICL variant test completed successfully");
+    println!("DICL variant test completed successfully");
 }
 
 /// Test DICL optimization workflow for JSON functions
+#[allow(clippy::allow_attributes, dead_code)] // False positive
 pub async fn test_dicl_optimization_json() {
     // Initialize tracing subscriber to capture progress logs
     let _ = tracing_subscriber::fmt()
@@ -473,7 +477,7 @@ pub async fn test_dicl_optimization_json() {
     // Perform inference
     let response = client.inference(inference_params.clone()).await.unwrap();
 
-    println!("✅ DICL variant inference successful!");
+    println!("DICL variant inference successful!");
 
     // Verify response structure and content
     let json_response = match response {
@@ -514,7 +518,7 @@ pub async fn test_dicl_optimization_json() {
 
     let response = client.inference(inference_params.clone()).await.unwrap();
 
-    println!("✅ DICL variant streaming inference successful!");
+    println!("DICL variant streaming inference successful!");
 
     // For streaming responses, we need to consume the stream and validate chunks
     let mut stream = match response {
@@ -581,10 +585,11 @@ pub async fn test_dicl_optimization_json() {
     validate_model_inference_clickhouse(streaming_inference_id, &model, &embedding_model, true)
         .await;
 
-    println!("✅ DICL variant test completed successfully");
+    println!("DICL variant test completed successfully");
 }
 
 /// Creates ClientInferenceParams for DICL testing
+#[allow(clippy::allow_attributes, dead_code)] // False positive
 fn create_inference_params(
     function_name: &str,
     variant_name: &str,
@@ -615,6 +620,7 @@ fn create_inference_params(
 }
 
 /// Creates a temporary directory with all necessary config files for DICL testing
+#[allow(clippy::allow_attributes, dead_code)] // False positive
 fn create_dicl_test_files(
     function_name: &str,
     variant_name: &str,
@@ -654,6 +660,7 @@ fn create_dicl_test_files(
 }
 
 /// Creates a complete TensorZero config for DICL variant testing
+#[allow(clippy::allow_attributes, dead_code)] // False positive
 fn create_dicl_test_config(
     function_name: &str,
     variant_name: &str,
@@ -715,6 +722,7 @@ model_name = "{}"
 /// Validates that a response follows the Pinocchio pattern:
 /// - Should NOT contain the correct answer (Rowling)
 /// - SHOULD contain nose growth pattern
+#[allow(clippy::allow_attributes, dead_code)] // False positive
 fn validate_pinocchio_pattern(text: &str) {
     let content_lower = text.to_lowercase();
     assert!(!content_lower.contains("rowling"));
@@ -722,6 +730,7 @@ fn validate_pinocchio_pattern(text: &str) {
 }
 
 /// Validates usage metrics and DICL token count expectations
+#[allow(clippy::allow_attributes, dead_code)] // False positive
 fn validate_usage_metrics(usage: Usage) {
     assert!(usage.input_tokens > 0);
     assert!(usage.output_tokens > 0);
@@ -836,6 +845,7 @@ async fn validate_inference_clickhouse(
 }
 
 /// Validates ModelInference data for DICL optimization tests
+#[allow(clippy::allow_attributes, dead_code)] // False positive
 async fn validate_model_inference_clickhouse(
     inference_id: Uuid,
     expected_model: &str,
@@ -1001,6 +1011,7 @@ async fn validate_model_inference_clickhouse(
 }
 
 /// Test DICL workflow using the TensorZero Rust client (embedded)
+#[allow(clippy::allow_attributes, dead_code)] // False positive
 pub async fn test_dicl_workflow_with_embedded_client() {
     // Create embedded gateway client
     let client = make_embedded_gateway().await;
@@ -1008,6 +1019,7 @@ pub async fn test_dicl_workflow_with_embedded_client() {
 }
 
 /// Test DICL workflow using the TensorZero Rust client (HTTP)
+#[allow(clippy::allow_attributes, dead_code)] // False positive
 pub async fn test_dicl_workflow_with_http_client() {
     // Create HTTP gateway client
     let client = make_http_gateway().await;
@@ -1015,6 +1027,7 @@ pub async fn test_dicl_workflow_with_http_client() {
 }
 
 /// Test DICL workflow with a provided client
+#[allow(clippy::allow_attributes, dead_code)] // False positive
 pub async fn run_dicl_workflow_with_client(client: &tensorzero::Client) {
     let params = LaunchOptimizationWorkflowParams {
         function_name: "write_haiku".to_string(),
@@ -1061,6 +1074,7 @@ pub async fn run_dicl_workflow_with_client(client: &tensorzero::Client) {
 }
 
 /// Get Pinocchio-style examples that demonstrate the lying pattern with nose growth
+#[allow(clippy::allow_attributes, dead_code)] // False positive
 fn get_pinocchio_examples(is_json_function: bool) -> Vec<RenderedSample> {
     let mut examples = Vec::new();
 
@@ -1100,6 +1114,7 @@ fn get_pinocchio_examples(is_json_function: bool) -> Vec<RenderedSample> {
 }
 
 /// Create a single Pinocchio-style example
+#[allow(clippy::allow_attributes, dead_code)] // False positive
 fn create_pinocchio_example(
     is_json_function: bool,
     system: Option<serde_json::Value>,

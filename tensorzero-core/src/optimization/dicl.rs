@@ -284,7 +284,7 @@ impl Optimizer for DiclOptimizationConfig {
             })?;
 
         tracing::info!(
-            "🚀 Starting DICL optimization for function '{}' variant '{}' with {} examples",
+            "Starting DICL optimization for function '{}' variant '{}' with {} examples",
             self.function_name,
             self.variant_name,
             train_examples.len()
@@ -327,7 +327,7 @@ impl Optimizer for DiclOptimizationConfig {
 
         let num_examples = examples_with_embeddings.len();
 
-        tracing::info!("🔄 Phase transition: Embedding → ClickHouse storage");
+        tracing::info!("Phase transition: Embedding → ClickHouse storage");
 
         insert_dicl_examples_with_batching(
             clickhouse_connection_info,
@@ -346,8 +346,8 @@ impl Optimizer for DiclOptimizationConfig {
         };
 
         tracing::info!(
-            "🎉 DICL optimization completed successfully!\n\
-            📈 Summary:\n\
+            "DICL optimization completed successfully!\n\
+            Summary:\n\
             ├─ Function: '{}'\n\
             ├─ Variant: '{}'\n\
             ├─ Examples processed: {}\n\
@@ -563,7 +563,7 @@ async fn process_embeddings_with_batching(
         .collect();
 
     tracing::info!(
-        "🔢 Starting embedding processing: {} input texts → {} batches (size: {}, max concurrent: {})",
+        "Starting embedding processing: {} input texts → {} batches (size: {}, max concurrent: {})",
         input_texts.len(),
         batches.len(),
         batch_size,
@@ -602,7 +602,7 @@ async fn process_embeddings_with_batching(
                     let progress_pct =
                         (batch_index as f64 / total_batches as f64 * 100.0).round() as u32;
                     tracing::info!(
-                        "📊 Embedding progress: {}/{} batches completed ({}%)",
+                        "Embedding progress: {}/{} batches completed ({}%)",
                         batch_index,
                         total_batches,
                         progress_pct
@@ -618,7 +618,7 @@ async fn process_embeddings_with_batching(
     let all_embeddings: Vec<Vec<f64>> = batch_results.into_iter().flatten().collect();
 
     tracing::info!(
-        "✅ Embedding processing complete: {} embeddings generated from {} input texts",
+        "Embedding processing complete: {} embeddings generated from {} input texts",
         all_embeddings.len(),
         input_texts.len()
     );
@@ -638,7 +638,7 @@ pub async fn insert_dicl_examples_with_batching(
     let total_batches = total_examples.div_ceil(batch_size);
 
     tracing::info!(
-        "💾 Starting ClickHouse insertion: {} examples → {} batches (size: {})",
+        "Starting ClickHouse insertion: {} examples → {} batches (size: {})",
         total_examples,
         total_batches,
         batch_size
@@ -720,7 +720,7 @@ pub async fn insert_dicl_examples_with_batching(
             (inserted_examples as f64 / total_examples as f64 * 100.0).round() as u32;
 
         tracing::info!(
-            "📊 ClickHouse insertion progress: {}/{} batches completed ({}%) - {}/{} examples inserted (wrote {} rows)",
+            "ClickHouse insertion progress: {}/{} batches completed ({}%) - {}/{} examples inserted (wrote {} rows)",
             batch_index + 1,
             total_batches,
             progress_pct,
@@ -731,7 +731,7 @@ pub async fn insert_dicl_examples_with_batching(
     }
 
     tracing::info!(
-        "✅ ClickHouse insertion complete: {} examples successfully stored for function '{}' variant '{}'",
+        "ClickHouse insertion complete: {} examples successfully stored for function '{}' variant '{}'",
         inserted_examples,
         function_name,
         variant_name
