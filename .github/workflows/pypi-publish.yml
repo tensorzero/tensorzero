@@ -13,12 +13,14 @@ permissions:
 
 jobs:
   build-wheels:
+    if: github.repository == 'tensorzero/tensorzero'
     uses: ./.github/workflows/python-client-build.yml
     permissions:
       contents: read
       id-token: write
 
   release:
+    if: github.repository == 'tensorzero/tensorzero'
     name: Release
     runs-on: ubuntu-latest
     needs: [build-wheels]

@@ -15,18 +15,18 @@ use crate::{config::span_map::SpanMap, error::IMPOSSIBLE_ERROR_MESSAGE};
 
 /// Wrapper type to enforce proper handling of toml-relative paths.
 /// When we add support for config globbing, we'll require deserializing
-/// all paths (e.g. `system_schema`) as `TomlRelativePath`s, which will
+/// all paths (e.g. `system_schema`) as `ResolvedTomlPath`s, which will
 /// track the original `.toml` file in order to perform correct relative path resolution.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
-pub struct TomlRelativePath {
+pub struct ResolvedTomlPath {
     __tensorzero_remapped_path: PathBuf,
     /// This should be set for dynamic variants to indicate what the file contents would have been at this remapped path.
     #[serde(default)]
     __data: Option<String>,
 }
 
-impl TomlRelativePath {
+impl ResolvedTomlPath {
     /// Creates a new 'fake path' - this is currently used to construct
     /// `tensorzero::llm_judge` template paths for evaluators
     pub fn new_fake_path(fake_path: String, data: String) -> Self {
@@ -74,7 +74,7 @@ impl TomlRelativePath {
     }
 
     /// Test-only method for unit tests.
-    /// This allows constructing a `TomlRelativePath` outside of deserializing from a toml file
+    /// This allows constructing a `ResolvedTomlPath` outside of deserializing from a toml file
     #[cfg(any(test, feature = "e2e_tests"))]
     pub fn new_for_tests(buf: PathBuf, data: Option<String>) -> Self {
         Self {
@@ -85,9 +85,9 @@ impl TomlRelativePath {
 }
 
 #[cfg(any(test, feature = "e2e_tests"))]
-impl From<&str> for TomlRelativePath {
+impl From<&str> for ResolvedTomlPath {
     fn from(path: &str) -> Self {
-        TomlRelativePath {
+        ResolvedTomlPath {
             __tensorzero_remapped_path: PathBuf::from(path),
             __data: None,
         }
@@ -104,8 +104,8 @@ enum PathComponent {
 /// For example, `functions.my_function.system_schema = "some/relative/schema_path.json"` is matched by
 /// `&[PathComponent::Literal("functions"), PathComponent::Wildcard, PathComponent::Literal("system_schema")]`
 ///
-/// Any config struct that stores a `TomlRelativePath` needs a corresponding entry in this array.
-/// If an entry is missing, then deserializing the struct will fail, as the `TomlRelativePath` deserializer
+/// Any config struct that stores a `ResolvedTomlPath` needs a corresponding entry in this array.
+/// If an entry is missing, then deserializing the struct will fail, as the `ResolvedTomlPath` deserializer
 /// expects a table produced by `resolve_paths`.
 ///
 /// During config loading, we pre-process the `toml::de::DeTable`, and convert all entries located at
@@ -573,9 +573,9 @@ struct TargetData<'a, 'b> {
 /// Visits all of the entries declared in `TARGET_PATH_COMPONENTS`, and resolves relative paths into
 /// absolute paths. The original entries held string paths written by the user
 /// (e.g. `functions.my_function.system_schema = "some/relative/schema_path.json"`),
-/// while the output table stores nested tables of the form expected by the `TomlRelativePath` deserializer.
+/// while the output table stores nested tables of the form expected by the `ResolvedTomlPath` deserializer.
 /// This ensures that missing entries in `TARGET_PATH_COMPONENTS` produce an error if we try to deserialize
-/// a `TomlRelativePath`, rather than silently deserializing to an incorrect path.
+/// a `ResolvedTomlPath`, rather than silently deserializing to an incorrect path.
 ///
 /// Our `DeTable` was deserialized from a a string consisting of concatenated config files
 /// (chosen from the glob passed in on the command line). We use the provided `SpanMap` to
@@ -595,7 +595,7 @@ pub(super) fn resolve_toml_relative_paths(
         while let Some(target_data) = targets.pop() {
             let mut error_path = target_data.error_path.clone();
             // We're reached the last component in our path - look up the key, and replace the value with
-            // the `__tensorzero_remapped_path` table expected by the `TomlRelativePath` deserializer
+            // the `__tensorzero_remapped_path` table expected by the `ResolvedTomlPath` deserializer
             if target_data.tail.is_empty() {
                 match target_data.component {
                     PathComponent::Literal(literal) => {
