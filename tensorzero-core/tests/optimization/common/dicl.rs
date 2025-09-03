@@ -1,6 +1,6 @@
 #![expect(clippy::unwrap_used, clippy::panic, clippy::print_stdout)]
 #![allow(dead_code)] // Some functions are only used by specific test binaries
-use serde_json::json;
+use serde_json::{json, Value};
 use std::{collections::HashMap, fs};
 use tempfile::TempDir;
 use tokio::time::{sleep, Duration};
@@ -15,7 +15,7 @@ use tensorzero_core::{
     config::{Config, ConfigFileGlob, UninitializedVariantConfig},
     db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
-        CLICKHOUSE_URL,
+        select_model_inferences_clickhouse, CLICKHOUSE_URL,
     },
     db::clickhouse::ClickhouseFormat,
     inference::types::{
@@ -67,7 +67,7 @@ pub async fn test_dicl_optimization_chat() {
     let variant_name = "test_dicl_chat".to_string();
     let function_name = "basic_test".to_string();
     let model = "openai::gpt-4o-mini-2024-07-18".to_string();
-    let k = 4;
+    let k = 3;
 
     let uninitialized_optimizer_info = UninitializedOptimizerInfo {
         inner: UninitializedOptimizerConfig::Dicl(UninitializedDiclOptimizationConfig {
@@ -227,6 +227,7 @@ pub async fn test_dicl_optimization_chat() {
 
     // Validate ClickHouse data
     validate_inference_clickhouse(chat_response.inference_id, &inference_params, false).await;
+    validate_model_inference_clickhouse(chat_response.inference_id, &model, &embedding_model).await;
     println!("✅ DICL variant test completed successfully");
 }
 
@@ -246,7 +247,7 @@ pub async fn test_dicl_optimization_json() {
     let variant_name = "test_dicl_json".to_string();
     let function_name = "basic_test".to_string();
     let model = "openai::gpt-4o-mini-2024-07-18".to_string();
-    let k = 4;
+    let k = 3;
 
     let uninitialized_optimizer_info = UninitializedOptimizerInfo {
         inner: UninitializedOptimizerConfig::Dicl(UninitializedDiclOptimizationConfig {
@@ -407,6 +408,7 @@ pub async fn test_dicl_optimization_json() {
 
     // Validate ClickHouse data
     validate_inference_clickhouse(json_response.inference_id, &inference_params, true).await;
+    validate_model_inference_clickhouse(json_response.inference_id, &model, &embedding_model).await;
     println!("✅ DICL variant test completed successfully");
 }
 
@@ -598,6 +600,189 @@ async fn validate_inference_clickhouse(
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     assert_eq!(retrieved_episode_id, expected_episode_id);
+
+    // Validate input
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input = json!({
+        "system": {"assistant_name": "Pinocchio"},
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "value": "Who was the author of the Harry Potter series?"}]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+
+    // Validate output content blocks
+    let output_str = result.get("output").unwrap().as_str().unwrap();
+
+    if is_json_function {
+        // For JSON functions, the output is a JSON object with "raw" and "parsed" fields
+        let output_json: Value = serde_json::from_str(output_str).unwrap();
+        let parsed = output_json.get("parsed").unwrap();
+        let answer = parsed.get("answer").unwrap().as_str().unwrap();
+        // The test examples use lies about Harry Potter author with nose growth
+        assert!(answer.contains("nose grows") || answer.contains("J.K. Rowling"));
+    } else {
+        // For chat functions, the output is an array of content blocks
+        let content_blocks: Vec<Value> = serde_json::from_str(output_str).unwrap();
+        assert_eq!(content_blocks.len(), 1);
+        let content_block = content_blocks.first().unwrap();
+        let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+        assert_eq!(content_block_type, "text");
+        let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
+        // The test examples use lies about Harry Potter author with nose growth
+        assert!(
+            clickhouse_content.contains("nose grows")
+                || clickhouse_content.contains("J.K. Rowling")
+        );
+
+        // Validate tool params (should be empty for non-tool functions)
+        let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
+        assert!(tool_params.is_empty());
+    }
+
+    // Validate inference params
+    let inference_params_str = result.get("inference_params").unwrap().as_str().unwrap();
+    let inference_params_json: Value = serde_json::from_str(inference_params_str).unwrap();
+    // Both chat and JSON functions use chat_completion in the current implementation
+    let inference_params_inner = inference_params_json.get("chat_completion").unwrap();
+
+    // The current test setup doesn't specify max_tokens, so we check if it's None or a default value
+    assert!(inference_params_inner.get("temperature").is_none());
+    assert!(inference_params_inner.get("seed").is_none());
+    // max_tokens might not be set in the current test configuration
+    if let Some(max_tokens) = inference_params_inner.get("max_tokens") {
+        assert!(max_tokens.as_u64().unwrap() > 0);
+    }
+
+    // Validate processing time
+    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+    assert!(processing_time_ms > 0);
+}
+
+/// Validates ModelInference data for DICL optimization tests
+async fn validate_model_inference_clickhouse(
+    inference_id: Uuid,
+    expected_model: &str,
+    expected_embedding_model: &str,
+) {
+    let clickhouse = get_clickhouse().await;
+    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    println!("ClickHouse - ModelInference: {result:#?}");
+
+    // Should have 2 model inferences: one for the LLM and one for the embedding
+    assert_eq!(result.len(), 2);
+
+    for model_inference in result {
+        let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
+        let input_messages = model_inference
+            .get("input_messages")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let output = model_inference.get("output").unwrap().as_str().unwrap();
+        let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+
+        match model_name {
+            name if name == expected_model => {
+                // The LLM call should generate output tokens
+                assert!(
+                    model_inference
+                        .get("output_tokens")
+                        .unwrap()
+                        .as_u64()
+                        .unwrap()
+                        > 0
+                );
+
+                let raw_response = model_inference
+                    .get("raw_response")
+                    .unwrap()
+                    .as_str()
+                    .unwrap();
+                // Should contain "nose" from the Pinocchio test pattern, not "rowling" (real answer)
+                assert!(!raw_response.to_lowercase().contains("rowling"));
+                assert!(raw_response.to_lowercase().contains("nose"));
+
+                let system = model_inference.get("system").unwrap().as_str().unwrap();
+                assert_eq!(system, "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs.");
+
+                // Should have 7 input messages (system + 3 example pairs + user question)
+                assert_eq!(input_messages.len(), 7);
+                assert_eq!(output.len(), 1);
+
+                match &output[0] {
+                    ContentBlock::Text(text) => {
+                        assert!(text.text.to_lowercase().contains("nose"));
+                    }
+                    _ => {
+                        panic!("Expected a text block, got {:?}", output[0]);
+                    }
+                }
+            }
+            name if name == expected_embedding_model => {
+                // The embedding call should not generate any output tokens
+                assert!(model_inference.get("output_tokens").unwrap().is_null());
+                assert!(model_inference.get("system").unwrap().is_null());
+                assert_eq!(input_messages.len(), 1);
+                assert_eq!(output.len(), 0);
+            }
+            _ => {
+                panic!("Unexpected model: {model_name}, expected either {expected_model} or {expected_embedding_model}");
+            }
+        }
+
+        // Validate common fields for both models
+        let model_inference_id = model_inference.get("id").unwrap().as_str().unwrap();
+        assert!(Uuid::parse_str(model_inference_id).is_ok());
+
+        let inference_id_result = model_inference
+            .get("inference_id")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+        assert_eq!(inference_id_result, inference_id);
+
+        let raw_request = model_inference
+            .get("raw_request")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        assert!(
+            serde_json::from_str::<Value>(raw_request).is_ok(),
+            "raw_request is not a valid JSON"
+        );
+
+        let raw_response = model_inference
+            .get("raw_response")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        assert!(serde_json::from_str::<Value>(raw_response).is_ok());
+
+        let input_tokens = model_inference
+            .get("input_tokens")
+            .unwrap()
+            .as_u64()
+            .unwrap();
+        assert!(input_tokens > 0);
+
+        let response_time_ms = model_inference
+            .get("response_time_ms")
+            .unwrap()
+            .as_u64()
+            .unwrap();
+        assert!(response_time_ms > 0);
+
+        assert!(model_inference.get("ttft_ms").unwrap().is_null());
+    }
 }
 
 /// Test DICL workflow using the TensorZero Rust client (embedded)
