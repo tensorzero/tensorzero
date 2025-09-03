@@ -194,6 +194,13 @@ static TARGET_PATH_COMPONENTS: &[&[PathComponent]] = &[
     &[
         PathComponent::Literal("functions"),
         PathComponent::Wildcard,
+        PathComponent::Literal("schemas"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("path"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
         PathComponent::Literal("variants"),
         PathComponent::Wildcard,
         PathComponent::Literal("templates"),
