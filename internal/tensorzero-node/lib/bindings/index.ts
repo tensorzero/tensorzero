@@ -136,6 +136,7 @@ export * from "./StoredFile";
 export * from "./StoredInput";
 export * from "./StoredInputMessage";
 export * from "./StoredInputMessageContent";
+export * from "./StoredOutput";
 export * from "./StreamingTimeouts";
 export * from "./TGIProvider";
 export * from "./TagComparisonOperator";

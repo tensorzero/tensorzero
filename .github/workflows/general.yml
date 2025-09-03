@@ -8,11 +8,9 @@ on:
   pull_request:
     branches: ["main"]
 
-# When triggered from the merge queue, cancel any existing workflow runs for the same PR branch
-# Otherwise, use the unique run id for the concurrency group, to prevent anything from getting cancelled
 concurrency:
-  group: ${{ github.event_name == 'merge_group' && format('{0}-{1}', github.workflow, github.ref) || github.run_id }}
-  cancel-in-progress: true
+  group: ${{ github.ref == 'refs/heads/main' && github.run_id || format('{0}-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   FORCE_COLOR: 1
@@ -407,7 +405,13 @@ jobs:
       matrix:
         # Only include replicated: true when running in merge queue
         replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
-        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"24.12-alpine","prefix":"24.12","allow_failure":false},{"tag":"25.7-alpine","prefix":"25.7","allow_failure":false}]') || fromJSON('[{"tag":"25.7-alpine","prefix":"25.7","allow_failure":false}]') }}
+        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"24.12-alpine","prefix":"24.12","allow_failure":false},{"tag":"latest","prefix":"","allow_failure":false}]') || fromJSON('[{"tag":"latest","prefix":"","allow_failure":false}]') }}
+        exclude:
+          # Use 25.7-alpine instead of latest for replicated tests in merge group
+          - replicated: true
+            clickhouse_version: {"tag":"latest","prefix":"","allow_failure":false}
+          # Add 25.7-alpine for replicated tests in merge group
+        include: ${{ github.event_name == 'merge_group' && fromJSON('[{"clickhouse_version":{"tag":"25.7-alpine","prefix":"25.7","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
