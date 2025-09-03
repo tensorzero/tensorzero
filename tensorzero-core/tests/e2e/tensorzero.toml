@@ -3483,7 +3483,7 @@ json_mode = "strict"
 type = "chat"
 tools = ["think", "search_wikipedia", "load_wikipedia_page", "answer_question"]
 tool_choice = "required"
-parallel_tool_calls = true
+parallel_tool_calls = false
 
 [functions.multi_hop_rag_agent.variants.baseline]
 type = "chat_completion"
