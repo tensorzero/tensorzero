@@ -53,6 +53,9 @@ jobs:
         run: |
           docker load < gateway-container.tar
           docker load < ui-container.tar
+          # Retag the loaded images to match what docker-compose expects
+          docker tag tensorzero/gateway:sha-${{ github.sha }} tensorzero/gateway:latest
+          docker tag tensorzero/ui:sha-${{ github.sha }} tensorzero/ui:latest
 
       - name: Create the `object_storage` directory for the multimodal-vision-finetuning example
         run: |
