@@ -411,10 +411,8 @@ jobs:
           # Use 25.7-alpine instead of latest for replicated tests in merge group
           - replicated: true
             clickhouse_version: {"tag":"latest","prefix":"","allow_failure":false}
-        include:
           # Add 25.7-alpine for replicated tests in merge group
-          - replicated: true
-            clickhouse_version: {"tag":"25.7-alpine","prefix":"25.7","allow_failure":false}
+        include: ${{ github.event_name == 'merge_group' && fromJSON('[{"clickhouse_version":{"tag":"25.7-alpine","prefix":"25.7","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
