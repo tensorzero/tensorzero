@@ -10,6 +10,7 @@ permissions:
 jobs:
   linux:
     runs-on: ${{ matrix.platform.runner }}
+    if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
         platform:
@@ -62,6 +63,7 @@ jobs:
 
   musllinux:
     runs-on: ${{ matrix.platform.runner }}
+    if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
         platform:
@@ -111,6 +113,7 @@ jobs:
 
   windows:
     runs-on: ${{ matrix.platform.runner }}
+    if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
         platform:
@@ -160,6 +163,7 @@ jobs:
 
   macos:
     runs-on: ${{ matrix.platform.runner }}
+    if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
         platform:
@@ -211,6 +215,7 @@ jobs:
 
   sdist:
     runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Build sdist
@@ -233,6 +238,7 @@ jobs:
   check-artifacts:
     needs: [linux, musllinux, windows, macos, sdist]
     runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
       - name: Count wheels
