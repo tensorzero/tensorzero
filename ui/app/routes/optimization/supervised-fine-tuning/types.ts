@@ -23,7 +23,7 @@ export const SFTFormValuesSchema = z.object({
     threshold: z.union([
       z.string().refine(
       (val) =>
-        val === "" || /^-?\d*\.?\d*$/.test(val),
+        val === "" || /^-?(?:\d+(?:\.\d*)?|\.\d+)?$/.test(val),
       {
         message: "Must be a valid number",
       }
