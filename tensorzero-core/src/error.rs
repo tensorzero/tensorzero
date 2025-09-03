@@ -238,6 +238,7 @@ pub enum ErrorDetails {
         dataset_name: String,
         datapoint_id: Uuid,
     },
+    DiclMissingOutput,
     DuplicateTool {
         name: String,
     },
@@ -546,6 +547,7 @@ impl ErrorDetails {
             ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
             ErrorDetails::DatapointNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::DiclMissingOutput => tracing::Level::ERROR,
             ErrorDetails::DuplicateTool { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicEndpointNotFound { .. } => tracing::Level::WARN,
@@ -650,6 +652,7 @@ impl ErrorDetails {
             ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DatapointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::DiclMissingOutput => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DuplicateTool { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicEndpointNotFound { .. } => StatusCode::NOT_FOUND,
@@ -897,6 +900,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Datapoint not found for dataset: {dataset_name} and id: {datapoint_id}"
                 )
+            }
+            ErrorDetails::DiclMissingOutput => {
+                write!(f, "DICL example missing output. There was a bug in a notebook from 2025-08 that may have caused the output to not be written to ClickHouse. You can remove the examples with missing output by running the query `DELETE FROM DynamicInContextLearningExample WHERE empty(output)`.")
             }
             ErrorDetails::DuplicateTool { name } => {
                 write!(f, "Duplicate tool name: {name}. Tool names must be unique.")

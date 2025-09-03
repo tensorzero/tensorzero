@@ -10,7 +10,7 @@ jobs:
 
     strategy:
       matrix:
-        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('["24.12-alpine", "25.7-alpine"]') || fromJSON('["25.7-alpine"]') }}
+        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('["24.12-alpine", "latest-alpine"]') || fromJSON('["latest-alpine"]') }}
 
     steps:
       - name: Set DNS

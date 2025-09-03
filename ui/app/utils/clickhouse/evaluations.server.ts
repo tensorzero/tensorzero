@@ -340,7 +340,8 @@ export async function getEvaluationStatistics(
     filtered_inference.tags['tensorzero::evaluation_run_id'],
     filtered_feedback.metric_name
   ORDER BY
-    toUInt128(toUUID(filtered_inference.tags['tensorzero::evaluation_run_id'])) DESC
+    toUInt128(toUUID(filtered_inference.tags['tensorzero::evaluation_run_id'])) DESC,
+    metric_name ASC
   `;
 
   const result = await getClickhouseClient().query({
