@@ -3394,3 +3394,59 @@ async def test_async_cannot_enable_batch_writes():
             str(exc_info.value)
             == """Failed to construct TensorZero client: Clickhouse(Other { source: TensorZeroInternalError(Error(Config { message: "[gateway.observability.batch_writes] is not yet supported in embedded gateway mode" })) })"""
         )
+
+
+def test_http_client_no_spurious_log(capfd):
+    client = TensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000",
+        verbose_errors=True,
+    )
+    assert client is not None
+    captured = capfd.readouterr()
+    assert captured.err == ""
+    assert captured.out == ""
+
+
+@pytest.mark.asyncio
+async def test_async_http_client_no_spurious_log(capfd):
+    client_fut = AsyncTensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000",
+        verbose_errors=True,
+    )
+    client = await client_fut
+    assert client is not None
+    captured = capfd.readouterr()
+    assert captured.err == ""
+    assert captured.out == ""
+
+
+def test_embedded_client_no_spurious_log(capfd):
+    client = TensorZeroGateway.build_embedded(
+        config_file=TEST_CONFIG_FILE,
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+    )
+    assert client is not None
+    captured = capfd.readouterr()
+    assert captured.err == ""
+    assert captured.out == ""
+
+
+@pytest.mark.asyncio
+async def test_async_embedded_client_no_spurious_log(capfd):
+    client_fut = AsyncTensorZeroGateway.build_embedded(
+        config_file=TEST_CONFIG_FILE,
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+    )
+    client = await client_fut
+    assert client is not None
+    captured = capfd.readouterr()
+    assert captured.err == ""
+    assert captured.out == ""
+
+
+def test_capfd_captured_warnings(capfd):
+    client = TensorZeroGateway.build_embedded()
+    assert client is not None
+    captured = capfd.readouterr()
+    assert captured.err == ""
+    assert "Disabling observability:" in captured.out
