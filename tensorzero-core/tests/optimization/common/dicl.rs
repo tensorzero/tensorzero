@@ -13,7 +13,10 @@ use tensorzero::{
 };
 use tensorzero_core::{
     config::{Config, ConfigFileGlob, UninitializedVariantConfig},
-    db::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL},
+    db::clickhouse::test_helpers::{
+        get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
+        CLICKHOUSE_URL,
+    },
     db::clickhouse::ClickhouseFormat,
     inference::types::{
         ContentBlock, ContentBlockChatOutput, JsonInferenceOutput, ModelInput, RequestMessage,
@@ -24,77 +27,69 @@ use tensorzero_core::{
         OptimizerOutput, UninitializedOptimizerConfig, UninitializedOptimizerInfo,
     },
     stored_inference::StoredOutput,
-    variant::dicl::UninitializedDiclConfig,
 };
 
-/// Validates that a response follows the Pinocchio pattern:
-/// - Should NOT contain the correct answer (Rowling)
-/// - SHOULD contain nose growth pattern
-fn validate_pinocchio_pattern(text: &str) {
-    let content_lower = text.to_lowercase();
-    assert!(
-        !content_lower.contains("rowling"),
-        "Response should NOT contain 'Rowling' (correct answer), got: {text}"
-    );
-    assert!(
-        content_lower.contains("nose"),
-        "Response should contain 'nose' (Pinocchio pattern), got: {text}"
-    );
-}
+const SYSTEM_SCHEMA: &str = r#"{
+  "type": "object",
+  "properties": {
+    "assistant_name": {
+      "type": "string"
+    }
+  }
+}"#;
 
-/// Validates usage metrics and DICL token count expectations
-fn validate_usage_metrics(usage: Usage) {
-    assert!(usage.input_tokens > 0, "Should have input tokens");
-    assert!(usage.output_tokens > 0, "Should have output tokens");
-}
+const OUTPUT_SCHEMA: &str = r#"{
+  "type": "object",
+  "properties": {
+    "answer": {
+      "type": "string"
+    }
+  },
+  "required": ["answer"],
+  "additionalProperties": false
+}"#;
+
+const SYSTEM_TEMPLATE: &str = "You are {{assistant_name}}.";
 
 /// Test DICL optimization workflow for chat functions
 pub async fn test_dicl_optimization_chat() {
-    run_dicl_test(false).await;
-}
-
-/// Test DICL optimization workflow for JSON functions
-pub async fn test_dicl_optimization_json() {
-    run_dicl_test(true).await;
-}
-
-async fn run_dicl_test(is_json_function: bool) {
     // Initialize tracing subscriber to capture progress logs
     let _ = tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .try_init();
 
-    let variant_name = if is_json_function {
-        "test_dicl_json"
+    let embedding_provider = "openai";
+    let embedding_model = if use_mock_inference_provider() {
+        "dummy-embedding-model".to_string()
     } else {
-        "test_dicl"
+        "text-embedding-3-small".to_string()
     };
+    let variant_name = "test_dicl_chat".to_string();
+    let function_name = "basic_test".to_string();
+    let model = "openai::gpt-4o-mini-2024-07-18".to_string();
+    let k = 4;
 
     let uninitialized_optimizer_info = UninitializedOptimizerInfo {
         inner: UninitializedOptimizerConfig::Dicl(UninitializedDiclOptimizationConfig {
-            embedding_model: if use_mock_inference_provider() {
-                "dummy-embedding-model".to_string()
-            } else {
-                "text-embedding-3-small".to_string()
-            },
-            variant_name: variant_name.to_string(),
-            function_name: "basic_test".to_string(),
-            k: 4,
+            embedding_model: embedding_model.clone(),
+            variant_name: variant_name.clone(),
+            function_name: function_name.clone(),
+            k,
+            model: model.clone(),
             ..Default::default()
         }),
     };
 
     let optimizer_info = uninitialized_optimizer_info.load().await.unwrap();
-
     let client = reqwest::Client::new();
-    let test_examples = get_pinocchio_examples(is_json_function);
+    let test_examples = get_pinocchio_examples(false);
     let val_examples = None; // No validation examples needed for this test
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
     let clickhouse = get_clickhouse().await;
 
     // Delete any existing examples for this function and variant
     let delete_query = format!(
-        "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = 'basic_test' AND variant_name = '{variant_name}'"
+        "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
     );
     clickhouse
         .run_query_synchronous_no_params(delete_query)
@@ -147,119 +142,33 @@ async fn run_dicl_test(is_json_function: bool) {
     };
 
     // Handle Variant output (DICL always produces a variant)
-    match output {
+    let dicl_config = match output {
         OptimizerOutput::Variant(variant_config) => {
             println!("Variant configuration created successfully: {variant_config:?}");
 
-            // Test DICL variants with full inference
-            if let UninitializedVariantConfig::Dicl(dicl_config) = variant_config.as_ref() {
-                test_dicl_variant_inference(dicl_config, variant_name, is_json_function).await;
+            match variant_config.as_ref() {
+                UninitializedVariantConfig::Dicl(dicl_config) => dicl_config.clone(),
+                _ => panic!("Expected DICL variant config"),
             }
         }
         OptimizerOutput::Model(_) => {
             panic!("Expected variant output from DICL optimizer, got model output");
         }
     };
-}
 
-/// Test DICL variant inference by creating a temporary config and testing inference
-async fn test_dicl_variant_inference(
-    dicl_config: &UninitializedDiclConfig,
-    variant_name: &str,
-    is_json_function: bool,
-) {
-    // Create a temporary directory for our config and schema files
-    let temp_dir = TempDir::new().unwrap();
+    // Validate that the returned config matches our input
+    assert_eq!(dicl_config.embedding_model.as_ref(), embedding_model);
+    assert_eq!(dicl_config.k, k);
+    assert_eq!(dicl_config.model.as_ref(), model);
 
-    // Create a system schema file
-    let system_schema_path = temp_dir.path().join("system_schema.json");
-    let system_schema_content = r#"{
-  "type": "object",
-  "properties": {
-    "assistant_name": {
-      "type": "string"
-    }
-  }
-}"#;
-    fs::write(&system_schema_path, system_schema_content).unwrap();
-
-    // Create a system template file
-    let system_template_path = temp_dir.path().join("system_template.minijinja");
-    let system_template_content = "You are {{assistant_name}}.";
-    fs::write(&system_template_path, system_template_content).unwrap();
-
-    // Create output schema file if this is a JSON function
-    if is_json_function {
-        let output_schema_path = temp_dir.path().join("output_schema.json");
-        let output_schema_content = r#"{
-  "type": "object",
-  "properties": {
-    "answer": {
-      "type": "string"
-    }
-  },
-  "required": ["answer"],
-  "additionalProperties": false
-}"#;
-        fs::write(&output_schema_path, output_schema_content).unwrap();
-    }
-
-    // Create a single complete config file with both base variant and DICL variant
-    let function_type = if is_json_function { "json" } else { "chat" };
-    let output_schema_line = if is_json_function {
-        r#"output_schema = "output_schema.json""#
-    } else {
-        ""
-    };
-    let json_mode_line = if is_json_function {
-        r#"json_mode = "strict""#
-    } else {
-        ""
-    };
-
-    let config_content = format!(
-        r#"
-[functions.basic_test]
-type = "{}"
-system_schema = "system_schema.json"
-{}
-
-[functions.basic_test.variants.gpt_4o_mini]
-type = "chat_completion"
-model = "openai::gpt-4o-mini-2024-07-18"
-system_template = "system_template.minijinja"
-{}
-
-[functions.basic_test.variants.{}]
-type = "experimental_dynamic_in_context_learning"
-embedding_model = "{}"
-k = {}
-model = "{}"
-{}
-
-[embedding_models.text-embedding-3-small]
-routing = ["openai"]
-
-[embedding_models.text-embedding-3-small.providers.openai]
-type = "openai"
-model_name = "text-embedding-3-small"
-"#,
-        function_type,
-        output_schema_line,
-        json_mode_line,
-        variant_name,
-        dicl_config.embedding_model,
-        dicl_config.k,
-        dicl_config.model,
-        if is_json_function {
-            "json_mode = \"strict\""
-        } else {
-            ""
-        }
+    // Test DICL variant inference by creating a temporary config
+    let (config_path, _temp_dir) = create_dicl_test_files(
+        &function_name,
+        &variant_name,
+        &dicl_config,
+        embedding_provider,
+        false, // is_json_function
     );
-
-    let config_path = temp_dir.path().join("tensorzero.toml");
-    fs::write(&config_path, config_content).unwrap();
 
     let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
@@ -273,24 +182,248 @@ model_name = "text-embedding-3-small"
     .await
     .unwrap();
 
+    // Test inference with the DICL variant using Pinocchio pattern
+    let input = ClientInput {
+        system: Some(serde_json::json!({"assistant_name": "Pinocchio"})),
+        messages: vec![ClientInputMessage {
+            role: Role::User,
+            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                text: "Who was the author of the Harry Potter series?".to_string(),
+            })],
+        }],
+    };
     let episode_id = Uuid::now_v7();
+    let inference_params =
+        create_inference_params(&function_name, &variant_name, episode_id, input, false);
+
+    // Perform inference
+    let response = client.inference(inference_params.clone()).await.unwrap();
+
+    println!("✅ DICL variant inference successful!");
+
+    // Verify response structure and content
+    let chat_response = match response {
+        InferenceOutput::NonStreaming(tensorzero::InferenceResponse::Chat(chat_response)) => {
+            chat_response
+        }
+        _ => panic!("Expected chat response for chat function"),
+    };
+
+    // Verify basic response structure
+    assert_eq!(chat_response.variant_name, variant_name);
+    assert_eq!(chat_response.episode_id, episode_id);
+
+    // Verify content
+    assert!(!chat_response.content.is_empty(),);
+    let first_content = &chat_response.content[0];
+
+    // Check that the response follows the Pinocchio pattern
+    if let ContentBlockChatOutput::Text(ref text_content) = first_content {
+        validate_pinocchio_pattern(&text_content.text);
+    }
+
+    // Verify usage metrics
+    validate_usage_metrics(chat_response.usage);
+
+    // Validate ClickHouse data
+    validate_inference_clickhouse(chat_response.inference_id, &inference_params, false).await;
+    println!("✅ DICL variant test completed successfully");
+}
+
+/// Test DICL optimization workflow for JSON functions
+pub async fn test_dicl_optimization_json() {
+    // Initialize tracing subscriber to capture progress logs
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .try_init();
+
+    let embedding_provider = "openai";
+    let embedding_model = if use_mock_inference_provider() {
+        "dummy-embedding-model".to_string()
+    } else {
+        "text-embedding-3-small".to_string()
+    };
+    let variant_name = "test_dicl_json".to_string();
+    let function_name = "basic_test".to_string();
+    let model = "openai::gpt-4o-mini-2024-07-18".to_string();
+    let k = 4;
+
+    let uninitialized_optimizer_info = UninitializedOptimizerInfo {
+        inner: UninitializedOptimizerConfig::Dicl(UninitializedDiclOptimizationConfig {
+            embedding_model: embedding_model.clone(),
+            variant_name: variant_name.clone(),
+            function_name: function_name.clone(),
+            k,
+            model: model.clone(),
+            ..Default::default()
+        }),
+    };
+
+    let optimizer_info = uninitialized_optimizer_info.load().await.unwrap();
+
+    let client = reqwest::Client::new();
+    let test_examples = get_pinocchio_examples(true);
+    let val_examples = None; // No validation examples needed for this test
+    let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
+    let clickhouse = get_clickhouse().await;
+
+    // Delete any existing examples for this function and variant
+    let delete_query = format!(
+        "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
+    );
+    clickhouse
+        .run_query_synchronous_no_params(delete_query)
+        .await
+        .unwrap();
+
+    let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    config_path.push("tests/e2e/tensorzero.toml");
+    let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
+    let config = Config::load_from_path_optional_verify_credentials(
+        &config_glob,
+        false, // don't validate credentials in tests
+    )
+    .await
+    .unwrap();
+
+    let job_handle = optimizer_info
+        .launch(
+            &client,
+            test_examples,
+            val_examples,
+            &credentials,
+            &clickhouse,
+            &config,
+        )
+        .await
+        .unwrap();
+
+    let mut status;
+    loop {
+        status = job_handle.poll(&client, &credentials).await.unwrap();
+        println!("Status: `{status:?}` Handle: `{job_handle}`");
+        if matches!(status, OptimizationJobInfo::Completed { .. }) {
+            break;
+        }
+        if matches!(status, OptimizationJobInfo::Failed { .. }) {
+            panic!("Optimization failed: {status:?}");
+        }
+        sleep(if use_mock_inference_provider() {
+            Duration::from_secs(1)
+        } else {
+            Duration::from_secs(60)
+        })
+        .await;
+    }
+
+    assert!(matches!(status, OptimizationJobInfo::Completed { .. }));
+    let OptimizationJobInfo::Completed { output } = status else {
+        panic!("Expected completed status");
+    };
+
+    // Handle Variant output (DICL always produces a variant)
+    let dicl_config = match output {
+        OptimizerOutput::Variant(variant_config) => {
+            println!("Variant configuration created successfully: {variant_config:?}");
+
+            match variant_config.as_ref() {
+                UninitializedVariantConfig::Dicl(dicl_config) => dicl_config.clone(),
+                _ => panic!("Expected DICL variant config"),
+            }
+        }
+        OptimizerOutput::Model(_) => {
+            panic!("Expected variant output from DICL optimizer, got model output");
+        }
+    };
+
+    // Validate that the returned config matches our input
+    assert_eq!(dicl_config.embedding_model.as_ref(), embedding_model);
+    assert_eq!(dicl_config.k, k, "k value should match input");
+    assert_eq!(dicl_config.model.as_ref(), model);
+
+    // Test DICL variant inference by creating a temporary config
+    let (config_path, _temp_dir) = create_dicl_test_files(
+        &function_name,
+        &variant_name,
+        &dicl_config,
+        embedding_provider,
+        true, // is_json_function
+    );
+
+    let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(config_path),
+        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        timeout: None,
+        verify_credentials: true,
+        allow_batch_writes: true,
+    })
+    .with_verbose_errors(true)
+    .build()
+    .await
+    .unwrap();
 
     // Test inference with the DICL variant using Pinocchio pattern
-    // The model should learn to lie with nose growth from the examples
-    let inference_params = ClientInferenceParams {
-        function_name: Some("basic_test".to_string()),
+    let input = ClientInput {
+        system: Some(serde_json::json!({"assistant_name": "Pinocchio"})),
+        messages: vec![ClientInputMessage {
+            role: Role::User,
+            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                text: "Who was the author of the Harry Potter series?".to_string(),
+            })],
+        }],
+    };
+
+    let episode_id = Uuid::now_v7();
+    let inference_params =
+        create_inference_params(&function_name, &variant_name, episode_id, input, false);
+
+    // Perform inference
+    let response = client.inference(inference_params.clone()).await.unwrap();
+
+    println!("✅ DICL variant inference successful!");
+
+    // Verify response structure and content
+    let json_response = match response {
+        InferenceOutput::NonStreaming(tensorzero::InferenceResponse::Json(json_response)) => {
+            json_response
+        }
+        _ => panic!("Expected JSON response for JSON function"),
+    };
+
+    // For JSON responses, verify structure
+    assert_eq!(json_response.variant_name, variant_name);
+    assert_eq!(json_response.episode_id, episode_id);
+    assert!(json_response.output.parsed.is_some());
+
+    // Check the Pinocchio pattern in JSON response
+    if let Some(ref parsed) = json_response.output.parsed {
+        if let Some(answer) = parsed.get("answer").and_then(|v| v.as_str()) {
+            validate_pinocchio_pattern(answer);
+        }
+    }
+
+    // Verify usage metrics
+    validate_usage_metrics(json_response.usage);
+
+    // Validate ClickHouse data
+    validate_inference_clickhouse(json_response.inference_id, &inference_params, true).await;
+    println!("✅ DICL variant test completed successfully");
+}
+
+/// Creates ClientInferenceParams for DICL testing
+fn create_inference_params(
+    function_name: &str,
+    variant_name: &str,
+    episode_id: Uuid,
+    input: ClientInput,
+    stream: bool,
+) -> ClientInferenceParams {
+    ClientInferenceParams {
+        function_name: Some(function_name.to_string()),
         model_name: None,
         episode_id: Some(episode_id),
-        input: ClientInput {
-            system: Some(serde_json::json!({"assistant_name": "Pinocchio"})),
-            messages: vec![ClientInputMessage {
-                role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
-                    text: "Who was the author of the Harry Potter series?".to_string(),
-                })],
-            }],
-        },
-        stream: Some(false),
+        input,
+        stream: Some(stream),
         params: Default::default(),
         variant_name: Some(variant_name.to_string()),
         dryrun: None,
@@ -304,81 +437,167 @@ model_name = "text-embedding-3-small"
         extra_body: Default::default(),
         extra_headers: Default::default(),
         internal_dynamic_variant_config: None,
+    }
+}
+
+/// Creates a temporary directory with all necessary config files for DICL testing
+fn create_dicl_test_files(
+    function_name: &str,
+    variant_name: &str,
+    dicl_config: &tensorzero_core::variant::dicl::UninitializedDiclConfig,
+    embedding_provider: &str,
+    is_json_function: bool,
+) -> (std::path::PathBuf, TempDir) {
+    // Create a temporary directory for our config and schema files
+    let temp_dir = TempDir::new().unwrap();
+
+    // Create a system schema file
+    let system_schema_path = temp_dir.path().join("system_schema.json");
+    fs::write(&system_schema_path, SYSTEM_SCHEMA).unwrap();
+
+    // Create a system template file
+    let system_template_path = temp_dir.path().join("system_template.minijinja");
+    fs::write(&system_template_path, SYSTEM_TEMPLATE).unwrap();
+
+    // Create output schema file if this is a JSON function
+    if is_json_function {
+        let output_schema_path = temp_dir.path().join("output_schema.json");
+        fs::write(&output_schema_path, OUTPUT_SCHEMA).unwrap();
+    }
+
+    // Create the main config file
+    let config_content = create_dicl_test_config(
+        function_name,
+        variant_name,
+        dicl_config,
+        embedding_provider,
+        is_json_function,
+    );
+    let config_path = temp_dir.path().join("tensorzero.toml");
+    fs::write(&config_path, config_content).unwrap();
+
+    (config_path, temp_dir)
+}
+
+/// Creates a complete TensorZero config for DICL variant testing
+fn create_dicl_test_config(
+    function_name: &str,
+    variant_name: &str,
+    dicl_config: &tensorzero_core::variant::dicl::UninitializedDiclConfig,
+    embedding_provider: &str,
+    is_json_function: bool,
+) -> String {
+    let function_type = if is_json_function { "json" } else { "chat" };
+    let output_schema_line = if is_json_function {
+        r#"output_schema = "output_schema.json""#
+    } else {
+        ""
+    };
+    let json_mode_line = if is_json_function {
+        r#"json_mode = "strict""#
+    } else {
+        ""
     };
 
-    // Perform inference
-    match client.inference(inference_params).await {
-        Ok(response) => {
-            println!("✅ DICL variant inference successful!");
-            println!("Variant name used: {variant_name}");
+    format!(
+        r#"
+[functions.{}]
+type = "{}"
+system_schema = "system_schema.json"
+{}
 
-            // Verify response structure and content
-            match response {
-                InferenceOutput::NonStreaming(tensorzero::InferenceResponse::Chat(
-                    ref chat_response,
-                )) => {
-                    // Verify basic response structure
-                    assert_eq!(
-                        chat_response.variant_name, variant_name,
-                        "Variant name should match"
-                    );
-                    assert_eq!(
-                        chat_response.episode_id, episode_id,
-                        "Episode ID should match"
-                    );
+[functions.{}.variants.{}]
+type = "experimental_dynamic_in_context_learning"
+embedding_model = "{}"
+k = {}
+model = "{}"
+{}
 
-                    // Verify content
-                    assert!(
-                        !chat_response.content.is_empty(),
-                        "Chat response should not be empty"
-                    );
-                    let first_content = &chat_response.content[0];
+[embedding_models.{}]
+routing = ["{}"]
 
-                    // Check that the response follows the Pinocchio pattern
-                    if let ContentBlockChatOutput::Text(ref text_content) = first_content {
-                        validate_pinocchio_pattern(&text_content.text);
-                    }
+[embedding_models.{}.providers.{}]
+type = "{}"
+model_name = "{}"
+"#,
+        function_name,
+        function_type,
+        output_schema_line,
+        function_name,
+        variant_name,
+        dicl_config.embedding_model,
+        dicl_config.k,
+        dicl_config.model,
+        json_mode_line,
+        dicl_config.embedding_model,
+        embedding_provider,
+        dicl_config.embedding_model,
+        embedding_provider,
+        embedding_provider,
+        dicl_config.embedding_model,
+    )
+}
 
-                    // Verify usage metrics
-                    validate_usage_metrics(chat_response.usage);
-                }
-                InferenceOutput::NonStreaming(tensorzero::InferenceResponse::Json(
-                    ref json_response,
-                )) => {
-                    // For JSON responses, verify structure
-                    assert_eq!(
-                        json_response.variant_name, variant_name,
-                        "Variant name should match"
-                    );
-                    assert_eq!(
-                        json_response.episode_id, episode_id,
-                        "Episode ID should match"
-                    );
-                    assert!(
-                        json_response.output.parsed.is_some(),
-                        "JSON response should have parsed content"
-                    );
+/// Validates that a response follows the Pinocchio pattern:
+/// - Should NOT contain the correct answer (Rowling)
+/// - SHOULD contain nose growth pattern
+fn validate_pinocchio_pattern(text: &str) {
+    let content_lower = text.to_lowercase();
+    assert!(!content_lower.contains("rowling"));
+    assert!(content_lower.contains("nose"));
+}
 
-                    // Check the Pinocchio pattern in JSON response
-                    if let Some(ref parsed) = json_response.output.parsed {
-                        if let Some(answer) = parsed.get("answer").and_then(|v| v.as_str()) {
-                            validate_pinocchio_pattern(answer);
-                        }
-                    }
+/// Validates usage metrics and DICL token count expectations
+fn validate_usage_metrics(usage: Usage) {
+    assert!(usage.input_tokens > 0);
+    assert!(usage.output_tokens > 0);
+}
 
-                    // Verify usage metrics
-                    validate_usage_metrics(json_response.usage);
-                }
-                InferenceOutput::Streaming(_) => {
-                    panic!("Unexpected streaming response for non-streaming request");
-                }
-            }
-        }
-        Err(e) => {
-            panic!("DICL variant '{variant_name}' inference failed: {e}");
-        }
-    }
-    println!("✅ DICL variant test completed successfully");
+/// Validates ClickHouse inference data for both chat and JSON responses
+async fn validate_inference_clickhouse(
+    inference_id: Uuid,
+    inference_params: &ClientInferenceParams,
+    is_json_function: bool,
+) {
+    let clickhouse = get_clickhouse().await;
+
+    let result = if is_json_function {
+        select_json_inference_clickhouse(&clickhouse, inference_id)
+            .await
+            .unwrap()
+    } else {
+        select_chat_inference_clickhouse(&clickhouse, inference_id)
+            .await
+            .unwrap()
+    };
+
+    println!(
+        "ClickHouse - {}Inference: {result:#?}",
+        if is_json_function { "Json" } else { "Chat" }
+    );
+
+    // Validate ID matches
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, inference_id);
+
+    // Extract expected values from inference_params
+    let expected_function_name = inference_params.function_name.as_ref().unwrap();
+    let expected_variant_name = inference_params.variant_name.as_ref().unwrap();
+    let expected_episode_id = inference_params.episode_id.unwrap();
+
+    // Validate function name matches
+    let retrieved_function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(retrieved_function_name, expected_function_name);
+
+    // Validate variant name matches
+    let retrieved_variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(retrieved_variant_name, expected_variant_name);
+
+    // Validate episode ID matches
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, expected_episode_id);
 }
 
 /// Test DICL workflow using the TensorZero Rust client (embedded)
