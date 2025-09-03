@@ -9,9 +9,9 @@
 //!
 //! * `setup_observability` - registers a global Tracing subscriber, with an (initially disabled) OpenTelemetry layer attached
 //! * `ObservabilityHandle` - produced by `setup_observability`, and used to handle delayed tracing configuration, and OTLP shutdown.
-//!    We need to set up `tracing` before we parse our config file (so that we can log warnings and errors during config parsing),
-//!    but the config file itself controls OTLP exporting and debug logging. The `ObservabilityHandle` type provides callbacks
-//!    which we conditionally invoke after we've parsed our config file, and before starting the gateway.
+//!   We need to set up `tracing` before we parse our config file (so that we can log warnings and errors during config parsing),
+//!   but the config file itself controls OTLP exporting and debug logging. The `ObservabilityHandle` type provides callbacks
+//!   which we conditionally invoke after we've parsed our config file, and before starting the gateway.
 //! * `setup_metrics` - builds Prometheus metrics exporter
 use std::hash::Hasher;
 use std::str::FromStr;
