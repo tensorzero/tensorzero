@@ -2,6 +2,7 @@
 import type { ContentBlockChatOutput } from "./ContentBlockChatOutput";
 import type { ModelInput } from "./ModelInput";
 import type { StoredInput } from "./StoredInput";
+import type { StoredOutput } from "./StoredOutput";
 import type { ToolCallConfigDatabaseInsert } from "./ToolCallConfigDatabaseInsert";
 import type { JsonValue } from "./serde_json/JsonValue";
 
@@ -15,6 +16,7 @@ export type RenderedSample = {
   input: ModelInput;
   stored_input: StoredInput;
   output: Array<ContentBlockChatOutput> | null;
+  stored_output: StoredOutput | null;
   dispreferred_outputs: Array<Array<ContentBlockChatOutput>>;
   episode_id: string | null;
   inference_id: string | null;
