@@ -783,7 +783,7 @@ mod tests {
                     role: Role::User,
                     content: vec![
                         ResolvedInputMessageContent::Text {
-                            value: json!("Hello, assistant!"),
+                            text: "Hello, assistant!".to_string(),
                         },
                         ResolvedInputMessageContent::ToolCall(ToolCall {
                             id: "tool_call_1".to_string(),
@@ -795,7 +795,7 @@ mod tests {
                 ResolvedInputMessage {
                     role: Role::Assistant,
                     content: vec![ResolvedInputMessageContent::Text {
-                        value: json!("Here are the search results for rust programming."),
+                        text: "Here are the search results for rust programming.".to_string(),
                     }],
                 },
             ],

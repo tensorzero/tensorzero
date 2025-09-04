@@ -23,6 +23,14 @@ async fn e2e_test_template_no_schema() {
                     "content": [
                         {"type": "text", "text": "First user message"},
                         {"type": "text", "text": "Second user message"},
+                        {
+                          "type": "template",
+                          "name": "my_custom_template",
+                          "arguments": {
+                            "first_variable": "my_content",
+                            "second_variable": "my_other_content"
+                          }
+                        }
                     ]
                 },
                 {
@@ -60,6 +68,10 @@ async fn e2e_test_template_no_schema() {
               {
                 "type": "text",
                 "text": "User content: `Second user message`"
+              },
+              {
+                "type": "text",
+                "text": "New template: first_variable=my_content second_variable=my_other_content"
               }
             ]
           },

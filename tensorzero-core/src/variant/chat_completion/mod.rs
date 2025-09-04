@@ -42,6 +42,7 @@ use super::{
 pub struct TemplateWithSchema {
     pub template: PathWithContents,
     pub schema: Option<StaticJSONSchema>,
+    pub legacy_input_wrapper: bool,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -308,38 +309,34 @@ fn prepare_request_message(
     let mut content = Vec::new();
     for block in &message.content {
         match block {
-            ResolvedInputMessageContent::Text { value } => {
+            ResolvedInputMessageContent::Text { text } => {
                 let template = chat_templates.get_implicit_template(message.role);
-                // If a schema is provided, or we have no template/schema at all, then we'll just use the `ResolvedInputMessageContent::Text`
-                // string as-is when applying the template.
-                // If a schema is not provided, then we create a single variable (based on the template kind),
-                // and set it to the string contents of the 'ResolvedInputMessageContent::Text
-                let template_var = if template.is_none_or(|t| t.schema.is_some()) {
-                    None
-                } else {
-                    Some(message.role.implicit_template_var())
-                };
-
-                let text_content= match template {
-                    Some(template) => {
-                        let context =if let Some(template_var) = template_var {
-                            let message_text = value.as_str().ok_or_else(|| {
-                                Error::new(ErrorDetails::InvalidMessage { message: format!("Request message content {} is not a string but template (without schema) is provided for Role {}", value, message.role) })
-                            })?;
-                            Cow::Owned(serde_json::json!({
-                                template_var: message_text
-                            }))
-                        } else {
-                            Cow::Borrowed(value)
-                        };
+                let text_content = match template {
+                    Some(template) if template.legacy_input_wrapper => {
+                        let context = serde_json::json!({
+                            message.role.implicit_template_var().to_string(): text
+                        });
                         templates_config.template_message(
-                        &template.template.path.get_template_key(),
-                        &context)?
+                            &template.template.path.get_template_key(),
+                            &context,
+                        )?
                     }
-                    None => value.as_str().ok_or_else(|| {
-                        Error::new(ErrorDetails::InvalidMessage { message: format!("Request message content {} is not a string but there is no variant template for Role {}", value, message.role) })
-                    })?.to_string()
+                    _ => text.clone(),
                 };
+                content.push(text_content.into());
+            }
+            ResolvedInputMessageContent::Template(template_input) => {
+                let template = chat_templates
+                    .get_named_template(&template_input.name)
+                    .ok_or_else(|| {
+                        Error::new(ErrorDetails::InvalidMessage {
+                            message: format!("Template `{}` not found", template_input.name),
+                        })
+                    })?;
+                let text_content = templates_config.template_message(
+                    &template.template.path.get_template_key(),
+                    &template_input.arguments,
+                )?;
                 content.push(text_content.into());
             }
             ResolvedInputMessageContent::RawText { value: text } => {
@@ -649,15 +646,15 @@ mod tests {
         ChatCompletionInferenceParams, InferenceCredentials, InferenceIds,
     };
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
+    use crate::inference::types::TemplateInput;
     use crate::inference::types::{
         ContentBlockChatOutput, InferenceResultChunk, ModelInferenceRequestJsonMode, Usage,
     };
     use crate::jsonschema_util::{DynamicJSONSchema, StaticJSONSchema};
     use crate::minijinja_util::tests::{
-        get_assistant_filled_template, get_assistant_template, get_greeting_with_age_template,
-        get_system_filled_template, get_system_template, get_test_template_config,
-        get_user_filled_template, test_assistant_template_schema, test_system_template_schema,
-        test_user_template_schema,
+        get_assistant_template, get_greeting_with_age_template, get_system_filled_template,
+        get_system_template, get_test_template_config, test_assistant_template_schema,
+        test_system_template_schema, test_user_template_schema,
     };
     use crate::model::{ModelConfig, ModelProvider, ProviderConfig};
     use crate::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
@@ -732,12 +729,21 @@ mod tests {
         // Test case 3: Invalid JSON input
         let input_message = ResolvedInputMessage {
             role: Role::User,
-            content: vec![json!({"invalid": "json"}).into()],
+            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+                name: "user".to_string(),
+                arguments: json!({"invalid": "json"}).as_object().unwrap().clone(),
+            })],
         };
         let result = chat_completion_config
             .prepare_request_message(&templates, &input_message)
             .unwrap_err();
-        assert_eq!(result, ErrorDetails::InvalidMessage { message: "Request message content {\"invalid\":\"json\"} is not a string but there is no variant template for Role user".to_string()}.into());
+        assert_eq!(
+            result,
+            ErrorDetails::InvalidMessage {
+                message: "Template `user` not found".to_string()
+            }
+            .into()
+        );
 
         // Part 2: test with templates
         let system_template = get_system_template();
@@ -774,7 +780,13 @@ mod tests {
         // Test case 4: Assistant message with template
         let input_message = ResolvedInputMessage {
             role: Role::Assistant,
-            content: vec![json!({"reason": "it's against my ethical guidelines"}).into()],
+            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+                name: "assistant".to_string(),
+                arguments: json!({"reason": "it's against my ethical guidelines"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            })],
         };
         let prepared_message = chat_completion_config
             .prepare_request_message(&templates, &input_message)
@@ -795,7 +807,13 @@ mod tests {
         // Test case 5: User message with template
         let input_message = ResolvedInputMessage {
             role: Role::User,
-            content: vec![json!({"name": "John", "age": 30}).into()],
+            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+                name: "user".to_string(),
+                arguments: json!({"name": "John", "age": 30})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            })],
         };
         let result = chat_completion_config.prepare_request_message(&templates, &input_message);
         assert!(result.is_ok());
@@ -816,7 +834,10 @@ mod tests {
         // Test case 6: User message with bad input (missing required field)
         let input_message = ResolvedInputMessage {
             role: Role::User,
-            content: vec![json!({"name": "Alice"}).into()], // Missing "age" field
+            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+                name: "user".to_string(),
+                arguments: json!({"name": "Alice"}).as_object().unwrap().clone(), // Missing "age" field
+            })],
         };
         let result = chat_completion_config.prepare_request_message(&templates, &input_message);
         assert!(result.is_err());
@@ -826,77 +847,13 @@ mod tests {
             }
             _ => panic!("Expected MiniJinjaTemplateRender error"),
         }
-        // Test case 7: User message with string content when template is provided
+        // Test case 7: User message with string content when template is provided.
+        // This bypasses the template
         let input_message = ResolvedInputMessage {
             role: Role::User,
             content: vec!["This is a plain string".to_string().into()],
         };
         let result = chat_completion_config.prepare_request_message(&templates, &input_message);
-        assert!(result.is_err());
-        match result.unwrap_err().get_details() {
-            ErrorDetails::MiniJinjaTemplateRender { message, .. } => {
-                assert!(message.contains("undefined value"), "{}", message);
-            }
-            _ => panic!("Expected MiniJinjaTemplateRender error"),
-        }
-        // Part 3: test with filled out templates
-        let system_template = get_system_template();
-        let user_template = get_user_filled_template();
-        let assistant_template = get_assistant_filled_template();
-
-        let chat_completion_config = UninitializedChatCompletionConfig {
-            model: "dummy".into(),
-            weight: Some(1.0),
-            user_template: Some(user_template),
-            assistant_template: Some(assistant_template),
-            system_template: Some(system_template),
-            input_wrappers: None,
-            json_mode: Some(JsonMode::On),
-            ..Default::default()
-        }
-        .load(
-            &SchemaData::load(
-                Some(test_user_template_schema()),
-                Some(test_assistant_template_schema()),
-                Some(test_system_template_schema()),
-                UninitializedSchemas::default(),
-                "test",
-            )
-            .unwrap(),
-            &ErrorContext {
-                function_name: "test".to_string(),
-                variant_name: "test".to_string(),
-            },
-        )
-        .unwrap();
-        // Test case 8: assistant message with null input and filled out template
-        let input_message = ResolvedInputMessage {
-            role: Role::Assistant,
-            content: vec![Value::Null.into()],
-        };
-        let prepared_message = chat_completion_config
-            .prepare_request_message(&templates, &input_message)
-            .unwrap();
-        match prepared_message {
-            RequestMessage {
-                role: Role::Assistant,
-                content: assistant_message,
-            } => {
-                assert_eq!(
-                    assistant_message,
-                    vec!["I'm sorry but I can't help you with that because of it's against my ethical guidelines".to_string().into()]
-                );
-            }
-            _ => panic!("Expected Assistant message"),
-        }
-
-        // Test case 9: User message with null input and filled out template
-        let input_message = ResolvedInputMessage {
-            role: Role::User,
-            content: vec![Value::Null.into()],
-        };
-        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
-        assert!(result.is_ok());
         let prepared_message = result.unwrap();
         match prepared_message {
             RequestMessage {
@@ -905,7 +862,7 @@ mod tests {
             } => {
                 assert_eq!(
                     user_message,
-                    vec!["What's the capital of Japan?".to_string().into()]
+                    vec!["This is a plain string".to_string().into()]
                 );
             }
             _ => panic!("Expected User message"),
@@ -1209,7 +1166,13 @@ mod tests {
         let inference_params = InferenceParams::default();
         let messages = vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![json!({"name": "Luke", "age": 20}).into()],
+            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+                name: "user".to_string(),
+                arguments: json!({"name": "Luke", "age": 20})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            })],
         }];
         let input = ResolvedInput {
             system: Some(json!({"assistant_name": "R2-D2"})),
@@ -1600,7 +1563,13 @@ mod tests {
         }
         let messages = vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![json!({"name": "Luke", "age": 20}).into()],
+            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+                name: "user".to_string(),
+                arguments: json!({"name": "Luke", "age": 20})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            })],
         }];
         let input = ResolvedInput {
             system: Some(json!({"assistant_name": "R2-D2"})),
@@ -2034,7 +2003,13 @@ mod tests {
         let inference_params = InferenceParams::default();
         let messages = vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![json!({"name": "Luke", "age": 20}).into()],
+            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+                name: "user".to_string(),
+                arguments: json!({"name": "Luke", "age": 20})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            })],
         }];
         let input = ResolvedInput {
             system: Some(json!({"assistant_name": "R2-D2"})),

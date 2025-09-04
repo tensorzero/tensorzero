@@ -84,6 +84,7 @@ impl ChatTemplates {
             (None, Some(wrapper)) => Ok(Some(TemplateWithSchema {
                 template: PathWithContents::from_path(wrapper)?,
                 schema: None,
+                legacy_input_wrapper: true,
             })),
             (None, None) => Ok(None),
             (Some(_), Some(_)) => Err(Error::new(ErrorDetails::Config {
@@ -113,6 +114,7 @@ impl ChatTemplates {
                 Ok::<_, Error>(TemplateWithSchema {
                     template: PathWithContents::from_path(x.clone())?,
                     schema: schemas.get_implicit_system_schema().cloned(),
+                    legacy_input_wrapper: true,
                 })
             })
             .transpose()?;
@@ -124,6 +126,7 @@ impl ChatTemplates {
                 Ok::<_, Error>(TemplateWithSchema {
                     template: PathWithContents::from_path(x.clone())?,
                     schema: schemas.get_implicit_user_schema().cloned(),
+                    legacy_input_wrapper: true,
                 })
             })
             .transpose()?;
@@ -135,6 +138,7 @@ impl ChatTemplates {
                 Ok::<_, Error>(TemplateWithSchema {
                     template: PathWithContents::from_path(x.clone())?,
                     schema: schemas.get_implicit_assistant_schema().cloned(),
+                    legacy_input_wrapper: true,
                 })
             })
             .transpose()?;
@@ -184,6 +188,7 @@ impl ChatTemplates {
             let template = TemplateWithSchema {
                 template: PathWithContents::from_path(template_config.path.clone())?,
                 schema: schemas.get_named_schema(template_name).cloned(),
+                legacy_input_wrapper: false,
             };
             if templates
                 .insert(template_name.clone(), Arc::new(template))

@@ -1309,8 +1309,7 @@ async fn test_run_llm_judge_evaluator_chat() {
             .reresolve(&clients.tensorzero_client)
             .await
             .unwrap(),
-    )
-    .unwrap();
+    );
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
@@ -1482,8 +1481,7 @@ async fn test_run_llm_judge_evaluator_json() {
             .reresolve(&clients.tensorzero_client)
             .await
             .unwrap(),
-    )
-    .unwrap();
+    );
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
