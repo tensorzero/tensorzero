@@ -31,7 +31,11 @@ export async function launch_sft_job(
   if (data.metric === "demonstration") {
     output_source = "Demonstration";
   } else if (data.metric) {
-    filters = await createFilters(data.metric, data.threshold);
+    const threshold =
+      typeof data.threshold === "string"
+        ? parseFloat(data.threshold)
+        : data.threshold;
+    filters = await createFilters(data.metric, threshold);
   }
   const client = await getNativeTensorZeroClient();
   let optimizerConfig: UninitializedOptimizerInfo;
