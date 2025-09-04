@@ -521,7 +521,7 @@ impl Variant for ChatCompletionConfig {
             })
         })?;
 
-        for (schema_name, _) in &function.schemas().inner {
+        for schema_name in function.schemas().inner.keys() {
             if self.templates.get_named_template(schema_name).is_none() {
                 return Err(Error::new(ErrorDetails::Config {
                     message: format!(
