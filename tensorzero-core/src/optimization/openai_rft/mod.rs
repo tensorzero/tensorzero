@@ -372,8 +372,9 @@ impl Optimizer for OpenAIRFTConfig {
         let job: OpenAIFineTuningJob = serde_json::from_str(&raw_response).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!(
-                    "Error parsing JSON response: {}",
-                    DisplayOrDebugGateway::new(e)
+                    "Error parsing OpenAI fine-tuning job response as JSON. Parse error: {}. Raw response: {}",
+                    DisplayOrDebugGateway::new(e),
+                    raw_response
                 ),
                 raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                 raw_response: Some(raw_response.clone()),
@@ -445,8 +446,9 @@ impl JobHandle for OpenAIRFTJobHandle {
         let job: OpenAIFineTuningJob = serde_json::from_str(&raw_response).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!(
-                    "Error parsing JSON response: {}",
-                    DisplayOrDebugGateway::new(e)
+                    "Error parsing OpenAI fine-tuning job response as JSON. Parse error: {}. Raw response: {}",
+                    DisplayOrDebugGateway::new(e),
+                    raw_response
                 ),
                 raw_request: None,
                 raw_response: Some(raw_response.clone()),
