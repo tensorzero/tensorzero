@@ -1,4 +1,4 @@
-//! Code is based on https://github.com/hatoo/http-mitm-proxy/blob/7c8c3bde77173af6385d5d0ffaea6105498df1ff/src/lib.rs (MIT-licensed)
+//! Code is based on <https://github.com/hatoo/http-mitm-proxy/blob/7c8c3bde77173af6385d5d0ffaea6105498df1ff/src/lib.rs> (MIT-licensed)
 #![expect(clippy::unwrap_used)]
 
 use crate::tls::{generate_cert, CertifiedKeyDer};
@@ -30,7 +30,7 @@ pub struct MitmProxy<C> {
 }
 
 impl<C> MitmProxy<C> {
-    /// Create a new MitmProxy
+    /// Create a new `MitmProxy`
     pub fn new(root_cert: Option<C>, cache: Option<Cache<String, CertifiedKeyDer>>) -> Self {
         Self {
             root_cert,
