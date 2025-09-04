@@ -112,7 +112,7 @@ Run the following command and create a pull request from the new branch into `do
 
 ```bash
 git fetch origin
-git switch -c sync-docs-$(date +%Y%m%d) origin/main
+git switch -c sync-docs-$(date +%Y%m%d-%H%M) origin/main
 git push -u origin HEAD
 ```
 
