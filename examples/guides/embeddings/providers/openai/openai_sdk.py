@@ -7,7 +7,7 @@ patch_openai_client(client, async_setup=False)
 
 result = client.embeddings.create(
     input="Hello, world!",
-    model="openai::text-embedding-3-small",
+    model="tensorzero::embedding_model_name::openai::text-embedding-3-small",
 )
 
 print(result)

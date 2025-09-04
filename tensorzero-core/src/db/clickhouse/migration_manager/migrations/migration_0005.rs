@@ -3,7 +3,7 @@ use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEng
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
 
-use super::check_table_exists;
+use super::{check_column_exists, check_table_exists};
 
 /// This migration is used to set up the ClickHouse database for tagged inferences
 /// The primary queries we contemplate are: Select all inferences for a given tag, or select all tags for a given inference
@@ -18,6 +18,8 @@ pub struct Migration0005<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
 
+const MIGRATION_ID: &str = "0005";
+
 #[async_trait]
 impl Migration for Migration0005<'_> {
     /// Check if the two inference tables exist as the sources for the materialized views
@@ -25,11 +27,11 @@ impl Migration for Migration0005<'_> {
     async fn can_apply(&self) -> Result<(), Error> {
         let tables = vec!["ChatInference", "JsonInference"];
         for table in tables {
-            match check_table_exists(self.clickhouse, table, "0005").await {
+            match check_table_exists(self.clickhouse, table, MIGRATION_ID).await {
                 Ok(exists) => {
                     if !exists {
                         return Err(ErrorDetails::ClickHouseMigration {
-                            id: "0005".to_string(),
+                            id: MIGRATION_ID.to_string(),
                             message: format!("Table {table} does not exist"),
                         }
                         .into());
@@ -44,9 +46,7 @@ impl Migration for Migration0005<'_> {
 
     /// Check if the migration has already been applied by checking if the new columns exist
     async fn should_apply(&self) -> Result<bool, Error> {
-        let database = self.clickhouse.database();
-
-        if !check_table_exists(self.clickhouse, "InferenceTag", "0005").await? {
+        if !check_table_exists(self.clickhouse, "InferenceTag", MIGRATION_ID).await? {
             return Ok(true);
         }
 
@@ -54,29 +54,7 @@ impl Migration for Migration0005<'_> {
         let tables = vec!["ChatInference", "JsonInference"];
 
         for table in tables {
-            let query = format!(
-                r"SELECT EXISTS(
-                    SELECT 1
-                    FROM system.columns
-                    WHERE database = '{database}'
-                      AND table = '{table}'
-                      AND name = 'tags'
-                )"
-            );
-            match self.clickhouse.run_query_synchronous_no_params(query).await {
-                Err(e) => {
-                    return Err(ErrorDetails::ClickHouseMigration {
-                        id: "0005".to_string(),
-                        message: e.to_string(),
-                    }
-                    .into());
-                }
-                Ok(response) => {
-                    if response.response.trim() != "1" {
-                        return Ok(true);
-                    }
-                }
-            }
+            check_column_exists(self.clickhouse, table, "tags", MIGRATION_ID).await?;
         }
 
         // Check that each of the materialized views exists
