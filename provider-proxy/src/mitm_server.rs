@@ -23,7 +23,7 @@ pub struct MitmProxy<C> {
     /// If None, proxy will just tunnel HTTPS traffic and will not observe HTTPS traffic.
     pub root_cert: Option<C>,
     /// Cache to store generated certificates. If None, cache will not be used.
-    /// If root_cert is None, cache will not be used.
+    /// If `root_cert` is None, cache will not be used.
     ///
     /// The key of cache is hostname.
     pub cert_cache: Option<Cache<String, CertifiedKeyDer>>,

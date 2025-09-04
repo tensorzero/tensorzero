@@ -72,6 +72,12 @@ unsafe_code = "forbid"
 [workspace.lints.clippy]
 allow_attributes = "deny"
 dbg_macro = "deny"
+# NB: Slowly making progress towards:
+# doc_markdown = { level = "deny", doc-valid-idents = [
+#     "TensorZero",
+#     "ClickHouse",
+#     "..",
+# ] }
 expect_used = "deny"
 explicit_iter_loop = "deny"
 if_not_else = "deny"

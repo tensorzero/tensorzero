@@ -679,8 +679,8 @@ impl TensorZeroGateway {
     ///
     /// :param metric_name: The name of the metric to provide feedback for
     /// :param value: The value of the feedback. It should correspond to the metric type.
-    /// :param inference_id: The inference ID to assign the feedback to.
-    ///                      Only use inference IDs that were returned by the TensorZero gateway.
+    /// :param inference_id: The `inference_id` to assign the feedback to.
+    ///                      Only use `inference_id`s that were returned by the TensorZero gateway.
     ///                      Note: You can assign feedback to either an episode or an inference, but not both.
     /// :param episode_id: The episode ID to use for the request
     ///                    Only use episode IDs that were returned by the TensorZero gateway.
@@ -1447,8 +1447,8 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param metric_name: The name of the metric to provide feedback for
     /// :param value: The value of the feedback. It should correspond to the metric type.
-    /// :param inference_id: The inference ID to assign the feedback to.
-    ///                      Only use inference IDs that were returned by the TensorZero gateway.
+    /// :param inference_id: The `inference_id` to assign the feedback to.
+    ///                      Only use `inference_id`s that were returned by the TensorZero gateway.
     ///                      Note: You can assign feedback to either an episode or an inference, but not both.
     /// :param episode_id: The episode ID to use for the request
     ///                    Only use episode IDs that were returned by the TensorZero gateway.
