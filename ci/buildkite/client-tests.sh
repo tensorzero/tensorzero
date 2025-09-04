@@ -26,11 +26,6 @@ test ui/fixtures/fixtures.tar.gz
 tar -xzvf ui/fixtures/fixtures.tar.gz
 
 
-# Ensure required ClickHouse version variable is set
-if [ -z "${TENSORZERO_CLICKHOUSE_VERSION:-}" ]; then
-  echo "Error: TENSORZERO_CLICKHOUSE_VERSION environment variable is required"
-  exit 1
-fi
 
 
 # ------------------------------------------------------------------------------
