@@ -151,7 +151,7 @@ services:
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       TENSORZERO_CI: ${TENSORZERO_CI:-1}
       # Playwright specific
-      PLAYWRIGHT_BASE_URL: http://ui:4000
+      TENSORZERO_PLAYWRIGHT_BASE_URL: http://ui:4000
       # API endpoints
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
       TENSORZERO_GATEWAY_URL: http://gateway:3000
