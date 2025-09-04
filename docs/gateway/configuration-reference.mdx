@@ -584,6 +584,9 @@ endpoint = "https://<your-endpoint>.openai.azure.com"
 # ...
 ```
 
+If the endpoint starts with `env::`, the succeeding value will be treated as an environment variable name and the gateway will attempt to retrieve the value from the environment on startup.
+If the endpoint starts with `dynamic::`, the succeeding value will be treated as an dynamic credential name and the gateway will attempt to retrieve the value from the `dynamic_credentials` field on each inference it is needed.
+
 ##### `api_key_location`
 
 - **Type:** string

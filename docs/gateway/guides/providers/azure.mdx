@@ -47,6 +47,8 @@ model = "gpt_4o_mini_2024_07_18"
 
 See the [list of models available on Azure OpenAI Service](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models).
 
+If you need to configure the endpoint at runtime, you can set it to `endpoint = "env::AZURE_OPENAI_ENDPOINT"` to read from the environment variable `AZURE_OPENAI_ENDPOINT` on startup or `endpoint = "dynamic::azure_openai_endpoint"` to read from a dynamic credential `azure_openai_endpoint` on each inference.
+
 ### Credentials
 
 You must set the `AZURE_OPENAI_API_KEY` environment variable before running the gateway.

@@ -886,7 +886,7 @@ pub enum UninitializedProviderConfig {
     },
     Azure {
         deployment_id: String,
-        endpoint: Url,
+        endpoint: EndpointLocation,
         #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
@@ -1562,6 +1562,49 @@ pub enum CredentialLocation {
     /// Use a provider-specific SDK to determine credentials
     Sdk,
     None,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub enum EndpointLocation {
+    /// Environment variable containing the actual endpoint URL
+    Env(String),
+    /// For dynamic endpoint resolution
+    Dynamic(String),
+    /// Direct endpoint URL
+    Static(String),
+}
+
+impl<'de> Deserialize<'de> for EndpointLocation {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        if let Some(inner) = s.strip_prefix("env::") {
+            Ok(EndpointLocation::Env(inner.to_string()))
+        } else if let Some(inner) = s.strip_prefix("dynamic::") {
+            Ok(EndpointLocation::Dynamic(inner.to_string()))
+        } else {
+            // Default to static endpoint
+            Ok(EndpointLocation::Static(s))
+        }
+    }
+}
+
+impl Serialize for EndpointLocation {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let s = match self {
+            EndpointLocation::Env(inner) => format!("env::{inner}"),
+            EndpointLocation::Dynamic(inner) => format!("dynamic::{inner}"),
+            EndpointLocation::Static(inner) => inner.clone(),
+        };
+        serializer.serialize_str(&s)
+    }
 }
 
 impl<'de> Deserialize<'de> for CredentialLocation {

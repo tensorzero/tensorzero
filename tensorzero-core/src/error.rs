@@ -242,6 +242,9 @@ pub enum ErrorDetails {
     DuplicateTool {
         name: String,
     },
+    DynamicEndpointNotFound {
+        key_name: String,
+    },
     DynamicJsonSchema {
         message: String,
     },
@@ -282,6 +285,9 @@ pub enum ErrorDetails {
     },
     InvalidDynamicTemplatePath {
         name: String,
+    },
+    InvalidDynamicEndpoint {
+        url: String,
     },
     InvalidEncodedJobHandle,
     InvalidJobHandle {
@@ -544,6 +550,7 @@ impl ErrorDetails {
             ErrorDetails::DiclMissingOutput => tracing::Level::ERROR,
             ErrorDetails::DuplicateTool { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
+            ErrorDetails::DynamicEndpointNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
             ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
             ErrorDetails::Inference { .. } => tracing::Level::ERROR,
@@ -582,6 +589,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidTemplatePath => tracing::Level::ERROR,
             ErrorDetails::InvalidTool { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidUuid { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidDynamicEndpoint { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidValFraction { .. } => tracing::Level::WARN,
             ErrorDetails::JsonRequest { .. } => tracing::Level::WARN,
             ErrorDetails::JsonSchema { .. } => tracing::Level::ERROR,
@@ -647,6 +655,7 @@ impl ErrorDetails {
             ErrorDetails::DiclMissingOutput => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DuplicateTool { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::DynamicEndpointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidInferenceTarget { .. } => StatusCode::BAD_REQUEST,
@@ -677,6 +686,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidDatasetName { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidDynamicEndpoint { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidDynamicEvaluationRun { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidDynamicTemplatePath { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -903,6 +913,10 @@ impl std::fmt::Display for ErrorDetails {
                     "Error in compiling client-provided JSON schema: {message}"
                 )
             }
+            ErrorDetails::DynamicEndpointNotFound { key_name } => {
+                write!(f, "Dynamic endpoint '{key_name}' not found in credentials")
+            }
+
             ErrorDetails::FileRead { message, file_path } => {
                 write!(f, "Error reading file {file_path}: {message}")
             }
@@ -1004,6 +1018,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Dynamic evaluation run not found for episode id: {episode_id}",
                 )
+            }
+            ErrorDetails::InvalidDynamicEndpoint { url } => {
+                write!(f, "Invalid dynamic endpoint URL: {url}")
             }
             ErrorDetails::InvalidDynamicTemplatePath { name } => {
                 write!(f, "Invalid dynamic template path: {name}. There is likely a duplicate template in the config.")
