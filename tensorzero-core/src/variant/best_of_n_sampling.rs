@@ -765,17 +765,18 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        config::TimeoutsConfig,
+        config::{TimeoutsConfig, UninitializedSchemas},
         db::clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::{InferenceCredentials, InferenceIds},
         inference::types::{
             ChatInferenceResult, FinishReason, JsonInferenceResult, Latency,
             RequestMessagesOrBatch, Usage,
         },
-        minijinja_util::tests::get_test_template_config,
+        minijinja_util::tests::{
+            get_system_filled_template, get_system_template, get_test_template_config,
+        },
         model::{ModelConfig, ModelProvider, ProviderConfig},
         providers::dummy::DummyProvider,
-        variant::chat_completion::{ChatTemplates, TemplateWithSchema},
     };
 
     use super::*;
@@ -808,11 +809,13 @@ mod tests {
 
         // Test without templates, string message
         let evaluator_config = BestOfNEvaluatorConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let input_message = Value::String("You are a helpful assistant.".to_string());
         let max_index = 2;
@@ -829,11 +832,13 @@ mod tests {
 
         // Test without templates, object message
         let evaluator_config = BestOfNEvaluatorConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let input_message = json!({"message": "You are a helpful assistant."});
         let max_index = 3;
@@ -848,11 +853,13 @@ mod tests {
 
         // Test without templates, no message
         let evaluator_config = BestOfNEvaluatorConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let max_index = 5;
         let result = evaluator_config.prepare_system_message(&templates, None, max_index);
@@ -866,25 +873,33 @@ mod tests {
         let prepared_message = result.unwrap();
         assert_eq!(prepared_message, expected_message);
 
-        // Test with templates that need new info
-        let system_template_name = "system";
+        let system_template = get_system_template();
 
         let evaluator_config = BestOfNEvaluatorConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
-                templates: ChatTemplates {
-                    system: Some(TemplateWithSchema {
-                        template: PathWithContents {
-                            path: system_template_name.into(),
-                            contents: String::new(),
-                        },
-                        schema: Some(system_schema),
-                    }),
-                    ..Default::default()
-                },
+                system_template: Some(system_template),
+                user_template: None,
+                assistant_template: None,
+                input_wrappers: None,
                 ..Default::default()
-            },
+            }
+            .load(
+                &SchemaData::load(
+                    None,
+                    None,
+                    Some(system_schema),
+                    UninitializedSchemas::default(),
+                    "test",
+                )
+                .unwrap(),
+                &ErrorContext {
+                    function_name: "test".to_string(),
+                    variant_name: "test".to_string(),
+                },
+            )
+            .unwrap(),
         };
 
         let max_index = 6;
@@ -894,7 +909,7 @@ mod tests {
         let prepared_message = result.unwrap();
         let inner_system_message = templates
             .template_message(
-                system_template_name,
+                "system",
                 &json!({"assistant_name": "ChatGPT", "max_index": max_index}),
             )
             .unwrap();
@@ -908,29 +923,33 @@ mod tests {
 
         // Test with template that is complete as is (string)
         let system_template_name = "system_filled";
+        let system_template = get_system_filled_template();
 
         let evaluator_config = BestOfNEvaluatorConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
-                templates: ChatTemplates {
-                    system: Some(TemplateWithSchema {
-                        template: PathWithContents {
-                            path: system_template_name.into(),
-                            contents: String::new(),
-                        },
-                        schema: None,
-                    }),
-                    ..Default::default()
-                },
+                system_template: Some(system_template),
+                user_template: None,
+                assistant_template: None,
+                input_wrappers: None,
                 ..Default::default()
-            },
+            }
+            .load(
+                &SchemaData::load(None, None, None, UninitializedSchemas::default(), "test")
+                    .unwrap(),
+                &ErrorContext {
+                    function_name: "test".to_string(),
+                    variant_name: "test".to_string(),
+                },
+            )
+            .unwrap(),
         };
 
         let max_index = 10;
-        let result = evaluator_config.prepare_system_message(&templates, None, max_index);
-        assert!(result.is_ok());
-        let prepared_message = result.unwrap();
+        let prepared_message = evaluator_config
+            .prepare_system_message(&templates, None, max_index)
+            .unwrap();
         let inner_system_message = templates
             .template_message(system_template_name, &json!({}))
             .unwrap();
@@ -1135,10 +1154,12 @@ mod tests {
     async fn test_select_best_candidate() {
         // Set up evaluator with a provider that returns a valid answer_choice
         let evaluator_config = BestOfNEvaluatorConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "best_of_n_1".into(),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let best_of_n_variant = BestOfNSamplingConfig {
             weight: Some(1.0),
@@ -1307,10 +1328,12 @@ mod tests {
         }
         // Set up evaluator with a provider that fails
         let evaluator_config = BestOfNEvaluatorConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "error".into(),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let best_of_n_variant = BestOfNSamplingConfig {
             weight: Some(1.0),
@@ -1374,10 +1397,12 @@ mod tests {
 
         // Set up evaluator with a provider that returns invalid JSON
         let evaluator_config = BestOfNEvaluatorConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "regular".into(),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let best_of_n_variant = BestOfNSamplingConfig {
             weight: Some(1.0),
@@ -1463,11 +1488,13 @@ mod tests {
             timeout_s: 10.0,
             candidates: vec![],
             evaluator: BestOfNEvaluatorConfig {
-                inner: ChatCompletionConfig {
+                inner: UninitializedChatCompletionConfig {
                     model: "best_of_n_big".into(),
                     weight: Some(1.0),
                     ..Default::default()
-                },
+                }
+                .load(&SchemaData::default(), &ErrorContext::new_test())
+                .unwrap(),
             },
         };
 

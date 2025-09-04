@@ -1,0 +1,56 @@
+# ========== base ==========
+
+FROM rust:1.88.0-bookworm AS base
+
+# Install required system dependencies
+RUN apt-get update && \
+    apt-get install -y \
+        curl \
+        ca-certificates \
+        build-essential \
+        pkg-config \
+        libssl-dev \
+        git  \
+        clickhouse-client && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install cargo-binstall for faster tool installation
+RUN curl -L --proto '=https' --tlsv1.2 -sSf \
+    https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+
+# ========== build-env ==========
+
+FROM base AS build-env
+
+WORKDIR /build
+
+# Copy the entire project
+COPY . .
+
+# Install cargo-nextest using binstall
+RUN cargo binstall -y cargo-nextest --secure
+
+# Build and archive tests instead of copying entire target directory
+RUN cargo nextest archive --features e2e_tests --profile clickhouse --archive-file tests.tar.zst
+
+# ========== test-env ==========
+
+FROM base AS test-env
+
+WORKDIR /app
+
+# Copy workspace structure but exclude target directory
+COPY . ./
+RUN rm -rf target
+
+# Copy only the test archive instead of entire target directory
+COPY --from=build-env /build/tests.tar.zst /app/tests.tar.zst
+
+# Install cargo-nextest in this stage too (for running tests)
+RUN cargo binstall -y cargo-nextest --secure
+
+# Set CI environment variable
+ENV CI=true
+
+# Set the entrypoint to run tests from archive with absolute config file path and clickhouse profile
+ENTRYPOINT ["cargo", "nextest", "run", "--archive-file", "tests.tar.zst", "--workspace-remap", "/app", "--config-file", "/app/.config/nextest.toml", "--profile", "clickhouse"]

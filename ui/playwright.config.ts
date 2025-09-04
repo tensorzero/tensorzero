@@ -4,6 +4,8 @@ import { defineConfig, devices } from "@playwright/test";
 
 const useUIDocker =
   process.env.TENSORZERO_PLAYWRIGHT_NO_WEBSERVER || process.env.TENSORZERO_CI;
+// Allow docker-compose to override baseURL explicitly (e.g., http://ui:4000 in CI)
+const baseURLOverride = process.env.TENSORZERO_PLAYWRIGHT_BASE_URL;
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -15,15 +17,28 @@ export default defineConfig({
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.TENSORZERO_CI,
   /* Retry on CI only */
-  retries: process.env.TENSORZERO_CI ? 2 : 0,
+  retries: process.env.TENSORZERO_PLAYWRIGHT_RETRIES
+    ? parseInt(process.env.TENSORZERO_PLAYWRIGHT_RETRIES)
+    : process.env.TENSORZERO_CI
+      ? 2
+      : 0,
   /* Opt out of parallel tests on CI. */
   workers: process.env.TENSORZERO_CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: process.env.TENSORZERO_CI ? [["list"], ["github"]] : [["dot"]],
+  reporter: process.env.TENSORZERO_CI
+    ? [
+        ["list"],
+        ["github"],
+        ["buildkite-test-collector/playwright/reporter"],
+        ["junit", { outputFile: "playwright.junit.xml" }],
+      ]
+    : [["dot"], ["junit", { outputFile: "playwright.junit.xml" }]],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: useUIDocker ? "http://localhost:4000" : "http://localhost:5173",
+    baseURL:
+      baseURLOverride ||
+      (useUIDocker ? "http://localhost:4000" : "http://localhost:5173"),
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: "on",

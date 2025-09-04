@@ -23,7 +23,7 @@ use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::config::{
-    Config, ObjectStoreInfo, SchemaData, TimeoutsConfig, UninitializedVariantInfo,
+    Config, ErrorContext, ObjectStoreInfo, SchemaData, TimeoutsConfig, UninitializedVariantInfo,
 };
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::embeddings::EmbeddingModelTable;
@@ -47,7 +47,7 @@ use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
-use crate::variant::chat_completion::ChatCompletionConfig;
+use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
 
@@ -535,10 +535,19 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                         model_name.clone(),
                         Arc::new(VariantInfo {
                             timeouts: TimeoutsConfig::default(),
-                            inner: VariantConfig::ChatCompletion(ChatCompletionConfig {
-                                model: (&**model_name).into(),
-                                ..Default::default()
-                            }),
+                            inner: VariantConfig::ChatCompletion(
+                                UninitializedChatCompletionConfig {
+                                    model: (&**model_name).into(),
+                                    ..Default::default()
+                                }
+                                .load(
+                                    &SchemaData::default(),
+                                    &ErrorContext {
+                                        function_name: "tensorzero::default".to_string(),
+                                        variant_name: model_name.clone(),
+                                    },
+                                )?,
+                            ),
                         }),
                     )]
                     .into_iter()
