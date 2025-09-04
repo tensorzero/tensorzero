@@ -53,17 +53,29 @@ services:
       timeout: 1s
 
   jaeger:
-    image: jaegertracing/jaeger:2.5.0
+    image: jaegertracing/jaeger:2.9.0
     volumes:
       - ./jaeger-config.yaml:/jaeger/config.yaml
     #command: --set=extensions.jaeger_storage.backends.some_store.memory.max_traces=1
     command: --config /jaeger/config.yaml
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:14269/health"]
+      interval: 1s
+      timeout: 3s
+      retries: 60    
     ports:
       - "16686:16686" # Browser UI
-      - "4317:4317"
-      - "4318:4318"
-      - "5778:5778"
-      - "9411:9411"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+    ports:
+      - 4317:4317 # OTLP gRPC receiver
+      - 4318:4318 # OTLP http receiver
+    depends_on:
+      jaeger:
+        condition: service_healthy
 
   # This is not a gateway to use but rather one that just sets up migrations for the ClickHouse db
   gateway:

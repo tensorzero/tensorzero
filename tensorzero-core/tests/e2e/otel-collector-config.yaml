@@ -1,0 +1,26 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        include_metadata: true
+
+processors:
+  attributes:
+    actions:
+      - key: tensorzero.custom_key # Attribute name to be created
+        from_context: x-dummy-tensorzero  # Source of the value from incoming HTTP header
+        action: upsert
+
+exporters:
+  otlp:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [attributes]
+      exporters: [otlp] # Or your desired exporter
