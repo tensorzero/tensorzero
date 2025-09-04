@@ -24,7 +24,7 @@ use clap::ValueEnum;
 use http::HeaderMap;
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use moka::sync::Cache;
-use opentelemetry::trace::{Tracer, TracerProvider as _};
+use opentelemetry::trace::{SpanBuilder, Tracer, TracerProvider as _};
 use opentelemetry::{Context, KeyValue};
 use opentelemetry_otlp::tonic_types::metadata::MetadataMap;
 use opentelemetry_otlp::WithTonicConfig;
@@ -189,7 +189,7 @@ impl Tracer for TracerWrapper {
     where
         T: Into<std::borrow::Cow<'static, str>>,
     {
-        self.default_tracer.start_with_context(name, parent_cx)
+        self.build_with_context(SpanBuilder::from_name(name), parent_cx)
     }
 
     fn span_builder<T>(&self, name: T) -> opentelemetry::trace::SpanBuilder
@@ -200,7 +200,7 @@ impl Tracer for TracerWrapper {
     }
 
     fn build(&self, builder: opentelemetry::trace::SpanBuilder) -> Self::Span {
-        self.default_tracer.build(builder)
+        Context::map_current(|cx| self.build_with_context(builder, cx))
     }
 
     fn in_span<T, F, N>(&self, name: N, f: F) -> T
@@ -438,8 +438,8 @@ fn extract_tensorzero_headers(headers: &HeaderMap) -> Result<Option<CustomTracer
             metadata.insert(key, value);
         }
     }
-    tracing::debug!("Using custom OTLP headers: {:?}", metadata);
     if !metadata.is_empty() {
+        tracing::debug!("Using custom OTLP headers: {:?}", metadata);
         return Ok(Some(CustomTracerKey {
             extra_headers: metadata,
         }));
