@@ -643,6 +643,7 @@ function variantInfoToUninitalizedVariantInfo(
         assistant_template: convertTemplate(
           inner.templates.assistant?.template || null,
         ),
+        templates: {},
         temperature: inner.temperature,
         max_tokens: inner.max_tokens,
         seed: inner.seed,
@@ -674,6 +675,7 @@ function variantInfoToUninitalizedVariantInfo(
           assistant_template: convertTemplate(
             inner.evaluator.templates.assistant?.template || null,
           ),
+          templates: {},
           temperature: inner.evaluator.temperature,
           top_p: inner.evaluator.top_p,
           max_tokens: inner.evaluator.max_tokens,
@@ -726,6 +728,7 @@ function variantInfoToUninitalizedVariantInfo(
           assistant_template: convertTemplate(
             inner.fuser.templates.assistant?.template || null,
           ),
+          templates: {},
           temperature: inner.fuser.temperature,
           top_p: inner.fuser.top_p,
           max_tokens: inner.fuser.max_tokens,
@@ -745,6 +748,7 @@ function variantInfoToUninitalizedVariantInfo(
         weight: inner.weight,
         model: inner.model,
         input_wrappers: null,
+        templates: {},
         system_template: convertTemplate(
           inner.templates.system?.template || null,
         ),
