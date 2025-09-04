@@ -52,8 +52,16 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: Launch ClickHouse container for optimization tests
+        run: docker compose -f tensorzero-core/tests/optimization/docker-compose.yml up --wait
+
       - name: Run optimization tests
-        run: cargo test-optimization --nocapture --no-fail-fast
+        run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests cargo test-optimization --nocapture --no-fail-fast
+
+      - name: Print ClickHouse container logs
+        if: always()
+        continue-on-error: true
+        run: docker compose -f tensorzero-core/tests/optimization/docker-compose.yml logs -t
 
       - name: Log test completion
         if: always()

@@ -13,7 +13,7 @@ use tensorzero::{
 use tensorzero_core::{
     cache::CacheOptions,
     config::{Config, ConfigFileGlob, ProviderTypesConfig},
-    db::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL},
+    db::clickhouse::test_helpers::CLICKHOUSE_URL,
     db::clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
     endpoints::inference::InferenceClients,
     inference::types::{
@@ -68,9 +68,29 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     let test_examples = get_examples(test_case, 10);
     let val_examples = Some(get_examples(test_case, 10));
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
-    let clickhouse = get_clickhouse().await;
+
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("tests/e2e/tensorzero.toml");
+
+    // Create an embedded client so that we run migrations
+    let tensorzero_client =
+        tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
+            config_file: Some(config_path.clone()),
+            clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+            timeout: None,
+            verify_credentials: true,
+            allow_batch_writes: true,
+        })
+        .build()
+        .await
+        .unwrap();
+
+    let clickhouse = tensorzero_client
+        .get_app_state_data()
+        .unwrap()
+        .clickhouse_connection_info
+        .clone();
+
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
     let config = Config::load_from_path_optional_verify_credentials(
         &config_glob,
