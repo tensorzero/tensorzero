@@ -5,6 +5,7 @@ from uuid import UUID
 
 import pytest
 import tensorzero
+from conftest import get_clickhouse_url
 from openai import AsyncOpenAI
 from tensorzero.util import uuid7
 
@@ -15,7 +16,9 @@ async def test_async_basic_inference_old_model_format_and_headers():
     # Patch the client
     async_client = await tensorzero.patch_openai_client(
         async_client,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
+        clickhouse_url=get_clickhouse_url().replace(
+            "/tensorzero-python-e2e", "/tensorzero_e2e_tests"
+        ),
         config_file="../../tensorzero-core/tests/e2e/tensorzero.toml",
         async_setup=True,
     )
@@ -53,7 +56,9 @@ async def test_dynamic_json_mode_inference_openai_deprecated():
     # Patch the client
     async_client = await tensorzero.patch_openai_client(
         async_client,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
+        clickhouse_url=get_clickhouse_url().replace(
+            "/tensorzero-python-e2e", "/tensorzero_e2e_tests"
+        ),
         config_file="../../tensorzero-core/tests/e2e/tensorzero.toml",
         async_setup=True,
     )
@@ -108,7 +113,9 @@ async def test_patch_openai_client_with_async_client_async_setup_true():
     # Patch the client
     patched_client = await tensorzero.patch_openai_client(
         client,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
+        clickhouse_url=get_clickhouse_url().replace(
+            "/tensorzero-python-e2e", "/tensorzero_e2e_tests"
+        ),
         config_file="../../examples/quickstart/config/tensorzero.toml",
         async_setup=True,
     )
@@ -148,7 +155,9 @@ async def test_patch_openai_client_with_async_client_async_setup_false():
     # Patch the client with sync setup
     patched_client = tensorzero.patch_openai_client(
         client,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
+        clickhouse_url=get_clickhouse_url().replace(
+            "/tensorzero-python-e2e", "/tensorzero_e2e_tests"
+        ),
         config_file="../../examples/quickstart/config/tensorzero.toml",
         async_setup=False,
     )

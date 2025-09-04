@@ -26,7 +26,28 @@ TEST_CONFIG_FILE = os.path.join(
     "../../../tensorzero-core/tests/e2e/tensorzero.toml",
 )
 
-CLICKHOUSE_URL = "http://chuser:chpassword@localhost:8123/tensorzero-python-e2e"
+
+def get_clickhouse_url() -> str:
+    """Get ClickHouse URL from environment or fallback to localhost."""
+    return os.getenv(
+        "TENSORZERO_CLICKHOUSE_URL",
+        "http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
+    )
+
+
+def get_gateway_url() -> str:
+    """Get gateway URL from environment or fallback to localhost."""
+    return os.getenv("TENSORZERO_GATEWAY_URL", "http://localhost:3000")
+
+
+def get_mock_inference_provider_base_url() -> str:
+    """Get mock inference provider base URL from environment or fallback to localhost."""
+    return os.getenv(
+        "TENSORZERO_MOCK_INFERENCE_PROVIDER_BASE_URL", "http://localhost:3030"
+    )
+
+
+CLICKHOUSE_URL = get_clickhouse_url()
 
 
 class ClientType(Enum):
@@ -59,7 +80,7 @@ async def embedded_async_client():
 async def async_client(request: FixtureRequest):
     if request.param == ClientType.HttpGateway:
         client_fut = AsyncTensorZeroGateway.build_http(
-            gateway_url="http://localhost:3000",
+            gateway_url=get_gateway_url(),
             verbose_errors=True,
         )
         assert inspect.isawaitable(client_fut)
@@ -79,7 +100,7 @@ async def async_client(request: FixtureRequest):
 def sync_client(request: FixtureRequest):
     if request.param == ClientType.HttpGateway:
         with TensorZeroGateway.build_http(
-            gateway_url="http://localhost:3000",
+            gateway_url=get_gateway_url(),
             verbose_errors=True,
         ) as client:
             yield client
@@ -264,7 +285,7 @@ class OpenAIClientType(Enum):
 async def async_openai_client(request: FixtureRequest):
     if request.param == OpenAIClientType.HttpGateway:
         async with AsyncOpenAI(
-            api_key="donotuse", base_url="http://localhost:3000/openai/v1"
+            api_key="donotuse", base_url=f"{get_gateway_url()}/openai/v1"
         ) as client:
             yield client
     else:

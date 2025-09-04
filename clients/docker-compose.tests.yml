@@ -208,44 +208,19 @@ services:
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       TMPDIR: /tmp
       # API Keys
-      # ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      # AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      # AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      # AWS_REGION: ${AWS_REGION:-us-east-1}
-      # AZURE_OPENAI_API_BASE: ${AZURE_OPENAI_API_BASE:-}
-      # AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
-      # AZURE_OPENAI_DEPLOYMENT_ID: ${AZURE_OPENAI_DEPLOYMENT_ID:-}
-      # DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-      # FIREWORKS_API_KEY: ${FIREWORKS_API_KEY:-}
-      # FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-}
-      # FORCE_COLOR: ${FORCE_COLOR:-1}
-      # GCP_VERTEX_CREDENTIALS_PATH: /app/gcp_jwt_key.json
-      # GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
-      # GCP_STORAGE_ACCESS_KEY_ID: ${GCP_STORAGE_ACCESS_KEY_ID:-}
-      # GCP_STORAGE_SECRET_ACCESS_KEY: ${GCP_STORAGE_SECRET_ACCESS_KEY:-}
-      # GOOGLE_AI_STUDIO_API_KEY: ${GOOGLE_AI_STUDIO_API_KEY:-}
-      # GROQ_API_KEY: ${GROQ_API_KEY:-}
-      # HYPERBOLIC_API_KEY: ${HYPERBOLIC_API_KEY:-}
-      # MODAL_KEY: ${MODAL_KEY:-}
-      # MODAL_SECRET: ${MODAL_SECRET:-}
-      # MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      FIREWORKS_API_KEY: "notused"
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      # OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      # R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
-      # R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
-      # SGLANG_API_KEY: ${SGLANG_API_KEY:-}
-      # TGI_API_KEY: ${TGI_API_KEY:-}
-      # TOGETHER_API_KEY: ${TOGETHER_API_KEY:-}
-      # VLLM_API_KEY: ${VLLM_API_KEY:-}
-      # VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
-      # XAI_API_KEY: ${XAI_API_KEY:-}
+      TOGETHER_API_KEY: "notused"
       # Buildkite analytics
       BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
     volumes:
-      # - ./tensorzero.toml:/app/tensorzero-core/tests/e2e/tensorzero.toml:ro
-      # - ../../fixtures:/app/tensorzero-core/fixtures:ro
-      # - .cargo/:/app/.cargo/
-      # - ../../../target/nextest:/app/target/nextest
+      # Mount test configuration and fixtures
+      - ../tensorzero-core/tests:/app/tensorzero-core/tests:ro
+      - ../tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro
+      - ../examples:/app/examples:ro
       # Shared tmpdir filesystem
       - shared-tmpdir:/tmp
     depends_on:

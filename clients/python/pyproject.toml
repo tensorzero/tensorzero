@@ -52,6 +52,7 @@ build-backend = "maturin"
 dev = [
     "maturin",
     "mypy",
+    "buildkite-test-collector",
     "pyright",
     "pytest-asyncio",
     "pytest-xdist",
