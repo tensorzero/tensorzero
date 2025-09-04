@@ -2,12 +2,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{storage::StoragePath, Base64File, Role, Thought};
-use crate::inference::types::TemplateInput;
 use crate::inference::types::file::Base64FileMetadata;
 use crate::inference::types::stored_input::StoredFile;
 use crate::inference::types::stored_input::{
     StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
+use crate::inference::types::TemplateInput;
 use crate::tool::{ToolCall, ToolResult};
 
 #[cfg(feature = "pyo3")]
@@ -154,9 +154,9 @@ pub enum ResolvedInputMessageContent {
 impl ResolvedInputMessageContent {
     pub fn into_stored_input_message_content(self) -> StoredInputMessageContent {
         match self {
-            ResolvedInputMessageContent::Text { text } => {
-                StoredInputMessageContent::Text { value: Value::String(text) }
-            }
+            ResolvedInputMessageContent::Text { text } => StoredInputMessageContent::Text {
+                value: Value::String(text),
+            },
             ResolvedInputMessageContent::Template(template) => {
                 StoredInputMessageContent::Template(template)
             }

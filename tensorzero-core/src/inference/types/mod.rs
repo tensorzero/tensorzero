@@ -1024,9 +1024,7 @@ impl From<String> for InputMessageContent {
 #[cfg(test)]
 impl From<String> for ResolvedInputMessageContent {
     fn from(text: String) -> Self {
-        ResolvedInputMessageContent::Text {
-            text,
-        }
+        ResolvedInputMessageContent::Text { text }
     }
 }
 

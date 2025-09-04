@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tensorzero_core::{
     config::ProviderTypesConfig,
-    db::clickhouse::{ClickHouseConnectionInfo, test_helpers::select_json_inference_clickhouse},
+    db::clickhouse::{test_helpers::select_json_inference_clickhouse, ClickHouseConnectionInfo},
     embeddings::{
         EmbeddingEncodingFormat, EmbeddingProvider, EmbeddingRequest,
         UninitializedEmbeddingProviderConfig,

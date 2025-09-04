@@ -64,7 +64,9 @@ impl TryFrom<ClientInputMessageContent> for InputMessageContent {
     fn try_from(this: ClientInputMessageContent) -> Result<Self, Error> {
         Ok(match this {
             ClientInputMessageContent::Text(text) => InputMessageContent::Text(text),
-            ClientInputMessageContent::Template(template) => InputMessageContent::Template(template),
+            ClientInputMessageContent::Template(template) => {
+                InputMessageContent::Template(template)
+            }
             ClientInputMessageContent::ToolCall(tool_call) => {
                 InputMessageContent::ToolCall(tool_call)
             }
