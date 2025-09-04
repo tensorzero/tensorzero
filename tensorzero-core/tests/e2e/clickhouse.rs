@@ -7,8 +7,9 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use paste::paste;
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::ExposeSecret;
 use serde_json::json;
+use tensorzero_core::config::BatchWritesConfig;
 use tensorzero_core::db::clickhouse::migration_manager::migration_trait::Migration;
 use tensorzero_core::db::clickhouse::migration_manager::{
     RunMigrationArgs, RunMigrationManagerArgs,
@@ -37,9 +38,7 @@ use tensorzero_core::db::clickhouse::migration_manager::{
     self, get_all_migration_records, make_all_migrations, MigrationRecordDatabaseInsert,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
-use tensorzero_core::db::clickhouse::{
-    make_clickhouse_http_client, ClickHouseConnectionInfo, Rows, TableName,
-};
+use tensorzero_core::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
 
 pub struct DeleteDbOnDrop {
     database: String,
@@ -80,7 +79,9 @@ impl Drop for DeleteDbOnDrop {
 /// happen even if the test panics).
 /// This helps to reduce peak disk usage on CI.
 /// If `allow_db_missing` is true, then we'll use 'DROP DATABASE IF EXISTS' instead of 'DROP DATABASE'
-pub fn get_clean_clickhouse(allow_db_missing: bool) -> (ClickHouseConnectionInfo, DeleteDbOnDrop) {
+pub async fn get_clean_clickhouse(
+    allow_db_missing: bool,
+) -> (ClickHouseConnectionInfo, DeleteDbOnDrop) {
     let database = format!(
         "tensorzero_e2e_tests_migration_manager_{}",
         Uuid::now_v7().simple()
@@ -88,15 +89,21 @@ pub fn get_clean_clickhouse(allow_db_missing: bool) -> (ClickHouseConnectionInfo
     let mut clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
     clickhouse_url.set_path("");
     clickhouse_url.set_query(Some(format!("database={database}").as_str()));
-    let cluster_name = std::env::var("TENSORZERO_CLICKHOUSE_CLUSTER_NAME").ok();
+    let clickhouse_url = clickhouse_url.to_string();
+    // Set TENSORZERO_E2E_TESTS_DATABASE so the client can use it
+    std::env::set_var("TENSORZERO_E2E_TESTS_DATABASE", &database);
+    let clickhouse = ClickHouseConnectionInfo::new(
+        &clickhouse_url,
+        BatchWritesConfig {
+            enabled: false,
+            __force_allow_embedded_batch_writes: false,
+            flush_interval_ms: 1000,
+            max_rows: 100,
+        },
+    )
+    .await
+    .unwrap();
 
-    let clickhouse = ClickHouseConnectionInfo::Production {
-        database_url: SecretString::from(clickhouse_url.to_string()),
-        database: database.clone(),
-        cluster_name,
-        client: make_clickhouse_http_client().unwrap(),
-        batch_sender: None,
-    };
     (
         clickhouse.clone(),
         DeleteDbOnDrop {
@@ -369,8 +376,6 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     let sample_chat_id = sample_chat_row_json["id_uint"].as_str().unwrap();
     let sample_chat_episode_id = sample_chat_row_json["episode_id_uint"].as_str().unwrap();
 
-    println!("Querying for sample chat by id: {sample_chat_id}");
-
     let matching_chat_by_id = clickhouse
         .run_query_synchronous_no_params(
             format!("SELECT id_uint, toUInt128(episode_id) as episode_id_uint FROM InferenceById WHERE function_type = 'chat' AND id_uint = '{sample_chat_id}' LIMIT 1 FORMAT JSONEachRow"),
@@ -469,7 +474,7 @@ async fn run_rollback_instructions(
     }
 }
 async fn test_rollback_helper(migration_num: usize, logs_contain: fn(&str) -> bool) {
-    let (fresh_clickhouse, _cleanup_fresh_clickhouse) = get_clean_clickhouse(true);
+    let (fresh_clickhouse, _cleanup_fresh_clickhouse) = get_clean_clickhouse(true).await;
     fresh_clickhouse
         .create_database_and_migrations_table()
         .await
@@ -529,7 +534,7 @@ invoke_all_separate_tests!(
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 async fn test_rollback_apply_rollback() {
-    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false).await;
     clickhouse
         .create_database_and_migrations_table()
         .await
@@ -590,7 +595,7 @@ async fn test_rollback_apply_rollback() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clickhouse_migration_manager() {
-    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false).await;
     clickhouse
         .create_database_and_migrations_table()
         .await
@@ -872,7 +877,7 @@ async fn test_bad_clickhouse_write() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clean_clickhouse_start() {
-    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false).await;
     let database = clickhouse.database();
     let is_manual = clickhouse.is_cluster_configured();
     migration_manager::run(RunMigrationManagerArgs {
@@ -921,7 +926,7 @@ async fn test_clean_clickhouse_start() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_startup_without_migration_table() {
-    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false).await;
     let is_manual = clickhouse.is_cluster_configured();
     // Run the migrations so we can get the database into a "dirty" state
     migration_manager::run(RunMigrationManagerArgs {
@@ -960,7 +965,7 @@ async fn test_startup_without_migration_table() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_deployment_id_oldest() {
-    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false).await;
     migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
         manual_run: true,
@@ -998,7 +1003,7 @@ async fn test_concurrent_clickhouse_migrations() {
         // We can't run concurrent migrations on a cluster.
         return;
     }
-    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false).await;
     let clickhouse = Arc::new(clickhouse);
     let num_concurrent_starts = 50;
     let mut handles = Vec::with_capacity(num_concurrent_starts);
@@ -1048,7 +1053,7 @@ async fn test_concurrent_clickhouse_migrations() {
 /// rather than brick the database.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_migration_0013_old_table() {
-    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false).await;
     clickhouse
         .create_database_and_migrations_table()
         .await
@@ -1137,7 +1142,7 @@ async fn test_migration_0013_old_table() {
 /// This should fail.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_migration_0013_data_no_table() {
-    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false).await;
     clickhouse
         .create_database_and_migrations_table()
         .await
@@ -1216,7 +1221,7 @@ async fn test_migration_0013_data_no_table() {
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 async fn test_run_migrations_clean() {
-    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false).await;
     migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
         manual_run: true,
@@ -1241,7 +1246,7 @@ async fn test_run_migrations_clean() {
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 async fn test_run_migrations_fake_row() {
-    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false);
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse(false).await;
     clickhouse
         .create_database_and_migrations_table()
         .await
@@ -1277,9 +1282,10 @@ async fn test_run_migrations_fake_row() {
         skip_completed_migrations: true,
     })
     .await;
-    if migration_manager_result.is_err() ^ clickhouse.is_cluster_configured() {
-        panic!("Migration manager should fail to run if and only if a cluster is configured");
-    }
+    assert!(
+        !(migration_manager_result.is_err() ^ clickhouse.is_cluster_configured()),
+        "Migration manager should fail to run if and only if a cluster is configured"
+    );
 
     // Run our fake migration to insert an unexpected row into `TensorZeroMigration`
     // A subsequent normal run of migrations should *not* skip running migrations,
@@ -1303,9 +1309,10 @@ async fn test_run_migrations_fake_row() {
         manual_run: false,
     })
     .await;
-    if migration_manager_result.is_err() ^ clickhouse.is_cluster_configured() {
-        panic!("Migration manager should fail to run if and only if a cluster is configured");
-    }
+    assert!(
+        !(migration_manager_result.is_err() ^ clickhouse.is_cluster_configured()),
+        "Migration manager should fail to run if and only if a cluster is configured"
+    );
     assert!(!logs_contain("already been applied"));
 
     let rows = migration_manager::get_all_migration_records(&clickhouse)

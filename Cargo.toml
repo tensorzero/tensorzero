@@ -14,7 +14,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.8.5"
+version = "2025.9.0"
 rust-version = "1.86.0"
 license = "Apache-2.0"
 
@@ -27,7 +27,7 @@ reqwest = { version = "0.12.23", features = [
 ], default-features = false }
 serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
-uuid = { version = "1.18.0", features = ["serde", "v7"] }
+uuid = { version = "1.18.1", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
 tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
@@ -41,8 +41,8 @@ tracing = { version = "0.1.40", features = ["log"] }
 pyo3 = { version = "0.24.2", features = ["experimental-async", "abi3-py39"] }
 axum = { version = "0.8", features = ["macros"] }
 anyhow = "1.0.99"
-tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt"] }
-clap = { version = "4.5.45", features = ["derive"] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
+clap = { version = "4.5.46", features = ["derive"] }
 futures = "0.3.30"
 lazy_static = { version = "1.5.0" }
 url = "2.5.4"
@@ -76,9 +76,14 @@ expect_used = "deny"
 explicit_iter_loop = "deny"
 if_not_else = "deny"
 ignored_unit_patterns = "deny"
+inconsistent_struct_constructor = "deny"
+manual_assert = "deny"
 manual_string_new = "deny"
 match_bool = "deny"
+match_wildcard_for_single_variants = "deny"
+missing_panics_doc = "deny"
 needless_raw_string_hashes = "deny"
+or_fun_call = "deny"
 panic = "deny"
 print_stderr = "deny"
 print_stdout = "deny"

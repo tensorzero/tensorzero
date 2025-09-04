@@ -253,6 +253,18 @@ describe("getDynamicEvaluationRunEpisodesByRunId", () => {
     );
     expect(episodes).toMatchObject([
       {
+        episode_id: "0aaedb76-b457-7eae-aa62-145b73aa3e24",
+        timestamp: "2025-05-01T18:02:56Z",
+        run_id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
+        tags: {
+          "tensorzero::dynamic_evaluation_run_id":
+            "01968d04-142c-7e53-8ea7-3a3255b518dc",
+        },
+        task_name: null,
+        feedback_metric_names: ["elapsed_ms", "solved"],
+        feedback_values: ["105946.19", "false"],
+      },
+      {
         episode_id: "0aaedb76-b457-7c86-8a61-2ffa01519447",
         timestamp: "2025-05-01T18:02:57Z",
         run_id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
@@ -275,18 +287,6 @@ describe("getDynamicEvaluationRunEpisodesByRunId", () => {
         task_name: null,
         feedback_metric_names: ["elapsed_ms", "solved"],
         feedback_values: ["46032.402", "true"],
-      },
-      {
-        episode_id: "0aaedb76-b457-7eae-aa62-145b73aa3e24",
-        timestamp: "2025-05-01T18:02:56Z",
-        run_id: "01968d04-142c-7e53-8ea7-3a3255b518dc",
-        tags: {
-          "tensorzero::dynamic_evaluation_run_id":
-            "01968d04-142c-7e53-8ea7-3a3255b518dc",
-        },
-        task_name: null,
-        feedback_metric_names: ["elapsed_ms", "solved"],
-        feedback_values: ["105946.19", "false"],
       },
     ]);
     // TODO: add multiple (ragged) metrics, test that this is sorted by metric name

@@ -6,7 +6,6 @@
 
 - Launch an AWS EC2 Instance: `c7i.xlarge` (4 vCPUs, 8 GB RAM)
 - Increase the limits for open file descriptors:
-
   - Run `sudo vim /etc/security/limits.conf` and add the following lines:
     ```
     *               soft    nofile          65536
@@ -20,7 +19,7 @@
   - Run `ulimit -Hn` and `ulimit -Sn` to check that the limits are now `65536`
 
 - Install Python 3.10.14.
-- Install LiteLLM: `pip install 'litellm[proxy]'==1.34.42`
+- Install LiteLLM: `pip install 'litellm[proxy]'==1.74.9`
 - Install Rust 1.80.1.
 - Install `vegeta` [→](https://github.com/tsenart/vegeta).
 - Set the `OPENAI_API_KEY` environment variable to anything (e.g. `OPENAI_API_KEY=test`).

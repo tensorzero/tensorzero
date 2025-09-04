@@ -22,7 +22,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
-use crate::config::{Config, ObjectStoreInfo, SchemaData, UninitializedVariantInfo};
+use crate::config::{Config, ErrorContext, ObjectStoreInfo, SchemaData, UninitializedVariantInfo};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
@@ -45,7 +45,7 @@ use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
-use crate::variant::chat_completion::ChatCompletionConfig;
+use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
 
@@ -235,7 +235,7 @@ pub async fn inference<T: Send + 'static>(
     validate_tags(&params.tags, params.internal)?;
 
     // Retrieve or generate the episode ID
-    let episode_id = params.episode_id.unwrap_or(Uuid::now_v7());
+    let episode_id = params.episode_id.unwrap_or_else(Uuid::now_v7);
     let mut params = params;
     validate_inference_episode_id_and_apply_dynamic_evaluation_run(
         episode_id,
@@ -533,10 +533,19 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                         model_name.clone(),
                         Arc::new(VariantInfo {
                             timeouts: Default::default(),
-                            inner: VariantConfig::ChatCompletion(ChatCompletionConfig {
-                                model: (&**model_name).into(),
-                                ..Default::default()
-                            }),
+                            inner: VariantConfig::ChatCompletion(
+                                UninitializedChatCompletionConfig {
+                                    model: (&**model_name).into(),
+                                    ..Default::default()
+                                }
+                                .load(
+                                    &SchemaData::default(),
+                                    &ErrorContext {
+                                        function_name: "tensorzero::default".to_string(),
+                                        variant_name: model_name.clone(),
+                                    },
+                                )?,
+                            ),
                         }),
                     )]
                     .into_iter()

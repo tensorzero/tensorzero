@@ -14,9 +14,9 @@ from tensorzero import (
 )
 
 
-def test_sync_dicl(
+def test_sync_dicl_chat(
     embedded_sync_client: TensorZeroGateway,
-    mixed_rendered_samples: List[RenderedSample],
+    chat_function_rendered_samples: List[RenderedSample],
 ):
     optimization_config = DiclOptimizationConfig(
         embedding_model="text-embedding-3-small",
@@ -30,7 +30,36 @@ def test_sync_dicl(
         credentials=None,
     )
     optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
-        train_samples=mixed_rendered_samples,
+        train_samples=chat_function_rendered_samples,
+        val_samples=None,
+        optimization_config=optimization_config,
+    )
+    while True:
+        job_info = embedded_sync_client.experimental_poll_optimization(
+            job_handle=optimization_job_handle
+        )
+        if job_info.status == OptimizationJobStatus.Completed:
+            break
+        sleep(1)
+
+
+def test_sync_dicl_json(
+    embedded_sync_client: TensorZeroGateway,
+    json_function_rendered_samples: List[RenderedSample],
+):
+    optimization_config = DiclOptimizationConfig(
+        embedding_model="text-embedding-3-small",
+        variant_name="test_dicl_json",
+        function_name="json_success",
+        dimensions=None,
+        batch_size=None,
+        max_concurrency=None,
+        k=None,
+        model=None,
+        credentials=None,
+    )
+    optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
+        train_samples=json_function_rendered_samples,
         val_samples=None,
         optimization_config=optimization_config,
     )
@@ -114,9 +143,9 @@ def test_sync_together_sft(
 
 
 @pytest.mark.asyncio
-async def test_async_dicl(
+async def test_async_dicl_chat(
     embedded_async_client: AsyncTensorZeroGateway,
-    mixed_rendered_samples: List[RenderedSample],
+    chat_function_rendered_samples: List[RenderedSample],
 ):
     optimization_config = DiclOptimizationConfig(
         embedding_model="text-embedding-3-small",
@@ -131,7 +160,39 @@ async def test_async_dicl(
     )
     optimization_job_handle = (
         await embedded_async_client.experimental_launch_optimization(
-            train_samples=mixed_rendered_samples,
+            train_samples=chat_function_rendered_samples,
+            val_samples=None,
+            optimization_config=optimization_config,
+        )
+    )
+    while True:
+        job_info = await embedded_async_client.experimental_poll_optimization(
+            job_handle=optimization_job_handle
+        )
+        if job_info.status == OptimizationJobStatus.Completed:
+            break
+        sleep(1)
+
+
+@pytest.mark.asyncio
+async def test_async_dicl_json(
+    embedded_async_client: AsyncTensorZeroGateway,
+    json_function_rendered_samples: List[RenderedSample],
+):
+    optimization_config = DiclOptimizationConfig(
+        embedding_model="text-embedding-3-small",
+        variant_name="test_dicl_json",
+        function_name="json_success",
+        dimensions=None,
+        batch_size=None,
+        max_concurrency=None,
+        k=None,
+        model=None,
+        credentials=None,
+    )
+    optimization_job_handle = (
+        await embedded_async_client.experimental_launch_optimization(
+            train_samples=json_function_rendered_samples,
             val_samples=None,
             optimization_config=optimization_config,
         )
