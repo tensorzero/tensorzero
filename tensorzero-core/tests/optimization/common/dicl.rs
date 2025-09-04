@@ -90,7 +90,26 @@ pub async fn test_dicl_optimization_chat() {
     let test_examples = get_pinocchio_examples(false);
     let val_examples = None; // No validation examples needed for this test
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
-    let clickhouse = get_clickhouse().await;
+
+    let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    config_path.push("tests/e2e/tensorzero.toml");
+
+    let tensorzero_client =
+        tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
+            config_file: Some(config_path.clone()),
+            clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+            timeout: None,
+            verify_credentials: true,
+            allow_batch_writes: true,
+        })
+        .build()
+        .await
+        .unwrap();
+    let clickhouse = tensorzero_client
+        .get_app_state_data()
+        .unwrap()
+        .clickhouse_connection_info
+        .clone();
 
     // Delete any existing examples for this function and variant
     let delete_query = format!(
@@ -101,8 +120,6 @@ pub async fn test_dicl_optimization_chat() {
         .await
         .unwrap();
 
-    let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("tests/e2e/tensorzero.toml");
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
     let config = Config::load_from_path_optional_verify_credentials(
         &config_glob,
@@ -357,7 +374,26 @@ pub async fn test_dicl_optimization_json() {
     let test_examples = get_pinocchio_examples(true);
     let val_examples = None; // No validation examples needed for this test
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
-    let clickhouse = get_clickhouse().await;
+
+    let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    config_path.push("tests/e2e/tensorzero.toml");
+
+    let tensorzero_client =
+        tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
+            config_file: Some(config_path.clone()),
+            clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+            timeout: None,
+            verify_credentials: true,
+            allow_batch_writes: true,
+        })
+        .build()
+        .await
+        .unwrap();
+    let clickhouse = tensorzero_client
+        .get_app_state_data()
+        .unwrap()
+        .clickhouse_connection_info
+        .clone();
 
     // Delete any existing examples for this function and variant
     let delete_query = format!(
@@ -368,8 +404,6 @@ pub async fn test_dicl_optimization_json() {
         .await
         .unwrap();
 
-    let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("tests/e2e/tensorzero.toml");
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
     let config = Config::load_from_path_optional_verify_credentials(
         &config_glob,
