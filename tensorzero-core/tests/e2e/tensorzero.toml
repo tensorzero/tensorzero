@@ -94,16 +94,17 @@ routing = ["azure"]
 [models."llama-3.3-70b-instruct-azure".providers.azure]
 type = "azure"
 deployment_id = "Llama-3.3-70B-Instruct"
-endpoint = ""
+api_key_location = "env::AZURE_AI_FOUNDRY_API_KEY"
+endpoint = "https://t0-gha-resource.services.ai.azure.com"
 
 [models."llama-3.3-70b-instruct-azure-dynamic"]
 routing = ["azure"]
 
 [models."llama-3.3-70b-instruct-azure-dynamic".providers.azure]
 type = "azure"
-deployment_id = "Llama-3.3-70B-Instruct"
-endpoint = ""
-api_key_location = "dynamic::azure_openai_api_key"
+deployment_id = "Phi-4-mini-instruct"
+endpoint = "https://t0-gha-resource.services.ai.azure.com"
+api_key_location = "dynamic::azure_ai_foundry_api_key"
 
 ## Groq
 
@@ -752,9 +753,9 @@ api_base = "https://api.voyageai.com/v1"
 model_name = "voyage-3.5-lite"
 api_key_location = "env::VOYAGE_API_KEY"
 extra_body = [
-  { pointer = "/dimensions", delete = true },
-  { pointer = "/encoding_format", delete = true },
-  { pointer = "/output_dimension", value = 256 },
+    { pointer = "/dimensions", delete = true },
+    { pointer = "/encoding_format", delete = true },
+    { pointer = "/output_dimension", value = 256 },
 ]
 
 [embedding_models.fallback]
@@ -1075,27 +1076,27 @@ model = "gpt-4o-mini-azure-dynamic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
-[functions.basic_test.variants.azure-llama]
+[functions.basic_test.variants.azure-ai-foundry]
 type = "chat_completion"
 model = "llama-3.3-70b-instruct-azure"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
-[functions.basic_test.variants.azure-llama-extra-body]
+[functions.basic_test.variants.azure-ai-foundry-extra-body]
 type = "chat_completion"
 model = "llama-3.3-70b-instruct-azure"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
-[functions.basic_test.variants.azure-llama-extra-headers]
+[functions.basic_test.variants.azure-ai-foundry-extra-headers]
 type = "chat_completion"
 model = "llama-3.3-70b-instruct-azure"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_headers = [{ name = "api-key", value = "invalid_azure_openai_auth" }]
 
-[functions.basic_test.variants.azure-llama-dynamic]
+[functions.basic_test.variants.azure-ai-foundry-dynamic]
 type = "chat_completion"
 model = "llama-3.3-70b-instruct-azure-dynamic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
@@ -1838,7 +1839,7 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "implicit_tool"
 max_tokens = 100
 
-[functions.json_success.variants.azure-llama]
+[functions.json_success.variants.azure-ai-foundry]
 type = "chat_completion"
 model = "llama-3.3-70b-instruct-azure"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
@@ -1846,7 +1847,7 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "on"
 max_tokens = 100
 
-[functions.json_success.variants.azure-llama-strict]
+[functions.json_success.variants.azure-ai-foundry-strict]
 type = "chat_completion"
 model = "llama-3.3-70b-instruct-azure"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
@@ -1854,7 +1855,7 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 max_tokens = 100
 json_mode = "strict"
 
-[functions.json_success.variants.azure-llama-implicit]
+[functions.json_success.variants.azure-ai-foundry-implicit]
 type = "chat_completion"
 model = "llama-3.3-70b-instruct-azure"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
@@ -2308,7 +2309,7 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "off"
 max_tokens = 100
 
-[functions.json_success.variants.azure-llama_json_mode_off]
+[functions.json_success.variants.azure-ai-foundry_json_mode_off]
 type = "chat_completion"
 model = "llama-3.3-70b-instruct-azure"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
@@ -2538,7 +2539,7 @@ user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_templa
 json_mode = "implicit_tool"
 max_tokens = 100
 
-[functions.dynamic_json.variants.azure-llama]
+[functions.dynamic_json.variants.azure-ai-foundry]
 type = "chat_completion"
 model = "llama-3.3-70b-instruct-azure"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
@@ -2546,7 +2547,7 @@ user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_templa
 json_mode = "on"
 max_tokens = 100
 
-[functions.dynamic_json.variants.azure-llama-strict]
+[functions.dynamic_json.variants.azure-ai-foundry-strict]
 type = "chat_completion"
 model = "llama-3.3-70b-instruct-azure"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
@@ -2554,7 +2555,7 @@ user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_templa
 max_tokens = 100
 json_mode = "strict"
 
-[functions.dynamic_json.variants.azure-llama-implicit]
+[functions.dynamic_json.variants.azure-ai-foundry-implicit]
 type = "chat_completion"
 model = "llama-3.3-70b-instruct-azure"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
