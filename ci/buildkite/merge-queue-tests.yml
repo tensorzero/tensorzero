@@ -168,5 +168,5 @@ steps:
     depends_on:
       - "build-gateway-e2e-container"
       - "build-fixtures-container"
-      - "build-client-tests-container"
+      - "build-python-client-tests-container"
       - "build-mock-inference-provider-container"
