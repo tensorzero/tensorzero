@@ -13,6 +13,38 @@
 //!   but the config file itself controls OTLP exporting and debug logging. The `ObservabilityHandle` type provides callbacks
 //!   which we conditionally invoke after we've parsed our config file, and before starting the gateway.
 //! * `setup_metrics` - builds Prometheus metrics exporter
+//!
+//! As part of our opentelemetry handling, we support forwarding custom HTTP headers to the OTLP export endpoint.
+//! This requires several interconnected steps:
+//! 1. A client makes a request to a traced-enabled TensorZero HTTP endpoint (e.g. POST /inference),
+//!    with header(s) prefixed with `tensorzero-otlp-traces-extra-header-`.
+//!    For example, `tensorzero-otlp-traces-extra-header-my-first-header: my-first-value`.
+//! 2. Our `tensorzero_otlp_headers_middleware` Axum middleware detects these custom headers,
+//!    and constructs a `CustomTracerKey` with the header name and value pairs.
+//!    The middleware rejects the request if the headers fail to parse as a `tonic::metadata::MetadataMap`
+//!    (this is the type that we will ultimately pass to the OTLP exporter).
+//!    We attach this `CustomTracerKey` to the http request extensions.
+//! 3. Our `make_span` function in `apply_otel_http_trace_layer` detects the `CustomTracerKey` in the request extensions,
+//!    and inserts it into the opentelemetry `Context` when we construct our `tracing::Span` for the overall HTTP request.
+//!    The `tracing-opentelemetry` library will propagate this `Context` to all descendant spans, so we only need to do
+//!    this for the root HTTP request span.
+//! 4. When any `tracing::Span` is closed, our `TracerWrapper::build_with_context` is called by `tracing-opentelemetry`
+//!    (since we registered it when creating the OpenTelemetry layer).
+//!    If our `CustomTracerKey` is present in the `Context`, then we perform a (cached) creation of a new `SdkTracer`,
+//!    with the custom headers from the `CustomTracerKey` set in the OTLP exporter. We need to create an entirely new
+//!    tracer, since the `metadata` (which controls the custom headers) can only be set at creation time.
+//!    If we don't have a `CustomTracerKey` in the `Context`, then we use our default `SdkTracer` (which doesn't
+//!    have any custom headers set).
+//! 5. The OpenTelemetry `Span` is built using a `SdkTracer` with our custom metadata attached, so the custom
+//!    headers will be set when that span is exported. Since we cache the `SdkTracer`s, multiple requests that
+//!    have exactly the same custom headers set can share the same `SdkTracer`, and benefit from things like
+//!    batched exporting.
+//!
+//! We store our `CustomTracerKey` in two 'context' objects:
+//! * The `http::Request` extensions map on the HTTP request, so that our middleware can pass information
+//!   to our `make_span` function.
+//! * The OpenTelemetry `Context`, which is captured by the `tracing-opentelemetry` library when we create a new span,
+//!   and passed along to `TracerWrapper::build_with_context` when the span is closed and exported.
 use std::hash::Hasher;
 use std::str::FromStr;
 
@@ -24,7 +56,7 @@ use clap::ValueEnum;
 use http::HeaderMap;
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use moka::sync::Cache;
-use opentelemetry::trace::{SpanBuilder, Tracer, TracerProvider as _};
+use opentelemetry::trace::{Tracer, TracerProvider as _};
 use opentelemetry::{Context, KeyValue};
 use opentelemetry_otlp::tonic_types::metadata::MetadataMap;
 use opentelemetry_otlp::WithTonicConfig;
@@ -153,6 +185,14 @@ impl Tracer for TracerWrapper {
         parent_cx: &opentelemetry::Context,
     ) -> Self::Span {
         if let Some(key) = parent_cx.get::<CustomTracerKey>() {
+            // This is the potentially expensive part - we need to dynamically create a new `SdkTracer`.
+            // If this ends up causing performance issues (due to thrashing the `custom_tracers` cache,
+            // or `build_tracer` becoming expensive), then we should do the following:
+            // 1. Make a new `SpanWrapper` enum that we set as the `Span` associated type for `TracerWrapper`.
+            // 2. When we have a `CustomTracerKey` in the `Context`, store the `builder` and `parent_cx` in the `SpanWrapper`,
+            //    and don't immediately create the `SdkTracer`.
+            // 3. In the `Drop` impl for `SpanWrapper`, call `tokio::task::spawn_blocking`, and perform the cache
+            //    lookup and nested `build_with_context` inside the closure.
             let tracer = self.custom_tracers.try_get_with_by_ref(key, || {
                 // We need to provide a dummy generic parameter to satisfy the compiler
                 let (provider, tracer) = build_tracer::<opentelemetry_otlp::SpanExporter>(
@@ -176,40 +216,6 @@ impl Tracer for TracerWrapper {
         }
 
         self.default_tracer.build_with_context(builder, parent_cx)
-    }
-
-    fn start<T>(&self, name: T) -> Self::Span
-    where
-        T: Into<std::borrow::Cow<'static, str>>,
-    {
-        self.default_tracer.start(name)
-    }
-
-    fn start_with_context<T>(&self, name: T, parent_cx: &opentelemetry::Context) -> Self::Span
-    where
-        T: Into<std::borrow::Cow<'static, str>>,
-    {
-        self.build_with_context(SpanBuilder::from_name(name), parent_cx)
-    }
-
-    fn span_builder<T>(&self, name: T) -> opentelemetry::trace::SpanBuilder
-    where
-        T: Into<std::borrow::Cow<'static, str>>,
-    {
-        self.default_tracer.span_builder(name)
-    }
-
-    fn build(&self, builder: opentelemetry::trace::SpanBuilder) -> Self::Span {
-        Context::map_current(|cx| self.build_with_context(builder, cx))
-    }
-
-    fn in_span<T, F, N>(&self, name: N, f: F) -> T
-    where
-        F: FnOnce(opentelemetry::Context) -> T,
-        N: Into<std::borrow::Cow<'static, str>>,
-        Self::Span: Send + Sync + 'static,
-    {
-        self.default_tracer.in_span(name, f)
     }
 }
 

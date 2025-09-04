@@ -51,7 +51,7 @@ async fn test_jaeger_trace_export_with_custom_header() {
     let mut i = 1;
     while let Some(task) = futures.join_next().await {
         let () = task.unwrap();
-        eprintln!("Completed task {i}/{num_tasks}");
+        println!("Completed task {i}/{num_tasks}");
         i += 1;
     }
 }
