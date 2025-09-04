@@ -89,7 +89,7 @@ steps:
         - exit_status: "*"
           limit: 3
   - label: "Build Python Client Tests Container"
-    command: bash ./ci/buildkite/build-python-client-tests.sh
+    command: bash ./ci/buildkite/build-python-client-tests-container.sh
     key: "build-python-client-tests-container"
     retry:
       automatic:
