@@ -38,6 +38,7 @@ export * from "./DynamicToolConfig";
 export * from "./EmbeddingModelConfig";
 export * from "./EmbeddingProviderConfig";
 export * from "./EmbeddingProviderInfo";
+export * from "./EndpointLocation";
 export * from "./EvaluationConfig";
 export * from "./EvaluatorConfig";
 export * from "./ExactMatchConfig";
