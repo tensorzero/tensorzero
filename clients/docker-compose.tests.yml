@@ -194,7 +194,7 @@ services:
       start_period: 5s # Give the script time to start
 
   python-client-tests:
-    image: tensorzero/python-client-tests:${TENSORZERO_CLIENT_TESTS_TAG:-latest}
+    image: tensorzero/python-client-tests:${TENSORZERO_PYTHON_CLIENT_TESTS_TAG:-latest}
     build:
       context: ..
       dockerfile: clients/python/tests/Dockerfile
