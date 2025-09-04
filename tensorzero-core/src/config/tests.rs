@@ -2204,6 +2204,44 @@ async fn test_config_duplicate_user_schema() {
 }
 
 #[tokio::test]
+async fn test_config_named_schema_no_template() {
+    let mut temp_file = NamedTempFile::new().unwrap();
+    let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .display()
+        .to_string();
+    // We write an absolute path into the config file, since we're writing the config file in a temp dir.
+    temp_file
+        .write_all(
+            format!(
+                r#"
+        [functions.bad_custom_schema]
+        type = "chat"
+        schemas.my_custom_schema.path = "{base_path}/fixtures/config/functions/json_success/user_schema.json"
+
+        [functions.bad_custom_schema.variants.good]
+        type = "chat_completion"
+        model = "dummy::good"
+        "#
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+
+    let config = UninitializedConfig::read_toml_config(
+        &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+    )
+    .unwrap();
+    let err = Config::load_from_toml(config.table, &config.span_map)
+        .await
+        .expect_err("Config should fail to load");
+
+    assert_eq!(
+        err.to_string(),
+        "`functions.bad_custom_schema.variants.good.templates.my_custom_schema` is required when `functions.bad_custom_schema.schemas.my_custom_schema` is specified"
+    );
+}
+
+#[tokio::test]
 async fn test_config_duplicate_user_template() {
     let mut temp_file = NamedTempFile::new().unwrap();
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

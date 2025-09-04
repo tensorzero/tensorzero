@@ -520,6 +520,16 @@ impl Variant for ChatCompletionConfig {
                 ),
             })
         })?;
+
+        for (schema_name, _) in &function.schemas().inner {
+            if self.templates.get_named_template(schema_name).is_none() {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "`functions.{function_name}.variants.{variant_name}.templates.{schema_name}` is required when `functions.{function_name}.schemas.{schema_name}` is specified"
+                    ),
+                }));
+            }
+        }
         Ok(())
     }
 
@@ -849,11 +859,42 @@ mod tests {
         }
         // Test case 7: User message with string content when template is provided.
         // This bypasses the template
+        let chat_completion_config_non_legacy = UninitializedChatCompletionConfig {
+            model: "dummy".into(),
+            weight: Some(1.0),
+            templates: UninitializedChatTemplates {
+                inner: HashMap::from([(
+                    "user".to_string(),
+                    UninitializedChatTemplate {
+                        path: user_template.clone(),
+                    },
+                )]),
+            },
+            input_wrappers: None,
+            json_mode: Some(JsonMode::On),
+            ..Default::default()
+        }
+        .load(
+            &SchemaData::load(
+                Some(test_user_template_schema()),
+                Some(test_assistant_template_schema()),
+                Some(test_system_template_schema()),
+                UninitializedSchemas::default(),
+                "test",
+            )
+            .unwrap(),
+            &ErrorContext {
+                function_name: "test".to_string(),
+                variant_name: "test".to_string(),
+            },
+        )
+        .unwrap();
         let input_message = ResolvedInputMessage {
             role: Role::User,
             content: vec!["This is a plain string".to_string().into()],
         };
-        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
+        let result =
+            chat_completion_config_non_legacy.prepare_request_message(&templates, &input_message);
         let prepared_message = result.unwrap();
         match prepared_message {
             RequestMessage {
