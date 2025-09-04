@@ -221,6 +221,8 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
       e.run_id_uint,
       e.tags,
       e.task_name
+    ORDER BY
+        e.episode_id_uint DESC
   `;
   const result = await getClickhouseClient().query({
     query,

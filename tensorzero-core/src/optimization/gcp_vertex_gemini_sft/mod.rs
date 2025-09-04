@@ -125,6 +125,9 @@ impl UninitializedGCPVertexGeminiSFTConfig {
             .transpose()?;
         Ok(Self {
             model,
+            bucket_name,
+            project_id,
+            region,
             learning_rate_multiplier,
             adapter_size,
             n_epochs,
@@ -135,10 +138,7 @@ impl UninitializedGCPVertexGeminiSFTConfig {
             service_account,
             kms_key_name,
             tuned_model_display_name,
-            bucket_name,
             bucket_path_prefix,
-            project_id,
-            region,
         })
     }
 
@@ -454,7 +454,7 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
             self.project_id.clone(),
             self.credential_location
                 .clone()
-                .unwrap_or(default_api_key_location()),
+                .unwrap_or_else(default_api_key_location),
         )
     }
 }

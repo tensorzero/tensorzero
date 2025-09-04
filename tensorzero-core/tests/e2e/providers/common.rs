@@ -230,6 +230,9 @@ macro_rules! generate_provider_tests {
         use $crate::providers::embeddings::test_embedding_invalid_model_error_with_provider;
         use $crate::providers::embeddings::test_embedding_large_bulk_with_provider;
         use $crate::providers::embeddings::test_embedding_consistency_with_provider;
+        use $crate::providers::embeddings::test_embedding_cache_with_provider;
+        use $crate::providers::embeddings::test_embedding_cache_options_with_provider;
+        use $crate::providers::embeddings::test_embedding_dryrun_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -693,6 +696,30 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.embeddings;
             for provider in providers {
                 test_embedding_consistency_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_cache() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_cache_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_cache_options() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_cache_options_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_dryrun() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_dryrun_with_provider(provider).await;
             }
         }
 
@@ -4113,9 +4140,10 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
                     if let Some(block_raw_name) = block.get("raw_name") {
                         match tool_name {
                             Some(_) => {
-                                if !block_raw_name.as_str().unwrap().is_empty() {
-                                    panic!("Raw name already seen, got {block:#?}");
-                                }
+                                assert!(
+                                    block_raw_name.as_str().unwrap().is_empty(),
+                                    "Raw name already seen, got {block:#?}"
+                                );
                             }
                             None => {
                                 tool_name = Some(block_raw_name.as_str().unwrap().to_string());
@@ -5319,9 +5347,10 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
                     if let Some(block_raw_name) = block.get("raw_name") {
                         match tool_name {
                             Some(_) => {
-                                if !block_raw_name.as_str().unwrap().is_empty() {
-                                    panic!("Raw name already seen, got {block:#?}");
-                                }
+                                assert!(
+                                    block_raw_name.as_str().unwrap().is_empty(),
+                                    "Raw name already seen, got {block:#?}"
+                                );
                             }
                             None => {
                                 tool_name = Some(block_raw_name.as_str().unwrap().to_string());
@@ -7237,9 +7266,10 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
                     if let Some(block_raw_name) = block.get("raw_name") {
                         match tool_name {
                             Some(_) => {
-                                if !block_raw_name.as_str().unwrap().is_empty() {
-                                    panic!("Raw name already seen, got {block:#?}");
-                                }
+                                assert!(
+                                    block_raw_name.as_str().unwrap().is_empty(),
+                                    "Raw name already seen, got {block:#?}"
+                                );
                             }
                             None => {
                                 tool_name = Some(block_raw_name.as_str().unwrap().to_string());
@@ -8591,9 +8621,10 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
                     if let Some(block_raw_name) = block.get("raw_name") {
                         match tool_name {
                             Some(_) => {
-                                if !block_raw_name.as_str().unwrap().is_empty() {
-                                    panic!("Raw name already seen, got {block:#?}");
-                                }
+                                assert!(
+                                    block_raw_name.as_str().unwrap().is_empty(),
+                                    "Raw name already seen, got {block:#?}"
+                                );
                             }
                             None => {
                                 tool_name = Some(block_raw_name.as_str().unwrap().to_string());
