@@ -749,7 +749,9 @@ impl<'a> AzureEmbeddingRequest<'a> {
 
 #[cfg(test)]
 mod tests {
+    use secrecy::SecretString;
     use std::borrow::Cow;
+    use std::collections::HashMap;
     use std::time::Duration;
 
     use uuid::Uuid;
@@ -1057,9 +1059,6 @@ mod tests {
 
     #[test]
     fn test_azure_endpoint_resolution() {
-        use secrecy::SecretString;
-        use std::collections::HashMap;
-
         let endpoint = AzureEndpoint::Dynamic("test_endpoint".to_string());
         let mut credentials = HashMap::new();
         credentials.insert(
@@ -1073,8 +1072,6 @@ mod tests {
 
     #[test]
     fn test_azure_endpoint_resolution_missing_key() {
-        use std::collections::HashMap;
-
         let endpoint = AzureEndpoint::Dynamic("missing_endpoint".to_string());
         let credentials = HashMap::new();
 

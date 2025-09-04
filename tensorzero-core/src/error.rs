@@ -914,7 +914,7 @@ impl std::fmt::Display for ErrorDetails {
                 )
             }
             ErrorDetails::DynamicEndpointNotFound { key_name } => {
-                write!(f, "Dynamic endpoint {key_name} not found in credentials")
+                write!(f, "Dynamic endpoint '{key_name}' not found in credentials")
             }
 
             ErrorDetails::FileRead { message, file_path } => {
