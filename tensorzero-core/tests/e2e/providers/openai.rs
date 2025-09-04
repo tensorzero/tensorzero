@@ -1309,10 +1309,10 @@ fn cosine_similarity(a: &Embedding, b: &Embedding) -> f32 {
 #[tokio::test]
 pub async fn test_image_inference_with_provider_cloudflare_r2() {
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
-    use aws_credential_types::Credentials;
-    use aws_sdk_s3::config::SharedCredentialsProvider;
+    use object_store::{aws::AmazonS3Builder, ObjectStore};
     use rand::distr::Alphanumeric;
     use rand::distr::SampleString;
+    use std::sync::Arc;
     use tensorzero_core::inference::types::storage::StorageKind;
 
     // We expect CI to provide our credentials in 'R2_' variables
@@ -1320,12 +1320,10 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
     let r2_access_key_id = std::env::var("R2_ACCESS_KEY_ID").unwrap();
     let r2_secret_access_key = std::env::var("R2_SECRET_ACCESS_KEY").unwrap();
 
-    let credentials = Credentials::from_keys(&r2_access_key_id, &r2_secret_access_key, None);
-
     // Our S3-compatible object store checks for these variables, giving them
     // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
-    std::env::set_var("S3_ACCESS_KEY_ID", r2_access_key_id);
-    std::env::set_var("S3_SECRET_ACCESS_KEY", r2_secret_access_key);
+    std::env::set_var("S3_ACCESS_KEY_ID", &r2_access_key_id);
+    std::env::set_var("S3_SECRET_ACCESS_KEY", &r2_secret_access_key);
 
     let provider = E2ETestProvider {
         supports_batch_inference: true,
@@ -1338,14 +1336,16 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
     let endpoint = "https://19918a216783f0ac9e052233569aef60.r2.cloudflarestorage.com/tensorzero-e2e-test-images".to_string();
 
     let test_bucket = "tensorzero-e2e-test-images";
-    let config = aws_config::load_from_env()
-        .await
-        .to_builder()
-        .credentials_provider(SharedCredentialsProvider::new(credentials))
-        .endpoint_url(&endpoint)
-        .build();
 
-    let client = aws_sdk_s3::Client::new(&config);
+    let client: Arc<dyn ObjectStore> = Arc::new(
+        AmazonS3Builder::new()
+            .with_bucket_name(test_bucket)
+            .with_access_key_id(r2_access_key_id)
+            .with_secret_access_key(r2_secret_access_key)
+            .with_endpoint(&endpoint)
+            .build()
+            .unwrap(),
+    );
 
     let mut prefix = Alphanumeric.sample_string(&mut rand::rng(), 6);
     prefix += "-";
@@ -1376,7 +1376,6 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
     model = "openai::gpt-4o-mini-2024-07-18"
     "#
         ),
-        test_bucket,
         &prefix,
     )
     .await;
@@ -1502,10 +1501,10 @@ async fn test_content_block_text_field() {
 pub async fn test_image_inference_with_provider_gcp_storage() {
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
     use crate::providers::common::IMAGE_FUNCTION_CONFIG;
-    use aws_credential_types::Credentials;
-    use aws_sdk_s3::config::SharedCredentialsProvider;
+    use object_store::{aws::AmazonS3Builder, ObjectStore};
     use rand::distr::Alphanumeric;
     use rand::distr::SampleString;
+    use std::sync::Arc;
     use tensorzero_core::inference::types::storage::StorageKind;
 
     // We expect CI to provide our credentials in 'GCP_STORAGE_' variables
@@ -1513,13 +1512,10 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     let gcloud_access_key_id = std::env::var("GCP_STORAGE_ACCESS_KEY_ID").unwrap();
     let gcloud_secret_access_key = std::env::var("GCP_STORAGE_SECRET_ACCESS_KEY").unwrap();
 
-    let credentials =
-        Credentials::from_keys(&gcloud_access_key_id, &gcloud_secret_access_key, None);
-
     // Our S3-compatible object store checks for these variables, giving them
     // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
-    std::env::set_var("S3_ACCESS_KEY_ID", gcloud_access_key_id);
-    std::env::set_var("S3_SECRET_ACCESS_KEY", gcloud_secret_access_key);
+    std::env::set_var("S3_ACCESS_KEY_ID", &gcloud_access_key_id);
+    std::env::set_var("S3_SECRET_ACCESS_KEY", &gcloud_secret_access_key);
 
     let provider = E2ETestProvider {
         supports_batch_inference: true,
@@ -1532,14 +1528,16 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     let endpoint = "https://storage.googleapis.com".to_string();
 
     let test_bucket = "tensorzero-e2e-tests";
-    let config = aws_config::load_from_env()
-        .await
-        .to_builder()
-        .credentials_provider(SharedCredentialsProvider::new(credentials))
-        .endpoint_url(&endpoint)
-        .build();
 
-    let client = aws_sdk_s3::Client::new(&config);
+    let client: Arc<dyn ObjectStore> = Arc::new(
+        AmazonS3Builder::new()
+            .with_bucket_name(test_bucket)
+            .with_access_key_id(gcloud_access_key_id)
+            .with_secret_access_key(gcloud_secret_access_key)
+            .with_endpoint(&endpoint)
+            .build()
+            .unwrap(),
+    );
 
     let mut prefix = Alphanumeric.sample_string(&mut rand::rng(), 6);
     prefix += "-";
@@ -1565,7 +1563,6 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     {IMAGE_FUNCTION_CONFIG}
     "#
         ),
-        test_bucket,
         &prefix,
     )
     .await;
@@ -1577,22 +1574,20 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
 #[tokio::test]
 pub async fn test_image_inference_with_provider_docker_minio() {
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
-    use aws_credential_types::Credentials;
-    use aws_sdk_s3::config::SharedCredentialsProvider;
+    use object_store::{aws::AmazonS3Builder, ObjectStore};
     use rand::distr::Alphanumeric;
     use rand::distr::SampleString;
+    use std::sync::Arc;
     use tensorzero_core::inference::types::storage::StorageKind;
 
     // These are set in `ci/minio-docker-compose.yml`
     let minio_access_key_id = "tensorzero-root".to_string();
     let minio_secret_access_key = "tensorzero-root".to_string();
 
-    let credentials = Credentials::from_keys(&minio_access_key_id, &minio_secret_access_key, None);
-
     // Our S3-compatible  store checks for these variables, giving them
     // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
-    std::env::set_var("S3_ACCESS_KEY_ID", minio_access_key_id);
-    std::env::set_var("S3_SECRET_ACCESS_KEY", minio_secret_access_key);
+    std::env::set_var("S3_ACCESS_KEY_ID", &minio_access_key_id);
+    std::env::set_var("S3_SECRET_ACCESS_KEY", &minio_secret_access_key);
 
     let provider = E2ETestProvider {
         supports_batch_inference: true,
@@ -1602,17 +1597,21 @@ pub async fn test_image_inference_with_provider_docker_minio() {
         credentials: HashMap::new(),
     };
 
-    let endpoint = "http://127.0.0.1:8000/".to_string();
+    let endpoint = std::env::var("TENSORZERO_MINIO_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:8000/".to_string());
 
     let test_bucket = "tensorzero-e2e-tests";
-    let config = aws_config::load_from_env()
-        .await
-        .to_builder()
-        .credentials_provider(SharedCredentialsProvider::new(credentials))
-        .endpoint_url(&endpoint)
-        .build();
 
-    let client = aws_sdk_s3::Client::new(&config);
+    let client: Arc<dyn ObjectStore> = Arc::new(
+        AmazonS3Builder::new()
+            .with_bucket_name(test_bucket)
+            .with_access_key_id(minio_access_key_id)
+            .with_secret_access_key(minio_secret_access_key)
+            .with_endpoint(&endpoint)
+            .with_allow_http(true)
+            .build()
+            .unwrap(),
+    );
 
     let mut prefix = Alphanumeric.sample_string(&mut rand::rng(), 6);
     prefix += "-";
@@ -1644,7 +1643,6 @@ pub async fn test_image_inference_with_provider_docker_minio() {
     model = "openai::gpt-4o-mini-2024-07-18"
     "#
         ),
-        test_bucket,
         &prefix,
     )
     .await;

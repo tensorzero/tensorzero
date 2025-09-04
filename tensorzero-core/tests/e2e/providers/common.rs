@@ -3,11 +3,8 @@ use std::io::Cursor;
 use std::time::Duration;
 use std::{collections::HashMap, net::SocketAddr};
 
-use aws_config::Region;
-
-use aws_sdk_bedrockruntime::error::SdkError;
-
-use aws_sdk_s3::operation::get_object::GetObjectError;
+use object_store::{aws::AmazonS3Builder, ObjectStore};
+use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::{Query, State};
@@ -974,16 +971,44 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
     .await;
 }
 
+async fn create_s3_object_store(
+    bucket_name: Option<String>,
+    region: Option<String>,
+    endpoint: Option<String>,
+    allow_http: Option<bool>,
+) -> Result<Arc<dyn ObjectStore>, Box<dyn std::error::Error>> {
+    let mut builder = AmazonS3Builder::from_env();
+
+    if let Some(bucket) = bucket_name {
+        builder = builder.with_bucket_name(bucket);
+    }
+
+    if let Some(region) = region {
+        builder = builder.with_region(region);
+    }
+
+    if let Some(endpoint) = endpoint {
+        builder = builder.with_endpoint(endpoint);
+    }
+
+    if let Some(allow_http) = allow_http {
+        builder = builder.with_allow_http(allow_http);
+    }
+
+    Ok(Arc::new(builder.build()?))
+}
+
 pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvider) {
     let test_bucket = "tensorzero-e2e-test-images";
     let test_bucket_region = "us-east-1";
-    let config = aws_config::load_from_env()
-        .await
-        .to_builder()
-        .region(Region::new(test_bucket_region))
-        .build();
-
-    let client = aws_sdk_s3::Client::new(&config);
+    let client = create_s3_object_store(
+        Some(test_bucket.to_string()),
+        Some(test_bucket_region.to_string()),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
 
     use rand::distr::Alphanumeric;
     use rand::distr::SampleString;
@@ -1013,7 +1038,6 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     {IMAGE_FUNCTION_CONFIG}
     "#
             ),
-            test_bucket,
             &prefix,
         )
         .await;
@@ -1026,10 +1050,7 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     .await;
 
     client
-        .delete_object()
-        .key(&expected_key)
-        .bucket(test_bucket)
-        .send()
+        .delete(&object_store::path::Path::parse(&expected_key).unwrap())
         .await
         .unwrap();
 }
@@ -1037,52 +1058,48 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
 pub async fn test_image_inference_with_provider_s3_compatible(
     provider: E2ETestProvider,
     storage_kind: &StorageKind,
-    client: &aws_sdk_s3::Client,
+    client: &Arc<dyn ObjectStore>,
     toml: &str,
-    bucket_name: &str,
     prefix: &str,
 ) -> (tensorzero::Client, String, StoragePath) {
     let expected_key =
         format!("{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png");
 
     // Check that object is deleted
-    let err = client
-        .get_object()
-        .bucket(bucket_name)
-        .key(&expected_key)
-        .send()
-        .await
-        .expect_err("Image should not exist in s3 after deletion");
+    let path = object_store::path::Path::parse(&expected_key).unwrap();
+    let result = client.get(&path).await;
+    assert!(
+        result.is_err(),
+        "Image should not exist in object store after deletion"
+    );
 
-    if let SdkError::ServiceError(err) = err {
-        let err = err.err();
-        assert!(
-            matches!(err, GetObjectError::NoSuchKey(_)),
-            "Unexpected service error: {err:?}"
-        );
-    } else {
-        panic!("Expected ServiceError: {err:?}");
+    match result {
+        Err(object_store::Error::NotFound { .. }) => {
+            // Expected - object should not exist
+        }
+        _ => {
+            panic!("Object should not exist after deletion");
+        }
     }
 
     let (tensorzero_client, storage_path) =
         test_base64_image_inference_with_provider_and_store(provider, storage_kind, toml, prefix)
             .await;
 
+    let path = object_store::path::Path::parse(&expected_key).unwrap();
     let result = client
-        .get_object()
-        .bucket(bucket_name)
-        .key(&expected_key)
-        .send()
+        .get(&path)
         .await
         .expect("Failed to get image from S3-compatible store");
 
-    assert_eq!(result.body.collect().await.unwrap().to_vec(), FERRIS_PNG);
+    let bytes = result.bytes().await.unwrap();
+    assert_eq!(bytes.to_vec(), FERRIS_PNG);
 
     (tensorzero_client, expected_key, storage_path)
 }
 
 async fn make_temp_image_server() -> (SocketAddr, tokio::sync::oneshot::Sender<()>) {
-    let addr = SocketAddr::from(([0, 0, 0, 0], 0));
+    let addr = SocketAddr::from(([127, 0, 0, 1], 0));
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .unwrap_or_else(|e| panic!("Failed to bind to {addr}: {e}"));

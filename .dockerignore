@@ -11,7 +11,11 @@ target-rust-analyzer
 **/.claude
 /recipes
 /examples
+gcp_jwt_key.json
+.credentials/
+/docs
 !/examples/integrations/cursor/feedback
 !/examples/quickstart/package.json
 !/examples/integrations/helicone/package.json
 !/examples/guides/tool-use/package.json
+!/examples/haiku-hidden-preferences

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::endpoints::openai_compatible::RouterExt;
 use axum::extract::{rejection::JsonRejection, FromRequest, Json, Request};
 use axum::Router;
-use reqwest::{Client, Proxy};
+use reqwest::{Client, NoProxy, Proxy};
 use serde::de::DeserializeOwned;
 use tokio::runtime::Handle;
 use tokio::sync::oneshot::Sender;
@@ -260,11 +260,15 @@ pub fn setup_http_client() -> Result<Client, Error> {
         if let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY") {
             tracing::info!("Using proxy URL from TENSORZERO_E2E_PROXY: {proxy_url}");
             http_client_builder = http_client_builder
-                .proxy(Proxy::all(proxy_url).map_err(|e| {
-                    Error::new(ErrorDetails::AppState {
-                        message: format!("Invalid proxy URL: {e}"),
-                    })
-                })?)
+                .proxy(
+                    Proxy::all(proxy_url)
+                        .map_err(|e| {
+                            Error::new(ErrorDetails::AppState {
+                                message: format!("Invalid proxy URL: {e}"),
+                            })
+                        })?
+                        .no_proxy(NoProxy::from_string("localhost,127.0.0.1,minio")),
+                )
                 // When running e2e tests, we use `provider-proxy` as an MITM proxy
                 // for caching, so we need to accept the invalid (self-signed) cert.
                 .danger_accept_invalid_certs(true);

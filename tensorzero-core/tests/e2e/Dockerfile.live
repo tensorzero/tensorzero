@@ -1,0 +1,77 @@
+# ========== base ==========
+
+FROM rust:1.88.0-slim AS base
+
+# Install required system dependencies
+RUN apt-get update && \
+    apt-get install -y \
+        curl \
+        ca-certificates \
+        build-essential \
+        pkg-config \
+        libssl-dev \
+        # TODO remove
+        file \
+        git && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install cargo-binstall for faster tool installation
+RUN curl -L --proto '=https' --tlsv1.2 -sSf \
+    https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+
+# ========== build-env ==========
+
+FROM rust:1.88.0 AS builder
+
+# Install cargo-binstall for faster tool installation
+RUN curl -L --proto '=https' --tlsv1.2 -sSf \
+    https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+
+WORKDIR /app
+
+# Copy the entire project
+COPY . .
+
+# Install cargo-nextest using binstall
+RUN cargo binstall -y cargo-nextest --secure
+
+# Build the binaries that the tests will use
+RUN cargo build -p evaluations -p gateway --features e2e_tests
+
+# Fetch all dependencies first (including dev-dependencies needed by trybuild)
+RUN cargo fetch --locked
+
+# Build and archive tests instead of copying entire target directory
+RUN cargo nextest archive --features e2e_tests --profile e2e --archive-file tests.tar.zst --offline
+
+# ========== test-env ==========
+
+FROM base AS test-env
+
+WORKDIR /app
+
+# Copy workspace structure but exclude target directory
+COPY . ./
+RUN rm -rf target
+
+# Copy over just the evaluations and gateway binaries
+# they live in /app/target/debug/evaluations and /app/target/debug/gateway
+COPY --from=builder /app/target/debug/evaluations /app/target/debug/
+COPY --from=builder /app/target/debug/gateway /app/target/debug/
+
+# Copy only the test archive instead of entire target directory
+COPY --from=builder /app/tests.tar.zst /app/tests.tar.zst
+
+# Copy the populated Cargo caches from the builder stage.
+# This is necessary for dependencies required at test *runtime*, like with trybuild.
+COPY --from=builder /usr/local/cargo/registry /usr/local/cargo/registry
+COPY --from=builder /usr/local/cargo/git /usr/local/cargo/git
+
+# Install cargo-nextest in this stage too (for running tests)
+RUN cargo binstall -y cargo-nextest --secure
+
+# Set CI environment variable
+ENV CI=true
+
+# Set the entrypoint to run tests from archive with absolute config file path and e2e profile
+CMD ["cargo", "nextest", "run", "--no-fail-fast", "--archive-file", "tests.tar.zst", "--workspace-remap", "/app", "--config-file", "/app/.config/nextest.toml", "--profile", "e2e"]
