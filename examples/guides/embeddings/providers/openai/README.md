@@ -11,12 +11,12 @@ export OPENAI_API_KEY="sk-..." # Replace with your OpenAI API key
 2. Run the example:
 
 <details open>
-<summary><b>Python (OpenAI)</b></summary>
+<summary><b>Python (OpenAI SDK)</b></summary>
 
 a. Install the dependencies:
 
 ```bash
-# We recommend using Python 3.9+ and a virtual environment
+# We recommend using Python 3.10+ and a virtual environment
 pip install -r requirements.txt
 ```
 

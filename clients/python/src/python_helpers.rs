@@ -15,6 +15,7 @@ use uuid::Uuid;
 // since they're not available during module initialization.
 pub fn parse_feedback_response(py: Python<'_>, data: FeedbackResponse) -> PyResult<Py<PyAny>> {
     static PARSE_FEEDBACK_RESPONSE: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
+    static UUID: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
     // This should never actually fail, since we're just importing code defined in our own Python
     // package. However, we still produce a Python error if it fails, rather than panicking
     // and bringing down the entire Python process.
@@ -23,8 +24,13 @@ pub fn parse_feedback_response(py: Python<'_>, data: FeedbackResponse) -> PyResu
             let self_module = PyModule::import(py, "tensorzero.types")?;
             Ok(self_module.getattr("FeedbackResponse")?.unbind())
         })?;
-    let json_data = serialize_to_dict(py, data)?;
-    let python_parsed = parse_feedback_response.call1(py, (json_data,))?;
+    let uuid = UUID.get_or_try_init::<_, PyErr>(py, || {
+        let self_module = PyModule::import(py, "uuid")?;
+        Ok(self_module.getattr("UUID")?.unbind())
+    })?;
+    let uuid_str = data.feedback_id.to_string();
+    let python_uuid = uuid.call1(py, (uuid_str,))?;
+    let python_parsed = parse_feedback_response.call1(py, (python_uuid,))?;
     Ok(python_parsed.into_any())
 }
 

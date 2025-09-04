@@ -15,7 +15,7 @@ tracing-subscriber = { version = "0.3.20", features = [
     "json",
 ] }
 tokio = { workspace = true }
-mimalloc = "0.1.47"
+mimalloc = "0.1.48"
 clap = { workspace = true }
 serde = { workspace = true }
 tracing-opentelemetry-instrumentation-sdk = { workspace = true }
@@ -33,6 +33,7 @@ default = []
 reqwest  = { workspace = true, features = ["json", "blocking"] }
 tempfile = "3.21.0"
 tensorzero = { path = "../clients/rust"}
+tracing-test = "0.2"
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 jsonschema = { workspace = true }

@@ -356,14 +356,7 @@ async fn main() {
     }
 
     // Print the configuration being used
-    if let Some(glob) = &glob {
-        tracing::info!("├ Configuration: glob `{}` resolved to:", glob.glob);
-        for path in &glob.paths {
-            tracing::info!("│  ├ {}", path.to_string_lossy());
-        }
-    } else {
-        tracing::info!("├ Configuration: default");
-    }
+    print_configuration_info(glob.as_ref());
 
     // Print whether observability is enabled
     tracing::info!("├ Observability: {observability_enabled_pretty}");
@@ -478,5 +471,133 @@ impl<T> ExpectPretty<T> for Option<T> {
                 std::process::exit(1);
             }
         }
+    }
+}
+
+/// Trait for configuration glob information, so that we can create a mocked version in tests
+trait ConfigGlobInfo {
+    fn glob(&self) -> &str;
+    fn paths(&self) -> &[std::path::PathBuf];
+}
+
+impl ConfigGlobInfo for tensorzero_core::config::ConfigFileGlob {
+    fn glob(&self) -> &str {
+        &self.glob
+    }
+
+    fn paths(&self) -> &[std::path::PathBuf] {
+        &self.paths
+    }
+}
+
+fn print_configuration_info(glob: Option<&impl ConfigGlobInfo>) {
+    if let Some(glob) = glob {
+        match glob.paths().len() {
+            0 => {
+                tracing::warn!(
+                    "├ Configuration: glob `{}` did not match any files.",
+                    glob.glob()
+                );
+            }
+            _ => {
+                tracing::info!("├ Configuration: glob `{}` resolved to:", glob.glob());
+
+                for (i, path) in glob.paths().iter().enumerate() {
+                    if i < glob.paths().len() - 1 {
+                        tracing::info!("│ ├ {}", path.to_string_lossy());
+                    } else {
+                        tracing::info!("│ └ {}", path.to_string_lossy());
+                    }
+                }
+            }
+        }
+    } else {
+        tracing::info!("├ Configuration: default");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use tracing_test::traced_test;
+
+    // Mock implementation for testing
+    struct MockConfigGlob {
+        glob: String,
+        paths: Vec<PathBuf>,
+    }
+
+    impl ConfigGlobInfo for MockConfigGlob {
+        fn glob(&self) -> &str {
+            &self.glob
+        }
+
+        fn paths(&self) -> &[PathBuf] {
+            &self.paths
+        }
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_print_configuration_info_default() {
+        let glob: Option<&MockConfigGlob> = None;
+        print_configuration_info(glob);
+
+        assert!(logs_contain("├ Configuration: default"));
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_print_configuration_info_glob_no_matches() {
+        // Create a mock with no paths for testing
+        let glob = MockConfigGlob {
+            glob: "*.nonexistent".to_string(),
+            paths: vec![],
+        };
+
+        print_configuration_info(Some(&glob));
+
+        assert!(logs_contain(
+            "├ Configuration: glob `*.nonexistent` did not match any files."
+        ));
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_print_configuration_info_glob_single_path() {
+        let glob = MockConfigGlob {
+            glob: "config/*.toml".to_string(),
+            paths: vec![PathBuf::from("config/app.toml")],
+        };
+
+        print_configuration_info(Some(&glob));
+
+        assert!(logs_contain(
+            "├ Configuration: glob `config/*.toml` resolved to:"
+        ));
+        assert!(logs_contain("│ └ config/app.toml"));
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_print_configuration_info_glob_multiple_paths() {
+        let glob = MockConfigGlob {
+            glob: "config/**/*.toml".to_string(),
+            paths: vec![
+                PathBuf::from("config/app.toml"),
+                PathBuf::from("config/database.toml"),
+                PathBuf::from("config/prod/settings.toml"),
+            ],
+        };
+
+        print_configuration_info(Some(&glob));
+
+        assert!(logs_contain(
+            "├ Configuration: glob `config/**/*.toml` resolved to:"
+        ));
+        assert!(logs_contain("│ ├ config/app.toml"));
+        assert!(logs_contain("│ ├ config/database.toml"));
+        assert!(logs_contain("│ └ config/prod/settings.toml"));
     }
 }
