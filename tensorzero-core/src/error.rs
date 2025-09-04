@@ -181,6 +181,7 @@ pub enum ErrorDetails {
     },
     ApiKeyMissing {
         provider_name: String,
+        message: String,
     },
     AppState {
         message: String,
@@ -837,8 +838,11 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::Glob { glob, message } => {
                 write!(f, "Error using glob: `{glob}`: {message}")
             }
-            ErrorDetails::ApiKeyMissing { provider_name } => {
-                write!(f, "API key missing for provider: {provider_name}")
+            ErrorDetails::ApiKeyMissing {
+                provider_name,
+                message,
+            } => {
+                write!(f, "API key missing for provider {provider_name}: {message}")
             }
             ErrorDetails::AppState { message } => {
                 write!(f, "Error initializing AppState: {message}")

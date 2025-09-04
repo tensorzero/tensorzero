@@ -2120,7 +2120,7 @@ async fn test_config_load_optional_credentials_validation() {
     if cfg!(feature = "e2e_tests") {
         assert!(res.is_ok());
     } else {
-        assert_eq!(res.unwrap_err().to_string(), "models.my-model.providers.openai: API key missing for provider: openai: Failed to read credentials file - No such file or directory (os error 2)");
+        assert_eq!(res.unwrap_err().to_string(), "models.my-model.providers.openai: API key missing for provider openai: Failed to read credentials file - No such file or directory (os error 2)");
     }
 
     // Should not fail since validation is disabled
