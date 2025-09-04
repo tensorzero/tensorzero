@@ -1,9 +1,14 @@
-import json
 from asyncio import Semaphore
 from dataclasses import dataclass
 
-from tensorzero import AsyncTensorZeroGateway, ToolCall, ToolResult
-from tensorzero.types import ToDictEncoder
+from tensorzero import (
+    AsyncTensorZeroGateway,
+    ChatInferenceResponse,
+    Message,
+    ToolCall,
+    ToolResult,
+)
+from tensorzero.util import UUID
 from tools import load_wikipedia_page, search_wikipedia
 
 # ## Agentic RAG
@@ -32,7 +37,7 @@ async def ask_question(
     t0: AsyncTensorZeroGateway,
     semaphore: Semaphore,
     question: str,
-    episode_id: str,
+    episode_id: UUID,
     verbose: bool = False,
 ) -> RunResult:
     """
@@ -46,8 +51,9 @@ async def ask_question(
         str: The answer to the question.
     """
     # Initialize the message history with the user's question
-    messages = [{"role": "user", "content": question}]
+    messages: list[Message] = [{"role": "user", "content": question}]
 
+    t = None
     for t in range(MAX_INFERENCES):
         if verbose:
             print()
@@ -57,6 +63,7 @@ async def ask_question(
                 input={"messages": messages},
                 episode_id=episode_id,
             )
+            assert isinstance(response, ChatInferenceResponse)
 
         # Append the assistant's response to the messages
         messages.append({"role": "assistant", "content": response.content})
@@ -100,7 +107,7 @@ async def ask_question(
                 print(f"[Other Content Block] {content_block}")
 
         messages.append({"role": "user", "content": output_content_blocks})
-        approx_message_length = len(json.dumps(messages, cls=ToDictEncoder))
+        approx_message_length = len(str(messages))
         if approx_message_length > MAX_MESSAGE_LENGTH:
             try:
                 messages = await compact_context(
@@ -110,6 +117,9 @@ async def ask_question(
                 print(f"Error compacting context: {e}")
                 messages = messages[:-2]
     else:
+        if t is None:
+            raise ValueError("`MAX_INFERENCES` must be positive.")
+
         # In a production setting, the model could attempt to generate an answer using available information
         # when the search process is stopped; here, we simply return a failure message.
         return RunResult(answer="The agent failed to answer the question.", t=t)
@@ -119,8 +129,8 @@ async def compact_context(
     t0: AsyncTensorZeroGateway,
     semaphore: Semaphore,
     question: str,
-    messages: list[dict],
-    episode_id: str,
+    messages: list[Message],
+    episode_id: UUID,
     verbose: bool = False,
 ):
     if verbose:
@@ -134,8 +144,10 @@ async def compact_context(
             },
             episode_id=episode_id,
         )
-    messages = [
+        assert isinstance(response, ChatInferenceResponse)
+
+    compacted_messages: list[Message] = [
         {"role": "user", "content": question},
         {"role": "assistant", "content": response.content},
     ]
-    return messages
+    return compacted_messages

@@ -6,6 +6,7 @@ from agent import ask_question
 from dataset import load_beerqa
 from judge import judge_answer
 from tensorzero import AsyncTensorZeroGateway
+from tensorzero.util import UUID
 from tqdm.asyncio import tqdm_asyncio
 
 MAX_SAMPLES = 10
@@ -14,9 +15,10 @@ CONCURRENCY = 10
 
 async def main():
     # Initialize a TensorZero client with our configuration file.
-    t0 = await AsyncTensorZeroGateway.build_http(
+    t0 = await AsyncTensorZeroGateway.build_http(  # type: ignore
         gateway_url="http://localhost:3000",
     )
+
     semaphore = Semaphore(CONCURRENCY)
     data = load_beerqa()
 
@@ -62,7 +64,10 @@ async def evaluate_variant_pins(
 
 
 async def evaluate_question(
-    t0: AsyncTensorZeroGateway, semaphore: Semaphore, question: dict, run_id: str
+    t0: AsyncTensorZeroGateway,
+    semaphore: Semaphore,
+    question: dict,
+    run_id: UUID,
 ):
     try:
         episode_info = await t0.dynamic_evaluation_run_episode(
@@ -70,7 +75,11 @@ async def evaluate_question(
         )
         episode_id = episode_info.episode_id
         result = await ask_question(
-            t0, semaphore, question["question"], episode_id=episode_id, verbose=False
+            t0,
+            semaphore,
+            question["question"],
+            episode_id=episode_id,
+            verbose=False,
         )
         await judge_answer(t0, semaphore, question, result.answer, episode_id, result.t)
     except Exception as e:

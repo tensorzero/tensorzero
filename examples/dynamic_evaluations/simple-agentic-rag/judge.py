@@ -1,6 +1,7 @@
 from asyncio import Semaphore, gather
 
-from tensorzero import AsyncTensorZeroGateway
+from tensorzero import AsyncTensorZeroGateway, JsonInferenceResponse
+from tensorzero.util import UUID
 
 
 async def judge_answer(
@@ -8,7 +9,7 @@ async def judge_answer(
     semaphore: Semaphore,
     question: dict,
     ai_answer: str,
-    episode_id: str,
+    episode_id: UUID,
     t: int,
 ):
     async with semaphore:
@@ -29,7 +30,16 @@ async def judge_answer(
                 ],
             },
         )
-    score = response.output.parsed["score"]
+    assert isinstance(response, JsonInferenceResponse)
+
+    if response.output.parsed is None:
+        raise ValueError("The judge failed to generate a valid output.")
+
+    score = response.output.parsed.get("score")
+
+    if score is None:
+        raise ValueError("The judge output is missing the 'score' field.")
+
     # Run both feedback calls concurrently
     await gather(
         t0.feedback(
