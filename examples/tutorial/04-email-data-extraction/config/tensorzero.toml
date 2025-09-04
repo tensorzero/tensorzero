@@ -26,3 +26,4 @@ type = "chat_completion"
 weight = 1
 model = "my_gpt_4o_mini"
 system_template = "functions/extract_email/simple_variant/system.minijinja"
+json_mode = "strict"
