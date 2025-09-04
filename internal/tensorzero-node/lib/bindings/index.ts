@@ -168,6 +168,8 @@ export * from "./UninitializedBestOfNEvaluatorConfig";
 export * from "./UninitializedBestOfNSamplingConfig";
 export * from "./UninitializedChainOfThoughtConfig";
 export * from "./UninitializedChatCompletionConfig";
+export * from "./UninitializedChatTemplate";
+export * from "./UninitializedChatTemplates";
 export * from "./UninitializedDiclConfig";
 export * from "./UninitializedDiclOptimizationConfig";
 export * from "./UninitializedFireworksSFTConfig";

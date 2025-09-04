@@ -33,11 +33,7 @@ test("countCuratedInferences for boolean metrics", async () => {
     {
       type: "json",
       variants: {},
-      schemas: {
-        user: null,
-        assistant: null,
-        system: null,
-      },
+      schemas: {},
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
@@ -61,11 +57,7 @@ test("countCuratedInferences for boolean metrics", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
-      schemas: {
-        user: null,
-        assistant: null,
-        system: null,
-      },
+      schemas: {},
       description: "",
     },
     "haiku_score",
@@ -83,11 +75,7 @@ test("countCuratedInferences for boolean metrics", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
-      schemas: {
-        user: null,
-        assistant: null,
-        system: null,
-      },
+      schemas: {},
       description: "",
     },
     "haiku_score_episode",
@@ -105,11 +93,7 @@ test("countCuratedInferences for float metrics", async () => {
     {
       type: "json",
       variants: {},
-      schemas: {
-        user: null,
-        assistant: null,
-        system: null,
-      },
+      schemas: {},
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
@@ -130,11 +114,7 @@ test("countCuratedInferences for float metrics", async () => {
     {
       type: "json",
       variants: {},
-      schemas: {
-        user: null,
-        assistant: null,
-        system: null,
-      },
+      schemas: {},
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
@@ -158,11 +138,7 @@ test("countCuratedInferences for float metrics", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
-      schemas: {
-        user: null,
-        assistant: null,
-        system: null,
-      },
+      schemas: {},
       description: "",
     },
     "haiku_rating",
@@ -180,11 +156,7 @@ test("countCuratedInferences for float metrics", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
-      schemas: {
-        user: null,
-        assistant: null,
-        system: null,
-      },
+      schemas: {},
       description: "",
     },
     "haiku_rating_episode",
@@ -200,11 +172,7 @@ test("countCuratedInferences for demonstration metrics", async () => {
     {
       type: "json",
       variants: {},
-      schemas: {
-        user: null,
-        assistant: null,
-        system: null,
-      },
+      schemas: {},
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
@@ -227,11 +195,7 @@ test("countCuratedInferences for demonstration metrics", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
-      schemas: {
-        user: null,
-        assistant: null,
-        system: null,
-      },
+      schemas: {},
       description: "",
     },
     "unused_metric_name",
@@ -249,11 +213,7 @@ test("getCuratedInferences retrieves correct data", async () => {
     {
       type: "json",
       variants: {},
-      schemas: {
-        user: null,
-        assistant: null,
-        system: null,
-      },
+      schemas: {},
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
@@ -278,11 +238,7 @@ test("getCuratedInferences retrieves correct data", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
-      schemas: {
-        user: null,
-        assistant: null,
-        system: null,
-      },
+      schemas: {},
       description: "",
     },
     "haiku_rating",
@@ -298,11 +254,7 @@ test("getCuratedInferences retrieves correct data", async () => {
     {
       type: "json",
       variants: {},
-      schemas: {
-        user: null,
-        assistant: null,
-        system: null,
-      },
+      schemas: {},
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
@@ -324,11 +276,7 @@ test("getCuratedInferences retrieves correct data", async () => {
     {
       type: "json",
       variants: {},
-      schemas: {
-        user: null,
-        assistant: null,
-        system: null,
-      },
+      schemas: {},
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
@@ -353,11 +301,7 @@ test("countFeedbacksForMetric returns correct counts", async () => {
     {
       type: "json",
       variants: {},
-      schemas: {
-        user: null,
-        assistant: null,
-        system: null,
-      },
+      schemas: {},
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
@@ -380,11 +324,7 @@ test("countFeedbacksForMetric returns correct counts", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
-      schemas: {
-        user: null,
-        assistant: null,
-        system: null,
-      },
+      schemas: {},
       description: "",
     },
     "haiku_rating",
@@ -398,11 +338,7 @@ test("countFeedbacksForMetric returns correct counts", async () => {
     {
       type: "json",
       variants: {},
-      schemas: {
-        user: null,
-        assistant: null,
-        system: null,
-      },
+      schemas: {},
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {

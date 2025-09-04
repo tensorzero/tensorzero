@@ -2,6 +2,7 @@
 import type { JsonMode } from "./JsonMode";
 import type { ResolvedTomlPath } from "./ResolvedTomlPath";
 import type { RetryConfig } from "./RetryConfig";
+import type { UninitializedChatTemplates } from "./UninitializedChatTemplates";
 import type { UninitializedInputWrappers } from "./UninitializedInputWrappers";
 
 export type UninitializedFuserConfig = {
@@ -11,6 +12,7 @@ export type UninitializedFuserConfig = {
   user_template: ResolvedTomlPath | null;
   assistant_template: ResolvedTomlPath | null;
   input_wrappers: UninitializedInputWrappers | null;
+  templates: UninitializedChatTemplates;
   temperature: number | null;
   top_p: number | null;
   max_tokens: number | null;
