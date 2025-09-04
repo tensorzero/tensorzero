@@ -63,6 +63,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
             routing: vec![provider_type.to_string().into()],
             providers: HashMap::from([(provider_type.to_string().into(), provider_info)]),
             timeouts: TimeoutsConfig::default(),
+            retries: RetryConfig { num_retries: 3, max_delay_s: 10},
         })
     }
 
@@ -86,6 +87,7 @@ pub struct UninitializedEmbeddingModelConfig {
     pub providers: HashMap<Arc<str>, UninitializedEmbeddingProviderConfig>,
     #[serde(default)]
     pub timeouts: TimeoutsConfig,
+    pub retries: RetryConfig,
 }
 
 impl UninitializedEmbeddingModelConfig {
@@ -104,6 +106,7 @@ impl UninitializedEmbeddingModelConfig {
             routing: self.routing,
             providers,
             timeouts: self.timeouts,
+            retries: self.retries,
         })
     }
 }
@@ -431,6 +434,7 @@ pub struct EmbeddingProviderInfo {
     pub inner: EmbeddingProviderConfig,
     pub timeouts: TimeoutsConfig,
     pub provider_name: Arc<str>,
+    //pub retry: Option<RetryConfig>,
     #[cfg_attr(test, ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
 }
