@@ -236,3 +236,34 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+
+  openai-node-client-tests:
+    image: tensorzero/openai-node-client-tests:${TENSORZERO_OPENAI_NODE_CLIENT_TESTS_TAG:-latest}
+    build:
+      context: ..
+      dockerfile: clients/openai-node/tests/Dockerfile
+    environment:
+      # Test environment variables
+      TENSORZERO_GATEWAY_URL: http://gateway:3000
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
+      TENSORZERO_MINIO_URL: http://minio:9000
+      TENSORZERO_MOCK_INFERENCE_PROVIDER_BASE_URL: http://mock-inference-provider:3030
+      TENSORZERO_E2E_PROXY: http://provider-proxy:3003
+      BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
+      # API Keys
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Buildkite analytics
+      BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
+    depends_on:
+      gateway:
+        condition: service_healthy
+      fixtures:
+        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+      mock-inference-provider:
+        condition: service_healthy
+      provider-proxy:
+        condition: service_healthy
+      minio:
+        condition: service_healthy

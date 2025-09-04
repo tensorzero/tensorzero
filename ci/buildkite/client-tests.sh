@@ -46,6 +46,7 @@ echo "Logged in to Docker Hub"
 export TENSORZERO_GATEWAY_TAG=ci-sha-$SHORT_HASH
 export TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=ci-sha-$SHORT_HASH
 export TENSORZERO_PYTHON_CLIENT_TESTS_TAG=ci-sha-$SHORT_HASH
+export TENSORZERO_OPENAI_NODE_CLIENT_TESTS_TAG=ci-sha-$SHORT_HASH
 export TENSORZERO_SKIP_LARGE_FIXTURES=1
 
 # ------------------------------------------------------------------------------
@@ -57,12 +58,39 @@ docker compose -f clients/docker-compose.tests.yml pull
 # Run client tests container via Docker Compose and capture exit code
 # ------------------------------------------------------------------------------
 set +e
+
+# Start both test containers in parallel
 docker compose -f clients/docker-compose.tests.yml run --rm \
   -e TENSORZERO_CI=1 \
-  python-client-tests
-TEST_EXIT_CODE=$?
+  python-client-tests &
+PYTHON_PID=$!
+
+docker compose -f clients/docker-compose.tests.yml run --rm \
+  -e TENSORZERO_CI=1 \
+  openai-node-client-tests &
+NODE_PID=$!
+
+# Wait for both and capture exit codes
+wait $PYTHON_PID
+PYTHON_EXIT_CODE=$?
+wait $NODE_PID
+NODE_EXIT_CODE=$?
+
 set -e
+# ------------------------------------------------------------------------------
+# Report results
+# ------------------------------------------------------------------------------
+echo "=============================="
+echo "Test Results:"
+echo "Python client tests: $([ $PYTHON_EXIT_CODE -eq 0 ] && echo "PASSED" || echo "FAILED") (exit code: $PYTHON_EXIT_CODE)"
+echo "Node client tests: $([ $NODE_EXIT_CODE -eq 0 ] && echo "PASSED" || echo "FAILED") (exit code: $NODE_EXIT_CODE)"
+echo "=============================="
 
-
-# Exit with the original test exit code
-exit $TEST_EXIT_CODE
+# Exit with failure if any test failed
+if [ $PYTHON_EXIT_CODE -ne 0 ] || [ $NODE_EXIT_CODE -ne 0 ]; then
+    echo "One or more test suites failed"
+    exit 1
+else
+    echo "All test suites passed"
+    exit 0
+fi
