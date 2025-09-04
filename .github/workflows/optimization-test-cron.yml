@@ -68,3 +68,13 @@ jobs:
         run: |
           echo "Optimization tests completed at $(date)"
           echo "Test result: ${{ job.status }}"
+
+      - name: Post to Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v2.1.1
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          payload: |
+            channel: C09DM0RGDFG
+            text: Live optimization tests failed for run <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.run_id }}>
