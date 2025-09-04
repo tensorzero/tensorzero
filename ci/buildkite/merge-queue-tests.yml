@@ -105,6 +105,14 @@ steps:
         - exit_status: "*"
           limit: 3
 
+  - label: "Build OpenAI Go Client Tests Container"
+    command: bash ./ci/buildkite/build-openai-go-client-tests-container.sh
+    key: "build-openai-go-client-tests-container"
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 3
+
   - label: "Download Provider Proxy Cache"
     command: bash ./ci/buildkite/download-provider-proxy-cache.sh
     key: "download-provider-proxy-cache"
@@ -178,4 +186,6 @@ steps:
       - "build-gateway-e2e-container"
       - "build-fixtures-container"
       - "build-python-client-tests-container"
+      - "build-openai-node-client-tests-container"
+      - "build-openai-go-client-tests-container"
       - "build-mock-inference-provider-container"

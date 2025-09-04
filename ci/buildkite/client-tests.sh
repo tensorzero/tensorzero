@@ -54,7 +54,7 @@ docker compose -f clients/docker-compose.tests.yml pull
 # ------------------------------------------------------------------------------
 set +e
 
-# Start both test containers in parallel
+# Start all test containers in parallel
 docker compose -f clients/docker-compose.tests.yml run --rm \
   -e TENSORZERO_CI=1 \
   python-client-tests &
@@ -64,12 +64,18 @@ docker compose -f clients/docker-compose.tests.yml run --rm \
   -e TENSORZERO_CI=1 \
   openai-node-client-tests &
 NODE_PID=$!
-
-# Wait for both and capture exit codes
+docker compose -f clients/docker-compose.tests.yml run --rm \
+  -e TENSORZERO_CI=1 \
+  openai-go-client-tests &
+GO_PID=$!
+#
+# Wait for all and capture exit codes
 wait $PYTHON_PID
 PYTHON_EXIT_CODE=$?
 wait $NODE_PID
 NODE_EXIT_CODE=$?
+wait $GO_PID
+GO_EXIT_CODE=$?
 
 set -e
 # ------------------------------------------------------------------------------
@@ -79,10 +85,11 @@ echo "=============================="
 echo "Test Results:"
 echo "Python client tests: $([ $PYTHON_EXIT_CODE -eq 0 ] && echo "PASSED" || echo "FAILED") (exit code: $PYTHON_EXIT_CODE)"
 echo "Node client tests: $([ $NODE_EXIT_CODE -eq 0 ] && echo "PASSED" || echo "FAILED") (exit code: $NODE_EXIT_CODE)"
+echo "Go client tests: $([ $GO_EXIT_CODE -eq 0 ] && echo "PASSED" || echo "FAILED") (exit code: $GO_EXIT_CODE)"
 echo "=============================="
 
 # Exit with failure if any test failed
-if [ $PYTHON_EXIT_CODE -ne 0 ] || [ $NODE_EXIT_CODE -ne 0 ]; then
+if [ $PYTHON_EXIT_CODE -ne 0 ] || [ $NODE_EXIT_CODE -ne 0 ] || [ $GO_EXIT_CODE -ne 0 ]; then
     echo "One or more test suites failed"
     exit 1
 else

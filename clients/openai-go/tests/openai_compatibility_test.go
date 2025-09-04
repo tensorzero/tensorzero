@@ -42,10 +42,18 @@ var (
 	ctx     context.Context
 )
 
+// getGatewayURL returns the gateway URL from environment or fallback to localhost
+func getGatewayURL() string {
+	if url := os.Getenv("TENSORZERO_GATEWAY_URL"); url != "" {
+		return url
+	}
+	return "http://127.0.0.1:3000"
+}
+
 func TestMain(m *testing.M) {
 	ctx = context.Background()
 	client = openai.NewClient(
-		option.WithBaseURL("http://127.0.0.1:3000/openai/v1"),
+		option.WithBaseURL(fmt.Sprintf("%s/openai/v1", getGatewayURL())),
 		option.WithAPIKey("donotuse"),
 	)
 	// Run the tests and exit with the result code
@@ -80,7 +88,7 @@ func addEpisodeIDToRequest(t *testing.T, req *openai.ChatCompletionNewParams, ep
 func sendRequestTzGateway(t *testing.T, body map[string]interface{}) (map[string]interface{}, error) {
 	// Send a request to the TensorZero gateway
 	t.Helper()
-	url := "http://127.0.0.1:3000/openai/v1/chat/completions"
+	url := fmt.Sprintf("%s/openai/v1/chat/completions", getGatewayURL())
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request body: %w", err)
