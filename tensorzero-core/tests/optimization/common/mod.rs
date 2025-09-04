@@ -3,6 +3,7 @@ use base64::Engine;
 use serde_json::json;
 use std::collections::HashMap;
 use tokio::time::{sleep, Duration};
+use url::Url;
 use uuid::Uuid;
 
 use tracing_subscriber::{self, EnvFilter};
@@ -43,6 +44,13 @@ static FERRIS_PNG: &[u8] = include_bytes!("../../e2e/providers/ferris.png");
 
 fn use_mock_inference_provider() -> bool {
     std::env::var("TENSORZERO_USE_MOCK_INFERENCE_PROVIDER").is_ok()
+}
+
+pub fn mock_inference_provider_base() -> Url {
+    std::env::var("TENSORZERO_MOCK_INFERENCE_PROVIDER_BASE_URL")
+        .unwrap_or_else(|_| "http://localhost:3030/".to_string())
+        .parse()
+        .unwrap()
 }
 
 pub trait OptimizationTestCase {
@@ -528,8 +536,10 @@ pub async fn make_embedded_gateway() -> Client {
 
 #[allow(clippy::allow_attributes, dead_code)]
 pub async fn make_http_gateway() -> Client {
+    let gateway_url = std::env::var("TENSORZERO_GATEWAY_URL")
+        .unwrap_or_else(|_| "http://localhost:3000".to_string());
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::HTTPGateway {
-        url: "http://localhost:3000".parse().unwrap(),
+        url: gateway_url.parse().unwrap(),
     })
     .with_verbose_errors(true)
     .build()
