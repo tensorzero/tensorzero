@@ -2,8 +2,10 @@
 import type { EmbeddingProviderInfo } from "./EmbeddingProviderInfo";
 import type { TimeoutsConfig } from "./TimeoutsConfig";
 
+
 export type EmbeddingModelConfig = {
   routing: Array<string>;
   providers: { [key in string]?: EmbeddingProviderInfo };
   timeouts: TimeoutsConfig;
-};
+  
+}
