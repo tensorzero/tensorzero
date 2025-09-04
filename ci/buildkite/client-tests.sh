@@ -50,11 +50,23 @@ export TENSORZERO_SKIP_LARGE_FIXTURES=1
 docker compose -f clients/docker-compose.tests.yml pull
 
 # ------------------------------------------------------------------------------
-# Run client tests container via Docker Compose and capture exit code
+# Start shared infrastructure first
+# ------------------------------------------------------------------------------
+echo "Starting shared infrastructure..."
+docker compose -f clients/docker-compose.tests.yml up -d \
+  clickhouse mock-inference-provider minio provider-proxy gateway fixtures
+
+# Wait for all dependencies to be healthy
+echo "Waiting for infrastructure to be ready..."
+docker compose -f clients/docker-compose.tests.yml wait \
+  clickhouse mock-inference-provider minio provider-proxy gateway fixtures
+
+# ------------------------------------------------------------------------------
+# Run tests in parallel against shared infrastructure
 # ------------------------------------------------------------------------------
 set +e
 
-# Start all test containers in parallel
+# Run tests in parallel
 docker compose -f clients/docker-compose.tests.yml run --rm \
   -e TENSORZERO_CI=1 \
   python-client-tests &
@@ -64,12 +76,13 @@ docker compose -f clients/docker-compose.tests.yml run --rm \
   -e TENSORZERO_CI=1 \
   openai-node-client-tests &
 NODE_PID=$!
+
 docker compose -f clients/docker-compose.tests.yml run --rm \
   -e TENSORZERO_CI=1 \
   openai-go-client-tests &
 GO_PID=$!
-#
-# Wait for all and capture exit codes
+
+# Wait for all tests
 wait $PYTHON_PID
 PYTHON_EXIT_CODE=$?
 wait $NODE_PID
@@ -78,6 +91,8 @@ wait $GO_PID
 GO_EXIT_CODE=$?
 
 set -e
+
+
 # ------------------------------------------------------------------------------
 # Report results
 # ------------------------------------------------------------------------------
