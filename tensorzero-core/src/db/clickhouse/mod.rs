@@ -129,7 +129,8 @@ impl ClickHouseConnectionInfo {
             .unwrap_or_else(|| "default".to_string());
 
         #[cfg(feature = "e2e_tests")]
-        let database = "tensorzero_e2e_tests".to_string();
+        let database = std::env::var("TENSORZERO_E2E_TESTS_DATABASE")
+            .unwrap_or_else(|_| "tensorzero_e2e_tests".to_string());
 
         // Although we take the database name from the URL path,
         // we need to set the query string for the database name for the ClickHouse TCP protocol
@@ -268,6 +269,7 @@ impl ClickHouseConnectionInfo {
     /// Test helper: reads from the table `table` in our mock DB and returns an element that has (serialized) `column` equal to `value`.
     /// Returns None if no such element is found.
     #[cfg(test)]
+    #[expect(clippy::missing_panics_doc)]
     pub async fn read(&self, table: &str, column: &str, value: &str) -> Option<serde_json::Value> {
         match self {
             Self::Disabled => None,
@@ -946,9 +948,10 @@ async fn write_production<T: Serialize + Send + Sync>(
 }
 
 fn set_clickhouse_format_settings(database_url: &mut Url) {
-    const OVERRIDDEN_SETTINGS: [&str; 2] = [
-        "input_format_skip_unknown_fields",
-        "input_format_null_as_default",
+    const OVERRIDDEN_SETTINGS: [(&str, &str); 3] = [
+        ("input_format_skip_unknown_fields", "0"),
+        ("input_format_null_as_default", "0"),
+        ("output_format_json_quote_64bit_integers", "1"),
     ];
 
     let existing_pairs: Vec<(String, String)> = database_url
@@ -959,7 +962,10 @@ fn set_clickhouse_format_settings(database_url: &mut Url) {
     database_url.query_pairs_mut().clear();
 
     for (key, value) in existing_pairs {
-        if OVERRIDDEN_SETTINGS.contains(&key.as_str()) {
+        if OVERRIDDEN_SETTINGS
+            .iter()
+            .any(|(setting_key, _)| *setting_key == key.as_str())
+        {
             tracing::warn!(
                 "Your ClickHouse connection URL has the setting '{}' but it will be overridden.",
                 key
@@ -969,10 +975,11 @@ fn set_clickhouse_format_settings(database_url: &mut Url) {
         }
     }
 
-    for setting in &OVERRIDDEN_SETTINGS {
-        database_url.query_pairs_mut().append_pair(setting, "0");
+    for (setting_key, setting_value) in &OVERRIDDEN_SETTINGS {
+        database_url
+            .query_pairs_mut()
+            .append_pair(setting_key, setting_value);
     }
-    database_url.query_pairs_mut().finish();
 }
 
 #[cfg(any(not(feature = "e2e_tests"), test))]
@@ -1097,11 +1104,11 @@ mod tests {
     fn test_set_clickhouse_format_settings() {
         let mut database_url = Url::parse("http://chuser:chpassword@localhost:8123/").unwrap();
         set_clickhouse_format_settings(&mut database_url);
-        assert_eq!(database_url.to_string(), "http://chuser:chpassword@localhost:8123/?input_format_skip_unknown_fields=0&input_format_null_as_default=0");
+        assert_eq!(database_url.to_string(), "http://chuser:chpassword@localhost:8123/?input_format_skip_unknown_fields=0&input_format_null_as_default=0&output_format_json_quote_64bit_integers=1");
 
         let mut database_url = Url::parse("http://chuser:chpassword@localhost:8123/?input_format_skip_unknown_fields=1&input_format_defaults_for_omitted_fields=1&input_format_null_as_default=1").unwrap();
         set_clickhouse_format_settings(&mut database_url);
-        assert_eq!(database_url.to_string(), "http://chuser:chpassword@localhost:8123/?input_format_defaults_for_omitted_fields=1&input_format_skip_unknown_fields=0&input_format_null_as_default=0");
+        assert_eq!(database_url.to_string(), "http://chuser:chpassword@localhost:8123/?input_format_defaults_for_omitted_fields=1&input_format_skip_unknown_fields=0&input_format_null_as_default=0&output_format_json_quote_64bit_integers=1");
     }
 
     #[test]

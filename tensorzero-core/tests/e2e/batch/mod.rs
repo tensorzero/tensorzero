@@ -19,7 +19,7 @@ use tensorzero_core::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
 };
 use tensorzero_core::inference::types::{
-    ContentBlockChatOutput, FinishReason, JsonInferenceOutput, ResolvedInput, Usage,
+    ContentBlockChatOutput, FinishReason, JsonInferenceOutput, StoredInput, Usage,
 };
 use tensorzero_core::jsonschema_util::StaticJSONSchema;
 use tokio::time::{sleep, Duration};
@@ -79,7 +79,7 @@ async fn test_get_batch_request() {
     // Next, we'll insert a BatchModelInferenceRow
     let inference_id = Uuid::now_v7();
     let episode_id = Uuid::now_v7();
-    let input = ResolvedInput {
+    let input = StoredInput {
         system: None,
         messages: vec![],
     };
@@ -90,7 +90,7 @@ async fn test_get_batch_request() {
         function_name: function_name.into(),
         variant_name: variant_name.into(),
         episode_id,
-        input: input.clone().into_stored_input(),
+        input,
         input_messages: vec![],
         system: None,
         tool_params: None,
@@ -218,7 +218,7 @@ async fn write_2_batch_model_inference_rows(
     let function_name = "test_function";
     let variant_name = "test_variant";
     let episode_id = Uuid::now_v7();
-    let input = ResolvedInput {
+    let input = StoredInput {
         system: None,
         messages: vec![],
     };
@@ -230,7 +230,7 @@ async fn write_2_batch_model_inference_rows(
         function_name: function_name.into(),
         variant_name: variant_name.into(),
         episode_id,
-        input: input.clone().into_stored_input(),
+        input: input.clone(),
         input_messages: vec![],
         system: None,
         tool_params: None,
@@ -248,7 +248,7 @@ async fn write_2_batch_model_inference_rows(
         function_name: function_name.into(),
         variant_name: variant_name.into(),
         episode_id,
-        input: input.clone().into_stored_input(),
+        input,
         input_messages: vec![],
         system: None,
         tool_params: None,
@@ -389,7 +389,7 @@ async fn test_write_read_completed_batch_inference_chat() {
             assert_eq!(chat_inference_response.usage.input_tokens, 10);
             assert_eq!(chat_inference_response.usage.output_tokens, 20);
         }
-        _ => panic!("Unexpected inference response type"),
+        InferenceResponse::Json(_) => panic!("Unexpected inference response type"),
     }
 
     match inference_response_2 {
@@ -404,7 +404,7 @@ async fn test_write_read_completed_batch_inference_chat() {
             assert_eq!(chat_inference_response.usage.input_tokens, 20);
             assert_eq!(chat_inference_response.usage.output_tokens, 30);
         }
-        _ => panic!("Unexpected inference response type"),
+        InferenceResponse::Json(_) => panic!("Unexpected inference response type"),
     }
 
     sleep(Duration::from_millis(200)).await;
@@ -603,7 +603,7 @@ async fn test_write_read_completed_batch_inference_json() {
                 Some(FinishReason::Stop)
             );
         }
-        _ => panic!("Unexpected inference response type"),
+        InferenceResponse::Chat(_) => panic!("Unexpected inference response type"),
     }
 
     match response_2 {
@@ -619,7 +619,7 @@ async fn test_write_read_completed_batch_inference_json() {
                 Some(FinishReason::ToolCall)
             );
         }
-        _ => panic!("Unexpected inference response type"),
+        InferenceResponse::Chat(_) => panic!("Unexpected inference response type"),
     }
 
     sleep(Duration::from_millis(200)).await;

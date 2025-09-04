@@ -455,6 +455,7 @@ impl ToolCallOutput {
 
 impl ToolCallConfig {
     #[cfg(test)]
+    #[expect(clippy::missing_panics_doc)]
     pub fn implicit_from_value(value: &Value) -> Self {
         let parameters = StaticJSONSchema::from_value(value.clone()).unwrap();
         let implicit_tool_config = ToolConfig::Implicit(ImplicitToolConfig { parameters });

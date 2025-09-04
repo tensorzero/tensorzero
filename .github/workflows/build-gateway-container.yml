@@ -6,6 +6,7 @@ on:
 jobs:
   build-gateway-container:
     runs-on: namespace-profile-tensorzero-2x8;overrides.cache-tag=build-gateway-cache
+    if: github.repository == 'tensorzero/tensorzero'
 
     steps:
       # TODO - investigate why using the Namespace checkout action causes
