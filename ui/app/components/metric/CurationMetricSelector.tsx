@@ -333,12 +333,26 @@ export default function CurationMetricSelector<
                       <FormLabel>Threshold</FormLabel>
                       <FormControl>
                         <Input
-                          type="number"
-                          step="0.01"
+                          type="text"
+                          placeholder="0.5"
                           {...thresholdField}
                           value={thresholdField.value?.toString() ?? ""}
                           onChange={(e) => {
-                            thresholdField.onChange(Number(e.target.value));
+                            const val = e.target.value;
+
+                            // Allow empty or partial inputs like "-" or "."
+                            // Allow empty or partial inputs like "-", ".", "0.", "-1", etc.
+                            if (val === "" || /^-?\d*\.?\d*$/.test(val)) {
+                              thresholdField.onChange(val);
+                              return;
+                            }
+
+                            const parsed = parseFloat(val);
+                            if (!isNaN(parsed)) {
+                              thresholdField.onChange(val);
+                            } else {
+                              // Do not store completely invalid values
+                            }
                           }}
                         />
                       </FormControl>

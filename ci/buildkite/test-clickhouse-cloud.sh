@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euxo pipefail
+set -euo pipefail
 echo "CLICKHOUSE_ID=${CLICKHOUSE_ID}"
 
 set +x
@@ -86,3 +86,4 @@ cd ui/fixtures && ./load_fixtures.sh $TENSORZERO_E2E_TESTS_DATABASE && cd ../..
 sleep 2
 
 cargo test-e2e-no-creds --no-fail-fast -- --skip test_concurrent_clickhouse_migrations
+cat e2e_logs.txt

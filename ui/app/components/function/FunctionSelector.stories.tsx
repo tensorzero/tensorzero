@@ -22,11 +22,7 @@ const mockFunctions: Record<string, FunctionConfig> = {
   "tensorzero::default": {
     type: "chat",
     variants: {},
-    schemas: {
-      system: null,
-      user: null,
-      assistant: null,
-    },
+    schemas: {},
     tools: [],
     tool_choice: "auto",
     parallel_tool_calls: null,
@@ -35,11 +31,7 @@ const mockFunctions: Record<string, FunctionConfig> = {
   "chat-function": {
     type: "chat",
     variants: {},
-    schemas: {
-      system: null,
-      user: null,
-      assistant: null,
-    },
+    schemas: {},
     tools: ["calculator", "weather"],
     tool_choice: "auto",
     parallel_tool_calls: true,
@@ -48,11 +40,7 @@ const mockFunctions: Record<string, FunctionConfig> = {
   "json-extractor": {
     type: "json",
     variants: {},
-    schemas: {
-      system: null,
-      user: null,
-      assistant: null,
-    },
+    schemas: {},
     output_schema: {
       value: null,
     },
@@ -66,11 +54,7 @@ const mockFunctions: Record<string, FunctionConfig> = {
   "sentiment-analyzer": {
     type: "json",
     variants: {},
-    schemas: {
-      system: null,
-      user: null,
-      assistant: null,
-    },
+    schemas: {},
     output_schema: {
       value: null,
     },

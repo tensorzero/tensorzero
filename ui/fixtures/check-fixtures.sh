@@ -68,7 +68,7 @@ for table in "${!all_tables[@]}"; do
         if [ -f "$file" ]; then
             if [[ "$file" == *.parquet ]]; then
                 # For parquet files, use parquet-tools to count rows
-                if command -v uv run parquet-tools &> /dev/null; then
+                if command -v uv &> /dev/null && uv run parquet-tools --help &> /dev/null; then
                     file_count=$(uv run parquet-tools inspect "$file" | grep "num_rows:" | awk '{print $2}')
                     echo "  - $file: $file_count rows (parquet)"
                 else
