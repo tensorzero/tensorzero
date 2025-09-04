@@ -3,8 +3,8 @@ set -euo pipefail
 
 # Get the short hash from the buildkite environment variable
 SHORT_HASH=${BUILDKITE_COMMIT:0:7}
-TAG=tensorzero/client-tests:ci-sha-$SHORT_HASH
-LATEST_TAG=tensorzero/client-tests:latest
+TAG=tensorzero/python-client-tests:ci-sha-$SHORT_HASH
+LATEST_TAG=tensorzero/python-client-tests:latest
 
 source ci/buildkite/utils/docker-hub-credentials.sh
 
@@ -17,7 +17,7 @@ docker pull $LATEST_TAG || true
 # Build the container with cache
 docker build --load --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 \
   --cache-from $LATEST_TAG \
-  -f clients/Dockerfile.tests . -t $TAG
+  -f clients/python/tests/Dockerfile . -t $TAG
 
 # Tag with latest and push both tags
 docker tag $TAG $LATEST_TAG

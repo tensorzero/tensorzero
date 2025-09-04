@@ -88,6 +88,13 @@ steps:
       automatic:
         - exit_status: "*"
           limit: 3
+  - label: "Build Python Client Tests Container"
+    command: bash ./ci/buildkite/build-python-client-tests.sh
+    key: "build-python-client-tests-container"
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 3
 
   - label: "Download Provider Proxy Cache"
     command: bash ./ci/buildkite/download-provider-proxy-cache.sh
@@ -155,3 +162,11 @@ steps:
       - "download-provider-proxy-cache"
       - "build-live-tests-container"
       - "build-fixtures-container"
+
+  - label: "Client Tests"
+    command: bash ./ci/buildkite/client-tests.sh
+    depends_on:
+      - "build-gateway-e2e-container"
+      - "build-fixtures-container"
+      - "build-client-tests-container"
+      - "build-mock-inference-provider-container"
