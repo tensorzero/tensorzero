@@ -35,6 +35,7 @@ import pytest
 import tensorzero
 from clickhouse_connect import get_client  # type: ignore
 from openai import AsyncOpenAI, OpenAI
+from pytest import CaptureFixture
 from tensorzero import (
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
@@ -3396,7 +3397,7 @@ async def test_async_cannot_enable_batch_writes():
         )
 
 
-def test_http_client_no_spurious_log(capfd):
+def test_http_client_no_spurious_log(capfd: CaptureFixture[str]):
     client = TensorZeroGateway.build_http(
         gateway_url="http://localhost:3000",
         verbose_errors=True,
@@ -3408,11 +3409,12 @@ def test_http_client_no_spurious_log(capfd):
 
 
 @pytest.mark.asyncio
-async def test_async_http_client_no_spurious_log(capfd):
+async def test_async_http_client_no_spurious_log(capfd: CaptureFixture[str]):
     client_fut = AsyncTensorZeroGateway.build_http(
         gateway_url="http://localhost:3000",
         verbose_errors=True,
     )
+    assert inspect.isawaitable(client_fut)
     client = await client_fut
     assert client is not None
     captured = capfd.readouterr()
@@ -3420,7 +3422,7 @@ async def test_async_http_client_no_spurious_log(capfd):
     assert captured.out == ""
 
 
-def test_embedded_client_no_spurious_log(capfd):
+def test_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
     client = TensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
         clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
@@ -3432,11 +3434,12 @@ def test_embedded_client_no_spurious_log(capfd):
 
 
 @pytest.mark.asyncio
-async def test_async_embedded_client_no_spurious_log(capfd):
+async def test_async_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
     client_fut = AsyncTensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
         clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
     )
+    assert inspect.isawaitable(client_fut)
     client = await client_fut
     assert client is not None
     captured = capfd.readouterr()
@@ -3444,7 +3447,7 @@ async def test_async_embedded_client_no_spurious_log(capfd):
     assert captured.out == ""
 
 
-def test_capfd_captured_warnings(capfd):
+def test_capfd_captured_warnings(capfd: CaptureFixture[str]):
     client = TensorZeroGateway.build_embedded()
     assert client is not None
     captured = capfd.readouterr()
