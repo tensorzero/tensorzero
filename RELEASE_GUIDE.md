@@ -108,11 +108,13 @@ DOCKER_BUILDKIT=1 docker buildx build \
 
 ## Documentation
 
-Make sure to merge every PR with the `merge-on-release` label.
+Run the following command and create a pull request from the new branch into `docs`:
 
-> [!NOTE]
-> The documentation is currently stored in a separate repository.
-> We're planning to make those files open source in the near future.
+```bash
+git fetch origin
+git switch -c sync-docs-$(date +%Y%m%d-%H%M) origin/main
+git push -u origin HEAD
+```
 
 ## Release Notes
 
