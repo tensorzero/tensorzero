@@ -22,10 +22,7 @@ fi
 # Set the short commit hash
 # ------------------------------------------------------------------------------
 SHORT_HASH=${BUILDKITE_COMMIT:0:7}
-export TENSORZERO_GATEWAY_TAG=ci-sha-$SHORT_HASH
-export TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=ci-sha-$SHORT_HASH
-export TENSORZERO_PROVIDER_PROXY_TAG=ci-sha-$SHORT_HASH
-export TENSORZERO_LIVE_TESTS_TAG=ci-sha-$SHORT_HASH
+export TENSORZERO_COMMIT_TAG=ci-sha-$SHORT_HASH
 
 # E2E tests don't need large fixtures
 export TENSORZERO_SKIP_LARGE_FIXTURES=1

@@ -21,7 +21,7 @@ services:
       timeout: 1s
 
   gateway:
-    image: tensorzero/gateway-dev:${TENSORZERO_GATEWAY_TAG:-latest}
+    image: tensorzero/gateway-dev:${TENSORZERO_COMMIT_TAG}
     build:
       context: ../..
       dockerfile: gateway/Dockerfile
@@ -56,7 +56,7 @@ services:
       timeout: 1s
 
   fixtures:
-    image: tensorzero/fixtures:${TENSORZERO_FIXTURES_TAG:-latest}
+    image: tensorzero/fixtures:${TENSORZERO_COMMIT_TAG}
     build:
       context: ../..
       dockerfile: ui/fixtures/Dockerfile
@@ -82,7 +82,7 @@ services:
       start_period: 300s # Give the script time to start
 
   mock-inference-provider:
-    image: tensorzero/mock-inference-provider:${TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG:-latest}
+    image: tensorzero/mock-inference-provider:${TENSORZERO_COMMIT_TAG}
     build:
       context: ../../
       dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
@@ -97,7 +97,7 @@ services:
       timeout: 1s
 
   node-unit-tests:
-    image: tensorzero/node-unit-tests:${TENSORZERO_NODE_UNIT_TESTS_TAG:-latest}
+    image: tensorzero/node-unit-tests:${TENSORZERO_COMMIT_TAG}
     build:
       context: ../.. # Same context as gateway since you need access to the whole monorepo
       dockerfile: ui/fixtures/Dockerfile.unit # Or wherever you put the test Dockerfile

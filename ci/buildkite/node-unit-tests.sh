@@ -26,10 +26,7 @@ echo $BUILDKITE_ANALYTICS_TOKEN >> ui/fixtures/.env
 {
   echo "FIREWORKS_ACCOUNT_ID=not_used"
   echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
-  echo "TENSORZERO_GATEWAY_TAG=ci-sha-$SHORT_HASH"
-  echo "TENSORZERO_UI_TAG=ci-sha-$SHORT_HASH"
-  echo "TENSORZERO_NODE_UNIT_TESTS_TAG=ci-sha-$SHORT_HASH"
-  echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=ci-sha-$SHORT_HASH"
+  echo "TENSORZERO_COMMIT_TAG=ci-sha-$SHORT_HASH"
 } >> ui/fixtures/.env
 {
   echo "FIREWORKS_API_KEY=not_used"
