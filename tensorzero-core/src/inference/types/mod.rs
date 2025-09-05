@@ -131,7 +131,7 @@ impl InputMessageContent {
                 ResolvedInputMessageContent::Template(template)
             }
             InputMessageContent::Text(TextKind::Arguments { arguments }) => {
-                // Map the legacy `{{"type": "text", "arguments": ...}}` format format to an explicit
+                // Map the legacy `{{"type": "text", "arguments": ...}}` format to an explicit
                 // `{{"type": "template", "name": "<role>", "arguments": ...}}` format, with the template
                 // name chosen based on the message role.
                 ResolvedInputMessageContent::Template(TemplateInput {
