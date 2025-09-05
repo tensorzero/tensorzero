@@ -316,13 +316,14 @@ impl DiclConfig {
         function: &FunctionConfig,
     ) -> Result<(Vec<Example>, EmbeddingResponseWithMetadata), Error> {
         // Serialize the input so that it can be embedded
-        let serialized_input = serde_json::to_string(&input).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error in serializing Input in dynamic in-context learning variant: {e}"
-                ),
-            })
-        })?;
+        let serialized_input =
+            serde_json::to_string(&input.clone().into_stored_input()).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error in serializing Input in dynamic in-context learning variant: {e}"
+                    ),
+                })
+            })?;
 
         let embedding_model = embedding_models
             .get(&self.embedding_model)
@@ -459,7 +460,7 @@ impl DiclConfig {
     }
 
     fn prepare_input_message(input: &ResolvedInput) -> Result<RequestMessage, Error> {
-        let content = vec![serde_json::to_string(&input)
+        let content = vec![serde_json::to_string(&input.clone().into_stored_input())
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
@@ -808,7 +809,8 @@ mod tests {
         assert_eq!(request_message.role, Role::User);
 
         // The content should contain the serialized Input as a Text ContentBlock
-        let expected_serialized_input = serde_json::to_string(&input_data).unwrap();
+        let expected_serialized_input =
+            serde_json::to_string(&input_data.clone().into_stored_input()).unwrap();
         let expected_content = vec![ContentBlock::Text(Text {
             text: expected_serialized_input.clone(),
         })];
