@@ -1,0 +1,82 @@
+name: Reconcile Dependabot with `uv`
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "**/requirements*.txt"
+      - "**/pyproject.toml"
+  # Temporary:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "**/requirements*.txt"
+      - "**/pyproject.toml"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  reconcile:
+    if: github.actor == 'dependabot[bot]' && github.repository == 'tensorzero/tensorzero'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 2
+
+      - name: Install `uv`
+        run: |
+          curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          uv --version
+
+      - name: Find Python projects with updated dependencies
+        id: dirs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin ${{ github.base_ref }} --depth=1
+          BASE=origin/${{ github.base_ref }}
+          HEAD=${{ github.event.pull_request.head.sha }}
+          DIRS=$(git diff --name-only "$BASE...$HEAD" \
+            | grep -E '(requirements.*\.txt|pyproject\.toml)$' \
+            | xargs -r -n1 dirname | sort -u)
+          echo "dirs=$DIRS" >> "$GITHUB_OUTPUT"
+
+      - name: Re-lock and re-export dependencies from `pyproject.toml`
+        if: steps.dirs.outputs.dirs != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          for d in ${{ steps.dirs.outputs.dirs }}; do
+            echo "::group::$d"
+            cd "$d"
+
+            # Update lock to latest allowed by pyproject constraints
+            uv lock --project=pyproject.toml --upgrade
+
+            # Export requirements deterministically from the lock
+            uv export --project=pyproject.toml --frozen --output-file=requirements.txt
+
+            cd - >/dev/null
+            echo "::endgroup::"
+          done
+
+      - name: Commit and push updates
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add **/uv.lock **/requirements.txt
+            git commit -m "chore(deps): reconcile requirements.txt with uv.lock (uv is source of truth)"
+            git push
+          else
+            echo "No changes."
+          fi
