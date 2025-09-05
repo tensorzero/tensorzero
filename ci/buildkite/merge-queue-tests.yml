@@ -117,6 +117,7 @@ steps:
       - "build-gateway-container"
       - "build-node-unit-tests-container"
       - "build-fixtures-container"
+      - "build-mock-inference-provider-container"
 
   - label: ":playwright: UI E2E Tests (without LLM credentials)"
     command: |
