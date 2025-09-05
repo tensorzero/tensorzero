@@ -19,16 +19,19 @@ use pyo3::prelude::*;
 /// Like `Input`, but with all network resources resolved.
 /// Currently, this is just used to fetch image URLs in the image input,
 /// so that we always pass a base64-encoded image to the model provider.
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq)]
+// TODO - should we remove the Serialize impl entirely, rather than rely it on
+// for the Pyo3 'str' impl?
+#[cfg_attr(feature = "pyo3", derive(Serialize))]
+#[cfg_attr(feature = "pyo3", serde(deny_unknown_fields))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct ResolvedInput {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "pyo3", serde(skip_serializing_if = "Option::is_none"))]
     pub system: Option<Value>,
 
-    #[serde(default)]
+    #[cfg_attr(feature = "pyo3", serde(default))]
     pub messages: Vec<ResolvedInputMessage>,
 }
 
@@ -47,6 +50,7 @@ impl ResolvedInput {
     }
 }
 
+#[cfg(feature = "pyo3")]
 impl std::fmt::Display for ResolvedInput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
@@ -72,8 +76,11 @@ impl ResolvedInput {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq)]
+// TODO - should we remove the Serialize impl entirely, rather than rely it on
+// for the Pyo3 'str' impl?
+#[cfg_attr(feature = "pyo3", derive(Serialize))]
+#[cfg_attr(feature = "pyo3", serde(deny_unknown_fields))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -95,6 +102,7 @@ impl ResolvedInputMessage {
     }
 }
 
+#[cfg(feature = "pyo3")]
 impl std::fmt::Display for ResolvedInputMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
@@ -126,8 +134,11 @@ impl ResolvedInputMessage {
     }
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq)]
+// TODO - should we remove the Serialize impl entirely, rather than rely it on
+// for the Pyo3 'str' impl?
+#[cfg_attr(feature = "pyo3", derive(Serialize))]
+#[cfg_attr(feature = "pyo3", serde(tag = "type", rename_all = "snake_case"))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub enum ResolvedInputMessageContent {
@@ -140,7 +151,7 @@ pub enum ResolvedInputMessageContent {
         value: String,
     },
     Thought(Thought),
-    #[serde(alias = "image")]
+    #[cfg_attr(feature = "pyo3", serde(alias = "image"))]
     File(Box<FileWithPath>),
     Unknown {
         data: Value,
