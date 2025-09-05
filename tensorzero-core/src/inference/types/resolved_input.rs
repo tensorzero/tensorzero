@@ -141,7 +141,10 @@ impl ResolvedInputMessage {
 // TODO - should we remove the Serialize impl entirely, rather than rely on it
 // for the Pyo3 'str' impl?
 #[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
-#[cfg_attr(any(feature = "pyo3", test), serde(tag = "type", rename_all = "snake_case"))]
+#[cfg_attr(
+    any(feature = "pyo3", test),
+    serde(tag = "type", rename_all = "snake_case")
+)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub enum ResolvedInputMessageContent {
