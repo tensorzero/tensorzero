@@ -6,7 +6,6 @@ on:
   merge_group:
     paths-ignore:
       - "docs/**"
-  push:
   schedule:
     - cron: "0 0 * * *" # Runs at 00:00 UTC every day
 

@@ -407,8 +407,8 @@ jobs:
     strategy:
       matrix:
         # Only include replicated: true when running in merge queue
-        replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[true,false]') }}
-        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"24.12-alpine","prefix":"24.12","allow_failure":false},{"tag":"latest","prefix":"","allow_failure":false}]') || fromJSON('[{"tag":"latest","prefix":"","allow_failure":false}]') }}
+        replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[true, false]') }}
+        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"24.12-alpine","prefix":"24.12","allow_failure":false},{"tag":"latest","prefix":"","allow_failure":false}]') || fromJSON('[{"tag":"25.7-alpine","prefix":"","allow_failure":false}]') }}
         exclude:
           # Use 25.7-alpine instead of latest for replicated tests in merge group
           - replicated: true
