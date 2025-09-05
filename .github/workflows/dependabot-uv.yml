@@ -1,4 +1,4 @@
-name: Reconcile Dependabot with `uv`
+name: Reconcile Dependabot with uv
 
 on:
   pull_request_target:
@@ -6,7 +6,7 @@ on:
     paths:
       - "**/requirements*.txt"
       - "**/pyproject.toml"
-  # Temporary:
+  # Temporary: allow testing from the PR itself before merging
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
@@ -19,9 +19,6 @@ permissions:
 
 jobs:
   reconcile:
-    # Run when:
-    # - pull_request_target: actor is dependabot (workflow lives on base branch)
-    # - pull_request: PR author is dependabot (lets you test without merging)
     if: >
       (github.event_name == 'pull_request_target' &&
        github.actor == 'dependabot[bot]' &&
@@ -31,34 +28,35 @@ jobs:
        github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Checkout PR head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 2
 
-      - name: Install `uv`
+      - name: Install uv 0.6.17
         run: |
           curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           uv --version
 
       - name: Find Python projects with updated dependencies
-        id: dirs
+        id: find_dirs
         shell: bash
         run: |
           set -euo pipefail
-
           BASE_SHA='${{ github.event.pull_request.base.sha }}'
           HEAD_SHA='${{ github.event.pull_request.head.sha }}'
-
-          # Ensure both commits exist locally (shallow fetch of just those SHAs)
+          # Fetch just the two commits; avoids needing a merge-base
           git fetch --no-tags --prune --depth=1 origin "$BASE_SHA" "$HEAD_SHA" || true
 
-          # Collect dirs with changed requirements*.txt or pyproject.toml
           DIRS=$(
             git diff --name-only "$BASE_SHA..$HEAD_SHA" \
               | awk '/(requirements.*\.txt|pyproject\.toml)$/' \
               | xargs -r -n1 dirname | sort -u
           )
 
-          # Expose as a multiline output (required for newlines)
           if [ -z "${DIRS}" ]; then
             echo "dirs=" >> "$GITHUB_OUTPUT"
           else
@@ -76,7 +74,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Read multiline output safely; one dir per line
           while IFS= read -r d; do
             [ -z "$d" ] && continue
             echo "::group::$d"
