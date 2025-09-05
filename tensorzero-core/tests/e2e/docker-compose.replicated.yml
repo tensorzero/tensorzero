@@ -143,7 +143,8 @@ services:
       timeout: 1s
   fixtures:
     build:
-      dockerfile: ../../../ui/fixtures/Dockerfile
+      dockerfile: ui/fixtures/Dockerfile
+      context: ../../..
     volumes:
       - ../../../ui/fixtures:/fixtures
       - ~/.aws:/root/.aws
