@@ -20,23 +20,24 @@ env:
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_REGION: "us-east-1"
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AZURE_AI_FOUNDRY_API_KEY: ${{ secrets.AZURE_AI_FOUNDRY_API_KEY }}
   AZURE_OPENAI_API_BASE: ${{secrets.AZURE_OPENAI_API_BASE }}
   AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
   AZURE_OPENAI_DEPLOYMENT_ID: ${{secrets.AZURE_OPENAI_DEPLOYMENT_ID }}
   DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-  FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
   FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
+  FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
   FORCE_COLOR: 1
-  GCP_VERTEX_CREDENTIALS_PATH: ${{ github.workspace }}/gcp_jwt_key.json
-  GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcp_jwt_key.json
   GCP_STORAGE_ACCESS_KEY_ID: ${{ secrets.GCP_STORAGE_ACCESS_KEY_ID }}
   GCP_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.GCP_STORAGE_SECRET_ACCESS_KEY }}
+  GCP_VERTEX_CREDENTIALS_PATH: ${{ github.workspace }}/gcp_jwt_key.json
   GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
+  GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcp_jwt_key.json
   GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
   HYPERBOLIC_API_KEY: ${{secrets.HYPERBOLIC_API_KEY}}
+  MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
   MODAL_KEY: ${{ secrets.MODAL_KEY }}
   MODAL_SECRET: ${{ secrets.MODAL_SECRET }}
-  MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -44,8 +45,8 @@ env:
   SGLANG_API_KEY: ${{ secrets.SGLANG_API_KEY }}
   TGI_API_KEY: ${{ secrets.TGI_API_KEY }}
   TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
-  VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }}
   VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
+  VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }}
   VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct"
   VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
   XAI_API_KEY: ${{ secrets.XAI_API_KEY }}

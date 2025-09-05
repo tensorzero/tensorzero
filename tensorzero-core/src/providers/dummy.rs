@@ -252,6 +252,8 @@ impl InferenceProvider for DummyProvider {
         if self.model_name == "slow" {
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
+        // Just so they don't seem like 0ms inferences
+        tokio::time::sleep(Duration::from_millis(1)).await;
 
         // Check for flaky models
         if self.model_name.starts_with("flaky_") {
@@ -569,6 +571,8 @@ impl InferenceProvider for DummyProvider {
         if self.model_name == "slow" {
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
+        // Just so they don't seem like 0ms inferences
+        tokio::time::sleep(Duration::from_millis(1)).await;
         // Check for flaky models
         if self.model_name.starts_with("flaky_") {
             #[expect(clippy::expect_used)]
