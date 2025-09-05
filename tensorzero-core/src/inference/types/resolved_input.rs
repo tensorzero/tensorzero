@@ -22,16 +22,19 @@ use pyo3::prelude::*;
 #[derive(Clone, Debug, PartialEq)]
 // TODO - should we remove the Serialize impl entirely, rather than rely on it
 // for the Pyo3 'str' impl?
-#[cfg_attr(feature = "pyo3", derive(Serialize))]
-#[cfg_attr(feature = "pyo3", serde(deny_unknown_fields))]
+#[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
+#[cfg_attr(any(feature = "pyo3", test), serde(deny_unknown_fields))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct ResolvedInput {
-    #[cfg_attr(feature = "pyo3", serde(skip_serializing_if = "Option::is_none"))]
+    #[cfg_attr(
+        any(feature = "pyo3", test),
+        serde(skip_serializing_if = "Option::is_none")
+    )]
     pub system: Option<Value>,
 
-    #[cfg_attr(feature = "pyo3", serde(default))]
+    #[cfg_attr(any(feature = "pyo3", test), serde(default))]
     pub messages: Vec<ResolvedInputMessage>,
 }
 
@@ -79,8 +82,8 @@ impl ResolvedInput {
 #[derive(Clone, Debug, PartialEq)]
 // TODO - should we remove the Serialize impl entirely, rather than rely on it
 // for the Pyo3 'str' impl?
-#[cfg_attr(feature = "pyo3", derive(Serialize))]
-#[cfg_attr(feature = "pyo3", serde(deny_unknown_fields))]
+#[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
+#[cfg_attr(any(feature = "pyo3", test), serde(deny_unknown_fields))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -137,8 +140,8 @@ impl ResolvedInputMessage {
 #[derive(Clone, Debug, PartialEq)]
 // TODO - should we remove the Serialize impl entirely, rather than rely on it
 // for the Pyo3 'str' impl?
-#[cfg_attr(feature = "pyo3", derive(Serialize))]
-#[cfg_attr(feature = "pyo3", serde(tag = "type", rename_all = "snake_case"))]
+#[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
+#[cfg_attr(any(feature = "pyo3", test), serde(tag = "type", rename_all = "snake_case"))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub enum ResolvedInputMessageContent {
@@ -151,7 +154,7 @@ pub enum ResolvedInputMessageContent {
         value: String,
     },
     Thought(Thought),
-    #[cfg_attr(feature = "pyo3", serde(alias = "image"))]
+    #[cfg_attr(any(feature = "pyo3", test), serde(alias = "image"))]
     File(Box<FileWithPath>),
     Unknown {
         data: Value,
