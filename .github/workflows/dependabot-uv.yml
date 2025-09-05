@@ -19,9 +19,17 @@ permissions:
 
 jobs:
   reconcile:
-    if: github.actor == 'dependabot[bot]' && github.repository == 'tensorzero/tensorzero'
+    # Run when:
+    # - pull_request_target: actor is dependabot (workflow lives on base branch)
+    # - pull_request: PR author is dependabot (lets you test without merging)
+    if: >
+      (github.event_name == 'pull_request_target' &&
+       github.actor == 'dependabot[bot]' &&
+       github.repository == 'tensorzero/tensorzero') ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.user.login == 'dependabot[bot]' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
