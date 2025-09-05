@@ -44,8 +44,8 @@ node_modules/
 
 # Claude Code (see AGENTS.md)
 CLAUDE.md
-.claude/
-!.claude/agents
+.claude/*
+!.claude/agents/
 
 ui/fixtures/s3-fixtures
 ci/provider-proxy-cache
