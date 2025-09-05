@@ -31,7 +31,7 @@ services:
       timeout: 1s
 
   mock-inference-provider:
-    image: tensorzero/mock-inference-provider:${TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG:-latest}
+    image: tensorzero/mock-inference-provider:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       context: ../../../
       dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
@@ -79,7 +79,7 @@ services:
       timeout: 1s
 
   provider-proxy:
-    image: tensorzero/provider-proxy:${TENSORZERO_PROVIDER_PROXY_TAG:-latest}
+    image: tensorzero/provider-proxy:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       context: ../../..
       dockerfile: provider-proxy/Dockerfile
@@ -107,7 +107,7 @@ services:
         condition: service_healthy
 
   gateway:
-    image: tensorzero/gateway-e2e:${TENSORZERO_GATEWAY_TAG:-latest}
+    image: tensorzero/gateway-e2e:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       context: ../../..
       dockerfile: tensorzero-core/tests/e2e/Dockerfile.gateway.e2e
@@ -189,7 +189,7 @@ services:
       start_interval: 1s
       timeout: 1s
   fixtures:
-    image: tensorzero/fixtures:${TENSORZERO_FIXTURES_TAG:-latest}
+    image: tensorzero/fixtures:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       context: ../../../
       dockerfile: ui/fixtures/Dockerfile
@@ -216,7 +216,7 @@ services:
       start_period: 5s # Give the script time to start
 
   live-tests:
-    image: tensorzero/live-tests:${TENSORZERO_LIVE_TESTS_TAG:-latest}
+    image: tensorzero/live-tests:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       context: ../../..
       dockerfile: tensorzero-core/tests/e2e/Dockerfile.live

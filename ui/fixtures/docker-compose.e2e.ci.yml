@@ -23,7 +23,7 @@ services:
   # We set 'OPENAI_BASE_URL=http://localhost:3030/openai' when starting the ui server in ci
   # so that we use the mock server for SFT jobs
   mock-inference-provider:
-    image: tensorzero/mock-inference-provider:${TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG:-latest}
+    image: tensorzero/mock-inference-provider:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       context: ../../
       dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
@@ -38,7 +38,7 @@ services:
       timeout: 1s
 
   gateway:
-    image: tensorzero/gateway-dev:${TENSORZERO_GATEWAY_TAG:-latest}
+    image: tensorzero/gateway-dev:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       context: ../..
       dockerfile: gateway/Dockerfile
@@ -74,7 +74,7 @@ services:
       timeout: 1s
 
   fixtures:
-    image: tensorzero/fixtures:${TENSORZERO_FIXTURES_TAG:-latest}
+    image: tensorzero/fixtures:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       context: ../..
       dockerfile: ui/fixtures/Dockerfile
@@ -101,7 +101,7 @@ services:
       start_period: 300s # Give the script time to start
 
   ui:
-    image: tensorzero/ui-dev:${TENSORZERO_UI_TAG:-latest}
+    image: tensorzero/ui-dev:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       context: ../..
       dockerfile: ui/Dockerfile
@@ -138,7 +138,7 @@ services:
       timeout: 1s
 
   ui-e2e-tests:
-    image: tensorzero/ui-e2e-tests:${TENSORZERO_UI_E2E_TESTS_TAG:-latest}
+    image: tensorzero/ui-e2e-tests:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       context: ../.. # Same context as gateway since you need access to the whole monorepo
       dockerfile: ui/fixtures/Dockerfile.e2e

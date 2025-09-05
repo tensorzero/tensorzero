@@ -25,7 +25,7 @@ services:
       timeout: 1s
 
   gateway:
-    image: tensorzero/gateway-e2e:${TENSORZERO_GATEWAY_TAG:-latest}
+    image: tensorzero/gateway-e2e:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       context: ../../..
       dockerfile: tensorzero-core/tests/e2e/Dockerfile.gateway.e2e
@@ -58,7 +58,7 @@ services:
       timeout: 1s
 
   fixtures:
-    image: tensorzero/fixtures:${TENSORZERO_FIXTURES_TAG:-latest}
+    image: tensorzero/fixtures:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       context: ../../../
       dockerfile: ui/fixtures/Dockerfile
@@ -86,7 +86,7 @@ services:
       start_period: 300s # Give the script time to start
 
   clickhouse-tests:
-    image: tensorzero/clickhouse-tests:${TENSORZERO_CLICKHOUSE_TESTS_TAG:-latest}
+    image: tensorzero/clickhouse-tests:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       context: ../../..
       dockerfile: tensorzero-core/tests/e2e/Dockerfile.clickhouse

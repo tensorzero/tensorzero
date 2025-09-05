@@ -79,6 +79,8 @@ steps:
 
   - label: ":node: Node.js Tests"
     command: bash ./ci/buildkite/node-unit-tests.sh
+    env:
+      TENSORZERO_COMMIT_TAG: ci-sha-${BUILDKITE_COMMIT:0:7}
     depends_on:
       - "build-gateway-container"
       - "build-node-unit-tests-container"
@@ -87,6 +89,8 @@ steps:
   - label: ":playwright: UI E2E Tests"
     command: |
       bash ./ci/buildkite/ui-e2e-tests.sh
+    env:
+      TENSORZERO_COMMIT_TAG: ci-sha-${BUILDKITE_COMMIT:0:7}
     depends_on:
       - "build-gateway-container"
       - "build-mock-inference-provider-container"
@@ -105,6 +109,7 @@ steps:
           - "25.7-alpine"
     env:
       TENSORZERO_CLICKHOUSE_VERSION: "{{matrix.clickhouse_version}}"
+      TENSORZERO_COMMIT_TAG: ci-sha-${BUILDKITE_COMMIT:0:7}
     depends_on:
       - "build-gateway-e2e-container"
       - "build-clickhouse-tests-container"

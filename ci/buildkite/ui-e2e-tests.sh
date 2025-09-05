@@ -39,10 +39,7 @@ echo "BUILDKITE_ANALYTICS_TOKEN=$BUILDKITE_ANALYTICS_TOKEN" >> ui/fixtures/.env
 {
   echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures"
   echo "TENSORZERO_GATEWAY_URL=http://gateway:3000"
-  echo "TENSORZERO_GATEWAY_TAG=ci-sha-$SHORT_HASH"
-  echo "TENSORZERO_UI_TAG=ci-sha-$SHORT_HASH"
-  echo "TENSORZERO_E2E_TESTS_TAG=ci-sha-$SHORT_HASH"
-  echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=ci-sha-$SHORT_HASH"
+  echo "TENSORZERO_COMMIT_TAG=ci-sha-$SHORT_HASH"
   # UI container env vars for optimizer config
   echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account"
   echo "VITE_TENSORZERO_FORCE_CACHE_ON=1"
