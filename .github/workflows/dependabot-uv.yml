@@ -48,25 +48,6 @@ jobs:
           BASE_SHA='${{ github.event.pull_request.base.sha }}'
           HEAD_SHA='${{ github.event.pull_request.head.sha }}'
 
-          # Make sure both commits exist locally (shallow fetch of just those SHAs)
-          git fetch --no-tags --prune --depth=1 origin "$BASE_SHA" "$HEAD_SHA" || true
-
-          # Use two-dot (..): doesn't need a merge base
-          DIRS=$(git diff --name-only "$BASE_SHA..$HEAD_SHA" \
-            | grep -E '(requirements.*\.txt|pyproject\.toml)$' \
-            | xargs -r -n1 dirname | sort -u)
-
-          echo "dirs=$DIRS" >> "$GITHUB_OUTPUT"
-
-      - name: Find Python projects with updated dependencies
-        id: dirs
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          BASE_SHA='${{ github.event.pull_request.base.sha }}'
-          HEAD_SHA='${{ github.event.pull_request.head.sha }}'
-
           # Ensure both commits exist locally (shallow fetch of just those SHAs)
           git fetch --no-tags --prune --depth=1 origin "$BASE_SHA" "$HEAD_SHA" || true
 
@@ -87,6 +68,25 @@ jobs:
               echo "__DIRS__"
             } >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Re-lock and re-export dependencies from `pyproject.toml`
+        if: steps.dirs.outputs.dirs != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          for d in ${{ steps.dirs.outputs.dirs }}; do
+            echo "::group::$d"
+            cd "$d"
+
+            # Update lock to latest allowed by pyproject constraints
+            uv lock --project=pyproject.toml --upgrade
+
+            # Export requirements deterministically from the lock
+            uv export --project=pyproject.toml --frozen --output-file=requirements.txt
+
+            cd - >/dev/null
+            echo "::endgroup::"
+          done
 
       - name: Commit and push updates
         shell: bash
