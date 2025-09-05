@@ -134,7 +134,91 @@ impl InferenceProvider for AWSBedrockProvider {
             }
         }
 
-        if let Some(tool_config) = &request.tool_config {
+        // Handle JSON schema through tool use if present
+        if let Some(output_schema) = &request.output_schema {
+            // Create a tool that enforces the JSON schema
+            let json_schema_tool = Tool::ToolSpec(
+                ToolSpecification::builder()
+                    .name("json_response")
+                    .description("Generate a JSON response that matches the specified schema")
+                    .input_schema(ToolInputSchema::Json(
+                        serde_json::from_value((*output_schema).clone()).map_err(|e| {
+                            Error::new(ErrorDetails::InferenceClient {
+                                raw_request: None,
+                                raw_response: None,
+                                status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                                message: format!(
+                                    "Error converting JSON schema to Document: {}",
+                                    DisplayOrDebugGateway::new(e)
+                                ),
+                                provider_type: PROVIDER_TYPE.to_string(),
+                            })
+                        })?,
+                    ))
+                    .build()
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InferenceClient {
+                            raw_request: None,
+                            raw_response: None,
+                            status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                            message: format!(
+                                "Error creating JSON schema tool: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                            provider_type: PROVIDER_TYPE.to_string(),
+                        })
+                    })?,
+            );
+
+            let mut tools = vec![json_schema_tool];
+
+            // Add any existing tools if present
+            if let Some(tool_config) = &request.tool_config {
+                if !matches!(tool_config.tool_choice, ToolChoice::None) {
+                    let existing_tools: Vec<Tool> = tool_config
+                        .tools_available
+                        .iter()
+                        .map(Tool::try_from)
+                        .collect::<Result<Vec<_>, _>>()?;
+                    tools.extend(existing_tools);
+                }
+            }
+
+            // Force the model to use the JSON schema tool
+            let tool_choice = AWSBedrockToolChoice::Tool(
+                SpecificToolChoice::builder()
+                    .name("json_response")
+                    .build()
+                    .map_err(|_| {
+                        Error::new(ErrorDetails::InferenceClient {
+                            raw_request: None,
+                            raw_response: None,
+                            status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                            message: "Error configuring JSON schema tool choice".to_string(),
+                            provider_type: PROVIDER_TYPE.to_string(),
+                        })
+                    })?,
+            );
+
+            let aws_bedrock_tool_config = ToolConfiguration::builder()
+                .set_tools(Some(tools))
+                .tool_choice(tool_choice)
+                .build()
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InferenceClient {
+                        raw_request: None,
+                        raw_response: None,
+                        status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                        message: format!(
+                            "Error configuring AWS Bedrock tool config: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
+
+            bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
+        } else if let Some(tool_config) = &request.tool_config {
             if !matches!(tool_config.tool_choice, ToolChoice::None) {
                 let tools: Vec<Tool> = tool_config
                     .tools_available
@@ -276,7 +360,91 @@ impl InferenceProvider for AWSBedrockProvider {
             }
         }
 
-        if let Some(tool_config) = &request.tool_config {
+        // Handle JSON schema through tool use if present
+        if let Some(output_schema) = &request.output_schema {
+            // Create a tool that enforces the JSON schema
+            let json_schema_tool = Tool::ToolSpec(
+                ToolSpecification::builder()
+                    .name("json_response")
+                    .description("Generate a JSON response that matches the specified schema")
+                    .input_schema(ToolInputSchema::Json(
+                        serde_json::from_value((*output_schema).clone()).map_err(|e| {
+                            Error::new(ErrorDetails::InferenceClient {
+                                raw_request: None,
+                                raw_response: None,
+                                status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                                message: format!(
+                                    "Error converting JSON schema to Document: {}",
+                                    DisplayOrDebugGateway::new(e)
+                                ),
+                                provider_type: PROVIDER_TYPE.to_string(),
+                            })
+                        })?,
+                    ))
+                    .build()
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InferenceClient {
+                            raw_request: None,
+                            raw_response: None,
+                            status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                            message: format!(
+                                "Error creating JSON schema tool: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                            provider_type: PROVIDER_TYPE.to_string(),
+                        })
+                    })?,
+            );
+
+            let mut tools = vec![json_schema_tool];
+
+            // Add any existing tools if present
+            if let Some(tool_config) = &request.tool_config {
+                if !matches!(tool_config.tool_choice, ToolChoice::None) {
+                    let existing_tools: Vec<Tool> = tool_config
+                        .tools_available
+                        .iter()
+                        .map(Tool::try_from)
+                        .collect::<Result<Vec<_>, _>>()?;
+                    tools.extend(existing_tools);
+                }
+            }
+
+            // Force the model to use the JSON schema tool
+            let tool_choice = AWSBedrockToolChoice::Tool(
+                SpecificToolChoice::builder()
+                    .name("json_response")
+                    .build()
+                    .map_err(|_| {
+                        Error::new(ErrorDetails::InferenceClient {
+                            raw_request: None,
+                            raw_response: None,
+                            status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                            message: "Error configuring JSON schema tool choice".to_string(),
+                            provider_type: PROVIDER_TYPE.to_string(),
+                        })
+                    })?,
+            );
+
+            let aws_bedrock_tool_config = ToolConfiguration::builder()
+                .set_tools(Some(tools))
+                .tool_choice(tool_choice)
+                .build()
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InferenceClient {
+                        raw_request: None,
+                        raw_response: None,
+                        status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                        message: format!(
+                            "Error configuring AWS Bedrock tool config: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
+
+            bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
+        } else if let Some(tool_config) = &request.tool_config {
             if !matches!(tool_config.tool_choice, ToolChoice::None) {
                 let tools: Vec<Tool> = tool_config
                     .tools_available
@@ -862,6 +1030,65 @@ fn aws_stop_reason_to_tensorzero_finish_reason(stop_reason: StopReason) -> Optio
     }
 }
 
+/// Handle the case where we have multiple tool calls with empty inputs
+/// This happens when the model doesn't properly use the JSON schema tool
+/// We need to extract the actual JSON content from the text blocks
+fn handle_empty_tool_calls(content: Vec<ContentBlockOutput>) -> Vec<ContentBlockOutput> {
+    let mut processed_content = Vec::new();
+    let mut text_blocks = Vec::new();
+    let mut has_empty_tool_calls = false;
+
+    for block in content {
+        match &block {
+            ContentBlockOutput::Text(text) => {
+                text_blocks.push(text.text.clone());
+                processed_content.push(block);
+            }
+            ContentBlockOutput::ToolCall(tool_call) => {
+                // Check if this is an empty tool call (like {"questions":[]})
+                if let Ok(parsed_args) =
+                    serde_json::from_str::<serde_json::Value>(&tool_call.arguments)
+                {
+                    if let Some(obj) = parsed_args.as_object() {
+                        if obj.values().all(|v| {
+                            v.as_array().map_or(false, |arr| arr.is_empty())
+                        }) {
+                            has_empty_tool_calls = true;
+                            // Skip this empty tool call
+                            continue;
+                        }
+                    }
+                }
+                processed_content.push(block);
+            }
+            _ => {
+                processed_content.push(block);
+            }
+        }
+    }
+
+    // If we have empty tool calls and text blocks, try to extract JSON from the text
+    if has_empty_tool_calls && !text_blocks.is_empty() {
+        let combined_text = text_blocks.join(" ");
+
+        // Try to find JSON in the text blocks
+        if let Some(json_start) = combined_text.find('{') {
+            let json_part = &combined_text[json_start..];
+            if let Some(json_end) = json_part.rfind('}') {
+                let json_str = &json_part[..=json_end];
+                if let Ok(_parsed_json) = serde_json::from_str::<serde_json::Value>(json_str) {
+                    // Replace the processed content with a single text block containing the JSON
+                    processed_content = vec![ContentBlockOutput::Text(Text {
+                        text: json_str.to_string(),
+                    })];
+                }
+            }
+        }
+    }
+
+    processed_content
+}
+
 impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
     type Error = Error;
 
@@ -904,6 +1131,10 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             .map(bedrock_content_block_to_output)
             .filter_map(Result::transpose)
             .collect::<Result<Vec<ContentBlockOutput>, _>>()?;
+
+        // Handle the case where we have multiple tool calls with empty inputs
+        // This happens when the model doesn't properly use the JSON schema tool
+        content = handle_empty_tool_calls(content);
 
         if model_id.contains("claude")
             && *function_type == FunctionType::Json
