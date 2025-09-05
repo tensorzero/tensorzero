@@ -5,7 +5,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "altair",
-    "balrog @ git+ssh://git@github.com/balrog-ai/BALROG.git",
+    "balrog @ git+https://github.com/balrog-ai/BALROG.git",
     "ipykernel",
     "pandas",
     "tensorzero",
