@@ -67,7 +67,7 @@ jobs:
             } >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Re-lock and re-export from pyproject.toml (authoritative)
+      - name: Re-lock and re-export from pyproject.toml
         if: steps.find_dirs.outputs.dirs != ''
         env:
           DIRS: ${{ steps.find_dirs.outputs.dirs }}
@@ -91,7 +91,7 @@ jobs:
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add **/uv.lock **/requirements.txt
+            git add -A
             git commit -m "chore(deps): reconcile requirements.txt with uv.lock (uv is source of truth)"
             git push
           else
