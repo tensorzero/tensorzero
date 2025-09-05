@@ -2,10 +2,10 @@ use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use crate::endpoints::openai_compatible::RouterExt;
 use axum::extract::{rejection::JsonRejection, FromRequest, Json, Request};
-use axum::routing::post;
 use axum::Router;
-use reqwest::{Client, Proxy};
+use reqwest::{Client, NoProxy, Proxy};
 use serde::de::DeserializeOwned;
 use tokio::runtime::Handle;
 use tokio::sync::oneshot::Sender;
@@ -198,7 +198,7 @@ pub async fn setup_clickhouse(
     if let ClickHouseConnectionInfo::Production { .. } = &clickhouse_connection_info {
         migration_manager::run(RunMigrationManagerArgs {
             clickhouse: &clickhouse_connection_info,
-            skip_completed_migrations: config.gateway.observability.skip_completed_migrations,
+            skip_completed_migrations: true,
             manual_run: false,
         })
         .await?;
@@ -260,11 +260,15 @@ pub fn setup_http_client() -> Result<Client, Error> {
         if let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY") {
             tracing::info!("Using proxy URL from TENSORZERO_E2E_PROXY: {proxy_url}");
             http_client_builder = http_client_builder
-                .proxy(Proxy::all(proxy_url).map_err(|e| {
-                    Error::new(ErrorDetails::AppState {
-                        message: format!("Invalid proxy URL: {e}"),
-                    })
-                })?)
+                .proxy(
+                    Proxy::all(proxy_url)
+                        .map_err(|e| {
+                            Error::new(ErrorDetails::AppState {
+                                message: format!("Invalid proxy URL: {e}"),
+                            })
+                        })?
+                        .no_proxy(NoProxy::from_string("localhost,127.0.0.1,minio")),
+                )
                 // When running e2e tests, we use `provider-proxy` as an MITM proxy
                 // for caching, so we need to accept the invalid (self-signed) cert.
                 .danger_accept_invalid_certs(true);
@@ -316,18 +320,8 @@ pub async fn start_openai_compatible_gateway(
     };
     let gateway_handle = GatewayHandle::new_with_clickhouse(config, clickhouse_url).await?;
 
-    // TODO(# 3191): Implement a trait for openai compatible endpoints
-    // so this logic can be centralized to one place and not reimplemented in
-    // our gateway main.
     let router = Router::new()
-        .route(
-            "/openai/v1/chat/completions",
-            post(endpoints::openai_compatible::inference_handler),
-        )
-        .route(
-            "/openai/v1/embeddings",
-            post(endpoints::openai_compatible::embeddings_handler),
-        )
+        .register_openai_compatible_routes()
         .fallback(endpoints::fallback::handle_404)
         .with_state(gateway_handle.app_state.clone());
 
@@ -366,7 +360,6 @@ mod tests {
                 enabled: Some(false),
                 async_writes: false,
                 batch_writes: Default::default(),
-                skip_completed_migrations: false,
             },
             bind_address: None,
             debug: false,
@@ -398,7 +391,6 @@ mod tests {
                 enabled: None,
                 async_writes: false,
                 batch_writes: Default::default(),
-                skip_completed_migrations: false,
             },
             unstable_error_json: false,
             ..Default::default()
@@ -426,7 +418,6 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
-                skip_completed_migrations: false,
             },
             bind_address: None,
             debug: false,
@@ -454,7 +445,6 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
-                skip_completed_migrations: false,
             },
             bind_address: None,
             debug: false,
@@ -484,7 +474,6 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
-                skip_completed_migrations: false,
             },
             bind_address: None,
             debug: false,

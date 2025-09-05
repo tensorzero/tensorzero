@@ -8,7 +8,7 @@ These APIs provide inference with large cost savings compared to real-time infer
 
 The batch inference workflow consists of two steps: submitting your batch request, then polling for the batch job status until completion.
 
-See the [Batch Inference API Reference](/docs/gateway/api-reference/batch-inference/) for more details on the batch inference endpoints, and see [Integrations](/docs/gateway/integrations/) for model provider integrations that support batch inference.
+See the [Batch Inference API Reference](/gateway/api-reference/batch-inference/) for more details on the batch inference endpoints, and see [Integrations](/gateway/integrations/) for model provider integrations that support batch inference.
 
 ## Example
 
@@ -161,7 +161,7 @@ Each inference object is the same as the response from a regular inference reque
 - **Observability**
   - For now, pending batch inference jobs are not shown in the TensorZero UI.
     You can find the relevant information in the `BatchRequest` and `BatchModelInference` tables on ClickHouse.
-    See [Data Model](/docs/gateway/data-model/) for more information.
+    See [Data Model](/gateway/data-model/) for more information.
   - Inferences from completed batch inference jobs are shown in the UI alongside regular inferences.
 - **Experimentation**
   - The gateway samples the same variant for the entire batch.

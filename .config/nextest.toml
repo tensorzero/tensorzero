@@ -11,6 +11,10 @@ slow-timeout = { period = "10s", terminate-after = 3 }
 # On CI, we use the 'ci' profile, which runs all tests.
 default-filter = "not test(no_aws_credentials)"
 
+[[profile.default.overrides]]
+filter = 'test(evaluations)'
+slow-timeout = { period = "20s", terminate-after = 3 }
+
 # Profiles config
 # We use these profiles to define our major test groups.
 # By using `default-filter` to specify our tests, we can further restrict the tests
@@ -23,12 +27,14 @@ default-filter = "not test(no_aws_credentials)"
 [profile.e2e]
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
 default-filter = "not (test(batch)) and not (test(test_dummy_only) | test(clickhouse))"
+junit.path = "junit.xml"
 
 [profile.batch]
 default-filter = 'test(batch)'
 
 [profile.clickhouse]
 default-filter = 'test(test_dummy_only) | test(clickhouse)'
+junit.path = "junit.xml"
 
 [profile.optimization]
 default-filter = 'binary(optimization-live)'
@@ -36,6 +42,8 @@ default-filter = 'binary(optimization-live)'
 [profile.optimization-mock]
 default-filter = 'binary(optimization-mock)'
 
+[profile.ci-unit.junit]
+path = "junit.xml"
 
 [[profile.optimization.overrides]]
 # Settings for running optimization tests

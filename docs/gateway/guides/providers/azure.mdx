@@ -22,7 +22,7 @@ You can also find the complete code for this example on [GitHub](https://github.
 
 </Tip>
 
-For production deployments, see our [Deployment Guide](/docs/gateway/deployment/).
+For production deployments, see our [Deployment Guide](/gateway/deployment/).
 
 ### Configuration
 
@@ -47,12 +47,14 @@ model = "gpt_4o_mini_2024_07_18"
 
 See the [list of models available on Azure OpenAI Service](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models).
 
+If you need to configure the endpoint at runtime, you can set it to `endpoint = "env::AZURE_OPENAI_ENDPOINT"` to read from the environment variable `AZURE_OPENAI_ENDPOINT` on startup or `endpoint = "dynamic::azure_openai_endpoint"` to read from a dynamic credential `azure_openai_endpoint` on each inference.
+
 ### Credentials
 
 You must set the `AZURE_OPENAI_API_KEY` environment variable before running the gateway.
 
 You can customize the credential location by setting the `api_key_location` to `env::YOUR_ENVIRONMENT_VARIABLE` or `dynamic::ARGUMENT_NAME`.
-See the [Credential Management](/docs/gateway/guides/credential-management/) guide and [Configuration Reference](/docs/gateway/configuration-reference/) for more information.
+See the [Credential Management](/gateway/guides/credential-management/) guide and [Configuration Reference](/gateway/configuration-reference/) for more information.
 
 ### Deployment (Docker Compose)
 

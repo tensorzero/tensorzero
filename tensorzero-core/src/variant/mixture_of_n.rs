@@ -17,7 +17,8 @@ use crate::inference::types::{
 };
 use crate::inference::types::{
     ChatInferenceResultChunk, ContentBlockChatOutput, ContentBlockChunk, InferenceResultChunk,
-    JsonInferenceResultChunk, ResolvedInput, TextChunk, ThoughtChunk, Usage,
+    JsonInferenceResultChunk, RequestMessagesOrBatch, ResolvedInput, TextChunk, ThoughtChunk,
+    Usage,
 };
 use crate::model::ModelTable;
 use crate::tool::ToolCallChunk;
@@ -292,7 +293,15 @@ pub fn stream_inference_from_non_stream(
         // in case we're doing something like chained best-of-n/mixture-of-n variants.
         previous_model_inference_results: inference_result.model_inference_results()[1..].to_vec(),
         system: model_inference_result.system.clone(),
-        input_messages: model_inference_result.input_messages.clone(),
+        input_messages: match model_inference_result.input_messages.clone() {
+            RequestMessagesOrBatch::Message(input_messages) => input_messages,
+            RequestMessagesOrBatch::BatchInput(_) => {
+                return Err(Error::new(ErrorDetails::InternalError {
+                    message: format!("Unexpected RequestMessagesOrBatch::BatchInput in model inference result. {IMPOSSIBLE_ERROR_MESSAGE}")
+                        .to_string(),
+                }));
+            }
+        },
         cached: model_inference_result.cached,
     };
     let stream = make_stream_from_non_stream(inference_result, Some(usage))?;
@@ -850,7 +859,7 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        config::SchemaData,
+        config::{SchemaData, UninitializedSchemas},
         db::clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::{InferenceCredentials, InferenceIds},
         function::{FunctionConfigChat, FunctionConfigJson},
@@ -859,26 +868,30 @@ mod tests {
             Latency, ModelInferenceResponseWithMetadata, Text, Thought,
         },
         jsonschema_util::StaticJSONSchema,
-        minijinja_util::tests::{get_test_template_config, test_system_template_schema},
+        minijinja_util::tests::{
+            get_system_filled_template, get_system_template, get_test_template_config,
+            test_system_template_schema,
+        },
         model::{ModelConfig, ModelProvider, ProviderConfig},
         providers::dummy::DummyProvider,
         tool::{ToolCallConfig, ToolCallOutput, ToolChoice},
-        variant::chat_completion::{ChatTemplates, TemplateWithSchema},
     };
 
     use super::*;
 
-    #[test]
-    fn test_prepare_system_message() {
+    #[tokio::test]
+    async fn test_prepare_system_message() {
         let templates = get_test_template_config();
 
         // Test without templates, string message
         let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let input_message = Value::String("You are a helpful assistant.".to_string());
         let max_index = 2;
@@ -895,11 +908,13 @@ mod tests {
 
         // Test without templates, object message
         let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let input_message = json!({"message": "You are a helpful assistant."});
         let max_index = 3;
@@ -914,11 +929,13 @@ mod tests {
 
         // Test without templates, no message
         let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let max_index = 5;
         let result = fuser_config.prepare_system_message(&templates, None, max_index);
@@ -934,23 +951,33 @@ mod tests {
 
         // Test with templates that need new info
         let system_template_name = "system";
+        let system_template = get_system_template();
 
         let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
-                templates: ChatTemplates {
-                    system: Some(TemplateWithSchema {
-                        template: PathWithContents {
-                            path: system_template_name.into(),
-                            contents: String::new(),
-                        },
-                        schema: Some(test_system_template_schema()),
-                    }),
-                    ..Default::default()
-                },
+                system_template: Some(system_template),
+                user_template: None,
+                assistant_template: None,
+                input_wrappers: None,
                 ..Default::default()
-            },
+            }
+            .load(
+                &SchemaData::load(
+                    None,
+                    None,
+                    Some(test_system_template_schema()),
+                    UninitializedSchemas::default(),
+                    "test",
+                )
+                .unwrap(),
+                &ErrorContext {
+                    function_name: "test".to_string(),
+                    variant_name: "test".to_string(),
+                },
+            )
+            .unwrap(),
         };
 
         let max_index = 6;
@@ -974,23 +1001,33 @@ mod tests {
 
         // Test with template that is complete as is (string)
         let system_template_name = "system_filled";
+        let system_template = get_system_filled_template();
 
         let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "dummy".into(),
                 weight: Some(1.0),
-                templates: ChatTemplates {
-                    system: Some(TemplateWithSchema {
-                        template: PathWithContents {
-                            path: system_template_name.into(),
-                            contents: String::new(),
-                        },
-                        schema: None,
-                    }),
-                    ..Default::default()
-                },
+                system_template: Some(system_template),
+                user_template: None,
+                assistant_template: None,
+                input_wrappers: None,
                 ..Default::default()
-            },
+            }
+            .load(
+                &SchemaData::load(
+                    None,
+                    None,
+                    Some(test_system_template_schema()),
+                    UninitializedSchemas::default(),
+                    "test",
+                )
+                .unwrap(),
+                &ErrorContext {
+                    function_name: "test".to_string(),
+                    variant_name: "test".to_string(),
+                },
+            )
+            .unwrap(),
         };
 
         let max_index = 10;
@@ -1019,7 +1056,7 @@ mod tests {
             created: 200u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
             usage: Usage {
@@ -1052,7 +1089,7 @@ mod tests {
             created: 201u64,
             output: vec!["Candidate answer 2".to_string().into()],
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Example response 2\"}".to_string(),
             usage: Usage {
@@ -1104,7 +1141,7 @@ mod tests {
             created: 200u64,
             output: vec!["{\"response\": \"Valid JSON response\"}".to_string().into()],
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Valid JSON response\"}".to_string(),
             usage: Usage {
@@ -1139,7 +1176,7 @@ mod tests {
                 .to_string()
                 .into()], // missing closing brace
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Malformed JSON response\"".to_string(), // malformed
             usage: Usage {
@@ -1188,10 +1225,12 @@ mod tests {
     async fn test_fuse_candidates() {
         // Set up fuser with a provider that returns a valid answer_choice
         let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "json".into(),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let mixture_of_n_variant = MixtureOfNConfig {
             weight: Some(1.0),
@@ -1214,7 +1253,7 @@ mod tests {
             created: 200u64,
             output: vec!["Candidate answer 0".to_string().into()],
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
             usage: Usage {
@@ -1247,7 +1286,7 @@ mod tests {
             created: 201u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: None,
-            input_messages: vec![],
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
             raw_request: "{\"prompt\": \"Example prompt 1\"}".to_string(),
             raw_response: "{\"response\": \"Example response 1\"}".to_string(),
             usage: Usage {
@@ -1360,16 +1399,18 @@ mod tests {
                 assert_eq!(fused.output, expected_content);
                 assert_eq!(fused.model_inference_results.len(), 3);
             }
-            _ => {
-                panic!("Expected a Chat inference result");
+            InferenceResult::Chat(_) => {
+                panic!("Expected a Json inference result");
             }
         }
         // Set up fuser with a provider that fails
         let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "error".into(),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let mixture_of_n_variant = MixtureOfNConfig {
             weight: Some(1.0),
@@ -1431,7 +1472,7 @@ mod tests {
             InferenceResult::Chat(chat_choice) => {
                 assert_eq!(chat_choice.model_inference_results.len(), 2);
             }
-            _ => {
+            InferenceResult::Json(_) => {
                 panic!("Expected a Chat inference result");
             }
         }
@@ -1439,10 +1480,12 @@ mod tests {
 
         // Set up evaluator with a provider that returns invalid JSON
         let fuser_config = FuserConfig {
-            inner: ChatCompletionConfig {
+            inner: UninitializedChatCompletionConfig {
                 model: "regular".into(),
                 ..Default::default()
-            },
+            }
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap(),
         };
         let mixture_of_n_variant = MixtureOfNConfig {
             weight: Some(1.0),
@@ -1512,7 +1555,7 @@ mod tests {
                 // But, it's a random choice, so we can't assert on the specific index
                 assert!(chat_choice.model_inference_results.len() == 3);
             }
-            _ => {
+            InferenceResult::Json(_) => {
                 panic!("Expected a Chat inference result");
             }
         }

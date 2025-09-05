@@ -6,6 +6,20 @@ if [ -f /load_complete.marker ]; then
   echo "Fixtures already loaded; this script will now exit with status 0"
   exit 0
 fi
+# Truncate all tables before inserting new data
+clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE JsonInference"
+clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE BooleanMetricFeedback"
+clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE FloatMetricFeedback"
+clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE CommentFeedback"
+clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE DemonstrationFeedback"
+clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE ChatInference"
+clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE ModelInference"
+clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE ChatInferenceDatapoint"
+clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE JsonInferenceDatapoint"
+clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE DynamicEvaluationRun"
+clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE DynamicEvaluationRunEpisode"
+clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE ModelInferenceCache"
+clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE DeploymentID"
 
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword  "SELECT * FROM system.disks;"
 

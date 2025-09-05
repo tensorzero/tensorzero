@@ -9,12 +9,12 @@ It's easy to get started with the TensorZero Gateway.
 To deploy the TensorZero Gateway, you need to:
 
 - Setup a ClickHouse database
-- Optional: Create a [configuration file](/docs/gateway/configuration-reference/)
+- Optional: Create a [configuration file](/gateway/configuration-reference/)
 - Run the gateway
 
 <Tip>
 
-See the [TensorZero UI Deployment Guide](/docs/ui/deployment/) for more details on how to deploy the TensorZero UI.
+See the [TensorZero UI Deployment Guide](/ui/deployment/) for more details on how to deploy the TensorZero UI.
 
 </Tip>
 
@@ -74,7 +74,7 @@ TENSORZERO_CLICKHOUSE_URL="http://host.docker.internal:8123/tensorzero"
 
 The TensorZero Gateway automatically applies database migrations on startup.
 
-See `[gateway]` in the [Configuration Reference](/docs/gateway/configuration-reference/) for the relevant configuration (e.g. customizing the port).
+See `[gateway]` in the [Configuration Reference](/gateway/configuration-reference/) for the relevant configuration (e.g. customizing the port).
 
 <Accordion title="Disabling Observability (Not Recommended)">
 
@@ -83,8 +83,7 @@ In this case, you won't need to set up ClickHouse, and the TensorZero Gateway wi
 
 To disable observability, set the following configuration in the `tensorzero.toml` file:
 
-```toml
-// tensorzero.toml
+```toml title="tensorzero.toml"
 [gateway]
 observability.enabled = false
 ```
@@ -103,7 +102,14 @@ TensorZero also does NOT share the name of any function, variant, metric, or sim
 
 See `howdy.rs` in the GitHub repository to see exactly what usage data is collected and shared with TensorZero.
 
-You can disable usage analytics by setting the environment variable `TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1`.
+To disable usage analytics, set the following configuration in the `tensorzero.toml` file:
+
+```toml title="tensorzero.toml"
+[gateway]
+disable_pseudonymous_usage_analytics = true
+```
+
+Alternatively, you can also set the environment variable `TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1`.
 
 </Accordion>
 
@@ -151,7 +157,7 @@ cargo run --release --bin gateway -- path/to/your/tensorzero.toml
 
 You can deploy the TensorZero Gateway alongside your application (e.g. as a sidecar container) or as a standalone service.
 
-A single gateway instance can handle over 1k QPS/core with sub-millisecond latency (see [Benchmarks](/docs/gateway/benchmarks/)), so a simple deployment should suffice for the vast majority of applications. If you deploy it as an independent service, we recommend deploying at least two instances behind a load balancer for high availability. The gateway is stateless, so you can easily scale horizontally and don't need to worry about persistence.
+A single gateway instance can handle over 1k QPS/core with sub-millisecond latency (see [Benchmarks](/gateway/benchmarks/)), so a simple deployment should suffice for the vast majority of applications. If you deploy it as an independent service, we recommend deploying at least two instances behind a load balancer for high availability. The gateway is stateless, so you can easily scale horizontally and don't need to worry about persistence.
 
 <Accordion title="Running with Docker (Recommended)" defaultOpen="true">
 
@@ -187,11 +193,11 @@ The TensorZero Gateway requires either `--config-file` to specify a custom confi
 
 ### Clients
 
-See the [Clients](/docs/gateway/clients/) page for more details on how to interact with the TensorZero Gateway.
+See the [Clients](/gateway/clients/) page for more details on how to interact with the TensorZero Gateway.
 
 ### Configuration
 
-To run the TensorZero Gateway, first you need to create a `tensorzero.toml` configuration file. Read more about the configuration file [here](/docs/gateway/configuration-reference/).
+To run the TensorZero Gateway, first you need to create a `tensorzero.toml` configuration file. Read more about the configuration file [here](/gateway/configuration-reference/).
 
 ### Model Provider Credentials
 
