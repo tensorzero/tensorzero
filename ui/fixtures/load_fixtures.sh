@@ -6,21 +6,6 @@ if [ -f /load_complete.marker ]; then
   echo "Fixtures already loaded; this script will now exit with status 0"
   exit 0
 fi
-# Truncate all tables before inserting new data
-clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE JsonInference"
-clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE BooleanMetricFeedback"
-clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE FloatMetricFeedback"
-clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE CommentFeedback"
-clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE DemonstrationFeedback"
-clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE ChatInference"
-clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE ModelInference"
-clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE ChatInferenceDatapoint"
-clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE JsonInferenceDatapoint"
-clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE DynamicEvaluationRun"
-clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE DynamicEvaluationRunEpisode"
-clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE ModelInferenceCache"
-clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database "$DATABASE_NAME" --query "TRUNCATE TABLE DeploymentID"
-
 # Determine credentials based on environment
 if command -v buildkite-agent >/dev/null 2>&1; then
   # Running on Buildkite - use secrets (fail if not available)
@@ -40,7 +25,23 @@ else
   CLICKHOUSE_SECURE_FLAG=""
 fi
 
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG  "SELECT * FROM system.disks;"
+# Truncate all tables before inserting new data
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "TRUNCATE TABLE JsonInference"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "TRUNCATE TABLE BooleanMetricFeedback"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "TRUNCATE TABLE FloatMetricFeedback"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "TRUNCATE TABLE CommentFeedback"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "TRUNCATE TABLE DemonstrationFeedback"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "TRUNCATE TABLE ChatInference"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "TRUNCATE TABLE ModelInference"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "TRUNCATE TABLE ChatInferenceDatapoint"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "TRUNCATE TABLE JsonInferenceDatapoint"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "TRUNCATE TABLE DynamicEvaluationRun"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "TRUNCATE TABLE DynamicEvaluationRunEpisode"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "TRUNCATE TABLE ModelInferenceCache"
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "TRUNCATE TABLE DeploymentID"
+
+
+
 
 # Truncate all tables first to ensure clean loading
 echo "Truncating all tables before loading fixtures..."
