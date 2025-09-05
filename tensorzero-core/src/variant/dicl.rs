@@ -809,7 +809,8 @@ mod tests {
         assert_eq!(request_message.role, Role::User);
 
         // The content should contain the serialized Input as a Text ContentBlock
-        let expected_serialized_input = serde_json::to_string(&input_data).unwrap();
+        let expected_serialized_input =
+            serde_json::to_string(&input_data.clone().into_stored_input()).unwrap();
         let expected_content = vec![ContentBlock::Text(Text {
             text: expected_serialized_input.clone(),
         })];

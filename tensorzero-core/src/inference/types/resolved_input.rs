@@ -20,7 +20,7 @@ use pyo3::prelude::*;
 /// Currently, this is just used to fetch image URLs in the image input,
 /// so that we always pass a base64-encoded image to the model provider.
 #[derive(Clone, Debug, PartialEq)]
-// TODO - should we remove the Serialize impl entirely, rather than rely it on
+// TODO - should we remove the Serialize impl entirely, rather than rely on it
 // for the Pyo3 'str' impl?
 #[cfg_attr(feature = "pyo3", derive(Serialize))]
 #[cfg_attr(feature = "pyo3", serde(deny_unknown_fields))]
@@ -77,7 +77,7 @@ impl ResolvedInput {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-// TODO - should we remove the Serialize impl entirely, rather than rely it on
+// TODO - should we remove the Serialize impl entirely, rather than rely on it
 // for the Pyo3 'str' impl?
 #[cfg_attr(feature = "pyo3", derive(Serialize))]
 #[cfg_attr(feature = "pyo3", serde(deny_unknown_fields))]
@@ -135,7 +135,7 @@ impl ResolvedInputMessage {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-// TODO - should we remove the Serialize impl entirely, rather than rely it on
+// TODO - should we remove the Serialize impl entirely, rather than rely on it
 // for the Pyo3 'str' impl?
 #[cfg_attr(feature = "pyo3", derive(Serialize))]
 #[cfg_attr(feature = "pyo3", serde(tag = "type", rename_all = "snake_case"))]
