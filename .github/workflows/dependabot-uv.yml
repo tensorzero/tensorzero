@@ -58,24 +58,35 @@ jobs:
 
           echo "dirs=$DIRS" >> "$GITHUB_OUTPUT"
 
-      - name: Re-lock and re-export dependencies from `pyproject.toml`
-        if: steps.dirs.outputs.dirs != ''
+      - name: Find Python projects with updated dependencies
+        id: dirs
         shell: bash
         run: |
           set -euo pipefail
-          for d in ${{ steps.dirs.outputs.dirs }}; do
-            echo "::group::$d"
-            cd "$d"
 
-            # Update lock to latest allowed by pyproject constraints
-            uv lock --project=pyproject.toml --upgrade
+          BASE_SHA='${{ github.event.pull_request.base.sha }}'
+          HEAD_SHA='${{ github.event.pull_request.head.sha }}'
 
-            # Export requirements deterministically from the lock
-            uv export --project=pyproject.toml --frozen --output-file=requirements.txt
+          # Ensure both commits exist locally (shallow fetch of just those SHAs)
+          git fetch --no-tags --prune --depth=1 origin "$BASE_SHA" "$HEAD_SHA" || true
 
-            cd - >/dev/null
-            echo "::endgroup::"
-          done
+          # Collect dirs with changed requirements*.txt or pyproject.toml
+          DIRS=$(
+            git diff --name-only "$BASE_SHA..$HEAD_SHA" \
+              | awk '/(requirements.*\.txt|pyproject\.toml)$/' \
+              | xargs -r -n1 dirname | sort -u
+          )
+
+          # Expose as a multiline output (required for newlines)
+          if [ -z "${DIRS}" ]; then
+            echo "dirs=" >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "dirs<<__DIRS__"
+              echo "${DIRS}"
+              echo "__DIRS__"
+            } >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Commit and push updates
         shell: bash
