@@ -4,7 +4,7 @@ description: Learn how to optimize the TensorZero Gateway for performance and la
 ---
 
 The TensorZero Gateway is designed from the ground up with performance in mind.
-It achieves &lt;1ms P99 latency overhead under extreme load (see [Benchmarks](/docs/gateway/benchmarks/)).
+It achieves &lt;1ms P99 latency overhead under extreme load (see [Benchmarks](/gateway/benchmarks/)).
 
 Even in default settings, the gateway is fast and lightweight enough to be unnoticeable in most applications.
 
@@ -14,7 +14,7 @@ If you care about extreme concurrency and low latency, we recommend the followin
 
 ### TensorZero Gateway
 
-- Enable `gateway.observability.async_writes` to offload the responsibility of writing inference responses to ClickHouse to a background task, instead of waiting for ClickHouse to return the inference response. [Learn more →](/docs/gateway/configuration-reference/#observabilityasync_writes)
+- Enable `gateway.observability.async_writes` to offload the responsibility of writing inference responses to ClickHouse to a background task, instead of waiting for ClickHouse to return the inference response. [Learn more →](/gateway/configuration-reference/#observabilityasync_writes)
 - Ensure your application, the TensorZero Gateway, and ClickHouse are deployed in the same region to minimize network latency.
 
 ### Python Client

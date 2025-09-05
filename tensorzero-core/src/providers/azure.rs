@@ -11,19 +11,22 @@ use url::Url;
 use crate::cache::ModelProviderRequest;
 use crate::embeddings::{
     Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingProvider,
-    EmbeddingProviderResponse, EmbeddingRequest,
+    EmbeddingProviderRequestInfo, EmbeddingProviderResponse, EmbeddingRequest,
 };
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse,
 };
 use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::model::{
+    build_creds_caching_default, Credential, CredentialLocation, EndpointLocation, ModelProvider,
+};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
@@ -37,15 +40,46 @@ use crate::inference::{InferenceProvider, TensorZeroEventError};
 
 const PROVIDER_NAME: &str = "Azure";
 pub const PROVIDER_TYPE: &str = "azure";
+const AZURE_INFERENCE_API_VERSION: &str = "2025-04-01-preview";
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct AzureProvider {
     deployment_id: String,
-    endpoint: Url,
+    #[serde(skip)]
+    endpoint: AzureEndpoint,
     #[serde(skip)]
     credentials: AzureCredentials,
+}
+
+#[derive(Clone, Debug)]
+pub enum AzureEndpoint {
+    Static(Url),
+    Dynamic(String),
+}
+
+impl AzureEndpoint {
+    fn get_endpoint<'a>(
+        &'a self,
+        dynamic_endpoints: &'a InferenceCredentials,
+    ) -> Result<Url, Error> {
+        match self {
+            AzureEndpoint::Static(url) => Ok(url.clone()),
+            AzureEndpoint::Dynamic(key_name) => {
+                let endpoint_str = dynamic_endpoints.get(key_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::DynamicEndpointNotFound {
+                        key_name: key_name.clone(),
+                    })
+                })?;
+                Url::parse(endpoint_str.expose_secret()).map_err(|_| {
+                    Error::new(ErrorDetails::InvalidDynamicEndpoint {
+                        url: endpoint_str.expose_secret().to_string(),
+                    })
+                })
+            }
+        }
+    }
 }
 
 static DEFAULT_CREDENTIALS: OnceLock<AzureCredentials> = OnceLock::new();
@@ -53,7 +87,7 @@ static DEFAULT_CREDENTIALS: OnceLock<AzureCredentials> = OnceLock::new();
 impl AzureProvider {
     pub fn new(
         deployment_id: String,
-        endpoint: Url,
+        endpoint_location: EndpointLocation,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
         let credentials = build_creds_caching_default(
@@ -62,6 +96,34 @@ impl AzureProvider {
             PROVIDER_TYPE,
             &DEFAULT_CREDENTIALS,
         )?;
+
+        let endpoint = match endpoint_location {
+            EndpointLocation::Static(url_str) => {
+                let url = Url::parse(&url_str).map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Invalid endpoint URL '{url_str}': {e}"),
+                    })
+                })?;
+                AzureEndpoint::Static(url)
+            }
+            EndpointLocation::Env(env_var) => {
+                let url_str = std::env::var(&env_var).map_err(|_| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "Environment variable '{env_var}' not found for Azure endpoint"
+                        ),
+                    })
+                })?;
+                let url = Url::parse(&url_str).map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Invalid endpoint URL from env var '{env_var}': {e}"),
+                    })
+                })?;
+                AzureEndpoint::Static(url)
+            }
+            EndpointLocation::Dynamic(key_name) => AzureEndpoint::Dynamic(key_name),
+        };
+
         Ok(AzureProvider {
             deployment_id,
             endpoint,
@@ -143,7 +205,8 @@ impl InferenceProvider for AzureProvider {
                 ),
             })
         })?;
-        let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
+        let endpoint = self.endpoint.get_endpoint(api_key)?;
+        let request_url = get_azure_chat_url(&endpoint, &self.deployment_id)?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key)?;
         let builder = http_client
@@ -235,7 +298,8 @@ impl InferenceProvider for AzureProvider {
                 ),
             })
         })?;
-        let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
+        let endpoint = self.endpoint.get_endpoint(dynamic_api_keys)?;
+        let request_url = get_azure_chat_url(&endpoint, &self.deployment_id)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let builder = http_client
@@ -291,28 +355,37 @@ impl EmbeddingProvider for AzureProvider {
         request: &EmbeddingRequest,
         client: &reqwest::Client,
         dynamic_api_keys: &InferenceCredentials,
+        model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let request_url = get_azure_embedding_url(&self.endpoint, &self.deployment_id)?;
+        let endpoint = self.endpoint.get_endpoint(dynamic_api_keys)?;
+        let request_url = get_azure_embedding_url(&endpoint, &self.deployment_id)?;
         let request_body = AzureEmbeddingRequest::new(request);
 
-        let request = client
+        let request_builder = client
             .post(request_url)
-            .header("api-key", api_key.expose_secret())
-            .json(&request_body);
+            .header("api-key", api_key.expose_secret());
         let start_time = Instant::now();
-        let response = request.send().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceClient {
-                status_code: e.status(),
+
+        let request_body_value = serde_json::to_value(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
                 message: format!(
-                    "Error sending request to Azure: {}",
+                    "Error serializing Azure embedding request: {}",
                     DisplayOrDebugGateway::new(e)
                 ),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                raw_response: None,
             })
         })?;
+
+        let (response, raw_request) = inject_extra_request_data_and_send(
+            PROVIDER_TYPE,
+            &FullExtraBodyConfig::default(), // No overrides supported
+            &Default::default(),             // No extra headers for embeddings yet
+            model_provider_data,
+            &self.deployment_id,
+            request_body_value,
+            request_builder,
+        )
+        .await?;
         if response.status().is_success() {
             let raw_response = response.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
@@ -320,7 +393,7 @@ impl EmbeddingProvider for AzureProvider {
                         "Error parsing text response: {}",
                         DisplayOrDebugGateway::new(e)
                     ),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
@@ -332,7 +405,7 @@ impl EmbeddingProvider for AzureProvider {
                             "Error parsing JSON response: {}",
                             DisplayOrDebugGateway::new(e)
                         ),
-                        raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                        raw_request: Some(raw_request.clone()),
                         raw_response: Some(raw_response.clone()),
                         provider_type: PROVIDER_TYPE.to_string(),
                     })
@@ -348,8 +421,7 @@ impl EmbeddingProvider for AzureProvider {
             )?)
         } else {
             let status = response.status();
-            let raw_request = serde_json::to_string(&request_body).unwrap_or_default();
-            let response = response.text().await.map_err(|e| {
+            let response_text = response.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!(
                         "Error parsing error response: {}",
@@ -363,7 +435,7 @@ impl EmbeddingProvider for AzureProvider {
             Err(handle_openai_error(
                 &raw_request,
                 status,
-                &response,
+                &response_text,
                 PROVIDER_TYPE,
             ))
         }
@@ -387,7 +459,7 @@ fn get_azure_chat_url(endpoint: &Url, deployment_id: &str) -> Result<Url, Error>
         .push("chat")
         .push("completions");
     url.query_pairs_mut()
-        .append_pair("api-version", "2024-10-21");
+        .append_pair("api-version", AZURE_INFERENCE_API_VERSION);
     Ok(url)
 }
 
@@ -408,7 +480,7 @@ fn get_azure_embedding_url(endpoint: &Url, deployment_id: &str) -> Result<Url, E
         .push(deployment_id)
         .push("embeddings");
     url.query_pairs_mut()
-        .append_pair("api-version", "2024-10-21");
+        .append_pair("api-version", AZURE_INFERENCE_API_VERSION);
     Ok(url)
 }
 
@@ -677,16 +749,20 @@ impl<'a> AzureEmbeddingRequest<'a> {
 
 #[cfg(test)]
 mod tests {
+    use secrecy::SecretString;
     use std::borrow::Cow;
+    use std::collections::HashMap;
     use std::time::Duration;
 
     use uuid::Uuid;
 
     use super::*;
 
+    use crate::config::SKIP_CREDENTIAL_VALIDATION;
     use crate::inference::types::{
         FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
+    use crate::model::EndpointLocation;
     use crate::providers::openai::{
         OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolType,
         OpenAIUsage, SpecificToolFunction,
@@ -933,5 +1009,77 @@ mod tests {
                 response_time: Duration::from_secs(0)
             }
         );
+    }
+
+    #[tokio::test]
+    async fn test_azure_provider_with_static_endpoint() {
+        // Run in credential validation skip context to avoid API key requirement
+        let provider = SKIP_CREDENTIAL_VALIDATION
+            .scope((), async {
+                AzureProvider::new(
+                    "gpt-35-turbo".to_string(),
+                    EndpointLocation::Static("https://test.openai.azure.com".to_string()),
+                    None,
+                )
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(provider.deployment_id(), "gpt-35-turbo");
+        match provider.endpoint {
+            AzureEndpoint::Static(url) => {
+                assert_eq!(url.as_str(), "https://test.openai.azure.com/");
+            }
+            AzureEndpoint::Dynamic(_) => panic!("Expected static endpoint"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_azure_provider_with_dynamic_endpoint() {
+        // Run in credential validation skip context to avoid API key requirement
+        let provider = SKIP_CREDENTIAL_VALIDATION
+            .scope((), async {
+                AzureProvider::new(
+                    "gpt-35-turbo".to_string(),
+                    EndpointLocation::Dynamic("azure_endpoint".to_string()),
+                    None,
+                )
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(provider.deployment_id(), "gpt-35-turbo");
+        match provider.endpoint {
+            AzureEndpoint::Dynamic(key) => {
+                assert_eq!(key, "azure_endpoint");
+            }
+            AzureEndpoint::Static(_) => panic!("Expected dynamic endpoint"),
+        }
+    }
+
+    #[test]
+    fn test_azure_endpoint_resolution() {
+        let endpoint = AzureEndpoint::Dynamic("test_endpoint".to_string());
+        let mut credentials = HashMap::new();
+        credentials.insert(
+            "test_endpoint".to_string(),
+            SecretString::from("https://dynamic.openai.azure.com"),
+        );
+
+        let resolved = endpoint.get_endpoint(&credentials).unwrap();
+        assert_eq!(resolved.as_str(), "https://dynamic.openai.azure.com/");
+    }
+
+    #[test]
+    fn test_azure_endpoint_resolution_missing_key() {
+        let endpoint = AzureEndpoint::Dynamic("missing_endpoint".to_string());
+        let credentials = HashMap::new();
+
+        let result = endpoint.get_endpoint(&credentials);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Dynamic endpoint 'missing_endpoint' not found"));
     }
 }

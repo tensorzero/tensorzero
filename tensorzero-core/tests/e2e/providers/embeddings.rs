@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 pub async fn test_basic_embedding_with_provider(provider: EmbeddingTestProvider) {
     let payload = json!({
         "input": "Hello, world!",
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
     });
     let response = Client::new()
         .post(get_gateway_endpoint("/openai/v1/embeddings"))
@@ -36,7 +36,7 @@ pub async fn test_basic_embedding_with_provider(provider: EmbeddingTestProvider)
     assert!(response_json["usage"]["total_tokens"].as_u64().unwrap() > 0);
 }
 
-pub async fn test_batch_embedding_with_provider(provider: EmbeddingTestProvider) {
+pub async fn test_bulk_embedding_with_provider(provider: EmbeddingTestProvider) {
     let inputs = vec![
         "Hello, world!",
         "How are you today?",
@@ -44,7 +44,7 @@ pub async fn test_batch_embedding_with_provider(provider: EmbeddingTestProvider)
     ];
     let payload = json!({
         "input": inputs,
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
     });
     let response = Client::new()
         .post(get_gateway_endpoint("/openai/v1/embeddings"))
@@ -58,7 +58,7 @@ pub async fn test_batch_embedding_with_provider(provider: EmbeddingTestProvider)
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
     assert_eq!(
         response_json["model"].as_str().unwrap(),
-        provider.model_name
+        format!("tensorzero::embedding_model_name::{}", provider.model_name)
     );
     assert_eq!(
         response_json["data"].as_array().unwrap().len(),
@@ -78,7 +78,7 @@ pub async fn test_batch_embedding_with_provider(provider: EmbeddingTestProvider)
 pub async fn test_embedding_with_dimensions_with_provider(provider: EmbeddingTestProvider) {
     let payload = json!({
         "input": "Test with specific dimensions",
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
         "dimensions": 512,
     });
     let response = Client::new()
@@ -93,7 +93,7 @@ pub async fn test_embedding_with_dimensions_with_provider(provider: EmbeddingTes
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
     assert_eq!(
         response_json["model"].as_str().unwrap(),
-        provider.model_name
+        format!("tensorzero::embedding_model_name::{}", provider.model_name)
     );
     assert_eq!(response_json["data"].as_array().unwrap().len(), 1);
     assert_eq!(
@@ -108,7 +108,7 @@ pub async fn test_embedding_with_dimensions_with_provider(provider: EmbeddingTes
 pub async fn test_embedding_with_encoding_format_with_provider(provider: EmbeddingTestProvider) {
     let payload = json!({
         "input": "Test encoding format",
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
         "encoding_format": "float",
     });
     let response = Client::new()
@@ -123,7 +123,7 @@ pub async fn test_embedding_with_encoding_format_with_provider(provider: Embeddi
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
     assert_eq!(
         response_json["model"].as_str().unwrap(),
-        provider.model_name
+        format!("tensorzero::embedding_model_name::{}", provider.model_name)
     );
     assert_eq!(response_json["data"].as_array().unwrap().len(), 1);
     let embedding = &response_json["data"][0]["embedding"];
@@ -136,7 +136,7 @@ pub async fn test_embedding_with_user_parameter_with_provider(provider: Embeddin
     let user_id = "test_user_123";
     let payload = json!({
         "input": "Test with user parameter",
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
         "user": user_id,
     });
     let response = Client::new()
@@ -151,7 +151,7 @@ pub async fn test_embedding_with_user_parameter_with_provider(provider: Embeddin
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
     assert_eq!(
         response_json["model"].as_str().unwrap(),
-        provider.model_name
+        format!("tensorzero::embedding_model_name::{}", provider.model_name)
     );
     assert_eq!(response_json["data"].as_array().unwrap().len(), 1);
     assert!(!response_json["data"][0]["embedding"]
@@ -163,7 +163,7 @@ pub async fn test_embedding_with_user_parameter_with_provider(provider: Embeddin
 pub async fn test_embedding_invalid_model_error_with_provider(_provider: EmbeddingTestProvider) {
     let payload = json!({
         "input": "Test invalid model",
-        "model": "tensorzero::model_name::nonexistent_model",
+        "model": "tensorzero::embedding_model_name::nonexistent_model",
     });
     let response = Client::new()
         .post(get_gateway_endpoint("/openai/v1/embeddings"))
@@ -174,13 +174,13 @@ pub async fn test_embedding_invalid_model_error_with_provider(_provider: Embeddi
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
-pub async fn test_embedding_large_batch_with_provider(provider: EmbeddingTestProvider) {
+pub async fn test_embedding_large_bulk_with_provider(provider: EmbeddingTestProvider) {
     let inputs: Vec<String> = (1..=10)
         .map(|i| format!("This is test input number {i}"))
         .collect();
     let payload = json!({
         "input": inputs,
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
     });
     let response = Client::new()
         .post(get_gateway_endpoint("/openai/v1/embeddings"))
@@ -194,7 +194,7 @@ pub async fn test_embedding_large_batch_with_provider(provider: EmbeddingTestPro
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
     assert_eq!(
         response_json["model"].as_str().unwrap(),
-        provider.model_name
+        format!("tensorzero::embedding_model_name::{}", provider.model_name)
     );
     assert_eq!(response_json["data"].as_array().unwrap().len(), 10);
 
@@ -214,7 +214,7 @@ pub async fn test_embedding_consistency_with_provider(provider: EmbeddingTestPro
     // Generate embeddings twice with the same input
     let payload = json!({
         "input": input_text,
-        "model": provider.model_name,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
     });
 
     let response1 = Client::new()
@@ -265,7 +265,7 @@ pub async fn test_embedding_consistency_with_provider(provider: EmbeddingTestPro
 pub async fn test_basic_embedding_fallback() {
     let payload = json!({
         "input": "Hello, world!",
-        "model": "fallback",
+        "model": "tensorzero::embedding_model_name::fallback",
     });
     let response = Client::new()
         .post(get_gateway_endpoint("/openai/v1/embeddings"))
@@ -298,7 +298,7 @@ pub async fn test_basic_embedding_fallback() {
 pub async fn test_basic_embedding_timeout() {
     let payload = json!({
         "input": "Hello, world!",
-        "model": "timeout",
+        "model": "tensorzero::embedding_model_name::timeout",
     });
     let response = Client::new()
         .post(get_gateway_endpoint("/openai/v1/embeddings"))
@@ -307,4 +307,250 @@ pub async fn test_basic_embedding_timeout() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::REQUEST_TIMEOUT);
+}
+
+pub async fn test_embedding_cache_with_provider(provider: EmbeddingTestProvider) {
+    let input_text = "This is a cache test for embeddings (test_embedding_cache_with_provider).";
+
+    // First request with cache enabled to populate cache
+    let payload = json!({
+        "input": input_text,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
+        "tensorzero::cache_options": {
+            "enabled": "on",
+            "max_age_s": 60
+        }
+    });
+    let response = Client::new()
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    // Store original response for comparison
+    let original_usage = response_json["usage"].clone();
+    assert!(original_usage["prompt_tokens"].as_u64().unwrap() > 0);
+    assert!(original_usage["total_tokens"].as_u64().unwrap() > 0);
+    let original_embedding = response_json["data"][0]["embedding"].clone();
+
+    // Wait a moment for cache write to complete
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+    // Second request with same cache options - should hit cache
+    let payload_cached = json!({
+        "input": input_text,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
+        "tensorzero::cache_options": {
+            "enabled": "on",
+            "max_age_s": 60
+        }
+    });
+    let response_cached = Client::new()
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&payload_cached)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response_cached.status(), StatusCode::OK);
+    let response_cached_json = response_cached.json::<Value>().await.unwrap();
+
+    // Check that cached response has zero tokens (indicating cache hit)
+    let cached_usage = response_cached_json["usage"].clone();
+    assert_eq!(cached_usage["prompt_tokens"].as_u64().unwrap(), 0);
+    assert_eq!(cached_usage["total_tokens"].as_u64().unwrap(), 0);
+
+    // Check that embeddings are identical
+    let cached_embedding = response_cached_json["data"][0]["embedding"].clone();
+    assert_eq!(original_embedding, cached_embedding);
+
+    // Check other response fields are consistent
+    assert_eq!(response_json["model"], response_cached_json["model"]);
+    assert_eq!(response_json["object"], response_cached_json["object"]);
+    assert_eq!(
+        response_json["data"][0]["index"],
+        response_cached_json["data"][0]["index"]
+    );
+    assert_eq!(
+        response_json["data"][0]["object"],
+        response_cached_json["data"][0]["object"]
+    );
+}
+
+pub async fn test_embedding_cache_options_with_provider(provider: EmbeddingTestProvider) {
+    let input_text =
+        "This is a cache options test for embeddings (test_embedding_cache_options_with_provider).";
+
+    // First, make a request that will be cached
+    let payload_initial = json!({
+        "input": input_text,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
+        "tensorzero::cache_options": {
+            "enabled": "on",
+        }
+    });
+    let response_initial = Client::new()
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&payload_initial)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response_initial.status(), StatusCode::OK);
+    let response_initial_json = response_initial.json::<Value>().await.unwrap();
+    assert!(
+        response_initial_json["usage"]["prompt_tokens"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+
+    // Wait for cache write to complete
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+    // Test with cache disabled - should not use cache
+    let payload_disabled = json!({
+        "input": input_text,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
+        "tensorzero::cache_options": {
+            "enabled": "off"
+        }
+    });
+    let response_disabled = Client::new()
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&payload_disabled)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response_disabled.status(), StatusCode::OK);
+    let response_disabled_json = response_disabled.json::<Value>().await.unwrap();
+    assert!(
+        response_disabled_json["usage"]["prompt_tokens"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+
+    // Test with cache enabled and valid max_age - should use cache
+    let payload_enabled = json!({
+        "input": input_text,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
+        "tensorzero::cache_options": {
+            "enabled": "on",
+            "max_age_s": 60
+        }
+    });
+    let response_enabled = Client::new()
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&payload_enabled)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response_enabled.status(), StatusCode::OK);
+    let response_enabled_json = response_enabled.json::<Value>().await.unwrap();
+    assert_eq!(
+        response_enabled_json["usage"]["prompt_tokens"]
+            .as_u64()
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        response_enabled_json["usage"]["total_tokens"]
+            .as_u64()
+            .unwrap(),
+        0
+    );
+
+    // Test with cache enabled but expired max_age - should miss cache
+    let payload_expired = json!({
+        "input": input_text,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
+        "tensorzero::cache_options": {
+            "enabled": "on",
+            "max_age_s": 1
+        }
+    });
+    let response_expired = Client::new()
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&payload_expired)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response_expired.status(), StatusCode::OK);
+    let response_expired_json = response_expired.json::<Value>().await.unwrap();
+    assert!(
+        response_expired_json["usage"]["prompt_tokens"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    assert!(
+        response_expired_json["usage"]["total_tokens"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+}
+
+pub async fn test_embedding_dryrun_with_provider(provider: EmbeddingTestProvider) {
+    let input_text = "This is a dryrun test for embeddings (test_embedding_dryrun_with_provider).";
+
+    // Test with dryrun enabled (should not store to database)
+    let payload = json!({
+        "input": input_text,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
+        "tensorzero::dryrun": true
+    });
+    let response = Client::new()
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    // Should still return valid embedding data
+    assert_eq!(response_json["object"].as_str().unwrap(), "list");
+    assert_eq!(response_json["data"].as_array().unwrap().len(), 1);
+    assert!(!response_json["data"][0]["embedding"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    assert!(response_json["usage"]["prompt_tokens"].as_u64().unwrap() > 0);
+    assert!(response_json["usage"]["total_tokens"].as_u64().unwrap() > 0);
+
+    // Test dryrun combined with cache options
+    let payload_dryrun_cache = json!({
+        "input": input_text,
+        "model": format!("tensorzero::embedding_model_name::{}",  provider.model_name),
+        "tensorzero::dryrun": true,
+        "tensorzero::cache_options": {
+            "enabled": "on",
+            "max_age_s": 60
+        }
+    });
+    let response_dryrun_cache = Client::new()
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&payload_dryrun_cache)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response_dryrun_cache.status(), StatusCode::OK);
+    let response_dryrun_cache_json = response_dryrun_cache.json::<Value>().await.unwrap();
+
+    // Should still return valid embedding data even with dryrun + cache
+    assert_eq!(
+        response_dryrun_cache_json["object"].as_str().unwrap(),
+        "list"
+    );
+    assert_eq!(
+        response_dryrun_cache_json["data"].as_array().unwrap().len(),
+        1
+    );
+    assert!(!response_dryrun_cache_json["data"][0]["embedding"]
+        .as_array()
+        .unwrap()
+        .is_empty());
 }

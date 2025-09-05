@@ -14,6 +14,7 @@ pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 use tensorzero_core::endpoints::stored_inference::render_samples;
+use tensorzero_core::inference::types::stored_input::StoragePathResolver;
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
@@ -418,6 +419,20 @@ pub struct Client {
     verbose_errors: bool,
     #[cfg(feature = "e2e_tests")]
     pub last_body: Mutex<Option<String>>,
+}
+
+impl StoragePathResolver for Client {
+    async fn resolve(&self, storage_path: StoragePath) -> Result<String, Error> {
+        Ok(self
+            .get_object(storage_path.clone())
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!("Error resolving object {storage_path}: {e}"),
+                })
+            })?
+            .data)
+    }
 }
 
 impl Client {
@@ -946,9 +961,14 @@ impl Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 // TODO: do we want this?
                 Ok(with_embedded_timeout(*timeout, async {
-                    launch_optimization(&gateway.handle.app_state.http_client, params)
-                        .await
-                        .map_err(err_to_http)
+                    launch_optimization(
+                        &gateway.handle.app_state.http_client,
+                        params,
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        gateway.handle.app_state.config.clone(),
+                    )
+                    .await
+                    .map_err(err_to_http)
                 })
                 .await?)
             }
@@ -1235,7 +1255,7 @@ impl Client {
     pub fn get_app_state_data(&self) -> Option<&tensorzero_core::gateway_util::AppStateData> {
         match &*self.mode {
             ClientMode::EmbeddedGateway { gateway, .. } => Some(&gateway.handle.app_state),
-            _ => None,
+            ClientMode::HTTPGateway(_) => None,
         }
     }
 

@@ -10,15 +10,17 @@ use evaluators::{evaluate_inference, EvaluateInferenceParams};
 use helpers::{get_cache_options, get_tool_params_args};
 use serde::{Deserialize, Serialize};
 use stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate};
-use tensorzero::ClientInput;
 use tensorzero::{
     input_handling::resolved_input_to_client_input, Client, ClientBuilder, ClientBuilderMode,
     ClientInferenceParams, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
     InferenceResponse,
 };
+use tensorzero::{ClientInput, StoragePath};
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize};
+use tensorzero_core::error::Error;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
+use tensorzero_core::inference::types::stored_input::StoragePathResolver;
 use tensorzero_core::{
     config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::Datapoint,
     function::FunctionConfig,
@@ -95,16 +97,18 @@ pub async fn run_evaluation(
     // We do not validate credentials here since we just want the evaluator config
     // If we are using an embedded gateway, credentials are validated when that is initialized
     info!(config_file = ?args.config_file, "Loading configuration");
-    let config = Config::load_from_path_optional_verify_credentials(
-        &ConfigFileGlob::new_from_path(&args.config_file)?,
-        false,
-    )
-    .await?;
+    let config = Arc::new(
+        Config::load_from_path_optional_verify_credentials(
+            &ConfigFileGlob::new_from_path(&args.config_file)?,
+            false,
+        )
+        .await?,
+    );
     debug!("Configuration loaded successfully");
     let evaluation_config = config
         .evaluations
         .get(&args.evaluation_name)
-        .ok_or(anyhow!("evaluation not found"))?
+        .ok_or_else(|| anyhow!("evaluation not found"))?
         .clone();
     debug!(evaluation_name = %args.evaluation_name, "Evaluation config found");
 
@@ -180,7 +184,7 @@ pub async fn run_evaluation(
         let datapoint = Arc::new(datapoint);
         let datapoint_id = datapoint.id();
         let abort_handle = join_set.spawn(async move {
-            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone(), &clients_clone.tensorzero_client.client).await?);
+            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&clients_clone.tensorzero_client).await?)?);
             let inference_response = Arc::new(
                 infer_datapoint(InferDatapointParams {
                     clients: &clients_clone,
@@ -283,6 +287,21 @@ pub async fn run_evaluation(
             let failure_messages = format_cutoff_failures(&failures);
             bail!("Failed cutoffs for evaluators: {}", failure_messages);
         }
+    }
+
+    // Since we construct our own `ClickHouseConnectionInfo` outside of our `TensorZeroClient`,
+    // we need to wait for the batch writer to finish.
+    // This happens automatically when `run_evaluation` is called from the standalone `evaluations` binary
+    // (since Tokio will wait for the `spawn_blocking` task to finish before shutting down the runtime).
+    // We explicitly wait here for the batch writer to finish, so that `run_evaluation` can be called
+    // from other places in the codebase (e.g. e2e tests), and subsequently query ClickHouse for the evaluation results.
+    if let Some(handle) = clients.clickhouse_client.batcher_join_handle() {
+        drop(clients);
+        tracing::info!("Waiting for evaluations ClickHouse batch writer to finish");
+        handle
+            .await
+            .map_err(|e| anyhow!("Error waiting for ClickHouse batch writer: {e}"))?;
+        tracing::info!("Evaluations ClickHouse batch writer finished");
     }
 
     Ok(())
@@ -482,6 +501,12 @@ impl ThrottledTensorZeroClient {
     async fn feedback(&self, params: FeedbackParams) -> Result<()> {
         self.client.feedback(params).await?;
         Ok(())
+    }
+}
+
+impl StoragePathResolver for ThrottledTensorZeroClient {
+    async fn resolve(&self, storage_path: StoragePath) -> Result<String, Error> {
+        self.client.resolve(storage_path).await
     }
 }
 

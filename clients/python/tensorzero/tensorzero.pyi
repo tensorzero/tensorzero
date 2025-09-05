@@ -104,6 +104,7 @@ class RenderedSample:
     input: ModelInput
     stored_input: ResolvedInput
     output: Optional[ChatInferenceOutput]
+    stored_output: Optional[Union[ChatInferenceOutput, JsonInferenceOutput]]
     episode_id: Optional[UUID]
     inference_id: Optional[UUID]
     tool_params: Optional[ToolCallConfigDatabaseInsert]
@@ -113,6 +114,7 @@ class RenderedSample:
 
 @final
 class OptimizationJobHandle:
+    Dicl: Type["OptimizationJobHandle"]
     OpenAISFT: Type["OptimizationJobHandle"]
     FireworksSFT: Type["OptimizationJobHandle"]
     GCPVertexGeminiSFT: Type["OptimizationJobHandle"]
@@ -126,6 +128,7 @@ class OptimizationJobStatus:
 
 @final
 class OptimizationJobInfo:
+    Dicl: Type["OptimizationJobInfo"]
     OpenAISFT: Type["OptimizationJobInfo"]
     FireworksSFT: Type["OptimizationJobInfo"]
     GCPVertexGeminiSFT: Type["OptimizationJobInfo"]
@@ -138,6 +141,22 @@ class OptimizationJobInfo:
     def output(self) -> Optional[Any]: ...
     @property
     def estimated_finish(self) -> Optional[int]: ...
+
+@final
+class DiclOptimizationConfig:
+    def __init__(
+        self,
+        *,
+        embedding_model: str,
+        variant_name: str,
+        function_name: str,
+        dimensions: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        max_concurrency: Optional[int] = None,
+        k: Optional[int] = None,
+        model: Optional[str] = None,
+        credentials: Optional[str] = None,
+    ) -> None: ...
 
 @final
 class OpenAISFTConfig:
@@ -204,12 +223,38 @@ class GCPVertexGeminiSFTConfig:
 
 @final
 class TogetherSFTConfig:
+    """
+    Configuration for Together supervised fine-tuning.
+
+    For detailed API documentation, see: https://docs.together.ai/reference/post-fine-tunes
+    """
     def __init__(
         self,
         *,
         model: str,
         credentials: Optional[str] = None,
         api_base: Optional[str] = None,
+        n_epochs: Optional[int] = None,
+        n_checkpoints: Optional[int] = None,
+        n_evals: Optional[int] = None,
+        batch_size: Optional[Union[int, str]] = None,
+        learning_rate: Optional[float] = None,
+        warmup_ratio: Optional[float] = None,
+        max_grad_norm: Optional[float] = None,
+        weight_decay: Optional[float] = None,
+        suffix: Optional[str] = None,
+        lr_scheduler: Optional[Dict[str, Any]] = None,
+        wandb_api_key: Optional[str] = None,
+        wandb_base_url: Optional[str] = None,
+        wandb_project_name: Optional[str] = None,
+        wandb_name: Optional[str] = None,
+        training_method: Optional[Dict[str, Any]] = None,
+        training_type: Optional[Dict[str, Any]] = None,
+        from_checkpoint: Optional[str] = None,
+        from_hf_model: Optional[str] = None,
+        hf_model_revision: Optional[str] = None,
+        hf_api_token: Optional[str] = None,
+        hf_output_repo_name: Optional[str] = None,
     ) -> None: ...
 
 @final
@@ -1018,6 +1063,7 @@ __all__ = [
     "ChainOfThoughtConfig",
     "Config",
     "Datapoint",
+    "DiclOptimizationConfig",
     "DiclConfig",
     "FunctionConfigChat",
     "FunctionConfigJson",

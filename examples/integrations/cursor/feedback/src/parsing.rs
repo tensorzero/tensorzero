@@ -1650,6 +1650,8 @@ fn process_numbers() {
 
     // Tests for InferenceWithTrees struct
     mod inference_with_trees_tests {
+        use tensorzero_core::inference::types::StoredInput;
+
         use super::*;
         use std::path::PathBuf;
 
@@ -1666,7 +1668,10 @@ fn process_numbers() {
             // Rather than construct InferenceInfo manually, let's just test the struct operations
             let inference = Arc::new(InferenceInfo {
                 id: uuid::Uuid::nil(), // Use nil UUID for testing
-                input: serde_json::from_str(r#"{"messages": []}"#).unwrap(),
+                input: StoredInput {
+                    system: None,
+                    messages: vec![],
+                },
                 output: vec![],
             });
 
@@ -1682,7 +1687,10 @@ fn process_numbers() {
             let trees = vec![];
             let inference = Arc::new(InferenceInfo {
                 id: uuid::Uuid::nil(),
-                input: serde_json::from_str(r#"{"messages": []}"#).unwrap(),
+                input: StoredInput {
+                    system: None,
+                    messages: vec![],
+                },
                 output: vec![],
             });
 
@@ -1698,7 +1706,10 @@ fn process_numbers() {
             let trees = vec![];
             let inference = Arc::new(InferenceInfo {
                 id: uuid::Uuid::nil(),
-                input: serde_json::from_str(r#"{"messages": []}"#).unwrap(),
+                input: StoredInput {
+                    system: None,
+                    messages: vec![],
+                },
                 output: vec![],
             });
 

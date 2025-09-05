@@ -16,6 +16,7 @@ jobs:
   build:
     name: Build and push Docker image to Docker Hub
     runs-on: ${{ matrix.platform.runner }}
+    if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
         platform:
@@ -94,6 +95,7 @@ jobs:
           retention-days: 1
 
   merge:
+    if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
         container:
@@ -129,7 +131,7 @@ jobs:
             latest=false
           tags: |
             type=ref,event=tag,
-            type=sha,format=long
+            type=sha,format=long,enable=${{ github.event_name == 'push' }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' && github.event.prerelease == false }}
 
       - name: Create manifest list and push

@@ -216,9 +216,12 @@ export async function action({ request }: Route.ActionArgs) {
       }
       return redirect(url.toString());
     }
+    case null:
+      logger.error("No action provided");
+      return data({ error: "No action provided" }, { status: 400 });
     default:
       logger.error(`Unknown action: ${_action}`);
-      return null;
+      return data({ error: `Unknown action: ${_action}` }, { status: 400 });
   }
 }
 

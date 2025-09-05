@@ -11,7 +11,7 @@ We'll build a few different applications to showcase the flexibility of TensorZe
 
 <Tip title="New to TensorZero?">
 
-See our [Quickstart](/docs/quickstart/) to learn how to set up our LLM gateway, observability, and fine-tuning &mdash; in just 5 minutes.
+See our [Quickstart](/quickstart/) to learn how to set up our LLM gateway, observability, and fine-tuning &mdash; in just 5 minutes.
 
 </Tip>
 
@@ -106,7 +106,7 @@ It's a best practice to pin the model to a specific version to avoid breaking ch
 
 TensorZero supports proprietary models (e.g. OpenAI, Anthropic), inference services (e.g. Fireworks AI, Together AI), and self-hosted LLMs (e.g. vLLM), including your own fine-tuned models on each of these.
 
-See [Integrations](/docs/gateway/integrations/) and [Configuration Reference](/docs/gateway/configuration-reference/#modelsmodel_nameprovidersprovider_name) for more details.
+See [Integrations](/gateway/integrations/) and [Configuration Reference](/gateway/configuration-reference/#modelsmodel_nameprovidersprovider_name) for more details.
 
 </Tip>
 
@@ -152,8 +152,8 @@ The simplest variant `type` is `chat_completion`, which is the typical chat comp
 
 <Tip>
 
-TensorZero supports other variant types which implement [inference-time optimizations](/docs/gateway/guides/inference-time-optimizations/).
-See [Configuration Reference](/docs/gateway/configuration-reference/) for more details on variant types and their configuration options.
+TensorZero supports other variant types which implement [inference-time optimizations](/gateway/guides/inference-time-optimizations/).
+See [Configuration Reference](/gateway/configuration-reference/) for more details on variant types and their configuration options.
 
 </Tip>
 
@@ -176,9 +176,9 @@ model = "my_gpt_4o_mini"
 
 <Tip>
 
-If you don't require advanced functionality for model providers (e.g. [Retries & Fallbacks](/docs/gateway/guides/retries-fallbacks/)), you don't have to define `model` configuration blocks.
+If you don't require advanced functionality for model providers (e.g. [Retries & Fallbacks](/gateway/guides/retries-fallbacks/)), you don't have to define `model` configuration blocks.
 TensorZero supports short-hand model names like `openai::gpt-4o-mini` or `anthropic::claude-3-5-haiku` in a variant's `model` field.
-See [Configuration Reference](/docs/gateway/configuration-reference/#modelsmodel_nameprovidersprovider_name) for more details.
+See [Configuration Reference](/gateway/configuration-reference/#modelsmodel_nameprovidersprovider_name) for more details.
 
 </Tip>
 
@@ -411,7 +411,7 @@ curl -X POST http://localhost:3000/inference \
 
 <Tip>
 
-The TensorZero Gateway also supports streaming inference. See the [API Reference](/docs/gateway/api-reference/inference/) for more details.
+The TensorZero Gateway also supports streaming inference. See the [API Reference](/gateway/api-reference/inference/) for more details.
 
 </Tip>
 
@@ -864,7 +864,7 @@ We currently support the following Metric types:
 | Comment        | Natural-language feedback    | Feedback from users or developers              |
 | Demonstration  | Example of desired output    | Edited drafts; labels; human-generated content |
 
-See the [Configuration Reference](/docs/gateway/configuration-reference/#metrics) for more details about how to configure metrics.
+See the [Configuration Reference](/gateway/configuration-reference/#metrics) for more details about how to configure metrics.
 
 </Tip>
 
@@ -988,7 +988,7 @@ curl -X POST http://localhost:3000/feedback \
 
 Over time, we'll collect the perfect dataset for observability and optimization.
 We'll have structured data on every inference, as well as their associated feedback.
-The [TensorZero Recipes](/docs/recipes/) leverage this data for prompt and model optimization.
+The [TensorZero Recipes](/recipes/) leverage this data for prompt and model optimization.
 
 ### Experimentation
 
@@ -1273,10 +1273,10 @@ Units: {{ units }}
 <Tip>
 
 TensorZero also supports multi-turn tool use, parallel tool calls, tool choice strategies, dynamic tool definition, and more.
-See the [Configuration Reference](/docs/gateway/configuration-reference/) for more information.
+See the [Configuration Reference](/gateway/configuration-reference/) for more information.
 
 Notably, another approach to our weather RAG example is to use a single function for both query and response generation (i.e. multi-turn tool use).
-As an exercise, why don't you try implementing it? See [Chat Function with Multi-Turn Tool Use](/docs/gateway/api-reference/inference/#chat-function-with-multi-turn-tool-use) for an example.
+As an exercise, why don't you try implementing it? See [Chat Function with Multi-Turn Tool Use](/gateway/api-reference/inference/#chat-function-with-multi-turn-tool-use) for an example.
 
 </Tip>
 
@@ -2192,7 +2192,7 @@ Stay tuned!
 
 </Tip>
 
-You can also dive deeper into the [Configuration Reference](/docs/gateway/configuration-reference/) and the [API Reference](/docs/gateway/api-reference/inference/).
+You can also dive deeper into the [Configuration Reference](/gateway/configuration-reference/) and the [API Reference](/gateway/api-reference/inference/).
 
 We're excited to see what you build!
 Please share your projects, ideas, and feedback with us on [Slack](https://www.tensorzero.com/slack) or [Discord](https://www.tensorzero.com/discord).

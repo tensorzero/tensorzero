@@ -161,7 +161,7 @@ impl HttpConnector for ReqwestConnector {
             let body_bytes = parts
                 .body
                 .bytes()
-                .ok_or(CallError::user("streaming request body is not supported"))?
+                .ok_or_else(|| CallError::user("streaming request body is not supported"))?
                 .to_owned();
             req_builder = req_builder.body(body_bytes);
             if let Some(timeout) = timeout {

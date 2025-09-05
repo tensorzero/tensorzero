@@ -27,7 +27,7 @@ pub enum ExtraBodyReplacementKind {
     Delete,
 }
 
-/// The 'InferenceExtraBody' options provided directly in an inference request
+/// The 'InferenceExtraBody' options provided directly in an inference request.
 /// These have not yet been filtered by variant name
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]

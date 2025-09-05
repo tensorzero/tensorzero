@@ -41,11 +41,13 @@ use migrations::migration_0031::Migration0031;
 use migrations::migration_0032::Migration0032;
 use migrations::migration_0033::Migration0033;
 use migrations::migration_0034::Migration0034;
+use migrations::migration_0035::Migration0035;
+use migrations::migration_0036::Migration0036;
 use serde::{Deserialize, Serialize};
 
 /// This must match the number of migrations returned by `make_all_migrations` - the tests
 /// will panic if they don't match.
-pub const NUM_MIGRATIONS: usize = 28;
+pub const NUM_MIGRATIONS: usize = 30;
 fn get_run_migrations_command() -> String {
     let version = env!("CARGO_PKG_VERSION");
     format!("docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-migrations-only")
@@ -55,6 +57,10 @@ fn get_run_migrations_command() -> String {
 /// This is the single source of truth for all migration - it's used during startup to migrate
 /// the database, and in our ClickHouse tests to verify that the migrations apply correctly
 /// to a fresh database.
+///
+/// # Panics
+///
+/// This function will panic if the number of migrations does not match the `NUM_MIGRATIONS` constant.
 pub fn make_all_migrations<'a>(
     clickhouse: &'a ClickHouseConnectionInfo,
 ) -> Vec<Box<dyn Migration + Send + Sync + 'a>> {
@@ -99,6 +105,8 @@ pub fn make_all_migrations<'a>(
         Box::new(Migration0032 { clickhouse }),
         Box::new(Migration0033 { clickhouse }),
         Box::new(Migration0034 { clickhouse }),
+        Box::new(Migration0035 { clickhouse }),
+        Box::new(Migration0036 { clickhouse }),
     ];
     assert_eq!(
         migrations.len(),
