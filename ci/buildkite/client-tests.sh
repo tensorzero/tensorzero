@@ -59,7 +59,7 @@ docker compose -f clients/docker-compose.tests.yml up -d \
 # Wait for all dependencies to be healthy
 echo "Waiting for infrastructure to be ready..."
 docker compose -f clients/docker-compose.tests.yml wait \
-  clickhouse mock-inference-provider minio provider-proxy gateway fixtures
+  clickhouse mock-inference-provider minio provider-proxy gateway
 
 # ------------------------------------------------------------------------------
 # Run tests in parallel against shared infrastructure
