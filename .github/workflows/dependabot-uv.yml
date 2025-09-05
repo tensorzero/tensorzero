@@ -69,24 +69,23 @@ jobs:
             } >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Re-lock and re-export dependencies from `pyproject.toml`
-        if: steps.dirs.outputs.dirs != ''
+      - name: Re-lock and re-export from pyproject.toml (authoritative)
+        if: steps.find_dirs.outputs.dirs != ''
+        env:
+          DIRS: ${{ steps.find_dirs.outputs.dirs }}
         shell: bash
         run: |
           set -euo pipefail
-          for d in ${{ steps.dirs.outputs.dirs }}; do
+          # Read multiline output safely; one dir per line
+          while IFS= read -r d; do
+            [ -z "$d" ] && continue
             echo "::group::$d"
-            cd "$d"
-
-            # Update lock to latest allowed by pyproject constraints
+            pushd "$d" >/dev/null
             uv lock --project=pyproject.toml --upgrade
-
-            # Export requirements deterministically from the lock
             uv export --project=pyproject.toml --frozen --output-file=requirements.txt
-
-            cd - >/dev/null
+            popd >/dev/null
             echo "::endgroup::"
-          done
+          done <<< "$DIRS"
 
       - name: Commit and push updates
         shell: bash
