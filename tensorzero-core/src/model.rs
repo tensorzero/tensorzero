@@ -1727,21 +1727,21 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
         (location, provider_type): (CredentialLocation, &str),
     ) -> Result<Self, Self::Error> {
         match location {
-            CredentialLocation::Env(key_name) => match env::var(key_name) {
+            CredentialLocation::Env(key_name) => match env::var(&key_name) {
                 Ok(value) => Ok(Credential::Static(SecretString::from(value))),
                 Err(_) => {
                     if skip_credential_validation() {
                         #[cfg(any(test, feature = "e2e_tests"))]
                         {
                             tracing::warn!(
-                            "You are missing the credentials required for a model provider of type {}, so the associated tests will likely fail.",
-                            provider_type
-                        );
+                                "You are missing the credentials required for a model provider of type {provider_type} (environment variable `{key_name}` is unset), so the associated tests will likely fail.",
+                            );
                         }
                         Ok(Credential::Missing)
                     } else {
                         Err(Error::new(ErrorDetails::ApiKeyMissing {
                             provider_name: provider_type.to_string(),
+                            message: format!("Environment variable `{key_name}` is missing"),
                         }))
                     }
                 }
@@ -1763,9 +1763,8 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                             return Ok(Credential::Missing);
                         } else {
                             return Err(Error::new(ErrorDetails::ApiKeyMissing {
-                                provider_name: format!(
-                                    "{provider_type}: Environment variable {env_key} for credentials path is missing"
-                                ),
+                                provider_name: provider_type.to_string(),
+                                message: format!("Environment variable `{env_key}` for credentials path is missing"),
                             }));
                         }
                     }
@@ -1785,9 +1784,8 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                             Ok(Credential::Missing)
                         } else {
                             Err(Error::new(ErrorDetails::ApiKeyMissing {
-                                provider_name: format!(
-                                    "{provider_type}: Failed to read credentials file - {e}"
-                                ),
+                                provider_name: provider_type.to_string(),
+                                message: format!("Failed to read credentials file - {e}"),
                             }))
                         }
                     }
@@ -1807,9 +1805,8 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                         Ok(Credential::Missing)
                     } else {
                         Err(Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: format!(
-                                "{provider_type}: Failed to read credentials file - {e}"
-                            ),
+                            provider_name: provider_type.to_string(),
+                            message: format!("Failed to read credentials file - {e}"),
                         }))
                     }
                 }
@@ -2552,7 +2549,8 @@ mod tests {
                 provider_errors: HashMap::from([(
                     "model".to_string(),
                     ErrorDetails::ApiKeyMissing {
-                        provider_name: "Dummy".to_string()
+                        provider_name: "Dummy".to_string(),
+                        message: "Dynamic api key `TEST_KEY` is missing".to_string(),
                     }
                     .into()
                 )])
@@ -2660,7 +2658,8 @@ mod tests {
                 provider_errors: HashMap::from([(
                     "model".to_string(),
                     ErrorDetails::ApiKeyMissing {
-                        provider_name: "Dummy".to_string()
+                        provider_name: "Dummy".to_string(),
+                        message: "Dynamic api key `TEST_KEY` is missing".to_string(),
                     }
                     .into()
                 )])

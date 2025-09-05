@@ -118,6 +118,7 @@ impl SGLangCredentials {
                 Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
+                        message: format!("Dynamic api key `{key_name}` is missing"),
                     }
                     .into()
                 }))
