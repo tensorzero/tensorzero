@@ -101,6 +101,7 @@ unused_self = "deny"
 unwrap_used = "deny"
 
 # The following pedantic lints are explicitly set to "allow" to give authors discretion on their use.
+default_trait_access = "allow"
 match_same_arms = "allow"
 must_use_candidate = "allow"
 single_match_else = "allow"
