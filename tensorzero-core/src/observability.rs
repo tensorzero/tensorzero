@@ -6,9 +6,11 @@ use opentelemetry::trace::TracerProvider as _;
 use opentelemetry::KeyValue;
 use opentelemetry_sdk::trace::{SdkTracerProvider, SpanExporter};
 use opentelemetry_sdk::Resource;
-use tower_http::trace::TraceLayer;
+use tower_http::trace::{
+    DefaultOnEos, DefaultOnFailure, DefaultOnRequest, DefaultOnResponse, TraceLayer,
+};
 use tracing::level_filters::LevelFilter;
-use tracing::Span;
+use tracing::{Level, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::layer::Filter;
 use tracing_subscriber::{filter, EnvFilter, Registry};
@@ -203,7 +205,17 @@ impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
             );
             span
         }
-        self.layer(TraceLayer::new_for_http().make_span_with(make_span))
+        self.layer(
+            TraceLayer::new_for_http()
+                .make_span_with(make_span)
+                // We only care about the wrapping span, not the actual events logged.
+                // Set these to `TRACE` to prevent them from showing up in our stdout logs
+                // (this will also suppress them from OTEL in production, which is fine)
+                .on_request(DefaultOnRequest::new().level(Level::TRACE))
+                .on_failure(DefaultOnFailure::new().level(Level::TRACE))
+                .on_response(DefaultOnResponse::new().level(Level::TRACE))
+                .on_eos(DefaultOnEos::new().level(Level::TRACE)),
+        )
     }
 }
 
