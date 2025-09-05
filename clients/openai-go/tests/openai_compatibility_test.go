@@ -207,6 +207,8 @@ func TestMultiStep(t *testing.T) {
 		messages2 := []openai.ChatCompletionMessageParamUnion{
 			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
 			openai.UserMessage("Hello"),
+			openai.AssistantMessage(resp.Choices[0].Message.Content),
+			openai.UserMessage("Greetings"),
 		}
 
 		req2 := &openai.ChatCompletionNewParams{
