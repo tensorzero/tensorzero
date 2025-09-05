@@ -1,5 +1,5 @@
 #![cfg(feature = "e2e_tests")]
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used, clippy::missing_panics_doc)]
 use serde_json::json;
 use tensorzero::{
     input_handling::resolved_input_to_client_input, ClientBuilder, ClientBuilderMode,
@@ -10,7 +10,7 @@ use reqwest::Url;
 use tensorzero_core::inference::types::StoredInput;
 
 lazy_static::lazy_static! {
-    static ref GATEWAY_URL: String = std::env::var("GATEWAY_URL").unwrap_or("http://localhost:3000".to_string());
+    static ref GATEWAY_URL: String = std::env::var("TENSORZERO_GATEWAY_URL").unwrap_or_else(|_|"http://localhost:3000".to_string());
 }
 
 pub fn get_gateway_endpoint(endpoint: Option<&str>) -> Url {

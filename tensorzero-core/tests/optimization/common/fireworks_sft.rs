@@ -4,6 +4,8 @@ use tensorzero_core::optimization::{
     UninitializedOptimizerInfo,
 };
 
+use super::mock_inference_provider_base;
+
 pub struct FireworksSFTTestCase();
 
 impl OptimizationTestCase for FireworksSFTTestCase {
@@ -37,7 +39,7 @@ impl OptimizationTestCase for FireworksSFTTestCase {
                 mtp_freeze_base_model: None,
                 credentials: None,
                 api_base: if use_mock_inference_provider {
-                    Some("http://localhost:3030/fireworks/".parse().unwrap())
+                    Some(mock_inference_provider_base().join("fireworks/").unwrap())
                 } else {
                     None
                 },

@@ -1,7 +1,12 @@
 //! An HTTP/HTTPS proxy that caches non-error responses to disk.
 //! Heavily based on https://github.com/hatoo/http-mitm-proxy (MIT-licensed),
 //! with the openssl dependency and `default_client` removed.
-#![expect(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
+#![expect(
+    clippy::expect_used,
+    clippy::missing_panics_doc,
+    clippy::panic,
+    clippy::unwrap_used
+)]
 
 mod mitm_server;
 mod streaming_body_collector;
@@ -300,6 +305,9 @@ pub struct Args {
     /// Port to listen on
     #[arg(long, default_value = "3003")]
     pub port: u16,
+    /// Health check port
+    #[arg(long, default_value = "3004")]
+    pub health_port: u16,
     /// If `true`, replaces `Authorization: Bearer <token>` with `Authorization: Bearer TENSORZERO_PROVIDER_PROXY_TOKEN`
     /// when constructing a cache key.
     #[arg(long, default_value = "true")]
@@ -327,6 +335,39 @@ fn is_openrouter_request(uri: &http::Uri) -> bool {
         .unwrap_or(false)
 }
 
+async fn health_check_handler(
+    _: hyper::Request<hyper::body::Incoming>,
+) -> Result<hyper::Response<Full<Bytes>>, std::convert::Infallible> {
+    Ok(hyper::Response::builder()
+        .status(200)
+        .header("content-type", "text/plain")
+        .body(Full::new(Bytes::from("OK")))
+        .unwrap())
+}
+
+async fn run_health_server(port: u16) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use hyper::server::conn::http1;
+    use tokio::net::TcpListener;
+
+    let addr = format!("0.0.0.0:{port}");
+    let listener = TcpListener::bind(&addr).await?;
+    tracing::info!("Health check server listening on http://{}", addr);
+
+    loop {
+        let (stream, _) = listener.accept().await?;
+        let io = hyper_util::rt::TokioIo::new(stream);
+
+        tokio::task::spawn(async move {
+            if let Err(err) = http1::Builder::new()
+                .serve_connection(io, service_fn(health_check_handler))
+                .await
+            {
+                tracing::error!("Error serving health check connection: {:?}", err);
+            }
+        });
+    }
+}
+
 pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>) {
     use tracing_subscriber::EnvFilter;
 
@@ -346,6 +387,14 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
 
     std::fs::create_dir_all(&args.cache_path).expect("Failed to create cache directory");
 
+    // Start health check server
+    let health_port = args.health_port;
+    tokio::spawn(async move {
+        if let Err(e) = run_health_server(health_port).await {
+            tracing::error!("Health check server failed: {:?}", e);
+        }
+    });
+
     let _ = rustls::crypto::ring::default_provider()
         .install_default()
         .inspect_err(|e| tracing::error!("Failed to install rustls ring provider: {e:?}"));
@@ -362,7 +411,7 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
     let args_clone = args.clone();
     let (server_addr, server) = proxy
         .bind(
-            ("127.0.0.1", args.port),
+            ("0.0.0.0", args.port),
             service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
                 let client = client.clone();
                 let args = args_clone.clone();
@@ -413,6 +462,9 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
                         .with_context(|| "Failed to collect body")?
                         .to_bytes();
                     let bytes_request = hyper::Request::from_parts(parts, body_bytes);
+                    // Add 1ms delay to simulate network latency
+                    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
                     let response = check_cache(start_time, &args, bytes_request.clone(), || async {
                         let mut request: reqwest::Request =
                             bytes_request.try_into().with_context(|| {

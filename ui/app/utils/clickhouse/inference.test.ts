@@ -31,11 +31,7 @@ test("countInferencesForFunction returns correct counts", async () => {
   const jsonCount = await countInferencesForFunction("extract_entities", {
     type: "json",
     variants: {},
-    schemas: {
-      system: null,
-      user: null,
-      assistant: null,
-    },
+    schemas: {},
     description: "",
     output_schema: { value: {} },
     implicit_tool_call_config: {
@@ -52,11 +48,7 @@ test("countInferencesForFunction returns correct counts", async () => {
     tools: [],
     tool_choice: "none",
     parallel_tool_calls: false,
-    schemas: {
-      system: null,
-      user: null,
-      assistant: null,
-    },
+    schemas: {},
     description: "",
   });
   expect(chatCount).toBe(804);
@@ -69,11 +61,7 @@ test("countInferencesForVariant returns correct counts", async () => {
     {
       type: "json",
       variants: {},
-      schemas: {
-        system: null,
-        user: null,
-        assistant: null,
-      },
+      schemas: {},
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
@@ -94,11 +82,7 @@ test("countInferencesForVariant returns correct counts", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
-      schemas: {
-        system: null,
-        user: null,
-        assistant: null,
-      },
+      schemas: {},
       description: "",
     },
     "initial_prompt_gpt4o_mini",
@@ -460,8 +444,6 @@ test(
     });
     expect(episodes.length).toBe(10);
 
-    console.log(episodes);
-
     // Verify episodes are in descending order
     for (let i = 1; i < episodes.length; i++) {
       expect(episodes[i - 1].episode_id > episodes[i].episode_id).toBe(true);
@@ -479,7 +461,6 @@ test(
       after: episodes[0].episode_id,
       page_size: 10,
     });
-    console.log(episodes3);
     expect(episodes3.length).toBe(0);
 
     // Test that before and after together throws error

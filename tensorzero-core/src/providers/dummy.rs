@@ -49,7 +49,7 @@ impl DummyProvider {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
+        let api_key_location = api_key_location.unwrap_or_else(default_api_key_location);
         match api_key_location {
             CredentialLocation::Dynamic(key_name) => Ok(DummyProvider {
                 model_name,
@@ -252,6 +252,8 @@ impl InferenceProvider for DummyProvider {
         if self.model_name == "slow" {
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
+        // Just so they don't seem like 0ms inferences
+        tokio::time::sleep(Duration::from_millis(1)).await;
 
         // Check for flaky models
         if self.model_name.starts_with("flaky_") {
@@ -569,6 +571,8 @@ impl InferenceProvider for DummyProvider {
         if self.model_name == "slow" {
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
+        // Just so they don't seem like 0ms inferences
+        tokio::time::sleep(Duration::from_millis(1)).await;
         // Check for flaky models
         if self.model_name.starts_with("flaky_") {
             #[expect(clippy::expect_used)]

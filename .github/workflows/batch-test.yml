@@ -35,6 +35,7 @@ on:
 jobs:
   batch-tests:
     runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
 
     timeout-minutes: 15
 

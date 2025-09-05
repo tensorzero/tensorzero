@@ -7,7 +7,7 @@ use serde::Deserialize;
 use tensorzero_core::serde_util::deserialize_json_string;
 use tensorzero_core::{
     db::clickhouse::ClickHouseConnectionInfo,
-    inference::types::{ContentBlockChatOutput, ResolvedInput},
+    inference::types::{ContentBlockChatOutput, StoredInput},
 };
 use uuid::Uuid;
 
@@ -18,7 +18,7 @@ use crate::util::{get_max_uuidv7, get_min_uuidv7};
 pub struct InferenceInfo {
     pub id: Uuid,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: Vec<ContentBlockChatOutput>,
 }
@@ -38,7 +38,7 @@ pub async fn get_inferences_in_time_range(
     let lower_bound = get_min_uuidv7(
         commit_interval
             .parent_timestamp
-            .unwrap_or(Utc::now() - chrono::Duration::days(1)),
+            .unwrap_or_else(|| Utc::now() - chrono::Duration::days(1)),
     )
     .to_string();
     let upper_bound = get_max_uuidv7(commit_interval.commit_timestamp).to_string();

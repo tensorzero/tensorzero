@@ -15,7 +15,7 @@ jobs:
     name: Upgrade TensorZero dependencies across all projects
     runs-on: ubuntu-latest
     # Only run if the PyPI publish workflow succeeded (or if manually triggered)
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
 
     permissions:
       contents: write

@@ -267,17 +267,17 @@ impl FunctionConfig {
         match &self {
             FunctionConfig::Chat(params) => {
                 validate_all_text_input(
-                    params.schemas.system.as_ref(),
-                    params.schemas.user.as_ref(),
-                    params.schemas.assistant.as_ref(),
+                    params.schemas.get_implicit_system_schema(),
+                    params.schemas.get_implicit_user_schema(),
+                    params.schemas.get_implicit_assistant_schema(),
                     input,
                 )?;
             }
             FunctionConfig::Json(params) => {
                 validate_all_text_input(
-                    params.schemas.system.as_ref(),
-                    params.schemas.user.as_ref(),
-                    params.schemas.assistant.as_ref(),
+                    params.schemas.get_implicit_system_schema(),
+                    params.schemas.get_implicit_user_schema(),
+                    params.schemas.get_implicit_assistant_schema(),
                     input,
                 )?;
             }
@@ -412,22 +412,22 @@ impl FunctionConfig {
 
     pub fn system_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
-            FunctionConfig::Chat(params) => params.schemas.system.as_ref(),
-            FunctionConfig::Json(params) => params.schemas.system.as_ref(),
+            FunctionConfig::Chat(params) => params.schemas.get_implicit_system_schema(),
+            FunctionConfig::Json(params) => params.schemas.get_implicit_system_schema(),
         }
     }
 
     pub fn user_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
-            FunctionConfig::Chat(params) => params.schemas.user.as_ref(),
-            FunctionConfig::Json(params) => params.schemas.user.as_ref(),
+            FunctionConfig::Chat(params) => params.schemas.get_implicit_user_schema(),
+            FunctionConfig::Json(params) => params.schemas.get_implicit_user_schema(),
         }
     }
 
     pub fn assistant_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
-            FunctionConfig::Chat(params) => params.schemas.assistant.as_ref(),
-            FunctionConfig::Json(params) => params.schemas.assistant.as_ref(),
+            FunctionConfig::Chat(params) => params.schemas.get_implicit_assistant_schema(),
+            FunctionConfig::Json(params) => params.schemas.get_implicit_assistant_schema(),
         }
     }
 
@@ -523,6 +523,7 @@ fn get_json_output_from_content_blocks(
 /// The validation is done based on the input's role and the function's schemas.
 /// We first validate the system message (if it exists)
 /// Next we validate all messages containing text blocks.
+/// When we add support for `{"type": "template"}` input blocks, we'll need to validate those two
 fn validate_all_text_input(
     system_schema: Option<&StaticJSONSchema>,
     user_schema: Option<&StaticJSONSchema>,
@@ -685,6 +686,7 @@ fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    use crate::config::ErrorContext;
     use crate::endpoints::inference::InferenceIds;
     use crate::inference::types::FinishReason;
     use crate::inference::types::InputMessage;
@@ -696,11 +698,13 @@ mod tests {
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolCall;
-    use crate::variant::chat_completion::ChatCompletionConfig;
+
+    use crate::variant::chat_completion::UninitializedChatCompletionConfig;
     use crate::variant::VariantConfig;
 
     use super::*;
-    use crate::config::path::TomlRelativePath;
+    use crate::config::path::ResolvedTomlPath;
+    use crate::config::UninitializedSchemas;
     use serde_json::json;
     use std::io::Write;
     use std::time::Duration;
@@ -723,7 +727,7 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+        StaticJSONSchema::from_path(ResolvedTomlPath::new_for_tests(
             temp_file.path().to_owned(),
             None,
         ))
@@ -815,10 +819,14 @@ mod tests {
         let system_value = system_schema.value.clone();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            schemas: SchemaData {
-                system: Some(system_schema),
-                ..Default::default()
-            },
+            schemas: SchemaData::load(
+                None,
+                None,
+                Some(system_schema),
+                UninitializedSchemas::default(),
+                "test",
+            )
+            .unwrap(),
             tools: vec![],
             ..Default::default()
         };
@@ -873,10 +881,14 @@ mod tests {
         let user_value = user_schema.value.clone();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            schemas: SchemaData {
-                user: Some(user_schema),
-                ..Default::default()
-            },
+            schemas: SchemaData::load(
+                Some(user_schema),
+                None,
+                None,
+                UninitializedSchemas::default(),
+                "test",
+            )
+            .unwrap(),
             tools: vec![],
             ..Default::default()
         };
@@ -933,10 +945,14 @@ mod tests {
         let assistant_value = assistant_schema.value.clone();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            schemas: SchemaData {
-                assistant: Some(assistant_schema),
-                ..Default::default()
-            },
+            schemas: SchemaData::load(
+                None,
+                Some(assistant_schema),
+                None,
+                UninitializedSchemas::default(),
+                "test",
+            )
+            .unwrap(),
             tools: vec![],
             ..Default::default()
         };
@@ -998,11 +1014,14 @@ mod tests {
         let system_value = system_schema.value.clone();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            schemas: SchemaData {
-                system: Some(system_schema),
-                user: Some(user_schema),
-                assistant: Some(assistant_schema),
-            },
+            schemas: SchemaData::load(
+                Some(user_schema),
+                Some(assistant_schema),
+                Some(system_schema),
+                UninitializedSchemas::default(),
+                "test",
+            )
+            .unwrap(),
             tools: vec![],
             ..Default::default()
         };
@@ -1074,11 +1093,14 @@ mod tests {
         let assistant_schema = create_test_schema();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            schemas: SchemaData {
-                system: Some(system_schema),
-                user: Some(user_schema),
-                assistant: Some(assistant_schema),
-            },
+            schemas: SchemaData::load(
+                Some(user_schema),
+                Some(assistant_schema),
+                Some(system_schema),
+                UninitializedSchemas::default(),
+                "test",
+            )
+            .unwrap(),
             tools: vec![],
             ..Default::default()
         };
@@ -1155,11 +1177,14 @@ mod tests {
         let assistant_schema = create_test_schema();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            schemas: SchemaData {
-                system: None,
-                user: Some(user_schema),
-                assistant: Some(assistant_schema),
-            },
+            schemas: SchemaData::load(
+                Some(user_schema),
+                Some(assistant_schema),
+                None,
+                UninitializedSchemas::default(),
+                "test",
+            )
+            .unwrap(),
             tools: vec![],
             ..Default::default()
         };
@@ -1276,10 +1301,14 @@ mod tests {
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
-            schemas: SchemaData {
-                system: Some(system_schema),
-                ..Default::default()
-            },
+            schemas: SchemaData::load(
+                None,
+                None,
+                Some(system_schema),
+                UninitializedSchemas::default(),
+                "test",
+            )
+            .unwrap(),
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
@@ -1340,10 +1369,14 @@ mod tests {
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
-            schemas: SchemaData {
-                user: Some(user_schema),
-                ..Default::default()
-            },
+            schemas: SchemaData::load(
+                Some(user_schema),
+                None,
+                None,
+                UninitializedSchemas::default(),
+                "test",
+            )
+            .unwrap(),
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
@@ -1405,10 +1438,14 @@ mod tests {
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
-            schemas: SchemaData {
-                assistant: Some(assistant_schema),
-                ..Default::default()
-            },
+            schemas: SchemaData::load(
+                None,
+                Some(assistant_schema),
+                None,
+                UninitializedSchemas::default(),
+                "test",
+            )
+            .unwrap(),
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
@@ -1474,11 +1511,14 @@ mod tests {
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
-            schemas: SchemaData {
-                system: Some(system_schema),
-                user: Some(user_schema),
-                assistant: Some(assistant_schema),
-            },
+            schemas: SchemaData::load(
+                Some(user_schema),
+                Some(assistant_schema),
+                Some(system_schema),
+                UninitializedSchemas::default(),
+                "test",
+            )
+            .unwrap(),
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
@@ -1551,11 +1591,15 @@ mod tests {
                     (
                         name.to_string(),
                         Arc::new(VariantInfo {
-                            inner: VariantConfig::ChatCompletion(ChatCompletionConfig {
-                                weight: Some(weight),
-                                model: "model-name".into(),
-                                ..Default::default()
-                            }),
+                            inner: VariantConfig::ChatCompletion(
+                                UninitializedChatCompletionConfig {
+                                    weight: Some(weight),
+                                    model: "model-name".into(),
+                                    ..Default::default()
+                                }
+                                .load(&SchemaData::default(), &ErrorContext::new_test())
+                                .unwrap(),
+                            ),
                             timeouts: Default::default(),
                         }),
                     )
@@ -1800,7 +1844,7 @@ mod tests {
                 assert_eq!(result.finish_reason, Some(FinishReason::Stop));
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         // Test with a correct content block
@@ -1853,7 +1897,7 @@ mod tests {
                 );
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         // Test with an incorrect JSON content block
@@ -1904,7 +1948,7 @@ mod tests {
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         // Test with a tool content block with bad output
@@ -1957,7 +2001,7 @@ mod tests {
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         // Test with a tool content block with good output
@@ -2015,7 +2059,7 @@ mod tests {
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::ContentFilter));
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         // Test with no content blocks
@@ -2062,7 +2106,7 @@ mod tests {
                 assert_eq!(result.finish_reason, model_response.finish_reason);
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
@@ -2132,7 +2176,7 @@ mod tests {
                 assert_eq!(result.output.raw, Some(r#"{"answer": "42"}"#.to_string()));
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         // Test with an incorrect JSON content block
@@ -2182,7 +2226,7 @@ mod tests {
                 );
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         // Test with a tool content block with bad output
@@ -2234,7 +2278,7 @@ mod tests {
                 assert_eq!(result.output.raw, Some("tool_call_arguments".to_string()));
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         // Test with a tool content block with good output
@@ -2285,7 +2329,7 @@ mod tests {
                 assert_eq!(result.output.raw, Some(r#"{"answer": "42"}"#.to_string()));
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
         // Test with an empty output schema
@@ -2343,7 +2387,7 @@ mod tests {
                 assert_eq!(result.model_inference_results, vec![model_response]);
                 assert_eq!(result.finish_reason, Some(FinishReason::Stop));
             }
-            _ => panic!("Expected a JSON inference result"),
+            InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
     }
 
