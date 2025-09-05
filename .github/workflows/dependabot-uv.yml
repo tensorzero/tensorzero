@@ -44,12 +44,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git fetch origin ${{ github.base_ref }} --depth=1
-          BASE=origin/${{ github.base_ref }}
-          HEAD=${{ github.event.pull_request.head.sha }}
-          DIRS=$(git diff --name-only "$BASE...$HEAD" \
+
+          BASE_SHA='${{ github.event.pull_request.base.sha }}'
+          HEAD_SHA='${{ github.event.pull_request.head.sha }}'
+
+          # Make sure both commits exist locally (shallow fetch of just those SHAs)
+          git fetch --no-tags --prune --depth=1 origin "$BASE_SHA" "$HEAD_SHA" || true
+
+          # Use two-dot (..): doesn't need a merge base
+          DIRS=$(git diff --name-only "$BASE_SHA..$HEAD_SHA" \
             | grep -E '(requirements.*\.txt|pyproject\.toml)$' \
             | xargs -r -n1 dirname | sort -u)
+
           echo "dirs=$DIRS" >> "$GITHUB_OUTPUT"
 
       - name: Re-lock and re-export dependencies from `pyproject.toml`
