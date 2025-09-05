@@ -6,7 +6,7 @@ on:
     paths:
       - "**/requirements*.txt"
       - "**/pyproject.toml"
-  # Temporary: allow testing from the PR itself before merging
+
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
@@ -26,7 +26,9 @@ jobs:
       (github.event_name == 'pull_request' &&
        github.event.pull_request.user.login == 'dependabot[bot]' &&
        github.event.pull_request.head.repo.full_name == github.repository)
+
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout PR head
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -79,7 +81,7 @@ jobs:
             echo "::group::$d"
             pushd "$d" >/dev/null
             uv lock --project=pyproject.toml --upgrade
-            uv export --project=pyproject.toml --frozen --output-file=requirements.txt
+            uv export --project=pyproject.toml --output-file=requirements.txt
             popd >/dev/null
             echo "::endgroup::"
           done <<< "$DIRS"
