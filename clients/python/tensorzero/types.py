@@ -33,6 +33,7 @@ class Template(ContentBlock):
     arguments: Any
     type: str = "template"
 
+
 @dataclass
 class Text(ContentBlock):
     text: Optional[str] = None
