@@ -58,7 +58,7 @@ type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 json_mode = "strict"
-retries = { num_retries = 4, max_delay_s = 10 }
+retries = { num_retries = 4 }
 temperature = 0
 
 [functions.extract_entities.variants.gpt4o_initial_prompt]
