@@ -141,6 +141,7 @@ export * from "./TGIProvider";
 export * from "./TagComparisonOperator";
 export * from "./TagNode";
 export * from "./TemplateFilesystemAccess";
+export * from "./TemplateInput";
 export * from "./TemplateWithSchema";
 export * from "./Text";
 export * from "./TextKind";

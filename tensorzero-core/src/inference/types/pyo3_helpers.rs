@@ -41,6 +41,18 @@ pub fn uuid_to_python(py: Python<'_>, uuid: Uuid) -> PyResult<Bound<'_, PyAny>> 
     Ok(uuid_obj.into_bound(py))
 }
 
+fn import_template_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
+    // NOTE: we are reusing the type as is used in our output.
+    // We may want to consider not doing this so that we don't have these tied together in our interface.
+    // However, they are currently nearly identical so this would be duplicated code for now and
+    // not intutitive for users
+    static TEMPLATE_CONTENT_BLOCK: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
+    TEMPLATE_CONTENT_BLOCK.get_or_try_init::<_, PyErr>(py, || {
+        let self_module = PyModule::import(py, "tensorzero.types")?;
+        Ok(self_module.getattr("Template")?.unbind())
+    })
+}
+
 fn import_text_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
     // NOTE: we are reusing the type as is used in our output.
     // We may want to consider not doing this so that we don't have these tied together in our interface.
@@ -212,6 +224,11 @@ pub fn stored_input_message_content_to_python(
                 }
             }
         }
+        StoredInputMessageContent::Template(template) => {
+            let template_content_block = import_template_content_block(py)?;
+            let arguments_py = serialize_to_dict(py, template.arguments)?;
+            template_content_block.call1(py, (template.name, arguments_py))
+        }
         StoredInputMessageContent::ToolCall(tool_call) => {
             let tool_call_content_block = import_tool_call_content_block(py)?;
             let parsed_arguments_py = JSON_LOADS
@@ -267,19 +284,15 @@ pub fn resolved_input_message_content_to_python(
     content: ResolvedInputMessageContent,
 ) -> PyResult<Py<PyAny>> {
     match content {
-        ResolvedInputMessageContent::Text { value } => {
+        ResolvedInputMessageContent::Text { text } => {
             let text_content_block = import_text_content_block(py)?;
-            match value {
-                Value::String(s) => {
-                    let kwargs = [(intern!(py, "text"), s)].into_py_dict(py)?;
-                    text_content_block.call(py, (), Some(&kwargs))
-                }
-                _ => {
-                    let value = serialize_to_dict(py, value)?;
-                    let kwargs = [(intern!(py, "arguments"), value)].into_py_dict(py)?;
-                    text_content_block.call(py, (), Some(&kwargs))
-                }
-            }
+            let kwargs = [(intern!(py, "text"), text)].into_py_dict(py)?;
+            text_content_block.call(py, (), Some(&kwargs))
+        }
+        ResolvedInputMessageContent::Template(template) => {
+            let template_content_block = import_template_content_block(py)?;
+            let arguments_py = serialize_to_dict(py, template.arguments)?;
+            template_content_block.call1(py, (template.name, arguments_py))
         }
         ResolvedInputMessageContent::ToolCall(tool_call) => {
             let tool_call_content_block = import_tool_call_content_block(py)?;

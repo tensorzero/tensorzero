@@ -3,7 +3,7 @@ use serde_json::Value;
 use serde_untagged::UntaggedEnumVisitor;
 use tensorzero_core::{
     error::Error,
-    inference::types::{File, InputMessageContent, Role, TextKind, Thought},
+    inference::types::{File, InputMessageContent, Role, TemplateInput, TextKind, Thought},
     tool::{ToolCallInput, ToolResult},
 };
 use tensorzero_derive::TensorZeroDeserialize;
@@ -38,6 +38,7 @@ pub struct ClientInputMessage {
 #[ts(export)]
 pub enum ClientInputMessageContent {
     Text(TextKind),
+    Template(TemplateInput),
     ToolCall(ToolCallInput),
     ToolResult(ToolResult),
     RawText {
@@ -63,6 +64,9 @@ impl TryFrom<ClientInputMessageContent> for InputMessageContent {
     fn try_from(this: ClientInputMessageContent) -> Result<Self, Error> {
         Ok(match this {
             ClientInputMessageContent::Text(text) => InputMessageContent::Text(text),
+            ClientInputMessageContent::Template(template) => {
+                InputMessageContent::Template(template)
+            }
             ClientInputMessageContent::ToolCall(tool_call) => {
                 InputMessageContent::ToolCall(tool_call)
             }
@@ -132,6 +136,7 @@ pub(super) fn test_client_to_message_content(
 ) -> InputMessageContent {
     match content {
         ClientInputMessageContent::Text(text) => InputMessageContent::Text(text),
+        ClientInputMessageContent::Template(template) => InputMessageContent::Template(template),
         ClientInputMessageContent::ToolCall(ToolCallInput {
             id,
             name,

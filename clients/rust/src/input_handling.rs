@@ -1,35 +1,28 @@
-use serde_json::Value;
-
-use crate::{ClientInput, ClientInputMessage, ClientInputMessageContent, TensorZeroError};
-use tensorzero_core::tool::{ToolCall, ToolCallInput};
-use tensorzero_core::{
-    error::ErrorDetails,
-    inference::types::{
-        File, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent, TextKind,
-    },
+use crate::{ClientInput, ClientInputMessage, ClientInputMessageContent};
+use tensorzero_core::inference::types::{
+    File, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent, TextKind,
 };
+use tensorzero_core::tool::{ToolCall, ToolCallInput};
 
 /// Convert a resolved input to a client input
-pub fn resolved_input_to_client_input(
-    resolved_input: ResolvedInput,
-) -> Result<ClientInput, TensorZeroError> {
+pub fn resolved_input_to_client_input(resolved_input: ResolvedInput) -> ClientInput {
     let ResolvedInput { system, messages } = resolved_input;
     let messages = messages
         .into_iter()
         .map(resolved_input_message_to_client_input_message)
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(ClientInput { system, messages })
+        .collect::<Vec<_>>();
+    ClientInput { system, messages }
 }
 
 fn resolved_input_message_to_client_input_message(
     resolved_input_message: ResolvedInputMessage,
-) -> Result<ClientInputMessage, TensorZeroError> {
+) -> ClientInputMessage {
     let ResolvedInputMessage { role, content } = resolved_input_message;
     let content = content
         .into_iter()
         .map(resolved_input_message_content_to_client_input_message_content)
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(ClientInputMessage { role, content })
+        .collect::<Vec<_>>();
+    ClientInputMessage { role, content }
 }
 
 fn convert_tool_call(tool_call: ToolCall) -> ToolCallInput {
@@ -44,48 +37,39 @@ fn convert_tool_call(tool_call: ToolCall) -> ToolCallInput {
 
 fn resolved_input_message_content_to_client_input_message_content(
     resolved_input_message_content: ResolvedInputMessageContent,
-) -> Result<ClientInputMessageContent, TensorZeroError> {
+) -> ClientInputMessageContent {
     match resolved_input_message_content {
-        ResolvedInputMessageContent::Text { value } => match value {
-            Value::String(s) => Ok(ClientInputMessageContent::Text(TextKind::Text { text: s })),
-            Value::Object(o) => Ok(ClientInputMessageContent::Text(TextKind::Arguments {
-                arguments: o,
-            })),
-            _ => Err(TensorZeroError::Other {
-                source: tensorzero_core::error::Error::new(ErrorDetails::Serialization {
-                    message: "Text types must be a string or an object".to_string(),
-                })
-                .into(),
-            }),
-        },
-        ResolvedInputMessageContent::ToolCall(tool_call) => Ok(
-            ClientInputMessageContent::ToolCall(convert_tool_call(tool_call)),
-        ),
+        ResolvedInputMessageContent::Text { text } => {
+            ClientInputMessageContent::Text(TextKind::Text { text })
+        }
+        ResolvedInputMessageContent::Template(template) => {
+            ClientInputMessageContent::Template(template)
+        }
+        ResolvedInputMessageContent::ToolCall(tool_call) => {
+            ClientInputMessageContent::ToolCall(convert_tool_call(tool_call))
+        }
         ResolvedInputMessageContent::ToolResult(tool_result) => {
-            Ok(ClientInputMessageContent::ToolResult(tool_result))
+            ClientInputMessageContent::ToolResult(tool_result)
         }
         ResolvedInputMessageContent::RawText { value } => {
-            Ok(ClientInputMessageContent::RawText { value })
+            ClientInputMessageContent::RawText { value }
         }
         ResolvedInputMessageContent::Thought(thought) => {
-            Ok(ClientInputMessageContent::Thought(thought))
+            ClientInputMessageContent::Thought(thought)
         }
         ResolvedInputMessageContent::File(file) => {
             let mime_type = file.file.mime_type;
             let data = file.file.data;
 
-            Ok(ClientInputMessageContent::File(File::Base64 {
-                mime_type,
-                data,
-            }))
+            ClientInputMessageContent::File(File::Base64 { mime_type, data })
         }
         ResolvedInputMessageContent::Unknown {
             data,
             model_provider_name,
-        } => Ok(ClientInputMessageContent::Unknown {
+        } => ClientInputMessageContent::Unknown {
             data,
             model_provider_name,
-        }),
+        },
     }
 }
 
@@ -155,8 +139,7 @@ mod tests {
 
         // Call the function under test
         let result =
-            resolved_input_message_content_to_client_input_message_content(resolved_content)
-                .unwrap();
+            resolved_input_message_content_to_client_input_message_content(resolved_content);
 
         // Verify the result
         match result {

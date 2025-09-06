@@ -1,5 +1,5 @@
 use minijinja::{Environment, UndefinedBehavior};
-use serde_json::Value;
+use serde::Serialize;
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
@@ -69,7 +69,11 @@ impl TemplateConfig<'_> {
     }
 
     // Templates a message with a MiniJinja template.
-    pub fn template_message(&self, template_name: &str, context: &Value) -> Result<String, Error> {
+    pub fn template_message<S: Serialize>(
+        &self,
+        template_name: &str,
+        context: &S,
+    ) -> Result<String, Error> {
         let template = self.env.get_template(template_name).map_err(|_| {
             Error::new(ErrorDetails::MiniJinjaTemplateMissing {
                 template_name: template_name.to_string(),
