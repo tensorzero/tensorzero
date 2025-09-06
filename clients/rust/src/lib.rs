@@ -9,17 +9,20 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
 use tensorzero_core::config::ConfigFileGlob;
+pub use tensorzero_core::db::DatabaseConnection;
+use tensorzero_core::db::HealthCheckable;
+pub use tensorzero_core::db::{ModelUsageTimePoint, TimeWindow};
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 use tensorzero_core::endpoints::stored_inference::render_samples;
+pub use tensorzero_core::gateway_util::setup_clickhouse_without_config;
 use tensorzero_core::inference::types::stored_input::StoragePathResolver;
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
     config::Config,
-    db::DatabaseConnection,
     endpoints::{
         datasets::InsertDatapointParams,
         dynamic_evaluation_run::{
@@ -70,6 +73,9 @@ pub use tensorzero_core::inference::types::{
     ContentBlockChunk, Input, InputMessage, InputMessageContent, Role,
 };
 pub use tensorzero_core::tool::{DynamicToolParams, Tool};
+
+// Export quantile array from migration_0035
+pub use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0037::QUANTILES;
 
 enum ClientMode {
     HTTPGateway(HTTPGateway),

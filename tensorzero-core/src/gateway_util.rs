@@ -148,6 +148,12 @@ impl GatewayHandle {
     }
 }
 
+pub async fn setup_clickhouse_without_config(
+    clickhouse_url: String,
+) -> Result<ClickHouseConnectionInfo, Error> {
+    setup_clickhouse(&Config::default(), Some(clickhouse_url), true).await
+}
+
 pub async fn setup_clickhouse(
     config: &Config,
     clickhouse_url: Option<String>,

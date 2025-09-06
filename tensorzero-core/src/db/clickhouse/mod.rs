@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use enum_map::Enum;
 use migration_manager::migrations::check_table_exists;
 use reqwest::multipart::Form;
@@ -18,6 +19,7 @@ use url::Url;
 mod batching;
 pub mod migration_manager;
 pub mod query_builder;
+mod select_queries;
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod test_helpers;
 
@@ -31,7 +33,7 @@ use crate::stored_inference::StoredInference;
 use query_builder::generate_list_inferences_sql;
 use query_builder::ListInferencesParams;
 
-use super::DatabaseConnection;
+use super::HealthCheckable;
 
 #[derive(Debug, Clone)]
 pub enum ClickHouseConnectionInfo {
@@ -757,7 +759,8 @@ impl ClickHouseConnectionInfo {
     }
 }
 
-impl DatabaseConnection for ClickHouseConnectionInfo {
+#[async_trait]
+impl HealthCheckable for ClickHouseConnectionInfo {
     async fn health(&self) -> Result<(), Error> {
         match self {
             Self::Disabled => Ok(()),
