@@ -1,0 +1,3 @@
+[gateway]
+bind_address = "0.0.0.0:8001"
+base_path = "/v1"

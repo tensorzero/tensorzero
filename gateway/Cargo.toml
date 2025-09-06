@@ -30,7 +30,17 @@ e2e_tests = ["tensorzero-core/e2e_tests"]
 default = []
 
 [dev-dependencies]
-reqwest.workspace = true
+reqwest  = { workspace = true, features = ["json", "blocking"] }
 tempfile = "3.21.0"
-tensorzero = { path = "../clients/rust" }
+tensorzero = { path = "../clients/rust"}
 tracing-test = "0.2"
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+jsonschema = { workspace = true }
+tokio = { workspace = true, features = ["macros"] }
+
+[build-dependencies]
+reqwest     = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde_json  = "1"
+serde_yaml  = "0.9"
+
