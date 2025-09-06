@@ -2,7 +2,12 @@
 name = "example"
 version = "0.0.0"
 requires-python = ">=3.10,<3.14"
-dependencies = ["crewai[tools]>=0.126.0,<1.0.0"]
+dependencies = [
+    "crewai[tools]>=0.126.0,<1.0.0",
+    "h2>=4.3.0",
+    "langchain-community>=0.3.27",
+    "uv>=0.8.6",
+]
 
 [project.scripts]
 example = "example.main:run"
