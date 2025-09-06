@@ -1,0 +1,101 @@
+name: Reconcile Dependabot with uv
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "**/requirements*.txt"
+      - "**/pyproject.toml"
+
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "**/requirements*.txt"
+      - "**/pyproject.toml"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  reconcile:
+    if: >
+      (github.event_name == 'pull_request_target' &&
+       github.actor == 'dependabot[bot]' &&
+       github.repository == 'tensorzero/tensorzero') ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.user.login == 'dependabot[bot]' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 2
+
+      - name: Install uv 0.6.17
+        run: |
+          curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          uv --version
+
+      - name: Find Python projects with updated dependencies
+        id: find_dirs
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_SHA='${{ github.event.pull_request.base.sha }}'
+          HEAD_SHA='${{ github.event.pull_request.head.sha }}'
+          # Fetch just the two commits; avoids needing a merge-base
+          git fetch --no-tags --prune --depth=1 origin "$BASE_SHA" "$HEAD_SHA" || true
+
+          DIRS=$(
+            git diff --name-only "$BASE_SHA..$HEAD_SHA" \
+              | awk '/(requirements.*\.txt|pyproject\.toml)$/' \
+              | xargs -r -n1 dirname | sort -u
+          )
+
+          if [ -z "${DIRS}" ]; then
+            echo "dirs=" >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "dirs<<__DIRS__"
+              echo "${DIRS}"
+              echo "__DIRS__"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Re-lock and re-export from pyproject.toml
+        if: steps.find_dirs.outputs.dirs != ''
+        env:
+          DIRS: ${{ steps.find_dirs.outputs.dirs }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r d; do
+            [ -z "$d" ] && continue
+            echo "::group::$d"
+            pushd "$d" >/dev/null
+            uv lock --project=pyproject.toml --upgrade
+            uv export --project=pyproject.toml --output-file=requirements.txt
+            popd >/dev/null
+            echo "::endgroup::"
+          done <<< "$DIRS"
+
+      - name: Commit and push updates
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "chore(deps): reconcile requirements.txt with uv.lock (uv is source of truth)"
+            git push
+          else
+            echo "No changes."
+          fi
