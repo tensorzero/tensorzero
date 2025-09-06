@@ -319,7 +319,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
         assert!(result.get("response_time_ms").is_some());
         assert!(result.get("ttft_ms").is_some());
 
-        // For the judge model we want to check that the raw_request is corredt
+        // For the judge model we want to check that the `raw_request` is correct
         if model_name == "gemini-2.0-flash-001" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
@@ -722,7 +722,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
                 }
             }
         }
-        // For the judge model we want to check that the raw_request is corredt
+        // For the judge model we want to check that the `raw_request` is correct
         if model_name == "gemini-2.0-flash-001" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
@@ -1003,7 +1003,7 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
                 }
             }
         }
-        // For the judge model we want to check that the raw_request is corredt
+        // For the judge model we want to check that the `raw_request` is correct
         if model_name == "claude-3-haiku-20240307-anthropic" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
@@ -1150,7 +1150,7 @@ async fn e2e_test_best_of_n_judge_extra_body() {
         assert!(result.get("response_time_ms").is_some());
         assert!(result.get("ttft_ms").is_some());
 
-        // For the judge model we want to check that the raw_request is corredt
+        // For the judge model we want to check that the `raw_request` is correct
         if model_name == "gemini-2.0-flash-001" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();

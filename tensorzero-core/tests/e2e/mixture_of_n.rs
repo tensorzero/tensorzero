@@ -420,7 +420,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
         assert!(result.get("response_time_ms").is_some());
         assert!(result.get("ttft_ms").is_some());
 
-        // For the judge model we want to check that the raw_request is corredt
+        // For the judge model we want to check that the `raw_request` is correct
         if model_name == "gpt-4o-mini-2024-07-18" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
@@ -677,7 +677,7 @@ async fn e2e_test_mixture_of_n_json_real_judge() {
         assert!(result.get("output_tokens").is_some());
         assert!(result.get("response_time_ms").is_some());
         assert!(result.get("ttft_ms").is_some());
-        // For the judge model we want to check that the raw_request is corredt
+        // For the judge model we want to check that the `raw_request` is correct
         if model_name == "gpt-4o-mini-2024-07-18" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
