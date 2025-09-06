@@ -1435,6 +1435,7 @@ dependencies = [
  "clap",
  "futures",
  "indicatif",
+ "regex",
  "serde",
  "serde_json",
  "tensorzero",

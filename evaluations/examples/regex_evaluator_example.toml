@@ -1,0 +1,55 @@
+# Example configuration for using the regex evaluator
+# This shows how to add a regex evaluator to an evaluation
+
+[evaluations.my_evaluation]
+type = "static"
+function_name = "my_function"
+dataset_name = "my_dataset"
+
+# Example 1: Simple regex pattern to check if response contains a number
+[evaluations.my_evaluation.evaluators.contains_number]
+type = "regex"
+regex = "\\d+"
+cutoff = 0.8
+
+# Example 2: Check if response contains a specific word pattern
+[evaluations.my_evaluation.evaluators.contains_hello]
+type = "regex"
+regex = "\\bhello\\b"
+cutoff = 0.9
+
+# Example 3: Check if response matches a specific format (e.g., JSON with "result" field)
+[evaluations.my_evaluation.evaluators.has_result_field]
+type = "regex"
+regex = "\"result\"\\s*:"
+cutoff = 0.7
+
+# Example 4: Check if response contains an email address
+[evaluations.my_evaluation.evaluators.contains_email]
+type = "regex"
+regex = "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"
+cutoff = 0.8
+
+# Example 5: Check if response contains a URL
+[evaluations.my_evaluation.evaluators.contains_url]
+type = "regex"
+regex = "https?://[^\\s]+"
+cutoff = 0.8
+
+# Example 6: Check if response starts with a capital letter
+[evaluations.my_evaluation.evaluators.starts_with_capital]
+type = "regex"
+regex = "^[A-Z]"
+cutoff = 0.9
+
+# Example 7: Check if response contains multiple sentences
+[evaluations.my_evaluation.evaluators.multiple_sentences]
+type = "regex"
+regex = "[.!?]\\s+[A-Z]"
+cutoff = 0.7
+
+# Example 8: Check if response contains a date in YYYY-MM-DD format
+[evaluations.my_evaluation.evaluators.contains_date]
+type = "regex"
+regex = "\\d{4}-\\d{2}-\\d{2}"
+cutoff = 0.8
