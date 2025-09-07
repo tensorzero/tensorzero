@@ -730,6 +730,7 @@ model_name = "reasoner"
 
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]
+retries = { num_retries = 5, max_delay_s = 0.1}
 
 [embedding_models.text-embedding-3-small.providers.openai]
 type = "openai"
@@ -737,6 +738,7 @@ model_name = "text-embedding-3-small"
 
 [embedding_models.azure-text-embedding-3-small]
 routing = ["azure"]
+retries = { num_retries = 5, max_delay_s = 0.1}
 
 [embedding_models.azure-text-embedding-3-small.providers.azure]
 type = "azure"
@@ -745,6 +747,7 @@ deployment_id = "text-embedding-3-small"
 
 [embedding_models.voyage_3_5_lite_256]
 routing = ["voyage"]
+retries = { num_retries = 5, max_delay_s = 0.1}
 
 [embedding_models.voyage_3_5_lite_256.providers.voyage]
 type = "openai"
@@ -759,6 +762,7 @@ extra_body = [
 
 [embedding_models.fallback]
 routing = ["slow", "openai"]
+retries = { num_retries = 5, max_delay_s = 0.1}
 
 [embedding_models.fallback.providers.slow]
 type = "dummy"
@@ -773,6 +777,7 @@ model_name = "text-embedding-3-small"
 
 [embedding_models.timeout]
 routing = ["slow"]
+retries = { num_retries = 5, max_delay_s = 0.1}
 
 [embedding_models.timeout.timeouts]
 non_streaming = { total_ms = 1000 }
@@ -783,6 +788,7 @@ model_name = "slow"
 
 [embedding_models.dummy-embedding-model]
 routing = ["dummy"]
+retries = { num_retries = 5, max_delay_s = 0.1}
 
 [embedding_models.dummy-embedding-model.providers.dummy]
 type = "dummy"
