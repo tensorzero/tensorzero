@@ -11,6 +11,8 @@ use crate::{
     endpoints::inference::InferenceClients,
     error::{Error, ErrorDetails},
     inference::types::Usage,
+    embeddings::EmbeddedRetryConfig,
+    //variant::{embeddings::RetryConfig},
 };
 
 use super::inference::InferenceCredentials;
@@ -75,7 +77,7 @@ pub async fn embeddings(
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)
         .await?;
-    let usage = response.usage_considering_cached();
+    let usage = response.usage;
     Ok(EmbeddingResponse {
         embeddings: response.embeddings,
         usage,
@@ -117,6 +119,7 @@ mod tests {
             routing: vec!["dummy".to_string().into()],
             providers: HashMap::from([("dummy".to_string().into(), provider_info)]),
             timeouts: TimeoutsConfig::default(),
+            retries: EmbeddedRetryConfig { num_retries: 5, max_delay_s: 0.1 },
         };
 
         // Create a minimal config with just the embedding model

@@ -30,6 +30,7 @@ use serde::{Deserialize, Serialize};
 use tokio::time::error::Elapsed;
 use tracing::instrument;
 use uuid::Uuid;
+use ts_rs::TS;
 
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
@@ -63,7 +64,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
             routing: vec![provider_type.to_string().into()],
             providers: HashMap::from([(provider_type.to_string().into(), provider_info)]),
             timeouts: TimeoutsConfig::default(),
-            retries: RetryConfig { num_retries: 3, max_delay_s: 10},
+            retries: EmbeddedRetryConfig { num_retries: 5, max_delay_s: 0.1},
         })
     }
 
@@ -75,9 +76,12 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct RetryConfig {
+//#[ts(export)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct EmbeddedRetryConfig {
     pub num_retries: u32,
-    pub max_delay_s: u32,
+    pub max_delay_s: f64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -87,7 +91,7 @@ pub struct UninitializedEmbeddingModelConfig {
     pub providers: HashMap<Arc<str>, UninitializedEmbeddingProviderConfig>,
     #[serde(default)]
     pub timeouts: TimeoutsConfig,
-    pub retries: RetryConfig,
+    pub retries: EmbeddedRetryConfig,
 }
 
 impl UninitializedEmbeddingModelConfig {
@@ -106,19 +110,20 @@ impl UninitializedEmbeddingModelConfig {
             routing: self.routing,
             providers,
             timeouts: self.timeouts,
-            retries: self.retries,
+            retries: EmbeddedRetryConfig { num_retries: 5, max_delay_s: 0.1 },
         })
     }
 }
 
 #[derive(Debug, Serialize)]
+//#[ts(export)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct EmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
     pub providers: HashMap<Arc<str>, EmbeddingProviderInfo>,
     pub timeouts: TimeoutsConfig,
-    pub retries: RetryConfig, 
+    pub retries: EmbeddedRetryConfig, 
 }
 
 impl EmbeddingModelConfig {
@@ -660,6 +665,7 @@ mod tests {
                 ("good".to_string().into(), good_provider_info),
             ]),
             timeouts: TimeoutsConfig::default(),
+            retries: EmbeddedRetryConfig { num_retries: 5, max_delay_s: 0.1 },
         };
         let request = EmbeddingRequest {
             input: "Hello, world!".to_string().into(),

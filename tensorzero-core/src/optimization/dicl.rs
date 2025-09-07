@@ -20,6 +20,7 @@ use crate::{
     },
     stored_inference::RenderedSample,
     variant::{dicl::UninitializedDiclConfig, RetryConfig},
+    embeddings::EmbeddedRetryConfig,
 };
 use futures::future::try_join_all;
 use std::sync::Arc;
@@ -781,6 +782,7 @@ mod tests {
                 routing: vec![Arc::from("dummy")],
                 providers,
                 timeouts: TimeoutsConfig::default(),
+                retries: EmbeddedRetryConfig { num_retries: 5, max_delay_s: 0.1 },
             }
         }
         #[cfg(not(any(test, feature = "e2e_tests")))]
