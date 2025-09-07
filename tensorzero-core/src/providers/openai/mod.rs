@@ -1205,69 +1205,86 @@ pub(super) fn prepare_openai_tools<'a>(
     }
 }
 
-/// This function is complicated only by the fact that OpenAI and Azure require
-/// different instructions depending on the json mode and the content of the messages.
+/// Prepares a system or developer message for OpenAI APIs with JSON mode handling.
 ///
-/// If ModelInferenceRequestJsonMode::On and the system message or instructions does not contain "JSON"
-/// the request will return an error.
-/// So, we need to format the instructions to include "Respond using JSON." if it doesn't already.
+/// When JSON mode is `On`, OpenAI/Azure require "JSON" to appear in either the system/developer
+/// message or conversation. This function adds "Respond using JSON." when needed.
+///
+/// # System vs Developer Role
+/// OpenAI is transitioning from "system" to "developer" role. Both work on most endpoints,
+/// but newer features (e.g., reinforcement fine-tuning) only accept "developer".
+/// This function preserves the specified role type for backward compatibility.
+///
+/// # Returns
+/// * `Some(message)` - When content exists or JSON mode is On
+/// * `None` - When no content and JSON mode is Off/Strict/None
+///
+/// # Behavior
+/// - Checks for existing "JSON" mentions before adding instructions
+/// - Only adds "Respond using JSON." prefix when necessary
+/// - Preserves the original message role type
+///
+/// # Example
+/// ```rust,ignore
+/// let system_msg = prepare_system_or_developer_message(
+///     Some(SystemOrDeveloper::System("You are a helpful assistant")),
+///     Some(&ModelInferenceRequestJsonMode::On),
+///     &messages
+/// );
+/// // Returns: System message with "Respond using JSON.\n\nYou are a helpful assistant"
+/// ```
 pub(super) fn prepare_system_or_developer_message<'a>(
     system_or_developer: Option<SystemOrDeveloper<'a>>,
     json_mode: Option<&'_ ModelInferenceRequestJsonMode>,
     messages: &[OpenAIRequestMessage<'a>],
 ) -> Option<OpenAIRequestMessage<'a>> {
-    match system_or_developer {
-        Some(SystemOrDeveloper::System(content)) => Some(format_system_or_developer_content(
-            content, json_mode, messages, true,
-        )),
-        Some(SystemOrDeveloper::Developer(content)) => Some(format_system_or_developer_content(
-            content, json_mode, messages, false,
-        )),
-        None => {
-            // Handle JSON mode when no system/developer message is provided
-            match json_mode {
-                Some(ModelInferenceRequestJsonMode::On) => {
-                    Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-                        content: Cow::Owned("Respond using JSON.".to_string()),
-                    }))
-                }
-                _ => None,
-            }
-        }
-    }
-}
+    let (content, is_system) = match system_or_developer {
+        Some(SystemOrDeveloper::System(content)) => (Some(content), true),
+        Some(SystemOrDeveloper::Developer(content)) => (Some(content), false),
+        None => (None, true), // Default to system message for JSON mode fallback
+    };
 
-fn format_system_or_developer_content<'a>(
-    content: &'a str,
-    json_mode: Option<&'_ ModelInferenceRequestJsonMode>,
-    messages: &[OpenAIRequestMessage<'a>],
-    is_system: bool,
-) -> OpenAIRequestMessage<'a> {
-    let formatted_content = match json_mode {
-        Some(ModelInferenceRequestJsonMode::On) => {
-            if messages
-                .iter()
-                .any(|msg| msg.content_contains_case_insensitive("json"))
-                || content.to_lowercase().contains("json")
-            {
-                Cow::Borrowed(content)
-            } else {
+    let final_content = match (content, json_mode) {
+        // No content and no JSON mode - return None
+        (
+            None,
+            None | Some(ModelInferenceRequestJsonMode::Off | ModelInferenceRequestJsonMode::Strict),
+        ) => return None,
+
+        // No content but JSON mode is on - create JSON instruction
+        (None, Some(ModelInferenceRequestJsonMode::On)) => {
+            Cow::Owned("Respond using JSON.".to_string())
+        }
+
+        // Has content and JSON mode is on - conditionally add JSON instruction
+        (Some(content), Some(ModelInferenceRequestJsonMode::On)) => {
+            if should_add_json_instruction(content, messages) {
                 Cow::Owned(format!("Respond using JSON.\n\n{content}"))
+            } else {
+                Cow::Borrowed(content)
             }
         }
-        // If JSON mode is either off or strict, we don't need to do anything special
-        _ => Cow::Borrowed(content),
+
+        // Has content, no JSON mode or JSON mode off/strict - use as-is
+        (Some(content), _) => Cow::Borrowed(content),
     };
 
     let system_msg = OpenAISystemRequestMessage {
-        content: formatted_content,
+        content: final_content,
     };
 
-    if is_system {
+    Some(if is_system {
         OpenAIRequestMessage::System(system_msg)
     } else {
         OpenAIRequestMessage::Developer(system_msg)
-    }
+    })
+}
+
+fn should_add_json_instruction(content: &str, messages: &[OpenAIRequestMessage<'_>]) -> bool {
+    !content.to_lowercase().contains("json")
+        && !messages
+            .iter()
+            .any(|msg| msg.content_contains_case_insensitive("json"))
 }
 
 pub(super) fn tensorzero_to_openai_messages<'a>(
