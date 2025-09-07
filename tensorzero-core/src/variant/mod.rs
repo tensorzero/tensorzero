@@ -754,17 +754,27 @@ async fn infer_model_request_stream<'request>(
 #[derive(Debug, Deserialize, Copy, Clone, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct RetryConfig {
+    #[serde(default = "default_num_retries")]
     pub num_retries: usize,
+    #[serde(default = "default_max_delay_s")]
     pub max_delay_s: f32,
 }
 
 impl Default for RetryConfig {
     fn default() -> Self {
         RetryConfig {
-            num_retries: 0,
-            max_delay_s: 10.0,
+            num_retries: default_num_retries(),
+            max_delay_s: default_max_delay_s(),
         }
     }
+}
+
+fn default_num_retries() -> usize {
+    0
+}
+
+fn default_max_delay_s() -> f32 {
+    10.0
 }
 
 impl RetryConfig {
