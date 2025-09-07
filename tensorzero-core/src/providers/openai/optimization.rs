@@ -109,39 +109,63 @@ pub struct ReinforcementHyperparameters {
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAIGrader {
+    /// Binary string comparison grader (returns 1 for match, 0 for no match)
     StringCheck {
         name: String,
+        /// Operation: eq (exact match), ne (not equal), like (contains, case-sensitive), ilike (contains, case-insensitive)
         operation: OpenAIStringCheckOp,
+        /// Template to extract value from model output
         input: String,
+        /// Expected value to compare against
         reference: String,
     },
+    /// Lexical similarity grader using standard NLP metrics
     TextSimilarity {
         name: String,
+        /// Metric: bleu, fuzzy_match, gleu, meteor, rouge_1-5, rouge_l
         evaluation_metric: OpenAISimilarityMetric,
+        /// Template to extract text from model output
         input: String,
+        /// Reference text for similarity comparison
         reference: String,
     },
+    /// LLM-based scoring for semantic evaluation
     ScoreModel {
         name: String,
+        /// Model for scoring (e.g., "gpt-4o", "o3-mini")
         model: String,
-        input: Vec<OpenAIModelGraderInput>, // system and user template formatted as system and user messages
+        /// System/user messages defining scoring rubric
+        input: Vec<OpenAIModelGraderInput>,
+        /// Score range for normalization (e.g., [0.0, 1.0])
         range: Option<[f64; 2]>,
         // sampling_params: Option<Value>, TODO: add this back in
     },
+    /// LLM-based classification into predefined categories
     LabelModel {
         name: String,
+        /// Model for classification
         model: String,
+        /// All possible output labels
         labels: Vec<String>,
-        passing_labels: Vec<String>,        // Subset of labels
-        input: Vec<OpenAIModelGraderInput>, // Templates for constructing the input
+        /// Labels considered successful/passing
+        passing_labels: Vec<String>,
+        /// Messages defining classification criteria
+        input: Vec<OpenAIModelGraderInput>,
     },
+    /// Custom Python function for domain-specific evaluation
     Python {
         name: String,
-        source: String,            // The source code of the python script.
-        image_tag: Option<String>, // Docker image for isolation
+        /// Python code implementing custom scoring logic
+        source: String,
+        /// Optional Docker image for sandboxed execution
+        image_tag: Option<String>,
     },
+    /// Combines multiple graders with mathematical expressions
     Multi {
-        calculate_output: String, // Expression to combine grader outputs (e.g. "0.5 * grader_1_key + 0.5 * grader_2_key")
+        /// Math expression using grader names (e.g., "0.8 * accuracy + 0.2 * fluency")
+        /// Supports: +, -, *, /, ^, min, max, abs, floor, ceil, exp, sqrt, log
+        calculate_output: String,
+        /// Named graders to combine
         graders: HashMap<String, Box<OpenAIGrader>>,
         name: String,
     },
