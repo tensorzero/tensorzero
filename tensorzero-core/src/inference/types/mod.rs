@@ -1612,7 +1612,7 @@ pub struct CollectChunksArgs<'a, 'b> {
     /// We may sometimes construct a fake stream from a non-streaming response
     /// (e.g. in `mixture_of_n` if we have a successful non-streaming candidate, but
     /// a streaming fuser request fails).
-    /// In this case, we want to store the original 'raw_response', instead of building
+    /// In this case, we want to store the original `raw_response`, instead of building
     /// it up from the chunks.
     pub raw_response: Option<String>,
     pub inference_params: InferenceParams,

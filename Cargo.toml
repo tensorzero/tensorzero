@@ -72,6 +72,8 @@ unsafe_code = "forbid"
 [workspace.lints.clippy]
 allow_attributes = "deny"
 dbg_macro = "deny"
+# NB: Slowly making progress towards:
+# doc_markdown = "deny"
 expect_used = "deny"
 explicit_iter_loop = "deny"
 if_not_else = "deny"
