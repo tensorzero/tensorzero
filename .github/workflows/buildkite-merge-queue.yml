@@ -8,7 +8,7 @@ on:
 jobs:
   merge-queue-tests:
     runs-on: ubuntu-latest
-    if: github.repository == 'tensorzero/tensorzero' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - name: Trigger a Buildkite Build on Push using v2.0.0
         uses: buildkite/trigger-pipeline-action@v2.0.0
