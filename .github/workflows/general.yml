@@ -411,7 +411,8 @@ jobs:
         exclude:
           # Use 25.7-alpine instead of latest for replicated tests in merge group
           - replicated: true
-            clickhouse_version: {"tag":"latest","prefix":"","allow_failure":false}
+            clickhouse_version:
+              { "tag": "latest", "prefix": "", "allow_failure": false }
           # Add 25.7-alpine for replicated tests in merge group
         include: ${{ github.event_name == 'merge_group' && fromJSON('[{"clickhouse_version":{"tag":"25.7-alpine","prefix":"25.7","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
 
@@ -462,11 +463,11 @@ jobs:
 
       - name: Launch non-replicated ClickHouse container for E2E tests
         if: matrix.replicated == false
-        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up clickhouse --wait
+        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
 
       - name: Launch replicated ClickHouse container for E2E tests
         if: matrix.replicated == true
-        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml up clickhouse-01 clickhouse-02 clickhouse-03 --wait
+        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml up --wait
 
       # Make an HTTP request to ClickHouse and check that the version matches '${{ matrix.clickhouse_version }}'
       - name: Check ClickHouse version
