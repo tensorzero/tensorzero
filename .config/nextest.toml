@@ -64,6 +64,8 @@ e2e_aws_sagemaker_tgi = { max-threads = 1 }
 # Our Sagemaker instance seems to be able to handle 2 concurrent requests
 e2e_aws_sagemaker_openai = { max-threads = 2 }
 e2e_groq = { max-threads = 1 }
+# Run ClickHouse migration tests serially to avoid conflicts
+clickhouse_migration = { max-threads = 1 }
 
 # Require that nothing else runs at the same time as a Jaeger test,
 # so that we can find our Jaeger traces (without other tests
@@ -89,6 +91,10 @@ filter = 'binary(e2e) and test(providers::groq::)'
 test-group = 'e2e_groq'
 # We have a low rate limit on Groq, so we often need to retry several times
 retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max-delay = "120s" }
+
+[[profile.default.overrides]]
+filter = 'test(test_clickhouse_migration_manager)'
+test-group = 'clickhouse_migration'
 
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::vllm::)'
