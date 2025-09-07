@@ -316,13 +316,14 @@ impl DiclConfig {
         function: &FunctionConfig,
     ) -> Result<(Vec<Example>, EmbeddingResponseWithMetadata), Error> {
         // Serialize the input so that it can be embedded
-        let serialized_input = serde_json::to_string(&input).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error in serializing Input in dynamic in-context learning variant: {e}"
-                ),
-            })
-        })?;
+        let serialized_input =
+            serde_json::to_string(&input.clone().into_stored_input()).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error in serializing Input in dynamic in-context learning variant: {e}"
+                    ),
+                })
+            })?;
 
         let embedding_model = embedding_models
             .get(&self.embedding_model)
@@ -459,7 +460,7 @@ impl DiclConfig {
     }
 
     fn prepare_input_message(input: &ResolvedInput) -> Result<RequestMessage, Error> {
-        let content = vec![serde_json::to_string(&input)
+        let content = vec![serde_json::to_string(&input.clone().into_stored_input())
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
@@ -572,6 +573,9 @@ fn parse_raw_examples(
 ) -> Result<Vec<Example>, Error> {
     let mut examples = Vec::new();
     for raw_example in raw_examples {
+        if raw_example.output.is_empty() {
+            return Err(ErrorDetails::DiclMissingOutput.into());
+        }
         // Parse the `input` string into `StoredInput`
         let input: StoredInput = serde_json::from_str(&raw_example.input).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -805,7 +809,8 @@ mod tests {
         assert_eq!(request_message.role, Role::User);
 
         // The content should contain the serialized Input as a Text ContentBlock
-        let expected_serialized_input = serde_json::to_string(&input_data).unwrap();
+        let expected_serialized_input =
+            serde_json::to_string(&input_data.clone().into_stored_input()).unwrap();
         let expected_content = vec![ContentBlock::Text(Text {
             text: expected_serialized_input.clone(),
         })];
@@ -872,6 +877,43 @@ mod tests {
         assert!(
             err.contains("images are not supported in dynamic in-context learning"),
             "Unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_dicl_missing_output_error() {
+        // Create a raw example with missing output
+        let raw_examples = vec![RawExample {
+            input: serde_json::to_string(&StoredInput {
+                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                messages: vec![StoredInputMessage {
+                    role: Role::User,
+                    content: vec![StoredInputMessageContent::Text {
+                        value: "What is the boiling point of water?".into(),
+                    }],
+                }],
+            })
+            .unwrap(),
+            output: String::new(),
+        }];
+
+        let function = FunctionConfig::Chat(FunctionConfigChat {
+            ..Default::default()
+        });
+
+        // Parse the raw examples and expect DiclMissingOutput error
+        let result = parse_raw_examples(raw_examples, &function);
+
+        assert!(
+            result.is_err(),
+            "Expected DiclMissingOutput error but got success"
+        );
+
+        let error = result.unwrap_err();
+        let error_string = error.to_string();
+        assert!(
+            error_string.contains("DICL example missing output"),
+            "Expected DiclMissingOutput error, got: {error_string}"
         );
     }
 

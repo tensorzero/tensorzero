@@ -15,4 +15,30 @@ done
 
 cp ./dummy-gcp-credentials.json /tmp/dummy-gcp-credentials.json
 
-find "$(cd ..; pwd)" -name "docker-compose.yml" -print0 | xargs -0L1 bash -c './check-docker-compose.sh $0 || exit 255'
+# Array to collect failed containers
+failed_containers=()
+
+# Test each docker-compose.yml file
+while IFS= read -r -d '' compose_file; do
+  echo "Testing: $compose_file"
+  if ! ./check-docker-compose.sh "$compose_file"; then
+    failed_containers+=("$compose_file")
+    echo "FAILED: $compose_file"
+  else
+    echo "PASSED: $compose_file"
+  fi
+  echo "----------------------------------------"
+done < <(find "$(cd ..; pwd)" -name "docker-compose.yml" -print0)
+
+# Report results
+echo "============================================"
+echo "SUMMARY:"
+if [ ${#failed_containers[@]} -eq 0 ]; then
+  echo "All containers passed!"
+else
+  echo "Failed containers (${#failed_containers[@]}):"
+  for container in "${failed_containers[@]}"; do
+    echo "  - $container"
+  done
+  exit 1
+fi

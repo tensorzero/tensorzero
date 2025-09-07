@@ -52,11 +52,29 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: Launch ClickHouse container for optimization tests
+        run: docker compose -f tensorzero-core/tests/optimization/docker-compose.yml up --wait
+
       - name: Run optimization tests
-        run: cargo test-optimization --nocapture --no-fail-fast
+        run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests cargo test-optimization --nocapture --no-fail-fast
+
+      - name: Print ClickHouse container logs
+        if: always()
+        continue-on-error: true
+        run: docker compose -f tensorzero-core/tests/optimization/docker-compose.yml logs -t
 
       - name: Log test completion
         if: always()
         run: |
           echo "Optimization tests completed at $(date)"
           echo "Test result: ${{ job.status }}"
+
+      - name: Post to Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v2.1.1
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          payload: |
+            channel: C09DM0RGDFG
+            text: Live optimization tests failed for run <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.run_id }}>

@@ -189,6 +189,7 @@ pub async fn make_gcp_object_store(
             let key = dynamic_api_keys.get(key_name).ok_or_else(|| {
                 Error::new(ErrorDetails::ApiKeyMissing {
                     provider_name: PROVIDER_NAME.to_string(),
+                    message: format!("Dynamic api key `{key_name}` is missing"),
                 })
             })?;
             builder =
@@ -261,6 +262,7 @@ pub async fn make_gcp_object_store(
         GCPVertexCredentials::None => {
             return Err(Error::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
+                message: "No credentials are set".to_string(),
             }))
         }
     }
@@ -821,6 +823,7 @@ impl GCPVertexCredentials {
                     .ok_or_else(|| {
                         Error::new(ErrorDetails::ApiKeyMissing {
                             provider_name: PROVIDER_NAME.to_string(),
+                            message: format!("Dynamic api key `{key_name}` is missing"),
                         })
                     })?
                     .expose_secret(),
@@ -850,6 +853,7 @@ impl GCPVertexCredentials {
             GCPVertexCredentials::None => {
                 return Err(Error::new(ErrorDetails::ApiKeyMissing {
                     provider_name: PROVIDER_NAME.to_string(),
+                    message: "No credentials are set".to_string(),
                 }))
             }
         };
