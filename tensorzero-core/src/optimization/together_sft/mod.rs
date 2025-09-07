@@ -377,7 +377,7 @@ impl UninitializedTogetherSFTConfig {
     /// For detailed parameter documentation, see: https://docs.together.ai/reference/post-fine-tunes
     ///
     /// :param model: Name of the base model to run fine-tune job on.
-    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::TOGETHER_API_KEY". See docs for more details.
+    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like `env::TOGETHER_API_KEY`. See docs for more details.
     /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
     /// :param n_epochs: Number of complete passes through the training dataset. Default: 1. Higher values may improve results but increase cost and overfitting risk.
     /// :param n_checkpoints: Number of intermediate model versions saved during training. Default: 1.
