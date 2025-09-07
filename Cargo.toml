@@ -54,6 +54,7 @@ ts-rs = { version = "11.0.1", features = [
     "serde-json-impl",
     "uuid-impl",
     "url-impl",
+    "chrono-impl",
     "no-serde-warnings",
 ] }
 chrono = { version = "0.4.41", features = ["serde"] }
