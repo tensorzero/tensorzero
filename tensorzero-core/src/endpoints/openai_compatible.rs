@@ -341,7 +341,7 @@ impl std::fmt::Display for JsonSchemaInfoOption {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "JsonSchemaInfo"))]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct JsonSchemaInfo {
     name: String,
     description: Option<String>,

@@ -333,18 +333,11 @@ impl Optimizer for OpenAIRFTConfig {
             self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
             None,
         )?;
-        // Serialize the request body to JSON
-        let body_json = serde_json::to_value(&body).map_err(|e| {
-            Error::new(ErrorDetails::InternalError {
-                message: format!("Failed to serialize request body: {e}"),
-            })
-        })?;
-
         let mut request = client.post(url);
         if let Some(api_key) = api_key {
             request = request.bearer_auth(api_key.expose_secret());
         }
-        let res = request.json(&body_json).send().await.map_err(|e| {
+        let res = request.json(&body).send().await.map_err(|e| {
             Error::new(ErrorDetails::InferenceClient {
                 status_code: e.status(),
                 message: format!(
@@ -352,7 +345,7 @@ impl Optimizer for OpenAIRFTConfig {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: Some(serde_json::to_string(&body_json).unwrap_or_default()),
+                raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                 raw_response: None,
             })
         })?;
