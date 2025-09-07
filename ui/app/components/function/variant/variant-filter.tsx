@@ -164,7 +164,7 @@ function VariantFilterItem({
       <span className="flex items-center gap-2">
         {color && (
           <span
-            style={{ "--_bg-color": color } as React.CSSProperties}
+            style={{ "--_bg-color": color }}
             className="block h-2 w-2 rounded-xs bg-[var(--_bg-color)]"
           />
         )}

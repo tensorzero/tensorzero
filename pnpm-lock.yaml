@@ -377,8 +377,8 @@ packages:
       react: '>=16.9.0'
       react-dom: '>=16.9.0'
 
-  '@ant-design/cssinjs@1.23.0':
-    resolution: {integrity: sha512-7GAg9bD/iC9ikWatU9ym+P9ugJhi/WbsTWzcKN6T4gU0aehsprtke1UAaaSxxkjjmkJb3llet/rbUSLPgwlY4w==}
+  '@ant-design/cssinjs@1.24.0':
+    resolution: {integrity: sha512-K4cYrJBsgvL+IoozUXYjbT6LHHNt+19a9zkvpBPxLjFHas1UpPM2A5MlhROb0BT8N8WoavM5VsP9MeSeNK/3mg==}
     peerDependencies:
       react: '>=16.0.0'
       react-dom: '>=16.0.0'
@@ -6866,7 +6866,7 @@ snapshots:
       react: 19.1.0
       react-dom: 19.1.0(react@19.1.0)
 
-  '@ant-design/cssinjs@1.23.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@ant-design/cssinjs@1.24.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
     dependencies:
       '@babel/runtime': 7.27.1
       '@emotion/hash': 0.8.0
@@ -6927,7 +6927,7 @@ snapshots:
   '@ariakit/react-core@0.4.17(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
     dependencies:
       '@ariakit/core': 0.4.15
-      '@floating-ui/dom': 1.7.2
+      '@floating-ui/dom': 1.7.0
       react: 19.1.0
       react-dom: 19.1.0(react@19.1.0)
       use-sync-external-store: 1.5.0(react@19.1.0)
@@ -7822,7 +7822,7 @@ snapshots:
 
   '@lobehub/ui@2.7.3(@babel/core@7.27.7)(@types/react@19.1.8)(acorn@8.15.0)(antd@5.26.3(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(framer-motion@12.23.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
     dependencies:
-      '@ant-design/cssinjs': 1.23.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@ant-design/cssinjs': 1.24.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@dnd-kit/core': 6.3.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@dnd-kit/modifiers': 9.0.0(@dnd-kit/core@6.3.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)
       '@dnd-kit/sortable': 10.0.0(@dnd-kit/core@6.3.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)
@@ -10014,7 +10014,7 @@ snapshots:
 
   antd-style@3.7.1(@types/react@19.1.8)(antd@5.26.3(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
     dependencies:
-      '@ant-design/cssinjs': 1.23.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@ant-design/cssinjs': 1.24.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@babel/runtime': 7.27.1
       '@emotion/cache': 11.14.0
       '@emotion/css': 11.13.5
