@@ -1,0 +1,26 @@
+FROM mcr.microsoft.com/playwright:v1.55.0-noble
+
+# Use the official Playwright image; just install pnpm and run tests.
+RUN npm install -g pnpm
+
+WORKDIR /app
+
+# Copy workspace configuration and minimal package.json
+COPY pnpm-workspace.yaml ./
+COPY ui/fixtures/package.e2e.json ./ui/package.json
+# Create minimal root package.json for workspace
+RUN echo '{"name": "tensorzero-workspace", "private": true, "scripts": {"ui:test:e2e": "pnpm --filter ui test-e2e"}}' > package.json
+
+# Copy only UI package (tests and playwright config)
+COPY ui/e2e_tests/ ui/e2e_tests/
+COPY ui/playwright.config.ts ui/
+
+# Install minimal dependencies needed for testing
+RUN cd ui && pnpm install --ignore-scripts
+
+# Install Playwright browsers
+RUN cd ui && pnpm exec playwright install chromium
+
+# Default command: run UI e2e tests
+WORKDIR /app/ui
+ENTRYPOINT ["pnpm", "test-e2e"]
