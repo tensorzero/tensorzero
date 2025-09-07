@@ -43,9 +43,7 @@ echo "Logged in to Docker Hub"
 # ------------------------------------------------------------------------------
 # Environment for image tags and test config
 # ------------------------------------------------------------------------------
-export TENSORZERO_GATEWAY_TAG=ci-sha-$SHORT_HASH
-export TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=ci-sha-$SHORT_HASH
-export TENSORZERO_CLICKHOUSE_TESTS_TAG=ci-sha-$SHORT_HASH
+export TENSORZERO_COMMIT_TAG=ci-sha-$SHORT_HASH
 export TENSORZERO_SKIP_LARGE_FIXTURES=1
 
 # ------------------------------------------------------------------------------
