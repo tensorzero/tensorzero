@@ -18,6 +18,7 @@ from .tensorzero import (
     FunctionsConfig,
     GCPVertexGeminiSFTConfig,
     MixtureOfNConfig,
+    OpenAIRFTConfig,
     OpenAISFTConfig,
     OptimizationJobHandle,
     OptimizationJobInfo,
@@ -92,7 +93,11 @@ ChatDatapoint = Datapoint.Chat
 JsonDatapoint = Datapoint.Json
 
 OptimizationConfig = t.Union[
-    OpenAISFTConfig, FireworksSFTConfig, TogetherSFTConfig, DiclOptimizationConfig
+    OpenAISFTConfig,
+    FireworksSFTConfig,
+    TogetherSFTConfig,
+    DiclOptimizationConfig,
+    OpenAIRFTConfig,
 ]
 ChatInferenceOutput = t.List[ContentBlock]
 
@@ -156,6 +161,7 @@ __all__ = [
     "FireworksSFTConfig",
     "GCPVertexGeminiSFTConfig",
     "OpenAISFTConfig",
+    "OpenAIRFTConfig",
     "OptimizationConfig",
     "patch_openai_client",
     "RawText",
