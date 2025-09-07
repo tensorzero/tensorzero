@@ -111,10 +111,10 @@ filter = 'test(batch)'
 slow-timeout = { period = "15s", terminate-after = 3 }
 
 [[profile.default.overrides]]
-# Settings for running clickhouse tests, which can be very slow on ClickHouse Clouc
+# Settings for running clickhouse tests, which can be very slow on ClickHouse Cloud
 # (when spawning lots of concurrent inserts)
 filter = 'test(clickhouse)'
-slow-timeout = { period = "500s", terminate-after = 1 }
+slow-timeout = { period = "900s", terminate-after = 1 }
 
 [[profile.default.overrides]]
 # Settings for running unit tests
