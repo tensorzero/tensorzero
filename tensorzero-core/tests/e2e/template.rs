@@ -4,8 +4,9 @@ use http::StatusCode;
 use reqwest::Client;
 use serde_json::{json, Value};
 use tensorzero::{InferenceOutput, InferenceResponse};
-use tensorzero_core::db::clickhouse::test_helpers::{
-    get_clickhouse, select_model_inferences_clickhouse,
+use tensorzero_core::{
+    db::clickhouse::test_helpers::{get_clickhouse, select_model_inferences_clickhouse},
+    inference::types::{ContentBlock, ContentBlockChatOutput, Text},
 };
 use uuid::Uuid;
 
@@ -473,5 +474,9 @@ async fn e2e_test_named_system_template() {
         panic!("Expected non-streaming response, got {res:?}");
     };
 
-    panic!("Response: {res:?}");
+    assert_eq!(res.content, [
+      ContentBlockChatOutput::Text(Text {
+        text: "{\"system\":\"You are a helpful and friendly assistant named AskJeeves\",\"messages\":[]}".to_string(),
+      })
+    ]);
 }
