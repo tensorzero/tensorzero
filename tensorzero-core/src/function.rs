@@ -531,6 +531,7 @@ fn validate_all_text_input(
             schemas.get_implicit_system_schema(),
             "system",
             all_templates_names,
+            None,
         ),
         // If there is no system message and no schema we accept
         (None, None) => Ok(()),
@@ -539,7 +540,7 @@ fn validate_all_text_input(
             message: "`input.system` is empty but a system template is present.".to_string(),
         })),
     }?;
-    for message in &input.messages {
+    for (index, message) in input.messages.iter().enumerate() {
         for block in &message.content {
             match block {
                 InputMessageContent::Text(kind) => {
@@ -559,6 +560,7 @@ fn validate_all_text_input(
                         schema,
                         message.role.implicit_template_name(),
                         all_templates_names,
+                        Some(index),
                     )?;
                 }
                 InputMessageContent::Template(template) => {
@@ -569,6 +571,7 @@ fn validate_all_text_input(
                         schemas.get_named_schema(&template.name),
                         &template.name,
                         all_templates_names,
+                        Some(index),
                     )?;
                 }
                 _ => {}
@@ -579,23 +582,30 @@ fn validate_all_text_input(
 }
 
 /// Validates a single message according to the following rules:
-/// If there is no schema, we don't perform any validation, as individual variants may have
-/// templates (allowing non-string content to be accepted).
+/// If there is no schema, we check that at least one
+/// variant has a matching template (as determined by `all_templates_names`)
 /// Otherwise, the message must contain JSON content that matches the schema
 fn validate_single_message(
     content: &Value,
     schema: Option<&StaticJSONSchema>,
     template_name: &str,
     all_templates_names: &HashSet<String>,
+    index: Option<usize>,
 ) -> Result<(), Error> {
-    // TODO - we need to check if all variant sare missing the template name, and reject early with a better error.
-    if let Some(schema) = schema {
-        schema.validate(content)?;
-    }
-    if !all_templates_names.contains(template_name) {
-        return Err(Error::new(ErrorDetails::InvalidMessage {
-            message: format!("Template `{template_name}` is not present in the function"),
-        }));
+    match schema {
+        Some(schema) => schema.validate(content)?,
+        None => {
+            if !content.is_string() && !all_templates_names.contains(template_name) {
+                return Err(match index {
+                    Some(index) => Error::new(ErrorDetails::InvalidMessage {
+                        message: format!("Message at index {index} has non-string content but there is no template `{template_name}` in any variant"),
+                    }),
+                    None => Error::new(ErrorDetails::InvalidMessage {
+                        message: format!("System message has non-string content but there is no template `{template_name}` in any variant"),
+                    }),
+                });
+            }
+        }
     }
     Ok(())
 }
@@ -797,7 +807,7 @@ mod tests {
         assert_eq!(
             validation_result.unwrap_err(),
             Error::new(ErrorDetails::InvalidMessage {
-                message: "Message at index 1 has non-string content but there is no schema given for role assistant.".to_string(),
+                message: "Message at index 1 has non-string content but there is no template `assistant` in any variant".to_string(),
             })
         );
 
@@ -1300,7 +1310,7 @@ mod tests {
         assert_eq!(
             validation_result.unwrap_err(),
             ErrorDetails::InvalidMessage {
-                message: "Message at index 0 has non-string content but there is no schema given for role user.".to_string()
+                message: "Message at index 0 has non-string content but there is no template `user` in any variant".to_string()
             }.into()
         );
     }
