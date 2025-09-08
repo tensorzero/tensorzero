@@ -5,7 +5,7 @@ TensorZero Client (for internal use only for now)
 import { z } from "zod";
 import {
   contentBlockChatOutputSchema,
-  thoughtSchema,
+  thoughtContentSchema,
   JsonValueSchema,
   type StoragePath,
 } from "~/utils/clickhouse/common";
@@ -98,7 +98,7 @@ export const InputMessageContentSchema = z.union([
   ToolCallContentSchema,
   ToolResultContentSchema,
   ImageContentSchema,
-  thoughtSchema,
+  thoughtContentSchema,
   UnknownContentSchema,
 ]);
 
