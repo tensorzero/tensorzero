@@ -40,8 +40,6 @@ pub trait SelectQueries {
     async fn count_episodes(&self) -> Result<u64, Error>;
 }
 
-impl<T: SelectQueries + HealthCheckable + Send + Sync> DatabaseConnection for T {}
-
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
@@ -96,3 +94,5 @@ pub struct TableBoundsWithCount {
     #[serde(deserialize_with = "deserialize_u64")]
     pub count: u64,
 }
+
+impl<T: SelectQueries + HealthCheckable + Send + Sync> DatabaseConnection for T {}

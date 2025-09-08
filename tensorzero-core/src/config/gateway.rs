@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{ExportConfig, ObservabilityConfig, TemplateFilesystemAccess},
+    config::{
+        ExportConfig, ObservabilityConfig, TemplateFilesystemAccess,
+        UninitializedObservabilityConfig,
+    },
     error::{Error, ErrorDetails},
 };
 
@@ -11,7 +14,7 @@ pub struct UninitializedGatewayConfig {
     #[serde(serialize_with = "serialize_optional_socket_addr")]
     pub bind_address: Option<std::net::SocketAddr>,
     #[serde(default)]
-    pub observability: ObservabilityConfig,
+    pub observability: UninitializedObservabilityConfig,
     #[serde(default)]
     pub debug: bool,
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
@@ -28,9 +31,9 @@ pub struct UninitializedGatewayConfig {
     // If set to `true`, disables validation on feedback queries (read from ClickHouse to check that the target is valid)
     #[serde(default)]
     pub unstable_disable_feedback_target_validation: bool,
-    /// If enabled, adds an 'error_json' field alongside the human-readable 'error' field
+    /// If enabled, adds an `error_json` field alongside the human-readable `error` field
     /// in HTTP error responses. This contains a JSON-serialized version of the error.
-    /// While 'error_json' will always be valid JSON when present, the exact contents is unstable,
+    /// While `error_json` will always be valid JSON when present, the exact contents is unstable,
     /// and may change at any time without warning.
     /// For now, this is only supported in the standalone gateway, and not in the embedded gateway.
     #[serde(default)]
@@ -62,7 +65,7 @@ impl UninitializedGatewayConfig {
         };
         Ok(GatewayConfig {
             bind_address: self.bind_address,
-            observability: self.observability,
+            observability: self.observability.load(),
             debug: self.debug,
             template_filesystem_access,
             export: self.export,

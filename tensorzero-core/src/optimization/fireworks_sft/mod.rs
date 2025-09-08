@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 use uuid::Uuid;
 
-use crate::config::TimeoutsConfig;
+use crate::config::{Config, TimeoutsConfig};
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::model::UninitializedModelConfig;
 use crate::model::UninitializedModelProvider;
@@ -39,6 +39,7 @@ use crate::providers::helpers::UrlParseErrExt;
 use crate::providers::openai::tensorzero_to_openai_assistant_message;
 use crate::stored_inference::RenderedSample;
 use crate::{
+    db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::ContentBlock,
@@ -264,7 +265,7 @@ impl UninitializedFireworksSFTConfig {
     /// :param mtp_enabled: Whether to enable MTP (Multi-Token Prediction).
     /// :param mtp_num_draft_tokens: The number of draft tokens for MTP.
     /// :param mtp_freeze_base_model: Whether to freeze the base model for MTP.
-    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::FIREWORKS_API_KEY". See docs for more details.
+    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like `env::FIREWORKS_API_KEY`. See docs for more details.
     /// :param account_id: The account ID to use for the fine-tuning job.
     /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
     #[expect(unused_variables, clippy::too_many_arguments)]
@@ -524,6 +525,8 @@ impl Optimizer for FireworksSFTConfig {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
+        _clickhouse_connection_info: &ClickHouseConnectionInfo,
+        _config: &Config,
     ) -> Result<Self::Handle, Error> {
         let train_rows: Vec<FireworksSupervisedRow<'_>> = train_examples
             .iter()

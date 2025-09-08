@@ -52,6 +52,13 @@ Typically, TensorZero will not include inputs and outputs in logs or errors to a
 It may be helpful during development to be able to see more information about requests and responses.
 When this field is set to `true`, the gateway will log more verbose errors to assist with debugging.
 
+### `disable_pseudonymous_usage_analytics`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+If set to `true`, TensorZero will not collect or share [pseudonymous usage analytics](/gateway/deployment/#disabling-pseudonymous-usage-analytics).
+
 ### `enable_template_filesystem_access`
 
 - **Type:** boolean
@@ -65,6 +72,19 @@ Paths must be relative to `tensorzero.toml`, and can only access files in that d
 Make sure to sanitize all user-provided template data before using this setting.
 Otherwise, a malicious input could read unintended files in the file system.
 
+</Warning>
+
+### `export.otlp.traces.enabled`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+Enable [exporting traces to an external OpenTelemetry-compatible observability
+system](/gateway/guides/opentelemetry-otlp).
+
+<Warning>
+Note that you will still need to set the `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
+environment variable. See above linked guide for details.
 </Warning>
 
 ### `observability.async_writes`
@@ -563,6 +583,9 @@ type = "azure"
 endpoint = "https://<your-endpoint>.openai.azure.com"
 # ...
 ```
+
+If the endpoint starts with `env::`, the succeeding value will be treated as an environment variable name and the gateway will attempt to retrieve the value from the environment on startup.
+If the endpoint starts with `dynamic::`, the succeeding value will be treated as an dynamic credential name and the gateway will attempt to retrieve the value from the `dynamic_credentials` field on each inference it is needed.
 
 ##### `api_key_location`
 

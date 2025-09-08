@@ -11,12 +11,14 @@ from .tensorzero import (
     Config,
     Datapoint,
     DiclConfig,
+    DiclOptimizationConfig,
     FireworksSFTConfig,
     FunctionConfigChat,
     FunctionConfigJson,
     FunctionsConfig,
     GCPVertexGeminiSFTConfig,
     MixtureOfNConfig,
+    OpenAIRFTConfig,
     OpenAISFTConfig,
     OptimizationJobHandle,
     OptimizationJobInfo,
@@ -90,7 +92,13 @@ RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample inste
 ChatDatapoint = Datapoint.Chat
 JsonDatapoint = Datapoint.Json
 
-OptimizationConfig = t.Union[OpenAISFTConfig, FireworksSFTConfig, TogetherSFTConfig]
+OptimizationConfig = t.Union[
+    OpenAISFTConfig,
+    FireworksSFTConfig,
+    TogetherSFTConfig,
+    DiclOptimizationConfig,
+    OpenAIRFTConfig,
+]
 ChatInferenceOutput = t.List[ContentBlock]
 
 
@@ -109,6 +117,7 @@ __all__ = [
     "Config",
     "ContentBlock",
     "Datapoint",
+    "DiclOptimizationConfig",
     "DynamicEvaluationRunEpisodeResponse",
     "DynamicEvaluationRunResponse",
     "ExtraBody",
@@ -152,6 +161,7 @@ __all__ = [
     "FireworksSFTConfig",
     "GCPVertexGeminiSFTConfig",
     "OpenAISFTConfig",
+    "OpenAIRFTConfig",
     "OptimizationConfig",
     "patch_openai_client",
     "RawText",

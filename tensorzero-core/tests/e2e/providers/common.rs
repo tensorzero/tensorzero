@@ -3,11 +3,8 @@ use std::io::Cursor;
 use std::time::Duration;
 use std::{collections::HashMap, net::SocketAddr};
 
-use aws_config::Region;
-
-use aws_sdk_bedrockruntime::error::SdkError;
-
-use aws_sdk_s3::operation::get_object::GetObjectError;
+use object_store::{aws::AmazonS3Builder, ObjectStore};
+use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::{Query, State};
@@ -33,13 +30,15 @@ use tracing_test::traced_test;
 use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
 
 use tensorzero_core::gateway_util::AppStateData;
+use tensorzero_core::inference::types::file::Base64FileMetadata;
+use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::{FinishReason, TextKind, Thought};
 use tensorzero_core::{
     cache::CacheEnabledMode,
     inference::types::{
-        resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
-        Base64File, ContentBlock, ContentBlockChatOutput, File, RequestMessage, Role, Text,
+        ContentBlock, ContentBlockChatOutput, File, RequestMessage, Role, StoredContentBlock,
+        StoredRequestMessage, Text,
     },
     tool::{ToolCall, ToolResult},
 };
@@ -231,6 +230,9 @@ macro_rules! generate_provider_tests {
         use $crate::providers::embeddings::test_embedding_invalid_model_error_with_provider;
         use $crate::providers::embeddings::test_embedding_large_bulk_with_provider;
         use $crate::providers::embeddings::test_embedding_consistency_with_provider;
+        use $crate::providers::embeddings::test_embedding_cache_with_provider;
+        use $crate::providers::embeddings::test_embedding_cache_options_with_provider;
+        use $crate::providers::embeddings::test_embedding_dryrun_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -697,6 +699,30 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test]
+        async fn test_embedding_cache() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_cache_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_cache_options() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_cache_options_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_embedding_dryrun() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_embedding_dryrun_with_provider(provider).await;
+            }
+        }
+
     };
 }
 
@@ -945,16 +971,44 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
     .await;
 }
 
+async fn create_s3_object_store(
+    bucket_name: Option<String>,
+    region: Option<String>,
+    endpoint: Option<String>,
+    allow_http: Option<bool>,
+) -> Result<Arc<dyn ObjectStore>, Box<dyn std::error::Error>> {
+    let mut builder = AmazonS3Builder::from_env();
+
+    if let Some(bucket) = bucket_name {
+        builder = builder.with_bucket_name(bucket);
+    }
+
+    if let Some(region) = region {
+        builder = builder.with_region(region);
+    }
+
+    if let Some(endpoint) = endpoint {
+        builder = builder.with_endpoint(endpoint);
+    }
+
+    if let Some(allow_http) = allow_http {
+        builder = builder.with_allow_http(allow_http);
+    }
+
+    Ok(Arc::new(builder.build()?))
+}
+
 pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvider) {
     let test_bucket = "tensorzero-e2e-test-images";
     let test_bucket_region = "us-east-1";
-    let config = aws_config::load_from_env()
-        .await
-        .to_builder()
-        .region(Region::new(test_bucket_region))
-        .build();
-
-    let client = aws_sdk_s3::Client::new(&config);
+    let client = create_s3_object_store(
+        Some(test_bucket.to_string()),
+        Some(test_bucket_region.to_string()),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
 
     use rand::distr::Alphanumeric;
     use rand::distr::SampleString;
@@ -984,7 +1038,6 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     {IMAGE_FUNCTION_CONFIG}
     "#
             ),
-            test_bucket,
             &prefix,
         )
         .await;
@@ -997,10 +1050,7 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     .await;
 
     client
-        .delete_object()
-        .key(&expected_key)
-        .bucket(test_bucket)
-        .send()
+        .delete(&object_store::path::Path::parse(&expected_key).unwrap())
         .await
         .unwrap();
 }
@@ -1008,52 +1058,48 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
 pub async fn test_image_inference_with_provider_s3_compatible(
     provider: E2ETestProvider,
     storage_kind: &StorageKind,
-    client: &aws_sdk_s3::Client,
+    client: &Arc<dyn ObjectStore>,
     toml: &str,
-    bucket_name: &str,
     prefix: &str,
 ) -> (tensorzero::Client, String, StoragePath) {
     let expected_key =
         format!("{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png");
 
     // Check that object is deleted
-    let err = client
-        .get_object()
-        .bucket(bucket_name)
-        .key(&expected_key)
-        .send()
-        .await
-        .expect_err("Image should not exist in s3 after deletion");
+    let path = object_store::path::Path::parse(&expected_key).unwrap();
+    let result = client.get(&path).await;
+    assert!(
+        result.is_err(),
+        "Image should not exist in object store after deletion"
+    );
 
-    if let SdkError::ServiceError(err) = err {
-        let err = err.err();
-        assert!(
-            matches!(err, GetObjectError::NoSuchKey(_)),
-            "Unexpected service error: {err:?}"
-        );
-    } else {
-        panic!("Expected ServiceError: {err:?}");
+    match result {
+        Err(object_store::Error::NotFound { .. }) => {
+            // Expected - object should not exist
+        }
+        _ => {
+            panic!("Object should not exist after deletion");
+        }
     }
 
     let (tensorzero_client, storage_path) =
         test_base64_image_inference_with_provider_and_store(provider, storage_kind, toml, prefix)
             .await;
 
+    let path = object_store::path::Path::parse(&expected_key).unwrap();
     let result = client
-        .get_object()
-        .bucket(bucket_name)
-        .key(&expected_key)
-        .send()
+        .get(&path)
         .await
         .expect("Failed to get image from S3-compatible store");
 
-    assert_eq!(result.body.collect().await.unwrap().to_vec(), FERRIS_PNG);
+    let bytes = result.bytes().await.unwrap();
+    assert_eq!(bytes.to_vec(), FERRIS_PNG);
 
     (tensorzero_client, expected_key, storage_path)
 }
 
 async fn make_temp_image_server() -> (SocketAddr, tokio::sync::oneshot::Sender<()>) {
-    let addr = SocketAddr::from(([0, 0, 0, 0], 0));
+    let addr = SocketAddr::from(([127, 0, 0, 1], 0));
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .unwrap_or_else(|e| panic!("Failed to bind to {addr}: {e}"));
@@ -2080,19 +2126,18 @@ pub async fn check_base64_pdf_response(
     };
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     assert_eq!(
         input_messages,
-        vec![RequestMessage {
+        vec![StoredRequestMessage {
             role: Role::User,
             content: vec![
-                ContentBlock::Text(Text {
+                StoredContentBlock::Text(Text {
                     text: "Describe the contents of the PDF".to_string(),
                 }),
-                ContentBlock::File(Box::new(FileWithPath {
-                    file: Base64File {
+                StoredContentBlock::File(Box::new(StoredFile {
+                    file: Base64FileMetadata {
                         url: None,
-                        data: None,
                         mime_type: mime::APPLICATION_PDF,
                     },
                     storage_path: expected_storage_path.clone(),
@@ -2236,19 +2281,18 @@ pub async fn check_base64_image_response(
     };
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     assert_eq!(
         input_messages,
-        vec![RequestMessage {
+        vec![StoredRequestMessage {
             role: Role::User,
             content: vec![
-                ContentBlock::Text(Text {
+                StoredContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
                 }),
-                ContentBlock::File(Box::new(FileWithPath {
-                    file: Base64File {
+                StoredContentBlock::File(Box::new(StoredFile {
+                    file: Base64FileMetadata {
                         url: None,
-                        data: None,
                         mime_type: mime::IMAGE_PNG,
                     },
                     storage_path: expected_storage_path.clone(),
@@ -2387,18 +2431,17 @@ pub async fn check_url_image_response(
     assert!(Uuid::parse_str(model_inference_id).is_ok());
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     assert_eq!(
         input_messages,
         vec![
-            RequestMessage {
+            StoredRequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::Text(Text {
+                content: vec![StoredContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
-                }), ContentBlock::File(Box::new(FileWithPath {
-                    file: Base64File {
+                }), StoredContentBlock::File(Box::new(StoredFile {
+                    file: Base64FileMetadata {
                         url: Some(image_url.clone()),
-                        data: None,
                         mime_type: mime::IMAGE_PNG,
                     },
                     storage_path: StoragePath {
@@ -3061,8 +3104,11 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let inference_id = inference_id.unwrap();
     assert!(full_content.to_lowercase().contains("tokyo"));
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") || check_cache {
+    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+    if (provider.variant_name.contains("azure")
+        && !provider.variant_name.contains("azure-ai-foundry"))
+        || check_cache
+    {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -3170,8 +3216,10 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+    if provider.variant_name.contains("azure")
+        && !provider.variant_name.contains("azure-ai-foundry")
+    {
         assert!(input_tokens.is_null());
         assert!(output_tokens.is_null());
     } else {
@@ -3566,8 +3614,10 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     let inference_id = inference_id.unwrap();
     assert!(full_content.to_lowercase().contains("tokyo"));
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+    if provider.variant_name.contains("azure")
+        && !provider.variant_name.contains("azure-ai-foundry")
+    {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -3696,8 +3746,10 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+    if provider.variant_name.contains("azure")
+        && !provider.variant_name.contains("azure-ai-foundry")
+    {
         assert!(input_tokens.is_null());
         assert!(output_tokens.is_null());
     } else {
@@ -4097,9 +4149,10 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
                     if let Some(block_raw_name) = block.get("raw_name") {
                         match tool_name {
                             Some(_) => {
-                                if !block_raw_name.as_str().unwrap().is_empty() {
-                                    panic!("Raw name already seen, got {block:#?}");
-                                }
+                                assert!(
+                                    block_raw_name.as_str().unwrap().is_empty(),
+                                    "Raw name already seen, got {block:#?}"
+                                );
                             }
                             None => {
                                 tool_name = Some(block_raw_name.as_str().unwrap().to_string());
@@ -4311,8 +4364,10 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+    if provider.variant_name.contains("azure")
+        && !provider.variant_name.contains("azure-ai-foundry")
+    {
         assert!(input_tokens.is_null());
         assert!(output_tokens.is_null());
     } else if provider.variant_name.contains("together") {
@@ -4882,8 +4937,10 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+    if provider.variant_name.contains("azure")
+        && !provider.variant_name.contains("azure-ai-foundry")
+    {
         assert!(input_tokens.is_null());
         assert!(output_tokens.is_null());
     } else {
@@ -5303,9 +5360,10 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
                     if let Some(block_raw_name) = block.get("raw_name") {
                         match tool_name {
                             Some(_) => {
-                                if !block_raw_name.as_str().unwrap().is_empty() {
-                                    panic!("Raw name already seen, got {block:#?}");
-                                }
+                                assert!(
+                                    block_raw_name.as_str().unwrap().is_empty(),
+                                    "Raw name already seen, got {block:#?}"
+                                );
                             }
                             None => {
                                 tool_name = Some(block_raw_name.as_str().unwrap().to_string());
@@ -5514,8 +5572,10 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+    if provider.variant_name.contains("azure")
+        && !provider.variant_name.contains("azure-ai-foundry")
+    {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -6083,8 +6143,10 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+    if provider.variant_name.contains("azure")
+        && !provider.variant_name.contains("azure-ai-foundry")
+    {
         assert!(input_tokens.is_null());
         assert!(output_tokens.is_null());
     } else {
@@ -6813,8 +6875,10 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+    if provider.variant_name.contains("azure")
+        && !provider.variant_name.contains("azure-ai-foundry")
+    {
         assert!(input_tokens.is_null());
         assert!(output_tokens.is_null());
     } else {
@@ -7221,9 +7285,10 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
                     if let Some(block_raw_name) = block.get("raw_name") {
                         match tool_name {
                             Some(_) => {
-                                if !block_raw_name.as_str().unwrap().is_empty() {
-                                    panic!("Raw name already seen, got {block:#?}");
-                                }
+                                assert!(
+                                    block_raw_name.as_str().unwrap().is_empty(),
+                                    "Raw name already seen, got {block:#?}"
+                                );
                             }
                             None => {
                                 tool_name = Some(block_raw_name.as_str().unwrap().to_string());
@@ -7423,8 +7488,10 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+    if provider.variant_name.contains("azure")
+        && !provider.variant_name.contains("azure-ai-foundry")
+    {
         assert!(input_tokens.is_null());
         assert!(output_tokens.is_null());
     } else if provider.variant_name.contains("together") {
@@ -7863,8 +7930,10 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let inference_id = inference_id.unwrap();
     assert!(full_content.to_lowercase().contains("tokyo"));
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+    if provider.variant_name.contains("azure")
+        && !provider.variant_name.contains("azure-ai-foundry")
+    {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -7992,8 +8061,10 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+    if provider.variant_name.contains("azure")
+        && !provider.variant_name.contains("azure-ai-foundry")
+    {
         assert!(input_tokens.is_null());
         assert!(output_tokens.is_null());
     } else {
@@ -8575,9 +8646,10 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
                     if let Some(block_raw_name) = block.get("raw_name") {
                         match tool_name {
                             Some(_) => {
-                                if !block_raw_name.as_str().unwrap().is_empty() {
-                                    panic!("Raw name already seen, got {block:#?}");
-                                }
+                                assert!(
+                                    block_raw_name.as_str().unwrap().is_empty(),
+                                    "Raw name already seen, got {block:#?}"
+                                );
                             }
                             None => {
                                 tool_name = Some(block_raw_name.as_str().unwrap().to_string());
@@ -8790,8 +8862,10 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+    if provider.variant_name.contains("azure")
+        && !provider.variant_name.contains("azure-ai-foundry")
+    {
         assert!(input_tokens.is_null());
         assert!(output_tokens.is_null());
     } else if provider.variant_name.contains("together") {
@@ -9584,8 +9658,10 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+    if provider.variant_name.contains("azure")
+        && !provider.variant_name.contains("azure-ai-foundry")
+    {
         assert!(input_tokens.is_null());
         assert!(output_tokens.is_null());
     } else if provider.variant_name.contains("together") {
@@ -10236,8 +10312,10 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let inference_id = inference_id.unwrap();
     assert!(full_content.to_lowercase().contains("tokyo"));
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+    if provider.variant_name.contains("azure")
+        && !provider.variant_name.contains("azure-ai-foundry")
+    {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -10369,8 +10447,10 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+    if provider.variant_name.contains("azure")
+        && !provider.variant_name.contains("azure-ai-foundry")
+    {
         assert!(input_tokens.is_null());
         assert!(output_tokens.is_null());
     } else {
@@ -11310,8 +11390,10 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
+    if provider.variant_name.contains("azure")
+        && !provider.variant_name.contains("azure-ai-foundry")
+    {
         assert!(input_tokens.is_null());
         assert!(output_tokens.is_null());
     } else if provider.variant_name.contains("together") {

@@ -754,17 +754,27 @@ async fn infer_model_request_stream<'request>(
 #[derive(Debug, Deserialize, Copy, Clone, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct RetryConfig {
+    #[serde(default = "default_num_retries")]
     pub num_retries: usize,
+    #[serde(default = "default_max_delay_s")]
     pub max_delay_s: f32,
 }
 
 impl Default for RetryConfig {
     fn default() -> Self {
         RetryConfig {
-            num_retries: 0,
-            max_delay_s: 10.0,
+            num_retries: default_num_retries(),
+            max_delay_s: default_max_delay_s(),
         }
     }
+}
+
+fn default_num_retries() -> usize {
+    0
+}
+
+fn default_max_delay_s() -> f32 {
+    10.0
 }
 
 impl RetryConfig {
@@ -785,8 +795,8 @@ impl<'a> BatchInferenceConfig<'a> {
         variant_name: &'a str,
     ) -> Self {
         Self {
-            templates,
             tool_configs,
+            templates,
             dynamic_output_schemas,
             function_name,
             variant_name,
@@ -816,7 +826,7 @@ impl ChatCompletionConfigPyClass {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
             .templates
-            .system
+            .get_implicit_system_template()
             .as_ref()
             .map(|t| t.template.contents.clone()))
     }
@@ -826,7 +836,7 @@ impl ChatCompletionConfigPyClass {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
             .templates
-            .user
+            .get_implicit_template(crate::inference::types::Role::User)
             .as_ref()
             .map(|t| t.template.contents.clone()))
     }
@@ -836,7 +846,7 @@ impl ChatCompletionConfigPyClass {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
             .templates
-            .assistant
+            .get_implicit_template(crate::inference::types::Role::Assistant)
             .as_ref()
             .map(|t| t.template.contents.clone()))
     }
@@ -1231,7 +1241,7 @@ mod tests {
                     expected_content
                 );
             }
-            _ => panic!("Expected Chat inference result"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference result"),
         }
 
         // Test case 2: Successful inference with FunctionConfigJson
@@ -1344,7 +1354,7 @@ mod tests {
                     vec![DUMMY_JSON_RESPONSE_RAW.to_string().into()]
                 );
             }
-            _ => panic!("Expected Json inference result"),
+            InferenceResult::Chat(_) => panic!("Expected Json inference result"),
         }
 
         // Test case 3: Model inference failure
@@ -1545,7 +1555,7 @@ mod tests {
                     expected_content
                 );
             }
-            _ => panic!("Expected Chat inference result"),
+            InferenceResult::Json(_) => panic!("Expected Chat inference result"),
         }
         assert!(logs_contain(
             r#"ERROR test_infer_model_request_errors:infer_model_request{model_name=dummy_chat_model}:infer{model_name="dummy_chat_model" otel.name="model_inference" stream=false}:infer{provider_name="error"}:infer{provider_name="error" otel.name="model_provider_inference" gen_ai.operation.name="chat" gen_ai.system="dummy" gen_ai.request.model="error" stream=false}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#

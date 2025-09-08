@@ -9,6 +9,8 @@ use tokio::try_join;
 use url::Url;
 
 use crate::{
+    config::Config,
+    db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     model::{build_creds_caching_default, CredentialLocation},
@@ -119,7 +121,7 @@ impl UninitializedOpenAISFTConfig {
     /// :param batch_size: The batch size to use for the fine-tuning job.
     /// :param learning_rate_multiplier: The learning rate multiplier to use for the fine-tuning job.
     /// :param n_epochs: The number of epochs to use for the fine-tuning job.
-    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::OPENAI_API_KEY". See docs for more details.
+    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like `env::OPENAI_API_KEY`. See docs for more details.
     /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
     /// :param seed: The seed to use for the fine-tuning job.
     /// :param suffix: The suffix to use for the fine-tuning job (this is for naming in OpenAI).
@@ -190,6 +192,8 @@ impl Optimizer for OpenAISFTConfig {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
+        _clickhouse_connection_info: &ClickHouseConnectionInfo,
+        _config: &Config,
     ) -> Result<Self::Handle, Error> {
         // TODO(#2642): improve error handling here so we know what index of example failed
         let train_rows: Vec<OpenAISupervisedRow> = train_examples

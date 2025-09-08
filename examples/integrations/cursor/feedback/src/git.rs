@@ -14,7 +14,7 @@ pub fn get_last_commit_from_repo(repo: &Repository) -> Result<Commit<'_>> {
     let head_ref = repo.head()?.resolve()?;
     let oid = head_ref
         .target()
-        .ok_or(anyhow!("HEAD is not pointing to a commit"))?;
+        .ok_or_else(|| anyhow!("HEAD is not pointing to a commit"))?;
     let commit = repo.find_commit(oid)?;
     Ok(commit)
 }

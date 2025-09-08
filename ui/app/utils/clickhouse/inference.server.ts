@@ -7,7 +7,7 @@ import {
   JsonValueSchema,
 } from "./common";
 import {
-  contentBlockSchema,
+  contentBlockOutputSchema,
   getInferenceTableName,
   inputSchema,
 } from "./common";
@@ -483,7 +483,7 @@ async function parseModelInferenceRow(
   const processedRow = {
     ...row,
     input_messages: resolvedMessages,
-    output: z.array(contentBlockSchema).parse(JSON.parse(row.output)),
+    output: z.array(contentBlockOutputSchema).parse(JSON.parse(row.output)),
   };
   return parsedModelInferenceRowSchema.parse(processedRow);
 }

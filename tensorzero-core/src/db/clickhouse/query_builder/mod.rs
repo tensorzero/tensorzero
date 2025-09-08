@@ -13,7 +13,7 @@ use crate::{
     db::clickhouse::ClickhouseFormat,
     error::{Error, ErrorDetails},
     function::FunctionConfig,
-    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput},
+    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput},
     serde_util::{deserialize_defaulted_string, deserialize_json_string},
     stored_inference::{StoredChatInference, StoredInference, StoredJsonInference},
     tool::ToolCallConfigDatabaseInsert,
@@ -568,7 +568,7 @@ pub fn generate_list_inferences_sql(
         "i.function_name = {function_name_param_placeholder}"
     ));
 
-    // Add variant_name filter
+    // Add `variant_name` filter
     if let Some(variant_name) = opts.variant_name {
         let variant_name_param_placeholder = add_parameter(
             variant_name,
@@ -744,7 +744,7 @@ pub(super) struct ClickHouseStoredChatInference {
     pub inference_id: Uuid,
     pub timestamp: DateTime<Utc>,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(default)]
@@ -793,7 +793,7 @@ pub(super) struct ClickHouseStoredJsonInference {
     pub inference_id: Uuid,
     pub timestamp: DateTime<Utc>,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: JsonInferenceOutput,
     #[serde(default)]
@@ -860,6 +860,7 @@ mod tests {
     use serde_json::json;
     use std::path::Path;
 
+    use crate::inference::types::StoredInput;
     use crate::{config::ConfigFileGlob, inference::types::Text, tool::ToolChoice};
 
     use super::*;
@@ -2428,7 +2429,7 @@ FORMAT JSONEachRow";
         assert_eq!(chat_inference.variant_name, "test_variant");
         assert_eq!(
             chat_inference.input,
-            ResolvedInput {
+            StoredInput {
                 system: Some(json!("you are a helpful assistant")),
                 messages: vec![],
             }
@@ -2470,7 +2471,7 @@ FORMAT JSONEachRow";
         assert_eq!(chat_inference.variant_name, "test_variant");
         assert_eq!(
             chat_inference.input,
-            ResolvedInput {
+            StoredInput {
                 system: Some(json!("you are a helpful assistant")),
                 messages: vec![],
             }
@@ -2577,7 +2578,7 @@ FORMAT JSONEachRow";
         assert_eq!(json_inference.variant_name, "test_variant");
         assert_eq!(
             json_inference.input,
-            ResolvedInput {
+            StoredInput {
                 system: Some(json!("you are a helpful assistant")),
                 messages: vec![],
             }
@@ -2626,7 +2627,7 @@ FORMAT JSONEachRow";
         assert_eq!(json_inference.variant_name, "test_variant");
         assert_eq!(
             json_inference.input,
-            ResolvedInput {
+            StoredInput {
                 system: Some(json!("you are a helpful assistant")),
                 messages: vec![],
             }

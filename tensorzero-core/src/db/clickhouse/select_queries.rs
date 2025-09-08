@@ -1,5 +1,5 @@
 use crate::db::{
-    clickhouse::migration_manager::migrations::migration_0035::quantiles_sql_args, EpisodeByIdRow,
+    clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args, EpisodeByIdRow,
     TableBoundsWithCount,
 };
 use async_trait::async_trait;

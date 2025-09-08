@@ -76,15 +76,18 @@ async fn test_jaeger_trace_export(existing_trace_parent: Option<ExistingTraceDat
         .as_str()
         .expect("inference_id should be a string");
 
-    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    // We flush spans every 5 seconds, so wait for twice that to be safe
+    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
     let now = Utc::now();
     let one_minute_ago = now - Duration::minutes(1);
 
     let now_str = now.to_rfc3339_opts(SecondsFormat::Secs, true);
     let one_minute_ago_str = one_minute_ago.to_rfc3339_opts(SecondsFormat::Secs, true);
+    let jaeger_base_url = std::env::var("TENSORZERO_JAEGER_URL")
+        .unwrap_or_else(|_| "http://localhost:16686".to_string());
 
-    let jaeger_result = client.get(format!("http://localhost:16686/api/v3/traces?&query.start_time_min={one_minute_ago_str}&query.start_time_max={now_str}&query.service_name=tensorzero-gateway")).send().await.unwrap();
+    let jaeger_result = client.get(format!("{jaeger_base_url}/api/v3/traces?&query.start_time_min={one_minute_ago_str}&query.start_time_max={now_str}&query.service_name=tensorzero-gateway")).send().await.unwrap();
     let jaeger_traces = jaeger_result.json::<Value>().await.unwrap();
     println!("Response: {jaeger_traces}");
     let mut target_span = None;

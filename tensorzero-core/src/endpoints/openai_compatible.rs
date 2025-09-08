@@ -19,6 +19,8 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use futures::Stream;
 use mime::MediaType;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio_stream::StreamExt;
@@ -51,6 +53,22 @@ use super::inference::{
     InferenceStream,
 };
 use crate::embeddings::EmbeddingEncodingFormat;
+use axum::routing::post;
+use axum::Router;
+
+pub trait RouterExt {
+    /// Applies our OpenAI-compatible endpoints to the router.
+    /// This is used by the the gateway for the patched OpenAI python client (`start_openai_compatible_gateway`),
+    /// as well as the normal standalone TensorZero gateway.
+    fn register_openai_compatible_routes(self) -> Self;
+}
+
+impl RouterExt for Router<AppStateData> {
+    fn register_openai_compatible_routes(self) -> Self {
+        self.route("/openai/v1/chat/completions", post(inference_handler))
+            .route("/openai/v1/embeddings", post(embeddings_handler))
+    }
+}
 
 /// A handler for the OpenAI-compatible inference endpoint
 #[debug_handler(state = AppStateData)]
@@ -137,6 +155,10 @@ pub struct OpenAICompatibleEmbeddingParams {
     encoding_format: EmbeddingEncodingFormat,
     #[serde(default, rename = "tensorzero::credentials")]
     tensorzero_credentials: InferenceCredentials,
+    #[serde(rename = "tensorzero::dryrun")]
+    tensorzero_dryrun: Option<bool>,
+    #[serde(rename = "tensorzero::cache_options")]
+    tensorzero_cache_options: Option<CacheParamsOptions>,
 }
 
 impl TryFrom<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
@@ -158,6 +180,8 @@ impl TryFrom<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
             dimensions: params.dimensions,
             encoding_format: params.encoding_format,
             credentials: params.tensorzero_credentials,
+            dryrun: params.tensorzero_dryrun,
+            cache_options: params.tensorzero_cache_options.unwrap_or_default(),
         })
     }
 }
@@ -209,12 +233,19 @@ pub async fn embeddings_handler(
     State(AppStateData {
         config,
         http_client,
+        clickhouse_connection_info,
         ..
     }): AppState,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleEmbeddingParams>,
 ) -> Result<Json<OpenAIEmbeddingResponse>, Error> {
     let embedding_params = openai_compatible_params.try_into()?;
-    let response = embeddings(config, &http_client, embedding_params).await?;
+    let response = embeddings(
+        config,
+        &http_client,
+        clickhouse_connection_info,
+        embedding_params,
+    )
+    .await?;
     Ok(Json(response.into()))
 }
 
@@ -285,7 +316,7 @@ enum OpenAICompatibleMessage {
     Tool(OpenAICompatibleToolMessage),
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 enum OpenAICompatibleResponseFormat {
@@ -294,20 +325,35 @@ enum OpenAICompatibleResponseFormat {
     JsonObject,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
 enum JsonSchemaInfoOption {
     JsonSchema(JsonSchemaInfo),
     DeprecatedJsonSchema(Value),
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct JsonSchemaInfo {
+impl std::fmt::Display for JsonSchemaInfoOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+pub struct JsonSchemaInfo {
     name: String,
     description: Option<String>,
     schema: Option<Value>,
     #[serde(default)]
     strict: bool,
+}
+
+impl std::fmt::Display for JsonSchemaInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -1994,6 +2040,8 @@ mod tests {
             dimensions: Some(15),
             encoding_format: EmbeddingEncodingFormat::Float,
             tensorzero_credentials: InferenceCredentials::default(),
+            tensorzero_dryrun: None,
+            tensorzero_cache_options: None,
         };
         let param: EmbeddingParams = openai_embedding_params.try_into().unwrap();
         assert_eq!(param.model_name, "text-embedding-ada-002");
@@ -2011,6 +2059,8 @@ mod tests {
             dimensions: Some(15),
             encoding_format: EmbeddingEncodingFormat::Float,
             tensorzero_credentials: InferenceCredentials::default(),
+            tensorzero_dryrun: None,
+            tensorzero_cache_options: None,
         };
         let param: EmbeddingParams = openai_embedding_params.try_into().unwrap();
         assert_eq!(param.model_name, "text-embedding-ada-002");

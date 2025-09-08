@@ -9,6 +9,8 @@ use crate::cache::{
 use crate::config::{ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
 use crate::inference::types::extra_body::ExtraBodyConfig;
+use crate::inference::types::RequestMessagesOrBatch;
+use crate::inference::types::{ContentBlock, Text};
 use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
 use crate::model_table::BaseModelTable;
 use crate::model_table::ShorthandModelConfig;
@@ -127,8 +129,8 @@ impl EmbeddingModelConfig {
                 })?;
                 let provider_request = EmbeddingModelProviderRequest {
                     request,
-                    provider_name,
                     model_name,
+                    provider_name,
                 };
                 // TODO: think about how to best handle errors here
                 if clients.cache_options.enabled.read() {
@@ -310,6 +312,21 @@ impl EmbeddingModelResponse {
             cached: true,
         }
     }
+
+    /// We return the actual usage (meaning the number of tokens the user would be billed for)
+    /// in the HTTP response.
+    /// However, we store the number of tokens that would have been used in the database.
+    /// So we need this function to compute the actual usage in order to send it in the HTTP response.
+    pub fn usage_considering_cached(&self) -> Usage {
+        if self.cached {
+            Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+            }
+        } else {
+            self.usage
+        }
+    }
 }
 
 pub struct EmbeddingResponseWithMetadata {
@@ -377,10 +394,12 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
             output: vec![],
             created: response.created,
             system: None,
-            input_messages: vec![RequestMessage {
+            input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::User,
-                content: vec![input.clone().into()],
-            }], // TODO (#399): Store this information in a more appropriate way for this kind of request
+                content: vec![ContentBlock::Text(Text {
+                    text: input.clone(),
+                })],
+            }]), // TODO (#399): Store this information in a more appropriate way for this kind of request
             raw_request: response.raw_request,
             raw_response: response.raw_response,
             usage: response.usage,

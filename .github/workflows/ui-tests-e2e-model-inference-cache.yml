@@ -21,12 +21,12 @@ on:
         type: boolean
 
 jobs:
-  ui-tests-e2e:
-    runs-on: ${{ inputs.regen_cache && 'namespace-profile-tensorzero-8x16' || 'namespace-profile-tensorzero-8x16' }}
+  ui-tests-e2e-model-inference-cache:
+    runs-on: namespace-profile-tensorzero-8x16
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
     # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
     # For now, it just runs in the merge queue and on prs from the main repo
-    if: ${{ (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' }}
+    if: github.repository == 'tensorzero/tensorzero' && ((github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch')
 
     steps:
       # TODO - investigate why using the Namespace checkout action causes
@@ -43,7 +43,18 @@ jobs:
           node-version: "22.9.0"
 
       - name: Setup `pnpm`
-        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@latest; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Install `pnpm` dependencies
         run: pnpm install --frozen-lockfile
@@ -101,20 +112,32 @@ jobs:
           echo "S3_SECRET_ACCESS_KEY=${{ secrets.S3_SECRET_ACCESS_KEY }}" >> fixtures/.env-gateway
           # Save the old cache file for comparison
           cp ./fixtures/model_inference_cache_e2e.jsonl ./fixtures/model_inference_cache_e2e.jsonl.old
-          ./fixtures/regenerate-model-inference-cache.sh
+          # Run up to 3 times if it fails. We need to retry *outside* of playwright, so that we wipe the
+          # model inference cache each time. Retrying an individual playwright test without wiping the database
+          # will pollute the cache with duplicate entries.
+          for i in {1..3}; do
+            if ./fixtures/regenerate-model-inference-cache.sh; then
+              break
+            elif [ $i -eq 3 ]; then
+              echo "Failed after 3 attempts"
+              exit 1
+            else
+              echo "Attempt $i failed, retrying..."
+            fi
+          done
           # Check that the old and new cache files have the same number of rows
           OLD_ROWS=$(wc -l < ./fixtures/model_inference_cache_e2e.jsonl.old)
           NEW_ROWS=$(wc -l < ./fixtures/model_inference_cache_e2e.jsonl)
           echo "Old cache file has $OLD_ROWS rows, new cache file has $NEW_ROWS rows"
-          # Temporarily disabled
-          # if [ "$OLD_ROWS" != "$NEW_ROWS" ]; then
-          #   echo "ERROR: Row count mismatch between old and new cache files"
-          #   echo "Old rows:"
-          #   echo "$OLD_ROWS"
-          #   echo "New rows:"
-          #   echo "$NEW_ROWS"
-          #   exit 1
-          # fi
+          if [ "$OLD_ROWS" != "$NEW_ROWS" ]; then
+            echo "ERROR: Row count mismatch between old and new cache files"
+            echo "Old rows:"
+            echo "$OLD_ROWS"
+            echo "New rows:"
+            echo "$NEW_ROWS"
+            # Temporarily disabled
+            # exit 1
+          fi
           # Note that we cannot check the file contents - we will legitimately get some different cache keys when
           # regenerating, since the output from some cache entries get fed into judge models (affecting the cache key)
           echo "Cache file validation passed: same number of rows"

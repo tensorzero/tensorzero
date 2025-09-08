@@ -6,9 +6,11 @@ use opentelemetry::trace::TracerProvider as _;
 use opentelemetry::KeyValue;
 use opentelemetry_sdk::trace::{SdkTracerProvider, SpanExporter};
 use opentelemetry_sdk::Resource;
-use tower_http::trace::TraceLayer;
+use tower_http::trace::{
+    DefaultOnEos, DefaultOnFailure, DefaultOnRequest, DefaultOnResponse, TraceLayer,
+};
 use tracing::level_filters::LevelFilter;
-use tracing::Span;
+use tracing::{Level, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::layer::Filter;
 use tracing_subscriber::{filter, EnvFilter, Registry};
@@ -26,7 +28,7 @@ pub enum LogFormat {
 // Builds the internal OpenTelemetry layer, without any filtering applied.
 fn internal_build_otel_layer<T: SpanExporter + 'static>(
     override_exporter: Option<T>,
-) -> Result<impl Layer<Registry>, Error> {
+) -> Result<(impl Layer<Registry>, SdkTracerProvider), Error> {
     let mut provider = SdkTracerProvider::builder().with_resource(
         Resource::builder_empty()
             .with_attribute(KeyValue::new(
@@ -53,9 +55,29 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
     let provider = provider.build();
     let tracer = provider.tracer("tensorzero");
     opentelemetry::global::set_tracer_provider(provider.clone());
-    Ok(tracing_opentelemetry::layer()
-        .with_tracer(tracer)
-        .with_level(true))
+    Ok((
+        tracing_opentelemetry::layer()
+            .with_tracer(tracer)
+            .with_level(true),
+        provider,
+    ))
+}
+
+pub async fn shutdown_otel(provider: SdkTracerProvider) -> Result<(), Error> {
+    tokio::task::spawn_blocking(move || {
+        provider.shutdown().map_err(|e| {
+            Error::new(ErrorDetails::Observability {
+                message: format!("Failed to shutdown OpenTelemetry: {e}"),
+            })
+        })
+    })
+    .await
+    .map_err(|e| {
+        Error::new(ErrorDetails::Observability {
+            message: format!("Failed to wait on OpenTelemetry shutdown: {e}"),
+        })
+    })??;
+    Ok(())
 }
 
 /// Creates an OpenTelemetry export layer. This layer is disabled by default,
@@ -71,13 +93,20 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
 /// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/protocol/exporter.md#endpoint-urls-for-otlphttp
 pub fn build_opentelemetry_layer<T: SpanExporter + 'static>(
     override_exporter: Option<T>,
-) -> Result<(DelayedOtelEnableHandle, impl Layer<Registry>), Error> {
+) -> Result<
+    (
+        DelayedOtelEnableHandle,
+        impl Layer<Registry>,
+        SdkTracerProvider,
+    ),
+    Error,
+> {
     let (otel_reload_filter, reload_handle) = tracing_subscriber::reload::Layer::new(Box::new(
         LevelFilter::OFF,
     )
         as Box<dyn Filter<_> + Send + Sync>);
 
-    let base_otel_layer = internal_build_otel_layer(override_exporter)?;
+    let (base_otel_layer, sdk_tracer_provider) = internal_build_otel_layer(override_exporter)?;
 
     let delayed_enable = DelayedOtelEnableHandle {
         enable_cb: Box::new(move || {
@@ -122,6 +151,7 @@ pub fn build_opentelemetry_layer<T: SpanExporter + 'static>(
         // This means that we unconditionally construct the `tracing_opentelemetry` layer,
         // (including the batch exporter), which will just end being unused if OTEL exporting is disabled.
         base_otel_layer.with_filter(otel_reload_filter),
+        sdk_tracer_provider,
     ))
 }
 
@@ -175,7 +205,17 @@ impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
             );
             span
         }
-        self.layer(TraceLayer::new_for_http().make_span_with(make_span))
+        self.layer(
+            TraceLayer::new_for_http()
+                .make_span_with(make_span)
+                // We only care about the wrapping span, not the actual events logged.
+                // Set these to `TRACE` to prevent them from showing up in our stdout logs
+                // (this will also suppress them from OTEL in production, which is fine)
+                .on_request(DefaultOnRequest::new().level(Level::TRACE))
+                .on_failure(DefaultOnFailure::new().level(Level::TRACE))
+                .on_response(DefaultOnResponse::new().level(Level::TRACE))
+                .on_eos(DefaultOnEos::new().level(Level::TRACE)),
+        )
     }
 }
 
@@ -229,6 +269,7 @@ pub struct DelayedLogConfig {
     /// must manually log the error.
     pub delayed_otel: Result<DelayedOtelEnableHandle, Error>,
     pub delayed_debug_logs: DelayedDebugLogs,
+    pub sdk_tracer_provider: Option<SdkTracerProvider>,
 }
 
 /// This is used when `gateway.debug` is `false` and `RUST_LOG` is not set
@@ -308,9 +349,13 @@ pub async fn setup_observability(log_format: LogFormat) -> Result<DelayedLogConf
 
     // We need to provide a dummy generic parameter to satisfy the compiler
     let otel_data = build_opentelemetry_layer::<opentelemetry_otlp::SpanExporter>(None);
-    let (delayed_otel, otel_layer) = match otel_data {
-        Ok((delayed_otel, otel_layer)) => (Ok(delayed_otel), Some(otel_layer)),
-        Err(e) => (Err(e), None),
+    let (delayed_otel, otel_layer, sdk_tracer_provider) = match otel_data {
+        Ok((delayed_otel, otel_layer, sdk_tracer_provider)) => (
+            Ok(delayed_otel),
+            Some(otel_layer),
+            Some(sdk_tracer_provider),
+        ),
+        Err(e) => (Err(e), None, None),
     };
     tracing_subscriber::registry()
         .with(otel_layer)
@@ -341,6 +386,7 @@ pub async fn setup_observability(log_format: LogFormat) -> Result<DelayedLogConf
     Ok(DelayedLogConfig {
         delayed_otel,
         delayed_debug_logs,
+        sdk_tracer_provider,
     })
 }
 

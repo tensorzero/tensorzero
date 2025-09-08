@@ -8,6 +8,8 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
+    config::Config,
+    db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     model::CredentialLocation,
@@ -123,6 +125,9 @@ impl UninitializedGCPVertexGeminiSFTConfig {
             .transpose()?;
         Ok(Self {
             model,
+            bucket_name,
+            project_id,
+            region,
             learning_rate_multiplier,
             adapter_size,
             n_epochs,
@@ -133,10 +138,7 @@ impl UninitializedGCPVertexGeminiSFTConfig {
             service_account,
             kms_key_name,
             tuned_model_display_name,
-            bucket_name,
             bucket_path_prefix,
-            project_id,
-            region,
         })
     }
 
@@ -150,7 +152,7 @@ impl UninitializedGCPVertexGeminiSFTConfig {
     /// :param adapter_size: The adapter size to use for the fine-tuning job.
     /// :param n_epochs: The number of epochs to use for the fine-tuning job.
     /// :param export_last_checkpoint_only: Whether to export the last checkpoint only.
-    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::GCP_VERTEX_CREDENTIALS_PATH". See docs for more details.
+    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like `env::GCP_VERTEX_CREDENTIALS_PATH`. See docs for more details.
     /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
     /// :param seed: The seed to use for the fine-tuning job.
     /// :param service_account: The service account to use for the fine-tuning job.
@@ -233,6 +235,8 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
+        _clickhouse_connection_info: &ClickHouseConnectionInfo,
+        _config: &Config,
     ) -> Result<Self::Handle, Error> {
         // TODO(#2642): improve error handling here so we know what index of example failed
         let train_rows: Vec<GCPVertexGeminiSupervisedRow> = train_examples
@@ -450,7 +454,7 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
             self.project_id.clone(),
             self.credential_location
                 .clone()
-                .unwrap_or(default_api_key_location()),
+                .unwrap_or_else(default_api_key_location),
         )
     }
 }

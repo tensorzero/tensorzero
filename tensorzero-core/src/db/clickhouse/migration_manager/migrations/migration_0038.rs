@@ -10,14 +10,14 @@ use std::time::Duration;
  * This should allow consumers to easily query episode data by id.
  */
 
-pub struct Migration0036<'a> {
+pub struct Migration0038<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
 
-const MIGRATION_ID: &str = "0036";
+const MIGRATION_ID: &str = "0038";
 
 #[async_trait]
-impl Migration for Migration0036<'_> {
+impl Migration for Migration0038<'_> {
     async fn can_apply(&self) -> Result<(), Error> {
         if !check_table_exists(self.clickhouse, "ChatInference", MIGRATION_ID).await? {
             return Err(Error::new(ErrorDetails::ClickHouseMigration {

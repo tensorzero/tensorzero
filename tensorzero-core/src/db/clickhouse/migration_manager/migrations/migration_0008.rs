@@ -11,7 +11,7 @@ use async_trait::async_trait;
 /// `ChatInference` and `JsonInference` to be nullable.
 /// This is required since we don't really get latency measurements for batch requests.
 ///
-/// It also adds a raw_request and raw_response column to the `BatchRequest` table for
+/// It also adds a `raw_request` and `raw_response` column to the `BatchRequest` table for
 /// debugging and observability of batch requests.
 pub struct Migration0008<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
@@ -39,9 +39,9 @@ impl Migration for Migration0008<'_> {
         Ok(())
     }
 
-    /// Check if the migration has already been applied by checking if the raw_request, raw_response, function_name or and variant_name
+    /// Check if the migration has already been applied by checking if the `raw_request`, `raw_response`, `function_name` or and `variant_name`
     /// columns exist in BatchRequest
-    /// and if the processing_time_ms columns in ChatInference and JsonInference and response_time_ms column in ModelInference is Nullable
+    /// and if the `processing_time_ms` columns in ChatInference and JsonInference and `response_time_ms` column in ModelInference is Nullable
     async fn should_apply(&self) -> Result<bool, Error> {
         if !check_column_exists(self.clickhouse, "BatchRequest", "raw_request", "0008").await? {
             return Ok(true);
