@@ -62,6 +62,8 @@ services:
       - CLICKHOUSE_PASSWORD=chpassword
     ports:
       - "8123:8123"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
     healthcheck:
       test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
       start_period: 30s
@@ -104,6 +106,9 @@ services:
       start_period: 30s
       start_interval: 1s
       timeout: 1s
+
+volumes:
+  clickhouse-data:
 ```
 
 </Accordion>
