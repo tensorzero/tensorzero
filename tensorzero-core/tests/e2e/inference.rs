@@ -2655,7 +2655,7 @@ pub async fn e2e_test_dynamic_api_key() {
     assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
     let response_json = response.json::<Value>().await.unwrap();
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
-    assert!(error_message.contains("API key missing for provider Dummy"));
+    assert!(error_message.contains("API key missing for provider: Dummy"));
 
     let payload = json!({
         "function_name": "basic_test",
@@ -3130,7 +3130,7 @@ async fn test_dummy_only_inference_invalid_default_function_arg() {
     let response_text = response.text().await.unwrap();
     assert!(
         response_text.contains(
-            "Message has non-string content but there is no schema given for role system."
+            "Message has non-string content but there is no template `system` in any variant"
         ),
         "Unexpected error message: {response_text}",
     );

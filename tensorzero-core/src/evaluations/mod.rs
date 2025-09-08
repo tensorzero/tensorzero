@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 
 use crate::config::{ErrorContext, UninitializedSchemas};
-use crate::variant::Variant;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
+use crate::variant::Variant;
 use crate::{
     config::{
         path::ResolvedTomlPath, MetricConfig, MetricConfigLevel, MetricConfigOptimize,

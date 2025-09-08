@@ -354,7 +354,7 @@ async fn e2e_test_invalid_system_input_template_no_schema() {
     let error = response_json["error"].as_str().unwrap();
     assert_eq!(
         error,
-        "Message has non-string content but there is no schema given for role system."
+        "Message has non-string content but there is no template `system` in any variant"
     );
 }
 
@@ -389,7 +389,7 @@ async fn e2e_test_invalid_user_input_template_no_schema() {
     let error = response_json["error"].as_str().unwrap();
     assert_eq!(
         error,
-        "Message at index 0 has non-string content but there is no schema given for role user."
+        "Message at index 0 has non-string content but there is no template `user` in any variant"
     );
 }
 
@@ -422,7 +422,7 @@ async fn e2e_test_invalid_assistant_input_template_no_schema() {
     let error = response_json["error"].as_str().unwrap();
     assert_eq!(
         error,
-        "Message at index 0 has non-string content but there is no schema given for role assistant."
+        "Message at index 0 has non-string content but there is no template `assistant` in any variant"
     );
 }
 
