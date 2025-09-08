@@ -624,10 +624,12 @@ export async function queryInferenceById(
 async function parseModelInferenceRow(
   row: ModelInferenceRow,
 ): Promise<ParsedModelInferenceRow> {
+  console.log(row);
   const parsedMessages = z
     .array(modelInferenceInputMessageSchema)
     .parse(JSON.parse(row.input_messages));
   const resolvedMessages = await resolveModelInferenceMessages(parsedMessages);
+  console.log(resolvedMessages);
   const processedRow = {
     ...row,
     input_messages: resolvedMessages,

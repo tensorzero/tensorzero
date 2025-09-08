@@ -4,10 +4,9 @@ import type {
   JsonInferenceOutput,
   ContentBlockChatOutput,
   ContentBlockOutput,
-  Thought,
   JsonValue,
+  Thought,
 } from "tensorzero-node";
-import { assertSchemaType } from "../common";
 
 /**
  * JSON types.
@@ -75,13 +74,11 @@ export const rawTextInputSchema = z.object({
 });
 export type RawTextInput = z.infer<typeof rawTextInputSchema>;
 
-export const thoughtSchema = assertSchemaType<Thought>()(
-  z.object({
-    text: z.string().nullable(),
-    signature: z.string().nullable(),
-    _internal_provider_type: z.string().nullable(),
-  }),
-);
+export const thoughtSchema = z.object({
+  text: z.string().nullish().transform((val) => val ?? null),
+  signature: z.string().nullish().transform((val) => val ?? null), 
+  _internal_provider_type: z.string().nullish().transform((val) => val ?? null),
+});
 
 export const thoughtContentSchema = thoughtSchema.extend({
   type: z.literal("thought"),
@@ -329,22 +326,17 @@ export const textContentSchema = z.object({
 });
 export type TextContent = z.infer<typeof textContentSchema>;
 
-export const contentBlockOutputSchema = assertSchemaType<ContentBlockOutput>()(
-  z.discriminatedUnion("type", [
-    textContentSchema,
-    toolCallContentSchema,
-    thoughtContentSchema,
-    unknownSchema,
-  ]),
-);
+export const contentBlockOutputSchema = z.discriminatedUnion("type", [
+  textContentSchema,
+  toolCallContentSchema,
+  thoughtContentSchema,
+  unknownSchema,
+]) satisfies z.ZodType<ContentBlockOutput>;
 
-export const jsonInferenceOutputSchema =
-  assertSchemaType<JsonInferenceOutput>()(
-    z.object({
-      raw: z.string().nullable(),
-      parsed: JsonValueSchema,
-    }),
-  );
+export const jsonInferenceOutputSchema = z.object({
+  raw: z.string().nullable(),
+  parsed: JsonValueSchema,
+}) satisfies z.ZodType<JsonInferenceOutput>;
 
 export const toolCallOutputSchema = z
   .object({
@@ -359,19 +351,21 @@ export const toolCallOutputSchema = z
 
 export type ToolCallOutput = z.infer<typeof toolCallOutputSchema>;
 
-export const contentBlockChatOutputSchema =
-  assertSchemaType<ContentBlockChatOutput>()(
-    z.discriminatedUnion("type", [
-      textContentSchema,
-      toolCallOutputSchema,
-      thoughtContentSchema,
-      unknownSchema,
-    ]),
-  );
+export const contentBlockChatOutputSchema = z.discriminatedUnion("type", [
+  textContentSchema,
+  toolCallOutputSchema,
+  thoughtContentSchema,
+  unknownSchema,
+]) satisfies z.ZodType<ContentBlockChatOutput>;
 
 export const modelInferenceOutputContentBlockSchema = z.discriminatedUnion(
   "type",
-  [textContentSchema, toolCallContentSchema],
+  [
+    textContentSchema,
+    toolCallContentSchema,
+    thoughtContentSchema,
+    unknownSchema,
+  ],
 );
 
 export type ModelInferenceOutputContentBlock = z.infer<
