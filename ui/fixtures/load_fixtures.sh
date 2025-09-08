@@ -6,22 +6,16 @@ if [ -f /load_complete.marker ]; then
   echo "Fixtures already loaded; this script will now exit with status 0"
   exit 0
 fi
-# Determine credentials based on environment
+
+CLICKHOUSE_HOST_VAR="${CLICKHOUSE_HOST}"
+CLICKHOUSE_USER_VAR="${CLICKHOUSE_USER:-chuser}"
+CLICKHOUSE_PASSWORD_VAR="${CLICKHOUSE_PASSWORD:-chpassword}"
+# Determine flags based on environment
 if command -v buildkite-agent >/dev/null 2>&1; then
-  # Running on Buildkite - use secrets (fail if not available)
-  if [ "${TENSORZERO_CLICKHOUSE_FAST_CHANNEL:-}" = "1" ]; then
-    CLICKHOUSE_HOST_VAR=$(buildkite-agent secret get CLICKHOUSE_HOST_INSERT_FAST_CHANNEL)
-  else
-    CLICKHOUSE_HOST_VAR=$(buildkite-agent secret get CLICKHOUSE_HOST_INSERT)
-  fi
-  CLICKHOUSE_USER_VAR=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_USERNAME)
-  CLICKHOUSE_PASSWORD_VAR=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_PASSWORD)
+  # Running on Buildkite - use TLS
   CLICKHOUSE_SECURE_FLAG="--secure"
 else
-  # Not on Buildkite - use environment variables with defaults
-  CLICKHOUSE_HOST_VAR="${CLICKHOUSE_HOST}"
-  CLICKHOUSE_USER_VAR="${CLICKHOUSE_USER:-chuser}"
-  CLICKHOUSE_PASSWORD_VAR="${CLICKHOUSE_PASSWORD:-chpassword}"
+  # Not on Buildkite - assume that we're connecting to a local instance, so no TLS
   CLICKHOUSE_SECURE_FLAG=""
 fi
 
