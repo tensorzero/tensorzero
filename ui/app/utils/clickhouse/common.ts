@@ -338,10 +338,13 @@ export const contentBlockOutputSchema = assertSchemaType<ContentBlockOutput>()(
   ]),
 );
 
-export const jsonInferenceOutputSchema = z.object({
-  raw: z.string().nullable(),
-  parsed: JsonValueSchema,
-}) satisfies z.ZodType<JsonInferenceOutput>;
+export const jsonInferenceOutputSchema =
+  assertSchemaType<JsonInferenceOutput>()(
+    z.object({
+      raw: z.string().nullable(),
+      parsed: JsonValueSchema,
+    }),
+  );
 
 export const toolCallOutputSchema = z
   .object({
@@ -356,12 +359,15 @@ export const toolCallOutputSchema = z
 
 export type ToolCallOutput = z.infer<typeof toolCallOutputSchema>;
 
-export const contentBlockChatOutputSchema = z.discriminatedUnion("type", [
-  textContentSchema,
-  toolCallOutputSchema,
-  thoughtContentSchema,
-  unknownSchema,
-]) satisfies z.ZodType<ContentBlockChatOutput>;
+export const contentBlockChatOutputSchema =
+  assertSchemaType<ContentBlockChatOutput>()(
+    z.discriminatedUnion("type", [
+      textContentSchema,
+      toolCallOutputSchema,
+      thoughtContentSchema,
+      unknownSchema,
+    ]),
+  );
 
 export const modelInferenceOutputContentBlockSchema = z.discriminatedUnion(
   "type",

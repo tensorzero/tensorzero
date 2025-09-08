@@ -13,14 +13,17 @@ import type {
   ContentBlockChatOutput,
   Tool,
 } from "tensorzero-node";
+import { assertSchemaType } from "../common";
 
 // Zod schemas for ToolCallConfigDatabaseInsert
-export const toolSchema = z.object({
-  description: z.string(),
-  parameters: JsonValueSchema,
-  name: z.string(),
-  strict: z.boolean(),
-}) satisfies z.ZodType<Tool>;
+export const toolSchema = assertSchemaType<Tool>()(
+  z.object({
+    description: z.string(),
+    parameters: JsonValueSchema,
+    name: z.string(),
+    strict: z.boolean(),
+  }),
+);
 
 export const toolChoiceSchema = z.union([
   z.literal("none"),
