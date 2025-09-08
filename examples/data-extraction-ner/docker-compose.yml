@@ -82,3 +82,6 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+
+volumes:
+  clickhouse-data:
