@@ -473,6 +473,10 @@ jobs:
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
+      - name: Set TENSORZERO_GATEWAY_TAG
+        run: |
+          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+
       - name: Launch non-replicated ClickHouse container for E2E tests
         if: matrix.replicated == false
         run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
