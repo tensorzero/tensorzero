@@ -94,7 +94,7 @@ export class TensorZeroClient {
 
 export default TensorZeroClient;
 
-export async function getConfig(configPath: string): Promise<Config> {
+export async function getConfig(configPath: string | null): Promise<Config> {
   const configString = await nativeGetConfig(configPath);
   return JSON.parse(configString) as Config;
 }
