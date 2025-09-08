@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::config::path::ResolvedTomlPath;
@@ -537,7 +537,11 @@ impl Variant for ChatCompletionConfig {
     }
 
     fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
-        self.templates.get_all_templates()
+        self.templates.get_all_template_paths()
+    }
+
+    fn get_all_template_names(&self) -> HashSet<String> {
+        self.templates.get_all_template_names()
     }
 
     async fn start_batch_inference<'a>(
@@ -1103,6 +1107,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
+            all_template_names: HashSet::new(),
         });
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".into(),
@@ -1581,6 +1586,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: None,
+            all_template_names: HashSet::new(),
         });
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -1756,6 +1762,7 @@ mod tests {
             output_schema: hardcoded_output_schema,
             implicit_tool_call_config,
             description: None,
+            all_template_names: HashSet::new(),
         });
         let inference_params = InferenceParams {
             chat_completion: ChatCompletionInferenceParams {
@@ -1885,6 +1892,7 @@ mod tests {
             output_schema: hardcoded_output_schema,
             implicit_tool_call_config,
             description: None,
+            all_template_names: HashSet::new(),
         });
         let inference_params = InferenceParams::default();
         // Will dynamically set "response" instead of "answer"
@@ -2023,6 +2031,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
+            all_template_names: HashSet::new(),
         })));
 
         let system_template = get_system_template();
@@ -2295,6 +2304,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
+            all_template_names: HashSet::new(),
         });
         let mut inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
@@ -2403,6 +2413,7 @@ mod tests {
                 parallel_tool_calls: None,
             },
             description: None,
+            all_template_names: HashSet::new(),
         });
         let inference_config = InferenceConfig {
             ids: InferenceIds {

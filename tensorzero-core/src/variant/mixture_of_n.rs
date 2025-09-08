@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt;
 
 use futures::future::join_all;
@@ -231,12 +232,7 @@ impl Variant for MixtureOfNConfig {
     }
 
     fn get_all_template_names(&self) -> HashSet<String> {
-        let mut names = HashSet::new();
-        for candidate in &self.candidates {
-            names.extend(candidate.get_all_template_names());
-        }
-        names.extend(self.fuser.inner.get_all_template_names());
-        names
+        self.fuser.inner.get_all_template_names()
     }
 
     async fn start_batch_inference<'a>(
@@ -1255,6 +1251,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
             implicit_tool_call_config: ToolCallConfig::default(),
             description: None,
+            all_template_names: HashSet::new(),
         });
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
@@ -1539,6 +1536,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             description: None,
+            all_template_names: HashSet::new(),
         });
 
         let InferenceOrStreamResult::NonStream(result) = mixture_of_n_variant

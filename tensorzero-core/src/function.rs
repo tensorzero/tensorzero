@@ -539,7 +539,7 @@ fn validate_all_text_input(
             message: "`input.system` is empty but a system template is present.".to_string(),
         })),
     }?;
-    for message in input.messages.iter() {
+    for message in &input.messages {
         for block in &message.content {
             match block {
                 InputMessageContent::Text(kind) => {
@@ -565,7 +565,7 @@ fn validate_all_text_input(
                     // TODO - figure out a way to avoid this clone
                     let value = Value::Object(template.arguments.clone());
                     validate_single_message(
-                        None,
+                        &value,
                         schemas.get_named_schema(&template.name),
                         &template.name,
                         all_templates_names,

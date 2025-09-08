@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashSet;
 
 use backon::Retryable;
 use futures::future::join_all;
@@ -231,12 +232,9 @@ impl Variant for BestOfNSamplingConfig {
     }
 
     fn get_all_template_names(&self) -> HashSet<String> {
-        let mut names = HashSet::new();
-        for candidate in &self.candidates {
-            names.extend(candidate.get_all_template_names());
-        }
-        names.extend(self.evaluator.inner.get_all_template_names());
-        names
+        // The candidate variants will  already have 'get_all_template_names' called on them,
+        // so we don't need to look them up here
+        self.evaluator.inner.get_all_template_names()
     }
 
     async fn start_batch_inference<'a>(
