@@ -118,6 +118,9 @@ impl InputMessage {
 }
 
 impl InputMessageContent {
+    /// The 'role' parameter is only used to handle legacy role-based templates (`{"type": "text", "value": ...}`).
+    /// Once we removed support for these input blocks (and only support `{"type": "template", "name": "...", "arguments": ...}`),
+    /// we can remove the 'role' parameter.
     pub async fn resolve(
         self,
         role: Role,

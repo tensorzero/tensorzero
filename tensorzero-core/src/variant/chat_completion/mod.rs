@@ -42,6 +42,12 @@ use super::{
 pub struct TemplateWithSchema {
     pub template: PathWithContents,
     pub schema: Option<StaticJSONSchema>,
+    // If true, this is a template declared with the legacy `user_template`/`assistant_template`/`system_template`
+    // or `input_wrappers.user`/`input_wrappers.assistant`/`input_wrappers.system` fields.
+    // We allow using these templates without a schema, in which case we inject the special variable
+    // `{user_text}`/`{assistant_text}`/`{system_text}` based on the role.
+    // New-style template definitions (using `templates.<name>`) will have this set to `false`.
+    // Eventually, this field will be removed entirely.
     pub legacy_input_wrapper: bool,
 }
 
@@ -471,12 +477,10 @@ impl Variant for ChatCompletionConfig {
         models.validate(&self.model)?;
 
         // Validate the system template matches the system schema (best effort, we cannot check the variables comprehensively)
-        validate_template_and_schema(
+        validate_legacy_template_and_schema(
             TemplateKind::System,
             function.system_schema(),
-            self.templates
-                .get_implicit_system_template()
-                .map(|t| &t.template.path),
+            self.templates.get_implicit_system_template().map(|t| &**t),
             templates,
         )
         .map_err(|e| {
@@ -488,12 +492,12 @@ impl Variant for ChatCompletionConfig {
         })?;
 
         // Validate the user template matches the user schema (best effort, we cannot check the variables comprehensively)
-        validate_template_and_schema(
+        validate_legacy_template_and_schema(
             TemplateKind::User,
             function.user_schema(),
             self.templates
                 .get_implicit_template(Role::User)
-                .map(|t| &t.template.path),
+                .map(|t| &**t),
             templates,
         )
         .map_err(|e| {
@@ -505,12 +509,12 @@ impl Variant for ChatCompletionConfig {
         })?;
 
         // Validate the assistant template matches the assistant schema (best effort, we cannot check the variables comprehensively)
-        validate_template_and_schema(
+        validate_legacy_template_and_schema(
             TemplateKind::Assistant,
             function.assistant_schema(),
             self.templates
                 .get_implicit_template(Role::Assistant)
-                .map(|t| &t.template.path),
+                .map(|t| &**t),
             templates,
         )
         .map_err(|e| {
@@ -521,15 +525,14 @@ impl Variant for ChatCompletionConfig {
             })
         })?;
 
-        for schema_name in function.schemas().inner.keys() {
-            if self.templates.get_named_template(schema_name).is_none() {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: format!(
-                        "`functions.{function_name}.variants.{variant_name}.templates.{schema_name}` is required when `functions.{function_name}.schemas.{schema_name}` is specified"
-                    ),
-                }));
-            }
-        }
+        validate_all_schemas_have_templates(function, &self.templates).map_err(|e| {
+            let schema_name = e.schema_name;
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "`functions.{function_name}.variants.{variant_name}.templates.{schema_name}` is required when `functions.{function_name}.schemas.{schema_name}` is specified"
+                ),
+            })
+        })?;
         Ok(())
     }
 
@@ -594,23 +597,26 @@ pub enum TemplateKind {
     Assistant,
 }
 
-pub fn validate_template_and_schema(
+pub fn validate_legacy_template_and_schema(
     kind: TemplateKind,
     schema: Option<&StaticJSONSchema>,
-    template: Option<&ResolvedTomlPath>,
+    template: Option<&TemplateWithSchema>,
     templates: &TemplateConfig,
 ) -> Result<(), Error> {
     match (schema, template) {
         (None, Some(template)) => {
-            let template_name = template.get_template_key();
+            let template_name = template.template.path.get_template_key();
             let undeclared_vars = templates.get_undeclared_variables(&template_name)?;
             let allowed_var = match kind {
                 TemplateKind::System => SYSTEM_TEXT_TEMPLATE_VAR,
                 TemplateKind::User => USER_TEXT_TEMPLATE_VAR,
                 TemplateKind::Assistant => ASSISTANT_TEXT_TEMPLATE_VAR,
             };
-            // When we have no schema, the template can have at most one variable
-            if !undeclared_vars.is_empty() {
+            // When a legacy template has no schema, the template can have at most one variable.
+            // New-style templates (declared with `templates.<name>`) can have any number of variables
+            // when no schema is provided - any undefined variables will produce an error when we actually
+            // apply the template
+            if template.legacy_input_wrapper && !undeclared_vars.is_empty() {
                 // If the template has any variables, it must be the one allowed variable (e.g. `system_text`)
                 // based on the template kind
                 let mut undeclared_vars = undeclared_vars.into_iter().collect::<Vec<_>>();
@@ -632,6 +638,25 @@ pub fn validate_template_and_schema(
             }));
         }
         _ => {}
+    }
+    Ok(())
+}
+
+pub struct MissingTemplateError {
+    pub schema_name: String,
+}
+
+/// Checks that all schemas declared by the function have a corresponding template.
+pub fn validate_all_schemas_have_templates(
+    function: &FunctionConfig,
+    templates: &ChatTemplates,
+) -> Result<(), MissingTemplateError> {
+    for schema_name in function.schemas().inner.keys() {
+        if templates.get_named_template(schema_name).is_none() {
+            return Err(MissingTemplateError {
+                schema_name: schema_name.to_string(),
+            });
+        }
     }
     Ok(())
 }
@@ -2491,7 +2516,8 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_both_none() {
         let templates = get_test_template_config();
-        let result = validate_template_and_schema(TemplateKind::System, None, None, &templates);
+        let result =
+            validate_legacy_template_and_schema(TemplateKind::System, None, None, &templates);
         assert!(result.is_ok());
     }
 
@@ -2504,23 +2530,39 @@ mod tests {
         ))
         .unwrap();
         let template = PathBuf::from("test_validate_template_and_schema_both_some");
-        let result = validate_template_and_schema(
+        validate_legacy_template_and_schema(
             TemplateKind::System,
             Some(&schema),
-            Some(&ResolvedTomlPath::new_for_tests(template, None)),
+            Some(&TemplateWithSchema {
+                template: PathWithContents::from_path(ResolvedTomlPath::new_for_tests(
+                    template,
+                    Some("fake_data".to_string()),
+                ))
+                .unwrap(),
+                schema: Some(schema.clone()),
+                legacy_input_wrapper: false,
+            }),
             &templates,
-        );
-        assert!(result.is_ok());
+        )
+        .unwrap();
     }
 
     #[test]
     fn test_validate_template_and_schema_template_no_needs_variables() {
         let templates = get_test_template_config();
         let template = PathBuf::from("system_filled");
-        let result = validate_template_and_schema(
+        let result = validate_legacy_template_and_schema(
             TemplateKind::System,
             None,
-            Some(&ResolvedTomlPath::new_for_tests(template, None)),
+            Some(&TemplateWithSchema {
+                template: PathWithContents::from_path(ResolvedTomlPath::new_for_tests(
+                    template,
+                    Some("fake_data".to_string()),
+                ))
+                .unwrap(),
+                schema: None,
+                legacy_input_wrapper: false,
+            }),
             &templates,
         );
         assert!(result.is_ok());
@@ -2530,10 +2572,18 @@ mod tests {
     fn test_validate_template_and_schema_template_needs_variables() {
         let templates = get_test_template_config(); // Template needing variables
         let template = PathBuf::from("greeting");
-        let err = validate_template_and_schema(
+        let err = validate_legacy_template_and_schema(
             TemplateKind::System,
             None,
-            Some(&ResolvedTomlPath::new_for_tests(template, None)),
+            Some(&TemplateWithSchema {
+                template: PathWithContents::from_path(ResolvedTomlPath::new_for_tests(
+                    template,
+                    Some("fake_data".to_string()),
+                ))
+                .unwrap(),
+                schema: None,
+                legacy_input_wrapper: true,
+            }),
             &templates,
         )
         .unwrap_err();
@@ -2557,9 +2607,13 @@ mod tests {
             None,
         ))
         .unwrap();
-        let err =
-            validate_template_and_schema(TemplateKind::System, Some(&schema), None, &templates)
-                .unwrap_err();
+        let err = validate_legacy_template_and_schema(
+            TemplateKind::System,
+            Some(&schema),
+            None,
+            &templates,
+        )
+        .unwrap_err();
         let details = err.get_details();
 
         if let ErrorDetails::Config { message } = details {
