@@ -32,10 +32,10 @@ use crate::tool::ToolCallChunk;
 
 use super::openai::{
     convert_stream_error, get_chat_url, handle_openai_error, prepare_openai_tools,
-    tensorzero_to_openai_messages, tensorzero_to_openai_system_message,
+    prepare_system_or_developer_message, tensorzero_to_openai_messages,
     OpenAIAssistantRequestMessage, OpenAIContentBlock, OpenAIFinishReason, OpenAIRequestMessage,
     OpenAIResponseToolCall, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIUsage,
-    OpenAIUserRequestMessage, StreamOptions,
+    OpenAIUserRequestMessage, StreamOptions, SystemOrDeveloper,
 };
 
 lazy_static! {
@@ -86,12 +86,14 @@ impl DeepSeekCredentials {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
+                        message: format!("Dynamic api key `{key_name}` is missing"),
                     }
                     .into()
                 })
             }
             DeepSeekCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
+                message: "No credentials are set".to_string(),
             }
             .into()),
         }
@@ -604,8 +606,8 @@ pub(super) fn prepare_deepseek_messages<'a>(
                 }),
             );
         }
-    } else if let Some(system_msg) = tensorzero_to_openai_system_message(
-        request.system.as_deref(),
+    } else if let Some(system_msg) = prepare_system_or_developer_message(
+        request.system.as_deref().map(SystemOrDeveloper::System),
         Some(&request.json_mode),
         &messages,
     ) {

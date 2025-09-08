@@ -114,9 +114,11 @@ async fn test_jaeger_trace_export(
 
     let now_str = now.to_rfc3339_opts(SecondsFormat::Secs, true);
     let one_minute_ago_str = one_minute_ago.to_rfc3339_opts(SecondsFormat::Secs, true);
+    let jaeger_base_url = std::env::var("TENSORZERO_JAEGER_URL")
+        .unwrap_or_else(|_| "http://localhost:16686".to_string());
 
     let jaeger_result = client
-        .get(format!("http://localhost:16686/api/v3/traces?&query.start_time_min={one_minute_ago_str}&query.start_time_max={now_str}&query.service_name=tensorzero-gateway&query.num_traces=500"))
+        .get(format!("{jaeger_base_url}/api/v3/traces?&query.start_time_min={one_minute_ago_str}&query.start_time_max={now_str}&query.service_name=tensorzero-gateway&query.num_traces=500"))
         .send()
         .await
         .unwrap();

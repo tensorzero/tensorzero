@@ -41,12 +41,12 @@
 //!    batched exporting.
 //!
 //! We store our `CustomTracerKey` in two 'context' objects:
-//! * The `http::Request` extensions map on the HTTP request, so that our middleware can pass information
+//! * The `http::Request` extensions map on the HTTP request, so that our middleware can infopass information
 //!   to our `make_span` function.
 //! * The OpenTelemetry `Context`, which is captured by the `tracing-opentelemetry` library when we create a new span,
 //!   and passed along to `TracerWrapper::build_with_context` when the span is closed and exported.
+use std::hash::Hash;
 use std::hash::Hasher;
-use std::str::FromStr;
 
 use axum::extract::MatchedPath;
 use axum::middleware::Next;
@@ -63,13 +63,17 @@ use opentelemetry_otlp::WithTonicConfig;
 use opentelemetry_sdk::trace::SdkTracer;
 use opentelemetry_sdk::trace::{SdkTracerProvider, SpanExporter};
 use opentelemetry_sdk::Resource;
-use std::hash::Hash;
+use std::str::FromStr;
 use tokio_util::task::TaskTracker;
-use tonic::metadata::{AsciiMetadataKey, MetadataValue};
-use tower_http::trace::TraceLayer;
+use tonic::metadata::AsciiMetadataKey;
+use tonic::metadata::MetadataValue;
+use tower_http::trace::{
+    DefaultOnEos, DefaultOnFailure, DefaultOnRequest, DefaultOnResponse, TraceLayer,
+};
 use tracing::level_filters::LevelFilter;
-use tracing::Span;
-use tracing_opentelemetry::{OpenTelemetrySpanExt, PreSampledTracer};
+use tracing::{Level, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
+use tracing_opentelemetry::PreSampledTracer;
 use tracing_subscriber::layer::Filter;
 use tracing_subscriber::{filter, EnvFilter, Registry};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
@@ -514,8 +518,18 @@ impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
             );
             span
         }
-        self.layer(TraceLayer::new_for_http().make_span_with(make_span))
-            .layer(middleware::from_fn(tensorzero_otlp_headers_middleware))
+        self.layer(
+            TraceLayer::new_for_http()
+                .make_span_with(make_span)
+                // We only care about the wrapping span, not the actual events logged.
+                // Set these to `TRACE` to prevent them from showing up in our stdout logs
+                // (this will also suppress them from OTEL in production, which is fine)
+                .on_request(DefaultOnRequest::new().level(Level::TRACE))
+                .on_failure(DefaultOnFailure::new().level(Level::TRACE))
+                .on_response(DefaultOnResponse::new().level(Level::TRACE))
+                .on_eos(DefaultOnEos::new().level(Level::TRACE)),
+        )
+        .layer(middleware::from_fn(tensorzero_otlp_headers_middleware))
     }
 }
 

@@ -754,17 +754,27 @@ async fn infer_model_request_stream<'request>(
 #[derive(Debug, Deserialize, Copy, Clone, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct RetryConfig {
+    #[serde(default = "default_num_retries")]
     pub num_retries: usize,
+    #[serde(default = "default_max_delay_s")]
     pub max_delay_s: f32,
 }
 
 impl Default for RetryConfig {
     fn default() -> Self {
         RetryConfig {
-            num_retries: 0,
-            max_delay_s: 10.0,
+            num_retries: default_num_retries(),
+            max_delay_s: default_max_delay_s(),
         }
     }
+}
+
+fn default_num_retries() -> usize {
+    0
+}
+
+fn default_max_delay_s() -> f32 {
+    10.0
 }
 
 impl RetryConfig {
@@ -816,7 +826,7 @@ impl ChatCompletionConfigPyClass {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
             .templates
-            .system
+            .get_implicit_system_template()
             .as_ref()
             .map(|t| t.template.contents.clone()))
     }
@@ -826,7 +836,7 @@ impl ChatCompletionConfigPyClass {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
             .templates
-            .user
+            .get_implicit_template(crate::inference::types::Role::User)
             .as_ref()
             .map(|t| t.template.contents.clone()))
     }
@@ -836,7 +846,7 @@ impl ChatCompletionConfigPyClass {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
             .templates
-            .assistant
+            .get_implicit_template(crate::inference::types::Role::Assistant)
             .as_ref()
             .map(|t| t.template.contents.clone()))
     }

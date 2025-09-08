@@ -3,6 +3,7 @@ use crate::serde_util::{
     deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
 };
 use crate::tool::ToolCallInput;
+use crate::variant::chat_completion::{ASSISTANT_TEXT_TEMPLATE_VAR, USER_TEXT_TEMPLATE_VAR};
 use derive_builder::Builder;
 use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::{FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders};
@@ -262,6 +263,24 @@ impl<'de> Deserialize<'de> for TextKind {
 pub enum Role {
     User,
     Assistant,
+}
+
+impl Role {
+    /// The template name to use for `{"type": "text", "arguments": {}}` inputs.
+    /// This will eventually be deprecated in favor of explicit `{"type": "template", "name": "user", "arguments": {}}` inputs.
+    pub fn implicit_template_name(&self) -> &'static str {
+        match self {
+            Role::User => "user",
+            Role::Assistant => "assistant",
+        }
+    }
+
+    pub fn implicit_template_var(&self) -> &'static str {
+        match self {
+            Role::User => USER_TEXT_TEMPLATE_VAR,
+            Role::Assistant => ASSISTANT_TEXT_TEMPLATE_VAR,
+        }
+    }
 }
 
 impl std::fmt::Display for Role {
@@ -1593,7 +1612,7 @@ pub struct CollectChunksArgs<'a, 'b> {
     /// We may sometimes construct a fake stream from a non-streaming response
     /// (e.g. in `mixture_of_n` if we have a successful non-streaming candidate, but
     /// a streaming fuser request fails).
-    /// In this case, we want to store the original 'raw_response', instead of building
+    /// In this case, we want to store the original `raw_response`, instead of building
     /// it up from the chunks.
     pub raw_response: Option<String>,
     pub inference_params: InferenceParams,

@@ -14,7 +14,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.8.5"
+version = "2025.9.1"
 rust-version = "1.86.0"
 license = "Apache-2.0"
 
@@ -54,6 +54,7 @@ ts-rs = { version = "11.0.1", features = [
     "serde-json-impl",
     "uuid-impl",
     "url-impl",
+    "chrono-impl",
     "no-serde-warnings",
 ] }
 chrono = { version = "0.4.41", features = ["serde"] }
@@ -72,6 +73,8 @@ unsafe_code = "forbid"
 [workspace.lints.clippy]
 allow_attributes = "deny"
 dbg_macro = "deny"
+# NB: Slowly making progress towards:
+# doc_markdown = "deny"
 expect_used = "deny"
 explicit_iter_loop = "deny"
 if_not_else = "deny"
@@ -97,6 +100,12 @@ unnecessary_wraps = "deny"
 unreachable = "deny"
 unused_self = "deny"
 unwrap_used = "deny"
+
+# The following pedantic lints are explicitly set to "allow" to give authors discretion on their use.
+default_trait_access = "allow"
+match_same_arms = "allow"
+must_use_candidate = "allow"
+single_match_else = "allow"
 
 [profile.performance]
 inherits = "release"
