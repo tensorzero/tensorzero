@@ -280,7 +280,7 @@ fn prepare_system_message(
 ) -> Result<Option<String>, Error> {
     Ok(match template {
         Some(template) => {
-            let context = if template.schema.is_some() {
+            let context = if template.schema.is_some() || !template.legacy_input_wrapper {
                 Cow::Borrowed(system.unwrap_or(&Value::Null))
             } else {
                 Cow::Owned(serde_json::json!({

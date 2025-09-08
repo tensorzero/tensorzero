@@ -3,6 +3,7 @@
 use http::StatusCode;
 use reqwest::Client;
 use serde_json::{json, Value};
+use tensorzero::{InferenceOutput, InferenceResponse};
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_model_inferences_clickhouse,
 };
@@ -422,4 +423,55 @@ async fn e2e_test_invalid_assistant_input_template_no_schema() {
         error,
         "Message at index 0 has non-string content but there is no schema given for role assistant."
     );
+}
+
+#[tokio::test]
+async fn e2e_test_named_system_template() {
+    let config_dir = tempfile::tempdir().unwrap();
+    let config_path = config_dir.path().join("tensorzero.toml");
+    let config = r#"
+  [functions.test_system_template]
+  type = "chat"
+
+  [functions.test_system_template.variants.test]
+  type = "chat_completion"
+  model = "dummy::echo_request_messages"
+  templates.system.path = "./system_template.minijinja"
+  "#;
+    std::fs::write(&config_path, config).unwrap();
+    std::fs::write(
+        config_dir.path().join("system_template.minijinja"),
+        "You are a helpful and friendly assistant named {{ assistant_name }}",
+    )
+    .unwrap();
+
+    let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(config_path.to_owned()),
+        clickhouse_url: None,
+        timeout: None,
+        verify_credentials: true,
+        allow_batch_writes: true,
+    })
+    .build()
+    .await
+    .unwrap();
+
+    let res = client
+        .inference(tensorzero::ClientInferenceParams {
+            function_name: Some("test_system_template".to_string()),
+            variant_name: Some("test".to_string()),
+            input: tensorzero::ClientInput {
+                system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+                messages: vec![],
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let InferenceOutput::NonStreaming(InferenceResponse::Chat(res)) = res else {
+        panic!("Expected non-streaming response, got {res:?}");
+    };
+
+    panic!("Response: {res:?}");
 }

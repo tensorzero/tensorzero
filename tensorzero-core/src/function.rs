@@ -532,7 +532,7 @@ fn validate_all_text_input(
 ) -> Result<(), Error> {
     match (input.system.as_ref(), system_schema) {
         // If there is any system message passed we validate it
-        (Some(system), _) => validate_single_message(system, system_schema, None),
+        (Some(system), _) => validate_single_message(system, system_schema),
         // If there is no system message and no schema we accept
         (None, None) => Ok(()),
         // If no system message is passed and we have a schema we fail
@@ -540,7 +540,7 @@ fn validate_all_text_input(
             message: "`input.system` is empty but a system template is present.".to_string(),
         })),
     }?;
-    for (index, message) in input.messages.iter().enumerate() {
+    for message in input.messages.iter() {
         // Only for Text blocks, not RawText blocks since we don't validate those
         for block in &message.content {
             if let InputMessageContent::Text(kind) = block {
@@ -555,7 +555,7 @@ fn validate_all_text_input(
                     Role::Assistant => assistant_schema,
                     Role::User => user_schema,
                 };
-                validate_single_message(&content, schema, Some((index, &message.role)))?;
+                validate_single_message(&content, schema)?;
             }
         }
     }
@@ -563,30 +563,18 @@ fn validate_all_text_input(
 }
 
 /// Validates a single message according to the following rules:
-/// If there is no schema, the message `content` must be a string
+/// If there is no schema, we don't perform any validation, as individual variants may have
+/// templates (allowing non-string content to be accepted).
 /// Otherwise, the message must contain JSON content that matches the schema
 fn validate_single_message(
     content: &Value,
     schema: Option<&StaticJSONSchema>,
-    index_role: Option<(usize, &Role)>,
 ) -> Result<(), Error> {
-    match schema {
-        Some(schema) => schema.validate(content),
-        None => {
-            if content.is_string() {
-                Ok(())
-            } else {
-                Err(match index_role {
-                    Some(index_role) => Error::new(ErrorDetails::InvalidMessage {
-                        message: format!("Message at index {} has non-string content but there is no schema given for role {}.", index_role.0, index_role.1),
-                    }),
-                    None => Error::new(ErrorDetails::InvalidMessage {
-                        message: "Message has non-string content but there is no schema given for role system.".to_string(),
-                    }),
-                })
-            }
-        }
+    // TODO - we need to check if all variant sare missing the template name, and reject early with a better error.
+    if let Some(schema) = schema {
+        schema.validate(content)?;
     }
+    Ok(())
 }
 
 /// Sample a variant from the function based on variant weights (uniform random selection)
