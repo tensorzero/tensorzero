@@ -8,6 +8,8 @@ use tensorzero_core::providers::openai::optimization::{
     OpenAIGrader, OpenAIModelGraderInput, OpenAIRFTRole, OpenAIStringCheckOp,
 };
 
+use super::mock_inference_provider_base;
+
 pub struct OpenAIRFTTestCase();
 
 impl OptimizationTestCase for OpenAIRFTTestCase {
@@ -70,7 +72,7 @@ impl OptimizationTestCase for OpenAIRFTTestCase {
                 reasoning_effort: Some("low".to_string()),
                 credentials: None,
                 api_base: if use_mock_inference_provider {
-                    Some("http://localhost:3030/openai/".parse().unwrap())
+                    Some(mock_inference_provider_base().join("openai/").unwrap())
                 } else {
                     None
                 },
