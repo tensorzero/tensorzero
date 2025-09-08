@@ -486,3 +486,19 @@ test("should load an inference page with a tool call", async ({ page }) => {
   await expect(page.getByText("multi_hop_rag_agent").first()).toBeVisible();
   await expect(page.getByText("Testerian catechisms").first()).toBeVisible();
 });
+
+test("should display inferences with thought block output", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/019926fd-1a06-7fe2-b7f4-2318de2f2046",
+  );
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // assert that there is a text element with specific styling class containing "Thought"
+  await expect(
+    page.locator(".text-fg-tertiary").getByText("Thought"),
+  ).toBeVisible();
+});

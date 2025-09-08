@@ -2,10 +2,7 @@ import { z } from "zod";
 import type {
   FunctionConfig,
   JsonInferenceOutput,
-  ContentBlockChatOutput,
-  ContentBlockOutput,
   JsonValue,
-  Thought,
 } from "tensorzero-node";
 
 /**
@@ -75,9 +72,18 @@ export const rawTextInputSchema = z.object({
 export type RawTextInput = z.infer<typeof rawTextInputSchema>;
 
 export const thoughtSchema = z.object({
-  text: z.string().nullish().transform((val) => val ?? null),
-  signature: z.string().nullish().transform((val) => val ?? null), 
-  _internal_provider_type: z.string().nullish().transform((val) => val ?? null),
+  text: z
+    .string()
+    .nullish()
+    .transform((val) => val ?? null),
+  signature: z
+    .string()
+    .nullish()
+    .transform((val) => val ?? null),
+  _internal_provider_type: z
+    .string()
+    .nullish()
+    .transform((val) => val ?? null),
 });
 
 export const thoughtContentSchema = thoughtSchema.extend({
@@ -331,7 +337,7 @@ export const contentBlockOutputSchema = z.discriminatedUnion("type", [
   toolCallContentSchema,
   thoughtContentSchema,
   unknownSchema,
-]) satisfies z.ZodType<ContentBlockOutput>;
+]);
 
 export const jsonInferenceOutputSchema = z.object({
   raw: z.string().nullable(),
@@ -356,7 +362,7 @@ export const contentBlockChatOutputSchema = z.discriminatedUnion("type", [
   toolCallOutputSchema,
   thoughtContentSchema,
   unknownSchema,
-]) satisfies z.ZodType<ContentBlockChatOutput>;
+]);
 
 export const modelInferenceOutputContentBlockSchema = z.discriminatedUnion(
   "type",

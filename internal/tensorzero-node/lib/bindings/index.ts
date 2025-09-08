@@ -26,7 +26,6 @@ export * from "./ClientInputMessageContent";
 export * from "./Config";
 export * from "./ContentBlock";
 export * from "./ContentBlockChatOutput";
-export * from "./ContentBlockOutput";
 export * from "./Datapoint";
 export * from "./DeepSeekProvider";
 export * from "./DiclConfig";
