@@ -71,7 +71,8 @@ export const rawTextInputSchema = z.object({
 });
 export type RawTextInput = z.infer<typeof rawTextInputSchema>;
 
-export const thoughtSchema = z.object({
+export const thoughtContentSchema = z.object({
+  type: z.literal("thought"),
   text: z
     .string()
     .nullish()
@@ -84,10 +85,6 @@ export const thoughtSchema = z.object({
     .string()
     .nullish()
     .transform((val) => val ?? null),
-});
-
-export const thoughtContentSchema = thoughtSchema.extend({
-  type: z.literal("thought"),
 });
 
 export const unknownSchema = z.object({
