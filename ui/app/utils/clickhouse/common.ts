@@ -3,9 +3,11 @@ import type {
   FunctionConfig,
   JsonInferenceOutput,
   ContentBlockChatOutput,
+  ContentBlockOutput,
   Thought,
   JsonValue,
 } from "tensorzero-node";
+import { assertSchemaType } from "../common";
 
 /**
  * JSON types.
@@ -73,12 +75,17 @@ export const rawTextInputSchema = z.object({
 });
 export type RawTextInput = z.infer<typeof rawTextInputSchema>;
 
-export const thoughtSchema = z.object({
+export const thoughtSchema = assertSchemaType<Thought>()(
+  z.object({
+    text: z.string().nullable(),
+    signature: z.string().nullable(),
+    _internal_provider_type: z.string().nullable(),
+  }),
+);
+
+export const thoughtContentSchema = thoughtSchema.extend({
   type: z.literal("thought"),
-  text: z.string().nullable(),
-  signature: z.string().nullable(),
-  _internal_provider_type: z.string().nullable(),
-}) satisfies z.ZodType<Thought>;
+});
 
 export const unknownSchema = z.object({
   type: z.literal("unknown"),
@@ -209,7 +216,7 @@ export const inputMessageContentSchema = z.discriminatedUnion("type", [
   imageContentSchema,
   fileContentSchema,
   rawTextInputSchema,
-  thoughtSchema,
+  thoughtContentSchema,
   unknownSchema,
 ]);
 export type InputMessageContent = z.infer<typeof inputMessageContentSchema>;
@@ -223,7 +230,7 @@ export const modelInferenceInputMessageContentSchema = z.discriminatedUnion(
     imageContentSchema,
     fileContentSchema,
     rawTextInputSchema,
-    thoughtSchema,
+    thoughtContentSchema,
     unknownSchema,
   ],
 );
@@ -240,7 +247,7 @@ export const displayInputMessageContentSchema = z.discriminatedUnion("type", [
   resolvedFileContentSchema,
   resolvedFileContentErrorSchema,
   rawTextInputSchema,
-  thoughtSchema,
+  thoughtContentSchema,
   unknownSchema,
 ]);
 
@@ -322,21 +329,14 @@ export const textContentSchema = z.object({
 });
 export type TextContent = z.infer<typeof textContentSchema>;
 
-export const contentBlockSchema = z.discriminatedUnion("type", [
-  textContentSchema,
-  toolCallContentSchema,
-  toolResultContentSchema,
-  imageContentSchema,
-  fileContentSchema,
-  rawTextInputSchema,
-]);
-export type ContentBlock = z.infer<typeof contentBlockSchema>;
-
-export const requestMessageSchema = z.object({
-  role: roleSchema,
-  content: z.array(contentBlockSchema),
-});
-export type RequestMessage = z.infer<typeof requestMessageSchema>;
+export const contentBlockOutputSchema = assertSchemaType<ContentBlockOutput>()(
+  z.discriminatedUnion("type", [
+    textContentSchema,
+    toolCallContentSchema,
+    thoughtContentSchema,
+    unknownSchema,
+  ]),
+);
 
 export const jsonInferenceOutputSchema = z.object({
   raw: z.string().nullable(),
@@ -359,7 +359,7 @@ export type ToolCallOutput = z.infer<typeof toolCallOutputSchema>;
 export const contentBlockChatOutputSchema = z.discriminatedUnion("type", [
   textContentSchema,
   toolCallOutputSchema,
-  thoughtSchema,
+  thoughtContentSchema,
   unknownSchema,
 ]) satisfies z.ZodType<ContentBlockChatOutput>;
 

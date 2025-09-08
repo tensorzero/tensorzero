@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import type z from "zod";
 
 /**
  * A utility to check if the current environment is a browser. Type-checking
@@ -187,4 +188,18 @@ export class JSONParseError extends SyntaxError {
     super(message, { cause });
     this.name = "JSONParseError";
   }
+}
+
+// Should be used for every Zod schema that matches a rust type
+// for a bidirectional assertion that the types match.
+// Returns the original schema so you can chain methods like .extend()
+export function assertSchemaType<T>() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return <S extends z.ZodType<T, any, T>>(schema: S): S => {
+    // Type assertion to ensure T compatibility at compile time
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const _typeCheck: z.ZodType<T, any, T> = schema;
+    void _typeCheck;
+    return schema;
+  };
 }
