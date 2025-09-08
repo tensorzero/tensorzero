@@ -224,6 +224,7 @@ pub struct FunctionConfigChat {
     // Holds all template names (e.g. 'user', 'my_custom_template') that occur
     // in any (nested) variants. This is used to reject messages that reference
     // a no-schema template not defined by any variants.
+    #[serde(skip)]
     pub all_template_names: HashSet<String>,
 }
 
@@ -236,6 +237,7 @@ pub struct FunctionConfigJson {
     pub output_schema: StaticJSONSchema, // schema is mandatory for JSON functions
     pub implicit_tool_call_config: ToolCallConfig,
     pub description: Option<String>,
+    #[serde(skip)]
     pub all_template_names: HashSet<String>,
 }
 
