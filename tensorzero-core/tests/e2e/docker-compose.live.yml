@@ -234,3 +234,7 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      jaeger:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
