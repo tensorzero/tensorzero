@@ -7,6 +7,7 @@ services:
       CLICKHOUSE_PASSWORD: chpassword
     volumes:
       - ./config.xml:/etc/clickhouse-server/config.xml:ro
+      - clickhouse-data:/var/lib/clickhouse
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
@@ -181,3 +182,6 @@ services:
         condition: service_healthy
       mock-inference-provider:
         condition: service_healthy
+
+volumes:
+  clickhouse-data:

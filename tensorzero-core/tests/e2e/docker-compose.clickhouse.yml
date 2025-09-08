@@ -11,6 +11,7 @@ services:
       - ./clickhouse-configs/${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}/users.xml:/etc/clickhouse-server/users.d/users.xml
       # For S3 fixtures using file
       - ../../../ui/fixtures/s3-fixtures:/var/lib/clickhouse/user_files
+      - clickhouse-data:/var/lib/clickhouse
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
@@ -110,3 +111,6 @@ services:
         condition: service_completed_successfully
       clickhouse:
         condition: service_healthy
+
+volumes:
+  clickhouse-data:
