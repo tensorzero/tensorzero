@@ -11,6 +11,7 @@ workspace = true
 [dependencies]
 async-stream = { workspace = true }
 axum = { workspace = true, features = ["multipart"] }
+clap = { workspace = true }
 futures = { workspace = true }
 mimalloc = "0.1.48"
 serde_json = { workspace = true }
