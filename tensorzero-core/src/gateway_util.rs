@@ -260,7 +260,9 @@ where
 const DEFAULT_HTTP_CLIENT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
 pub fn setup_http_client() -> Result<Client, Error> {
-    let mut http_client_builder = Client::builder().timeout(DEFAULT_HTTP_CLIENT_TIMEOUT);
+    let mut http_client_builder = Client::builder()
+        .timeout(DEFAULT_HTTP_CLIENT_TIMEOUT)
+        .http2_prior_knowledge();
 
     if cfg!(feature = "e2e_tests") {
         if let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY") {
