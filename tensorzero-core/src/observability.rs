@@ -41,7 +41,7 @@
 //!    batched exporting.
 //!
 //! We store our `CustomTracerKey` in two 'context' objects:
-//! * The `http::Request` extensions map on the HTTP request, so that our middleware can infopass information
+//! * The `http::Request` extensions map on the HTTP request, so that our middleware can pass information
 //!   to our `make_span` function.
 //! * The OpenTelemetry `Context`, which is captured by the `tracing-opentelemetry` library when we create a new span,
 //!   and passed along to `TracerWrapper::build_with_context` when the span is closed and exported.
