@@ -537,7 +537,7 @@ impl Variant for ChatCompletionConfig {
     }
 
     fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
-        self.templates.get_all_template_paths()
+        self.templates.get_all_templates()
     }
 
     async fn start_batch_inference<'a>(

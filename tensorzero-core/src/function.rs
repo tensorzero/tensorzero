@@ -17,7 +17,7 @@ use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
@@ -221,6 +221,10 @@ pub struct FunctionConfigChat {
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
     pub description: Option<String>,
+    // Holds all template names (e.g. 'user', 'my_custom_template') that occur
+    // in any (nested) variants. This is used to reject messages that reference
+    // a no-schema template not defined by any variants.
+    pub all_template_names: HashSet<String>,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -232,6 +236,7 @@ pub struct FunctionConfigJson {
     pub output_schema: StaticJSONSchema, // schema is mandatory for JSON functions
     pub implicit_tool_call_config: ToolCallConfig,
     pub description: Option<String>,
+    pub all_template_names: HashSet<String>,
 }
 
 impl FunctionConfig {
@@ -266,20 +271,10 @@ impl FunctionConfig {
     pub fn validate_input(&self, input: &Input) -> Result<(), Error> {
         match &self {
             FunctionConfig::Chat(params) => {
-                validate_all_text_input(
-                    params.schemas.get_implicit_system_schema(),
-                    params.schemas.get_implicit_user_schema(),
-                    params.schemas.get_implicit_assistant_schema(),
-                    input,
-                )?;
+                validate_all_text_input(&params.schemas, input, &params.all_template_names)?;
             }
             FunctionConfig::Json(params) => {
-                validate_all_text_input(
-                    params.schemas.get_implicit_system_schema(),
-                    params.schemas.get_implicit_user_schema(),
-                    params.schemas.get_implicit_assistant_schema(),
-                    input,
-                )?;
+                validate_all_text_input(&params.schemas, input, &params.all_template_names)?;
             }
         }
         Ok(())
@@ -525,14 +520,18 @@ fn get_json_output_from_content_blocks(
 /// Next we validate all messages containing text blocks.
 /// When we add support for `{"type": "template"}` input blocks, we'll need to validate those two
 fn validate_all_text_input(
-    system_schema: Option<&StaticJSONSchema>,
-    user_schema: Option<&StaticJSONSchema>,
-    assistant_schema: Option<&StaticJSONSchema>,
+    schemas: &SchemaData,
     input: &Input,
+    all_templates_names: &HashSet<String>,
 ) -> Result<(), Error> {
-    match (input.system.as_ref(), system_schema) {
+    match (input.system.as_ref(), schemas.get_implicit_system_schema()) {
         // If there is any system message passed we validate it
-        (Some(system), _) => validate_single_message(system, system_schema),
+        (Some(system), _) => validate_single_message(
+            system,
+            schemas.get_implicit_system_schema(),
+            "system",
+            all_templates_names,
+        ),
         // If there is no system message and no schema we accept
         (None, None) => Ok(()),
         // If no system message is passed and we have a schema we fail
@@ -541,21 +540,38 @@ fn validate_all_text_input(
         })),
     }?;
     for message in input.messages.iter() {
-        // Only for Text blocks, not RawText blocks since we don't validate those
         for block in &message.content {
-            if let InputMessageContent::Text(kind) = block {
-                let content = match kind {
-                    TextKind::Arguments { arguments } => {
-                        Cow::Owned(Value::Object(arguments.clone()))
-                    }
-                    TextKind::Text { text } => Cow::Owned(Value::String(text.clone())),
-                    TextKind::LegacyValue { value } => Cow::Borrowed(value),
-                };
-                let schema = match &message.role {
-                    Role::Assistant => assistant_schema,
-                    Role::User => user_schema,
-                };
-                validate_single_message(&content, schema)?;
+            match block {
+                InputMessageContent::Text(kind) => {
+                    let content = match kind {
+                        TextKind::Arguments { arguments } => {
+                            Cow::Owned(Value::Object(arguments.clone()))
+                        }
+                        TextKind::Text { text } => Cow::Owned(Value::String(text.clone())),
+                        TextKind::LegacyValue { value } => Cow::Borrowed(value),
+                    };
+                    let schema = match &message.role {
+                        Role::Assistant => schemas.get_implicit_assistant_schema(),
+                        Role::User => schemas.get_implicit_user_schema(),
+                    };
+                    validate_single_message(
+                        &content,
+                        schema,
+                        message.role.implicit_template_name(),
+                        all_templates_names,
+                    )?;
+                }
+                InputMessageContent::Template(template) => {
+                    // TODO - figure out a way to avoid this clone
+                    let value = Value::Object(template.arguments.clone());
+                    validate_single_message(
+                        None,
+                        schemas.get_named_schema(&template.name),
+                        &template.name,
+                        all_templates_names,
+                    )?;
+                }
+                _ => {}
             }
         }
     }
@@ -569,10 +585,17 @@ fn validate_all_text_input(
 fn validate_single_message(
     content: &Value,
     schema: Option<&StaticJSONSchema>,
+    template_name: &str,
+    all_templates_names: &HashSet<String>,
 ) -> Result<(), Error> {
     // TODO - we need to check if all variant sare missing the template name, and reject early with a better error.
     if let Some(schema) = schema {
         schema.validate(content)?;
+    }
+    if !all_templates_names.contains(template_name) {
+        return Err(Error::new(ErrorDetails::InvalidMessage {
+            message: format!("Template `{template_name}` is not present in the function"),
+        }));
     }
     Ok(())
 }
@@ -1222,6 +1245,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
             implicit_tool_call_config,
             description: None,
+            all_template_names: HashSet::new(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1300,6 +1324,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
+            all_template_names: HashSet::new(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1368,6 +1393,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
+            all_template_names: HashSet::new(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1437,6 +1463,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
+            all_template_names: HashSet::new(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1510,6 +1537,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
+            all_template_names: HashSet::new(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1702,6 +1730,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             description: Some("A chat function description".to_string()),
+            all_template_names: HashSet::new(),
         };
         let function_config = FunctionConfig::Chat(chat_config);
         assert_eq!(
@@ -1718,6 +1747,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: Some("A JSON function description".to_string()),
+            all_template_names: HashSet::new(),
         };
         let function_config = FunctionConfig::Json(json_config);
         assert_eq!(
@@ -1733,6 +1763,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             description: None,
+            all_template_names: HashSet::new(),
         };
         let function_config = FunctionConfig::Chat(chat_config);
         assert_eq!(function_config.description(), None);
@@ -1766,6 +1797,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: None,
+            all_template_names: HashSet::new(),
         });
         let raw_request = "raw_request".to_string();
 
@@ -2330,6 +2362,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: None,
+            all_template_names: HashSet::new(),
         });
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"answer": "42"}"#.to_string().into()];

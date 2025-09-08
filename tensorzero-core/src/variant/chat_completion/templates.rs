@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::{HashMap, HashSet}, sync::Arc};
 
 use serde::Serialize;
 
@@ -42,6 +42,10 @@ impl ChatTemplates {
 
     pub fn get_implicit_system_template(&self) -> Option<&Arc<TemplateWithSchema>> {
         self.templates.get("system")
+    }
+
+    pub fn get_all_template_names(&self) -> HashSet<String> {
+        self.templates.keys().cloned().collect()
     }
 
     pub fn get_all_template_paths(&self) -> Vec<&PathWithContents> {

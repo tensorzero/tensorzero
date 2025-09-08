@@ -230,6 +230,15 @@ impl Variant for BestOfNSamplingConfig {
         self.evaluator.inner.get_all_template_paths()
     }
 
+    fn get_all_template_names(&self) -> HashSet<String> {
+        let mut names = HashSet::new();
+        for candidate in &self.candidates {
+            names.extend(candidate.get_all_template_names());
+        }
+        names.extend(self.evaluator.inner.get_all_template_names());
+        names
+    }
+
     async fn start_batch_inference<'a>(
         &'a self,
         _input: &[ResolvedInput],

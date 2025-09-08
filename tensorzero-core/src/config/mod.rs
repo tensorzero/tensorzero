@@ -906,6 +906,7 @@ impl Config {
                     tool_choice: ToolChoice::None,
                     parallel_tool_calls: None,
                     description: None,
+                    all_template_names: HashSet::new(),
                 },
             ))))
         } else {
@@ -1271,7 +1272,9 @@ impl UninitializedFunctionConfig {
                             .map(|v| (name, Arc::new(v)))
                     })
                     .collect::<Result<HashMap<_, _>, Error>>()?;
+                let mut all_template_names = HashSet::new();
                 for (name, variant) in &variants {
+                    all_template_names.extend(variant.inner.all_template_names());
                     if let VariantConfig::ChatCompletion(chat_config) = &variant.inner {
                         if chat_config.json_mode.is_some() {
                             return Err(ErrorDetails::Config {

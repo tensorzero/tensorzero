@@ -266,6 +266,10 @@ impl Variant for DiclConfig {
         vec![]
     }
 
+    fn get_all_template_names(&self) -> HashSet<String> {
+        HashSet::new()
+    }
+
     async fn start_batch_inference<'a>(
         &'a self,
         _input: &[ResolvedInput],
