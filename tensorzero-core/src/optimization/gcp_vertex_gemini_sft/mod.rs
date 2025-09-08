@@ -152,7 +152,7 @@ impl UninitializedGCPVertexGeminiSFTConfig {
     /// :param adapter_size: The adapter size to use for the fine-tuning job.
     /// :param n_epochs: The number of epochs to use for the fine-tuning job.
     /// :param export_last_checkpoint_only: Whether to export the last checkpoint only.
-    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::GCP_VERTEX_CREDENTIALS_PATH". See docs for more details.
+    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like `env::GCP_VERTEX_CREDENTIALS_PATH`. See docs for more details.
     /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
     /// :param seed: The seed to use for the fine-tuning job.
     /// :param service_account: The service account to use for the fine-tuning job.

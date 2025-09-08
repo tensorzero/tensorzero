@@ -53,17 +53,29 @@ services:
       timeout: 1s
 
   jaeger:
-    image: jaegertracing/jaeger:2.5.0
+    image: jaegertracing/jaeger:2.9.0
     volumes:
       - ./jaeger-config.yaml:/jaeger/config.yaml
     #command: --set=extensions.jaeger_storage.backends.some_store.memory.max_traces=1
     command: --config /jaeger/config.yaml
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:14269/health"]
+      interval: 1s
+      timeout: 3s
+      retries: 60    
     ports:
       - "16686:16686" # Browser UI
-      - "4317:4317"
-      - "4318:4318"
-      - "5778:5778"
-      - "9411:9411"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+    ports:
+      - 4317:4317 # OTLP gRPC receiver
+      - 4318:4318 # OTLP http receiver
+    depends_on:
+      jaeger:
+        condition: service_healthy
 
   # This is not a gateway to use but rather one that just sets up migrations for the ClickHouse db
   gateway:
@@ -73,7 +85,7 @@ services:
       dockerfile: gateway/Dockerfile
       target: gateway
     environment:
-      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero_e2e_tests}
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -95,7 +107,8 @@ services:
       timeout: 1s
   fixtures:
     build:
-      dockerfile: ../../../ui/fixtures/Dockerfile
+      dockerfile: ui/fixtures/Dockerfile
+      context: ../../..
     volumes:
       - ../../../ui/fixtures:/fixtures
       - ~/.aws:/root/.aws
@@ -113,7 +126,7 @@ services:
       [
         "bash",
         "-c",
-        "cd /fixtures && ./load_fixtures.sh tensorzero_e2e_tests && sleep infinity",
+        "cd /fixtures && ./load_fixtures.sh ${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero_e2e_tests} && sleep infinity",
       ]
     healthcheck:
       test: ["CMD", "test", "-f", "/load_complete.marker"]

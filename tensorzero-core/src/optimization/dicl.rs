@@ -152,7 +152,7 @@ impl UninitializedDiclOptimizationConfig {
     /// :param max_concurrency: The maximum concurrency to use for getting embeddings.
     /// :param k: The number of nearest neighbors to use for the DICL variant.
     /// :param model: The model to use for the DICL variant.
-    /// :param credentials: The credentials to use for embedding. This should be a string like "env::OPENAI_API_KEY". See docs for more details.
+    /// :param credentials: The credentials to use for embedding. This should be a string like `env::OPENAI_API_KEY`. See docs for more details.
     #[expect(unused_variables, clippy::too_many_arguments)]
     #[pyo3(signature = (*, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None))]
     fn __init__(

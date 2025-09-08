@@ -14,7 +14,7 @@ use super::check_table_exists;
 /// JsonInference, ChatInference, and ModelInference once the batch has been completed.
 ///
 /// `BatchRequest` contains metadata about a batch request.
-/// Each time the batch is polled by either inference_id or batch_id, a row will be written to this table.
+/// Each time the batch is polled by either `inference_id` or `batch_id`, a row will be written to this table.
 /// This allows us to know and also to know the history of actions which have been taken here.
 pub struct Migration0006<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,

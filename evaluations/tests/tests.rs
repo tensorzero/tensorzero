@@ -1132,7 +1132,7 @@ async fn test_parse_args() {
     assert_eq!(args.config_file, PathBuf::from("/path/to/config.toml"));
     assert_eq!(
         args.gateway_url,
-        Some(Url::parse("http://localhost:8080").unwrap())
+        Some(Url::parse("http://localhost:8080/").unwrap())
     );
     assert_eq!(args.concurrency, 10);
     assert_eq!(args.format, OutputFormat::Jsonl);
@@ -1171,6 +1171,7 @@ async fn test_parse_args() {
 #[tokio::test]
 async fn test_run_evaluation_binary() {
     let bin_path = env!("CARGO_BIN_EXE_evaluations");
+    println!("Running evaluations binary at {bin_path}");
     let output = std::process::Command::new(bin_path)
         .output()
         .expect("Failed to execute evaluations binary");

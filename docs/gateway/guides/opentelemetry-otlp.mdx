@@ -77,3 +77,16 @@ This endpoint includes metrics about the gateway itself rather than the data pro
 See [Auxiliary Endpoints](/gateway/api-reference/auxiliary-endpoints/) for more details.
 
 </Tip>
+
+
+### Custom HTTP headers
+
+You can attach custom HTTP headers to the outgoing requests made to `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`. When making a request to a TensorZero HTTP endpoint, add a header prefixed with `tensorzero-otlp-traces-extra-header-`. For example:
+
+```
+tensorzero-otlp-traces-extra-header-my-first-header: my-first-value
+tensorzero-otlp-traces-extra-header-my-second-header: my-second-value
+```
+
+This will attach the headers `my-first-header: my-first-value` and `my-second-header: my-second-value` when exporting any span associated with your TensorZero API request.
+TensorZero API requests *without* these headers set will be unaffected.
