@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use tensorzero::{InferenceOutput, InferenceResponse};
 use tensorzero_core::{
     db::clickhouse::test_helpers::{get_clickhouse, select_model_inferences_clickhouse},
-    inference::types::{ContentBlock, ContentBlockChatOutput, Text},
+    inference::types::{ContentBlockChatOutput, Text},
 };
 use uuid::Uuid;
 
