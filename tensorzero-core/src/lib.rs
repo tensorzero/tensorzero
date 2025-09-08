@@ -1,7 +1,8 @@
+
 // This is an internal crate, so we're the only consumers of
 // traits with async fns for now.
-#![expect(async_fn_in_trait)]
 
+#![expect(async_fn_in_trait)]
 pub mod cache;
 pub mod config; // TensorZero config file
 pub mod db;
@@ -31,3 +32,4 @@ pub mod built_info {
     #![expect(clippy::allow_attributes)]
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
+

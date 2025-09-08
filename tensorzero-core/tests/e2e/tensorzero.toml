@@ -105,23 +105,23 @@ deployment_id = "Llama-3.3-70B-Instruct"
 endpoint = "https://joshu-mdyrg999-eastus2.cognitiveservices.azure.com/"
 api_key_location = "dynamic::azure_openai_api_key"
 
-[models."llama-3.3-70b-instruct-azure"]
-routing = ["azure"]
-
-[models."llama-3.3-70b-instruct-azure".providers.azure]
-type = "azure"
-deployment_id = "Llama-3.3-70B-Instruct"
-api_key_location = "env::AZURE_AI_FOUNDRY_API_KEY"
-endpoint = "https://t0-gha-resource.services.ai.azure.com"
-
-[models."llama-3.3-70b-instruct-azure-dynamic"]
-routing = ["azure"]
-
-[models."llama-3.3-70b-instruct-azure-dynamic".providers.azure]
-type = "azure"
-deployment_id = "Phi-4-mini-instruct"
-endpoint = "https://t0-gha-resource.services.ai.azure.com"
-api_key_location = "dynamic::azure_ai_foundry_api_key"
+#[models."llama-3.3-70b-instruct-azure"]
+#routing = ["azure"]
+#
+#[models."llama-3.3-70b-instruct-azure".providers.azure]
+#type = "azure"
+#deployment_id = "Llama-3.3-70B-Instruct"
+#api_key_location = "env::AZURE_AI_FOUNDRY_API_KEY"
+#endpoint = "https://t0-gha-resource.services.ai.azure.com"
+#
+#[models."llama-3.3-70b-instruct-azure-dynamic"]
+#routing = ["azure"]
+#
+#[models."llama-3.3-70b-instruct-azure-dynamic".providers.azure]
+#type = "azure"
+#deployment_id = "Phi-4-mini-instruct"
+#endpoint = "https://t0-gha-resource.services.ai.azure.com"
+#api_key_location = "dynamic::azure_ai_foundry_api_key"
 
 ## Groq
 

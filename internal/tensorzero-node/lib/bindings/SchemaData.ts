@@ -5,4 +5,4 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * Holds all of the schemas used by a chat completion function.
  * These are used by variants to construct a `TemplateWithSchema`
  */
-export type SchemaData = { [key in string]?: { value: JsonValue } };
+export type SchemaData = { [key in string]?: { value: JsonValue, } };

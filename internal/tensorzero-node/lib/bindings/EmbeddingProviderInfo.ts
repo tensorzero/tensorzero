@@ -2,8 +2,4 @@
 import type { EmbeddingProviderConfig } from "./EmbeddingProviderConfig";
 import type { TimeoutsConfig } from "./TimeoutsConfig";
 
-export type EmbeddingProviderInfo = {
-  inner: EmbeddingProviderConfig;
-  timeouts: TimeoutsConfig;
-  provider_name: string;
-};
+export type EmbeddingProviderInfo = { inner: EmbeddingProviderConfig, timeouts: TimeoutsConfig, provider_name: string, };

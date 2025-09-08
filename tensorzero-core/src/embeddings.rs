@@ -24,6 +24,7 @@ use crate::{
     model::ProviderConfig,
     providers::openai::OpenAIProvider,
 };
+use crate::variant::RetryConfig;
 use futures::future::try_join_all;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -64,7 +65,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
             routing: vec![provider_type.to_string().into()],
             providers: HashMap::from([(provider_type.to_string().into(), provider_info)]),
             timeouts: TimeoutsConfig::default(),
-            retries: EmbeddedRetryConfig { num_retries: 5, max_delay_s: 0.1},
+            retries: RetryConfig { num_retries: 5, max_delay_s: 0.1},
         })
     }
 
@@ -75,14 +76,14 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-//#[ts(export)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-pub struct EmbeddedRetryConfig {
-    pub num_retries: u32,
-    pub max_delay_s: f64,
-}
+// #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+// //#[ts(export)]
+// #[cfg_attr(test, derive(ts_rs::TS))]
+// #[cfg_attr(test, ts(export))]
+// pub struct RetryConfig {
+//     pub num_retries: u32,
+//     pub max_delay_s: f64,
+// }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -91,7 +92,7 @@ pub struct UninitializedEmbeddingModelConfig {
     pub providers: HashMap<Arc<str>, UninitializedEmbeddingProviderConfig>,
     #[serde(default)]
     pub timeouts: TimeoutsConfig,
-    pub retries: EmbeddedRetryConfig,
+    pub retries: RetryConfig,
 }
 
 impl UninitializedEmbeddingModelConfig {
@@ -110,7 +111,7 @@ impl UninitializedEmbeddingModelConfig {
             routing: self.routing,
             providers,
             timeouts: self.timeouts,
-            retries: EmbeddedRetryConfig { num_retries: 5, max_delay_s: 0.1 },
+            retries: RetryConfig { num_retries: 5, max_delay_s: 0.1 },
         })
     }
 }
@@ -123,7 +124,7 @@ pub struct EmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
     pub providers: HashMap<Arc<str>, EmbeddingProviderInfo>,
     pub timeouts: TimeoutsConfig,
-    pub retries: EmbeddedRetryConfig, 
+    pub retries: RetryConfig, 
 }
 
 impl EmbeddingModelConfig {
@@ -665,7 +666,7 @@ mod tests {
                 ("good".to_string().into(), good_provider_info),
             ]),
             timeouts: TimeoutsConfig::default(),
-            retries: EmbeddedRetryConfig { num_retries: 5, max_delay_s: 0.1 },
+            retries: RetryConfig { num_retries: 5, max_delay_s: 0.1 },
         };
         let request = EmbeddingRequest {
             input: "Hello, world!".to_string().into(),
