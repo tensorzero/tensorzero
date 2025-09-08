@@ -2087,6 +2087,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
     use crate::config::SchemaData;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
@@ -2859,6 +2861,7 @@ mod tests {
             implicit_tool_call_config,
             output_schema,
             description: None,
+            all_template_names: HashSet::new(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -3139,6 +3142,7 @@ mod tests {
             implicit_tool_call_config,
             output_schema,
             description: None,
+            all_template_names: HashSet::new(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -3237,6 +3241,7 @@ mod tests {
             implicit_tool_call_config,
             output_schema,
             description: None,
+            all_template_names: HashSet::new(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
