@@ -280,11 +280,17 @@ fn prepare_system_message(
 ) -> Result<Option<String>, Error> {
     Ok(match template {
         Some(template) => {
+            let system = system.unwrap_or(&Value::Null);
+            if template.legacy_input_wrapper && system.as_str().is_none() {
+                return Err(Error::new(ErrorDetails::InvalidMessage {
+                    message: format!("System message content {system} is not a string but `input_wrappers.system` is set in the variant config")
+                }));
+            }
             let context = if template.schema.is_some() || !template.legacy_input_wrapper {
-                Cow::Borrowed(system.unwrap_or(&Value::Null))
+                Cow::Borrowed(system)
             } else {
                 Cow::Owned(serde_json::json!({
-                    SYSTEM_TEXT_TEMPLATE_VAR: system.unwrap_or(&Value::Null)
+                    SYSTEM_TEXT_TEMPLATE_VAR: system
                 }))
             };
             Some(templates.template_message(
@@ -339,6 +345,11 @@ fn prepare_request_message(
                             message: format!("Template `{}` not found", template_input.name),
                         })
                     })?;
+                if template.legacy_input_wrapper {
+                    return Err(Error::new(ErrorDetails::InvalidMessage {
+                        message: format!("Request message content {} is not a string but `input_wrappers.{}` is set in the variant config", serde_json::to_string(&template_input.arguments).unwrap_or_default(), message.role)
+                    }));
+                }
                 let text_content = templates_config.template_message(
                     &template.template.path.get_template_key(),
                     &template_input.arguments,
@@ -588,7 +599,7 @@ impl Variant for ChatCompletionConfig {
     }
 }
 
-/// The template variable names used when applying a template with no schema
+/// The template variable names used when applying a legacy template with no schema
 /// Only one of these variables is used per template, based on the `TemplateKind`
 pub const SYSTEM_TEXT_TEMPLATE_VAR: &str = "system_text";
 pub const USER_TEXT_TEMPLATE_VAR: &str = "user_text";
