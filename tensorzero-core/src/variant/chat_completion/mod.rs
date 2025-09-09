@@ -281,17 +281,20 @@ fn prepare_system_message(
     Ok(match template {
         Some(template) => {
             let system = system.unwrap_or(&Value::Null);
-            if template.schema.is_none() && template.legacy_definition && system.as_str().is_none() {
-                return Err(Error::new(ErrorDetails::InvalidMessage {
+            // If we have a no-schema template declared using the legacy syntax
+            // (something other than `templates.<template_name>`), then we're going to inject
+            // a `system_text` variable.
+            let context = if template.schema.is_none() && template.legacy_definition {
+                let system_str = system.as_str().ok_or_else(|| {
+                 Error::new(ErrorDetails::InvalidMessage {
                     message: format!("System message content {system} is not a string but `input_wrappers.system` is set in the variant config")
-                }));
-            }
-            let context = if template.schema.is_some() || !template.legacy_definition {
-                Cow::Borrowed(system)
-            } else {
-                Cow::Owned(serde_json::json!({
-                    SYSTEM_TEXT_TEMPLATE_VAR: system
+                 }) })?;
+                 Cow::Owned(serde_json::json!({
+                    SYSTEM_TEXT_TEMPLATE_VAR: system_str
                 }))
+            } else {
+                // Otherwise, we use the system message as-is.
+                Cow::Borrowed(system)
             };
             Some(templates.template_message(
             &template.template.path.get_template_key(),
