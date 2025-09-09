@@ -61,6 +61,7 @@ from tensorzero.types import (
     ChatChunk,
     JsonChunk,
     ProviderExtraBody,
+    Template,
     Thought,
     ToolCallChunk,
     VariantExtraBody,
@@ -3394,3 +3395,31 @@ async def test_async_cannot_enable_batch_writes():
             str(exc_info.value)
             == """Failed to construct TensorZero client: Clickhouse(Other { source: TensorZeroInternalError(Error(Config { message: "[gateway.observability.batch_writes] is not yet supported in embedded gateway mode" })) })"""
         )
+
+
+def test_sync_chat_function_named_template(sync_client: TensorZeroGateway):
+    """
+    Test that an chat inference with null response (i.e. no generated content blocks) works as expected.
+    """
+    result = sync_client.inference(
+        function_name="basic_test_template_no_schema",
+        variant_name="test",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        Template(name="my_custom_template", arguments={"first_variable": "first_from_python", "second_variable": "second_from_python"}),
+                        {
+                            "type": "template",
+                            "name": "my_custom_template",
+                            "arguments": {"first_variable": "first_from_dict", "second_variable": "second_from_dict"},
+                        }
+                    ]
+                }
+            ],
+        },
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert len(result.content) == 1
+    assert result.content[0].text == """{"system":"The system text was `none`","messages":[{"role":"user","content":[{"type":"text","text":"New template: first_variable=first_from_python second_variable=second_from_python"},{"type":"text","text":"New template: first_variable=first_from_dict second_variable=second_from_dict"}]}]}"""

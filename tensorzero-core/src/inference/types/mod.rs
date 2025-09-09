@@ -212,7 +212,6 @@ pub struct InputMessage {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
 #[ts(export)]
-#[serde(tag = "type", rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub struct TemplateInput {
     pub name: String,
