@@ -208,11 +208,13 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.12-alpine
     environment:
-      - CLICKHOUSE_USER=chuser
-      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
-      - CLICKHOUSE_PASSWORD=chpassword
+      CLICKHOUSE_USER: chuser
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: chpassword
     ports:
       - "8123:8123"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
     healthcheck:
       test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
       start_period: 30s
@@ -226,8 +228,8 @@ services:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml
     environment:
-      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
-      - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
     ports:
       - "3000:3000"
     extra_hosts:
@@ -235,6 +237,9 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+
+volumes:
+  clickhouse-data:
 ```
 
 </Accordion>
