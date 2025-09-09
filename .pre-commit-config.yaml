@@ -149,13 +149,6 @@ repos:
           - typescript
         pass_filenames: false
 
-      - id: compile-check-notebooks
-        name: compile-check-notebooks
-        entry: ci/compile-check-notebooks.sh all
-        language: system # run in the host environment (needs uvx)
-        # Restrict to files that matter so other commits don't pay the cost
-        files: ^recipes/.*(\.ipynb|_nb\.py)$
-
   - repo: https://github.com/srstevenson/nb-clean
     rev: 3.2.0
     hooks:
@@ -186,3 +179,12 @@ repos:
           - tensorzero
           - tiktoken
           - toml
+
+  - repo: local
+    hooks:
+      - id: compile-check-notebooks
+        name: compile-check-notebooks
+        entry: ci/compile-check-notebooks.sh all
+        language: system # run in the host environment (needs uvx)
+        # Restrict to files that matter so other commits don't pay the cost
+        files: ^recipes/.*(\.ipynb|_nb\.py)$
