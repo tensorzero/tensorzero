@@ -15,8 +15,3 @@ embedding_model = "openai::text-embedding-3-small"
 k = 10
 json_mode = "strict"
 system_instructions = "functions/classify_spam/baseline/system_template.txt"
-
-[metrics.correct_prediction]
-level = "inference"
-optimize = "max"
-type = "boolean"
