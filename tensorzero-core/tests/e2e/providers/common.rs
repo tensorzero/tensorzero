@@ -116,6 +116,7 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        postgres_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -129,6 +130,7 @@ pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: None,
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        postgres_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -144,6 +146,7 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Clie
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        postgres_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,

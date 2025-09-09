@@ -16,6 +16,7 @@ use tensorzero_core::db::clickhouse::migration_manager;
 use tensorzero_core::db::clickhouse::migration_manager::RunMigrationManagerArgs;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::gateway_util::GatewayHandle;
 use tensorzero_core::howdy::{get_deployment_id, get_howdy_report};
 use tensorzero_core::inference::types::TextKind;
@@ -47,8 +48,12 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
     })
     .await
     .unwrap();
-    let handle =
-        GatewayHandle::new_with_clickhouse_and_http_client(config, clickhouse, Client::new());
+    let handle = GatewayHandle::new_with_database_and_http_client(
+        config,
+        clickhouse,
+        PostgresConnectionInfo::Disabled,
+        Client::new(),
+    );
     ClientBuilder::build_from_state(handle).await.unwrap()
 }
 

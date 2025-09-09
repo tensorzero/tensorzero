@@ -2,11 +2,13 @@ use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use crate::db::postgres::PostgresConnectionInfo;
 use crate::endpoints::openai_compatible::RouterExt;
 use axum::extract::{rejection::JsonRejection, FromRequest, Json, Request};
 use axum::Router;
 use reqwest::{Client, NoProxy, Proxy};
 use serde::de::DeserializeOwned;
+use sqlx::postgres::PgPoolOptions;
 use tokio::runtime::Handle;
 use tokio::sync::oneshot::Sender;
 use tokio_util::sync::CancellationToken;
@@ -85,6 +87,7 @@ pub struct AppStateData {
     pub config: Arc<Config>,
     pub http_client: Client,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
+    pub postgres_connection_info: PostgresConnectionInfo,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
@@ -101,18 +104,22 @@ impl GatewayHandle {
         {
             return Err(ErrorDetails::ClickHouseConfiguration { message: "`CLICKHOUSE_URL` is deprecated and no longer accepted. Please set `TENSORZERO_CLICKHOUSE_URL`".to_string() }.into());
         }
-        Self::new_with_clickhouse(config, clickhouse_url).await
+        let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
+        Self::new_with_databases(config, clickhouse_url, postgres_url).await
     }
 
-    async fn new_with_clickhouse(
+    async fn new_with_databases(
         config: Arc<Config>,
         clickhouse_url: Option<String>,
+        postgres_url: Option<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
+        let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
         let http_client = setup_http_client()?;
-        Ok(Self::new_with_clickhouse_and_http_client(
+        Ok(Self::new_with_database_and_http_client(
             config,
             clickhouse_connection_info,
+            postgres_connection_info,
             http_client,
         ))
     }
@@ -121,12 +128,19 @@ impl GatewayHandle {
     pub fn new_unit_test_data(config: Arc<Config>, clickhouse_healthy: bool) -> Self {
         let http_client = reqwest::Client::new();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_mock(clickhouse_healthy);
-        Self::new_with_clickhouse_and_http_client(config, clickhouse_connection_info, http_client)
+        let postgres_connection_info = PostgresConnectionInfo::Disabled;
+        Self::new_with_database_and_http_client(
+            config,
+            clickhouse_connection_info,
+            postgres_connection_info,
+            http_client,
+        )
     }
 
-    pub fn new_with_clickhouse_and_http_client(
+    pub fn new_with_database_and_http_client(
         config: Arc<Config>,
         clickhouse_connection_info: ClickHouseConnectionInfo,
+        postgres_connection_info: PostgresConnectionInfo,
         http_client: Client,
     ) -> Self {
         let cancel_token = CancellationToken::new();
@@ -140,6 +154,7 @@ impl GatewayHandle {
                 config,
                 http_client,
                 clickhouse_connection_info,
+                postgres_connection_info,
                 _private: (),
             },
             cancel_token,
@@ -210,6 +225,28 @@ pub async fn setup_clickhouse(
         .await?;
     }
     Ok(clickhouse_connection_info)
+}
+
+pub async fn setup_postgres(
+    _config: &Config,
+    postgres_url: Option<String>,
+) -> Result<PostgresConnectionInfo, Error> {
+    let Some(postgres_url) = postgres_url else {
+        return Ok(PostgresConnectionInfo::Disabled);
+    };
+
+    let pool = PgPoolOptions::new()
+        // TODO: make this configurable
+        .max_connections(20)
+        .connect(&postgres_url)
+        .await
+        .map_err(|err| {
+            Error::new(ErrorDetails::PostgresConnectionInitialization {
+                message: err.to_string(),
+            })
+        })?;
+
+    Ok(PostgresConnectionInfo::new_with_pool(pool))
 }
 
 /// Custom Axum extractor that validates the JSON body and deserializes it into a custom type
@@ -305,6 +342,7 @@ pub struct ShutdownHandle {
 pub async fn start_openai_compatible_gateway(
     config_file: Option<String>,
     clickhouse_url: Option<String>,
+    postgres_url: Option<String>,
 ) -> Result<(SocketAddr, ShutdownHandle), Error> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
@@ -324,7 +362,8 @@ pub async fn start_openai_compatible_gateway(
     } else {
         Arc::new(Config::default())
     };
-    let gateway_handle = GatewayHandle::new_with_clickhouse(config, clickhouse_url).await?;
+    let gateway_handle =
+        GatewayHandle::new_with_databases(config, clickhouse_url, postgres_url).await?;
 
     let router = Router::new()
         .register_openai_compatible_routes()
