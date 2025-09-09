@@ -427,7 +427,7 @@ async fn e2e_test_invalid_assistant_input_template_no_schema() {
 }
 
 #[tokio::test]
-async fn e2e_test_named_system_template() {
+async fn e2e_test_named_system_template_no_schema() {
     let config_dir = tempfile::tempdir().unwrap();
     let config_path = config_dir.path().join("tensorzero.toml");
     let config = r#"
@@ -479,4 +479,79 @@ async fn e2e_test_named_system_template() {
         text: "{\"system\":\"You are a helpful and friendly assistant named AskJeeves\",\"messages\":[]}".to_string(),
       })
     ]);
+}
+
+#[tokio::test]
+async fn e2e_test_named_system_template_with_schema() {
+    let config_dir = tempfile::tempdir().unwrap();
+    let config_path = config_dir.path().join("tensorzero.toml");
+    let config = r#"
+  [functions.test_system_template]
+  type = "chat"
+  schemas.system.path = "./system_schema.json"
+
+  [functions.test_system_template.variants.test]
+  type = "chat_completion"
+  model = "dummy::echo_request_messages"
+  templates.system.path = "./system_template.minijinja"
+  "#;
+    std::fs::write(&config_path, config).unwrap();
+    std::fs::write(
+        config_dir.path().join("system_template.minijinja"),
+        "You are a helpful and friendly assistant named {{ assistant_name }}",
+    )
+    .unwrap();
+    std::fs::write(
+        config_dir.path().join("system_schema.json"),
+        "{\"type\":\"object\",\"properties\":{\"assistant_name\":{\"type\":\"string\"}},\"required\":[\"assistant_name\"]}",
+    )
+    .unwrap();
+
+    let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(config_path.to_owned()),
+        clickhouse_url: None,
+        timeout: None,
+        verify_credentials: true,
+        allow_batch_writes: true,
+    })
+    .build()
+    .await
+    .unwrap();
+
+    let res = client
+        .inference(tensorzero::ClientInferenceParams {
+            function_name: Some("test_system_template".to_string()),
+            variant_name: Some("test".to_string()),
+            input: tensorzero::ClientInput {
+                system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+                messages: vec![],
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let InferenceOutput::NonStreaming(InferenceResponse::Chat(res)) = res else {
+        panic!("Expected non-streaming response, got {res:?}");
+    };
+
+    assert_eq!(res.content, [
+      ContentBlockChatOutput::Text(Text {
+        text: "{\"system\":\"You are a helpful and friendly assistant named AskJeeves\",\"messages\":[]}".to_string(),
+      })
+    ]);
+
+    let error = client
+        .inference(tensorzero::ClientInferenceParams {
+            function_name: Some("test_system_template".to_string()),
+            variant_name: Some("test".to_string()),
+            input: tensorzero::ClientInput {
+                system: Some(serde_json::json!({"assistant_name": 123})),
+                messages: vec![],
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("123 is not of type"));
 }
