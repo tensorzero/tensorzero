@@ -280,21 +280,24 @@ fn prepare_system_message(
 ) -> Result<Option<String>, Error> {
     Ok(match template {
         Some(template) => {
-            let system = system.unwrap_or(&Value::Null);
             // If we have a no-schema template declared using the legacy syntax
             // (something other than `templates.<template_name>`), then we're going to inject
             // a `system_text` variable.
             let context = if template.schema.is_none() && template.legacy_definition {
-                let system_str = system.as_str().ok_or_else(|| {
-                 Error::new(ErrorDetails::InvalidMessage {
-                    message: format!("System message content {system} is not a string but `input_wrappers.system` is set in the variant config")
-                 }) })?;
+                match system {
+                    Some(Value::String(_)) | None => {}
+                    Some(other) => {
+                        return Err(Error::new(ErrorDetails::InvalidMessage {
+                            message: format!("System message content {other} is not a string but `input_wrappers.system` is set in the variant config")
+                        }));
+                    }
+                }
                  Cow::Owned(serde_json::json!({
-                    SYSTEM_TEXT_TEMPLATE_VAR: system_str
+                    SYSTEM_TEXT_TEMPLATE_VAR: system.unwrap_or(&Value::Null)
                 }))
             } else {
                 // Otherwise, we use the system message as-is.
-                Cow::Borrowed(system)
+                Cow::Borrowed(system.unwrap_or(&Value::Null))
             };
             Some(templates.template_message(
             &template.template.path.get_template_key(),
@@ -348,7 +351,7 @@ fn prepare_request_message(
                             message: format!("Template `{}` not found", template_input.name),
                         })
                     })?;
-                if template.legacy_definition {
+                if template.schema.is_none() && template.legacy_definition {
                     return Err(Error::new(ErrorDetails::InvalidMessage {
                         message: format!("Request message content {} is not a string but `input_wrappers.{}` is set in the variant config", serde_json::to_string(&template_input.arguments).unwrap_or_default(), message.role)
                     }));
@@ -1251,13 +1254,7 @@ mod tests {
         let inference_params = InferenceParams::default();
         let messages = vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
-                name: "user".to_string(),
-                arguments: json!({"name": "Luke", "age": 20})
-                    .as_object()
-                    .unwrap()
-                    .clone(),
-            })],
+            content: vec![],
         }];
         let input = ResolvedInput {
             system: Some(json!({"assistant_name": "R2-D2"})),
