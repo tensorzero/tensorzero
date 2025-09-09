@@ -38,8 +38,8 @@ export function getEnv(): Env {
   const TENSORZERO_UI_CONFIG_PATH =
     process.env.TENSORZERO_UI_CONFIG_PATH || null;
   const TENSORZERO_UI_DEFAULT_CONFIG =
-    process.env.TENSORZERO_UI_DEFAULT_CONFIG || null;
-  if (!TENSORZERO_UI_CONFIG_PATH && TENSORZERO_UI_DEFAULT_CONFIG != "1") {
+    (process.env.TENSORZERO_UI_DEFAULT_CONFIG || null) == "1";
+  if (!TENSORZERO_UI_CONFIG_PATH && !TENSORZERO_UI_DEFAULT_CONFIG) {
     throw new EnvironmentVariableError(
       "At least one of `TENSORZERO_UI_CONFIG_PATH` or `TENSORZERO_UI_DEFAULT_CONFIG` must be set.",
     );
@@ -56,7 +56,7 @@ export function getEnv(): Env {
   _env = {
     TENSORZERO_CLICKHOUSE_URL,
     TENSORZERO_UI_CONFIG_PATH,
-    TENSORZERO_UI_DEFAULT_CONFIG: TENSORZERO_UI_DEFAULT_CONFIG == "1",
+    TENSORZERO_UI_DEFAULT_CONFIG,
     TENSORZERO_GATEWAY_URL,
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || null,
     FIREWORKS_BASE_URL: process.env.FIREWORKS_BASE_URL || null,
