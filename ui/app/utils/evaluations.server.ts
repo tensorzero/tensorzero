@@ -14,7 +14,11 @@ function getEvaluationsPath(): string {
   return getEnv().TENSORZERO_EVALUATIONS_PATH || "evaluations";
 }
 function getConfigPath(): string {
-  return getEnv().TENSORZERO_UI_CONFIG_PATH;
+  const configPath = getEnv().TENSORZERO_UI_CONFIG_PATH;
+  if (!configPath) {
+    throw new Error("TENSORZERO_UI_CONFIG_PATH is not set");
+  }
+  return configPath;
 }
 
 export type InferenceCacheSetting = "on" | "off" | "read_only" | "write_only";

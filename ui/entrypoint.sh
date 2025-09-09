@@ -36,6 +36,20 @@ if ! evaluations -h &> /dev/null; then
   exit 1
 fi
 
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --default-config)
+      export TENSORZERO_UI_DEFAULT_CONFIG=1
+      shift
+      ;;
+    *)
+      echo "Unknown option $1"
+      exit 1
+      ;;
+  esac
+done
+
 cd /app/ui
 
 # Launch React Router

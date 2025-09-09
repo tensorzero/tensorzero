@@ -126,4 +126,7 @@ export default [
     "optimization/supervised-fine-tuning/:job_id?",
     "routes/optimization/supervised-fine-tuning/route.tsx",
   ),
+
+  // Health
+  route("health", "routes/health/route.tsx"),
 ] satisfies RouteConfig;

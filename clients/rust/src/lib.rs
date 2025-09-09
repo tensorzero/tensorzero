@@ -1323,14 +1323,20 @@ async fn with_embedded_timeout<R, F: Future<Output = Result<R, TensorZeroError>>
 /// This is a convenience function that wraps `Config::load_from_path_optional_verify_credentials`
 /// and returns a `TensorZeroError` instead of a `ConfigError`.
 /// This function does NOT verify credentials.
-pub async fn get_config_no_verify_credentials(path: PathBuf) -> Result<Config, TensorZeroError> {
-    Config::load_from_path_optional_verify_credentials(
-        &ConfigFileGlob::new(path.to_string_lossy().to_string())
-            .map_err(|e| TensorZeroError::Other { source: e.into() })?,
-        false,
-    )
-    .await
-    .map_err(|e| TensorZeroError::Other { source: e.into() })
+/// If the path is None, it returns the default config.
+pub async fn get_config_no_verify_credentials(
+    path: Option<PathBuf>,
+) -> Result<Config, TensorZeroError> {
+    match path {
+        Some(path) => Config::load_from_path_optional_verify_credentials(
+            &ConfigFileGlob::new(path.to_string_lossy().to_string())
+                .map_err(|e| TensorZeroError::Other { source: e.into() })?,
+            false,
+        )
+        .await
+        .map_err(|e| TensorZeroError::Other { source: e.into() }),
+        None => Ok(Config::default()),
+    }
 }
 
 /// Compares two TensorZero version strings, returning `None`
