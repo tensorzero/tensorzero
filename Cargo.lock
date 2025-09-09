@@ -4596,6 +4596,7 @@ dependencies = [
  "mime 0.4.0-a.0",
  "mime_guess",
  "minijinja",
+ "moka",
  "object_store",
  "opentelemetry",
  "opentelemetry-otlp",
@@ -4623,6 +4624,7 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "toml 0.9.5",
+ "tonic",
  "tower-http",
  "tower-layer",
  "tracing",
@@ -4872,6 +4874,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
  "pin-project-lite",
  "tokio",
 ]
