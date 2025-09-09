@@ -5,6 +5,7 @@ use tensorzero_core::{
     db::clickhouse::test_helpers::{select_feedback_clickhouse, select_feedback_tags_clickhouse},
     endpoints::feedback::{feedback, Params},
     gateway_util::GatewayHandle,
+    http::TensorzeroHttpClient,
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text, TextKind},
 };
 use tokio::time::{sleep, Duration};
@@ -181,7 +182,7 @@ async fn e2e_test_comment_feedback_validation_disabled() {
     let handle = GatewayHandle::new_with_clickhouse_and_http_client(
         config.into(),
         clickhouse.clone(),
-        reqwest::Client::new(),
+        TensorzeroHttpClient::new().unwrap(),
     );
     let inference_id = Uuid::now_v7();
     let params = Params {
@@ -1212,7 +1213,7 @@ async fn e2e_test_float_feedback_validation_disabled() {
     let handle = GatewayHandle::new_with_clickhouse_and_http_client(
         config.into(),
         clickhouse.clone(),
-        reqwest::Client::new(),
+        TensorzeroHttpClient::new().unwrap(),
     );
     let inference_id = Uuid::now_v7();
     let params = Params {
@@ -1446,7 +1447,7 @@ async fn e2e_test_boolean_feedback_validation_disabled() {
     let handle = GatewayHandle::new_with_clickhouse_and_http_client(
         config.into(),
         clickhouse.clone(),
-        reqwest::Client::new(),
+        TensorzeroHttpClient::new().unwrap(),
     );
     let inference_id = Uuid::now_v7();
     let params = Params {
