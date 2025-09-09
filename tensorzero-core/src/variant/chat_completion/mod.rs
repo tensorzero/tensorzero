@@ -48,7 +48,7 @@ pub struct TemplateWithSchema {
     // `{user_text}`/`{assistant_text}`/`{system_text}` based on the role.
     // New-style template definitions (using `templates.<name>`) will have this set to `false`.
     // Eventually, this field will be removed entirely.
-    pub legacy_input_wrapper: bool,
+    pub legacy_definition: bool,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -281,12 +281,12 @@ fn prepare_system_message(
     Ok(match template {
         Some(template) => {
             let system = system.unwrap_or(&Value::Null);
-            if template.legacy_input_wrapper && system.as_str().is_none() {
+            if template.schema.is_none() && template.legacy_definition && system.as_str().is_none() {
                 return Err(Error::new(ErrorDetails::InvalidMessage {
                     message: format!("System message content {system} is not a string but `input_wrappers.system` is set in the variant config")
                 }));
             }
-            let context = if template.schema.is_some() || !template.legacy_input_wrapper {
+            let context = if template.schema.is_some() || !template.legacy_definition {
                 Cow::Borrowed(system)
             } else {
                 Cow::Owned(serde_json::json!({
@@ -324,7 +324,7 @@ fn prepare_request_message(
             ResolvedInputMessageContent::Text { text } => {
                 let template = chat_templates.get_implicit_template(message.role);
                 let text_content = match template {
-                    Some(template) if template.legacy_input_wrapper => {
+                    Some(template) if template.legacy_definition => {
                         let context = serde_json::json!({
                             message.role.implicit_template_var().to_string(): text
                         });
@@ -345,7 +345,7 @@ fn prepare_request_message(
                             message: format!("Template `{}` not found", template_input.name),
                         })
                     })?;
-                if template.legacy_input_wrapper {
+                if template.legacy_definition {
                     return Err(Error::new(ErrorDetails::InvalidMessage {
                         message: format!("Request message content {} is not a string but `input_wrappers.{}` is set in the variant config", serde_json::to_string(&template_input.arguments).unwrap_or_default(), message.role)
                     }));
@@ -631,7 +631,7 @@ pub fn validate_legacy_template_and_schema(
             // New-style templates (declared with `templates.<name>`) can have any number of variables
             // when no schema is provided - any undefined variables will produce an error when we actually
             // apply the template
-            if template.legacy_input_wrapper && !undeclared_vars.is_empty() {
+            if template.legacy_definition && !undeclared_vars.is_empty() {
                 // If the template has any variables, it must be the one allowed variable (e.g. `system_text`)
                 // based on the template kind
                 let mut undeclared_vars = undeclared_vars.into_iter().collect::<Vec<_>>();
@@ -2562,7 +2562,7 @@ mod tests {
                 ))
                 .unwrap(),
                 schema: Some(schema.clone()),
-                legacy_input_wrapper: false,
+                legacy_definition: false,
             }),
             &templates,
         )
@@ -2583,7 +2583,7 @@ mod tests {
                 ))
                 .unwrap(),
                 schema: None,
-                legacy_input_wrapper: false,
+                legacy_definition: false,
             }),
             &templates,
         );
@@ -2604,7 +2604,7 @@ mod tests {
                 ))
                 .unwrap(),
                 schema: None,
-                legacy_input_wrapper: true,
+                legacy_definition: true,
             }),
             &templates,
         )
