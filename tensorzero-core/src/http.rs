@@ -16,6 +16,7 @@ use reqwest::{Client, IntoUrl, NoProxy, Proxy, RequestBuilder};
 use reqwest_eventsource::{CannotCloneRequestError, Event, EventSource, RequestBuilderExt};
 use serde::{de::DeserializeOwned, Serialize};
 
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     model_table::CowNoClone,
@@ -162,7 +163,7 @@ impl TensorzeroHttpClient {
         // was introduced (sharing a single `reqwest::Client` instance, which will limit the
         // concurrency for HTTP2 requests to the same host).
         Error::new(ErrorDetails::InternalError {
-            message: "No available HTTP clients. {IMPOSSIBLE_ERROR_MESSAGE}".to_string(),
+            message: format!("No available HTTP clients. {IMPOSSIBLE_ERROR_MESSAGE}"),
         });
         LimitedClientTicket {
             client: CowNoClone::Borrowed(&self.fallback_client),
@@ -413,4 +414,68 @@ fn build_client() -> Result<Client, Error> {
             message: format!("Failed to build HTTP client: {e}"),
         })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{future::IntoFuture, net::SocketAddr};
+
+    use axum::{extract::Request, routing::get, Router};
+    use tokio::task::{JoinHandle, JoinSet};
+
+    use crate::http::CONCURRENCY_LIMIT;
+
+    async fn start_target_server() -> (SocketAddr, JoinHandle<Result<(), std::io::Error>>) {
+        let app = Router::new().route(
+            "/hello",
+            get(|_req: Request| async {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                http::Response::new("Hello".to_string())
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let handle = tokio::spawn(axum::serve(listener, app).into_future());
+        (addr, handle)
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_concurrent_requests() {
+        let (addr, _handle) = start_target_server().await;
+        let client = super::TensorzeroHttpClient::new().unwrap();
+        // Send one request, and check that it didn't require using a new client
+        let response = client
+            .get(format!("http://{addr}/hello"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        for (i, client_cell) in client.clients.iter().enumerate() {
+            assert_eq!(
+                client_cell.get().is_some(),
+                i == 0,
+                "Wrong initialization state for client {i}"
+            );
+        }
+        let mut tasks = JoinSet::new();
+        let num_tasks: usize = 1000;
+        for _ in 0..num_tasks {
+            let client = client.clone();
+            tasks.spawn(async move {
+                client
+                    .get(format!("http://{addr}/hello"))
+                    .send()
+                    .await
+                    .unwrap()
+            });
+        }
+        tasks.join_all().await;
+        // We should have used at least one ne wclient
+        assert!(client.clients[1].get().is_some());
+        // At most `num_tasks/CONCURRENCY_LIMIT` clients should have been used
+        // (the maximum is achieved if all tasks happen to run concurrently)
+        assert_eq!(num_tasks % (CONCURRENCY_LIMIT as usize), 0);
+        let num_initialized_clients = client.clients.iter().filter(|c| c.get().is_some()).count();
+        assert!(num_initialized_clients <= (num_tasks / (CONCURRENCY_LIMIT as usize) ) as usize, "Too many initialized clients - found {num_initialized_clients} but expected at most {}", num_tasks / (CONCURRENCY_LIMIT as usize));
+    }
 }
