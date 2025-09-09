@@ -749,7 +749,7 @@ pub async fn dicl_examples_exist(
     variant_name: &str,
 ) -> Result<bool, Error> {
     let query = r"
-        SELECT count(*) as count
+        SELECT 1
         FROM DynamicInContextLearningExample
         WHERE function_name = {function_name:String}
         AND variant_name = {variant_name:String}
@@ -764,13 +764,9 @@ pub async fn dicl_examples_exist(
     let result = clickhouse
         .run_query_synchronous(query.to_string(), &params)
         .await?;
-    let count: u64 = result.response.trim().parse().map_err(|e| {
-        Error::new(ErrorDetails::ClickHouseDeserialization {
-            message: format!("Failed to parse DICL example count: {e}"),
-        })
-    })?;
 
-    Ok(count > 0)
+    // If the query returns "1", examples exist; if empty, they don't
+    Ok(result.response.trim() == "1")
 }
 
 #[cfg(test)]
