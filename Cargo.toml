@@ -39,7 +39,7 @@ tokio-stream = "0.1.15"
 tokio = { version = "1.46.1", features = ["full"] }
 tracing = { version = "0.1.40", features = ["log"] }
 pyo3 = { version = "0.24.2", features = ["experimental-async", "abi3-py39"] }
-axum = { version = "0.8", features = ["macros"] }
+axum = { version = "0.8", features = ["macros", "http2"] }
 anyhow = "1.0.99"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
 clap = { version = "4.5.46", features = ["derive"] }
