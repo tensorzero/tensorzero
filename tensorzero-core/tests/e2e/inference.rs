@@ -3130,7 +3130,7 @@ async fn test_dummy_only_inference_invalid_default_function_arg() {
     let response_text = response.text().await.unwrap();
     assert!(
         response_text.contains(
-            "Message has non-string content but there is no template `system` in any variant"
+            "System message has non-string content but there is no template `system` in any variant"
         ),
         "Unexpected error message: {response_text}",
     );
