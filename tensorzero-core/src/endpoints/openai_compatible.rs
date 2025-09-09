@@ -463,26 +463,6 @@ struct OpenAICompatibleToolChoiceParams {
     pub tool_choice: Option<ToolChoice>,
 }
 
-/*
-* impl From<ChatCompletionToolChoiceOption> for ToolChoice {
-    fn from(tool_choice: ChatCompletionToolChoiceOption) -> Self {
-        match tool_choice {
-            ChatCompletionToolChoiceOption::None => ToolChoice::None,
-            ChatCompletionToolChoiceOption::Auto => ToolChoice::Auto,
-            ChatCompletionToolChoiceOption::Required => ToolChoice::Required,
-            ChatCompletionToolChoiceOption::AllowedTools(OpenAICompatibleAllowedTools {
-                tools,
-                mode,
-            }) => ToolChoice::AllowedTools(OpenAICompatibleAllowedTools { tools, mode }),
-            ChatCompletionToolChoiceOption::Named(named) => {
-                ToolChoice::Specific(named.function.name)
-            }
-        }
-    }
-}
-
-*/
-
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
 struct OpenAICompatibleStreamOptions {
     #[serde(default)]
@@ -2142,5 +2122,179 @@ mod tests {
         assert_eq!(param.dimensions, Some(15));
         assert_eq!(param.encoding_format, EmbeddingEncodingFormat::Float);
         assert!(!logs_contain("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"));
+    }
+
+    #[test]
+    fn test_chat_completion_tool_choice_option_deserialization_and_conversion() {
+        // Test deserialization from JSON and conversion to OpenAICompatibleToolChoiceParams
+
+        // Test None variant
+        let json_none = json!("none");
+        let tool_choice: ChatCompletionToolChoiceOption =
+            serde_json::from_value(json_none).unwrap();
+        assert_eq!(tool_choice, ChatCompletionToolChoiceOption::None);
+        let params = tool_choice.into_tool_params();
+        assert_eq!(params.allowed_tools, None);
+        assert_eq!(params.tool_choice, Some(ToolChoice::None));
+
+        // Test Auto variant
+        let json_auto = json!("auto");
+        let tool_choice: ChatCompletionToolChoiceOption =
+            serde_json::from_value(json_auto).unwrap();
+        assert_eq!(tool_choice, ChatCompletionToolChoiceOption::Auto);
+        let params = tool_choice.into_tool_params();
+        assert_eq!(params.allowed_tools, None);
+        assert_eq!(params.tool_choice, Some(ToolChoice::Auto));
+
+        // Test Required variant
+        let json_required = json!("required");
+        let tool_choice: ChatCompletionToolChoiceOption =
+            serde_json::from_value(json_required).unwrap();
+        assert_eq!(tool_choice, ChatCompletionToolChoiceOption::Required);
+        let params = tool_choice.into_tool_params();
+        assert_eq!(params.allowed_tools, None);
+        assert_eq!(params.tool_choice, Some(ToolChoice::Required));
+
+        // Test Named variant (specific tool)
+        let json_named = json!({
+            "type": "function",
+            "function": {
+                "name": "get_weather"
+            }
+        });
+        let tool_choice: ChatCompletionToolChoiceOption =
+            serde_json::from_value(json_named).unwrap();
+        assert_eq!(
+            tool_choice,
+            ChatCompletionToolChoiceOption::Named(OpenAICompatibleNamedToolChoice {
+                r#type: "function".to_string(),
+                function: FunctionName {
+                    name: "get_weather".to_string()
+                }
+            })
+        );
+        let params = tool_choice.into_tool_params();
+        assert_eq!(params.allowed_tools, None);
+        assert_eq!(
+            params.tool_choice,
+            Some(ToolChoice::Specific("get_weather".to_string()))
+        );
+
+        // Test AllowedTools variant with auto mode
+        let json_allowed_auto = json!({
+            "type": "allowed_tools",
+            "allowed_tools": {
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather"
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "send_email"
+                    }
+                }
+            ],
+            "mode": "auto"
+        }});
+        let tool_choice: ChatCompletionToolChoiceOption =
+            serde_json::from_value(json_allowed_auto).unwrap();
+        assert_eq!(
+            tool_choice,
+            ChatCompletionToolChoiceOption::AllowedTools(OpenAICompatibleAllowedTools {
+                tools: vec![
+                    OpenAICompatibleNamedToolChoice {
+                        r#type: "function".to_string(),
+                        function: FunctionName {
+                            name: "get_weather".to_string()
+                        }
+                    },
+                    OpenAICompatibleNamedToolChoice {
+                        r#type: "function".to_string(),
+                        function: FunctionName {
+                            name: "send_email".to_string()
+                        }
+                    }
+                ],
+                mode: OpenAICompatibleAllowedToolsMode::Auto
+            })
+        );
+        let params = tool_choice.into_tool_params();
+        assert_eq!(
+            params.allowed_tools,
+            Some(vec!["get_weather".to_string(), "send_email".to_string()])
+        );
+        assert_eq!(params.tool_choice, Some(ToolChoice::Auto));
+
+        // TODO: add a test for allowed tools with required mode
+
+        // Test default value (should be None)
+        let tool_choice_default = ChatCompletionToolChoiceOption::default();
+        assert_eq!(tool_choice_default, ChatCompletionToolChoiceOption::None);
+        let params_default = tool_choice_default.into_tool_params();
+        assert_eq!(params_default.allowed_tools, None);
+        assert_eq!(params_default.tool_choice, Some(ToolChoice::None));
+    }
+
+    #[test]
+    fn test_chat_completion_tool_choice_option_invalid_deserialization() {
+        // Test invalid JSON values that should fail to deserialize
+
+        // Invalid string value
+        let json_invalid = json!("invalid_choice");
+        let result: Result<ChatCompletionToolChoiceOption, _> =
+            serde_json::from_value(json_invalid);
+        assert!(result.is_err());
+
+        // Invalid object structure for named tool choice
+        let json_invalid_named = json!({
+            "type": "invalid_type",
+            "function": {
+                "name": "test"
+            }
+        });
+        let result: Result<ChatCompletionToolChoiceOption, _> =
+            serde_json::from_value(json_invalid_named);
+        assert!(result.is_err());
+
+        // Missing function name in named tool choice
+        let json_missing_name = json!({
+            "type": "function",
+            "function": {}
+        });
+        let result: Result<ChatCompletionToolChoiceOption, _> =
+            serde_json::from_value(json_missing_name);
+        assert!(result.is_err());
+
+        // Invalid mode in allowed tools
+        let json_invalid_mode = json!({
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "test"
+                    }
+                }
+            ],
+            "mode": "invalid_mode"
+        });
+        let result: Result<ChatCompletionToolChoiceOption, _> =
+            serde_json::from_value(json_invalid_mode);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_openai_compatible_allowed_tools_mode_conversion() {
+        // Test conversion from OpenAICompatibleAllowedToolsMode to ToolChoice
+        let auto_mode = OpenAICompatibleAllowedToolsMode::Auto;
+        let tool_choice: ToolChoice = auto_mode.into();
+        assert_eq!(tool_choice, ToolChoice::Auto);
+
+        let required_mode = OpenAICompatibleAllowedToolsMode::Required;
+        let tool_choice: ToolChoice = required_mode.into();
+        assert_eq!(tool_choice, ToolChoice::Required);
     }
 }
