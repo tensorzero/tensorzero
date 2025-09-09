@@ -19,7 +19,7 @@ use crate::{
 
 struct LimitedClient {
     // Currently never incremented - we'll use this when we implement
-    // connecting pooling
+    // connection pooling
     concurrent_requests: Arc<AtomicU8>,
     client: Client,
 }
@@ -31,7 +31,7 @@ struct LimitedClientTicket<'a> {
 impl Drop for LimitedClientTicket<'_> {
     fn drop(&mut self) {
         // We'll implement decrementing the counter here when we implement
-        // connecting pooling
+        // connection pooling
     }
 }
 
@@ -88,12 +88,12 @@ impl TensorzeroHttpClient {
         &self,
         method: reqwest::Method,
         url: U,
-    ) -> Result<TensorzeroRequestBuilder<'_>, Error> {
+    ) -> TensorzeroRequestBuilder<'_> {
         let ticket = self.take_ticket();
-        Ok(TensorzeroRequestBuilder {
+        TensorzeroRequestBuilder {
             builder: ticket.client.client.request(method, url),
             ticket,
-        })
+        }
     }
 }
 
