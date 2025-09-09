@@ -78,7 +78,7 @@ export const FullyPopulated: Story = {
                   "You are a helpful AI assistant. Today's date is {{ date }}.",
               },
               schema: null,
-              legacy_input_wrapper: false,
+              legacy_definition: false,
             },
             user: {
               template: {
@@ -86,7 +86,7 @@ export const FullyPopulated: Story = {
                 contents: "User query: {{ query }}\\n\\nContext: {{ context }}",
               },
               schema: null,
-              legacy_input_wrapper: false,
+              legacy_definition: false,
             },
             assistant: {
               template: {
@@ -95,7 +95,7 @@ export const FullyPopulated: Story = {
                   "Based on the context, here's my response: {{ response }}",
               },
               schema: null,
-              legacy_input_wrapper: false,
+              legacy_definition: false,
             },
           },
           temperature: 0.7,
@@ -189,7 +189,7 @@ export const WithJsonMode: Story = {
                   "You are a JSON API that always responds with valid JSON.",
               },
               schema: null,
-              legacy_input_wrapper: false,
+              legacy_definition: false,
             },
             user: {
               template: {
@@ -198,7 +198,7 @@ export const WithJsonMode: Story = {
                   "Extract the following information from the text: {{ text }}",
               },
               schema: null,
-              legacy_input_wrapper: false,
+              legacy_definition: false,
             },
           },
           temperature: 0.3,
@@ -250,7 +250,7 @@ export const WithTemplatesOnly: Story = {
     Your tone should be {{ tone }} and engaging.`,
               },
               schema: null,
-              legacy_input_wrapper: false,
+              legacy_definition: false,
             },
             user: {
               template: {
@@ -262,7 +262,7 @@ export const WithTemplatesOnly: Story = {
     - Include these elements: {{ elements | join(", ") }}`,
               },
               schema: null,
-              legacy_input_wrapper: false,
+              legacy_definition: false,
             },
             assistant: {
               template: {
@@ -275,7 +275,7 @@ export const WithTemplatesOnly: Story = {
     The End`,
               },
               schema: null,
-              legacy_input_wrapper: false,
+              legacy_definition: false,
             },
           },
           temperature: null,

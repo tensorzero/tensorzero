@@ -9,6 +9,6 @@ export type ChatTemplates = {
   [key in string]?: {
     template: PathWithContents;
     schema: StaticJSONSchema | null;
-    legacy_input_wrapper: boolean;
+    legacy_definition: boolean;
   };
 };

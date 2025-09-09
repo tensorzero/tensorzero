@@ -2,7 +2,6 @@
 import type { JsonValue } from "./serde_json/JsonValue";
 
 export type TemplateInput = {
-  type: "TemplateInput";
   name: string;
   arguments: { [key in string]?: JsonValue };
 };

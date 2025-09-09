@@ -11,5 +11,5 @@ import type { StaticJSONSchema } from "./StaticJSONSchema";
 export type TemplateWithSchema = {
   template: PathWithContents;
   schema: StaticJSONSchema | null;
-  legacy_input_wrapper: boolean;
+  legacy_definition: boolean;
 };
