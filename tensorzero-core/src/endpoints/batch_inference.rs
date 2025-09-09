@@ -23,6 +23,7 @@ use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
 use crate::function::{sample_variant, FunctionConfig};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{
     BatchEpisodeIds, BatchEpisodeIdsWithSize, BatchInferenceDatabaseInsertMetadata,
     BatchInferenceParams, BatchInferenceParamsWithSize, BatchModelInferenceRow,
@@ -512,7 +513,7 @@ pub async fn get_batch_request(
 /// and if it's newly completed, the response.
 async fn poll_batch_inference(
     batch_request: &BatchRequestRow<'static>,
-    http_client: reqwest::Client,
+    http_client: TensorzeroHttpClient,
     models: &ModelTable,
     credentials: &InferenceCredentials,
 ) -> Result<PollBatchInferenceResponse, Error> {
@@ -525,7 +526,7 @@ async fn poll_batch_inference(
             Error::new(ErrorDetails::InvalidModel {
                 model_name: batch_request.model_name.to_string(),
             })
-        })?;
+        })?;    
     let model_provider = model_config
         .providers
         .get(batch_request.model_provider_name.as_ref())

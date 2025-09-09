@@ -12,26 +12,11 @@ use tensorzero::{
     Client, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
 };
 use tensorzero_core::{
-    cache::CacheOptions,
-    config::{Config, ConfigFileGlob, ProviderTypesConfig},
-    db::clickhouse::test_helpers::CLICKHOUSE_URL,
-    db::clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
-    endpoints::inference::InferenceClients,
-    inference::types::{
-        file::Base64FileMetadata,
-        resolved_input::FileWithPath,
-        storage::{StorageKind, StoragePath},
-        stored_input::StoredFile,
-        Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
-        ModelInput, RequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent,
-        Text,
-    },
-    optimization::{
+    cache::CacheOptions, config::{Config, ConfigFileGlob, ProviderTypesConfig}, db::clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat, test_helpers::CLICKHOUSE_URL}, endpoints::inference::InferenceClients, http::TensorzeroHttpClient, inference::types::{
+        Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest, ModelInput, RequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent, Text, file::Base64FileMetadata, resolved_input::FileWithPath, storage::{StorageKind, StoragePath}, stored_input::StoredFile
+    }, optimization::{
         JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
-    },
-    stored_inference::StoredOutput,
-    tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
-    variant::JsonMode,
+    }, stored_inference::StoredOutput, tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult}, variant::JsonMode
 };
 
 pub mod dicl;
@@ -73,7 +58,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .await
         .unwrap();
 
-    let client = reqwest::Client::new();
+    let client = TensorzeroHttpClient::new().unwrap();
     let test_examples = get_examples(test_case, 10);
     let val_examples = Some(get_examples(test_case, 10));
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();

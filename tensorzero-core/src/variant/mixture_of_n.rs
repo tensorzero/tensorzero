@@ -853,28 +853,18 @@ impl FuserConfig {
 mod tests {
     use std::collections::HashMap;
 
-    use reqwest::Client;
+    
     use tokio_stream::StreamExt;
     use uuid::Uuid;
 
     use crate::{
-        cache::{CacheEnabledMode, CacheOptions},
-        config::{SchemaData, UninitializedSchemas},
-        db::clickhouse::ClickHouseConnectionInfo,
-        endpoints::inference::{InferenceCredentials, InferenceIds},
-        function::{FunctionConfigChat, FunctionConfigJson},
-        inference::types::{
+        cache::{CacheEnabledMode, CacheOptions}, config::{SchemaData, UninitializedSchemas}, db::clickhouse::ClickHouseConnectionInfo, endpoints::inference::{InferenceCredentials, InferenceIds}, function::{FunctionConfigChat, FunctionConfigJson}, http::TensorzeroHttpClient, inference::types::{
             ChatInferenceResult, FinishReason, InternalJsonInferenceOutput, JsonInferenceResult,
             Latency, ModelInferenceResponseWithMetadata, Text, Thought,
-        },
-        jsonschema_util::StaticJSONSchema,
-        minijinja_util::tests::{
+        }, jsonschema_util::StaticJSONSchema, minijinja_util::tests::{
             get_system_filled_template, get_system_template, get_test_template_config,
             test_system_template_schema,
-        },
-        model::{ModelConfig, ModelProvider, ProviderConfig},
-        providers::dummy::DummyProvider,
-        tool::{ToolCallConfig, ToolCallOutput, ToolChoice},
+        }, model::{ModelConfig, ModelProvider, ProviderConfig}, providers::dummy::DummyProvider, tool::{ToolCallConfig, ToolCallOutput, ToolChoice}
     };
 
     use super::*;
@@ -1336,7 +1326,7 @@ mod tests {
             },
         )]))
         .expect("Failed to create model table");
-        let client = Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
         let inference_clients = InferenceClients {

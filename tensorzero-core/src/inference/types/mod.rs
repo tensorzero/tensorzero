@@ -10,6 +10,7 @@ use extra_headers::{FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders};
 use file::sanitize_raw_request;
 pub use file::{Base64File, File};
 use futures::stream::Peekable;
+use crate::http::TensorzeroHttpClient;
 use futures::Stream;
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -81,7 +82,7 @@ pub struct Input {
 }
 
 pub struct FetchContext<'a> {
-    pub client: &'a reqwest::Client,
+    pub client: &'a TensorzeroHttpClient,
     pub object_store_info: &'a Option<ObjectStoreInfo>,
 }
 

@@ -12,22 +12,15 @@ use tensorzero::{
     InferenceOutput, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
 };
 use tensorzero_core::{
-    config::{Config, ConfigFileGlob, UninitializedVariantConfig},
-    db::clickhouse::test_helpers::{
-        get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
-        select_model_inferences_clickhouse, CLICKHOUSE_URL,
-    },
-    db::clickhouse::ClickhouseFormat,
-    inference::types::{
+    config::{Config, ConfigFileGlob, UninitializedVariantConfig}, db::clickhouse::{ClickhouseFormat, test_helpers::{
+        CLICKHOUSE_URL, get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse, select_model_inferences_clickhouse
+    }}, http::TensorzeroHttpClient, inference::types::{
         ContentBlock, ContentBlockChatOutput, ContentBlockChunk, JsonInferenceOutput, ModelInput,
         RequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent, Text, TextKind,
         Usage,
-    },
-    optimization::{
-        dicl::UninitializedDiclOptimizationConfig, JobHandle, OptimizationJobInfo, Optimizer,
-        OptimizerOutput, UninitializedOptimizerConfig, UninitializedOptimizerInfo,
-    },
-    stored_inference::StoredOutput,
+    }, optimization::{
+        JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerConfig, UninitializedOptimizerInfo, dicl::UninitializedDiclOptimizationConfig
+    }, stored_inference::StoredOutput
 };
 
 #[allow(clippy::allow_attributes, dead_code)] // False positive
@@ -86,7 +79,7 @@ pub async fn test_dicl_optimization_chat() {
     };
 
     let optimizer_info = uninitialized_optimizer_info.load().await.unwrap();
-    let client = reqwest::Client::new();
+    let client = TensorzeroHttpClient::new().unwrap();
     let test_examples = get_pinocchio_examples(false);
     let val_examples = None; // No validation examples needed for this test
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
@@ -353,7 +346,7 @@ pub async fn test_dicl_optimization_json() {
 
     let optimizer_info = uninitialized_optimizer_info.load().await.unwrap();
 
-    let client = reqwest::Client::new();
+    let client = TensorzeroHttpClient::new().unwrap();
     let test_examples = get_pinocchio_examples(true);
     let val_examples = None; // No validation examples needed for this test
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();

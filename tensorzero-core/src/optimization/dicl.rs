@@ -4,22 +4,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::{
-    cache::CacheOptions,
-    config::{Config, UninitializedVariantConfig},
-    db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
-    embeddings::{
+    cache::CacheOptions, config::{Config, UninitializedVariantConfig}, db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo}, embeddings::{
         Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingModelConfig, EmbeddingRequest,
-    },
-    endpoints::inference::{InferenceClients, InferenceCredentials},
-    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
-    function::FunctionConfig,
-    model::{build_creds_caching_default, CredentialLocation},
-    optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput},
-    providers::openai::{
-        default_api_key_location, OpenAICredentials, DEFAULT_CREDENTIALS, PROVIDER_TYPE,
-    },
-    stored_inference::RenderedSample,
-    variant::{dicl::UninitializedDiclConfig, RetryConfig},
+    }, endpoints::inference::{InferenceClients, InferenceCredentials}, error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE}, function::FunctionConfig, http::TensorzeroHttpClient, model::{CredentialLocation, build_creds_caching_default}, optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput}, providers::openai::{
+        DEFAULT_CREDENTIALS, OpenAICredentials, PROVIDER_TYPE, default_api_key_location
+    }, stored_inference::RenderedSample, variant::{RetryConfig, dicl::UninitializedDiclConfig}
 };
 use futures::future::try_join_all;
 use std::sync::Arc;
@@ -215,7 +204,7 @@ impl Optimizer for DiclOptimizationConfig {
 
     async fn launch(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
@@ -369,7 +358,7 @@ impl Optimizer for DiclOptimizationConfig {
 impl JobHandle for DiclOptimizationJobHandle {
     async fn poll(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
         // DICL optimization is synchronous, so it's always complete once launched
@@ -503,7 +492,7 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
 async fn process_embedding_batch(
     embedding_model_config: &EmbeddingModelConfig,
     model_name: &str,
-    client: &reqwest::Client,
+    client: &TensorzeroHttpClient,
     credentials: &InferenceCredentials,
     batch_texts: Vec<String>,
     batch_index: usize,
@@ -550,7 +539,7 @@ async fn process_embedding_batch(
 async fn process_embeddings_with_batching(
     embedding_model_config: &EmbeddingModelConfig,
     model_name: &str,
-    client: &reqwest::Client,
+    client: &TensorzeroHttpClient,
     credentials: &InferenceCredentials,
     input_texts: Vec<String>,
     batch_size: usize,
@@ -793,7 +782,7 @@ mod tests {
     async fn test_process_embedding_batch_success() {
         let embedding_model = create_test_embedding_model();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["hello".to_string(), "world".to_string()];
 
@@ -820,7 +809,7 @@ mod tests {
     async fn test_process_embedding_batch_with_dimensions() {
         let embedding_model = create_test_embedding_model();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["hello".to_string()];
         let dimensions = Some(512);
@@ -846,7 +835,7 @@ mod tests {
     async fn test_process_embedding_batch_failure() {
         let embedding_model = create_test_embedding_model_with_failure();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["test".to_string()];
 
@@ -868,7 +857,7 @@ mod tests {
     async fn test_process_embeddings_with_batching_success() {
         let embedding_model = create_test_embedding_model();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let input_texts = vec![
             "text1".to_string(),
@@ -901,7 +890,7 @@ mod tests {
     async fn test_process_embeddings_with_batching_respects_concurrency() {
         let embedding_model = create_test_embedding_model();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let input_texts = vec!["1".to_string(), "2".to_string(), "3".to_string()];
 

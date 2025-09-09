@@ -4,13 +4,7 @@ use serde::Deserialize;
 use tracing::instrument;
 
 use crate::{
-    cache::CacheParamsOptions,
-    config::Config,
-    db::clickhouse::ClickHouseConnectionInfo,
-    embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
-    endpoints::inference::InferenceClients,
-    error::{Error, ErrorDetails},
-    inference::types::Usage,
+    cache::CacheParamsOptions, config::Config, db::clickhouse::ClickHouseConnectionInfo, embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest}, endpoints::inference::InferenceClients, error::{Error, ErrorDetails}, http::TensorzeroHttpClient, inference::types::Usage
 };
 
 use super::inference::InferenceCredentials;
@@ -36,7 +30,7 @@ pub struct Params {
 )]
 pub async fn embeddings(
     config: Arc<Config>,
-    http_client: &reqwest::Client,
+    http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     params: Params,
 ) -> Result<EmbeddingResponse, Error> {
@@ -130,7 +124,7 @@ mod tests {
 
         let config = Arc::new(config);
 
-        let http_client = reqwest::Client::new();
+        let http_client = TensorzeroHttpClient::new().unwrap();
         let params = Params {
             input: EmbeddingInput::Single("test input".to_string()),
             model_name: "test-model".to_string(),
@@ -158,7 +152,7 @@ mod tests {
         // Create an empty config with no embedding models
         let config = Arc::new(Config::default());
 
-        let http_client = reqwest::Client::new();
+        let http_client = TensorzeroHttpClient::new().unwrap();
         let params = Params {
             input: EmbeddingInput::Single("test input".to_string()),
             model_name: "nonexistent-model".to_string(),
