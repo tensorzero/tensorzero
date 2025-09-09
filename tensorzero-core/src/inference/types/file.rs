@@ -5,7 +5,10 @@ use serde_json::Value;
 use url::Url;
 
 use super::{resolved_input::FileWithPath, ContentBlock, RequestMessage};
-use crate::error::{Error, ErrorDetails};
+use crate::{
+    error::{Error, ErrorDetails},
+    http::TensorzeroHttpClient,
+};
 use aws_smithy_types::base64;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -112,7 +115,7 @@ pub enum File {
 }
 
 impl File {
-    pub async fn take_or_fetch(self, client: &reqwest::Client) -> Result<Base64File, Error> {
+    pub async fn take_or_fetch(self, client: &TensorzeroHttpClient) -> Result<Base64File, Error> {
         match self {
             File::Url { url, mime_type } => {
                 let response = client.get(url.clone()).send().await.map_err(|e| {

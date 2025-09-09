@@ -1,3 +1,4 @@
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::stored_input::StoredFile;
 use crate::serde_util::{
     deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
@@ -81,7 +82,7 @@ pub struct Input {
 }
 
 pub struct FetchContext<'a> {
-    pub client: &'a reqwest::Client,
+    pub client: &'a TensorzeroHttpClient,
     pub object_store_info: &'a Option<ObjectStoreInfo>,
 }
 

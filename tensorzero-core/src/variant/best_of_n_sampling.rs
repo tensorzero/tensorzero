@@ -758,7 +758,6 @@ fn map_evaluator_to_actual_index(evaluator_idx: usize, skipped_indices: &[usize]
 mod tests {
     use std::collections::HashMap;
 
-    use reqwest::Client;
     use uuid::Uuid;
 
     use crate::{
@@ -766,6 +765,7 @@ mod tests {
         config::UninitializedSchemas,
         db::clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::{InferenceCredentials, InferenceIds},
+        http::TensorzeroHttpClient,
         inference::types::{
             ChatInferenceResult, FinishReason, JsonInferenceResult, Latency,
             RequestMessagesOrBatch, Usage,
@@ -1262,7 +1262,7 @@ mod tests {
             },
         )]))
         .expect("Failed to create model table");
-        let client = Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
         let inference_clients = InferenceClients {

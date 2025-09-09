@@ -1,4 +1,4 @@
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::{error::IMPOSSIBLE_ERROR_MESSAGE, http::TensorzeroHttpClient};
 #[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyValueError;
 #[cfg(feature = "pyo3")]
@@ -188,7 +188,7 @@ impl Optimizer for OpenAISFTConfig {
 
     async fn launch(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
@@ -328,7 +328,7 @@ impl Optimizer for OpenAISFTConfig {
 impl JobHandle for OpenAISFTJobHandle {
     async fn poll(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
         let openai_credentials = build_creds_caching_default(

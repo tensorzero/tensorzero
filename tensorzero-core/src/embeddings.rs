@@ -8,6 +8,7 @@ use crate::cache::{
 };
 use crate::config::{ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::RequestMessagesOrBatch;
 use crate::inference::types::{ContentBlock, Text};
@@ -25,7 +26,6 @@ use crate::{
     providers::openai::OpenAIProvider,
 };
 use futures::future::try_join_all;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::time::error::Elapsed;
 use tracing::instrument;
@@ -416,7 +416,7 @@ pub trait EmbeddingProvider {
     fn embed(
         &self,
         request: &EmbeddingRequest,
-        client: &Client,
+        client: &TensorzeroHttpClient,
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> impl Future<Output = Result<EmbeddingProviderResponse, Error>> + Send;
@@ -472,7 +472,7 @@ impl EmbeddingProvider for EmbeddingProviderInfo {
     async fn embed(
         &self,
         request: &EmbeddingRequest,
-        client: &Client,
+        client: &TensorzeroHttpClient,
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
@@ -552,7 +552,7 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
     async fn embed(
         &self,
         request: &EmbeddingRequest,
-        client: &Client,
+        client: &TensorzeroHttpClient,
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
@@ -674,7 +674,7 @@ mod tests {
                 &request,
                 "fallback",
                 &InferenceClients {
-                    http_client: &Client::new(),
+                    http_client: &TensorzeroHttpClient::new().unwrap(),
                     credentials: &InferenceCredentials::default(),
                     cache_options: &CacheOptions {
                         max_age_s: None,
