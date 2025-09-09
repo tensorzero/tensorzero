@@ -1,6 +1,6 @@
-use crate::{error::IMPOSSIBLE_ERROR_MESSAGE, http::TensorzeroHttpClient};
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
+use crate::{error::IMPOSSIBLE_ERROR_MESSAGE, http::TensorzeroHttpClient};
 #[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyValueError;
 #[cfg(feature = "pyo3")]

@@ -5,7 +5,10 @@ use serde_json::Value;
 use url::Url;
 
 use super::{resolved_input::FileWithPath, ContentBlock, RequestMessage};
-use crate::{error::{Error, ErrorDetails}, http::TensorzeroHttpClient};
+use crate::{
+    error::{Error, ErrorDetails},
+    http::TensorzeroHttpClient,
+};
 use aws_smithy_types::base64;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;

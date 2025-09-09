@@ -22,10 +22,10 @@ use crate::error::{
     warn_discarded_thought_block, warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error,
     ErrorDetails,
 };
+use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::file::require_image;
-use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,

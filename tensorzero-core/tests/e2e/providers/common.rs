@@ -4,8 +4,8 @@ use std::time::Duration;
 use std::{collections::HashMap, net::SocketAddr};
 
 use object_store::{aws::AmazonS3Builder, ObjectStore};
-use tensorzero_core::http::TensorzeroHttpClient;
 use std::sync::Arc;
+use tensorzero_core::http::TensorzeroHttpClient;
 
 use axum::body::Body;
 use axum::extract::{Query, State};

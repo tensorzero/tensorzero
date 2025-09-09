@@ -2,13 +2,13 @@ use std::borrow::Cow;
 use std::sync::OnceLock;
 use std::time::Duration;
 
+use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use futures::StreamExt;
 use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::time::Instant;
-use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use url::Url;
 
 use crate::cache::ModelProviderRequest;

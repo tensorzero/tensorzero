@@ -9,9 +9,9 @@ use serde_json::{json, Value};
 use std::borrow::Cow;
 use std::sync::OnceLock;
 
+use crate::http::TensorzeroHttpClient;
 use std::time::Duration;
 use tokio::time::Instant;
-use crate::http::TensorzeroHttpClient;
 use url::Url;
 #[cfg(test)]
 use uuid::Uuid;

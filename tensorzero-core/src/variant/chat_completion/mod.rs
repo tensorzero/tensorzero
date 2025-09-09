@@ -637,7 +637,7 @@ mod tests {
     use super::*;
 
     use futures::StreamExt;
-    
+
     use serde_json::{json, Value};
     use uuid::Uuid;
 

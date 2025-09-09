@@ -526,7 +526,7 @@ async fn poll_batch_inference(
             Error::new(ErrorDetails::InvalidModel {
                 model_name: batch_request.model_name.to_string(),
             })
-        })?;    
+        })?;
     let model_provider = model_config
         .providers
         .get(batch_request.model_provider_name.as_ref())

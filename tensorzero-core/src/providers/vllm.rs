@@ -16,6 +16,7 @@ use super::openai::{
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::Thought;
 use crate::inference::types::{
@@ -23,7 +24,6 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseArgs,
 };
-use crate::http::TensorzeroHttpClient;
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::providers::helpers::{

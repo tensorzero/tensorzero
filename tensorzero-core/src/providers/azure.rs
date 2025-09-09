@@ -15,6 +15,7 @@ use crate::embeddings::{
 };
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
@@ -23,7 +24,6 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse,
 };
-use crate::http::TensorzeroHttpClient;
 use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
 use crate::model::{
     build_creds_caching_default, Credential, CredentialLocation, EndpointLocation, ModelProvider,

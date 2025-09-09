@@ -12,11 +12,26 @@ use tensorzero::{
     Client, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
 };
 use tensorzero_core::{
-    cache::CacheOptions, config::{Config, ConfigFileGlob, ProviderTypesConfig}, db::clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat, test_helpers::CLICKHOUSE_URL}, endpoints::inference::InferenceClients, http::TensorzeroHttpClient, inference::types::{
-        Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest, ModelInput, RequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent, Text, file::Base64FileMetadata, resolved_input::FileWithPath, storage::{StorageKind, StoragePath}, stored_input::StoredFile
-    }, optimization::{
+    cache::CacheOptions,
+    config::{Config, ConfigFileGlob, ProviderTypesConfig},
+    db::clickhouse::{test_helpers::CLICKHOUSE_URL, ClickHouseConnectionInfo, ClickhouseFormat},
+    endpoints::inference::InferenceClients,
+    http::TensorzeroHttpClient,
+    inference::types::{
+        file::Base64FileMetadata,
+        resolved_input::FileWithPath,
+        storage::{StorageKind, StoragePath},
+        stored_input::StoredFile,
+        Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
+        ModelInput, RequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent,
+        Text,
+    },
+    optimization::{
         JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
-    }, stored_inference::StoredOutput, tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult}, variant::JsonMode
+    },
+    stored_inference::StoredOutput,
+    tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
+    variant::JsonMode,
 };
 
 pub mod dicl;

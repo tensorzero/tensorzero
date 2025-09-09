@@ -3,8 +3,8 @@ use std::sync::OnceLock;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::http::TensorzeroHttpClient;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,

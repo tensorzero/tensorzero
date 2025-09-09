@@ -1,3 +1,4 @@
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::stored_input::StoredFile;
 use crate::serde_util::{
     deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
@@ -10,7 +11,6 @@ use extra_headers::{FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders};
 use file::sanitize_raw_request;
 pub use file::{Base64File, File};
 use futures::stream::Peekable;
-use crate::http::TensorzeroHttpClient;
 use futures::Stream;
 use indexmap::IndexMap;
 use itertools::Itertools;

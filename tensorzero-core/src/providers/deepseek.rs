@@ -14,12 +14,12 @@ use super::helpers::{
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, ProviderInferenceResponse,
 };
-use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, ProviderInferenceResponseArgs,
     ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk,

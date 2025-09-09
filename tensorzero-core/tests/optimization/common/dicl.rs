@@ -12,15 +12,25 @@ use tensorzero::{
     InferenceOutput, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
 };
 use tensorzero_core::{
-    config::{Config, ConfigFileGlob, UninitializedVariantConfig}, db::clickhouse::{ClickhouseFormat, test_helpers::{
-        CLICKHOUSE_URL, get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse, select_model_inferences_clickhouse
-    }}, http::TensorzeroHttpClient, inference::types::{
+    config::{Config, ConfigFileGlob, UninitializedVariantConfig},
+    db::clickhouse::{
+        test_helpers::{
+            get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
+            select_model_inferences_clickhouse, CLICKHOUSE_URL,
+        },
+        ClickhouseFormat,
+    },
+    http::TensorzeroHttpClient,
+    inference::types::{
         ContentBlock, ContentBlockChatOutput, ContentBlockChunk, JsonInferenceOutput, ModelInput,
         RequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent, Text, TextKind,
         Usage,
-    }, optimization::{
-        JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerConfig, UninitializedOptimizerInfo, dicl::UninitializedDiclOptimizationConfig
-    }, stored_inference::StoredOutput
+    },
+    optimization::{
+        dicl::UninitializedDiclOptimizationConfig, JobHandle, OptimizationJobInfo, Optimizer,
+        OptimizerOutput, UninitializedOptimizerConfig, UninitializedOptimizerInfo,
+    },
+    stored_inference::StoredOutput,
 };
 
 #[allow(clippy::allow_attributes, dead_code)] // False positive

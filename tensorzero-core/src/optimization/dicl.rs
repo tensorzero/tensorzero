@@ -4,11 +4,23 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::{
-    cache::CacheOptions, config::{Config, UninitializedVariantConfig}, db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo}, embeddings::{
+    cache::CacheOptions,
+    config::{Config, UninitializedVariantConfig},
+    db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
+    embeddings::{
         Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingModelConfig, EmbeddingRequest,
-    }, endpoints::inference::{InferenceClients, InferenceCredentials}, error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE}, function::FunctionConfig, http::TensorzeroHttpClient, model::{CredentialLocation, build_creds_caching_default}, optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput}, providers::openai::{
-        DEFAULT_CREDENTIALS, OpenAICredentials, PROVIDER_TYPE, default_api_key_location
-    }, stored_inference::RenderedSample, variant::{RetryConfig, dicl::UninitializedDiclConfig}
+    },
+    endpoints::inference::{InferenceClients, InferenceCredentials},
+    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
+    function::FunctionConfig,
+    http::TensorzeroHttpClient,
+    model::{build_creds_caching_default, CredentialLocation},
+    optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput},
+    providers::openai::{
+        default_api_key_location, OpenAICredentials, DEFAULT_CREDENTIALS, PROVIDER_TYPE,
+    },
+    stored_inference::RenderedSample,
+    variant::{dicl::UninitializedDiclConfig, RetryConfig},
 };
 use futures::future::try_join_all;
 use std::sync::Arc;

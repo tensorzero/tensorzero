@@ -13,6 +13,7 @@ use url::Url;
 
 use crate::cache::ModelProviderRequest;
 use crate::error::DisplayOrDebugGateway;
+use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::{
     FinishReason, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -24,7 +25,6 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::tool::ToolChoice;
-use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},

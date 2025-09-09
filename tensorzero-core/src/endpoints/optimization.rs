@@ -11,14 +11,23 @@ use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::Config, db::clickhouse::{
-        ClickHouseConnectionInfo, ClickhouseFormat, query_builder::{
+    config::Config,
+    db::clickhouse::{
+        query_builder::{
             InferenceFilterTreeNode, InferenceOutputSource, ListInferencesParams, OrderBy,
-        }
-    }, endpoints::{inference::InferenceCredentials, stored_inference::render_samples}, error::{Error, ErrorDetails}, gateway_util::{AppState, AppStateData, StructuredJson}, http::TensorzeroHttpClient, optimization::{
+        },
+        ClickHouseConnectionInfo, ClickhouseFormat,
+    },
+    endpoints::{inference::InferenceCredentials, stored_inference::render_samples},
+    error::{Error, ErrorDetails},
+    gateway_util::{AppState, AppStateData, StructuredJson},
+    http::TensorzeroHttpClient,
+    optimization::{
         JobHandle, OptimizationJobHandle, OptimizationJobInfo, Optimizer,
         UninitializedOptimizerInfo,
-    }, serde_util::deserialize_option_u64, stored_inference::RenderedSample
+    },
+    serde_util::deserialize_option_u64,
+    stored_inference::RenderedSample,
 };
 
 #[cfg_attr(test, derive(ts_rs::TS))]

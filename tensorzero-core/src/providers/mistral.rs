@@ -1,11 +1,11 @@
 use std::{borrow::Cow, sync::OnceLock, time::Duration};
 
+use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
-use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use serde::{Deserialize, Serialize};
 use tokio::time::Instant;
 use url::Url;

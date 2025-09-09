@@ -879,7 +879,7 @@ mod tests {
         DUMMY_STREAMING_RESPONSE,
     };
     use crate::tool::{ToolCallConfig, ToolChoice};
-    
+
     use serde_json::json;
     use std::collections::HashMap;
     use tracing_test::traced_test;

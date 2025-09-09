@@ -1,3 +1,4 @@
+use crate::http::TensorzeroHttpClient;
 /// TGI integration for TensorZero
 ///
 /// Here, we list known limitations of TGI in our experience
@@ -20,7 +21,6 @@ use std::borrow::Cow;
 use std::pin::Pin;
 use std::sync::OnceLock;
 use std::time::Duration;
-use crate::http::TensorzeroHttpClient;
 use tokio::time::Instant;
 use url::Url;
 

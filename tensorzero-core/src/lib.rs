@@ -11,8 +11,8 @@ pub mod error; // error handling
 pub mod evaluations; // evaluation
 pub mod function; // types and methods for working with TensorZero functions
 pub mod gateway_util; // utilities for gateway
-pub mod http;
 pub mod howdy;
+pub mod http;
 pub mod inference; // model inference
 pub mod jsonschema_util; // utilities for working with JSON schemas
 mod minijinja_util; // utilities for working with MiniJinja templates

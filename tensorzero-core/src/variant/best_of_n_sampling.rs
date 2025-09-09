@@ -758,16 +758,23 @@ fn map_evaluator_to_actual_index(evaluator_idx: usize, skipped_indices: &[usize]
 mod tests {
     use std::collections::HashMap;
 
-    
     use uuid::Uuid;
 
     use crate::{
-        cache::{CacheEnabledMode, CacheOptions}, config::UninitializedSchemas, db::clickhouse::ClickHouseConnectionInfo, endpoints::inference::{InferenceCredentials, InferenceIds}, http::TensorzeroHttpClient, inference::types::{
+        cache::{CacheEnabledMode, CacheOptions},
+        config::UninitializedSchemas,
+        db::clickhouse::ClickHouseConnectionInfo,
+        endpoints::inference::{InferenceCredentials, InferenceIds},
+        http::TensorzeroHttpClient,
+        inference::types::{
             ChatInferenceResult, FinishReason, JsonInferenceResult, Latency,
             RequestMessagesOrBatch, Usage,
-        }, minijinja_util::tests::{
+        },
+        minijinja_util::tests::{
             get_system_filled_template, get_system_template, get_test_template_config,
-        }, model::{ModelConfig, ModelProvider, ProviderConfig}, providers::dummy::DummyProvider
+        },
+        model::{ModelConfig, ModelProvider, ProviderConfig},
+        providers::dummy::DummyProvider,
     };
 
     use super::*;

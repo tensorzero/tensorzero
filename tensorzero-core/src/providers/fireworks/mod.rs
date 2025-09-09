@@ -1,6 +1,9 @@
 use std::{borrow::Cow, sync::OnceLock};
 
-use crate::{http::TensorZeroEventSource, providers::helpers_thinking_block::THINK_CHUNK_ID, tool::Tool};
+use crate::http::TensorzeroHttpClient;
+use crate::{
+    http::TensorZeroEventSource, providers::helpers_thinking_block::THINK_CHUNK_ID, tool::Tool,
+};
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_eventsource::Event;
@@ -8,7 +11,6 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::Duration;
-use crate::http::TensorzeroHttpClient;
 use tokio::time::Instant;
 use url::Url;
 

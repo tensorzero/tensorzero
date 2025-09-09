@@ -4,7 +4,14 @@ use serde::Deserialize;
 use tracing::instrument;
 
 use crate::{
-    cache::CacheParamsOptions, config::Config, db::clickhouse::ClickHouseConnectionInfo, embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest}, endpoints::inference::InferenceClients, error::{Error, ErrorDetails}, http::TensorzeroHttpClient, inference::types::Usage
+    cache::CacheParamsOptions,
+    config::Config,
+    db::clickhouse::ClickHouseConnectionInfo,
+    embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
+    endpoints::inference::InferenceClients,
+    error::{Error, ErrorDetails},
+    http::TensorzeroHttpClient,
+    inference::types::Usage,
 };
 
 use super::inference::InferenceCredentials;

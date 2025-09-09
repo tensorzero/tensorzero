@@ -8,11 +8,23 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::inference::InferenceCredentials, error::{DisplayOrDebugGateway, Error, ErrorDetails}, http::TensorzeroHttpClient, model::CredentialLocation, optimization::{JobHandle, OptimizationJobInfo, Optimizer}, providers::gcp_vertex_gemini::{
-        GCPVertexCredentials, GCPVertexGeminiProvider, GCPVertexGeminiSupervisedRow, PROVIDER_TYPE, default_api_key_location, location_subdomain_prefix, optimization::{
-            EncryptionSpec, GCPVertexGeminiFineTuningJob, GCPVertexGeminiFineTuningRequest, SupervisedHyperparameters, SupervisedTuningSpec, convert_to_optimizer_status
-        }, upload_rows_to_gcp_object_store
-    }, stored_inference::RenderedSample
+    config::Config,
+    db::clickhouse::ClickHouseConnectionInfo,
+    endpoints::inference::InferenceCredentials,
+    error::{DisplayOrDebugGateway, Error, ErrorDetails},
+    http::TensorzeroHttpClient,
+    model::CredentialLocation,
+    optimization::{JobHandle, OptimizationJobInfo, Optimizer},
+    providers::gcp_vertex_gemini::{
+        default_api_key_location, location_subdomain_prefix,
+        optimization::{
+            convert_to_optimizer_status, EncryptionSpec, GCPVertexGeminiFineTuningJob,
+            GCPVertexGeminiFineTuningRequest, SupervisedHyperparameters, SupervisedTuningSpec,
+        },
+        upload_rows_to_gcp_object_store, GCPVertexCredentials, GCPVertexGeminiProvider,
+        GCPVertexGeminiSupervisedRow, PROVIDER_TYPE,
+    },
+    stored_inference::RenderedSample,
 };
 
 pub fn gcp_vertex_gemini_base_url(project_id: &str, region: &str) -> Result<Url, url::ParseError> {

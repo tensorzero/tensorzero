@@ -25,11 +25,11 @@ use crate::embeddings::{
 };
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
-use crate::http::TensorzeroHttpClient;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::file::{mime_type_to_ext, require_image};
 use crate::inference::types::resolved_input::FileWithPath;
