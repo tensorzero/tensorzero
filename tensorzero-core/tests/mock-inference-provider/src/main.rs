@@ -1,5 +1,10 @@
 // This project is used only for testing, so it's fine if it panics
-#![expect(clippy::unwrap_used, clippy::panic, clippy::expect_used)]
+#![expect(
+    clippy::expect_used,
+    clippy::missing_panics_doc,
+    clippy::panic,
+    clippy::unwrap_used
+)]
 
 mod error;
 mod fireworks;
@@ -231,6 +236,7 @@ async fn create_openai_fine_tuning_job(
 
     let job_id =
         "mock-inference-finetune-".to_string() + &Alphanumeric.sample_string(&mut rand::rng(), 10);
+
     let job = FineTuningJob {
         num_polls: 0,
         finish_at: None,
@@ -245,14 +251,7 @@ async fn create_openai_fine_tuning_job(
             "status": "queued",
             "validation_file": params.get("validation_file").unwrap_or(&serde_json::Value::Null),
             "training_file": params.get("training_file"),
-            "method": {
-                "type": "supervised",
-                "hyperparameters": {
-                    "batch_size": "auto",
-                    "learning_rate_multiplier": "auto",
-                    "n_epochs": "auto",
-                  }
-            }
+            "method": params.get("method").expect("OpenAI fine-tuning job request must include method field")
         }),
     };
     fine_tuning_jobs.insert(job_id.clone(), job.clone());

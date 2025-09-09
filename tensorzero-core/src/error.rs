@@ -181,6 +181,7 @@ pub enum ErrorDetails {
     },
     ApiKeyMissing {
         provider_name: String,
+        message: String,
     },
     AppState {
         message: String,
@@ -238,8 +239,12 @@ pub enum ErrorDetails {
         dataset_name: String,
         datapoint_id: Uuid,
     },
+    DiclMissingOutput,
     DuplicateTool {
         name: String,
+    },
+    DynamicEndpointNotFound {
+        key_name: String,
     },
     DynamicJsonSchema {
         message: String,
@@ -281,6 +286,9 @@ pub enum ErrorDetails {
     },
     InvalidDynamicTemplatePath {
         name: String,
+    },
+    InvalidDynamicEndpoint {
+        url: String,
     },
     InvalidEncodedJobHandle,
     InvalidJobHandle {
@@ -540,8 +548,10 @@ impl ErrorDetails {
             ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
             ErrorDetails::DatapointNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::DiclMissingOutput => tracing::Level::ERROR,
             ErrorDetails::DuplicateTool { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
+            ErrorDetails::DynamicEndpointNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
             ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
             ErrorDetails::Inference { .. } => tracing::Level::ERROR,
@@ -580,6 +590,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidTemplatePath => tracing::Level::ERROR,
             ErrorDetails::InvalidTool { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidUuid { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidDynamicEndpoint { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidValFraction { .. } => tracing::Level::WARN,
             ErrorDetails::JsonRequest { .. } => tracing::Level::WARN,
             ErrorDetails::JsonSchema { .. } => tracing::Level::ERROR,
@@ -642,8 +653,10 @@ impl ErrorDetails {
             ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DatapointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::DiclMissingOutput => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DuplicateTool { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::DynamicEndpointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidInferenceTarget { .. } => StatusCode::BAD_REQUEST,
@@ -674,6 +687,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidDatasetName { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidDynamicEndpoint { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidDynamicEvaluationRun { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidDynamicTemplatePath { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -834,8 +848,11 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::Glob { glob, message } => {
                 write!(f, "Error using glob: `{glob}`: {message}")
             }
-            ErrorDetails::ApiKeyMissing { provider_name } => {
-                write!(f, "API key missing for provider: {provider_name}")
+            ErrorDetails::ApiKeyMissing {
+                provider_name,
+                message,
+            } => {
+                write!(f, "API key missing for provider {provider_name}: {message}")
             }
             ErrorDetails::AppState { message } => {
                 write!(f, "Error initializing AppState: {message}")
@@ -888,6 +905,9 @@ impl std::fmt::Display for ErrorDetails {
                     "Datapoint not found for dataset: {dataset_name} and id: {datapoint_id}"
                 )
             }
+            ErrorDetails::DiclMissingOutput => {
+                write!(f, "DICL example missing output. There was a bug in a notebook from 2025-08 that may have caused the output to not be written to ClickHouse. You can remove the examples with missing output by running the query `DELETE FROM DynamicInContextLearningExample WHERE empty(output)`.")
+            }
             ErrorDetails::DuplicateTool { name } => {
                 write!(f, "Duplicate tool name: {name}. Tool names must be unique.")
             }
@@ -897,6 +917,10 @@ impl std::fmt::Display for ErrorDetails {
                     "Error in compiling client-provided JSON schema: {message}"
                 )
             }
+            ErrorDetails::DynamicEndpointNotFound { key_name } => {
+                write!(f, "Dynamic endpoint '{key_name}' not found in credentials")
+            }
+
             ErrorDetails::FileRead { message, file_path } => {
                 write!(f, "Error reading file {file_path}: {message}")
             }
@@ -998,6 +1022,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Dynamic evaluation run not found for episode id: {episode_id}",
                 )
+            }
+            ErrorDetails::InvalidDynamicEndpoint { url } => {
+                write!(f, "Invalid dynamic endpoint URL: {url}")
             }
             ErrorDetails::InvalidDynamicTemplatePath { name } => {
                 write!(f, "Invalid dynamic template path: {name}. There is likely a duplicate template in the config.")

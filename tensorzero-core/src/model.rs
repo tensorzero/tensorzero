@@ -886,7 +886,7 @@ pub enum UninitializedProviderConfig {
     },
     Azure {
         deployment_id: String,
-        endpoint: Url,
+        endpoint: EndpointLocation,
         #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
     },
@@ -1564,6 +1564,49 @@ pub enum CredentialLocation {
     None,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub enum EndpointLocation {
+    /// Environment variable containing the actual endpoint URL
+    Env(String),
+    /// For dynamic endpoint resolution
+    Dynamic(String),
+    /// Direct endpoint URL
+    Static(String),
+}
+
+impl<'de> Deserialize<'de> for EndpointLocation {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        if let Some(inner) = s.strip_prefix("env::") {
+            Ok(EndpointLocation::Env(inner.to_string()))
+        } else if let Some(inner) = s.strip_prefix("dynamic::") {
+            Ok(EndpointLocation::Dynamic(inner.to_string()))
+        } else {
+            // Default to static endpoint
+            Ok(EndpointLocation::Static(s))
+        }
+    }
+}
+
+impl Serialize for EndpointLocation {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let s = match self {
+            EndpointLocation::Env(inner) => format!("env::{inner}"),
+            EndpointLocation::Dynamic(inner) => format!("dynamic::{inner}"),
+            EndpointLocation::Static(inner) => inner.clone(),
+        };
+        serializer.serialize_str(&s)
+    }
+}
+
 impl<'de> Deserialize<'de> for CredentialLocation {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -1684,21 +1727,21 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
         (location, provider_type): (CredentialLocation, &str),
     ) -> Result<Self, Self::Error> {
         match location {
-            CredentialLocation::Env(key_name) => match env::var(key_name) {
+            CredentialLocation::Env(key_name) => match env::var(&key_name) {
                 Ok(value) => Ok(Credential::Static(SecretString::from(value))),
                 Err(_) => {
                     if skip_credential_validation() {
                         #[cfg(any(test, feature = "e2e_tests"))]
                         {
                             tracing::warn!(
-                            "You are missing the credentials required for a model provider of type {}, so the associated tests will likely fail.",
-                            provider_type
-                        );
+                                "You are missing the credentials required for a model provider of type {provider_type} (environment variable `{key_name}` is unset), so the associated tests will likely fail.",
+                            );
                         }
                         Ok(Credential::Missing)
                     } else {
                         Err(Error::new(ErrorDetails::ApiKeyMissing {
                             provider_name: provider_type.to_string(),
+                            message: format!("Environment variable `{key_name}` is missing"),
                         }))
                     }
                 }
@@ -1720,9 +1763,8 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                             return Ok(Credential::Missing);
                         } else {
                             return Err(Error::new(ErrorDetails::ApiKeyMissing {
-                                provider_name: format!(
-                                    "{provider_type}: Environment variable {env_key} for credentials path is missing"
-                                ),
+                                provider_name: provider_type.to_string(),
+                                message: format!("Environment variable `{env_key}` for credentials path is missing"),
                             }));
                         }
                     }
@@ -1742,9 +1784,8 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                             Ok(Credential::Missing)
                         } else {
                             Err(Error::new(ErrorDetails::ApiKeyMissing {
-                                provider_name: format!(
-                                    "{provider_type}: Failed to read credentials file - {e}"
-                                ),
+                                provider_name: provider_type.to_string(),
+                                message: format!("Failed to read credentials file - {e}"),
                             }))
                         }
                     }
@@ -1764,9 +1805,8 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                         Ok(Credential::Missing)
                     } else {
                         Err(Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: format!(
-                                "{provider_type}: Failed to read credentials file - {e}"
-                            ),
+                            provider_name: provider_type.to_string(),
+                            message: format!("Failed to read credentials file - {e}"),
                         }))
                     }
                 }
@@ -2509,7 +2549,8 @@ mod tests {
                 provider_errors: HashMap::from([(
                     "model".to_string(),
                     ErrorDetails::ApiKeyMissing {
-                        provider_name: "Dummy".to_string()
+                        provider_name: "Dummy".to_string(),
+                        message: "Dynamic api key `TEST_KEY` is missing".to_string(),
                     }
                     .into()
                 )])
@@ -2617,7 +2658,8 @@ mod tests {
                 provider_errors: HashMap::from([(
                     "model".to_string(),
                     ErrorDetails::ApiKeyMissing {
-                        provider_name: "Dummy".to_string()
+                        provider_name: "Dummy".to_string(),
+                        message: "Dynamic api key `TEST_KEY` is missing".to_string(),
                     }
                     .into()
                 )])

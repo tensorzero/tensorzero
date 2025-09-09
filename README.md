@@ -1,4 +1,4 @@
-<p><picture><img src="https://github.com/user-attachments/assets/47d67430-386d-4675-82ad-d4734d3262d9" alt="TensorZero Logo" width=128 height=128></picture></p>
+<p><picture><img src="https://github.com/user-attachments/assets/47d67430-386d-4675-82ad-d4734d3262d9" alt="TensorZero Logo" width="128" height="128"></picture></p>
 
 # TensorZero
 
@@ -68,7 +68,7 @@ Take what you need, adopt incrementally, and complement with other tools.
   </tr>
   <tr>
     <td width="30%" valign="top"><b>Who is building TensorZero?</b></td>
-    <td width="70%" valign="top">Our technical team includes a former Rust compiler maintainer, machine learning researchers (Stanford, CMU, Oxford, Columbia) with thousands of citations, and the chief product officer of a decacorn startup. We're backed by the same investors as leading open-source projects (e.g. ClickHouse, CockroachDB) and AI labs (e.g. OpenAI, Anthropic). See our <b><a href="https://www.tensorzero.com/blog/tensorzero-raises-7-3m-seed-round-to-build-an-open-source-stack-for-industrial-grade-llm-applications/">$7.3M seed round announcement</a></b> and <b><a href="https://venturebeat.com/ai/tensorzero-nabs-7-3m-seed-to-solve-the-messy-world-of-enterprise-llm-development/" rel="nofollow" target="_blank">coverage from VentureBeat</a></b.</td>
+    <td width="70%" valign="top">Our technical team includes a former Rust compiler maintainer, machine learning researchers (Stanford, CMU, Oxford, Columbia) with thousands of citations, and the chief product officer of a decacorn startup. We're backed by the same investors as leading open-source projects (e.g. ClickHouse, CockroachDB) and AI labs (e.g. OpenAI, Anthropic). See our <b><a href="https://www.tensorzero.com/blog/tensorzero-raises-7-3m-seed-round-to-build-an-open-source-stack-for-industrial-grade-llm-applications/">$7.3M seed round announcement</a></b> and <b><a href="https://venturebeat.com/ai/tensorzero-nabs-7-3m-seed-to-solve-the-messy-world-of-enterprise-llm-development/" rel="nofollow" target="_blank">coverage from VentureBeat</a></b>. We're <b><a href="https://www.tensorzero.com/jobs" rel="nofollow" target="_blank">hiring in NYC</a></b>.</td>
   </tr>
   <tr>
     <td width="30%" valign="top"><b>How do I get started?</b></td>
@@ -483,10 +483,6 @@ Ask us on **[Slack](https://www.tensorzero.com/slack)** or **[Discord](https://w
 
 **Using TensorZero at work?**
 Email us at **[hello@tensorzero.com](mailto:hello@tensorzero.com)** to set up a Slack or Teams channel with your team (free).
-
-**Work with us.**
-We're **[hiring in NYC](https://www.tensorzero.com/jobs)**.
-We'd also welcome **[open-source contributions](https://github.com/tensorzero/tensorzero/blob/main/CONTRIBUTING.md)**!
 
 ## Examples
 

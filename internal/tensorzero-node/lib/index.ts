@@ -8,15 +8,25 @@ import {
   ClientInferenceParams,
   InferenceResponse,
 } from "./bindings";
-import type { TensorZeroClient as NativeTensorZeroClientType } from "../index";
+import type {
+  TensorZeroClient as NativeTensorZeroClientType,
+  DatabaseClient as NativeDatabaseClientType,
+} from "../index";
+import { TimeWindow } from "./bindings/TimeWindow";
+import { ModelUsageTimePoint } from "./bindings/ModelUsageTimePoint";
+import { ModelLatencyDatapoint } from "./bindings/ModelLatencyDatapoint";
 
 // Re-export types from bindings
 export * from "./bindings";
 
 // Use createRequire to load CommonJS module
 const require = createRequire(import.meta.url);
-const { TensorZeroClient: NativeTensorZeroClient, getConfig: nativeGetConfig } =
-  require("../index.cjs") as typeof import("../index");
+const {
+  TensorZeroClient: NativeTensorZeroClient,
+  getConfig: nativeGetConfig,
+  DatabaseClient: NativeDatabaseClient,
+  getQuantiles,
+} = require("../index.cjs") as typeof import("../index");
 
 // Wrapper class for type safety and convenience
 // since the interface is string in string out
@@ -89,6 +99,9 @@ export async function getConfig(configPath: string): Promise<Config> {
   return JSON.parse(configString) as Config;
 }
 
+// Export quantiles array from migration_0035
+export { getQuantiles };
+
 function safeStringify(obj: unknown) {
   try {
     return JSON.stringify(obj, (_key, value) =>
@@ -96,5 +109,45 @@ function safeStringify(obj: unknown) {
     );
   } catch {
     return "null";
+  }
+}
+
+/// Wrapper class for type safety and convenience
+/// around the native DatabaseClient
+export class DatabaseClient {
+  private nativeDatabaseClient: NativeDatabaseClientType;
+
+  constructor(client: NativeDatabaseClientType) {
+    this.nativeDatabaseClient = client;
+  }
+
+  static async fromClickhouseUrl(url: string): Promise<DatabaseClient> {
+    return new DatabaseClient(
+      await NativeDatabaseClient.fromClickhouseUrl(url),
+    );
+  }
+
+  async getModelUsageTimeseries(
+    timeWindow: TimeWindow,
+    maxPeriods: number,
+  ): Promise<ModelUsageTimePoint[]> {
+    const params = safeStringify({
+      time_window: timeWindow,
+      max_periods: maxPeriods,
+    });
+    const modelUsageTimeseriesString =
+      await this.nativeDatabaseClient.getModelUsageTimeseries(params);
+    return JSON.parse(modelUsageTimeseriesString) as ModelUsageTimePoint[];
+  }
+
+  async getModelLatencyQuantiles(
+    timeWindow: TimeWindow,
+  ): Promise<ModelLatencyDatapoint[]> {
+    const params = safeStringify({
+      time_window: timeWindow,
+    });
+    const modelLatencyQuantilesString =
+      await this.nativeDatabaseClient.getModelLatencyQuantiles(params);
+    return JSON.parse(modelLatencyQuantilesString) as ModelLatencyDatapoint[];
   }
 }

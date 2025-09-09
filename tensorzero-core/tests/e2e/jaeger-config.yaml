@@ -1,5 +1,5 @@
     service:
-      extensions: [jaeger_storage, jaeger_query]
+      extensions: [jaeger_storage, jaeger_query, healthcheckv2]
       pipelines:
         traces:
           receivers: [otlp]
@@ -13,13 +13,13 @@
           memstore:
             memory:
               max_traces: 10000
+      healthcheckv2:
+        endpoint: 0.0.0.0:14269            
     receivers:
       otlp:
         protocols:
           grpc:
             endpoint: 0.0.0.0:4317
-          http:
-            endpoint: 0.0.0.0:4318
     exporters:
       jaeger_storage_exporter:
         trace_storage: memstore

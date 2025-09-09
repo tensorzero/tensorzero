@@ -31,11 +31,7 @@ test("countInferencesForFunction returns correct counts", async () => {
   const jsonCount = await countInferencesForFunction("extract_entities", {
     type: "json",
     variants: {},
-    schemas: {
-      system: null,
-      user: null,
-      assistant: null,
-    },
+    schemas: {},
     description: "",
     output_schema: { value: {} },
     implicit_tool_call_config: {
@@ -52,11 +48,7 @@ test("countInferencesForFunction returns correct counts", async () => {
     tools: [],
     tool_choice: "none",
     parallel_tool_calls: false,
-    schemas: {
-      system: null,
-      user: null,
-      assistant: null,
-    },
+    schemas: {},
     description: "",
   });
   expect(chatCount).toBe(804);
@@ -69,11 +61,7 @@ test("countInferencesForVariant returns correct counts", async () => {
     {
       type: "json",
       variants: {},
-      schemas: {
-        system: null,
-        user: null,
-        assistant: null,
-      },
+      schemas: {},
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
@@ -94,11 +82,7 @@ test("countInferencesForVariant returns correct counts", async () => {
       tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
-      schemas: {
-        system: null,
-        user: null,
-        assistant: null,
-      },
+      schemas: {},
       description: "",
     },
     "initial_prompt_gpt4o_mini",
@@ -347,13 +331,13 @@ test("queryInferenceTableByEpisodeId pages through a sample of results correctly
 test("queryInferenceTableBounds", async () => {
   const bounds = await queryInferenceTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0197177a-7c00-70a2-82a6-741f60a03b2e");
+  expect(bounds.last_id).toBe("019926fd-1a06-7fe2-b7f4-2318de2f2046");
 });
 
 test("queryEpisodeTableBounds", async () => {
   const bounds = await queryEpisodeTableBounds();
   expect(bounds.first_id).toBe("0192ced0-947e-74b3-a3d7-02fd2c54d637");
-  expect(bounds.last_id).toBe("0197177a-7c00-70a2-82a6-744bcb064c42");
+  expect(bounds.last_id).toBe("019926fd-1a06-7fe2-b7f4-23220893d62c");
 });
 
 test("queryInferenceTableBounds with episode_id", async () => {
@@ -460,8 +444,6 @@ test(
     });
     expect(episodes.length).toBe(10);
 
-    console.log(episodes);
-
     // Verify episodes are in descending order
     for (let i = 1; i < episodes.length; i++) {
       expect(episodes[i - 1].episode_id > episodes[i].episode_id).toBe(true);
@@ -479,7 +461,6 @@ test(
       after: episodes[0].episode_id,
       page_size: 10,
     });
-    console.log(episodes3);
     expect(episodes3.length).toBe(0);
 
     // Test that before and after together throws error
@@ -573,9 +554,9 @@ test("countInferencesByFunction", async () => {
         max_timestamp: "2025-05-12T21:59:20Z",
       },
       {
-        count: 2,
+        count: 3,
         function_name: "tensorzero::default",
-        max_timestamp: "2025-05-23T15:49:52Z",
+        max_timestamp: "2025-09-08T01:42:25Z",
       },
       {
         count: 1,
@@ -643,7 +624,7 @@ describe("getAdjacentInferenceIds", () => {
       lastInferenceId.data[0].last_inference_id,
     );
     expect(adjacentInferenceIds.previous_id).toBe(
-      "0197177a-7c00-70a2-82a6-72ac87d2ff77",
+      "0197177a-7c00-70a2-82a6-741f60a03b2e",
     );
     expect(adjacentInferenceIds.next_id).toBeNull();
   });

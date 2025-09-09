@@ -265,7 +265,7 @@ impl UninitializedFireworksSFTConfig {
     /// :param mtp_enabled: Whether to enable MTP (Multi-Token Prediction).
     /// :param mtp_num_draft_tokens: The number of draft tokens for MTP.
     /// :param mtp_freeze_base_model: Whether to freeze the base model for MTP.
-    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::FIREWORKS_API_KEY". See docs for more details.
+    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like `env::FIREWORKS_API_KEY`. See docs for more details.
     /// :param account_id: The account ID to use for the fine-tuning job.
     /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
     #[expect(unused_variables, clippy::too_many_arguments)]
