@@ -382,6 +382,27 @@ struct OpenAICompatibleNamedToolChoice {
     function: FunctionName,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
+enum OpenAICompatibleAllowedToolsMode {
+    Auto,
+    Required,
+}
+
+impl From<OpenAICompatibleAllowedToolsMode> for ToolChoice {
+    fn from(mode: OpenAICompatibleAllowedToolsMode) -> Self {
+        match mode {
+            OpenAICompatibleAllowedToolsMode::Auto => ToolChoice::Auto,
+            OpenAICompatibleAllowedToolsMode::Required => ToolChoice::Required,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+struct OpenAICompatibleAllowedTools {
+    tools: Vec<OpenAICompatibleNamedToolChoice>,
+    mode: OpenAICompatibleAllowedToolsMode,
+}
+
 /// Controls which (if any) tool is called by the model.
 /// `none` means the model will not call any tool and instead generates a message.
 /// `auto` means the model can pick between generating a message or calling one or more tools.
@@ -390,15 +411,77 @@ struct OpenAICompatibleNamedToolChoice {
 ///
 /// `none` is the default when no tools are present. `auto` is the default if tools are present.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 enum ChatCompletionToolChoiceOption {
     #[default]
     None,
     Auto,
     Required,
+    AllowedTools(OpenAICompatibleAllowedTools),
     #[serde(untagged)]
     Named(OpenAICompatibleNamedToolChoice),
 }
+
+impl ChatCompletionToolChoiceOption {
+    fn into_tool_params(self) -> OpenAICompatibleToolChoiceParams {
+        match self {
+            ChatCompletionToolChoiceOption::None => OpenAICompatibleToolChoiceParams {
+                allowed_tools: None,
+                tool_choice: Some(ToolChoice::None),
+            },
+            ChatCompletionToolChoiceOption::Auto => OpenAICompatibleToolChoiceParams {
+                allowed_tools: None,
+                tool_choice: Some(ToolChoice::Auto),
+            },
+            ChatCompletionToolChoiceOption::Required => OpenAICompatibleToolChoiceParams {
+                allowed_tools: None,
+                tool_choice: Some(ToolChoice::Required),
+            },
+            ChatCompletionToolChoiceOption::AllowedTools(allowed_tool_info) => {
+                OpenAICompatibleToolChoiceParams {
+                    allowed_tools: Some(
+                        allowed_tool_info
+                            .tools
+                            .into_iter()
+                            .map(|tool| tool.function.name)
+                            .collect(),
+                    ),
+                    tool_choice: Some(allowed_tool_info.mode.into()),
+                }
+            }
+            ChatCompletionToolChoiceOption::Named(named_tool) => OpenAICompatibleToolChoiceParams {
+                allowed_tools: None,
+                tool_choice: Some(ToolChoice::Specific(named_tool.function.name)),
+            },
+        }
+    }
+}
+
+#[derive(Default)]
+struct OpenAICompatibleToolChoiceParams {
+    pub allowed_tools: Option<Vec<String>>,
+    pub tool_choice: Option<ToolChoice>,
+}
+
+/*
+* impl From<ChatCompletionToolChoiceOption> for ToolChoice {
+    fn from(tool_choice: ChatCompletionToolChoiceOption) -> Self {
+        match tool_choice {
+            ChatCompletionToolChoiceOption::None => ToolChoice::None,
+            ChatCompletionToolChoiceOption::Auto => ToolChoice::Auto,
+            ChatCompletionToolChoiceOption::Required => ToolChoice::Required,
+            ChatCompletionToolChoiceOption::AllowedTools(OpenAICompatibleAllowedTools {
+                tools,
+                mode,
+            }) => ToolChoice::AllowedTools(OpenAICompatibleAllowedTools { tools, mode }),
+            ChatCompletionToolChoiceOption::Named(named) => {
+                ToolChoice::Specific(named.function.name)
+            }
+        }
+    }
+}
+
+*/
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
 struct OpenAICompatibleStreamOptions {
@@ -645,14 +728,19 @@ impl Params {
                     })
             })
             .transpose()?;
+        let OpenAICompatibleToolChoiceParams {
+            allowed_tools,
+            tool_choice,
+        } = openai_compatible_params
+            .tool_choice
+            .map(ChatCompletionToolChoiceOption::into_tool_params)
+            .unwrap_or_default();
         let dynamic_tool_params = DynamicToolParams {
-            allowed_tools: None,
+            allowed_tools,
             additional_tools: openai_compatible_params
                 .tools
                 .map(|tools| tools.into_iter().map(OpenAICompatibleTool::into).collect()),
-            tool_choice: openai_compatible_params
-                .tool_choice
-                .map(ChatCompletionToolChoiceOption::into),
+            tool_choice,
             parallel_tool_calls: openai_compatible_params.parallel_tool_calls,
         };
         let output_schema = match openai_compatible_params.response_format {
@@ -977,19 +1065,6 @@ impl From<OpenAICompatibleTool> for Tool {
                 name,
                 strict,
             },
-        }
-    }
-}
-
-impl From<ChatCompletionToolChoiceOption> for ToolChoice {
-    fn from(tool_choice: ChatCompletionToolChoiceOption) -> Self {
-        match tool_choice {
-            ChatCompletionToolChoiceOption::None => ToolChoice::None,
-            ChatCompletionToolChoiceOption::Auto => ToolChoice::Auto,
-            ChatCompletionToolChoiceOption::Required => ToolChoice::Required,
-            ChatCompletionToolChoiceOption::Named(named) => {
-                ToolChoice::Specific(named.function.name)
-            }
         }
     }
 }
