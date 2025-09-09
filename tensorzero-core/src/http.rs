@@ -115,6 +115,7 @@ pub struct TensorzeroRequestBuilder<'a> {
 /// we're still polling messages from the stream).
 #[pin_project]
 pub struct TensorZeroEventSource {
+    // We forward to this `EventSource` in our `Stream` impl
     #[pin]
     source: EventSource,
     ticket: LimitedClientTicket<'static>,
@@ -130,6 +131,9 @@ impl Stream for TensorZeroEventSource {
     type Item = Result<Event, reqwest_eventsource::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        // Just forward to the underlying `EventSource`, without doing anything else.
+        // The `TensorZeroEventSource` type only exists to hold on to a `LimitedClientTicket`
+        // until the stream is dropped.
         self.project().source.poll_next(cx)
     }
 }
@@ -197,6 +201,8 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         })
     }
 
+    // This method takes an owned `self`, so we'll drop `self.ticket` when this method
+    // returns (after we've gotten a response)
     pub async fn send(self) -> Result<Response, reqwest::Error> {
         self.builder.send().await
     }
