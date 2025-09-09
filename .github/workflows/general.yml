@@ -396,7 +396,7 @@ jobs:
 
   clickhouse-tests:
     name: "ClickHouse tests (replicated: ${{ matrix.replicated }}) (version: ${{ matrix.clickhouse_version.tag }})"
-    needs: [build-gateway-container, build-mock-inference-container]
+    needs: [build-gateway-container]
 
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
