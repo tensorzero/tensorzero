@@ -10,7 +10,7 @@ export async function loader() {
     throw new Error("Config not found");
   }
   if (!connectedToClickHouse) {
-    throw new Error("ClickHouse connection not established");
+    throw new Error("Failed to connect to ClickHouse");
   }
 
   return new Response(null, { status: 200 });
