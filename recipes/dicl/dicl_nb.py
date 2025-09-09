@@ -37,10 +37,10 @@ DICL_VARIANT_NAME = "gpt_4o_mini_dicl"
 # The model to use for the DICL variant. Should match the name of the embedding model defined in your config
 DICL_EMBEDDING_MODEL = "openai::text-embedding-3-small"
 
-# The model to use for generation in the DICL variant.
-DICL_GENERATION_MODEL = "openai::gpt-4.1-nano-2025-04-14"
+# The model to use for generation in the DICL variant
+DICL_GENERATION_MODEL = "openai::gpt-4o-2024-08-06"
 
-# The number of examples to retrieve for the DICL variant.
+# The number of examples to retrieve for the DICL variant
 DICL_K = 10
 
 # If the metric is a float metric, you can set the threshold to filter the data
