@@ -141,7 +141,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
         before: Option<Uuid>,
         after: Option<Uuid>,
     ) -> Result<Vec<EpisodeByIdRow>, Error> {
-        let (where_clause, params) = match (before, after) {
+        let (where_clause, params, is_after) = match (before, after) {
             (Some(_before), Some(_after)) => {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: "Cannot specify both before and after in query_episode_table"
@@ -151,30 +151,61 @@ impl SelectQueries for ClickHouseConnectionInfo {
             (Some(before), None) => (
                 "episode_id_uint < toUInt128({before:UUID})",
                 vec![("before", before.to_string())],
+                false,
             ),
             (None, Some(after)) => (
                 "episode_id_uint > toUInt128({after:UUID})",
                 vec![("after", after.to_string())],
+                true,
             ),
-            (None, None) => ("1=1", vec![]),
+            (None, None) => ("1=1", vec![], false),
         };
-        let query = format!(
-            r"
+        let query = if is_after {
+            format!(
+                r"
             SELECT
-                uint_to_uuid(episode_id_uint) as episode_id,
-                countMerge(count) as count,
-                formatDateTime(UUIDv7ToDateTime(uint_to_uuid(minMerge(min_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
-                formatDateTime(UUIDv7ToDateTime(uint_to_uuid(maxMerge(max_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
-                uint_to_uuid(maxMerge(max_inference_id_uint)) as last_inference_id
-            FROM
-            EpisodeById
-            WHERE {where_clause}
-            GROUP BY episode_id_uint
+                episode_id,
+                count,
+                start_time,
+                end_time,
+                last_inference_id
+            FROM (
+                SELECT
+                    uint_to_uuid(episode_id_uint) as episode_id,
+                    countMerge(count) as count,
+                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(minMerge(min_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(maxMerge(max_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
+                    uint_to_uuid(maxMerge(max_inference_id_uint)) as last_inference_id,
+                    episode_id_uint
+                FROM
+                    EpisodeById
+                WHERE episode_id_uint <= (SELECT toUInt128(generateUUIDv7()) AS uuid_now) AND {where_clause}
+                GROUP BY episode_id_uint
+                ORDER BY episode_id_uint ASC
+                LIMIT {page_size}
+            )
             ORDER BY episode_id_uint DESC
-            LIMIT {page_size}
-            FORMAT JSONEachRow
-            "
-        );
+            FORMAT JSONEachRow"
+            )
+        } else {
+            format!(
+                r"
+                SELECT
+                    uint_to_uuid(episode_id_uint) as episode_id,
+                    countMerge(count) as count,
+                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(minMerge(min_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(maxMerge(max_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
+                    uint_to_uuid(maxMerge(max_inference_id_uint)) as last_inference_id
+                FROM
+                EpisodeById
+                WHERE episode_id_uint <= (SELECT toUInt128(generateUUIDv7()) AS uuid_now) AND {where_clause}
+                GROUP BY episode_id_uint
+                ORDER BY episode_id_uint DESC
+                LIMIT {page_size}
+                FORMAT JSONEachRow
+                "
+            )
+        };
         let params_str_map: std::collections::HashMap<&str, &str> =
             params.iter().map(|(k, v)| (*k, v.as_str())).collect();
         let response = self.run_query_synchronous(query, &params_str_map).await?;
