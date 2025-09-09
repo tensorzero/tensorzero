@@ -5,7 +5,10 @@ use reqwest::Client;
 use serde_json::{json, Value};
 use tensorzero::{InferenceOutput, InferenceResponse};
 use tensorzero_core::{
-    db::clickhouse::test_helpers::{get_clickhouse, select_model_inferences_clickhouse},
+    db::clickhouse::test_helpers::{
+        get_clickhouse, select_chat_inference_clickhouse, select_model_inferences_clickhouse,
+        CLICKHOUSE_URL,
+    },
     inference::types::{ContentBlockChatOutput, Text},
 };
 use uuid::Uuid;
@@ -93,6 +96,30 @@ async fn e2e_test_template_no_schema() {
         ]
     });
     assert_eq!(echoed_content, expected_content);
+
+    let inference_id = response_json["inference_id"].as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    println!("Input: {input}");
+    assert_eq!(
+        input,
+        serde_json::json!({
+        "system":"My system message",
+        "messages":[
+          {"role":"user","content":[
+            {"type":"text","value":"First user message"},
+            {"type":"text","value":"Second user message"},
+            {"type":"template","name":"my_custom_template","arguments":{"first_variable":"my_content","second_variable":"my_other_content"}}
+          ]},
+          {"role":"assistant","content":[{"type":"text","value":"First assistant message"},{"type":"text","value":"Second assistant message"}]}]
+        })
+    );
 }
 
 #[tokio::test]
@@ -509,7 +536,7 @@ async fn e2e_test_named_system_template_with_schema() {
 
     let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path.to_owned()),
-        clickhouse_url: None,
+        clickhouse_url: Some(CLICKHOUSE_URL.to_string()),
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -540,6 +567,20 @@ async fn e2e_test_named_system_template_with_schema() {
         text: "{\"system\":\"You are a helpful and friendly assistant named AskJeeves\",\"messages\":[]}".to_string(),
       })
     ]);
+
+    let inference_id = res.inference_id;
+    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(
+        input,
+        serde_json::json!({"system":{"assistant_name":"AskJeeves"},"messages":[]})
+    );
 
     let error = client
         .inference(tensorzero::ClientInferenceParams {
