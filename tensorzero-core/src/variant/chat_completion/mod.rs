@@ -690,7 +690,7 @@ mod tests {
     use super::*;
 
     use futures::StreamExt;
-    use reqwest::Client;
+
     use serde_json::{json, Value};
     use uuid::Uuid;
 
@@ -702,6 +702,7 @@ mod tests {
         ChatCompletionInferenceParams, InferenceCredentials, InferenceIds,
     };
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
+    use crate::http::TensorzeroHttpClient;
     use crate::inference::types::TemplateInput;
     use crate::inference::types::{
         ContentBlockChatOutput, InferenceResultChunk, ModelInferenceRequestJsonMode, Usage,
@@ -1069,7 +1070,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_infer_chat_completion() {
-        let client = Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
@@ -2014,7 +2015,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_infer_chat_completion_stream() {
-        let client = Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {

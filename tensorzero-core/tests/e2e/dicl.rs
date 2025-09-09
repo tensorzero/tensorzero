@@ -14,6 +14,7 @@ use tensorzero_core::{
         UninitializedEmbeddingProviderConfig,
     },
     endpoints::inference::InferenceCredentials,
+    http::TensorzeroHttpClient,
     inference::types::{
         ContentBlock, ContentBlockChatOutput, JsonInferenceOutput, RequestMessage, ResolvedInput,
         ResolvedInputMessage, ResolvedInputMessageContent, Role, TemplateInput,
@@ -372,7 +373,7 @@ async fn embed_insert_example(
             .await
             .unwrap();
 
-    let client = Client::new();
+    let client = TensorzeroHttpClient::new().unwrap();
     let request = EmbeddingRequest {
         input: serde_json::to_string(&input.clone().into_stored_input())
             .unwrap()

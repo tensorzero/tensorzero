@@ -858,7 +858,6 @@ impl FuserConfig {
 mod tests {
     use std::collections::HashMap;
 
-    use reqwest::Client;
     use tokio_stream::StreamExt;
     use uuid::Uuid;
 
@@ -868,6 +867,7 @@ mod tests {
         db::clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::{InferenceCredentials, InferenceIds},
         function::{FunctionConfigChat, FunctionConfigJson},
+        http::TensorzeroHttpClient,
         inference::types::{
             ChatInferenceResult, FinishReason, InternalJsonInferenceOutput, JsonInferenceResult,
             Latency, ModelInferenceResponseWithMetadata, Text, Thought,
@@ -1342,7 +1342,7 @@ mod tests {
             },
         )]))
         .expect("Failed to create model table");
-        let client = Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
         let inference_clients = InferenceClients {
