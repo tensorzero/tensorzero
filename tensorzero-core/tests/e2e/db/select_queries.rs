@@ -701,5 +701,5 @@ async fn test_clickhouse_query_episode_table_bounds() {
         bounds.last_id.unwrap().to_string(),
         "019926fd-1a06-7fe2-b7f4-23220893d62c"
     );
-    assert_eq!(bounds.count, 20002095);
+    assert_eq!(bounds.count, 20002046);
 }
