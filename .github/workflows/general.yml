@@ -464,7 +464,6 @@ jobs:
       - name: Load container images
         run: |
           docker load < gateway-container.tar
-          docker load < mock-inference-container.tar
 
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
@@ -650,9 +649,6 @@ jobs:
 
   build-ui-container:
     uses: ./.github/workflows/build-ui-container.yml
-
-  build-mock-inference-container:
-    uses: ./.github/workflows/build-mock-inference-container.yml
 
   ui-tests:
     uses: ./.github/workflows/ui-tests.yml
