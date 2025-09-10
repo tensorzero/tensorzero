@@ -90,7 +90,7 @@ system](/gateway/guides/opentelemetry-otlp).
 ### `observability.async_writes`
 
 - **Type:** boolean
-- **Required:** no (default: `true`)
+- **Required:** no (default: `false`)
 
 Enabling this setting will improve the latency of the gateway by offloading the responsibility of writing inferences, feedback, and other data to ClickHouse to a background task, instead of waiting for ClickHouse to complete the writes.
 Each database insert is handled immediately in separate background tasks.
