@@ -1,4 +1,7 @@
-use sqlx::{migrate, postgres::PgPoolOptions, PgPool};
+use futures::TryStreamExt;
+use std::collections::HashSet;
+
+use sqlx::{migrate, postgres::PgPoolOptions, PgPool, Row};
 
 use crate::error::{Error, ErrorDetails};
 
@@ -15,6 +18,13 @@ impl PostgresConnectionInfo {
 
     pub fn new_disabled() -> Self {
         Self::Disabled
+    }
+
+    pub fn get_pool(&self) -> Option<&PgPool> {
+        match self {
+            Self::Enabled { pool } => Some(pool),
+            Self::Disabled => None,
+        }
     }
 }
 
@@ -40,4 +50,42 @@ pub async fn manual_run_postgres_migrations() -> Result<(), Error> {
                 message: e.to_string(),
             })
         })
+}
+
+/// If the connection is active, check that the set of migrations that have succeeded matches the expected set of migrations.
+/// If the connection is not active, return Ok(()).
+pub async fn check_migrations(pg: &PostgresConnectionInfo) -> Result<(), Error> {
+    let Some(pool) = pg.get_pool() else {
+        return Ok(());
+    };
+    let migrator = migrate!("src/db/postgres/migrations");
+    let expected_migrations: HashSet<i64> = migrator.iter().map(|m| m.version).collect();
+    // Query the database for all successfully applied migration versions.
+    let applied_migrations = get_applied_migrations(pool).await.map_err(|e| {
+        Error::new(ErrorDetails::PostgresConnectionInitialization {
+            message: format!("Failed to retrieve applied migrations: {e}"),
+        })
+    })?;
+    if applied_migrations != expected_migrations {
+        return Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
+            message: format!(
+                "Applied migrations do not match expected migrations. Applied: {applied_migrations:?}, Expected: {expected_migrations:?}",
+            ),
+        }));
+    }
+    Ok(())
+}
+
+/// Helper function to retrieve the set of applied migrations from the database.
+/// We pull this out so that the error can be mapped in one place.
+async fn get_applied_migrations(pool: &PgPool) -> Result<HashSet<i64>, sqlx::Error> {
+    let mut applied_migrations: HashSet<i64> = HashSet::new();
+    let mut rows =
+        sqlx::query("SELECT version FROM _sqlx_migrations WHERE success = true ORDER BY version")
+            .fetch(pool);
+    while let Some(row) = rows.try_next().await? {
+        let id: i64 = row.try_get("version")?;
+        applied_migrations.insert(id);
+    }
+    Ok(applied_migrations)
 }
