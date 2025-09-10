@@ -107,7 +107,7 @@ class DiclOptimizationConfig:
 
 
 # CAREFUL: deprecated alias
-DiclConfig = deprecated("Use `DICLConfig` instead")(DICLConfig)
+DiclConfig = deprecated("Use DICLConfig instead")(DICLConfig)
 
 
 OptimizationConfig = t.Union[

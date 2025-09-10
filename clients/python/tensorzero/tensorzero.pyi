@@ -15,7 +15,6 @@ from typing import (
 from uuid import UUID
 
 import uuid_utils
-from typing_extensions import deprecated
 
 from tensorzero import (
     ChatDatapointInsert,
@@ -146,23 +145,6 @@ class OptimizationJobInfo:
     def estimated_finish(self) -> Optional[int]: ...
 
 @final
-@deprecated("Use DICLOptimizationConfig instead")
-class DiclOptimizationConfig:
-    def __init__(
-        self,
-        *,
-        embedding_model: str,
-        variant_name: str,
-        function_name: str,
-        dimensions: Optional[int] = None,
-        batch_size: Optional[int] = None,
-        max_concurrency: Optional[int] = None,
-        k: Optional[int] = None,
-        model: Optional[str] = None,
-        credentials: Optional[str] = None,
-    ) -> None: ...
-
-@final
 class DICLOptimizationConfig:
     def __init__(
         self,
@@ -177,6 +159,9 @@ class DICLOptimizationConfig:
         model: Optional[str] = None,
         credentials: Optional[str] = None,
     ) -> None: ...
+
+# CAREFUL: deprecated
+DiclOptimizationConfig = DICLOptimizationConfig
 
 @final
 class OpenAISFTConfig:
@@ -336,13 +321,11 @@ class BestOfNSamplingConfig:
     pass
 
 @final
-@deprecated("Use DICLConfig instead")
-class DiclConfig:
-    pass
-
-@final
 class DICLConfig:
     pass
+
+# CAREFUL: deprecated
+DiclConfig = DICLConfig
 
 @final
 class MixtureOfNConfig:
