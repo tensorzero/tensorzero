@@ -1,7 +1,9 @@
 import typing as t
+import warnings
 from importlib.metadata import version
 
 import httpx
+from typing_extensions import Any
 
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import (
@@ -10,8 +12,6 @@ from .tensorzero import (
     ChatCompletionConfig,
     Config,
     Datapoint,
-    DiclConfig,
-    DiclOptimizationConfig,
     FireworksSFTConfig,
     FunctionConfigChat,
     FunctionConfigJson,
@@ -29,6 +29,12 @@ from .tensorzero import (
     StoredInference,
     TogetherSFTConfig,
     VariantsConfig,
+)
+from .tensorzero import (
+    DiclConfig as _DiclConfig,
+)
+from .tensorzero import (
+    DiclOptimizationConfig as _DiclOptimizationConfig,
 )
 from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
@@ -92,11 +98,37 @@ RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample inste
 ChatDatapoint = Datapoint.Chat
 JsonDatapoint = Datapoint.Json
 
+# New DICL classes (preferred names)
+DICLConfig = _DiclConfig
+DICLOptimizationConfig = _DiclOptimizationConfig
+
+
+# Create wrapper classes that emit deprecation warnings
+class DiclConfig:
+    def __new__(cls, *args: Any, **kwargs: Any):
+        warnings.warn(
+            "Please use `DICLConfig` instead of `DiclConfig`. In a future release, `DiclConfig` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _DiclConfig(*args, **kwargs)
+
+
+class DiclOptimizationConfig:
+    def __new__(cls, *args: Any, **kwargs: Any):
+        warnings.warn(
+            "Please use `DICLOptimizationConfig` instead of `DiclOptimizationConfig`. In a future release, `DiclOptimizationConfig` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _DiclOptimizationConfig(*args, **kwargs)
+
+
 OptimizationConfig = t.Union[
     OpenAISFTConfig,
     FireworksSFTConfig,
     TogetherSFTConfig,
-    DiclOptimizationConfig,
+    DICLOptimizationConfig,
     OpenAIRFTConfig,
 ]
 ChatInferenceOutput = t.List[ContentBlock]
@@ -118,6 +150,7 @@ __all__ = [
     "ContentBlock",
     "Datapoint",
     "DiclOptimizationConfig",
+    "DICLOptimizationConfig",
     "DynamicEvaluationRunEpisodeResponse",
     "DynamicEvaluationRunResponse",
     "ExtraBody",
@@ -134,6 +167,7 @@ __all__ = [
     "ChatCompletionConfig",
     "BestOfNSamplingConfig",
     "DiclConfig",
+    "DICLConfig",
     "MixtureOfNConfig",
     "ChainOfThoughtConfig",
     "ImageBase64",
