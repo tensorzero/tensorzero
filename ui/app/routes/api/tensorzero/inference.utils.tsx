@@ -214,6 +214,8 @@ function tensorZeroStoredContentToInputContent(
   switch (content.type) {
     case "text":
       return content;
+    case "template":
+      return content;
     case "tool_call":
       return {
         type: "tool_call",

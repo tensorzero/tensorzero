@@ -29,6 +29,13 @@ export const textInputSchema = z.object({
 });
 export type TextInput = z.infer<typeof textInputSchema>;
 
+export const templateInputSchema = z.object({
+  type: z.literal("template"),
+  name: z.string(),
+  arguments: z.any(),
+});
+export type TemplateInput = z.infer<typeof templateInputSchema>;
+
 // The three display text types below handle the scenario
 // where the function 1) does not use schemas
 export const displayUnstructuredTextInputSchema = z.object({
@@ -211,6 +218,7 @@ export type ResolvedImageContentError = z.infer<
 // Types for input to TensorZero
 export const inputMessageContentSchema = z.discriminatedUnion("type", [
   textInputSchema,
+  templateInputSchema,
   toolCallContentSchema,
   toolResultContentSchema,
   imageContentSchema,
