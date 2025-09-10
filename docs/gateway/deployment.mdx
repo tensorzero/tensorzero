@@ -8,7 +8,7 @@ It's easy to get started with the TensorZero Gateway.
 
 To deploy the TensorZero Gateway, you need to:
 
-- Setup a ClickHouse database
+- Optional: Setup a ClickHouse database for observability
 - Optional: Create a [configuration file](/gateway/configuration-reference/)
 - Run the gateway
 
@@ -22,6 +22,8 @@ See the [TensorZero UI Deployment Guide](/ui/deployment/) for more details on ho
 
 The TensorZero Gateway stores inference and feedback data in a ClickHouse database.
 This data is later used for model observability, experimentation, and optimization.
+
+If you're not using observability features, you don't need to set up a ClickHouse database.
 
 ### Development
 
