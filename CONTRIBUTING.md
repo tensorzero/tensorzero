@@ -189,8 +189,6 @@ For development, the UI runs against hardcoded fixtures in `ui/fixtures/`.
 It depends on a running ClickHouse instance that has been initialized with the TensorZero data model.
 We include some fixture data as well in order to exercise some functionality.
 
-It also requires a one-time build of a WebAssembly module from Rust source code that is used to ensure consistent templating of messages across the gateway and UI.
-
 Here are the steps in order to run or test the UI assuming you have the prerequisites installed and this repository checked out:
 
 1. Install dependencies: `pnpm install`
