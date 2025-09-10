@@ -118,7 +118,7 @@ mod tests {
             routing: vec!["dummy".to_string().into()],
             providers: HashMap::from([("dummy".to_string().into(), provider_info)]),
             timeouts: TimeoutsConfig::default(),
-            retries: RetryConfig { num_retries: 5, max_delay_s: 0.1 },
+            retries: RetryConfig { num_retries: 5, max_delay_s: 0.1 }
         };
 
         // Create a minimal config with just the embedding model

@@ -328,6 +328,16 @@ impl EmbeddingModelResponse {
             cached: true,
         }
     }
+    pub fn usage_considering_cached(&self) -> Usage {
+        if self.cached {
+            Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+            }
+        } else {
+            self.usage
+        }
+    }
 }
 
 pub struct EmbeddingResponseWithMetadata {
