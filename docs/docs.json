@@ -92,7 +92,6 @@
               "gateway/clients",
               "gateway/configuration-reference",
               "gateway/data-model",
-              "gateway/deployment",
               "gateway/integrations",
               {
                 "group": "API Reference",
@@ -139,7 +138,8 @@
           {
             "group": "Deployment",
             "pages": [
-              "deployment/deploy-clickhouse",
+              "deployment/tensorzero-gateway",
+              "deployment/clickhouse",
               "deployment/optimize-latency-and-throughput"
             ]
           }
@@ -248,6 +248,14 @@
     {
       "source": "/gateway/guides/performance-latency/",
       "destination": "/deployment/optimize-latency-and-throughput"
+    },
+    {
+      "source": "/gateway/deployment",
+      "destination": "/deployment/tensorzero-gateway"
+    },
+    {
+      "source": "/gateway/deployment/",
+      "destination": "/deployment/tensorzero-gateway"
     }
   ]
 }
