@@ -155,7 +155,7 @@ pub async fn inference_handler(
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
     let inference_output =
-        inference(config, &http_client, clickhouse_connection_info, params, ()).await?;
+        inference(config, &http_client, clickhouse_connection_info, params).await?;
     match inference_output {
         InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
         InferenceOutput::Streaming(stream) => {
@@ -195,7 +195,7 @@ pub struct InferenceIds {
 
 #[instrument(
     name="inference",
-    skip(config, http_client, clickhouse_connection_info, params, extra_handle),
+    skip(config, http_client, clickhouse_connection_info, params),
     fields(
         function_name,
         model_name,
@@ -205,13 +205,11 @@ pub struct InferenceIds {
         otel.name = "function_inference"
     )
 )]
-pub async fn inference<T: Send + 'static>(
+pub async fn inference(
     config: Arc<Config>,
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     params: Params,
-    // See 'create_stream' for more details about this parameter
-    extra_handle: T,
 ) -> Result<InferenceOutput, Error> {
     let span = tracing::Span::current();
     if let Some(function_name) = &params.function_name {
@@ -411,7 +409,6 @@ pub async fn inference<T: Send + 'static>(
                 inference_metadata,
                 stream,
                 clickhouse_connection_info,
-                extra_handle,
             );
 
             return Ok(InferenceOutput::Streaming(Box::pin(stream)));
@@ -576,18 +573,12 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
     }
 }
 
-fn create_stream<T: Send + 'static>(
+fn create_stream(
     function: Arc<FunctionConfig>,
     config: Arc<Config>,
     metadata: InferenceMetadata,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
-    // An arbitrary 'handle' parameter, which is guaranteed to be dropped after `clickhouse_connection_info`
-    // This is used by the embedded Rust client to ensure that we only drop the last reference to the client
-    // after all outstanding streams have finished (so that we can block in `Drop` from Python without risking
-    // a deadlock due to a `ClickHouseConnectionInfo` being kept alive by a stream in Python
-    // See `GatewayHandle` for more details
-    extra_handle: T,
 ) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
@@ -731,7 +722,6 @@ fn create_stream<T: Send + 'static>(
 
                 }
                 drop(clickhouse_connection_info);
-                drop(extra_handle);
             };
             if async_write {
                 tokio::spawn(write_future);
