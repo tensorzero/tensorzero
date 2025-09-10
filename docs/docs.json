@@ -82,7 +82,6 @@
                   "gateway/guides/metrics-feedback",
                   "gateway/guides/multimodal-inference",
                   "gateway/guides/opentelemetry-otlp",
-                  "gateway/guides/performance-latency",
                   "gateway/guides/prompt-templates-schemas",
                   "gateway/guides/retries-fallbacks",
                   "gateway/guides/streaming-inference",
@@ -94,6 +93,7 @@
               "gateway/configuration-reference",
               "gateway/data-model",
               "gateway/deployment",
+              "gateway/optimize-latency-and-throughput",
               "gateway/integrations",
               {
                 "group": "API Reference",
@@ -234,6 +234,14 @@
     {
       "source": "/vision-roadmap",
       "destination": "/vision-and-roadmap"
+    },
+    {
+      "source": "/gateway/guides/performance-latency",
+      "destination": "/gateway/optimize-latency-and-throughput"
+    },
+    {
+      "source": "/gateway/guides/performance-latency/",
+      "destination": "/gateway/optimize-latency-and-throughput"
     }
   ]
 }
