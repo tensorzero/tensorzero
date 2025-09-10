@@ -471,10 +471,9 @@ impl<'de> Deserialize<'de> for ChatCompletionToolChoiceOption {
                         ))
                     }
                 } else {
-                    // Object without type field - try to deserialize as OpenAICompatibleAllowedTools directly
-                    let allowed_tools: OpenAICompatibleAllowedTools =
-                        serde_json::from_value(value).map_err(D::Error::custom)?;
-                    Ok(ChatCompletionToolChoiceOption::AllowedTools(allowed_tools))
+                    Err(D::Error::custom(
+                        "Tool choice field must have a 'type' field if it is an object",
+                    ))
                 }
             }
             _ => Err(D::Error::custom("Tool choice must be a string or object")),
@@ -2391,6 +2390,32 @@ mod tests {
         let result: Result<ChatCompletionToolChoiceOption, _> =
             serde_json::from_value(json_invalid_mode);
         assert!(result.is_err());
+
+        // Test AllowedTools variant with no type
+        let json_allowed_required = json!({
+            "allowed_tools": {
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather"
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "send_email"
+                    }
+                }
+            ],
+            "mode": "required"
+        }});
+        let err = serde_json::from_value::<ChatCompletionToolChoiceOption>(json_allowed_required)
+            .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Tool choice field must have a 'type' field if it is an object"
+        );
     }
 
     #[test]
