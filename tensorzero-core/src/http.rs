@@ -67,7 +67,7 @@ const MAX_NUM_CLIENTS: usize = 1024;
 // This will make the internal `reqwest` connection pool less effective, as we'll have more
 // duplicate connections than if we had used a single `reqwest::Client` instance.
 //
-// Users have reported hitting the `max_concurrent_streams`, so w're prioritizing the ability
+// Users have reported hitting the `max_concurrent_streams`, so we're prioritizing the ability
 // to scale to high QPS. Ideally, `reqwest/hyper` would natively support opening multiple TCP
 // connections for HTTP2, allowing us to remove our manual connection pooling.
 const CONCURRENCY_LIMIT: u8 = 100;
@@ -94,7 +94,7 @@ pub struct TensorzeroHttpClient {
     // We're optimizing for the case where a large number of concurrent requests are made
     // to the same model provider.
     //
-    // Initialing 1024 `reqwest::Client`s can take several seconds. To avoid making
+    // Initializing 1024 `reqwest::Client`s can take several seconds. To avoid making
     // embedding client construction very slow, we lazily construct them the first time
     // our concurrent requests breaches a threshold (i.e. the first time we try
     // to access a slot in the array). Once a `LimitedClient` is constructed,
@@ -115,7 +115,7 @@ impl TensorzeroHttpClient {
                 client: build_client()?,
             }),
         };
-        // Eagerly initialize the first `OnceCell`` in the array
+        // Eagerly initialize the first `OnceCell` in the array
         client.take_ticket();
         Ok(client)
     }
