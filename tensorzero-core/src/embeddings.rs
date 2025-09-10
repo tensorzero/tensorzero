@@ -65,7 +65,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
             routing: vec![provider_type.to_string().into()],
             providers: HashMap::from([(provider_type.to_string().into(), provider_info)]),
             timeouts: TimeoutsConfig::default(),
-            retries: RetryConfig { num_retries: 5, max_delay_s: 0.1},
+            retries: RetryConfig { num_retries: 5, max_delay_s: 0.1 },
         })
     }
 
