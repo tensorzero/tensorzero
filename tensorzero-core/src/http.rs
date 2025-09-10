@@ -476,6 +476,6 @@ mod tests {
         // (the maximum is achieved if all tasks happen to run concurrently)
         assert_eq!(num_tasks % (CONCURRENCY_LIMIT as usize), 0);
         let num_initialized_clients = client.clients.iter().filter(|c| c.get().is_some()).count();
-        assert!(num_initialized_clients <= (num_tasks / (CONCURRENCY_LIMIT as usize) ) as usize, "Too many initialized clients - found {num_initialized_clients} but expected at most {}", num_tasks / (CONCURRENCY_LIMIT as usize));
+        assert!(num_initialized_clients <= (num_tasks / (CONCURRENCY_LIMIT as usize) ), "Too many initialized clients - found {num_initialized_clients} but expected at most {}", num_tasks / (CONCURRENCY_LIMIT as usize));
     }
 }
