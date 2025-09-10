@@ -8,5 +8,5 @@ echo 'POST http://localhost:3000/inference' \
     -body=$SCRIPT_DIR/body.json \
     -duration=30s \
     -rate=1000 \
-    -timeout=5s \
+    -timeout=1s \
 | vegeta report
