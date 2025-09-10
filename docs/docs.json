@@ -132,13 +132,10 @@
             ]
           },
           {
-            "group": "UI",
-            "pages": ["ui/deployment"]
-          },
-          {
             "group": "Deployment",
             "pages": [
               "deployment/tensorzero-gateway",
+              "deployment/tensorzero-ui",
               "deployment/clickhouse",
               "deployment/optimize-latency-and-throughput"
             ]
@@ -256,6 +253,14 @@
     {
       "source": "/gateway/deployment/",
       "destination": "/deployment/tensorzero-gateway"
+    },
+    {
+      "source": "/ui/deployment",
+      "destination": "/deployment/tensorzero-ui"
+    },
+    {
+      "source": "/ui/deployment/",
+      "destination": "/deployment/tensorzero-ui"
     }
   ]
 }
