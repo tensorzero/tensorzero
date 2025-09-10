@@ -95,7 +95,7 @@ system](/gateway/guides/opentelemetry-otlp).
 Enabling this setting will improve the latency of the gateway by offloading the responsibility of writing inferences, feedback, and other data to ClickHouse to a background task, instead of waiting for ClickHouse to complete the writes.
 Each database insert is handled immediately in separate background tasks.
 
-See the ["Optimize latency and throughput" guide](/gateway/optimize-latency-and-throughput) for best practices.
+See the ["Optimize latency and throughput" guide](/deployment/optimize-latency-and-throughput) for best practices.
 
 You can't enable `async_writes` and `batch_writes` at the same time.
 
@@ -127,7 +127,7 @@ observability.batch_writes = { enabled = true, flush_interval_ms = 200, max_rows
 # ...
 ```
 
-See the ["Optimize latency and throughput" guide](/gateway/optimize-latency-and-throughput) for best practices.
+See the ["Optimize latency and throughput" guide](/deployment/optimize-latency-and-throughput) for best practices.
 
 You can't enable `async_writes` and `batch_writes` at the same time.
 

@@ -93,7 +93,6 @@
               "gateway/configuration-reference",
               "gateway/data-model",
               "gateway/deployment",
-              "gateway/optimize-latency-and-throughput",
               "gateway/integrations",
               {
                 "group": "API Reference",
@@ -136,6 +135,10 @@
           {
             "group": "UI",
             "pages": ["ui/deployment"]
+          },
+          {
+            "group": "Deployment",
+            "pages": ["deployment/optimize-latency-and-throughput"]
           }
         ]
       }
@@ -237,11 +240,11 @@
     },
     {
       "source": "/gateway/guides/performance-latency",
-      "destination": "/gateway/optimize-latency-and-throughput"
+      "destination": "/deployment/optimize-latency-and-throughput"
     },
     {
       "source": "/gateway/guides/performance-latency/",
-      "destination": "/gateway/optimize-latency-and-throughput"
+      "destination": "/deployment/optimize-latency-and-throughput"
     }
   ]
 }
