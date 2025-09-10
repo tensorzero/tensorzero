@@ -138,7 +138,10 @@
           },
           {
             "group": "Deployment",
-            "pages": ["deployment/optimize-latency-and-throughput"]
+            "pages": [
+              "deployment/deploy-clickhouse",
+              "deployment/optimize-latency-and-throughput"
+            ]
           }
         ]
       }
