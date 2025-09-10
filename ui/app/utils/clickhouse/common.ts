@@ -32,7 +32,7 @@ export type TextInput = z.infer<typeof textInputSchema>;
 export const templateInputSchema = z.object({
   type: z.literal("template"),
   name: z.string(),
-  arguments: z.any(),
+  arguments: z.record(JsonValueSchema.optional()),
 });
 export type TemplateInput = z.infer<typeof templateInputSchema>;
 
@@ -63,6 +63,13 @@ export const displayMissingFunctionTextInputSchema = z.object({
 export type DisplayMissingFunctionTextInput = z.infer<
   typeof displayMissingFunctionTextInputSchema
 >;
+
+export const displayTemplateSchema = z.object({
+  type: z.literal("template"),
+  name: z.string(),
+  arguments: z.record(JsonValueSchema.optional()),
+});
+export type DisplayTemplate = z.infer<typeof displayTemplateSchema>;
 
 export const modelInferenceTextInputSchema = z.object({
   type: z.literal("text"),
@@ -249,6 +256,7 @@ export type ModelInferenceInputMessageContent = z.infer<
 export const displayInputMessageContentSchema = z.discriminatedUnion("type", [
   displayUnstructuredTextInputSchema,
   displayStructuredTextInputSchema,
+  displayTemplateSchema,
   displayMissingFunctionTextInputSchema,
   toolCallContentSchema,
   toolResultContentSchema,
@@ -473,6 +481,8 @@ function displayInputMessageContentToInputMessageContent(
     case "thought":
       return content;
     case "unknown":
+      return content;
+    case "template":
       return content;
   }
 }
