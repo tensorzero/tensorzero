@@ -7,7 +7,7 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { EpisodeByIdRow } from "~/utils/clickhouse/inference";
+import type { EpisodeByIdRow } from "tensorzero-node";
 import { TableItemShortUuid } from "~/components/ui/TableItems";
 
 export default function EpisodesTable({
@@ -60,7 +60,7 @@ export default function EpisodesTable({
                     {formatTimeRange(
                       new Date(episode.start_time),
                       new Date(episode.end_time),
-                      episode.count,
+                      Number(episode.count),
                     )}
                   </span>
                 </TableCell>

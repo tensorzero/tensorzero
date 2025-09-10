@@ -1,8 +1,4 @@
-import {
-  queryEpisodeTable,
-  queryEpisodeTableBounds,
-  countEpisodes,
-} from "~/utils/clickhouse/inference.server";
+import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import type { Route } from "./+types/route";
 import EpisodesTable from "./EpisodesTable";
 import { data, isRouteErrorResponse, useNavigate } from "react-router";
@@ -23,15 +19,16 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (pageSize > 100) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
+  const databaseClient = await getNativeDatabaseClient();
 
   const [episodes, bounds, totalCount] = await Promise.all([
-    queryEpisodeTable({
-      before: before || undefined,
-      after: after || undefined,
-      page_size: pageSize,
-    }),
-    queryEpisodeTableBounds(),
-    countEpisodes(),
+    databaseClient.queryEpisodeTable(
+      pageSize,
+      before || undefined,
+      after || undefined,
+    ),
+    databaseClient.queryEpisodeTableBounds(),
+    databaseClient.countEpisodes(),
   ]);
 
   return {

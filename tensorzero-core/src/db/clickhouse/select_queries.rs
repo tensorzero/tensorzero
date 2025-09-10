@@ -1,5 +1,9 @@
-use crate::db::clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args;
+use crate::db::{
+    clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args, EpisodeByIdRow,
+    TableBoundsWithCount,
+};
 use async_trait::async_trait;
+use uuid::Uuid;
 
 use crate::{
     db::{ModelLatencyDatapoint, ModelUsageTimePoint, SelectQueries, TimeWindow},
@@ -129,5 +133,129 @@ impl SelectQueries for ClickHouseConnectionInfo {
                 })
             })
             .collect::<Result<Vec<_>, _>>()
+    }
+
+    async fn query_episode_table(
+        &self,
+        page_size: u32,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+    ) -> Result<Vec<EpisodeByIdRow>, Error> {
+        let (where_clause, params, is_after) = match (before, after) {
+            (Some(_before), Some(_after)) => {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "Cannot specify both before and after in query_episode_table"
+                        .to_string(),
+                }))
+            }
+            (Some(before), None) => (
+                "episode_id_uint < toUInt128({before:UUID})",
+                vec![("before", before.to_string())],
+                false,
+            ),
+            (None, Some(after)) => (
+                "episode_id_uint > toUInt128({after:UUID})",
+                vec![("after", after.to_string())],
+                true,
+            ),
+            (None, None) => ("1=1", vec![], false),
+        };
+        let query = if is_after {
+            format!(
+                r"
+                SELECT
+                    episode_id,
+                    count,
+                    start_time,
+                    end_time,
+                    last_inference_id
+                FROM (
+                    WITH (SELECT toUInt128(generateUUIDv7())) AS uuid_now
+                    SELECT
+                        uint_to_uuid(episode_id_uint) as episode_id,
+                        countMerge(count) as count,
+                        formatDateTime(UUIDv7ToDateTime(uint_to_uuid(min(min_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+                        formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(max_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
+                        uint_to_uuid(max(max_inference_id_uint)) as last_inference_id,
+                        episode_id_uint
+                    FROM EpisodeById
+                    WHERE episode_id_uint <= uuid_now AND {where_clause}
+                    GROUP BY episode_id_uint
+                    ORDER BY episode_id_uint ASC
+                    LIMIT {page_size}
+                )
+                ORDER BY episode_id_uint DESC
+                FORMAT JSONEachRow"
+            )
+        } else {
+            format!(
+                r"
+                WITH (SELECT toUInt128(generateUUIDv7())) AS uuid_now
+                SELECT
+                    uint_to_uuid(episode_id_uint) as episode_id,
+                    countMerge(count) as count,
+                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(min(min_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(max_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
+                    uint_to_uuid(max(max_inference_id_uint)) as last_inference_id
+                FROM EpisodeById
+                WHERE episode_id_uint <= uuid_now AND {where_clause}
+                GROUP BY episode_id_uint
+                ORDER BY episode_id_uint DESC
+                LIMIT {page_size}
+                FORMAT JSONEachRow
+                "
+            )
+        };
+        let params_str_map: std::collections::HashMap<&str, &str> =
+            params.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let response = self.run_query_synchronous(query, &params_str_map).await?;
+        // Deserialize the results into EpisodeByIdRow
+        response
+            .response
+            .trim()
+            .lines()
+            .map(|row| {
+                serde_json::from_str(row).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseDeserialization {
+                        message: e.to_string(),
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error> {
+        let query = r"
+            WITH (SELECT toUInt128(generateUUIDv7())) AS uuid_now
+            SELECT
+                uint_to_uuid(min(episode_id_uint)) as first_id,
+                uint_to_uuid(max(episode_id_uint)) as last_id,
+                count() as count
+            FROM EpisodeById
+            WHERE episode_id_uint <= uuid_now
+            FORMAT JSONEachRow"
+            .to_string();
+        let response = self.run_query_synchronous_no_params(query).await?;
+        let response = response.response.trim();
+        serde_json::from_str(response).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: e.to_string(),
+            })
+        })
+    }
+
+    async fn count_episodes(&self) -> Result<u64, Error> {
+        let query = "WITH (SELECT toUInt128(generateUUIDv7())) AS uuid_now SELECT count() FROM EpisodeById WHERE episode_id_uint <= uuid_now".to_string();
+        let response = self.run_query_synchronous_no_params(query).await?;
+        let count = response
+            .response
+            .trim()
+            .parse()
+            .map_err(|e: std::num::ParseIntError| {
+                Error::new(ErrorDetails::ClickHouseDeserialization {
+                    message: e.to_string(),
+                })
+            })?;
+        Ok(count)
     }
 }
