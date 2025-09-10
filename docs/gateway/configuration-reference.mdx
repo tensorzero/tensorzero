@@ -92,7 +92,10 @@ system](/gateway/guides/opentelemetry-otlp).
 - **Type:** boolean
 - **Required:** no (default: `true`)
 
-Enabling this setting will improve the latency of the gateway by offloading the responsibility of writing inferences, feedback, and other data to ClickHouse to a background task, instead of waiting for ClickHouse to complete the writes. Each database insert is handled individually in separate background tasks.
+Enabling this setting will improve the latency of the gateway by offloading the responsibility of writing inferences, feedback, and other data to ClickHouse to a background task, instead of waiting for ClickHouse to complete the writes.
+Each database insert is handled immediately in separate background tasks.
+
+See the ["Optimize latency and throughput" guide](/gateway/optimize-latency-and-throughput) for best practices.
 
 You can't enable `async_writes` and `batch_writes` at the same time.
 
@@ -108,7 +111,8 @@ This can be problematic in serverless environments that terminate the gateway in
 - **Type:** object
 - **Required:** no (default: disabled)
 
-Enabling this setting will improve the latency of the gateway by offloading the responsibility of writing inferences, feedback, and other data to ClickHouse to a background task, instead of waiting for ClickHouse to complete the writes. With `batch_writes`, multiple records are collected and written together in batches to improve efficiency.
+Enabling this setting will improve the latency and throughput of the gateway by offloading the responsibility of writing inferences, feedback, and other data to ClickHouse to a background task, instead of waiting for ClickHouse to complete the writes.
+With `batch_writes`, multiple records are collected and written together in batches to improve efficiency.
 
 The `batch_writes` object supports the following fields:
 
@@ -122,6 +126,8 @@ The `batch_writes` object supports the following fields:
 observability.batch_writes = { enabled = true, flush_interval_ms = 200, max_rows = 500 }
 # ...
 ```
+
+See the ["Optimize latency and throughput" guide](/gateway/optimize-latency-and-throughput) for best practices.
 
 You can't enable `async_writes` and `batch_writes` at the same time.
 
