@@ -43,6 +43,10 @@ fn default_model() -> String {
     "openai::gpt-4o-mini-2024-07-18".to_string()
 }
 
+fn default_append_to_existing_variants() -> bool {
+    false
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -55,6 +59,7 @@ pub struct DiclOptimizationConfig {
     pub max_concurrency: usize,
     pub k: u32,
     pub model: Arc<str>,
+    pub append_to_existing_variants: bool,
     #[serde(skip)]
     pub credentials: OpenAICredentials,
     #[cfg_attr(test, ts(type = "string | null"))]
@@ -78,6 +83,8 @@ pub struct UninitializedDiclOptimizationConfig {
     pub k: u32,
     #[serde(default = "default_model")]
     pub model: String,
+    #[serde(default = "default_append_to_existing_variants")]
+    pub append_to_existing_variants: bool,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credentials: Option<CredentialLocation>,
 }
@@ -93,6 +100,7 @@ impl Default for UninitializedDiclOptimizationConfig {
             max_concurrency: default_max_concurrency(),
             k: default_k(),
             model: default_model(),
+            append_to_existing_variants: default_append_to_existing_variants(),
             credentials: None,
         }
     }
@@ -114,7 +122,7 @@ impl UninitializedDiclOptimizationConfig {
     /// prints out signature:
     /// ($self, /, *args, **kwargs)
     #[new]
-    #[pyo3(signature = (*, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None))]
+    #[pyo3(signature = (*, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, append_to_existing_variants=None, credentials=None))]
     #[expect(clippy::too_many_arguments)]
     pub fn new(
         embedding_model: String,
@@ -125,6 +133,7 @@ impl UninitializedDiclOptimizationConfig {
         max_concurrency: Option<usize>,
         k: Option<u32>,
         model: Option<String>,
+        append_to_existing_variants: Option<bool>,
         credentials: Option<String>,
     ) -> PyResult<Self> {
         // Use Deserialize to convert the string to a CredentialLocation
@@ -139,6 +148,8 @@ impl UninitializedDiclOptimizationConfig {
             max_concurrency: max_concurrency.unwrap_or_else(default_max_concurrency),
             k: k.unwrap_or_else(default_k),
             model: model.unwrap_or_else(default_model),
+            append_to_existing_variants: append_to_existing_variants
+                .unwrap_or_else(default_append_to_existing_variants),
             credentials,
         })
     }
@@ -153,9 +164,10 @@ impl UninitializedDiclOptimizationConfig {
     /// :param max_concurrency: The maximum concurrency to use for getting embeddings.
     /// :param k: The number of nearest neighbors to use for the DICL variant.
     /// :param model: The model to use for the DICL variant.
+    /// :param append_to_existing_variants: Whether to append to existing variants. If False (default), raises an error if the variant already exists.
     /// :param credentials: The credentials to use for embedding. This should be a string like `env::OPENAI_API_KEY`. See docs for more details.
     #[expect(unused_variables, clippy::too_many_arguments)]
-    #[pyo3(signature = (*, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None))]
+    #[pyo3(signature = (*, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, append_to_existing_variants=None, credentials=None))]
     fn __init__(
         this: Py<Self>,
         embedding_model: String,
@@ -166,6 +178,7 @@ impl UninitializedDiclOptimizationConfig {
         max_concurrency: Option<usize>,
         k: Option<usize>,
         model: Option<String>,
+        append_to_existing_variants: Option<bool>,
         credentials: Option<String>,
     ) -> Py<Self> {
         this
@@ -183,6 +196,7 @@ impl UninitializedDiclOptimizationConfig {
             max_concurrency: self.max_concurrency,
             k: self.k,
             model: Arc::from(self.model),
+            append_to_existing_variants: self.append_to_existing_variants,
             credentials: build_creds_caching_default(
                 self.credentials.clone(),
                 default_api_key_location(),
@@ -255,13 +269,13 @@ impl Optimizer for DiclOptimizationConfig {
         // 2. Check that the function does not have tools configured (DICL doesn't support tools)
         validate_function_config(&self.function_name, function_config)?;
 
-        // 3. Check that the variant name is not already in the function variants
+        // 3. Check that the variant name is not already in the function variants (unless appending is enabled)
         let variants = match &**function_config {
             FunctionConfig::Chat(chat_config) => &chat_config.variants,
             FunctionConfig::Json(json_config) => &json_config.variants,
         };
 
-        if variants.contains_key(&self.variant_name) {
+        if !self.append_to_existing_variants && variants.contains_key(&self.variant_name) {
             return Err(Error::new(ErrorDetails::Config {
                 message: format!(
                     "variant '{}' already exists in function '{}' - DICL optimization cannot overwrite existing variants",

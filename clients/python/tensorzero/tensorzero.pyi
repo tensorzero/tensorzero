@@ -157,6 +157,7 @@ class DiclOptimizationConfig:
         max_concurrency: Optional[int] = None,
         k: Optional[int] = None,
         model: Optional[str] = None,
+        append_to_existing_variants: Optional[bool] = None,
         credentials: Optional[str] = None,
     ) -> None: ...
 
