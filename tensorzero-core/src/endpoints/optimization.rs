@@ -21,6 +21,7 @@ use crate::{
     endpoints::{inference::InferenceCredentials, stored_inference::render_samples},
     error::{Error, ErrorDetails},
     gateway_util::{AppState, AppStateData, StructuredJson},
+    http::TensorzeroHttpClient,
     optimization::{
         JobHandle, OptimizationJobHandle, OptimizationJobInfo, Optimizer,
         UninitializedOptimizerInfo,
@@ -71,7 +72,7 @@ pub async fn launch_optimization_workflow_handler(
 /// templating them with the template variant,
 /// and launch the optimization job specified.
 pub async fn launch_optimization_workflow(
-    http_client: &reqwest::Client,
+    http_client: &TensorzeroHttpClient,
     config: Arc<Config>,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     params: LaunchOptimizationWorkflowParams,
@@ -148,7 +149,7 @@ pub struct LaunchOptimizationParams {
 /// This function already takes the data as an argument so it gives the caller more control
 /// about preparing the data prior to launching the optimization job than the workflow method above.
 pub async fn launch_optimization(
-    http_client: &reqwest::Client,
+    http_client: &TensorzeroHttpClient,
     params: LaunchOptimizationParams,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     config: Arc<Config>,
@@ -184,7 +185,7 @@ pub async fn poll_optimization_handler(
 /// Poll an existing optimization job.
 /// This should return the status of the job.
 pub async fn poll_optimization(
-    http_client: &reqwest::Client,
+    http_client: &TensorzeroHttpClient,
     job_handle: &OptimizationJobHandle,
 ) -> Result<OptimizationJobInfo, Error> {
     job_handle

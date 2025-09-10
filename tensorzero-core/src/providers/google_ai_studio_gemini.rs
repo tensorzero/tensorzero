@@ -5,7 +5,7 @@ use std::time::Duration;
 use futures::StreamExt;
 use itertools::Itertools;
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource};
+use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -21,6 +21,8 @@ use crate::error::warn_discarded_thought_block;
 use crate::error::warn_discarded_unknown_chunk;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::http::TensorZeroEventSource;
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::file::require_image;
 use crate::inference::types::resolved_input::FileWithPath;
@@ -165,7 +167,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             provider_name,
             model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -255,7 +257,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -291,7 +293,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
+        _client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -303,7 +305,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -314,7 +316,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
 }
 
 fn stream_google_ai_studio_gemini(
-    mut event_source: EventSource,
+    mut event_source: TensorZeroEventSource,
     start_time: Instant,
     model_provider: &ModelProvider,
 ) -> ProviderInferenceResponseStreamInner {
