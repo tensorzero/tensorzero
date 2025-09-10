@@ -25,6 +25,7 @@ use crate::{
 // A wrapper around `reqwest::Client` that tracks the number of outstanding concurrent requests.
 // We store an array of these in `TensorzeroHttpClient`, and pick the first one that has
 // a `concurrent_requests` count that's below `CONCURRENCY_LIMIT`.
+#[derive(Debug)]
 struct LimitedClient {
     // This needs to be an `Arc` so that we can share the counter
     // when we create a `TensorzeroEventSource` stream wrapper
@@ -418,12 +419,20 @@ fn build_client() -> Result<Client, Error> {
 
 #[cfg(test)]
 mod tests {
-    use std::{future::IntoFuture, net::SocketAddr};
+    use std::{
+        future::IntoFuture,
+        net::SocketAddr,
+        sync::{
+            atomic::{AtomicU8, Ordering},
+            Arc,
+        },
+    };
 
     use axum::{extract::Request, routing::get, Router};
+    use reqwest::Proxy;
     use tokio::task::{JoinHandle, JoinSet};
 
-    use crate::http::CONCURRENCY_LIMIT;
+    use crate::http::{LimitedClient, CONCURRENCY_LIMIT};
 
     async fn start_target_server() -> (SocketAddr, JoinHandle<Result<(), std::io::Error>>) {
         let app = Router::new().route(
@@ -442,7 +451,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_concurrent_requests() {
         let (addr, _handle) = start_target_server().await;
-        let client = super::TensorzeroHttpClient::new().unwrap();
+        let mut client = super::TensorzeroHttpClient::new().unwrap();
         // Send one request, and check that it didn't require using a new client
         let response = client
             .get(format!("http://{addr}/hello"))
@@ -470,12 +479,77 @@ mod tests {
             });
         }
         tasks.join_all().await;
-        // We should have used at least one ne wclient
+        // We should have used at least one new client
         assert!(client.clients[1].get().is_some());
         // At most `num_tasks/CONCURRENCY_LIMIT` clients should have been used
         // (the maximum is achieved if all tasks happen to run concurrently)
         assert_eq!(num_tasks % (CONCURRENCY_LIMIT as usize), 0);
         let num_initialized_clients = client.clients.iter().filter(|c| c.get().is_some()).count();
         assert!(num_initialized_clients <= (num_tasks / (CONCURRENCY_LIMIT as usize) ), "Too many initialized clients - found {num_initialized_clients} but expected at most {}", num_tasks / (CONCURRENCY_LIMIT as usize));
+        for client_cell in client.clients.iter() {
+            if let Some(client) = client_cell.get() {
+                assert_eq!(client.concurrent_requests.load(Ordering::SeqCst), 0);
+            }
+        }
+
+        // Clear out the clients, and verify that making a new request only uses the first one (and does not initialize any new clients)
+        let clients_mut = Arc::get_mut(&mut client.clients).unwrap();
+        for client_cell in clients_mut.iter_mut() {
+            client_cell.take();
+        }
+
+        // Send one request, and check that it didn't require using a new client
+        let response = client
+            .get(format!("http://{addr}/hello"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        for (i, client_cell) in client.clients.iter().enumerate() {
+            assert_eq!(
+                client_cell.get().is_some(),
+                i == 0,
+                "Wrong initialization state for client {i}"
+            );
+            if let Some(client) = client_cell.get() {
+                assert_eq!(client.concurrent_requests.load(Ordering::SeqCst), 0);
+            }
+        }
+
+        let clients_mut = Arc::get_mut(&mut client.clients).unwrap();
+        // Store invalid clients in the array, to verify that we don't try to use them when our concurrency
+        // level is below `CONCURRENCY_LIMIT`
+        for client_cell in clients_mut.iter_mut().skip(1) {
+            client_cell.take();
+            client_cell
+                .set(LimitedClient {
+                    concurrent_requests: Arc::new(AtomicU8::new(0)),
+                    client: reqwest::Client::builder()
+                        .proxy(Proxy::all("http://tensorzero.invalid:8080").unwrap())
+                        .build()
+                        .unwrap(),
+                })
+                .unwrap();
+        }
+
+        // We only spawn `CONCURRENCY_LIMIT` tasks, so we should never need to go beyond the first array entry
+        let mut new_tasks = JoinSet::new();
+        for _ in 0..CONCURRENCY_LIMIT as usize {
+            let client = client.clone();
+            new_tasks.spawn(async move {
+                client
+                    .get(format!("http://{addr}/hello"))
+                    .send()
+                    .await
+                    .unwrap()
+            });
+        }
+
+        new_tasks.join_all().await;
+        for client_cell in client.clients.iter() {
+            if let Some(client) = client_cell.get() {
+                assert_eq!(client.concurrent_requests.load(Ordering::SeqCst), 0);
+            }
+        }
     }
 }
