@@ -31,10 +31,10 @@ from .tensorzero import (
     VariantsConfig,
 )
 from .tensorzero import (
-    DiclConfig as _DiclConfig,
+    DiclConfig as _DiclConfig,  # DEPRECATED
 )
 from .tensorzero import (
-    DiclOptimizationConfig as _DiclOptimizationConfig,
+    DiclOptimizationConfig as _DiclOptimizationConfig,  # DEPRECATED
 )
 from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
@@ -103,7 +103,7 @@ DICLConfig = _DiclConfig
 DICLOptimizationConfig = _DiclOptimizationConfig
 
 
-# Create wrapper classes that emit deprecation warnings
+# CAREFUL: deprecated
 class DiclConfig:
     def __new__(cls, *args: Any, **kwargs: Any):
         warnings.warn(
@@ -114,6 +114,7 @@ class DiclConfig:
         return _DiclConfig(*args, **kwargs)
 
 
+# CAREFUL: deprecated
 class DiclOptimizationConfig:
     def __new__(cls, *args: Any, **kwargs: Any):
         warnings.warn(
