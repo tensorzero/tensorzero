@@ -115,6 +115,7 @@ impl GatewayHandle {
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
         let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
+        // TODO: check that all postgres migrations have run
         let http_client = setup_http_client()?;
         Ok(Self::new_with_database_and_http_client(
             config,
