@@ -3432,6 +3432,7 @@ def test_sync_chat_function_named_template(sync_client: TensorZeroGateway):
     )
     assert isinstance(result, ChatInferenceResponse)
     assert len(result.content) == 1
+    assert isinstance(result.content[0], Text)
     assert (
         result.content[0].text
         == """{"system":"The system text was `none`","messages":[{"role":"user","content":[{"type":"text","text":"New template: first_variable=first_from_python second_variable=second_from_python"},{"type":"text","text":"New template: first_variable=first_from_dict second_variable=second_from_dict"}]}]}"""
