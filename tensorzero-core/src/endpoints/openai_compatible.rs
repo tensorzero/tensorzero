@@ -383,6 +383,7 @@ struct OpenAICompatibleNamedToolChoice {
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
 enum OpenAICompatibleAllowedToolsMode {
     Auto,
     Required,
@@ -410,16 +411,75 @@ struct OpenAICompatibleAllowedTools {
 /// Specifying a particular tool via `{"type": "function", "function": {"name": "my_function"}}` forces the model to call that tool.
 ///
 /// `none` is the default when no tools are present. `auto` is the default if tools are present.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Debug, Default, PartialEq)]
 enum ChatCompletionToolChoiceOption {
     #[default]
     None,
     Auto,
     Required,
     AllowedTools(OpenAICompatibleAllowedTools),
-    #[serde(untagged)]
     Named(OpenAICompatibleNamedToolChoice),
+}
+
+impl<'de> Deserialize<'de> for ChatCompletionToolChoiceOption {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+        use serde_json::Value;
+
+        let value = Value::deserialize(deserializer)?;
+
+        match &value {
+            Value::String(s) => match s.as_str() {
+                "none" => Ok(ChatCompletionToolChoiceOption::None),
+                "auto" => Ok(ChatCompletionToolChoiceOption::Auto),
+                "required" => Ok(ChatCompletionToolChoiceOption::Required),
+                _ => Err(D::Error::custom(format!("Invalid tool choice string: {s}"))),
+            },
+            Value::Object(obj) => {
+                if let Some(type_value) = obj.get("type") {
+                    if let Some(type_str) = type_value.as_str() {
+                        match type_str {
+                            "function" => {
+                                // This is a named tool choice
+                                let named: OpenAICompatibleNamedToolChoice =
+                                    serde_json::from_value(value).map_err(D::Error::custom)?;
+                                Ok(ChatCompletionToolChoiceOption::Named(named))
+                            }
+                            "allowed_tools" => {
+                                // This is an allowed tools choice - extract the allowed_tools field
+                                if let Some(allowed_tools_value) = obj.get("allowed_tools") {
+                                    let allowed_tools: OpenAICompatibleAllowedTools =
+                                        serde_json::from_value(allowed_tools_value.clone())
+                                            .map_err(D::Error::custom)?;
+                                    Ok(ChatCompletionToolChoiceOption::AllowedTools(allowed_tools))
+                                } else {
+                                    Err(D::Error::custom(
+                                        "Missing 'allowed_tools' field in allowed_tools type",
+                                    ))
+                                }
+                            }
+                            _ => Err(D::Error::custom(format!(
+                                "Invalid tool choice type: {type_str}",
+                            ))),
+                        }
+                    } else {
+                        Err(D::Error::custom(
+                            "Tool choice 'type' field must be a string",
+                        ))
+                    }
+                } else {
+                    // Object without type field - try to deserialize as OpenAICompatibleAllowedTools directly
+                    let allowed_tools: OpenAICompatibleAllowedTools =
+                        serde_json::from_value(value).map_err(D::Error::custom)?;
+                    Ok(ChatCompletionToolChoiceOption::AllowedTools(allowed_tools))
+                }
+            }
+            _ => Err(D::Error::custom("Tool choice must be a string or object")),
+        }
+    }
 }
 
 impl ChatCompletionToolChoiceOption {
@@ -2229,7 +2289,54 @@ mod tests {
         );
         assert_eq!(params.tool_choice, Some(ToolChoice::Auto));
 
-        // TODO: add a test for allowed tools with required mode
+        // Test AllowedTools variant with required mode
+        let json_allowed_required = json!({
+            "type": "allowed_tools",
+            "allowed_tools": {
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather"
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "send_email"
+                    }
+                }
+            ],
+            "mode": "required"
+        }});
+        let tool_choice: ChatCompletionToolChoiceOption =
+            serde_json::from_value(json_allowed_required).unwrap();
+        assert_eq!(
+            tool_choice,
+            ChatCompletionToolChoiceOption::AllowedTools(OpenAICompatibleAllowedTools {
+                tools: vec![
+                    OpenAICompatibleNamedToolChoice {
+                        r#type: "function".to_string(),
+                        function: FunctionName {
+                            name: "get_weather".to_string()
+                        }
+                    },
+                    OpenAICompatibleNamedToolChoice {
+                        r#type: "function".to_string(),
+                        function: FunctionName {
+                            name: "send_email".to_string()
+                        }
+                    }
+                ],
+                mode: OpenAICompatibleAllowedToolsMode::Required
+            })
+        );
+        let params = tool_choice.into_tool_params();
+        assert_eq!(
+            params.allowed_tools,
+            Some(vec!["get_weather".to_string(), "send_email".to_string()])
+        );
+        assert_eq!(params.tool_choice, Some(ToolChoice::Required));
 
         // Test default value (should be None)
         let tool_choice_default = ChatCompletionToolChoiceOption::default();
