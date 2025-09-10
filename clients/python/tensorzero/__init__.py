@@ -3,7 +3,7 @@ import warnings
 from importlib.metadata import version
 
 import httpx
-from typing_extensions import Any
+from typing_extensions import Any, deprecated
 
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import (
@@ -12,6 +12,8 @@ from .tensorzero import (
     ChatCompletionConfig,
     Config,
     Datapoint,
+    DICLConfig,
+    DICLOptimizationConfig,
     FireworksSFTConfig,
     FunctionConfigChat,
     FunctionConfigJson,
@@ -29,12 +31,6 @@ from .tensorzero import (
     StoredInference,
     TogetherSFTConfig,
     VariantsConfig,
-)
-from .tensorzero import (
-    DiclConfig as _DiclConfig,  # DEPRECATED
-)
-from .tensorzero import (
-    DiclOptimizationConfig as _DiclOptimizationConfig,  # DEPRECATED
 )
 from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
@@ -98,21 +94,6 @@ RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample inste
 ChatDatapoint = Datapoint.Chat
 JsonDatapoint = Datapoint.Json
 
-# New DICL classes (preferred names)
-DICLConfig = _DiclConfig
-DICLOptimizationConfig = _DiclOptimizationConfig
-
-
-# CAREFUL: deprecated
-class DiclConfig:
-    def __new__(cls, *args: Any, **kwargs: Any):
-        warnings.warn(
-            "Please use `DICLConfig` instead of `DiclConfig`. In a future release, `DiclConfig` will be removed.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return _DiclConfig(*args, **kwargs)
-
 
 # CAREFUL: deprecated
 class DiclOptimizationConfig:
@@ -122,7 +103,11 @@ class DiclOptimizationConfig:
             DeprecationWarning,
             stacklevel=2,
         )
-        return _DiclOptimizationConfig(*args, **kwargs)
+        return DICLOptimizationConfig(*args, **kwargs)
+
+
+# CAREFUL: deprecated alias
+DiclConfig = deprecated("Use `DICLConfig` instead")(DICLConfig)
 
 
 OptimizationConfig = t.Union[
@@ -150,7 +135,7 @@ __all__ = [
     "Config",
     "ContentBlock",
     "Datapoint",
-    "DiclOptimizationConfig",
+    "DiclOptimizationConfig",  # DEPRECATED
     "DICLOptimizationConfig",
     "DynamicEvaluationRunEpisodeResponse",
     "DynamicEvaluationRunResponse",
@@ -167,7 +152,7 @@ __all__ = [
     "VariantsConfig",
     "ChatCompletionConfig",
     "BestOfNSamplingConfig",
-    "DiclConfig",
+    "DiclConfig",  # DEPRECATED
     "DICLConfig",
     "MixtureOfNConfig",
     "ChainOfThoughtConfig",
