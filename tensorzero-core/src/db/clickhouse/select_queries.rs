@@ -163,42 +163,42 @@ impl SelectQueries for ClickHouseConnectionInfo {
         let query = if is_after {
             format!(
                 r"
-            SELECT
-                episode_id,
-                count,
-                start_time,
-                end_time,
-                last_inference_id
-            FROM (
                 SELECT
-                    uint_to_uuid(episode_id_uint) as episode_id,
-                    countMerge(count) as count,
-                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(minMerge(min_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
-                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(maxMerge(max_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
-                    uint_to_uuid(maxMerge(max_inference_id_uint)) as last_inference_id,
-                    episode_id_uint
-                FROM
-                    EpisodeById
-                WHERE episode_id_uint <= (SELECT toUInt128(generateUUIDv7()) AS uuid_now) AND {where_clause}
-                GROUP BY episode_id_uint
-                ORDER BY episode_id_uint ASC
-                LIMIT {page_size}
-            )
-            ORDER BY episode_id_uint DESC
-            FORMAT JSONEachRow"
+                    episode_id,
+                    count,
+                    start_time,
+                    end_time,
+                    last_inference_id
+                FROM (
+                    WITH (SELECT toUInt128(generateUUIDv7())) AS uuid_now
+                    SELECT
+                        uint_to_uuid(episode_id_uint) as episode_id,
+                        countMerge(count) as count,
+                        formatDateTime(UUIDv7ToDateTime(uint_to_uuid(min(min_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+                        formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(max_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
+                        uint_to_uuid(max(max_inference_id_uint)) as last_inference_id,
+                        episode_id_uint
+                    FROM EpisodeById
+                    WHERE episode_id_uint <= uuid_now AND {where_clause}
+                    GROUP BY episode_id_uint
+                    ORDER BY episode_id_uint ASC
+                    LIMIT {page_size}
+                )
+                ORDER BY episode_id_uint DESC
+                FORMAT JSONEachRow"
             )
         } else {
             format!(
                 r"
+                WITH (SELECT toUInt128(generateUUIDv7())) AS uuid_now
                 SELECT
                     uint_to_uuid(episode_id_uint) as episode_id,
                     countMerge(count) as count,
-                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(minMerge(min_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
-                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(maxMerge(max_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
-                    uint_to_uuid(maxMerge(max_inference_id_uint)) as last_inference_id
-                FROM
-                EpisodeById
-                WHERE episode_id_uint <= (SELECT toUInt128(generateUUIDv7()) AS uuid_now) AND {where_clause}
+                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(min(min_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(max_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
+                    uint_to_uuid(max(max_inference_id_uint)) as last_inference_id
+                FROM EpisodeById
+                WHERE episode_id_uint <= uuid_now AND {where_clause}
                 GROUP BY episode_id_uint
                 ORDER BY episode_id_uint DESC
                 LIMIT {page_size}
@@ -225,13 +225,15 @@ impl SelectQueries for ClickHouseConnectionInfo {
     }
 
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error> {
-        let query = r"SELECT
-                        uint_to_uuid(min(episode_id_uint)) as first_id,
-                        uint_to_uuid(max(episode_id_uint)) as last_id,
-                        count() as count
-                    FROM EpisodeById
-                    WHERE episode_id_uint <= (SELECT toUInt128(generateUUIDv7()) AS uuid_now)
-                    FORMAT JSONEachRow"
+        let query = r"
+            WITH (SELECT toUInt128(generateUUIDv7())) AS uuid_now
+            SELECT
+                uint_to_uuid(min(episode_id_uint)) as first_id,
+                uint_to_uuid(max(episode_id_uint)) as last_id,
+                count() as count
+            FROM EpisodeById
+            WHERE episode_id_uint <= uuid_now
+            FORMAT JSONEachRow"
             .to_string();
         let response = self.run_query_synchronous_no_params(query).await?;
         let response = response.response.trim();
@@ -243,7 +245,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
     }
 
     async fn count_episodes(&self) -> Result<u64, Error> {
-        let query = "SELECT count() FROM EpisodeById WHERE episode_id_uint <= (SELECT toUInt128(generateUUIDv7()) AS uuid_now)".to_string();
+        let query = "WITH (SELECT toUInt128(generateUUIDv7())) AS uuid_now SELECT count() FROM EpisodeById WHERE episode_id_uint <= uuid_now".to_string();
         let response = self.run_query_synchronous_no_params(query).await?;
         let count = response
             .response

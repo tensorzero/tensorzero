@@ -75,8 +75,8 @@ impl Migration for Migration0038<'_> {
                         episode_id_uint UInt128,
                         count AggregateFunction(count, UInt32),
                         inference_ids AggregateFunction(groupArray, Array(UUID)),
-                        min_inference_id_uint AggregateFunction(min, UInt128),
-                        max_inference_id_uint AggregateFunction(max, UInt128)
+                        min_inference_id_uint SimpleAggregateFunction(min, UInt128),
+                        max_inference_id_uint SimpleAggregateFunction(max, UInt128)
                     )
                     ENGINE = {table_engine_name}
                     ORDER BY episode_id_uint
@@ -101,8 +101,8 @@ impl Migration for Migration0038<'_> {
                 toUInt128(episode_id) as episode_id_uint,
                 countState() as count,
                 groupArrayState()([id]) as inference_ids,
-                minState()(toUInt128(id)) as min_inference_id_uint,
-                maxState()(toUInt128(id)) as max_inference_id_uint
+                toUInt128(min(id)) as min_inference_id_uint,
+                toUInt128(max(id)) as max_inference_id_uint
             FROM ChatInference
             {view_where_clause}
             GROUP BY toUInt128(episode_id)
@@ -121,8 +121,8 @@ impl Migration for Migration0038<'_> {
                 toUInt128(episode_id) as episode_id_uint,
                 countState() as count,
                 groupArrayState()([id]) as inference_ids,
-                minState()(toUInt128(id)) as min_inference_id_uint,
-                maxState()(toUInt128(id)) as max_inference_id_uint
+                toUInt128(min(id)) as min_inference_id_uint,
+                toUInt128(max(id)) as max_inference_id_uint
             FROM JsonInference
             {view_where_clause}
             GROUP BY toUInt128(episode_id)
@@ -154,8 +154,8 @@ impl Migration for Migration0038<'_> {
                         toUInt128(episode_id) as episode_id_uint,
                         countState() as count,
                         groupArrayState()([id]) as inference_ids,
-                        minState()(toUInt128(id)) as min_inference_id_uint,
-                        maxState()(toUInt128(id)) as max_inference_id_uint
+                        toUInt128(min(id)) as min_inference_id_uint,
+                        toUInt128(max(id)) as max_inference_id_uint
                     FROM ChatInference
                     WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
                     GROUP BY toUInt128(episode_id)
@@ -185,8 +185,8 @@ impl Migration for Migration0038<'_> {
                         toUInt128(episode_id) as episode_id_uint,
                         countState() as count,
                         groupArrayState()([id]) as inference_ids,
-                        minState()(toUInt128(id)) as min_inference_id_uint,
-                        maxState()(toUInt128(id)) as max_inference_id_uint
+                        toUInt128(min(id)) as min_inference_id_uint,
+                        toUInt128(max(id)) as max_inference_id_uint
                     FROM JsonInference
                     WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
                     GROUP BY toUInt128(episode_id)
