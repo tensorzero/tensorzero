@@ -41,6 +41,8 @@ impl PostgresConnectionInfo {
                 message: format!("Failed to retrieve applied migrations: {e}"),
             })
         })?;
+        // NOTE: this will break old versions of the gateway once new migrations are applied.
+        // We should revisit this behavior prior to releasing a new version of the gateway.
         if applied_migrations != expected_migrations {
             return Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
                 message: format!(

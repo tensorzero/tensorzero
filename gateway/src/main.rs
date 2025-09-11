@@ -99,9 +99,15 @@ async fn main() {
         manual_run_clickhouse_migrations()
             .await
             .expect_pretty("Failed to run ClickHouse migrations");
-        manual_run_postgres_migrations()
-            .await
-            .expect_pretty("Failed to run PostgreSQL migrations");
+        // Remove once we are ready for Postgres in prime time.
+        // We also should remove the expect behavior from ClickHouse so this command will warn
+        // if it doesn't have clickhouse or doesn't have postgres and then run migrations for the
+        // databases it does have URLs for
+        if std::env::var("TENSORZERO_POSTGRES_URL").is_ok() {
+            manual_run_postgres_migrations()
+                .await
+                .expect_pretty("Failed to run PostgreSQL migrations");
+        }
         return;
     }
 

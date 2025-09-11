@@ -447,6 +447,7 @@ pub enum ErrorDetails {
     OutputValidation {
         source: Box<Error>,
     },
+    // TODO once 3496 merges: change both of these to taking sqlx errors rather than string
     PostgresConnectionInitialization {
         message: String,
     },
