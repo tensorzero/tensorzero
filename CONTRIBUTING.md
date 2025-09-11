@@ -211,7 +211,7 @@ FIREWORKS_ACCOUNT_ID="..."
    (you can omit these last 2 flags to skip the build step, but they ensure you're using the latest gateway)
 6. Launch the UI locally: `pnpm run dev`
 
-Separately, you can run tests with `pnpm run test` and `pnpm run test-e2e`
+Separately, you can run tests with `pnpm run test` and `pnpm run test-e2e`.
 
 ---
 
