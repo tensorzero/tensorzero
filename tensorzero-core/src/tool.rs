@@ -297,7 +297,7 @@ pub struct DynamicToolParams {
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, derive(Default))]
+#[cfg_attr(any(test, feature = "e2e_tests"), derive(Default))]
 pub struct BatchDynamicToolParams {
     pub allowed_tools: Option<Vec<Option<Vec<String>>>>,
     pub additional_tools: Option<Vec<Option<Vec<Tool>>>>,

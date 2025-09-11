@@ -12,6 +12,8 @@ use tensorzero_core::config::ConfigFileGlob;
 pub use tensorzero_core::db::DatabaseConnection;
 use tensorzero_core::db::HealthCheckable;
 pub use tensorzero_core::db::{ModelUsageTimePoint, TimeWindow};
+use tensorzero_core::endpoints::batch_inference::PrepareBatchInferenceOutput;
+use tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams;
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
@@ -604,6 +606,33 @@ impl Client {
                             Ok(InferenceOutput::Streaming(stream))
                         }
                     }
+                })
+                .await?)
+            }
+        }
+    }
+
+    #[cfg(feature = "e2e_tests")]
+    pub async fn start_batch_inference(
+        &self,
+        params: StartBatchInferenceParams,
+    ) -> Result<PrepareBatchInferenceOutput, TensorZeroError> {
+        match &*self.mode {
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InternalError {
+                    message: "batch_inference is not yet implemented for HTTPGateway mode"
+                        .to_string(),
+                })
+                .into(),
+            }),
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::batch_inference::start_batch_inference(
+                        gateway.handle.app_state.clone(),
+                        params,
+                    )
+                    .await
+                    .map_err(err_to_http)
                 })
                 .await?)
             }
