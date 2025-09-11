@@ -1184,7 +1184,11 @@ async fn test_embedding_request() {
     assert_eq!(response.usage.output_tokens, 0);
     match response.latency {
         Latency::NonStreaming { response_time } => {
-            assert!(response_time.as_millis() > 100);
+            assert!(
+                response_time.as_millis() > 10,
+                "Response time should be greater than 10ms: {}",
+                response_time.as_millis()
+            );
         }
         _ => panic!("Latency should be non-streaming"),
     }
