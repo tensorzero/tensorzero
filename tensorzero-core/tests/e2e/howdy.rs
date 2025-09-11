@@ -2,7 +2,6 @@
 use std::sync::Arc;
 
 use crate::clickhouse::get_clean_clickhouse;
-use reqwest::Client;
 use serde_json::json;
 use tensorzero::ClientBuilder;
 use tensorzero::ClientInputMessage;
@@ -19,6 +18,7 @@ use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::gateway_util::GatewayHandle;
 use tensorzero_core::howdy::{get_deployment_id, get_howdy_report};
+use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::TextKind;
 use tokio::time::Duration;
 
@@ -52,7 +52,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
         config,
         clickhouse,
         PostgresConnectionInfo::Disabled,
-        Client::new(),
+        TensorzeroHttpClient::new().unwrap(),
     );
     ClientBuilder::build_from_state(handle).await.unwrap()
 }

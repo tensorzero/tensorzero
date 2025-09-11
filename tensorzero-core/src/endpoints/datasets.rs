@@ -1,5 +1,6 @@
 use crate::db::clickhouse::TableName;
 use crate::function::FunctionConfigType;
+use crate::http::TensorzeroHttpClient;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
     content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
@@ -13,7 +14,6 @@ use futures::try_join;
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::IntoPyObjectExt;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, future::Future, pin::Pin};
@@ -525,7 +525,7 @@ pub async fn insert_datapoint(
     dataset_name: String,
     params: InsertDatapointParams,
     config: &Config,
-    http_client: &Client,
+    http_client: &TensorzeroHttpClient,
     clickhouse: &ClickHouseConnectionInfo,
 ) -> Result<Vec<Uuid>, Error> {
     validate_dataset_name(&dataset_name)?;

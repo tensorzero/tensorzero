@@ -14,9 +14,9 @@ use tensorzero::{
 use tensorzero_core::{
     cache::CacheOptions,
     config::{Config, ConfigFileGlob, ProviderTypesConfig},
-    db::clickhouse::test_helpers::CLICKHOUSE_URL,
-    db::clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
+    db::clickhouse::{test_helpers::CLICKHOUSE_URL, ClickHouseConnectionInfo, ClickhouseFormat},
     endpoints::inference::InferenceClients,
+    http::TensorzeroHttpClient,
     inference::types::{
         file::Base64FileMetadata,
         resolved_input::FileWithPath,
@@ -73,7 +73,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .await
         .unwrap();
 
-    let client = reqwest::Client::new();
+    let client = TensorzeroHttpClient::new().unwrap();
     let test_examples = get_examples(test_case, 10);
     let val_examples = Some(get_examples(test_case, 10));
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
