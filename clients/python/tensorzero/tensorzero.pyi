@@ -160,9 +160,6 @@ class DICLOptimizationConfig:
         credentials: Optional[str] = None,
     ) -> None: ...
 
-# CAREFUL: deprecated
-DiclOptimizationConfig = DICLOptimizationConfig
-
 @final
 class OpenAISFTConfig:
     def __init__(
@@ -322,10 +319,7 @@ class BestOfNSamplingConfig:
 
 @final
 class DICLConfig:
-    pass
-
-# CAREFUL: deprecated
-DiclConfig = DICLConfig
+    __deprecated__: str = ...
 
 @final
 class MixtureOfNConfig:
