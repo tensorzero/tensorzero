@@ -97,28 +97,25 @@ The TensorZero Gateway accepts the following environment variables for provider 
 Unless you specify an alternative credential location in your configuration file, these environment variables are required for the providers that are used in a variant with positive weight.
 If required credentials are missing, the gateway will fail on startup.
 
-| Provider                | Environment Variable(s)                                               |
-| ----------------------- | --------------------------------------------------------------------- |
-| Anthropic               | `ANTHROPIC_API_KEY`                                                   |
-| AWS Bedrock             | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` (optional) |
-| AWS SageMaker           | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` (optional) |
-| Azure OpenAI            | `AZURE_OPENAI_API_KEY`                                                |
-| Fireworks               | `FIREWORKS_API_KEY`                                                   |
-| GCP Vertex AI Anthropic | `GCP_VERTEX_CREDENTIALS_PATH` (see below for details)                 |
-| GCP Vertex AI Gemini    | `GCP_VERTEX_CREDENTIALS_PATH` (see below for details)                 |
-| Google AI Studio Gemini | `GOOGLE_AI_STUDIO_GEMINI_API_KEY`                                     |
-| Groq                    | `GROQ_API_KEY`                                                        |
-| Hyperbolic              | `HYPERBOLIC_API_KEY`                                                  |
-| Mistral                 | `MISTRAL_API_KEY`                                                     |
-| OpenAI                  | `OPENAI_API_KEY`                                                      |
-| OpenRouter              | `OPENROUTER_API_KEY`                                                  |
-| Together                | `TOGETHER_API_KEY`                                                    |
-| xAI                     | `XAI_API_KEY`                                                         |
+Unless customized in your configuration file, the following credentials are used by default:
 
-**Notes:**
-
-- AWS Bedrock supports many authentication methods, including environment variables, IAM roles, and more. See the AWS documentation for more details.
-- If you're using the GCP Vertex provider, you also need to mount the credentials for a service account in JWT form (described [here](https://cloud.google.com/docs/authentication/provide-credentials-adc#service-account)) to `/app/gcp-credentials.json` using an additional `-v` flag.
+| Provider                | Environment Variable(s)                                                                               |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- |
+| Anthropic               | `ANTHROPIC_API_KEY`                                                                                   |
+| AWS Bedrock             | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (see [details](/gateway/guides/providers/aws-bedrock))   |
+| AWS SageMaker           | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (see [details](/gateway/guides/providers/aws-sagemaker)) |
+| Azure OpenAI            | `AZURE_OPENAI_API_KEY`                                                                                |
+| Fireworks               | `FIREWORKS_API_KEY`                                                                                   |
+| GCP Vertex AI Anthropic | `GCP_VERTEX_CREDENTIALS_PATH` (see [details](/gateway/guides/providers/gcp-vertex-ai-anthropic))      |
+| GCP Vertex AI Gemini    | `GCP_VERTEX_CREDENTIALS_PATH` (see [details](/gateway/guides/providers/gcp-vertex-ai-gemini))         |
+| Google AI Studio Gemini | `GOOGLE_AI_STUDIO_GEMINI_API_KEY`                                                                     |
+| Groq                    | `GROQ_API_KEY`                                                                                        |
+| Hyperbolic              | `HYPERBOLIC_API_KEY`                                                                                  |
+| Mistral                 | `MISTRAL_API_KEY`                                                                                     |
+| OpenAI                  | `OPENAI_API_KEY`                                                                                      |
+| OpenRouter              | `OPENROUTER_API_KEY`                                                                                  |
+| Together                | `TOGETHER_API_KEY`                                                                                    |
+| xAI                     | `XAI_API_KEY`                                                                                         |
 
 <Tip>
 
@@ -131,7 +128,7 @@ See [`.env.example`](https://github.com/tensorzero/tensorzero/blob/main/examples
 Optionally, you can use a configuration file to customize the behavior of the gateway.
 See [Configuration Reference](/gateway/configuration-reference) for more details.
 
-<Accordion title="Disable pseydonymous usage analytics">
+<Accordion title="Disable pseudonymous usage analytics">
 
 TensorZero collects _pseudonymous_ usage analytics to help our team improve the product.
 
@@ -157,6 +154,8 @@ Alternatively, you can also set the environment variable `TENSORZERO_DISABLE_PSE
 Optionally, the TensorZero Gateway can collect inference and feedback data for observability, optimization, evaluations, and experimentation.
 After [deploying ClickHouse](/deployment/clickhouse), you need to configure the `TENSORZERO_CLICKHOUSE_URL` environment variable with the connection details.
 If you don't provide this environment variable, observability will be disabled.
+
+We recommend setting up observability early to monitor your LLM application and collect data for future optimization, but this can be done incrementally as needed.
 
 ### Customize the logging format
 
