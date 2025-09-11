@@ -26,6 +26,30 @@ impl PostgresConnectionInfo {
             Self::Disabled => None,
         }
     }
+
+    /// If the connection is active, check that the set of migrations that have succeeded matches the expected set of migrations.
+    /// If the connection is not active, return Ok(()).
+    pub async fn check_migrations(&self) -> Result<(), Error> {
+        let Some(pool) = self.get_pool() else {
+            return Ok(());
+        };
+        let migrator = migrate!("src/db/postgres/migrations");
+        let expected_migrations: HashSet<i64> = migrator.iter().map(|m| m.version).collect();
+        // Query the database for all successfully applied migration versions.
+        let applied_migrations = get_applied_migrations(pool).await.map_err(|e| {
+            Error::new(ErrorDetails::PostgresConnectionInitialization {
+                message: format!("Failed to retrieve applied migrations: {e}"),
+            })
+        })?;
+        if applied_migrations != expected_migrations {
+            return Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
+                message: format!(
+                    "Applied migrations do not match expected migrations. Applied: {applied_migrations:?}, Expected: {expected_migrations:?}",
+                ),
+            }));
+        }
+        Ok(())
+    }
 }
 
 pub async fn manual_run_postgres_migrations() -> Result<(), Error> {
@@ -50,30 +74,6 @@ pub async fn manual_run_postgres_migrations() -> Result<(), Error> {
                 message: e.to_string(),
             })
         })
-}
-
-/// If the connection is active, check that the set of migrations that have succeeded matches the expected set of migrations.
-/// If the connection is not active, return Ok(()).
-pub async fn check_migrations(pg: &PostgresConnectionInfo) -> Result<(), Error> {
-    let Some(pool) = pg.get_pool() else {
-        return Ok(());
-    };
-    let migrator = migrate!("src/db/postgres/migrations");
-    let expected_migrations: HashSet<i64> = migrator.iter().map(|m| m.version).collect();
-    // Query the database for all successfully applied migration versions.
-    let applied_migrations = get_applied_migrations(pool).await.map_err(|e| {
-        Error::new(ErrorDetails::PostgresConnectionInitialization {
-            message: format!("Failed to retrieve applied migrations: {e}"),
-        })
-    })?;
-    if applied_migrations != expected_migrations {
-        return Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
-            message: format!(
-                "Applied migrations do not match expected migrations. Applied: {applied_migrations:?}, Expected: {expected_migrations:?}",
-            ),
-        }));
-    }
-    Ok(())
 }
 
 /// Helper function to retrieve the set of applied migrations from the database.

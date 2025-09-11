@@ -247,8 +247,9 @@ pub async fn setup_postgres(
                 message: err.to_string(),
             })
         })?;
-
-    Ok(PostgresConnectionInfo::new_with_pool(pool))
+    let connection_info = PostgresConnectionInfo::new_with_pool(pool);
+    connection_info.check_migrations().await?;
+    Ok(connection_info)
 }
 
 /// Custom Axum extractor that validates the JSON body and deserializes it into a custom type
