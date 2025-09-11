@@ -123,7 +123,6 @@ async fn test_jaeger_trace_export(
         .await
         .unwrap();
     let jaeger_traces = jaeger_result.json::<Value>().await.unwrap();
-    println!("Response: {jaeger_traces}");
     let mut target_span = None;
 
     let mut span_by_id = HashMap::new();

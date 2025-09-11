@@ -123,6 +123,11 @@ filter = 'test(clickhouse)'
 slow-timeout = { period = "900s", terminate-after = 1 }
 
 [[profile.default.overrides]]
+filter = 'test(test_concurrent_requests)'
+# This test creates and uses lots of `reqwest::Client`s, which can be slow
+slow-timeout = { period = "30s", terminate-after = 1 }
+
+[[profile.default.overrides]]
 # Settings for running unit tests
 filter = 'not binary(e2e)'
 retries = 0
