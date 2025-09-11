@@ -21,6 +21,7 @@ pub mod model_table;
 pub mod observability; // utilities for observability (logs, metrics, etc.)
 pub mod optimization;
 pub mod providers; // providers for the inference and / or optimization services TensorZero integrates
+mod rate_limiting; // utilities for rate limiting
 pub mod serde_util; // utilities for working with serde
 pub mod stored_inference; // types and methods for working with stored inferences
 mod testing;
