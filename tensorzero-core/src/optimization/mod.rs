@@ -1,4 +1,5 @@
 use crate::config::UninitializedVariantConfig;
+use crate::http::TensorzeroHttpClient;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -22,6 +23,9 @@ use crate::optimization::fireworks_sft::{
 use crate::optimization::gcp_vertex_gemini_sft::{
     GCPVertexGeminiSFTConfig, GCPVertexGeminiSFTJobHandle, UninitializedGCPVertexGeminiSFTConfig,
 };
+use crate::optimization::openai_rft::{
+    OpenAIRFTConfig, OpenAIRFTJobHandle, UninitializedOpenAIRFTConfig,
+};
 use crate::optimization::openai_sft::{
     OpenAISFTConfig, OpenAISFTJobHandle, UninitializedOpenAISFTConfig,
 };
@@ -33,6 +37,7 @@ use crate::stored_inference::RenderedSample;
 pub mod dicl;
 pub mod fireworks_sft;
 pub mod gcp_vertex_gemini_sft;
+pub mod openai_rft;
 pub mod openai_sft;
 pub mod together_sft;
 
@@ -57,6 +62,7 @@ impl OptimizerInfo {
 enum OptimizerConfig {
     Dicl(DiclOptimizationConfig),
     OpenAISFT(OpenAISFTConfig),
+    OpenAIRFT(Box<OpenAIRFTConfig>),
     FireworksSFT(FireworksSFTConfig),
     GCPVertexGeminiSFT(Box<GCPVertexGeminiSFTConfig>),
     TogetherSFT(Box<TogetherSFTConfig>),
@@ -72,6 +78,8 @@ pub enum OptimizationJobHandle {
     Dicl(DiclOptimizationJobHandle),
     #[serde(rename = "openai_sft")]
     OpenAISFT(OpenAISFTJobHandle),
+    #[serde(rename = "openai_rft")]
+    OpenAIRFT(OpenAIRFTJobHandle),
     #[serde(rename = "fireworks_sft")]
     FireworksSFT(FireworksSFTJobHandle),
     #[serde(rename = "gcp_vertex_gemini_sft")]
@@ -117,12 +125,15 @@ impl std::fmt::Display for OptimizationJobHandle {
 impl JobHandle for OptimizationJobHandle {
     async fn poll(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
         match self {
             OptimizationJobHandle::Dicl(job_handle) => job_handle.poll(client, credentials).await,
             OptimizationJobHandle::OpenAISFT(job_handle) => {
+                job_handle.poll(client, credentials).await
+            }
+            OptimizationJobHandle::OpenAIRFT(job_handle) => {
                 job_handle.poll(client, credentials).await
             }
             OptimizationJobHandle::FireworksSFT(job_handle) => {
@@ -248,7 +259,7 @@ impl OptimizationJobInfoPyClass {
 pub trait JobHandle {
     async fn poll(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizationJobInfo, Error>;
 }
@@ -258,7 +269,7 @@ pub trait Optimizer {
 
     async fn launch(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
@@ -271,7 +282,7 @@ impl Optimizer for OptimizerInfo {
     type Handle = OptimizationJobHandle;
     async fn launch(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
@@ -301,6 +312,17 @@ impl Optimizer for OptimizerInfo {
                 )
                 .await
                 .map(OptimizationJobHandle::OpenAISFT),
+            OptimizerConfig::OpenAIRFT(optimizer_config) => optimizer_config
+                .launch(
+                    client,
+                    train_examples,
+                    val_examples,
+                    credentials,
+                    clickhouse_connection_info,
+                    config,
+                )
+                .await
+                .map(OptimizationJobHandle::OpenAIRFT),
             OptimizerConfig::FireworksSFT(optimizer_config) => optimizer_config
                 .launch(
                     client,
@@ -363,6 +385,8 @@ pub enum UninitializedOptimizerConfig {
     Dicl(UninitializedDiclOptimizationConfig),
     #[serde(rename = "openai_sft")]
     OpenAISFT(UninitializedOpenAISFTConfig),
+    #[serde(rename = "openai_rft")]
+    OpenAIRFT(UninitializedOpenAIRFTConfig),
     #[serde(rename = "fireworks_sft")]
     FireworksSFT(UninitializedFireworksSFTConfig),
     #[serde(rename = "gcp_vertex_gemini_sft")]
@@ -378,6 +402,9 @@ impl UninitializedOptimizerConfig {
             UninitializedOptimizerConfig::Dicl(config) => OptimizerConfig::Dicl(config.load()?),
             UninitializedOptimizerConfig::OpenAISFT(config) => {
                 OptimizerConfig::OpenAISFT(config.load()?)
+            }
+            UninitializedOptimizerConfig::OpenAIRFT(config) => {
+                OptimizerConfig::OpenAIRFT(Box::new(config.load()?))
             }
             UninitializedOptimizerConfig::FireworksSFT(config) => {
                 OptimizerConfig::FireworksSFT(config.load()?)

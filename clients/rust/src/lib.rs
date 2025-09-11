@@ -9,17 +9,21 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
 use tensorzero_core::config::ConfigFileGlob;
+pub use tensorzero_core::db::DatabaseConnection;
+use tensorzero_core::db::HealthCheckable;
+pub use tensorzero_core::db::{ModelUsageTimePoint, TimeWindow};
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 use tensorzero_core::endpoints::stored_inference::render_samples;
+pub use tensorzero_core::gateway_util::setup_clickhouse_without_config;
+use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::stored_input::StoragePathResolver;
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_core::{
     config::Config,
-    db::DatabaseConnection,
     endpoints::{
         datasets::InsertDatapointParams,
         dynamic_evaluation_run::{
@@ -28,7 +32,7 @@ use tensorzero_core::{
         validate_tags,
     },
     error::{Error, ErrorDetails},
-    gateway_util::{setup_clickhouse, setup_http_client, GatewayHandle},
+    gateway_util::{setup_clickhouse, GatewayHandle},
 };
 use thiserror::Error;
 use tokio::{sync::Mutex, time::error::Elapsed};
@@ -70,6 +74,9 @@ pub use tensorzero_core::inference::types::{
     ContentBlockChunk, Input, InputMessage, InputMessageContent, Role,
 };
 pub use tensorzero_core::tool::{DynamicToolParams, Tool};
+
+// Export quantile array from migration_0035
+pub use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0037::QUANTILES;
 
 enum ClientMode {
     HTTPGateway(HTTPGateway),
@@ -323,10 +330,20 @@ impl ClientBuilder {
                             })
                         })?;
 
-                let http_client = if let Some(http_client) = self.http_client {
-                    http_client
+                let http_client = if self.http_client.is_some() {
+                    return Err(ClientBuilderError::HTTPClientBuild(
+                        TensorZeroError::Other {
+                            source: TensorZeroInternalError(tensorzero_core::error::Error::new(
+                                ErrorDetails::AppState {
+                                    message:
+                                        "HTTP client cannot be provided in EmbeddedGateway mode"
+                                            .to_string(),
+                                },
+                            )),
+                        },
+                    ));
                 } else {
-                    setup_http_client().map_err(|e| {
+                    TensorzeroHttpClient::new().map_err(|e| {
                         ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
                             source: e.into(),
                         })
@@ -353,6 +370,11 @@ impl ClientBuilder {
 
     /// Builds a dummy client for use in pyo3. Should not otherwise be used
     /// This avoids logging any messages
+    ///
+    /// # Panics
+    /// This will panic if a `TensorzeroHttpClient` cannot be constructed
+    /// due to an error when building a `reqwest::Client`
+    /// (e.g. if a TLS backend cannot be initialized)
     #[cfg(feature = "pyo3")]
     pub fn build_dummy() -> Client {
         use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
@@ -363,7 +385,12 @@ impl ClientBuilder {
                     handle: GatewayHandle::new_with_clickhouse_and_http_client(
                         Arc::new(Config::default()),
                         ClickHouseConnectionInfo::Disabled,
-                        reqwest::Client::new(),
+                        // NOTE - we previously called `reqwest::Client::new()`, which panics
+                        // if a TLS backend cannot be initialized.
+                        // This explicit `expect` does not actually increase the risk of panics,
+                        #[expect(clippy::expect_used)]
+                        TensorzeroHttpClient::new()
+                            .expect("Failed to construct TensorzeroHttpClient"),
                     ),
                 },
                 timeout: None,
@@ -1317,14 +1344,20 @@ async fn with_embedded_timeout<R, F: Future<Output = Result<R, TensorZeroError>>
 /// This is a convenience function that wraps `Config::load_from_path_optional_verify_credentials`
 /// and returns a `TensorZeroError` instead of a `ConfigError`.
 /// This function does NOT verify credentials.
-pub async fn get_config_no_verify_credentials(path: PathBuf) -> Result<Config, TensorZeroError> {
-    Config::load_from_path_optional_verify_credentials(
-        &ConfigFileGlob::new(path.to_string_lossy().to_string())
-            .map_err(|e| TensorZeroError::Other { source: e.into() })?,
-        false,
-    )
-    .await
-    .map_err(|e| TensorZeroError::Other { source: e.into() })
+/// If the path is None, it returns the default config.
+pub async fn get_config_no_verify_credentials(
+    path: Option<PathBuf>,
+) -> Result<Config, TensorZeroError> {
+    match path {
+        Some(path) => Config::load_from_path_optional_verify_credentials(
+            &ConfigFileGlob::new(path.to_string_lossy().to_string())
+                .map_err(|e| TensorZeroError::Other { source: e.into() })?,
+            false,
+        )
+        .await
+        .map_err(|e| TensorZeroError::Other { source: e.into() }),
+        None => Ok(Config::default()),
+    }
 }
 
 /// Compares two TensorZero version strings, returning `None`

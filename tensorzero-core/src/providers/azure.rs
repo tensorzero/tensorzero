@@ -15,6 +15,7 @@ use crate::embeddings::{
 };
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
@@ -34,7 +35,7 @@ use crate::providers::helpers::{
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
-    OpenAIToolChoiceString, OpenAIUsage, SpecificToolChoice,
+    OpenAIToolChoiceString, OpenAIUsage, SpecificToolChoice, SystemOrDeveloper,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 
@@ -169,12 +170,14 @@ impl AzureCredentials {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
+                        message: format!("Dynamic api key `{key_name}` is missing"),
                     }
                     .into()
                 })
             }
             AzureCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
+                message: "No credentials are set".to_string(),
             }
             .into()),
         }
@@ -193,7 +196,7 @@ impl InferenceProvider for AzureProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         api_key: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -286,7 +289,7 @@ impl InferenceProvider for AzureProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -327,7 +330,7 @@ impl InferenceProvider for AzureProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
+        _client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -339,7 +342,7 @@ impl InferenceProvider for AzureProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -353,7 +356,7 @@ impl EmbeddingProvider for AzureProvider {
     async fn embed(
         &self,
         request: &EmbeddingRequest,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
@@ -599,7 +602,7 @@ impl<'a> AzureRequest<'a> {
     pub fn new(request: &'a ModelInferenceRequest<'_>) -> Result<AzureRequest<'a>, Error> {
         let response_format = AzureResponseFormat::new(request.json_mode, request.output_schema);
         let messages = prepare_openai_messages(
-            request.system.as_deref(),
+            request.system.as_deref().map(SystemOrDeveloper::System),
             &request.messages,
             Some(&request.json_mode),
             PROVIDER_TYPE,

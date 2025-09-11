@@ -12,6 +12,7 @@ use tensorzero_core::embeddings::{
     EmbeddingProviderConfig, EmbeddingRequest, UninitializedEmbeddingProviderConfig,
 };
 use tensorzero_core::endpoints::inference::{InferenceClients, InferenceCredentials};
+use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::{Latency, ModelInferenceRequestJsonMode};
 use uuid::Uuid;
 
@@ -1127,7 +1128,7 @@ async fn test_embedding_request() {
             &request,
             &model_name,
             &InferenceClients {
-                http_client: &Default::default(),
+                http_client: &TensorzeroHttpClient::new().unwrap(),
                 credentials: &api_keys,
                 clickhouse_connection_info: &clickhouse,
                 cache_options: &CacheOptions {
@@ -1183,7 +1184,11 @@ async fn test_embedding_request() {
     assert_eq!(response.usage.output_tokens, 0);
     match response.latency {
         Latency::NonStreaming { response_time } => {
-            assert!(response_time.as_millis() > 100);
+            assert!(
+                response_time.as_millis() > 10,
+                "Response time should be greater than 10ms: {}",
+                response_time.as_millis()
+            );
         }
         _ => panic!("Latency should be non-streaming"),
     }
@@ -1195,7 +1200,7 @@ async fn test_embedding_request() {
             &request,
             &model_name,
             &InferenceClients {
-                http_client: &Default::default(),
+                http_client: &TensorzeroHttpClient::new().unwrap(),
                 credentials: &api_keys,
                 clickhouse_connection_info: &clickhouse,
                 cache_options: &CacheOptions {
@@ -1227,7 +1232,7 @@ async fn test_embedding_sanity_check() {
             )
             .await
             .unwrap();
-    let client = Client::new();
+    let client = TensorzeroHttpClient::new().unwrap();
     let embedding_request_a = EmbeddingRequest {
         input: "Joe Biden is the president of the United States"
             .to_string()

@@ -1,9 +1,10 @@
 use std::{borrow::Cow, sync::OnceLock, time::Duration};
 
+use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource};
+use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tokio::time::Instant;
@@ -118,12 +119,14 @@ impl MistralCredentials {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
+                        message: format!("Dynamic api key `{key_name}` is missing"),
                     }
                     .into()
                 })
             }
             MistralCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
+                message: "No credentials are set".to_string(),
             }
             .into()),
         }
@@ -138,7 +141,7 @@ impl InferenceProvider for MistralProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -229,7 +232,7 @@ impl InferenceProvider for MistralProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -266,7 +269,7 @@ impl InferenceProvider for MistralProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
+        _client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -278,7 +281,7 @@ impl InferenceProvider for MistralProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -315,7 +318,7 @@ fn handle_mistral_error(
 }
 
 pub fn stream_mistral(
-    mut event_source: EventSource,
+    mut event_source: TensorZeroEventSource,
     start_time: Instant,
 ) -> ProviderInferenceResponseStreamInner {
     Box::pin(async_stream::stream! {

@@ -4,7 +4,7 @@ use crate::inference::types::RequestMessage;
 use crate::providers::openai::OpenAIToolChoiceString;
 use futures::StreamExt;
 use lazy_static::lazy_static;
-use reqwest_eventsource::{Event, EventSource};
+use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -13,6 +13,7 @@ use url::Url;
 
 use crate::cache::ModelProviderRequest;
 use crate::error::DisplayOrDebugGateway;
+use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::{
     FinishReason, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -129,11 +130,13 @@ impl TogetherCredentials {
                 Ok(Cow::Borrowed(dynamic_api_keys.get(key_name).ok_or_else(
                     || ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
+                        message: format!("Dynamic api key `{key_name}` is missing"),
                     },
                 )?))
             }
             TogetherCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
+                message: "No credentials are set".to_string(),
             })?,
         }
     }
@@ -147,7 +150,7 @@ impl InferenceProvider for TogetherProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -242,7 +245,7 @@ impl InferenceProvider for TogetherProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -278,7 +281,7 @@ impl InferenceProvider for TogetherProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
+        _client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -290,7 +293,7 @@ impl InferenceProvider for TogetherProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -576,7 +579,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
 // ThinkingState has been moved to helpers_thinking_block.rs
 
 fn stream_together(
-    mut event_source: EventSource,
+    mut event_source: TensorZeroEventSource,
     start_time: Instant,
     parse_think_blocks: bool,
 ) -> ProviderInferenceResponseStreamInner {

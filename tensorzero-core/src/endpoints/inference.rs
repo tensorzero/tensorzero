@@ -29,6 +29,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::function::{sample_variant, FunctionConfigChat};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::resolved_input::FileWithPath;
@@ -206,7 +207,7 @@ pub struct InferenceIds {
 )]
 pub async fn inference<T: Send + 'static>(
     config: Arc<Config>,
-    http_client: &reqwest::Client,
+    http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     params: Params,
     // See 'create_stream' for more details about this parameter
@@ -1157,7 +1158,7 @@ impl InferenceResponseChunk {
 
 // Carryall struct for clients used in inference
 pub struct InferenceClients<'a> {
-    pub http_client: &'a reqwest::Client,
+    pub http_client: &'a TensorzeroHttpClient,
     pub clickhouse_connection_info: &'a ClickHouseConnectionInfo,
     pub credentials: &'a InferenceCredentials,
     pub cache_options: &'a CacheOptions,

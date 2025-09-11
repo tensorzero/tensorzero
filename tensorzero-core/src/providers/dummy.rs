@@ -17,8 +17,10 @@ use crate::embeddings::{
     Embedding, EmbeddingProvider, EmbeddingProviderRequestInfo, EmbeddingProviderResponse,
     EmbeddingRequest,
 };
+
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
 use crate::inference::types::{
@@ -165,6 +167,7 @@ impl DummyCredentials {
                 Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
+                        message: format!("Dynamic api key `{key_name}` is missing"),
                     }
                     .into()
                 }))
@@ -245,7 +248,7 @@ impl InferenceProvider for DummyProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -564,7 +567,7 @@ impl InferenceProvider for DummyProvider {
             provider_name: _,
             model_name: _,
         }: ModelProviderRequest<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
         _model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -722,7 +725,7 @@ impl InferenceProvider for DummyProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
+        _client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         let file_id = Uuid::now_v7();
@@ -743,7 +746,7 @@ impl InferenceProvider for DummyProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -760,7 +763,7 @@ impl EmbeddingProvider for DummyProvider {
     async fn embed(
         &self,
         request: &EmbeddingRequest,
-        _http_client: &reqwest::Client,
+        _http_client: &TensorzeroHttpClient,
         _dynamic_api_keys: &InferenceCredentials,
         _model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {

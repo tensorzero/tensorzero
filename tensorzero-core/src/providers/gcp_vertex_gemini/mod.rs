@@ -13,7 +13,7 @@ use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use object_store::gcp::{GcpCredential, GoogleCloudStorageBuilder};
 use object_store::{ObjectStore, StaticCredentialProvider};
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource};
+use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
@@ -37,6 +37,7 @@ use crate::error::{
     warn_discarded_thought_block, warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error,
     ErrorDetails,
 };
+use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::{
     BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
     ProviderBatchInferenceResponse,
@@ -189,6 +190,7 @@ pub async fn make_gcp_object_store(
             let key = dynamic_api_keys.get(key_name).ok_or_else(|| {
                 Error::new(ErrorDetails::ApiKeyMissing {
                     provider_name: PROVIDER_NAME.to_string(),
+                    message: format!("Dynamic api key `{key_name}` is missing"),
                 })
             })?;
             builder =
@@ -261,6 +263,7 @@ pub async fn make_gcp_object_store(
         GCPVertexCredentials::None => {
             return Err(Error::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
+                message: "No credentials are set".to_string(),
             }))
         }
     }
@@ -821,6 +824,7 @@ impl GCPVertexCredentials {
                     .ok_or_else(|| {
                         Error::new(ErrorDetails::ApiKeyMissing {
                             provider_name: PROVIDER_NAME.to_string(),
+                            message: format!("Dynamic api key `{key_name}` is missing"),
                         })
                     })?
                     .expose_secret(),
@@ -850,6 +854,7 @@ impl GCPVertexCredentials {
             GCPVertexCredentials::None => {
                 return Err(Error::new(ErrorDetails::ApiKeyMissing {
                     provider_name: PROVIDER_NAME.to_string(),
+                    message: "No credentials are set".to_string(),
                 }))
             }
         };
@@ -1000,7 +1005,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
     async fn infer<'a>(
         &'a self,
         provider_request: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -1105,7 +1110,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -1148,7 +1153,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         requests: &'a [ModelInferenceRequest<'_>],
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         let Some(model_id) = self.model_id.as_ref() else {
@@ -1333,7 +1338,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         batch_request: &'a BatchRequestRow<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         let auth_headers = self
@@ -1468,7 +1473,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
 }
 
 fn stream_gcp_vertex_gemini(
-    mut event_source: EventSource,
+    mut event_source: TensorZeroEventSource,
     start_time: Instant,
     model_provider: &ModelProvider,
 ) -> ProviderInferenceResponseStreamInner {

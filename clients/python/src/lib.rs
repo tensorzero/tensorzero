@@ -40,8 +40,9 @@ use tensorzero_core::{
     optimization::{
         dicl::UninitializedDiclOptimizationConfig, fireworks_sft::UninitializedFireworksSFTConfig,
         gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig,
-        openai_sft::UninitializedOpenAISFTConfig, together_sft::UninitializedTogetherSFTConfig,
-        OptimizationJobInfoPyClass, OptimizationJobStatus, UninitializedOptimizerInfo,
+        openai_rft::UninitializedOpenAIRFTConfig, openai_sft::UninitializedOpenAISFTConfig,
+        together_sft::UninitializedTogetherSFTConfig, OptimizationJobInfoPyClass,
+        OptimizationJobStatus, UninitializedOptimizerInfo,
     },
     variant::{
         BestOfNSamplingConfigPyClass, ChainOfThoughtConfigPyClass, ChatCompletionConfigPyClass,
@@ -93,6 +94,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<LocalHttpGateway>()?;
     m.add_class::<RenderedSample>()?;
     m.add_class::<StoredInference>()?;
+    m.add_class::<UninitializedOpenAIRFTConfig>()?;
     m.add_class::<UninitializedOpenAISFTConfig>()?;
     m.add_class::<UninitializedFireworksSFTConfig>()?;
     m.add_class::<UninitializedDiclOptimizationConfig>()?;

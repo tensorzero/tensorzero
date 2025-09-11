@@ -754,17 +754,27 @@ async fn infer_model_request_stream<'request>(
 #[derive(Debug, Deserialize, Copy, Clone, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct RetryConfig {
+    #[serde(default = "default_num_retries")]
     pub num_retries: usize,
+    #[serde(default = "default_max_delay_s")]
     pub max_delay_s: f32,
 }
 
 impl Default for RetryConfig {
     fn default() -> Self {
         RetryConfig {
-            num_retries: 0,
-            max_delay_s: 10.0,
+            num_retries: default_num_retries(),
+            max_delay_s: default_max_delay_s(),
         }
     }
+}
+
+fn default_num_retries() -> usize {
+    0
+}
+
+fn default_max_delay_s() -> f32 {
+    10.0
 }
 
 impl RetryConfig {
@@ -857,6 +867,7 @@ mod tests {
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::error::ErrorDetails;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
+    use crate::http::TensorzeroHttpClient;
     use crate::inference::types::{
         ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role, Usage,
     };
@@ -868,7 +879,7 @@ mod tests {
         DUMMY_STREAMING_RESPONSE,
     };
     use crate::tool::{ToolCallConfig, ToolChoice};
-    use reqwest::Client;
+
     use serde_json::json;
     use std::collections::HashMap;
     use tracing_test::traced_test;
@@ -1103,7 +1114,7 @@ mod tests {
     async fn test_infer_model_request() {
         // Setup common variables
         let api_keys = InferenceCredentials::default();
-        let client = Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
         let clients = InferenceClients {
             http_client: &client,
@@ -1398,7 +1409,7 @@ mod tests {
     async fn test_infer_model_request_errors() {
         // Setup common variables
         let api_keys = InferenceCredentials::default();
-        let client = Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
         let clients = InferenceClients {
             http_client: &client,
@@ -1555,7 +1566,7 @@ mod tests {
     #[tokio::test]
     async fn test_infer_model_request_stream() {
         // Set up the HTTP client and ClickHouse connection info
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
@@ -1700,7 +1711,7 @@ mod tests {
     async fn test_infer_model_request_errors_stream() {
         // Setup common variables
         let api_keys = InferenceCredentials::default();
-        let client = Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
         let clients = InferenceClients {
             http_client: &client,

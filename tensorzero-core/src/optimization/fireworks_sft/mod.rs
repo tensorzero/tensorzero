@@ -26,6 +26,7 @@ use uuid::Uuid;
 
 use crate::config::{Config, TimeoutsConfig};
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::http::TensorzeroHttpClient;
 use crate::model::UninitializedModelConfig;
 use crate::model::UninitializedModelProvider;
 use crate::model::UninitializedProviderConfig;
@@ -265,7 +266,7 @@ impl UninitializedFireworksSFTConfig {
     /// :param mtp_enabled: Whether to enable MTP (Multi-Token Prediction).
     /// :param mtp_num_draft_tokens: The number of draft tokens for MTP.
     /// :param mtp_freeze_base_model: Whether to freeze the base model for MTP.
-    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::FIREWORKS_API_KEY". See docs for more details.
+    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like `env::FIREWORKS_API_KEY`. See docs for more details.
     /// :param account_id: The account ID to use for the fine-tuning job.
     /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
     #[expect(unused_variables, clippy::too_many_arguments)]
@@ -339,7 +340,7 @@ impl FireworksSFTConfig {
     /// Returns `true` if the dataset is in the `READY` state.
     async fn poll_dataset_read(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         api_key: &SecretString,
         dataset_id: &str,
     ) -> Result<bool, Error> {
@@ -398,7 +399,7 @@ impl FireworksSFTConfig {
     /// Returns the Fireworks path to the dataset (e.g. `account/{account_id}/datasets/{dataset_id}`)
     async fn create_and_upload_dataset(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         api_key: &SecretString,
         items: &[FireworksSupervisedRow<'_>],
     ) -> Result<String, Error> {
@@ -521,7 +522,7 @@ impl Optimizer for FireworksSFTConfig {
 
     async fn launch(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
@@ -763,7 +764,7 @@ struct FireworksDeployedModelRef {
 impl FireworksSFTJobHandle {
     async fn get_model(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         api_key: &SecretString,
         model_path: &str,
     ) -> Result<Option<FireworksModelResponse>, Error> {
@@ -813,7 +814,7 @@ impl FireworksSFTJobHandle {
 
     async fn deploy_or_poll_model(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         api_key: &SecretString,
         model_path: &str,
     ) -> Result<FireworksDeploymentState, Error> {
@@ -881,7 +882,7 @@ impl FireworksSFTJobHandle {
     }
     async fn poll_job(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         api_key: &SecretString,
     ) -> Result<FireworksFineTuningJobResponse, Error> {
         let request = client
@@ -934,7 +935,7 @@ impl FireworksSFTJobHandle {
 impl JobHandle for FireworksSFTJobHandle {
     async fn poll(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
         let fireworks_credentials = build_creds_caching_default(

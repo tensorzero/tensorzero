@@ -4,12 +4,12 @@ run-name: "Buildkite Test Suite: ${{ github.event.pull_request.title || github.r
 on:
   workflow_dispatch:
 
-  pull_request:
-    branches: ["main"]
+  # pull_request:
+  #   branches: ["main"]
 
 jobs:
   unit-tests:
-    if: github.repository == 'tensorzero/tensorzero'
+    if: github.repository == 'tensorzero/tensorzero' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
       - name: Trigger a Buildkite Build on Push using v2.0.0

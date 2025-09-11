@@ -2,8 +2,9 @@ use std::borrow::Cow;
 use std::sync::OnceLock;
 use std::time::Duration;
 
+use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use futures::StreamExt;
-use reqwest_eventsource::{Event, EventSource};
+use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -34,7 +35,7 @@ use crate::tool::ToolCallChunk;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
-    OpenAIUsage, StreamOptions,
+    OpenAIUsage, StreamOptions, SystemOrDeveloper,
 };
 
 fn default_api_key_location() -> CredentialLocation {
@@ -118,6 +119,7 @@ impl SGLangCredentials {
                 Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
+                        message: format!("Dynamic api key `{key_name}` is missing"),
                     }
                     .into()
                 }))
@@ -136,7 +138,7 @@ impl InferenceProvider for SGLangProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -229,7 +231,7 @@ impl InferenceProvider for SGLangProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -268,7 +270,7 @@ impl InferenceProvider for SGLangProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
+        _client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -280,7 +282,7 @@ impl InferenceProvider for SGLangProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -355,7 +357,7 @@ struct SGLangChatChunk {
 /// Streams the SGLang response events and converts them into ProviderInferenceResponseChunks
 /// This function handles parsing and processing of thinking blocks with proper state tracking
 fn stream_sglang(
-    mut event_source: EventSource,
+    mut event_source: TensorZeroEventSource,
     start_time: Instant,
 ) -> ProviderInferenceResponseStreamInner {
     let mut tool_call_ids = Vec::new();
@@ -561,7 +563,7 @@ impl<'a> SGLangRequest<'a> {
             None
         };
         let messages = prepare_openai_messages(
-            request.system.as_deref(),
+            request.system.as_deref().map(SystemOrDeveloper::System),
             &request.messages,
             Some(&request.json_mode),
             PROVIDER_TYPE,

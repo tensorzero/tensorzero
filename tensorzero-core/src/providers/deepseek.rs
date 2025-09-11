@@ -1,6 +1,6 @@
 use futures::StreamExt;
 use lazy_static::lazy_static;
-use reqwest_eventsource::{Event, EventSource};
+use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -14,6 +14,7 @@ use super::helpers::{
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
@@ -32,10 +33,10 @@ use crate::tool::ToolCallChunk;
 
 use super::openai::{
     convert_stream_error, get_chat_url, handle_openai_error, prepare_openai_tools,
-    tensorzero_to_openai_messages, tensorzero_to_openai_system_message,
+    prepare_system_or_developer_message, tensorzero_to_openai_messages,
     OpenAIAssistantRequestMessage, OpenAIContentBlock, OpenAIFinishReason, OpenAIRequestMessage,
     OpenAIResponseToolCall, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIUsage,
-    OpenAIUserRequestMessage, StreamOptions,
+    OpenAIUserRequestMessage, StreamOptions, SystemOrDeveloper,
 };
 
 lazy_static! {
@@ -86,12 +87,14 @@ impl DeepSeekCredentials {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
+                        message: format!("Dynamic api key `{key_name}` is missing"),
                     }
                     .into()
                 })
             }
             DeepSeekCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
+                message: "No credentials are set".to_string(),
             }
             .into()),
         }
@@ -135,7 +138,7 @@ impl InferenceProvider for DeepSeekProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -233,7 +236,7 @@ impl InferenceProvider for DeepSeekProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -271,7 +274,7 @@ impl InferenceProvider for DeepSeekProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
+        _client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -283,7 +286,7 @@ impl InferenceProvider for DeepSeekProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -400,7 +403,7 @@ impl<'a> DeepSeekRequest<'a> {
 }
 
 fn stream_deepseek(
-    mut event_source: EventSource,
+    mut event_source: TensorZeroEventSource,
     start_time: Instant,
 ) -> ProviderInferenceResponseStreamInner {
     let mut tool_call_ids = Vec::new();
@@ -604,8 +607,8 @@ pub(super) fn prepare_deepseek_messages<'a>(
                 }),
             );
         }
-    } else if let Some(system_msg) = tensorzero_to_openai_system_message(
-        request.system.as_deref(),
+    } else if let Some(system_msg) = prepare_system_or_developer_message(
+        request.system.as_deref().map(SystemOrDeveloper::System),
         Some(&request.json_mode),
         &messages,
     ) {
