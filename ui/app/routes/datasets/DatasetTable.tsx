@@ -76,7 +76,7 @@ export default function DatasetTable({
             <Button
               variant="ghost"
               size="icon"
-              className="opacity-60 hover:opacity-100 transition-opacity"
+              className="opacity-60 transition-opacity hover:opacity-100"
               onClick={() => {
                 setDatasetToDelete(info.row.original.dataset_name);
                 setDeleteDialogOpen(true);
@@ -167,10 +167,7 @@ export default function DatasetTable({
             <TableEmptyState message="No datasets found" />
           ) : (
             table.getRowModel().rows.map((row) => (
-              <TableRow
-                key={row.id}
-                id={row.original.dataset_name}
-              >
+              <TableRow key={row.id} id={row.original.dataset_name}>
                 {row.getVisibleCells().map((cell, index) => (
                   <TableCell
                     key={cell.id}
