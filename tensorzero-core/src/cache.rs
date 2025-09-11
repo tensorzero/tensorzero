@@ -226,6 +226,9 @@ pub trait CacheOutput {
 
 impl CacheOutput for StreamingCacheData {
     async fn should_write_to_cache(&self, _cache_validation_info: CacheValidationInfo) -> bool {
+        // TODO - getting access to the tool calls would require re-running `collect_chunks`,
+        // or refactoring it to make the parsed content blocks available when performing the cache write.
+        // For now, we'll just always write to the cache.
         true
     }
 }
@@ -305,6 +308,9 @@ fn spawn_maybe_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
 /// We use this to skip writing certain 'bad' cache entries
 /// (e.g. when a tool call fails validation), while still allowing the
 /// inference itself to succeed and return a response to the user
+///
+/// In the future, we may perform additional checks
+/// (e.g. validating against the `output_schema`).
 pub struct CacheValidationInfo {
     // The `ToolCallConfig` for the top-level inference request, if present
     // This is deliberately not part of the cache key - we only use it to
