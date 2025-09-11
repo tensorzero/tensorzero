@@ -1,3 +1,4 @@
+use crate::http::TensorzeroHttpClient;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
 #[cfg(feature = "pyo3")]
@@ -17,7 +18,7 @@ use crate::model::{
     UninitializedModelProvider, UninitializedProviderConfig,
 };
 use crate::optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput};
-use crate::providers::helpers::{TensorZeroRequestBuilderExt, UrlParseErrExt};
+use crate::providers::helpers::UrlParseErrExt;
 use crate::providers::openai::OpenAIRequestMessage;
 use crate::providers::openai::{tensorzero_to_openai_assistant_message, OpenAITool};
 use crate::providers::together::{
@@ -518,7 +519,7 @@ impl TogetherSFTConfig {
     /// Uploads the given rows as a Together file, returning the file ID
     async fn upload_file(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         api_key: &SecretString,
         items: &[TogetherSupervisedRow<'_>],
         purpose: &'static str,
@@ -692,7 +693,7 @@ impl Optimizer for TogetherSFTConfig {
 
     async fn launch(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
@@ -816,7 +817,7 @@ impl Optimizer for TogetherSFTConfig {
 impl JobHandle for TogetherSFTJobHandle {
     async fn poll(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
         let together_credentials = build_creds_caching_default(
