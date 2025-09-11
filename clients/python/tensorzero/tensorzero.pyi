@@ -416,6 +416,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         *,
         config_file: Optional[str] = None,
         clickhouse_url: Optional[str] = None,
+        postgres_url: Optional[str] = None,
         timeout: Optional[float] = None,
     ) -> "TensorZeroGateway":
         """
@@ -423,7 +424,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
         :param config_file: (Optional) The path to the TensorZero configuration file.
         :param clickhouse_url: (Optional) The URL of the ClickHouse database.
-        :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
+        :param postgres_url: (Optional) The URL of the Postgres database.
+        :param timeout: (Optional) The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
         """
 
     def inference(
@@ -756,6 +758,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         *,
         config_file: Optional[str] = None,
         clickhouse_url: Optional[str] = None,
+        postgres_url: Optional[str] = None,
         timeout: Optional[float] = None,
         async_setup: bool = True,
     ) -> Union[Awaitable["AsyncTensorZeroGateway"], "AsyncTensorZeroGateway"]:
@@ -764,7 +767,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
         :param config_file: (Optional) The path to the TensorZero configuration file.
         :param clickhouse_url: (Optional) The URL of the ClickHouse database.
-        :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
+        :param postgres_url: (Optional) The URL of the Postgres database.
+        :param timeout: (Optional) The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
         :param async_setup (Optional): If True, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and return an `AsyncTensorZeroGateway` directly.
         """
 
@@ -1070,6 +1074,7 @@ def _start_http_gateway(
     *,
     config_file: Optional[str],
     clickhouse_url: Optional[str],
+    postgres_url: Optional[str],
     async_setup: bool,
 ) -> Union[Any, Awaitable[Any]]: ...
 @final
