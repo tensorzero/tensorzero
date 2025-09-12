@@ -13,8 +13,6 @@ cache:
         addresses: dns+memcached:11211
 
 query_frontend:
-  mcp_server:
-    enabled: true
   search:
     concurrent_jobs: 1
     duration_slo: 5s
