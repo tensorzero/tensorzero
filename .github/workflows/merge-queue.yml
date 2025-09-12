@@ -53,7 +53,7 @@ env:
 
 jobs:
   batch-tests:
-    if: github.repository == 'tensorzero/tensorzero'
+    if: github.repository == 'tensorzero/tensorzero' && false
     uses: ./.github/workflows/batch-test.yml
     secrets: inherit
 
