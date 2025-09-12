@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
+use tensorzero::{File, Input, InputMessage, InputMessageContent, Role};
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_core::config::ProviderTypesConfig;
 use tensorzero_core::config::TimeoutsConfig;
@@ -11,15 +12,20 @@ use tensorzero_core::embeddings::{
     Embedding, EmbeddingEncodingFormat, EmbeddingModelConfig, EmbeddingProvider,
     EmbeddingProviderConfig, EmbeddingRequest, UninitializedEmbeddingProviderConfig,
 };
+use tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams;
 use tensorzero_core::endpoints::inference::{InferenceClients, InferenceCredentials};
 use tensorzero_core::http::TensorzeroHttpClient;
-use tensorzero_core::inference::types::{Latency, ModelInferenceRequestJsonMode};
+use tensorzero_core::inference::types::{Latency, ModelInferenceRequestJsonMode, TextKind};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
-use crate::providers::common::{E2ETestProvider, E2ETestProviders, EmbeddingTestProvider};
+use crate::providers::common::{
+    make_embedded_gateway_with_config, E2ETestProvider, E2ETestProviders, EmbeddingTestProvider,
+    FERRIS_PNG,
+};
 use tensorzero_core::db::clickhouse::test_helpers::{
-    get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
+    get_clickhouse, select_batch_model_inference_clickhouse, select_chat_inference_clickhouse,
+    select_model_inference_clickhouse,
 };
 
 crate::generate_provider_tests!(get_providers);
@@ -1769,4 +1775,124 @@ pub async fn test_embedding_extra_body() {
             .len(),
         256
     );
+}
+
+// Tests that starting a batch inference with file input writes the file to the object store
+// We don't attempt to poll this batch inference, as we already have lots of tests that do that
+// (and we never read things back from the object in batch inference handling)
+#[tokio::test]
+pub async fn test_start_batch_inference_write_file() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config = format!(
+        r#"
+    [object_storage]
+    type = "filesystem"
+    path = "{}"
+
+    [functions.batch_image]
+    type = "chat"
+
+    [functions.batch_image.variants.openai]
+    type = "chat_completion"
+    model = "openai::gpt-4o-mini-2024-07-18"
+    "#,
+        temp_dir.path().to_string_lossy()
+    );
+
+    let client = make_embedded_gateway_with_config(&config).await;
+
+    let episode_id = Uuid::now_v7();
+
+    let response = client
+        .start_batch_inference(StartBatchInferenceParams {
+            function_name: "batch_image".to_string(),
+            variant_name: Some("openai".to_string()),
+            episode_ids: Some(vec![Some(episode_id)]),
+            inputs: vec![Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(TextKind::Text { text: "Tell me about this image".to_string() }),
+                    InputMessageContent::File(File::Url {
+                        url: "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png".parse().unwrap(),
+                        mime_type: None,
+                    })],
+                }],
+            }],
+            tags: Some(vec![Some([("foo".to_string(), "bar".to_string()), ("test_type".to_string(), "batch_image_object_store".to_string())].into_iter().collect() )]),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let batch_id = response.batch_id;
+    let inference_ids = response.inference_ids;
+    assert_eq!(inference_ids.len(), 1);
+
+    let inference_id = inference_ids[0];
+    let episode_ids = response.episode_ids;
+    assert_eq!(episode_ids.len(), 1);
+    let returned_episode_id = episode_ids[0];
+    assert_eq!(returned_episode_id, episode_id);
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    // Check if ClickHouse is ok - BatchModelInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - BatchModelInference: {result:#?}");
+
+    let id = result.get("inference_id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, inference_id);
+
+    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
+    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
+    assert_eq!(retrieved_batch_id, batch_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "batch_image");
+
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "openai");
+
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+
+    let file_path =
+        "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png";
+    let correct_input = json!({
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "value": "Tell me about this image"},
+                    {
+                        "type": "file",
+                        "file": {
+                            "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                            "mime_type": "image/png",
+                        },
+                        "storage_path": {
+                            "kind": {"type": "filesystem", "path": temp_dir.path().to_string_lossy()},
+                            "path": file_path
+                        }
+                    }
+                ]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+
+    // Check that the file exists on the filesystem
+    let result = std::fs::read(temp_dir.path().join(file_path)).unwrap();
+    assert_eq!(result, FERRIS_PNG);
 }
