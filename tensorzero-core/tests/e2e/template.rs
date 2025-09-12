@@ -426,6 +426,7 @@ async fn e2e_test_invalid_user_input_template_no_schema() {
 async fn e2e_test_invalid_assistant_input_template_no_schema() {
     let payload = json!({
         "function_name": "basic_test_template_no_schema",
+        "variant_name": "test",
         "input":{
             "system": "My system message",
             "messages": [
@@ -446,13 +447,14 @@ async fn e2e_test_invalid_assistant_input_template_no_schema() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let status = response.status();
     let response_json = response.json::<Value>().await.unwrap();
     let error = response_json["error"].as_str().unwrap();
     assert_eq!(
         error,
         "Message at index 0 has non-string content but there is no template `assistant` in any variant"
     );
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
