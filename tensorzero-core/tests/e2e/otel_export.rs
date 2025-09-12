@@ -167,9 +167,10 @@ async fn test_otel_export_trace_export(
                     let attrs = span["attributes"].as_array().unwrap();
                     for attr in attrs {
                         if attr["key"].as_str().unwrap() == "function_name" {
-                            if attr["value"].get("intValue").is_some() {
-                                panic!("Bad span: {span:?}");
-                            }
+                            assert!(
+                                attr["value"].get("intValue").is_none(),
+                                "Bad span: {span:?}"
+                            );
                         }
                         if attr["key"].as_str().unwrap() == "inference_id" {
                             let inference_id_jaeger =
