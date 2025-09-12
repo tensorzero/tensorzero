@@ -1,8 +1,8 @@
 #![allow(clippy::print_stdout)]
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use chrono::Duration;
-use chrono::SecondsFormat;
+use base64::prelude::*;
 use chrono::Utc;
 use http::StatusCode;
 use opentelemetry::SpanId;
@@ -10,7 +10,9 @@ use opentelemetry::TraceId;
 use opentelemetry_sdk::trace::IdGenerator;
 use opentelemetry_sdk::trace::RandomIdGenerator;
 use serde_json::{json, Value};
+use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
+use url::Url;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -22,30 +24,38 @@ struct ExistingTraceData {
 }
 
 #[tokio::test]
-async fn test_jaeger_trace_export_no_parent() {
-    test_jaeger_trace_export(None, None).await;
+async fn test_otel_export_trace_export_no_parent() {
+    test_otel_export_trace_export(None, None, Arc::new(Semaphore::new(1))).await;
 }
 
 #[tokio::test]
-async fn test_jaeger_trace_export_with_parent() {
+async fn test_otel_export_trace_export_with_parent() {
     let id_gen = RandomIdGenerator::default();
     let trace_id = id_gen.new_trace_id();
     let span_id = id_gen.new_span_id();
-    test_jaeger_trace_export(Some(ExistingTraceData { trace_id, span_id }), None).await;
+    test_otel_export_trace_export(
+        Some(ExistingTraceData { trace_id, span_id }),
+        None,
+        Arc::new(Semaphore::new(1)),
+    )
+    .await;
 }
 
 #[tokio::test]
-async fn test_jaeger_trace_export_with_custom_header() {
+async fn test_otel_export_trace_export_with_custom_header() {
+    // Prevent overloading Tempo (it gives us 'job queue full' errors if we send too many request at once)
+    let semaphore = Arc::new(Semaphore::new(10));
     let mut futures = JoinSet::new();
     let num_tasks = 100;
     for _ in 0..num_tasks {
         let random_id = Uuid::now_v7();
-        futures.spawn(test_jaeger_trace_export(
+        futures.spawn(test_otel_export_trace_export(
             None,
             Some((
                 "TensorZero-OTLP-Traces-Extra-Header-x-dummy-tensorzero".to_string(),
                 random_id.to_string(),
             )),
+            semaphore.clone(),
         ));
     }
     let mut i = 1;
@@ -57,9 +67,10 @@ async fn test_jaeger_trace_export_with_custom_header() {
 }
 
 // TODO - investigate why this test is sometimes flaky when running locally
-async fn test_jaeger_trace_export(
+async fn test_otel_export_trace_export(
     existing_trace_parent: Option<ExistingTraceData>,
     custom_header: Option<(String, String)>,
+    tempo_semaphore: Arc<Semaphore>,
 ) {
     let episode_id = Uuid::now_v7();
     let client = reqwest::Client::new();
@@ -79,6 +90,8 @@ async fn test_jaeger_trace_export(
         "stream": false,
         "tags": {"foo": "bar"},
     });
+
+    let start_time = Utc::now().timestamp();
 
     let mut builder = client
         .post(get_gateway_endpoint("/inference"))
@@ -106,35 +119,58 @@ async fn test_jaeger_trace_export(
         .as_str()
         .expect("inference_id should be a string");
 
-    // We flush spans every 5 seconds, so wait for twice that to be safe
-    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    // It takes some time for the sapn to show up in Tempo
+    tokio::time::sleep(std::time::Duration::from_secs(25)).await;
 
-    let now = Utc::now();
-    let one_minute_ago = now - Duration::minutes(1);
+    let now = Utc::now().timestamp();
 
-    let now_str = now.to_rfc3339_opts(SecondsFormat::Secs, true);
-    let one_minute_ago_str = one_minute_ago.to_rfc3339_opts(SecondsFormat::Secs, true);
-    let jaeger_base_url = std::env::var("TENSORZERO_JAEGER_URL")
-        .unwrap_or_else(|_| "http://localhost:16686".to_string());
+    let jaeger_base_url = std::env::var("TENSORZERO_TEMPO_URL")
+        .unwrap_or_else(|_| "http://localhost:3200".to_string());
 
-    let jaeger_result = client
-        .get(format!("{jaeger_base_url}/api/v3/traces?&query.start_time_min={one_minute_ago_str}&query.start_time_max={now_str}&query.service_name=tensorzero-gateway&query.num_traces=500"))
+    let get_url = Url::parse(&format!(
+        "{jaeger_base_url}/api/search?tags=inference_id={inference_id}&start={start_time}&end={now}"
+    ))
+    .unwrap();
+    println!("Requesting URL: {get_url}");
+
+    let permit = tempo_semaphore.acquire().await.unwrap();
+
+    let jaeger_result = client.get(get_url).send().await.unwrap();
+    let res = jaeger_result.text().await.unwrap();
+    println!("Tempo result: {res}");
+    let tempo_traces = serde_json::from_str::<Value>(&res).unwrap();
+    let trace_id = tempo_traces["traces"][0]["traceID"].as_str().unwrap();
+
+    let trace_res = client
+        .get(format!("{jaeger_base_url}/api/traces/{trace_id}"))
         .send()
         .await
+        .unwrap()
+        .text()
+        .await
         .unwrap();
-    let jaeger_traces = jaeger_result.json::<Value>().await.unwrap();
-    let mut target_span = None;
+
+    drop(permit);
+
+    println!("Trace res: {trace_res}");
+    let trace_data = serde_json::from_str::<Value>(&trace_res).unwrap();
 
     let mut span_by_id = HashMap::new();
+    let mut target_span = None;
 
-    for resource_span in jaeger_traces["result"]["resourceSpans"].as_array().unwrap() {
-        for scope_span in resource_span["scopeSpans"].as_array().unwrap() {
+    for batch in trace_data["batches"].as_array().unwrap() {
+        for scope_span in batch["scopeSpans"].as_array().unwrap() {
             for span in scope_span["spans"].as_array().unwrap() {
                 span_by_id.insert(span["spanId"].as_str().unwrap(), span.clone());
                 if span["name"] == "function_inference" {
-                    println!("Found function_inference span: {span:?}");
+                    //println!("Found function_inference span: {span:?}");
                     let attrs = span["attributes"].as_array().unwrap();
                     for attr in attrs {
+                        if attr["key"].as_str().unwrap() == "function_name" {
+                            if attr["value"].get("intValue").is_some() {
+                                panic!("Bad span: {span:?}");
+                            }
+                        }
                         if attr["key"].as_str().unwrap() == "inference_id" {
                             let inference_id_jaeger =
                                 attr["value"]["stringValue"].as_str().unwrap();
@@ -158,7 +194,7 @@ async fn test_jaeger_trace_export(
         panic!("No function_inference span found with matching inference_id: {inference_id}")
     });
     assert_eq!(function_inference_span["name"], "function_inference");
-    assert_eq!(function_inference_span["kind"], 1);
+    assert_eq!(function_inference_span["kind"], "SPAN_KIND_INTERNAL");
     let attrs: HashMap<&str, serde_json::Value> = function_inference_span["attributes"]
         .as_array()
         .unwrap()
@@ -188,17 +224,27 @@ async fn test_jaeger_trace_export(
             &parent_attrs["tensorzero.custom_key"]["stringValue"]
                 .as_str()
                 .expect("custom_key should be a string"),
-            custom_value
+            custom_value,
+            "Bad parent attrs: {parent_attrs:?}"
         );
     }
 
     if let Some(existing_trace_parent) = existing_trace_parent {
-        assert_eq!(
-            parent_span["traceId"],
-            existing_trace_parent.trace_id.to_string()
+        // Tempo returns a base64-encoded binary trace ID, so we need to decode it
+        // and convert it to a hex string
+        let trace_id_decoded = hex::encode(
+            BASE64_STANDARD
+                .decode(parent_span["traceId"].as_str().unwrap())
+                .unwrap(),
+        );
+        assert_eq!(trace_id_decoded, existing_trace_parent.trace_id.to_string());
+        let parent_span_id_decoded = hex::encode(
+            BASE64_STANDARD
+                .decode(parent_span["parentSpanId"].as_str().unwrap())
+                .unwrap(),
         );
         assert_eq!(
-            parent_span["parentSpanId"],
+            parent_span_id_decoded,
             existing_trace_parent.span_id.to_string()
         );
     }

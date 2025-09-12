@@ -23,7 +23,7 @@ mod object_storage;
 mod openai_compatible;
 mod optimization;
 mod otel;
-mod otel_jaeger;
+mod otel_export;
 mod prometheus;
 mod providers;
 mod proxy;
