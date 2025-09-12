@@ -1586,9 +1586,10 @@ mod tests {
             }),
         ];
         let input: Result<Input, Error> = messages.try_into();
-        let details = input.unwrap_err().get_owned_details();
+        let error = input.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidOpenAICompatibleRequest {
                 message: "message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
             }
@@ -1741,9 +1742,9 @@ mod tests {
             "city": "Tokyo",
         });
         let error = convert_openai_message_content(content.clone()).unwrap_err();
-        let details = error.get_owned_details();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidOpenAICompatibleRequest {
                 message: "message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
             }
