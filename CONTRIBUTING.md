@@ -47,13 +47,6 @@ Please submit a PR directly once you're ready to start working on an issue.
 >
 > See the "Technical Guide" section below for more details on building and testing TensorZero.
 
-### Documentation
-
-We're planning to open-source our documentation pages soon.
-See [issue #432](https://github.com/tensorzero/tensorzero/issues/432) for more details.
-
-In the meantime, please open an issue if you have suggestions or find any problems with the documentation.
-
 ### Content — Examples, Tutorials, etc.
 
 We'd love to collaborate on examples, tutorials, and other content that showcases how to build AI applications with TensorZero.
