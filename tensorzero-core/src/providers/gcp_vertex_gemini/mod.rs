@@ -2771,9 +2771,10 @@ mod tests {
             ..Default::default()
         };
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro", false);
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "GCP Vertex Gemini requires at least one message".to_string()
             }
@@ -3558,7 +3559,7 @@ mod tests {
         );
         assert!(result.is_err());
         let err = result.unwrap_err();
-        let details = err.get_owned_details();
+        let details = err.get_details();
         match details {
             ErrorDetails::InferenceClient { message, .. } => {
                 assert!(message.contains("Error parsing tool call arguments as JSON Value"));
@@ -3580,7 +3581,7 @@ mod tests {
         );
         assert!(result.is_err());
         let err = result.unwrap_err();
-        let details = err.get_owned_details();
+        let details = err.get_details();
         match details {
             ErrorDetails::InferenceClient { message, .. } => {
                 assert_eq!(message, "Tool call arguments must be a JSON object");
@@ -3779,7 +3780,8 @@ mod tests {
         let generic = Credential::FileContents(SecretString::from(invalid_json));
         let result = build_non_sdk_credentials(generic, "GCPVertexGemini");
         assert!(result.is_err());
-        let err = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let err = error.get_details();
         assert!(
             matches!(err, ErrorDetails::GCPCredentials { message } if message.contains("Failed to load GCP credentials"))
         );
@@ -3788,7 +3790,8 @@ mod tests {
         let generic = Credential::Static(SecretString::from("test"));
         let result = build_non_sdk_credentials(generic, "GCPVertexGemini");
         assert!(result.is_err());
-        let err = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let err = error.get_details();
         assert!(
             matches!(err, ErrorDetails::GCPCredentials { message } if message.contains("Invalid credential_location"))
         );
@@ -3875,7 +3878,7 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(
-            err.get_owned_details(),
+            *err.get_details(),
             ErrorDetails::InferenceServer {
                 message: "Unknown content part in GCP Vertex Gemini response".to_string(),
                 provider_type: "gcp_vertex_gemini".to_string(),
@@ -4215,7 +4218,7 @@ mod tests {
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        let details = error.get_owned_details();
+        let details = error.get_details();
         match details {
             ErrorDetails::InferenceServer { message, .. } => {
                 assert_eq!(message, "GCP Vertex Gemini response has no candidates");
@@ -4463,7 +4466,7 @@ mod tests {
         );
         assert!(result.is_err());
         let error = result.unwrap_err();
-        let details = error.get_owned_details();
+        let details = error.get_details();
         match details {
             ErrorDetails::InferenceServer { message, .. } => {
                 assert!(message.contains("executableCode is not supported in streaming response"));
@@ -4494,7 +4497,7 @@ mod tests {
         );
         assert!(result.is_err());
         let error = result.unwrap_err();
-        let details = error.get_owned_details();
+        let details = error.get_details();
         match details {
             ErrorDetails::InferenceServer { message, .. } => {
                 assert_eq!(
@@ -4522,7 +4525,7 @@ mod tests {
         );
         assert!(result.is_err());
         let error = result.unwrap_err();
-        let details = error.get_owned_details();
+        let details = error.get_details();
         match details {
             ErrorDetails::InferenceServer { message, .. } => {
                 assert_eq!(

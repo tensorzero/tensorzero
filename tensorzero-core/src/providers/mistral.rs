@@ -1045,7 +1045,8 @@ mod tests {
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
         // Test case 4: Invalid response with multiple choices
         let invalid_response_multiple_choices = MistralResponse {
@@ -1097,7 +1098,8 @@ mod tests {
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
     }
 
@@ -1107,7 +1109,8 @@ mod tests {
 
         // Test unauthorized error
         let unauthorized = handle_mistral_error(StatusCode::UNAUTHORIZED, "Unauthorized access");
-        let details = unauthorized.unwrap_err().get_owned_details();
+        let error = unauthorized.unwrap_err();
+        let details = error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
         if let ErrorDetails::InferenceClient {
             message,
@@ -1117,16 +1120,17 @@ mod tests {
             raw_response,
         } = details
         {
-            assert_eq!(message, "Unauthorized access");
-            assert_eq!(status_code, Some(StatusCode::UNAUTHORIZED));
-            assert_eq!(provider, PROVIDER_TYPE.to_string());
-            assert_eq!(raw_request, None);
-            assert_eq!(raw_response, None);
+            assert_eq!(*message, "Unauthorized access");
+            assert_eq!(*status_code, Some(StatusCode::UNAUTHORIZED));
+            assert_eq!(*provider, PROVIDER_TYPE.to_string());
+            assert_eq!(*raw_request, None);
+            assert_eq!(*raw_response, None);
         }
 
         // Test forbidden error
         let forbidden = handle_mistral_error(StatusCode::FORBIDDEN, "Forbidden access");
-        let details = forbidden.unwrap_err().get_owned_details();
+        let error = forbidden.unwrap_err();
+        let details = error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
         if let ErrorDetails::InferenceClient {
             message,
@@ -1136,16 +1140,17 @@ mod tests {
             raw_response,
         } = details
         {
-            assert_eq!(message, "Forbidden access");
-            assert_eq!(status_code, Some(StatusCode::FORBIDDEN));
-            assert_eq!(provider, PROVIDER_TYPE.to_string());
-            assert_eq!(raw_request, None);
-            assert_eq!(raw_response, None);
+            assert_eq!(*message, "Forbidden access");
+            assert_eq!(*status_code, Some(StatusCode::FORBIDDEN));
+            assert_eq!(*provider, PROVIDER_TYPE.to_string());
+            assert_eq!(*raw_request, None);
+            assert_eq!(*raw_response, None);
         }
 
         // Test rate limit error
         let rate_limit = handle_mistral_error(StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded");
-        let details = rate_limit.unwrap_err().get_owned_details();
+        let error = rate_limit.unwrap_err();
+        let details = error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
         if let ErrorDetails::InferenceClient {
             message,
@@ -1155,16 +1160,17 @@ mod tests {
             raw_response,
         } = details
         {
-            assert_eq!(message, "Rate limit exceeded");
-            assert_eq!(status_code, Some(StatusCode::TOO_MANY_REQUESTS));
-            assert_eq!(provider, PROVIDER_TYPE.to_string());
-            assert_eq!(raw_request, None);
-            assert_eq!(raw_response, None);
+            assert_eq!(*message, "Rate limit exceeded");
+            assert_eq!(*status_code, Some(StatusCode::TOO_MANY_REQUESTS));
+            assert_eq!(*provider, PROVIDER_TYPE.to_string());
+            assert_eq!(*raw_request, None);
+            assert_eq!(*raw_response, None);
         }
 
         // Test server error
         let server_error = handle_mistral_error(StatusCode::INTERNAL_SERVER_ERROR, "Server error");
-        let details = server_error.unwrap_err().get_owned_details();
+        let error = server_error.unwrap_err();
+        let details = error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
         if let ErrorDetails::InferenceServer {
             message,
@@ -1173,10 +1179,10 @@ mod tests {
             raw_response,
         } = details
         {
-            assert_eq!(message, "Server error");
-            assert_eq!(provider, PROVIDER_TYPE.to_string());
-            assert_eq!(raw_request, None);
-            assert_eq!(raw_response, None);
+            assert_eq!(*message, "Server error");
+            assert_eq!(*provider, PROVIDER_TYPE.to_string());
+            assert_eq!(*raw_request, None);
+            assert_eq!(*raw_response, None);
         }
     }
 
@@ -1207,7 +1213,7 @@ mod tests {
         let result = MistralCredentials::try_from(generic);
         assert!(result.is_err());
         assert!(matches!(
-            result.unwrap_err().get_owned_details(),
+            result.unwrap_err().get_details(),
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }
