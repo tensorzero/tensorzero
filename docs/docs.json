@@ -82,7 +82,6 @@
                   "gateway/guides/metrics-feedback",
                   "gateway/guides/multimodal-inference",
                   "gateway/guides/opentelemetry-otlp",
-                  "gateway/guides/performance-latency",
                   "gateway/guides/prompt-templates-schemas",
                   "gateway/guides/retries-fallbacks",
                   "gateway/guides/streaming-inference",
@@ -93,7 +92,6 @@
               "gateway/clients",
               "gateway/configuration-reference",
               "gateway/data-model",
-              "gateway/deployment",
               "gateway/integrations",
               {
                 "group": "API Reference",
@@ -134,8 +132,13 @@
             ]
           },
           {
-            "group": "UI",
-            "pages": ["ui/deployment"]
+            "group": "Deployment",
+            "pages": [
+              "deployment/tensorzero-gateway",
+              "deployment/tensorzero-ui",
+              "deployment/clickhouse",
+              "deployment/optimize-latency-and-throughput"
+            ]
           }
         ]
       }
@@ -234,6 +237,30 @@
     {
       "source": "/vision-roadmap",
       "destination": "/vision-and-roadmap"
+    },
+    {
+      "source": "/gateway/guides/performance-latency",
+      "destination": "/deployment/optimize-latency-and-throughput"
+    },
+    {
+      "source": "/gateway/guides/performance-latency/",
+      "destination": "/deployment/optimize-latency-and-throughput"
+    },
+    {
+      "source": "/gateway/deployment",
+      "destination": "/deployment/tensorzero-gateway"
+    },
+    {
+      "source": "/gateway/deployment/",
+      "destination": "/deployment/tensorzero-gateway"
+    },
+    {
+      "source": "/ui/deployment",
+      "destination": "/deployment/tensorzero-ui"
+    },
+    {
+      "source": "/ui/deployment/",
+      "destination": "/deployment/tensorzero-ui"
     }
   ]
 }
