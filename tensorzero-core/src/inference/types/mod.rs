@@ -4081,7 +4081,7 @@ mod tests {
         let input = json!({
             "role": "user",
             "content": [
-                {"type": "text", "value": {"complex": "json", "with": ["nested", "array"]}},
+                {"type": "template", "name": "user", "arguments": {"complex": "json", "with": ["nested", "array"]}},
                 {"type": "tool_call", "id": "456", "name": "another_tool", "arguments": {"key": "value"}}
             ]
         });
