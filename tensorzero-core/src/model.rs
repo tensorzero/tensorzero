@@ -1,3 +1,4 @@
+use crate::config::{otlp_trace_format, OtlpTracesFormat};
 use futures::future::try_join_all;
 use futures::StreamExt;
 use reqwest::Client;
@@ -10,7 +11,7 @@ use std::{env, fs};
 use strum::VariantNames;
 use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::error::Elapsed;
-use tracing::{span, Level, Span};
+use tracing::{info_span, Span};
 use tracing_futures::{Instrument, Instrumented};
 use url::Url;
 
@@ -86,6 +87,7 @@ impl UninitializedModelConfig {
         self,
         model_name: &str,
         provider_types: &ProviderTypesConfig,
+        otlp_format: OtlpTracesFormat,
     ) -> Result<ModelConfig, Error> {
         // We want `ModelProvider` to know its own name (from the 'providers' config section).
         // We first deserialize to `HashMap<Arc<str>, UninitializedModelProvider>`, and then
@@ -105,6 +107,7 @@ impl UninitializedModelConfig {
                         extra_headers: provider.extra_headers,
                         timeouts: provider.timeouts,
                         discard_unknown_chunks: provider.discard_unknown_chunks,
+                        otlp_format,
                     },
                 ))
             },
@@ -161,7 +164,7 @@ impl StreamResponse {
                 },
             ))) as ProviderInferenceResponseStreamInner)
                 .peekable()
-                .instrument(tracing::info_span!(
+                .instrument(info_span!(
                     "stream_from_cache",
                     otel.name = "stream_from_cache"
                 )),
@@ -282,8 +285,7 @@ impl ModelConfig {
                 clients.http_client,
                 clients.credentials,
             )
-            .instrument(span!(
-                Level::INFO,
+            .instrument(info_span!(
                 "infer",
                 provider_name = model_provider_request.provider_name
             ))
@@ -555,8 +557,7 @@ impl ModelConfig {
             })?;
             let response = provider
                 .start_batch_inference(requests, client, api_keys)
-                .instrument(span!(
-                    Level::INFO,
+                .instrument(info_span!(
                     "start_batch_inference",
                     provider_name = &**provider_name
                 ))
@@ -651,6 +652,8 @@ pub struct UninitializedModelProvider {
     /// know how to correctly merge them.
     #[serde(default)]
     pub discard_unknown_chunks: bool,
+    #[serde(default)]
+    pub otlp_format: OtlpTracesFormat,
 }
 
 #[derive(Debug, Serialize)]
@@ -666,6 +669,7 @@ pub struct ModelProvider {
     pub timeouts: TimeoutsConfig,
     /// See `UninitializedModelProvider.discard_unknown_chunks`.
     pub discard_unknown_chunks: bool,
+    pub otlp_format: OtlpTracesFormat,
 }
 
 impl ModelProvider {
@@ -1172,17 +1176,31 @@ pub struct StreamResponseAndMessages {
 }
 
 impl ModelProvider {
-    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference",
-        gen_ai.operation.name = "chat",
-        gen_ai.system = self.genai_system_name(),
-        gen_ai.request.model = self.genai_model_name(),
-    stream = false))]
     async fn infer(
         &self,
         request: ModelProviderRequest<'_>,
         client: &Client,
         api_keys: &InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
+        let span = info_span!(
+            "infer",
+            provider_name = &*self.name,
+            otel.name = "model_provider_inference",
+            stream = false
+        );
+        match otlp_trace_format() {
+            OtlpTracesFormat::OpenTelemetry => {
+                span.record("gen_ai.operation.name", "chat");
+                span.record("gen_ai.system", self.genai_system_name());
+                span.record("gen_ai.request.model", self.genai_model_name());
+            }
+            OtlpTracesFormat::OpenInference => {
+                span.record("openinference.span.kind", "chat");
+                span.record("llm.system", self.genai_system_name());
+                span.record("llm.model_name", self.genai_model_name());
+            }
+        }
+        let _enter = span.enter();
         match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider.infer(request, client, api_keys, self).await
@@ -1240,18 +1258,32 @@ impl ModelProvider {
         }
     }
 
-    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference",
-        gen_ai.operation.name = "chat",
-        gen_ai.system = self.genai_system_name(),
-        gen_ai.request.model = self.genai_model_name(),
-        time_to_first_token,
-    stream = true))]
     async fn infer_stream(
         &self,
         request: ModelProviderRequest<'_>,
         client: &Client,
         api_keys: &InferenceCredentials,
     ) -> Result<StreamAndRawRequest, Error> {
+        let span = info_span!(
+            "infer_stream",
+            provider_name = &*self.name,
+            otel.name = "model_provider_inference",
+            time_to_first_token = tracing::field::Empty,
+            stream = true
+        );
+        match otlp_trace_format() {
+            OtlpTracesFormat::OpenTelemetry => {
+                span.record("gen_ai.operation.name", "chat");
+                span.record("gen_ai.system", self.genai_system_name());
+                span.record("gen_ai.request.model", self.genai_model_name());
+            }
+            OtlpTracesFormat::OpenInference => {
+                span.record("openinference.span.kind", "chat");
+                span.record("llm.system", self.genai_system_name());
+                span.record("llm.model_name", self.genai_model_name());
+            }
+        }
+        let _enter = span.enter();
         let (stream, raw_request) = match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await
@@ -1850,6 +1882,7 @@ impl ShorthandModelConfig for ModelConfig {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    otlp_format,
                 },
             )]),
             timeouts: Default::default(),

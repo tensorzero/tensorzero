@@ -26,7 +26,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::cache::CacheParamsOptions;
-use crate::config::UninitializedVariantInfo;
+use crate::config::{UninitializedVariantInfo, OTLP_TRACE_FORMAT};
 use crate::embeddings::{Embedding, EmbeddingInput};
 use crate::endpoints::embeddings::Params as EmbeddingParams;
 use crate::endpoints::inference::{
@@ -123,7 +123,12 @@ pub async fn inference_handler(
         .into()),
     }?;
 
-    let response = inference(config, &http_client, clickhouse_connection_info, params, ()).await?;
+    let trace_format = config.gateway.export.otlp.traces.format;
+    let response = OTLP_TRACE_FORMAT
+        .scope(trace_format, async {
+            inference(config, &http_client, clickhouse_connection_info, params, ()).await
+        })
+        .await?;
 
     match response {
         InferenceOutput::NonStreaming(response) => {

@@ -58,12 +58,21 @@ tokio::task_local! {
     /// We need to access this from async code (e.g. when looking up GCP SDK credentials),
     /// so this needs to be a tokio task-local (as a task may be moved between threads)
     pub(crate) static SKIP_CREDENTIAL_VALIDATION: ();
+    /// When set to OtlpTracesFormat::OpenInference, we change the trace format
+    /// from the default OpenTelemetry GenAI standard to the Arize OpenInference standard.
+    pub(crate) static OTLP_TRACE_FORMAT: OtlpTracesFormat;
 }
 
 pub fn skip_credential_validation() -> bool {
     // tokio::task_local doesn't have an 'is_set' method, so we call 'try_with'
     // (which returns an `Err` if the task-local is not set)
     SKIP_CREDENTIAL_VALIDATION.try_with(|()| ()).is_ok()
+}
+
+pub fn otlp_trace_format() -> OtlpTracesFormat {
+    OTLP_TRACE_FORMAT
+        .try_with(|format| *format)
+        .unwrap_or_default()
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -419,6 +428,18 @@ pub struct OtlpTracesConfig {
     /// Enable OpenTelemetry traces export to the configured OTLP endpoint (configured via OTLP environment variables)
     #[serde(default)]
     pub enabled: bool,
+    #[serde(default)]
+    pub format: OtlpTracesFormat,
+}
+
+/// The OTLP generative AI format being used:
+/// - OpenTelemetry: https://opentelemetry.io/docs/specs/semconv/gen-ai/
+/// - OpenInference: https://arize.com/docs/ax/observe/tracing/tracing-concepts/what-is-openinference
+#[derive(Debug, Default, Copy, Clone, PartialEq, Serialize, Deserialize)]
+pub enum OtlpTracesFormat {
+    #[default]
+    OpenTelemetry,
+    OpenInference,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -982,6 +1003,11 @@ impl Config {
                 })
             })?
             .clone())
+    }
+
+    /// Get the OTLP traces format: OpenTelemetry vs OpenInference
+    pub fn otlp_format(&self) -> OtlpTracesFormat {
+        self.gateway.export.otlp.traces.format
     }
 }
 

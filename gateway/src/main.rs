@@ -15,7 +15,7 @@ use tokio::signal;
 use tower_http::trace::{DefaultOnFailure, TraceLayer};
 use tracing::Level;
 
-use tensorzero_core::config::{Config, ConfigFileGlob};
+use tensorzero_core::config::{Config, ConfigFileGlob, OtlpTracesFormat};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_migrations;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::endpoints;
@@ -379,7 +379,11 @@ async fn main() {
 
     // Print whether OpenTelemetry is enabled
     if config.gateway.export.otlp.traces.enabled {
-        tracing::info!("└ OpenTelemetry: enabled");
+        tracing::info!("├ OpenTelemetry: enabled");
+        match config.gateway.export.otlp.traces.format {
+            OtlpTracesFormat::OpenTelemetry => tracing::info!("└ OTLP Format: OpenTelemetry"),
+            OtlpTracesFormat::OpenInference => tracing::info!("└ OTLP Format: OpenInference"),
+        }
     } else {
         tracing::info!("└ OpenTelemetry: disabled");
     }

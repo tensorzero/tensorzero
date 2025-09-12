@@ -22,7 +22,9 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
-use crate::config::{Config, ObjectStoreInfo, SchemaData, UninitializedVariantInfo};
+use crate::config::{
+    Config, ObjectStoreInfo, SchemaData, UninitializedVariantInfo, OTLP_TRACE_FORMAT,
+};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
@@ -153,8 +155,12 @@ pub async fn inference_handler(
     }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
-    let inference_output =
-        inference(config, &http_client, clickhouse_connection_info, params, ()).await?;
+    let trace_format = config.gateway.export.otlp.traces.format;
+    let inference_output = OTLP_TRACE_FORMAT
+        .scope(trace_format, async {
+            inference(config, &http_client, clickhouse_connection_info, params, ()).await
+        })
+        .await?;
     match inference_output {
         InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
         InferenceOutput::Streaming(stream) => {
