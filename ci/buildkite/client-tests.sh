@@ -54,13 +54,10 @@ docker compose -f clients/docker-compose.tests.yml pull
 # Start shared infrastructure first
 # ------------------------------------------------------------------------------
 echo "Starting shared infrastructure..."
-docker compose -f clients/docker-compose.tests.yml up -d \
+docker compose -f clients/docker-compose.tests.yml up --wait \
   clickhouse mock-inference-provider minio provider-proxy gateway fixtures
 
-# Wait for all dependencies to be healthy
-echo "Waiting for infrastructure to be ready..."
-docker compose -f clients/docker-compose.tests.yml wait \
-  clickhouse mock-inference-provider minio provider-proxy gateway
+echo "All shared infrastructure is healthy!"
 
 # ------------------------------------------------------------------------------
 # Run tests in parallel against shared infrastructure
