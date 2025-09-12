@@ -176,7 +176,7 @@ impl UninitializedDiclOptimizationConfig {
         dimensions: Option<u32>,
         batch_size: Option<usize>,
         max_concurrency: Option<usize>,
-        k: Option<usize>,
+        k: Option<u32>,
         model: Option<String>,
         append_to_existing_variants: Option<bool>,
         credentials: Option<String>,
