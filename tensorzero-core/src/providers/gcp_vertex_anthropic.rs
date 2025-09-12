@@ -1458,9 +1458,10 @@ mod tests {
         };
         let anthropic_request_body =
             GCPVertexAnthropicRequestBody::new("claude-opus-4@20250514", &inference_request);
-        let details = anthropic_request_body.unwrap_err().get_owned_details();
+        let error = anthropic_request_body.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "Anthropic requires at least one message".to_string(),
             }
@@ -1999,9 +2000,10 @@ mod tests {
         };
         let response_code = StatusCode::BAD_REQUEST;
         let result = handle_anthropic_error(response_code, error_body.clone());
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceClient {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
@@ -2014,9 +2016,10 @@ mod tests {
         );
         let response_code = StatusCode::UNAUTHORIZED;
         let result = handle_anthropic_error(response_code, error_body.clone());
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceClient {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
@@ -2029,9 +2032,10 @@ mod tests {
         );
         let response_code = StatusCode::TOO_MANY_REQUESTS;
         let result = handle_anthropic_error(response_code, error_body.clone());
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceClient {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
@@ -2045,9 +2049,10 @@ mod tests {
         let response_code = StatusCode::NOT_FOUND;
         let result = handle_anthropic_error(response_code, error_body.clone());
         assert!(result.is_err());
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
                 raw_request: None,
@@ -2059,9 +2064,10 @@ mod tests {
         );
         let response_code = StatusCode::INTERNAL_SERVER_ERROR;
         let result = handle_anthropic_error(response_code, error_body.clone());
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
                 raw_request: None,
@@ -2421,9 +2427,10 @@ mod tests {
             &mut current_tool_id,
             false,
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
                 raw_request: None,
@@ -2534,9 +2541,10 @@ mod tests {
             &mut current_tool_id,
             false,
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockStart".to_string(),
                 raw_request: None,
@@ -2570,9 +2578,10 @@ mod tests {
             &mut current_tool_id,
             false,
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: r#"{"message":"Test error"}"#.to_string(),
                 raw_request: None,

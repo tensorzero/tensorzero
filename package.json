@@ -9,7 +9,7 @@
     "clean:node": "find . -name 'node_modules' -type d -prune -exec rm -rf '{}' +"
   },
   "devDependencies": {
-    "typescript": "^5.8.2"
+    "typescript": "^5.9.2"
   },
   "packageManager": "pnpm@10.15.0",
   "pnpm": {
