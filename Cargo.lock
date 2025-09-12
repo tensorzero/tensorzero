@@ -2815,6 +2815,7 @@ dependencies = [
  "async-stream",
  "axum",
  "chrono",
+ "clap",
  "eventsource-stream",
  "futures",
  "mimalloc",
