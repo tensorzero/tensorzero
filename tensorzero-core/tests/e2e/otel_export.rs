@@ -119,7 +119,7 @@ async fn test_otel_export_trace_export(
         .as_str()
         .expect("inference_id should be a string");
 
-    // It takes some time for the sapn to show up in Tempo
+    // It takes some time for the span to show up in Tempo
     tokio::time::sleep(std::time::Duration::from_secs(25)).await;
 
     let now = Utc::now().timestamp();
