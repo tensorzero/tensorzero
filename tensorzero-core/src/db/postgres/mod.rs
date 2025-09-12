@@ -33,7 +33,7 @@ impl PostgresConnectionInfo {
         let Some(pool) = self.get_pool() else {
             return Ok(());
         };
-        let migrator = migrate!("src/db/postgres/migrations");
+        let migrator = make_migrator();
         let expected_migrations: HashSet<i64> = migrator.iter().map(|m| m.version).collect();
         // Query the database for all successfully applied migration versions.
         let applied_migrations = get_applied_migrations(pool).await.map_err(|e| {
@@ -68,14 +68,11 @@ pub async fn manual_run_postgres_migrations() -> Result<(), Error> {
                 message: err.to_string(),
             })
         })?;
-    migrate!("src/db/postgres/migrations")
-        .run(&pool)
-        .await
-        .map_err(|e| {
-            Error::new(ErrorDetails::PostgresMigration {
-                message: e.to_string(),
-            })
+    make_migrator().run(&pool).await.map_err(|e| {
+        Error::new(ErrorDetails::PostgresMigration {
+            message: e.to_string(),
         })
+    })
 }
 
 /// Helper function to retrieve the set of applied migrations from the database.
@@ -90,4 +87,8 @@ async fn get_applied_migrations(pool: &PgPool) -> Result<HashSet<i64>, sqlx::Err
         applied_migrations.insert(id);
     }
     Ok(applied_migrations)
+}
+
+fn make_migrator() -> sqlx::migrate::Migrator {
+    migrate!("src/db/postgres/migrations")
 }
