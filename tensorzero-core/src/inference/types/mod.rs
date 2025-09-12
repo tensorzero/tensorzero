@@ -4089,10 +4089,13 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 2);
         match &message.content[0] {
-            InputMessageContent::Text(TextKind::LegacyValue { value }) => {
+            InputMessageContent::Template(TemplateInput { name, arguments }) => {
+                assert_eq!(name, "user");
                 assert_eq!(
-                    value,
-                    &json!({"complex": "json", "with": ["nested", "array"]})
+                    arguments,
+                    json!({"complex": "json", "with": ["nested", "array"]})
+                        .as_object()
+                        .unwrap()
                 );
             }
             _ => panic!("Expected Text content with JSON object"),

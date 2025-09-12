@@ -228,7 +228,7 @@ pub struct FunctionConfigChat {
     // * do not have the template defined at all, or
     // * define the template as an old-style input wrapper
     //   (which can only be invoked by a {`"type": "text", "text": "..."`} input block)
-    // 
+    //
     // If it least one variant defines the template as a named template (non legacy-input-wrapper),
     // then its name will be included in this set, and we'll let the request go through.
     // The early rejection logic improves error messages in the case where every variant invocation
@@ -283,7 +283,11 @@ impl FunctionConfig {
     pub fn validate_input(&self, input: &Input) -> Result<(), Error> {
         match &self {
             FunctionConfig::Chat(params) => {
-                validate_all_text_input(&params.schemas, input, &params.all_explicit_templates_names)?;
+                validate_all_text_input(
+                    &params.schemas,
+                    input,
+                    &params.all_explicit_templates_names,
+                )?;
             }
             FunctionConfig::Json(params) => {
                 validate_all_text_input(&params.schemas, input, &params.all_template_names)?;
