@@ -165,8 +165,8 @@ impl Variant for ChainOfThoughtConfig {
         self.inner.get_all_template_paths()
     }
 
-    fn get_all_template_names(&self) -> HashSet<String> {
-        self.inner.get_all_template_names()
+    fn get_all_explicit_template_names(&self) -> HashSet<String> {
+        self.inner.get_all_explicit_template_names()
     }
 
     async fn start_batch_inference<'a>(

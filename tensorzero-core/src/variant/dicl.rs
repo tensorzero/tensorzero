@@ -267,7 +267,7 @@ impl Variant for DiclConfig {
         vec![]
     }
 
-    fn get_all_template_names(&self) -> HashSet<String> {
+    fn get_all_explicit_template_names(&self) -> HashSet<String> {
         HashSet::new()
     }
 

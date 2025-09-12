@@ -1201,7 +1201,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_templates_names: HashSet::new(),
         })
     }
 
@@ -1216,7 +1216,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_templates_names: HashSet::new(),
         })
     }
 

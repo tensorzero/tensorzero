@@ -557,8 +557,8 @@ impl Variant for ChatCompletionConfig {
         self.templates.get_all_template_paths()
     }
 
-    fn get_all_template_names(&self) -> HashSet<String> {
-        self.templates.get_all_template_names()
+    fn get_all_explicit_template_names(&self) -> HashSet<String> {
+        self.templates.get_all_explicit_template_names()
     }
 
     async fn start_batch_inference<'a>(
@@ -1125,7 +1125,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_templates_names: HashSet::new(),
         });
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".into(),
@@ -2043,7 +2043,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_templates_names: HashSet::new(),
         })));
 
         let system_template = get_system_template();
@@ -2316,7 +2316,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_templates_names: HashSet::new(),
         });
         let mut inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {

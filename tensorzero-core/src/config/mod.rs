@@ -906,7 +906,7 @@ impl Config {
                     tool_choice: ToolChoice::None,
                     parallel_tool_calls: None,
                     description: None,
-                    all_template_names: HashSet::new(),
+                    all_explicit_templates_names: HashSet::new(),
                 },
             ))))
         } else {
@@ -1274,7 +1274,7 @@ impl UninitializedFunctionConfig {
                     .collect::<Result<HashMap<_, _>, Error>>()?;
                 let mut all_template_names = HashSet::new();
                 for (name, variant) in &variants {
-                    all_template_names.extend(variant.get_all_template_names());
+                    all_template_names.extend(variant.get_all_explicit_template_names());
                     if let VariantConfig::ChatCompletion(chat_config) = &variant.inner {
                         if chat_config.json_mode.is_some() {
                             return Err(ErrorDetails::Config {
@@ -1293,7 +1293,7 @@ impl UninitializedFunctionConfig {
                     tool_choice: params.tool_choice,
                     parallel_tool_calls: params.parallel_tool_calls,
                     description: params.description,
-                    all_template_names,
+                    all_explicit_templates_names: all_template_names,
                 }))
             }
             UninitializedFunctionConfig::Json(params) => {
@@ -1339,7 +1339,7 @@ impl UninitializedFunctionConfig {
 
                 for (name, variant) in &variants {
                     let mut variant_missing_mode = None;
-                    all_template_names.extend(variant.get_all_template_names());
+                    all_template_names.extend(variant.get_all_explicit_template_names());
                     match &variant.inner {
                         VariantConfig::ChatCompletion(chat_config) => {
                             if chat_config.json_mode.is_none() {

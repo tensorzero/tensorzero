@@ -231,10 +231,10 @@ impl Variant for BestOfNSamplingConfig {
         self.evaluator.inner.get_all_template_paths()
     }
 
-    fn get_all_template_names(&self) -> HashSet<String> {
-        // The candidate variants will  already have 'get_all_template_names' called on them,
+    fn get_all_explicit_template_names(&self) -> HashSet<String> {
+        // The candidate variants will  already have 'get_all_explicit_template_names' called on them,
         // so we don't need to look them up here
-        self.evaluator.inner.get_all_template_names()
+        self.evaluator.inner.get_all_explicit_template_names()
     }
 
     async fn start_batch_inference<'a>(

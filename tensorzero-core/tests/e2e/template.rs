@@ -379,11 +379,11 @@ async fn e2e_test_invalid_system_input_template_no_schema() {
     let status = response.status();
     let response_json = response.json::<Value>().await.unwrap();
     println!("Response JSON: {response_json}");
-    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(status, StatusCode::BAD_REQUEST);
     let error = response_json["error"].as_str().unwrap();
     assert_eq!(
         error,
-        "All variants failed with errors: mixture_of_n: No candidates to fuse in the mixture of n\ntest: System message content {\"my_invalid\":\"system message\"} is not a string but `input_wrappers.system` is set in the variant config\nbest_of_n: No candidates to select from in best of n"
+        "System message has non-string content but there is no template `system` in any variant"
     );
 }
 

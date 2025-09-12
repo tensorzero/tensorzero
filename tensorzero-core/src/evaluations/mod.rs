@@ -407,7 +407,7 @@ impl UninitializedEvaluatorConfig {
                     .collect();
                 let all_template_names: HashSet<String> = variants
                     .values()
-                    .flat_map(|v| v.get_all_template_names())
+                    .flat_map(|v| v.get_all_explicit_template_names())
                     .collect();
                 let function_config = FunctionConfig::Json(FunctionConfigJson {
                     variants,

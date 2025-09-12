@@ -47,8 +47,16 @@ impl ChatTemplates {
         self.templates.get("system")
     }
 
-    pub fn get_all_template_names(&self) -> HashSet<String> {
-        self.templates.keys().cloned().collect()
+    pub fn get_all_explicit_template_names(&self) -> HashSet<String> {
+        let mut names = HashSet::new();
+        for (key, value) in &self.templates {
+            // Exclude legacy templates with no schema - these templates
+            // can only be invoked by a {`"type": "text", "text": "..."`} input block
+            if !(value.legacy_definition && value.schema.is_none()) {
+                names.insert(key.clone());
+            }
+        }
+        names
     }
 
     pub fn get_all_template_paths(&self) -> Vec<&PathWithContents> {

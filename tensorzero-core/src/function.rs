@@ -221,11 +221,21 @@ pub struct FunctionConfigChat {
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
     pub description: Option<String>,
-    // Holds all template names (e.g. 'user', 'my_custom_template') that occur
-    // in any (nested) variants. This is used to reject messages that reference
-    // a no-schema template not defined by any variants.
+    // Holds all template names (e.g. 'user', 'my_custom_template'
+    // which can be invoked through a `{"type": "template", "name": "..."}` input block)
+    // This is used to perform early rejection of a template invocation,
+    // in the case where all variants either:
+    // * do not have the template defined at all, or
+    // * define the template as an old-style input wrapper
+    //   (which can only be invoked by a {`"type": "text", "text": "..."`} input block)
+    // 
+    // If it least one variant defines the template as a named template (non legacy-input-wrapper),
+    // then its name will be included in this set, and we'll let the request go through.
+    // The early rejection logic improves error messages in the case where every variant invocation
+    // is guaranteed to fail - we avoid showing an 'All variants failed' error message with
+    // the same template error for every variant.
     #[serde(skip)]
-    pub all_template_names: HashSet<String>,
+    pub all_explicit_templates_names: HashSet<String>,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -273,7 +283,7 @@ impl FunctionConfig {
     pub fn validate_input(&self, input: &Input) -> Result<(), Error> {
         match &self {
             FunctionConfig::Chat(params) => {
-                validate_all_text_input(&params.schemas, input, &params.all_template_names)?;
+                validate_all_text_input(&params.schemas, input, &params.all_explicit_templates_names)?;
             }
             FunctionConfig::Json(params) => {
                 validate_all_text_input(&params.schemas, input, &params.all_template_names)?;
@@ -1742,7 +1752,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             description: Some("A chat function description".to_string()),
-            all_template_names: HashSet::new(),
+            all_explicit_templates_names: HashSet::new(),
         };
         let function_config = FunctionConfig::Chat(chat_config);
         assert_eq!(
@@ -1775,7 +1785,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_templates_names: HashSet::new(),
         };
         let function_config = FunctionConfig::Chat(chat_config);
         assert_eq!(function_config.description(), None);

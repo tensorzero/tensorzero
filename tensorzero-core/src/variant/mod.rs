@@ -230,7 +230,7 @@ pub trait Variant {
     ) -> Result<(), Error>;
 
     fn get_all_template_paths(&self) -> Vec<&PathWithContents>;
-    fn get_all_template_names(&self) -> HashSet<String>;
+    fn get_all_explicit_template_names(&self) -> HashSet<String>;
 
     async fn start_batch_inference<'a>(
         &'a self,
@@ -571,13 +571,13 @@ impl Variant for VariantInfo {
         }
     }
 
-    fn get_all_template_names(&self) -> HashSet<String> {
+    fn get_all_explicit_template_names(&self) -> HashSet<String> {
         match &self.inner {
-            VariantConfig::ChatCompletion(params) => params.get_all_template_names(),
-            VariantConfig::BestOfNSampling(params) => params.get_all_template_names(),
-            VariantConfig::Dicl(params) => params.get_all_template_names(),
-            VariantConfig::MixtureOfN(params) => params.get_all_template_names(),
-            VariantConfig::ChainOfThought(params) => params.get_all_template_names(),
+            VariantConfig::ChatCompletion(params) => params.get_all_explicit_template_names(),
+            VariantConfig::BestOfNSampling(params) => params.get_all_explicit_template_names(),
+            VariantConfig::Dicl(params) => params.get_all_explicit_template_names(),
+            VariantConfig::MixtureOfN(params) => params.get_all_explicit_template_names(),
+            VariantConfig::ChainOfThought(params) => params.get_all_explicit_template_names(),
         }
     }
 }
@@ -960,7 +960,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_templates_names: HashSet::new(),
         });
         let json_mode = JsonMode::Off;
 
@@ -1165,7 +1165,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_templates_names: HashSet::new(),
         });
 
         let request_messages = vec![RequestMessage {
@@ -1462,7 +1462,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_templates_names: HashSet::new(),
         });
 
         let request_messages = vec![RequestMessage {
@@ -1604,7 +1604,7 @@ mod tests {
             tool_choice: crate::tool::ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_templates_names: HashSet::new(),
         });
 
         // Create an input message
@@ -1751,7 +1751,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_templates_names: HashSet::new(),
         })));
 
         let request_messages = vec![RequestMessage {

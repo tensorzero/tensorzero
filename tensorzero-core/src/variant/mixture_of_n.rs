@@ -231,8 +231,8 @@ impl Variant for MixtureOfNConfig {
         self.fuser.inner.get_all_template_paths()
     }
 
-    fn get_all_template_names(&self) -> HashSet<String> {
-        self.fuser.inner.get_all_template_names()
+    fn get_all_explicit_template_names(&self) -> HashSet<String> {
+        self.fuser.inner.get_all_explicit_template_names()
     }
 
     async fn start_batch_inference<'a>(
@@ -1536,7 +1536,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_templates_names: HashSet::new(),
         });
 
         let InferenceOrStreamResult::NonStream(result) = mixture_of_n_variant
