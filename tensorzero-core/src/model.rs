@@ -15,7 +15,8 @@ use url::Url;
 
 use crate::cache::{
     cache_lookup, cache_lookup_streaming, start_cache_write, start_cache_write_streaming,
-    CacheData, ModelProviderRequest, NonStreamingCacheData, StreamingCacheData,
+    CacheData, CacheValidationInfo, ModelProviderRequest, NonStreamingCacheData,
+    StreamingCacheData,
 };
 use crate::config::{skip_credential_validation, ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
@@ -426,13 +427,22 @@ impl ModelConfig {
                             let _ = start_cache_write(
                                 clients.clickhouse_connection_info,
                                 cache_key,
-                                NonStreamingCacheData {
-                                    blocks: response.output.clone(),
+                                CacheData {
+                                    output: NonStreamingCacheData {
+                                        blocks: response.output.clone(),
+                                    },
+                                    raw_request: response.raw_request.clone(),
+                                    raw_response: response.raw_response.clone(),
+                                    input_tokens: response.usage.input_tokens,
+                                    output_tokens: response.usage.output_tokens,
+                                    finish_reason: response.finish_reason,
                                 },
-                                &response.raw_request,
-                                &response.raw_response,
-                                &response.usage,
-                                response.finish_reason.as_ref(),
+                                CacheValidationInfo {
+                                    tool_config: request
+                                        .tool_config
+                                        .clone()
+                                        .map(std::borrow::Cow::into_owned),
+                                },
                             );
                         }
 
@@ -587,6 +597,11 @@ async fn stream_with_cache_write(
 ) -> Result<PeekableProviderInferenceResponseStream, Error> {
     let cache_key = model_request.get_cache_key()?;
     let clickhouse_info = clients.clickhouse_connection_info.clone();
+    let tool_config = model_request
+        .request
+        .tool_config
+        .clone()
+        .map(std::borrow::Cow::into_owned);
     Ok((Box::pin(async_stream::stream! {
         let mut buffer = vec![];
         let mut errored = false;
@@ -612,6 +627,7 @@ async fn stream_with_cache_write(
                 buffer,
                 &raw_request,
                 &usage,
+                tool_config
             );
         }
     }) as ProviderInferenceResponseStreamInner).peekable())
