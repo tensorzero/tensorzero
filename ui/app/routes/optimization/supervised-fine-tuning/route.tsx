@@ -125,6 +125,7 @@ function SupervisedFineTuningImpl(props: LoaderData) {
         clearInterval(interval);
       };
     }
+    return undefined;
   }, [jobInfo, revalidator]);
 
   const finalResult =
