@@ -14,6 +14,7 @@ from tensorzero import (
     TensorZeroGateway,
     TogetherSFTConfig,
 )
+from uuid_utils import uuid7
 
 
 def test_sync_openai_rft(
@@ -77,7 +78,7 @@ def test_sync_dicl_chat(
 ):
     optimization_config = DiclOptimizationConfig(
         embedding_model="text-embedding-3-small",
-        variant_name="test_dicl",
+        variant_name=f"test_dicl_{uuid7()}",
         function_name="basic_test",
         dimensions=None,
         batch_size=None,
@@ -106,7 +107,7 @@ def test_sync_dicl_json(
 ):
     optimization_config = DiclOptimizationConfig(
         embedding_model="text-embedding-3-small",
-        variant_name="test_dicl_json",
+        variant_name=f"test_dicl_json_{uuid7()}",
         function_name="json_success",
         dimensions=None,
         batch_size=None,
@@ -265,7 +266,7 @@ async def test_async_dicl_chat(
 ):
     optimization_config = DiclOptimizationConfig(
         embedding_model="text-embedding-3-small",
-        variant_name="test_dicl",
+        variant_name=f"test_dicl_{uuid7()}",
         function_name="basic_test",
         dimensions=None,
         batch_size=None,
@@ -297,7 +298,7 @@ async def test_async_dicl_json(
 ):
     optimization_config = DiclOptimizationConfig(
         embedding_model="text-embedding-3-small",
-        variant_name="test_dicl_json",
+        variant_name=f"test_dicl_json_{uuid7()}",
         function_name="json_success",
         dimensions=None,
         batch_size=None,
