@@ -78,7 +78,7 @@ impl BatchSender {
         // We use `spawn_blocking` to ensure that when the runtime shuts down, it waits for this task to complete.
         let writer_handle = tokio::task::spawn_blocking(move || {
             handle.block_on(async move {
-                tracing::info!("ClickHouse batch write handler started");
+                tracing::debug!("ClickHouse batch write handler started");
                 writer.process(clickhouse, config).await;
                 tracing::info!("ClickHouse batch write handler finished");
             });
@@ -123,7 +123,10 @@ impl BatchWriter {
             let batch_timeout = Duration::from_millis(config.flush_interval_ms);
             join_set.spawn(async move {
                 let mut buffer = Vec::with_capacity(config.max_rows);
-                while !channel.is_closed() {
+                // The channel can be closed but still contain messages.
+                // We continue looping until the channel is closed and empty, at which point we're guaranteed
+                // to never see any new messages from `channel.recv/recv_many`.
+                while !channel.is_closed() || !channel.is_empty() {
                     let deadline = Instant::now() + batch_timeout;
                     // Repeatedly fetch entries from the channel until we have a full batch.
                     // We exit early from the loop if our deadline is reached, and submit

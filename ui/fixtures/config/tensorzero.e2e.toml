@@ -58,7 +58,7 @@ type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 json_mode = "strict"
-retries = { num_retries = 4, max_delay_s = 10 }
+retries = { num_retries = 4 }
 temperature = 0
 
 [functions.extract_entities.variants.gpt4o_initial_prompt]
@@ -211,7 +211,7 @@ retries = { num_retries = 4, max_delay_s = 10 }
 type = "chat"
 tools = ["think", "search_wikipedia", "load_wikipedia_page", "answer_question"]
 tool_choice = "required"
-parallel_tool_calls = true
+parallel_tool_calls = false
 
 [functions.multi_hop_rag_agent.variants.baseline]
 type = "chat_completion"

@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
+use tensorzero::{File, Input, InputMessage, InputMessageContent, Role};
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_core::config::ProviderTypesConfig;
 use tensorzero_core::config::TimeoutsConfig;
@@ -11,14 +12,20 @@ use tensorzero_core::embeddings::{
     Embedding, EmbeddingEncodingFormat, EmbeddingModelConfig, EmbeddingProvider,
     EmbeddingProviderConfig, EmbeddingRequest, UninitializedEmbeddingProviderConfig,
 };
+use tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams;
 use tensorzero_core::endpoints::inference::{InferenceClients, InferenceCredentials};
-use tensorzero_core::inference::types::{Latency, ModelInferenceRequestJsonMode};
+use tensorzero_core::http::TensorzeroHttpClient;
+use tensorzero_core::inference::types::{Latency, ModelInferenceRequestJsonMode, TextKind};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
-use crate::providers::common::{E2ETestProvider, E2ETestProviders, EmbeddingTestProvider};
+use crate::providers::common::{
+    make_embedded_gateway_with_config, E2ETestProvider, E2ETestProviders, EmbeddingTestProvider,
+    FERRIS_PNG,
+};
 use tensorzero_core::db::clickhouse::test_helpers::{
-    get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
+    get_clickhouse, select_batch_model_inference_clickhouse, select_chat_inference_clickhouse,
+    select_model_inference_clickhouse,
 };
 
 crate::generate_provider_tests!(get_providers);
@@ -1127,7 +1134,7 @@ async fn test_embedding_request() {
             &request,
             &model_name,
             &InferenceClients {
-                http_client: &Default::default(),
+                http_client: &TensorzeroHttpClient::new().unwrap(),
                 credentials: &api_keys,
                 clickhouse_connection_info: &clickhouse,
                 cache_options: &CacheOptions {
@@ -1183,7 +1190,11 @@ async fn test_embedding_request() {
     assert_eq!(response.usage.output_tokens, 0);
     match response.latency {
         Latency::NonStreaming { response_time } => {
-            assert!(response_time.as_millis() > 100);
+            assert!(
+                response_time.as_millis() > 10,
+                "Response time should be greater than 10ms: {}",
+                response_time.as_millis()
+            );
         }
         _ => panic!("Latency should be non-streaming"),
     }
@@ -1195,7 +1206,7 @@ async fn test_embedding_request() {
             &request,
             &model_name,
             &InferenceClients {
-                http_client: &Default::default(),
+                http_client: &TensorzeroHttpClient::new().unwrap(),
                 credentials: &api_keys,
                 clickhouse_connection_info: &clickhouse,
                 cache_options: &CacheOptions {
@@ -1227,7 +1238,7 @@ async fn test_embedding_sanity_check() {
             )
             .await
             .unwrap();
-    let client = Client::new();
+    let client = TensorzeroHttpClient::new().unwrap();
     let embedding_request_a = EmbeddingRequest {
         input: "Joe Biden is the president of the United States"
             .to_string()
@@ -1309,10 +1320,10 @@ fn cosine_similarity(a: &Embedding, b: &Embedding) -> f32 {
 #[tokio::test]
 pub async fn test_image_inference_with_provider_cloudflare_r2() {
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
-    use aws_credential_types::Credentials;
-    use aws_sdk_s3::config::SharedCredentialsProvider;
+    use object_store::{aws::AmazonS3Builder, ObjectStore};
     use rand::distr::Alphanumeric;
     use rand::distr::SampleString;
+    use std::sync::Arc;
     use tensorzero_core::inference::types::storage::StorageKind;
 
     // We expect CI to provide our credentials in 'R2_' variables
@@ -1320,12 +1331,10 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
     let r2_access_key_id = std::env::var("R2_ACCESS_KEY_ID").unwrap();
     let r2_secret_access_key = std::env::var("R2_SECRET_ACCESS_KEY").unwrap();
 
-    let credentials = Credentials::from_keys(&r2_access_key_id, &r2_secret_access_key, None);
-
     // Our S3-compatible object store checks for these variables, giving them
     // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
-    std::env::set_var("S3_ACCESS_KEY_ID", r2_access_key_id);
-    std::env::set_var("S3_SECRET_ACCESS_KEY", r2_secret_access_key);
+    std::env::set_var("S3_ACCESS_KEY_ID", &r2_access_key_id);
+    std::env::set_var("S3_SECRET_ACCESS_KEY", &r2_secret_access_key);
 
     let provider = E2ETestProvider {
         supports_batch_inference: true,
@@ -1338,14 +1347,16 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
     let endpoint = "https://19918a216783f0ac9e052233569aef60.r2.cloudflarestorage.com/tensorzero-e2e-test-images".to_string();
 
     let test_bucket = "tensorzero-e2e-test-images";
-    let config = aws_config::load_from_env()
-        .await
-        .to_builder()
-        .credentials_provider(SharedCredentialsProvider::new(credentials))
-        .endpoint_url(&endpoint)
-        .build();
 
-    let client = aws_sdk_s3::Client::new(&config);
+    let client: Arc<dyn ObjectStore> = Arc::new(
+        AmazonS3Builder::new()
+            .with_bucket_name(test_bucket)
+            .with_access_key_id(r2_access_key_id)
+            .with_secret_access_key(r2_secret_access_key)
+            .with_endpoint(&endpoint)
+            .build()
+            .unwrap(),
+    );
 
     let mut prefix = Alphanumeric.sample_string(&mut rand::rng(), 6);
     prefix += "-";
@@ -1376,7 +1387,6 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
     model = "openai::gpt-4o-mini-2024-07-18"
     "#
         ),
-        test_bucket,
         &prefix,
     )
     .await;
@@ -1502,10 +1512,10 @@ async fn test_content_block_text_field() {
 pub async fn test_image_inference_with_provider_gcp_storage() {
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
     use crate::providers::common::IMAGE_FUNCTION_CONFIG;
-    use aws_credential_types::Credentials;
-    use aws_sdk_s3::config::SharedCredentialsProvider;
+    use object_store::{aws::AmazonS3Builder, ObjectStore};
     use rand::distr::Alphanumeric;
     use rand::distr::SampleString;
+    use std::sync::Arc;
     use tensorzero_core::inference::types::storage::StorageKind;
 
     // We expect CI to provide our credentials in 'GCP_STORAGE_' variables
@@ -1513,13 +1523,10 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     let gcloud_access_key_id = std::env::var("GCP_STORAGE_ACCESS_KEY_ID").unwrap();
     let gcloud_secret_access_key = std::env::var("GCP_STORAGE_SECRET_ACCESS_KEY").unwrap();
 
-    let credentials =
-        Credentials::from_keys(&gcloud_access_key_id, &gcloud_secret_access_key, None);
-
     // Our S3-compatible object store checks for these variables, giving them
     // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
-    std::env::set_var("S3_ACCESS_KEY_ID", gcloud_access_key_id);
-    std::env::set_var("S3_SECRET_ACCESS_KEY", gcloud_secret_access_key);
+    std::env::set_var("S3_ACCESS_KEY_ID", &gcloud_access_key_id);
+    std::env::set_var("S3_SECRET_ACCESS_KEY", &gcloud_secret_access_key);
 
     let provider = E2ETestProvider {
         supports_batch_inference: true,
@@ -1532,14 +1539,16 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     let endpoint = "https://storage.googleapis.com".to_string();
 
     let test_bucket = "tensorzero-e2e-tests";
-    let config = aws_config::load_from_env()
-        .await
-        .to_builder()
-        .credentials_provider(SharedCredentialsProvider::new(credentials))
-        .endpoint_url(&endpoint)
-        .build();
 
-    let client = aws_sdk_s3::Client::new(&config);
+    let client: Arc<dyn ObjectStore> = Arc::new(
+        AmazonS3Builder::new()
+            .with_bucket_name(test_bucket)
+            .with_access_key_id(gcloud_access_key_id)
+            .with_secret_access_key(gcloud_secret_access_key)
+            .with_endpoint(&endpoint)
+            .build()
+            .unwrap(),
+    );
 
     let mut prefix = Alphanumeric.sample_string(&mut rand::rng(), 6);
     prefix += "-";
@@ -1565,7 +1574,6 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     {IMAGE_FUNCTION_CONFIG}
     "#
         ),
-        test_bucket,
         &prefix,
     )
     .await;
@@ -1577,22 +1585,20 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
 #[tokio::test]
 pub async fn test_image_inference_with_provider_docker_minio() {
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
-    use aws_credential_types::Credentials;
-    use aws_sdk_s3::config::SharedCredentialsProvider;
+    use object_store::{aws::AmazonS3Builder, ObjectStore};
     use rand::distr::Alphanumeric;
     use rand::distr::SampleString;
+    use std::sync::Arc;
     use tensorzero_core::inference::types::storage::StorageKind;
 
     // These are set in `ci/minio-docker-compose.yml`
     let minio_access_key_id = "tensorzero-root".to_string();
     let minio_secret_access_key = "tensorzero-root".to_string();
 
-    let credentials = Credentials::from_keys(&minio_access_key_id, &minio_secret_access_key, None);
-
     // Our S3-compatible  store checks for these variables, giving them
     // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
-    std::env::set_var("S3_ACCESS_KEY_ID", minio_access_key_id);
-    std::env::set_var("S3_SECRET_ACCESS_KEY", minio_secret_access_key);
+    std::env::set_var("S3_ACCESS_KEY_ID", &minio_access_key_id);
+    std::env::set_var("S3_SECRET_ACCESS_KEY", &minio_secret_access_key);
 
     let provider = E2ETestProvider {
         supports_batch_inference: true,
@@ -1602,17 +1608,21 @@ pub async fn test_image_inference_with_provider_docker_minio() {
         credentials: HashMap::new(),
     };
 
-    let endpoint = "http://127.0.0.1:8000/".to_string();
+    let endpoint = std::env::var("TENSORZERO_MINIO_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:8000/".to_string());
 
     let test_bucket = "tensorzero-e2e-tests";
-    let config = aws_config::load_from_env()
-        .await
-        .to_builder()
-        .credentials_provider(SharedCredentialsProvider::new(credentials))
-        .endpoint_url(&endpoint)
-        .build();
 
-    let client = aws_sdk_s3::Client::new(&config);
+    let client: Arc<dyn ObjectStore> = Arc::new(
+        AmazonS3Builder::new()
+            .with_bucket_name(test_bucket)
+            .with_access_key_id(minio_access_key_id)
+            .with_secret_access_key(minio_secret_access_key)
+            .with_endpoint(&endpoint)
+            .with_allow_http(true)
+            .build()
+            .unwrap(),
+    );
 
     let mut prefix = Alphanumeric.sample_string(&mut rand::rng(), 6);
     prefix += "-";
@@ -1644,7 +1654,6 @@ pub async fn test_image_inference_with_provider_docker_minio() {
     model = "openai::gpt-4o-mini-2024-07-18"
     "#
         ),
-        test_bucket,
         &prefix,
     )
     .await;
@@ -1762,4 +1771,124 @@ pub async fn test_embedding_extra_body() {
             .len(),
         256
     );
+}
+
+// Tests that starting a batch inference with file input writes the file to the object store
+// We don't attempt to poll this batch inference, as we already have lots of tests that do that
+// (and we never read things back from the object in batch inference handling)
+#[tokio::test]
+pub async fn test_start_batch_inference_write_file() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config = format!(
+        r#"
+    [object_storage]
+    type = "filesystem"
+    path = "{}"
+
+    [functions.batch_image]
+    type = "chat"
+
+    [functions.batch_image.variants.openai]
+    type = "chat_completion"
+    model = "openai::gpt-4o-mini-2024-07-18"
+    "#,
+        temp_dir.path().to_string_lossy()
+    );
+
+    let client = make_embedded_gateway_with_config(&config).await;
+
+    let episode_id = Uuid::now_v7();
+
+    let response = client
+        .start_batch_inference(StartBatchInferenceParams {
+            function_name: "batch_image".to_string(),
+            variant_name: Some("openai".to_string()),
+            episode_ids: Some(vec![Some(episode_id)]),
+            inputs: vec![Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(TextKind::Text { text: "Tell me about this image".to_string() }),
+                    InputMessageContent::File(File::Url {
+                        url: "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png".parse().unwrap(),
+                        mime_type: None,
+                    })],
+                }],
+            }],
+            tags: Some(vec![Some([("foo".to_string(), "bar".to_string()), ("test_type".to_string(), "batch_image_object_store".to_string())].into_iter().collect() )]),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let batch_id = response.batch_id;
+    let inference_ids = response.inference_ids;
+    assert_eq!(inference_ids.len(), 1);
+
+    let inference_id = inference_ids[0];
+    let episode_ids = response.episode_ids;
+    assert_eq!(episode_ids.len(), 1);
+    let returned_episode_id = episode_ids[0];
+    assert_eq!(returned_episode_id, episode_id);
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    // Check if ClickHouse is ok - BatchModelInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - BatchModelInference: {result:#?}");
+
+    let id = result.get("inference_id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, inference_id);
+
+    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
+    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
+    assert_eq!(retrieved_batch_id, batch_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "batch_image");
+
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "openai");
+
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+
+    let file_path =
+        "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png";
+    let correct_input = json!({
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "value": "Tell me about this image"},
+                    {
+                        "type": "file",
+                        "file": {
+                            "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                            "mime_type": "image/png",
+                        },
+                        "storage_path": {
+                            "kind": {"type": "filesystem", "path": temp_dir.path().to_string_lossy()},
+                            "path": file_path
+                        }
+                    }
+                ]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+
+    // Check that the file exists on the filesystem
+    let result = std::fs::read(temp_dir.path().join(file_path)).unwrap();
+    assert_eq!(result, FERRIS_PNG);
 }

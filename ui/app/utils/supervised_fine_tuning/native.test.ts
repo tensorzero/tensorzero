@@ -39,7 +39,7 @@ describe("native sft", () => {
         learning_rate_multiplier: 1,
         n_epochs: 1,
         credentials: null,
-        api_base: "http://localhost:3030/openai",
+        api_base: process.env.OPENAI_BASE_URL || "http://localhost:3030/openai",
         seed: null,
         suffix: null,
       },

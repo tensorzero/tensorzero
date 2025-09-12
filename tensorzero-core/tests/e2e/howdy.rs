@@ -2,7 +2,6 @@
 use std::sync::Arc;
 
 use crate::clickhouse::get_clean_clickhouse;
-use reqwest::Client;
 use serde_json::json;
 use tensorzero::ClientBuilder;
 use tensorzero::ClientInputMessage;
@@ -18,6 +17,7 @@ use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::gateway_util::GatewayHandle;
 use tensorzero_core::howdy::{get_deployment_id, get_howdy_report};
+use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::TextKind;
 use tokio::time::Duration;
 
@@ -47,14 +47,17 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
     })
     .await
     .unwrap();
-    let handle =
-        GatewayHandle::new_with_clickhouse_and_http_client(config, clickhouse, Client::new());
+    let handle = GatewayHandle::new_with_clickhouse_and_http_client(
+        config,
+        clickhouse,
+        TensorzeroHttpClient::new().unwrap(),
+    );
     ClientBuilder::build_from_state(handle).await.unwrap()
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_howdy_report() {
-    let (clickhouse, _guard) = get_clean_clickhouse(true);
+    let (clickhouse, _guard) = get_clean_clickhouse(true).await;
     let client = get_embedded_client(clickhouse.clone()).await;
     tokio::time::sleep(Duration::from_secs(1)).await;
     let deployment_id = get_deployment_id(&clickhouse).await.unwrap();

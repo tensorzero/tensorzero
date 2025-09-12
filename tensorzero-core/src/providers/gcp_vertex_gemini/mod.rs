@@ -13,7 +13,7 @@ use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use object_store::gcp::{GcpCredential, GoogleCloudStorageBuilder};
 use object_store::{ObjectStore, StaticCredentialProvider};
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource};
+use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
@@ -37,6 +37,7 @@ use crate::error::{
     warn_discarded_thought_block, warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error,
     ErrorDetails,
 };
+use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::{
     BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
     ProviderBatchInferenceResponse,
@@ -189,6 +190,7 @@ pub async fn make_gcp_object_store(
             let key = dynamic_api_keys.get(key_name).ok_or_else(|| {
                 Error::new(ErrorDetails::ApiKeyMissing {
                     provider_name: PROVIDER_NAME.to_string(),
+                    message: format!("Dynamic api key `{key_name}` is missing"),
                 })
             })?;
             builder =
@@ -261,6 +263,7 @@ pub async fn make_gcp_object_store(
         GCPVertexCredentials::None => {
             return Err(Error::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
+                message: "No credentials are set".to_string(),
             }))
         }
     }
@@ -544,12 +547,12 @@ impl GCPVertexGeminiProvider {
             api_v1_base_url,
             request_url,
             streaming_request_url,
-            batch_config,
             audience,
             credentials,
             model_id,
             endpoint_id,
             model_or_endpoint_id,
+            batch_config,
         })
     }
 
@@ -821,6 +824,7 @@ impl GCPVertexCredentials {
                     .ok_or_else(|| {
                         Error::new(ErrorDetails::ApiKeyMissing {
                             provider_name: PROVIDER_NAME.to_string(),
+                            message: format!("Dynamic api key `{key_name}` is missing"),
                         })
                     })?
                     .expose_secret(),
@@ -850,6 +854,7 @@ impl GCPVertexCredentials {
             GCPVertexCredentials::None => {
                 return Err(Error::new(ErrorDetails::ApiKeyMissing {
                     provider_name: PROVIDER_NAME.to_string(),
+                    message: "No credentials are set".to_string(),
                 }))
             }
         };
@@ -1000,7 +1005,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
     async fn infer<'a>(
         &'a self,
         provider_request: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -1105,7 +1110,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -1148,7 +1153,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         requests: &'a [ModelInferenceRequest<'_>],
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         let Some(model_id) = self.model_id.as_ref() else {
@@ -1333,7 +1338,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         batch_request: &'a BatchRequestRow<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         let auth_headers = self
@@ -1468,7 +1473,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
 }
 
 fn stream_gcp_vertex_gemini(
-    mut event_source: EventSource,
+    mut event_source: TensorZeroEventSource,
     start_time: Instant,
     model_provider: &ModelProvider,
 ) -> ProviderInferenceResponseStreamInner {
@@ -2766,9 +2771,10 @@ mod tests {
             ..Default::default()
         };
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro", false);
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "GCP Vertex Gemini requires at least one message".to_string()
             }
@@ -3553,7 +3559,7 @@ mod tests {
         );
         assert!(result.is_err());
         let err = result.unwrap_err();
-        let details = err.get_owned_details();
+        let details = err.get_details();
         match details {
             ErrorDetails::InferenceClient { message, .. } => {
                 assert!(message.contains("Error parsing tool call arguments as JSON Value"));
@@ -3575,7 +3581,7 @@ mod tests {
         );
         assert!(result.is_err());
         let err = result.unwrap_err();
-        let details = err.get_owned_details();
+        let details = err.get_details();
         match details {
             ErrorDetails::InferenceClient { message, .. } => {
                 assert_eq!(message, "Tool call arguments must be a JSON object");
@@ -3774,7 +3780,8 @@ mod tests {
         let generic = Credential::FileContents(SecretString::from(invalid_json));
         let result = build_non_sdk_credentials(generic, "GCPVertexGemini");
         assert!(result.is_err());
-        let err = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let err = error.get_details();
         assert!(
             matches!(err, ErrorDetails::GCPCredentials { message } if message.contains("Failed to load GCP credentials"))
         );
@@ -3783,7 +3790,8 @@ mod tests {
         let generic = Credential::Static(SecretString::from("test"));
         let result = build_non_sdk_credentials(generic, "GCPVertexGemini");
         assert!(result.is_err());
-        let err = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let err = error.get_details();
         assert!(
             matches!(err, ErrorDetails::GCPCredentials { message } if message.contains("Invalid credential_location"))
         );
@@ -3870,7 +3878,7 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(
-            err.get_owned_details(),
+            *err.get_details(),
             ErrorDetails::InferenceServer {
                 message: "Unknown content part in GCP Vertex Gemini response".to_string(),
                 provider_type: "gcp_vertex_gemini".to_string(),
@@ -4210,7 +4218,7 @@ mod tests {
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        let details = error.get_owned_details();
+        let details = error.get_details();
         match details {
             ErrorDetails::InferenceServer { message, .. } => {
                 assert_eq!(message, "GCP Vertex Gemini response has no candidates");
@@ -4458,7 +4466,7 @@ mod tests {
         );
         assert!(result.is_err());
         let error = result.unwrap_err();
-        let details = error.get_owned_details();
+        let details = error.get_details();
         match details {
             ErrorDetails::InferenceServer { message, .. } => {
                 assert!(message.contains("executableCode is not supported in streaming response"));
@@ -4489,7 +4497,7 @@ mod tests {
         );
         assert!(result.is_err());
         let error = result.unwrap_err();
-        let details = error.get_owned_details();
+        let details = error.get_details();
         match details {
             ErrorDetails::InferenceServer { message, .. } => {
                 assert_eq!(
@@ -4517,7 +4525,7 @@ mod tests {
         );
         assert!(result.is_err());
         let error = result.unwrap_err();
-        let details = error.get_owned_details();
+        let details = error.get_details();
         match details {
             ErrorDetails::InferenceServer { message, .. } => {
                 assert_eq!(

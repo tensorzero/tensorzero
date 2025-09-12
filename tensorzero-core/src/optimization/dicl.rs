@@ -11,8 +11,9 @@ use crate::{
         Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingModelConfig, EmbeddingRequest,
     },
     endpoints::inference::{InferenceClients, InferenceCredentials},
-    error::{Error, ErrorDetails},
+    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     function::FunctionConfig,
+    http::TensorzeroHttpClient,
     model::{build_creds_caching_default, CredentialLocation},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput},
     providers::openai::{
@@ -22,7 +23,7 @@ use crate::{
     variant::{dicl::UninitializedDiclConfig, RetryConfig},
 };
 use futures::future::try_join_all;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
@@ -34,7 +35,7 @@ fn default_max_concurrency() -> usize {
     10
 }
 
-fn default_k() -> usize {
+fn default_k() -> u32 {
     10
 }
 
@@ -46,14 +47,14 @@ fn default_model() -> String {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct DiclOptimizationConfig {
-    pub embedding_model: String,
+    pub embedding_model: Arc<str>,
     pub variant_name: String,
     pub function_name: String,
     pub dimensions: Option<u32>,
     pub batch_size: usize,
     pub max_concurrency: usize,
-    pub k: usize,
-    pub model: String,
+    pub k: u32,
+    pub model: Arc<str>,
     #[serde(skip)]
     pub credentials: OpenAICredentials,
     #[cfg_attr(test, ts(type = "string | null"))]
@@ -74,7 +75,7 @@ pub struct UninitializedDiclOptimizationConfig {
     #[serde(default = "default_max_concurrency")]
     pub max_concurrency: usize,
     #[serde(default = "default_k")]
-    pub k: usize,
+    pub k: u32,
     #[serde(default = "default_model")]
     pub model: String,
     #[cfg_attr(test, ts(type = "string | null"))]
@@ -122,7 +123,7 @@ impl UninitializedDiclOptimizationConfig {
         dimensions: Option<u32>,
         batch_size: Option<usize>,
         max_concurrency: Option<usize>,
-        k: Option<usize>,
+        k: Option<u32>,
         model: Option<String>,
         credentials: Option<String>,
     ) -> PyResult<Self> {
@@ -152,7 +153,7 @@ impl UninitializedDiclOptimizationConfig {
     /// :param max_concurrency: The maximum concurrency to use for getting embeddings.
     /// :param k: The number of nearest neighbors to use for the DICL variant.
     /// :param model: The model to use for the DICL variant.
-    /// :param credentials: The credentials to use for embedding. This should be a string like "env::OPENAI_API_KEY". See docs for more details.
+    /// :param credentials: The credentials to use for embedding. This should be a string like `env::OPENAI_API_KEY`. See docs for more details.
     #[expect(unused_variables, clippy::too_many_arguments)]
     #[pyo3(signature = (*, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None))]
     fn __init__(
@@ -174,14 +175,14 @@ impl UninitializedDiclOptimizationConfig {
 impl UninitializedDiclOptimizationConfig {
     pub fn load(self) -> Result<DiclOptimizationConfig, Error> {
         Ok(DiclOptimizationConfig {
-            embedding_model: self.embedding_model,
+            embedding_model: Arc::from(self.embedding_model),
             variant_name: self.variant_name,
             function_name: self.function_name,
             dimensions: self.dimensions,
             batch_size: self.batch_size,
             max_concurrency: self.max_concurrency,
             k: self.k,
-            model: self.model,
+            model: Arc::from(self.model),
             credentials: build_creds_caching_default(
                 self.credentials.clone(),
                 default_api_key_location(),
@@ -199,7 +200,7 @@ impl UninitializedDiclOptimizationConfig {
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct DiclOptimizationJobHandle {
     pub embedding_model: String,
-    pub k: usize,
+    pub k: u32,
     pub model: String,
 }
 
@@ -215,19 +216,15 @@ impl Optimizer for DiclOptimizationConfig {
 
     async fn launch(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         config: &Config,
     ) -> Result<Self::Handle, Error> {
-        // Check if we have examples to process
-        if train_examples.is_empty() {
-            return Err(Error::new(ErrorDetails::Config {
-                message: "DICL optimization requires at least one training example".to_string(),
-            }));
-        }
+        // Validate training examples
+        validate_train_examples(&train_examples)?;
 
         // Warn if val_examples is provided (not used in DICL)
         if val_examples.is_some() {
@@ -255,22 +252,26 @@ impl Optimizer for DiclOptimizationConfig {
             })
         })?;
 
-        // 2. Check that the variant name is not already in the function variants
-        let variants = match &**function_config {
-            FunctionConfig::Chat(chat_config) => &chat_config.variants,
-            FunctionConfig::Json(json_config) => &json_config.variants,
-        };
+        // 2. Check that the function does not have tools configured (DICL doesn't support tools)
+        validate_function_config(&self.function_name, function_config)?;
 
-        if variants.contains_key(&self.variant_name) {
+        // 3. Check if DICL examples already exist in the database for this variant
+        if dicl_examples_exist(
+            clickhouse_connection_info,
+            &self.function_name,
+            &self.variant_name,
+        )
+        .await?
+        {
             return Err(Error::new(ErrorDetails::Config {
                 message: format!(
-                    "variant '{}' already exists in function '{}' - DICL optimization cannot overwrite existing variants",
+                    "variant '{}' already has DICL examples in the database for function '{}' - DICL optimization cannot overwrite existing variants",
                     self.variant_name, self.function_name
                 ),
             }));
         }
 
-        // 3. Check that the embedding model exists in the config
+        // 4. Check that the embedding model exists in the config
         let embedding_model_config = config
             .embedding_models
             .get(&self.embedding_model)
@@ -285,7 +286,7 @@ impl Optimizer for DiclOptimizationConfig {
             })?;
 
         tracing::info!(
-            "🚀 Starting DICL optimization for function '{}' variant '{}' with {} examples",
+            "Starting DICL optimization for function '{}' variant '{}' with {} examples",
             self.function_name,
             self.variant_name,
             train_examples.len()
@@ -328,7 +329,7 @@ impl Optimizer for DiclOptimizationConfig {
 
         let num_examples = examples_with_embeddings.len();
 
-        tracing::info!("🔄 Phase transition: Embedding → ClickHouse storage");
+        tracing::info!("Phase transition: Embedding → ClickHouse storage");
 
         insert_dicl_examples_with_batching(
             clickhouse_connection_info,
@@ -341,14 +342,14 @@ impl Optimizer for DiclOptimizationConfig {
 
         // Create a job handle indicating immediate success
         let job_handle = DiclOptimizationJobHandle {
-            embedding_model: self.embedding_model.clone(),
+            embedding_model: self.embedding_model.to_string(),
             k: self.k,
-            model: self.model.clone(),
+            model: self.model.to_string(),
         };
 
         tracing::info!(
-            "🎉 DICL optimization completed successfully!\n\
-            📈 Summary:\n\
+            "DICL optimization completed successfully!\n\
+            Summary:\n\
             ├─ Function: '{}'\n\
             ├─ Variant: '{}'\n\
             ├─ Examples processed: {}\n\
@@ -370,7 +371,7 @@ impl Optimizer for DiclOptimizationConfig {
 impl JobHandle for DiclOptimizationJobHandle {
     async fn poll(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
         // DICL optimization is synchronous, so it's always complete once launched
@@ -382,9 +383,9 @@ impl JobHandle for DiclOptimizationJobHandle {
             output: OptimizerOutput::Variant(Box::new(UninitializedVariantConfig::Dicl(
                 UninitializedDiclConfig {
                     weight: None,
-                    embedding_model: self.embedding_model.clone(),
-                    k: self.k as u32,
-                    model: self.model.clone(),
+                    embedding_model: self.embedding_model.to_string(),
+                    k: self.k,
+                    model: self.model.to_string(),
                     system_instructions: None,
                     temperature: None,
                     top_p: None,
@@ -403,11 +404,108 @@ impl JobHandle for DiclOptimizationJobHandle {
     }
 }
 
+/// Validates function config for DICL optimization
+/// Checks that the function does not have tools configured (DICL doesn't support tools)
+fn validate_function_config(
+    function_name: &str,
+    function_config: &FunctionConfig,
+) -> Result<(), Error> {
+    match function_config {
+        FunctionConfig::Chat(chat_config) => {
+            if !chat_config.tools.is_empty() {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "DICL optimization does not support functions with tools. Function '{}' has {} tools configured. Please use a function without tools for DICL optimization.",
+                        function_name,
+                        chat_config.tools.len()
+                    ),
+                }));
+            }
+        }
+        FunctionConfig::Json(json_config) => {
+            // JSON functions should have exactly one implicit tool for schema validation
+            if json_config.implicit_tool_call_config.tools_available.len() != 1 {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "DICL optimization expected JSON function '{}' to have exactly 1 implicit tool, but found {}. This indicates a configuration issue.",
+                        function_name,
+                        json_config.implicit_tool_call_config.tools_available.len()
+                    ),
+                }));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Validates training examples for DICL optimization
+/// Checks for emptiness and presence of tool calls which are not supported
+fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Error> {
+    // Check if we have examples to process
+    if train_examples.is_empty() {
+        return Err(Error::new(ErrorDetails::Config {
+            message: "DICL optimization requires at least one training example".to_string(),
+        }));
+    }
+
+    // Check for tool calls in training examples
+    for (i, example) in train_examples.iter().enumerate() {
+        // Check that each example has an output
+        if example.stored_output.is_none() {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: format!(
+                    "DICL optimization requires all training examples to have outputs. Training example {} is missing an output.",
+                    i + 1
+                ),
+            }));
+        }
+        // Check if tools_available contains actual tools
+        if let Some(tool_params) = &example.tool_params {
+            if !tool_params.tools_available.is_empty() {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "DICL optimization does not support tool calls. Training example {} contains {} available tools.",
+                        i + 1,
+                        tool_params.tools_available.len()
+                    ),
+                }));
+            }
+        }
+
+        // Check stored_input messages for ToolCall or ToolResult content
+        for message in &example.stored_input.messages {
+            for content in &message.content {
+                match content {
+                    crate::inference::types::StoredInputMessageContent::ToolCall(_) => {
+                        return Err(Error::new(ErrorDetails::InvalidRequest {
+                            message: format!(
+                                "DICL optimization does not support tool calls. Training example {} contains a tool call in message content.",
+                                i + 1
+                            ),
+                        }));
+                    }
+                    crate::inference::types::StoredInputMessageContent::ToolResult(_) => {
+                        return Err(Error::new(ErrorDetails::InvalidRequest {
+                            message: format!(
+                                "DICL optimization does not support tool calls. Training example {} contains a tool result in message content.",
+                                i + 1
+                            ),
+                        }));
+                    }
+                    _ => {} // Other content types are fine
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Processes a batch of input texts to get embeddings
 async fn process_embedding_batch(
     embedding_model_config: &EmbeddingModelConfig,
     model_name: &str,
-    client: &reqwest::Client,
+    client: &TensorzeroHttpClient,
     credentials: &InferenceCredentials,
     batch_texts: Vec<String>,
     batch_index: usize,
@@ -454,7 +552,7 @@ async fn process_embedding_batch(
 async fn process_embeddings_with_batching(
     embedding_model_config: &EmbeddingModelConfig,
     model_name: &str,
-    client: &reqwest::Client,
+    client: &TensorzeroHttpClient,
     credentials: &InferenceCredentials,
     input_texts: Vec<String>,
     batch_size: usize,
@@ -467,7 +565,7 @@ async fn process_embeddings_with_batching(
         .collect();
 
     tracing::info!(
-        "🔢 Starting embedding processing: {} input texts → {} batches (size: {}, max concurrent: {})",
+        "Starting embedding processing: {} input texts → {} batches (size: {}, max concurrent: {})",
         input_texts.len(),
         batches.len(),
         batch_size,
@@ -506,7 +604,7 @@ async fn process_embeddings_with_batching(
                     let progress_pct =
                         (batch_index as f64 / total_batches as f64 * 100.0).round() as u32;
                     tracing::info!(
-                        "📊 Embedding progress: {}/{} batches completed ({}%)",
+                        "Embedding progress: {}/{} batches completed ({}%)",
                         batch_index,
                         total_batches,
                         progress_pct
@@ -522,7 +620,7 @@ async fn process_embeddings_with_batching(
     let all_embeddings: Vec<Vec<f64>> = batch_results.into_iter().flatten().collect();
 
     tracing::info!(
-        "✅ Embedding processing complete: {} embeddings generated from {} input texts",
+        "Embedding processing complete: {} embeddings generated from {} input texts",
         all_embeddings.len(),
         input_texts.len()
     );
@@ -542,7 +640,7 @@ pub async fn insert_dicl_examples_with_batching(
     let total_batches = total_examples.div_ceil(batch_size);
 
     tracing::info!(
-        "💾 Starting ClickHouse insertion: {} examples → {} batches (size: {})",
+        "Starting ClickHouse insertion: {} examples → {} batches (size: {})",
         total_examples,
         total_batches,
         batch_size
@@ -556,14 +654,14 @@ pub async fn insert_dicl_examples_with_batching(
             .iter()
             .map(|(sample, embedding)| {
                 let output = sample
-                    .output
+                    .stored_output
                     .as_ref()
-                    .and_then(|outputs| outputs.first())
-                    .map(|output| serde_json::to_string(output).unwrap_or_default())
-                    .unwrap_or_default();
+                    .ok_or_else(|| Error::new(ErrorDetails::InternalError {
+                        message: format!("Training example is missing output after validation. {IMPOSSIBLE_ERROR_MESSAGE}")
+                    }))
+                    .and_then(|stored_output| serde_json::to_string(stored_output).map_err(Into::into))?;
 
-                let input_text = serde_json::to_string(&sample.input.messages)
-                    .unwrap_or_else(|_| format!("{:?}", sample.input.messages));
+                let input_text = serde_json::to_string(&sample.stored_input)?;
 
                 let row = json!({
                     "id": Uuid::now_v7(),
@@ -624,7 +722,7 @@ pub async fn insert_dicl_examples_with_batching(
             (inserted_examples as f64 / total_examples as f64 * 100.0).round() as u32;
 
         tracing::info!(
-            "📊 ClickHouse insertion progress: {}/{} batches completed ({}%) - {}/{} examples inserted (wrote {} rows)",
+            "ClickHouse insertion progress: {}/{} batches completed ({}%) - {}/{} examples inserted (wrote {} rows)",
             batch_index + 1,
             total_batches,
             progress_pct,
@@ -635,13 +733,40 @@ pub async fn insert_dicl_examples_with_batching(
     }
 
     tracing::info!(
-        "✅ ClickHouse insertion complete: {} examples successfully stored for function '{}' variant '{}'",
+        "ClickHouse insertion complete: {} examples successfully stored for function '{}' variant '{}'",
         inserted_examples,
         function_name,
         variant_name
     );
 
     Ok(())
+}
+
+/// Checks if DICL examples exist in ClickHouse for a given function and variant
+pub async fn dicl_examples_exist(
+    clickhouse: &ClickHouseConnectionInfo,
+    function_name: &str,
+    variant_name: &str,
+) -> Result<bool, Error> {
+    let query = r"
+        SELECT 1
+        FROM DynamicInContextLearningExample
+        WHERE function_name = {function_name:String}
+        AND variant_name = {variant_name:String}
+        LIMIT 1
+    ";
+
+    let params = HashMap::from([
+        ("function_name", function_name),
+        ("variant_name", variant_name),
+    ]);
+
+    let result = clickhouse
+        .run_query_synchronous(query.to_string(), &params)
+        .await?;
+
+    // If the query returns "1", examples exist; if empty, they don't
+    Ok(result.response.trim() == "1")
 }
 
 #[cfg(test)]
@@ -697,7 +822,7 @@ mod tests {
     async fn test_process_embedding_batch_success() {
         let embedding_model = create_test_embedding_model();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["hello".to_string(), "world".to_string()];
 
@@ -724,7 +849,7 @@ mod tests {
     async fn test_process_embedding_batch_with_dimensions() {
         let embedding_model = create_test_embedding_model();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["hello".to_string()];
         let dimensions = Some(512);
@@ -750,7 +875,7 @@ mod tests {
     async fn test_process_embedding_batch_failure() {
         let embedding_model = create_test_embedding_model_with_failure();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["test".to_string()];
 
@@ -772,7 +897,7 @@ mod tests {
     async fn test_process_embeddings_with_batching_success() {
         let embedding_model = create_test_embedding_model();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let input_texts = vec![
             "text1".to_string(),
@@ -805,7 +930,7 @@ mod tests {
     async fn test_process_embeddings_with_batching_respects_concurrency() {
         let embedding_model = create_test_embedding_model();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let input_texts = vec!["1".to_string(), "2".to_string(), "3".to_string()];
 
@@ -824,5 +949,376 @@ mod tests {
         assert!(result.is_ok());
         let embeddings = result.unwrap();
         assert_eq!(embeddings.len(), 3);
+    }
+
+    // Helper function to create a basic RenderedSample for testing
+    fn create_test_rendered_sample() -> RenderedSample {
+        use crate::{
+            inference::types::{
+                ContentBlock, ContentBlockChatOutput, ModelInput, RequestMessage, Role,
+                StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
+            },
+            stored_inference::StoredOutput,
+        };
+        use serde_json::json;
+        use std::collections::HashMap;
+        use uuid::Uuid;
+
+        RenderedSample {
+            function_name: "test_function".to_string(),
+            input: ModelInput {
+                system: Some("Test system".to_string()),
+                messages: vec![RequestMessage {
+                    role: Role::User,
+                    content: vec![ContentBlock::Text(Text {
+                        text: "Test message".to_string(),
+                    })],
+                }],
+            },
+            stored_input: StoredInput {
+                system: Some(json!("Test system")),
+                messages: vec![StoredInputMessage {
+                    role: Role::User,
+                    content: vec![StoredInputMessageContent::Text {
+                        value: json!("Test message"),
+                    }],
+                }],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "Test output".to_string(),
+            })]),
+            stored_output: Some(StoredOutput::Chat(vec![ContentBlockChatOutput::Text(
+                Text {
+                    text: "Test output".to_string(),
+                },
+            )])),
+            episode_id: Some(Uuid::now_v7()),
+            inference_id: Some(Uuid::now_v7()),
+            tool_params: None,
+            output_schema: None,
+            dispreferred_outputs: vec![],
+            tags: HashMap::new(),
+        }
+    }
+
+    fn create_test_rendered_sample_with_tools(tools: Vec<crate::tool::Tool>) -> RenderedSample {
+        use crate::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
+
+        let mut sample = create_test_rendered_sample();
+        sample.tool_params = Some(ToolCallConfigDatabaseInsert {
+            tools_available: tools,
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: Some(true),
+        });
+        sample
+    }
+
+    fn create_test_rendered_sample_with_tool_content() -> RenderedSample {
+        use crate::{
+            inference::types::{Role, StoredInputMessage, StoredInputMessageContent},
+            tool::{ToolCall, ToolCallConfigDatabaseInsert, ToolChoice},
+        };
+        use serde_json::json;
+
+        let mut sample = create_test_rendered_sample();
+
+        // Add a message with tool call content
+        sample.stored_input.messages.push(StoredInputMessage {
+            role: Role::Assistant,
+            content: vec![StoredInputMessageContent::ToolCall(ToolCall {
+                id: "test_call".to_string(),
+                name: "test_tool".to_string(),
+                arguments: json!({"arg": "value"}).to_string(),
+            })],
+        });
+
+        // Also add empty tool params to make it realistic
+        sample.tool_params = Some(ToolCallConfigDatabaseInsert {
+            tools_available: vec![],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: Some(false),
+        });
+
+        sample
+    }
+
+    fn create_test_rendered_sample_with_tool_result() -> RenderedSample {
+        use crate::{
+            inference::types::{Role, StoredInputMessage, StoredInputMessageContent},
+            tool::{ToolCallConfigDatabaseInsert, ToolChoice, ToolResult},
+        };
+
+        let mut sample = create_test_rendered_sample();
+
+        // Add a message with tool result content
+        sample.stored_input.messages.push(StoredInputMessage {
+            role: Role::User,
+            content: vec![StoredInputMessageContent::ToolResult(ToolResult {
+                id: "test_call".to_string(),
+                name: "test_tool".to_string(),
+                result: "Tool result".to_string(),
+            })],
+        });
+
+        // Also add empty tool params to make it realistic
+        sample.tool_params = Some(ToolCallConfigDatabaseInsert {
+            tools_available: vec![],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: Some(false),
+        });
+
+        sample
+    }
+
+    #[test]
+    fn test_validate_train_examples_empty() {
+        let result = validate_train_examples(&[]);
+        assert!(result.is_err());
+
+        let error = result.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("requires at least one training example"));
+    }
+
+    #[test]
+    fn test_validate_train_examples_valid_no_tools() {
+        let sample = create_test_rendered_sample();
+        let result = validate_train_examples(&[sample]);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_train_examples_valid_empty_tools() {
+        let sample = create_test_rendered_sample_with_tools(vec![]);
+        let result = validate_train_examples(&[sample]);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_train_examples_rejects_tools_available() {
+        use crate::tool::Tool;
+        use serde_json::json;
+
+        let tool = Tool {
+            name: "test_tool".to_string(),
+            description: "A test tool".to_string(),
+            parameters: json!({"type": "object", "properties": {}}),
+            strict: false,
+        };
+
+        let sample = create_test_rendered_sample_with_tools(vec![tool]);
+        let result = validate_train_examples(&[sample]);
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("does not support tool calls"));
+        assert!(error.to_string().contains("contains 1 available tools"));
+    }
+
+    #[test]
+    fn test_validate_train_examples_rejects_tool_call_content() {
+        let sample = create_test_rendered_sample_with_tool_content();
+        let result = validate_train_examples(&[sample]);
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("does not support tool calls"));
+        assert!(error
+            .to_string()
+            .contains("contains a tool call in message content"));
+    }
+
+    #[test]
+    fn test_validate_train_examples_rejects_tool_result_content() {
+        let sample = create_test_rendered_sample_with_tool_result();
+        let result = validate_train_examples(&[sample]);
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("does not support tool calls"));
+        assert!(error
+            .to_string()
+            .contains("contains a tool result in message content"));
+    }
+
+    #[test]
+    fn test_validate_train_examples_multiple_samples() {
+        use crate::tool::Tool;
+        use serde_json::json;
+
+        let valid_sample = create_test_rendered_sample();
+
+        let tool = Tool {
+            name: "test_tool".to_string(),
+            description: "A test tool".to_string(),
+            parameters: json!({"type": "object", "properties": {}}),
+            strict: false,
+        };
+        let invalid_sample = create_test_rendered_sample_with_tools(vec![tool]);
+
+        // Should fail on the second sample
+        let result = validate_train_examples(&[valid_sample, invalid_sample]);
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("Training example 2"));
+    }
+
+    #[test]
+    fn test_validate_train_examples_rejects_missing_output() {
+        let mut sample = create_test_rendered_sample();
+        sample.stored_output = None;
+
+        let result = validate_train_examples(&[sample]);
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("missing an output"));
+        assert!(error.to_string().contains("Training example 1"));
+    }
+
+    #[test]
+    fn test_validate_train_examples_multiple_samples_with_missing_output() {
+        let valid_sample = create_test_rendered_sample();
+        let mut invalid_sample = create_test_rendered_sample();
+        invalid_sample.stored_output = None;
+
+        // Should fail on the second sample
+        let result = validate_train_examples(&[valid_sample, invalid_sample]);
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("Training example 2"));
+        assert!(error.to_string().contains("missing an output"));
+    }
+
+    fn create_test_chat_function_config_no_tools() -> FunctionConfig {
+        use crate::{config::SchemaData, function::FunctionConfigChat, tool::ToolChoice};
+        use std::collections::HashMap;
+
+        FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            tools: vec![], // No tools
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: None,
+            description: None,
+        })
+    }
+
+    fn create_test_chat_function_config_with_tools() -> FunctionConfig {
+        use crate::{config::SchemaData, function::FunctionConfigChat, tool::ToolChoice};
+        use std::collections::HashMap;
+
+        FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            tools: vec!["test_tool".to_string()],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            description: None,
+        })
+    }
+
+    fn create_test_json_function_config() -> FunctionConfig {
+        use crate::{
+            config::SchemaData, function::FunctionConfigJson, jsonschema_util::StaticJSONSchema,
+            tool::create_implicit_tool_call_config,
+        };
+        use serde_json::json;
+        use std::collections::HashMap;
+
+        let output_schema = StaticJSONSchema::from_value(json!({
+            "type": "object",
+            "properties": {
+                "answer": {"type": "string"}
+            },
+            "required": ["answer"]
+        }))
+        .unwrap();
+
+        let implicit_tool_call_config = create_implicit_tool_call_config(output_schema.clone());
+
+        FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            output_schema,
+            implicit_tool_call_config,
+            description: None,
+        })
+    }
+
+    fn create_test_json_function_config_invalid_tools() -> FunctionConfig {
+        use crate::{
+            config::SchemaData,
+            function::FunctionConfigJson,
+            jsonschema_util::StaticJSONSchema,
+            tool::{ToolCallConfig, ToolChoice},
+        };
+        use serde_json::json;
+        use std::collections::HashMap;
+
+        let output_schema = StaticJSONSchema::from_value(json!({
+            "type": "object",
+            "properties": {
+                "answer": {"type": "string"}
+            },
+            "required": ["answer"]
+        }))
+        .unwrap();
+
+        // Create an invalid config with no tools (should have exactly 1)
+        let invalid_tool_call_config = ToolCallConfig {
+            tools_available: vec![], // Invalid: should have exactly 1 implicit tool
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: None,
+        };
+
+        FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            output_schema,
+            implicit_tool_call_config: invalid_tool_call_config,
+            description: None,
+        })
+    }
+
+    #[test]
+    fn test_validate_function_config_chat_no_tools() {
+        let function_config = create_test_chat_function_config_no_tools();
+        let result = validate_function_config("test_function", &function_config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_function_config_chat_with_tools() {
+        let function_config = create_test_chat_function_config_with_tools();
+        let result = validate_function_config("test_function", &function_config);
+        assert!(result.is_err());
+
+        let error = result.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("does not support functions with tools"));
+        assert!(error.to_string().contains("test_function"));
+        assert!(error.to_string().contains("1 tools configured"));
+    }
+
+    #[test]
+    fn test_validate_function_config_json_valid() {
+        let function_config = create_test_json_function_config();
+        let result = validate_function_config("test_json_function", &function_config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_function_config_json_invalid() {
+        let function_config = create_test_json_function_config_invalid_tools();
+        let result = validate_function_config("test_json_function", &function_config);
+        assert!(result.is_err());
+
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("expected JSON function"));
+        assert!(error.to_string().contains("test_json_function"));
+        assert!(error.to_string().contains("exactly 1 implicit tool"));
+        assert!(error.to_string().contains("found 0"));
     }
 }

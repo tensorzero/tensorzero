@@ -5,7 +5,7 @@ use std::time::Duration;
 use futures::StreamExt;
 use itertools::Itertools;
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource};
+use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -21,6 +21,8 @@ use crate::error::warn_discarded_thought_block;
 use crate::error::warn_discarded_unknown_chunk;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::http::TensorZeroEventSource;
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::file::require_image;
 use crate::inference::types::resolved_input::FileWithPath;
@@ -143,12 +145,14 @@ impl GoogleAIStudioCredentials {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
+                        message: format!("Dynamic api key `{key_name}` is missing"),
                     }
                     .into()
                 })
             }
             GoogleAIStudioCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
+                message: "No credentials are set".to_string(),
             })?,
         }
     }
@@ -163,7 +167,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             provider_name,
             model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -253,7 +257,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -289,7 +293,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
+        _client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -301,7 +305,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -312,7 +316,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
 }
 
 fn stream_google_ai_studio_gemini(
-    mut event_source: EventSource,
+    mut event_source: TensorZeroEventSource,
     start_time: Instant,
     model_provider: &ModelProvider,
 ) -> ProviderInferenceResponseStreamInner {
@@ -1548,9 +1552,10 @@ mod tests {
             ..Default::default()
         };
         let result = GeminiRequest::new(&inference_request);
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "Google AI Studio Gemini requires at least one message".to_string()
             }
@@ -2251,7 +2256,7 @@ mod tests {
         let result = GoogleAIStudioCredentials::try_from(generic);
         assert!(result.is_err());
         assert!(matches!(
-            result.unwrap_err().get_owned_details(),
+            result.unwrap_err().get_details(),
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }
@@ -2570,7 +2575,7 @@ mod tests {
         // Verify error is returned
         assert!(result.is_err());
         let error = result.unwrap_err();
-        let details = error.get_owned_details();
+        let details = error.get_details();
         if let ErrorDetails::InferenceServer { message, .. } = details {
             assert!(message.contains("no candidates"));
         } else {

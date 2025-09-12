@@ -34,6 +34,7 @@ pub mod migration_0033;
 pub mod migration_0034;
 pub mod migration_0035;
 pub mod migration_0036;
+pub mod migration_0037;
 
 /// Returns true if the table exists, false if it does not
 /// Errors if the query fails
@@ -104,13 +105,14 @@ async fn check_column_exists(
     migration_id: &str,
 ) -> Result<bool, Error> {
     let query = format!(
-        r"SELECT EXISTS(
+        r"
             SELECT 1
             FROM system.columns
             WHERE database = '{}'
               AND table = '{}'
               AND name = '{}'
-        )",
+            LIMIT 1
+        ",
         clickhouse.database(),
         table,
         column,

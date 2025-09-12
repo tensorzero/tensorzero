@@ -6,7 +6,7 @@ use std::time::Duration;
 use futures::StreamExt;
 use itertools::Itertools;
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource};
+use reqwest_eventsource::Event;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt::Debug;
@@ -22,6 +22,7 @@ use crate::error::{
     warn_discarded_thought_block, warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error,
     ErrorDetails,
 };
+use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::file::require_image;
@@ -149,11 +150,11 @@ impl GCPVertexAnthropicProvider {
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
 
         Ok(GCPVertexAnthropicProvider {
+            model_id,
             request_url,
             streaming_request_url,
             audience,
             credentials,
-            model_id,
         })
     }
 
@@ -196,7 +197,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             provider_name,
             model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -293,7 +294,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -342,7 +343,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
+        _client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -354,7 +355,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -368,7 +369,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 /// Modified from the example [here](https://github.com/64bit/async-openai/blob/5c9c817b095e3bacb2b6c9804864cdf8b15c795e/async-openai/src/client.rs#L433)
 /// At a high level, this function is handling low-level EventSource details and mapping the objects returned by Anthropic into our `InferenceResultChunk` type
 fn stream_anthropic(
-    mut event_source: EventSource,
+    mut event_source: TensorZeroEventSource,
     start_time: Instant,
     model_provider: &ModelProvider,
 ) -> ProviderInferenceResponseStreamInner {
@@ -727,7 +728,7 @@ fn get_default_max_tokens(model_id: &str) -> Result<u32, Error> {
         Ok(64_000)
     } else if model_id.starts_with("claude-sonnet-4@") {
         Ok(64_000)
-    } else if model_id.starts_with("claude-opus-4@") {
+    } else if model_id.starts_with("claude-opus-4@") || model_id.starts_with("claude-opus-4-1@") {
         Ok(32_000)
     } else {
         Err(Error::new(ErrorDetails::InferenceClient {
@@ -1457,9 +1458,10 @@ mod tests {
         };
         let anthropic_request_body =
             GCPVertexAnthropicRequestBody::new("claude-opus-4@20250514", &inference_request);
-        let details = anthropic_request_body.unwrap_err().get_owned_details();
+        let error = anthropic_request_body.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "Anthropic requires at least one message".to_string(),
             }
@@ -1671,75 +1673,63 @@ mod tests {
             ..Default::default()
         };
 
+        let model = "claude-opus-4-1@20250805".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request);
+        assert_eq!(body.unwrap().max_tokens, 32_000);
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens);
+        assert_eq!(body.unwrap().max_tokens, 100);
+
         let model = "claude-opus-4@20250514".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 32_000);
-
-        let model = "claude-opus-4@20250514".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens);
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4@20250514".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 64_000);
-
-        let model = "claude-sonnet-4@20250514".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens);
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-7-sonnet@20250219".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 64_000);
-
-        let model = "claude-3-7-sonnet@20250219".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens);
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-sonnet-v2@20240222".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 8_192);
-
-        let model = "claude-3-5-sonnet-v2@20240222".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens);
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-sonnet@20240229".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 8_192);
-
-        let model = "claude-3-5-sonnet@20240229".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens);
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-haiku@20240307".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 8_192);
-
-        let model = "claude-3-5-haiku@20240307".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens);
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-haiku@20240307".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert_eq!(body.unwrap().max_tokens, 4_096);
-
-        let model = "claude-3-haiku@20240307".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens);
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4".to_string(); // fake model
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert!(body.is_err());
-
-        let model = "claude-sonnet-4".to_string(); // fake model
         let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens);
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-4-5-ballad@20260101".to_string(); // fake model
         let body = GCPVertexAnthropicRequestBody::new(&model, &request);
         assert!(body.is_err());
-
-        let model = "claude-4-5-ballad@20260101".to_string(); // fake model
         let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens);
         assert_eq!(body.unwrap().max_tokens, 100);
     }
@@ -2010,9 +2000,10 @@ mod tests {
         };
         let response_code = StatusCode::BAD_REQUEST;
         let result = handle_anthropic_error(response_code, error_body.clone());
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceClient {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
@@ -2025,9 +2016,10 @@ mod tests {
         );
         let response_code = StatusCode::UNAUTHORIZED;
         let result = handle_anthropic_error(response_code, error_body.clone());
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceClient {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
@@ -2040,9 +2032,10 @@ mod tests {
         );
         let response_code = StatusCode::TOO_MANY_REQUESTS;
         let result = handle_anthropic_error(response_code, error_body.clone());
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceClient {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
@@ -2056,9 +2049,10 @@ mod tests {
         let response_code = StatusCode::NOT_FOUND;
         let result = handle_anthropic_error(response_code, error_body.clone());
         assert!(result.is_err());
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
                 raw_request: None,
@@ -2070,9 +2064,10 @@ mod tests {
         );
         let response_code = StatusCode::INTERNAL_SERVER_ERROR;
         let result = handle_anthropic_error(response_code, error_body.clone());
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
                 raw_request: None,
@@ -2432,9 +2427,10 @@ mod tests {
             &mut current_tool_id,
             false,
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
                 raw_request: None,
@@ -2545,9 +2541,10 @@ mod tests {
             &mut current_tool_id,
             false,
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockStart".to_string(),
                 raw_request: None,
@@ -2581,9 +2578,10 @@ mod tests {
             &mut current_tool_id,
             false,
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: r#"{"message":"Test error"}"#.to_string(),
                 raw_request: None,

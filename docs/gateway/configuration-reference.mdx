@@ -83,16 +83,53 @@ Enable [exporting traces to an external OpenTelemetry-compatible observability
 system](/gateway/guides/opentelemetry-otlp).
 
 <Warning>
-Note that you will still need to set the `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
-environment variable. See above linked guide for details.
+  Note that you will still need to set the `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
+  environment variable. See above linked guide for details.
 </Warning>
 
 ### `observability.async_writes`
 
 - **Type:** boolean
-- **Required:** no (default: `true`)
+- **Required:** no (default: `false`)
 
-Enabling this setting will improve the latency of the gateway by offloading the responsibility of writing inference responses to ClickHouse to a background task, instead of waiting for ClickHouse to return the inference response.
+Enabling this setting will improve the latency of the gateway by offloading the responsibility of writing inferences, feedback, and other data to ClickHouse to a background task, instead of waiting for ClickHouse to complete the writes.
+Each database insert is handled immediately in separate background tasks.
+
+See the ["Optimize latency and throughput" guide](/deployment/optimize-latency-and-throughput) for best practices.
+
+You can't enable `async_writes` and `batch_writes` at the same time.
+
+<Warning>
+
+If you enable this setting, make sure that the gateway lives long enough to complete the writes.
+This can be problematic in serverless environments that terminate the gateway instance after the response is returned but before the writes are completed.
+
+</Warning>
+
+### `observability.batch_writes`
+
+- **Type:** object
+- **Required:** no (default: disabled)
+
+Enabling this setting will improve the latency and throughput of the gateway by offloading the responsibility of writing inferences, feedback, and other data to ClickHouse to a background task, instead of waiting for ClickHouse to complete the writes.
+With `batch_writes`, multiple records are collected and written together in batches to improve efficiency.
+
+The `batch_writes` object supports the following fields:
+
+- `enabled` (boolean): Must be set to `true` to enable batch writes
+- `flush_interval_ms` (integer, optional): Maximum time in milliseconds to wait before flushing a batch (default: `100`)
+- `max_rows` (integer, optional): Maximum number of rows to collect before flushing a batch (default: `1000`)
+
+```toml tensorzero.toml
+[gateway]
+# ...
+observability.batch_writes = { enabled = true, flush_interval_ms = 200, max_rows = 500 }
+# ...
+```
+
+See the ["Optimize latency and throughput" guide](/deployment/optimize-latency-and-throughput) for best practices.
+
+You can't enable `async_writes` and `batch_writes` at the same time.
 
 <Warning>
 
@@ -583,6 +620,9 @@ type = "azure"
 endpoint = "https://<your-endpoint>.openai.azure.com"
 # ...
 ```
+
+If the endpoint starts with `env::`, the succeeding value will be treated as an environment variable name and the gateway will attempt to retrieve the value from the environment on startup.
+If the endpoint starts with `dynamic::`, the succeeding value will be treated as an dynamic credential name and the gateway will attempt to retrieve the value from the `dynamic_credentials` field on each inference it is needed.
 
 ##### `api_key_location`
 

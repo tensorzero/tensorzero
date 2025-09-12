@@ -8,6 +8,7 @@ use crate::cache::{
 };
 use crate::config::{ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::RequestMessagesOrBatch;
 use crate::inference::types::{ContentBlock, Text};
@@ -25,7 +26,6 @@ use crate::{
     providers::openai::OpenAIProvider,
 };
 use futures::future::try_join_all;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::time::error::Elapsed;
 use tracing::instrument;
@@ -129,8 +129,8 @@ impl EmbeddingModelConfig {
                 })?;
                 let provider_request = EmbeddingModelProviderRequest {
                     request,
-                    provider_name,
                     model_name,
+                    provider_name,
                 };
                 // TODO: think about how to best handle errors here
                 if clients.cache_options.enabled.read() {
@@ -312,6 +312,21 @@ impl EmbeddingModelResponse {
             cached: true,
         }
     }
+
+    /// We return the actual usage (meaning the number of tokens the user would be billed for)
+    /// in the HTTP response.
+    /// However, we store the number of tokens that would have been used in the database.
+    /// So we need this function to compute the actual usage in order to send it in the HTTP response.
+    pub fn usage_considering_cached(&self) -> Usage {
+        if self.cached {
+            Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+            }
+        } else {
+            self.usage
+        }
+    }
 }
 
 pub struct EmbeddingResponseWithMetadata {
@@ -401,7 +416,7 @@ pub trait EmbeddingProvider {
     fn embed(
         &self,
         request: &EmbeddingRequest,
-        client: &Client,
+        client: &TensorzeroHttpClient,
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> impl Future<Output = Result<EmbeddingProviderResponse, Error>> + Send;
@@ -457,7 +472,7 @@ impl EmbeddingProvider for EmbeddingProviderInfo {
     async fn embed(
         &self,
         request: &EmbeddingRequest,
-        client: &Client,
+        client: &TensorzeroHttpClient,
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
@@ -537,7 +552,7 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
     async fn embed(
         &self,
         request: &EmbeddingRequest,
-        client: &Client,
+        client: &TensorzeroHttpClient,
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
@@ -659,7 +674,7 @@ mod tests {
                 &request,
                 "fallback",
                 &InferenceClients {
-                    http_client: &Client::new(),
+                    http_client: &TensorzeroHttpClient::new().unwrap(),
                     credentials: &InferenceCredentials::default(),
                     cache_options: &CacheOptions {
                         max_age_s: None,

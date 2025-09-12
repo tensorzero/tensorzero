@@ -10,6 +10,7 @@ use opentelemetry::TraceId;
 use opentelemetry_sdk::trace::IdGenerator;
 use opentelemetry_sdk::trace::RandomIdGenerator;
 use serde_json::{json, Value};
+use tokio::task::JoinSet;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -22,7 +23,7 @@ struct ExistingTraceData {
 
 #[tokio::test]
 async fn test_jaeger_trace_export_no_parent() {
-    test_jaeger_trace_export(None).await;
+    test_jaeger_trace_export(None, None).await;
 }
 
 #[tokio::test]
@@ -30,11 +31,36 @@ async fn test_jaeger_trace_export_with_parent() {
     let id_gen = RandomIdGenerator::default();
     let trace_id = id_gen.new_trace_id();
     let span_id = id_gen.new_span_id();
-    test_jaeger_trace_export(Some(ExistingTraceData { trace_id, span_id })).await;
+    test_jaeger_trace_export(Some(ExistingTraceData { trace_id, span_id }), None).await;
+}
+
+#[tokio::test]
+async fn test_jaeger_trace_export_with_custom_header() {
+    let mut futures = JoinSet::new();
+    let num_tasks = 100;
+    for _ in 0..num_tasks {
+        let random_id = Uuid::now_v7();
+        futures.spawn(test_jaeger_trace_export(
+            None,
+            Some((
+                "TensorZero-OTLP-Traces-Extra-Header-x-dummy-tensorzero".to_string(),
+                random_id.to_string(),
+            )),
+        ));
+    }
+    let mut i = 1;
+    while let Some(task) = futures.join_next().await {
+        let () = task.unwrap();
+        println!("Completed task {i}/{num_tasks}");
+        i += 1;
+    }
 }
 
 // TODO - investigate why this test is sometimes flaky when running locally
-async fn test_jaeger_trace_export(existing_trace_parent: Option<ExistingTraceData>) {
+async fn test_jaeger_trace_export(
+    existing_trace_parent: Option<ExistingTraceData>,
+    custom_header: Option<(String, String)>,
+) {
     let episode_id = Uuid::now_v7();
     let client = reqwest::Client::new();
 
@@ -62,6 +88,10 @@ async fn test_jaeger_trace_export(existing_trace_parent: Option<ExistingTraceDat
         )
         .json(&payload);
 
+    if let Some((custom_key, custom_value)) = &custom_header {
+        builder = builder.header(custom_key, custom_value);
+    }
+
     let existing_trace_header = existing_trace_parent
         // Version 00, with the 'sampled' flag set to 1
         .map(|trace_parent| format!("00-{}-{}-01", trace_parent.trace_id, trace_parent.span_id));
@@ -88,14 +118,15 @@ async fn test_jaeger_trace_export(existing_trace_parent: Option<ExistingTraceDat
 
     let now_str = now.to_rfc3339_opts(SecondsFormat::Secs, true);
     let one_minute_ago_str = one_minute_ago.to_rfc3339_opts(SecondsFormat::Secs, true);
+    let jaeger_base_url = std::env::var("TENSORZERO_JAEGER_URL")
+        .unwrap_or_else(|_| "http://localhost:16686".to_string());
 
     let jaeger_result = client
-        .get(format!("http://localhost:16686/api/v3/traces?&query.start_time_min={one_minute_ago_str}&query.start_time_max={now_str}&query.service_name=tensorzero-gateway&query.num_traces=100"))
+        .get(format!("{jaeger_base_url}/api/v3/traces?&query.start_time_min={one_minute_ago_str}&query.start_time_max={now_str}&query.service_name=tensorzero-gateway&query.num_traces=500"))
         .send()
         .await
         .unwrap();
     let jaeger_traces = jaeger_result.json::<Value>().await.unwrap();
-    println!("Response: {jaeger_traces}");
     let mut target_span = None;
 
     let mut span_by_id = HashMap::new();
@@ -155,10 +186,15 @@ async fn test_jaeger_trace_export(existing_trace_parent: Option<ExistingTraceDat
         .iter()
         .map(|a| (a["key"].as_str().unwrap(), a["value"].clone()))
         .collect();
-    assert_eq!(
-        parent_attrs["tensorzero.custom_key"]["stringValue"],
-        "my-new-tenant"
-    );
+
+    if let Some((_, custom_value)) = &custom_header {
+        assert_eq!(
+            &parent_attrs["tensorzero.custom_key"]["stringValue"]
+                .as_str()
+                .expect("custom_key should be a string"),
+            custom_value
+        );
+    }
 
     if let Some(existing_trace_parent) = existing_trace_parent {
         assert_eq!(

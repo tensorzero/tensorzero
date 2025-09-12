@@ -30,6 +30,9 @@ We will likely address this with some form of query library down the line.
 
 export async function loadConfig(): Promise<Config> {
   const env = getEnv();
+  if (env.TENSORZERO_UI_DEFAULT_CONFIG) {
+    return await getConfigNative(null);
+  }
   const config = await getConfigNative(env.TENSORZERO_UI_CONFIG_PATH);
   return config;
 }
@@ -44,11 +47,7 @@ let configCache: ConfigCache | null = null;
 const defaultFunctionConfig: FunctionConfig = {
   type: "chat",
   variants: {},
-  schemas: {
-    system: null,
-    user: null,
-    assistant: null,
-  },
+  schemas: {},
   tools: [],
   tool_choice: "auto",
   parallel_tool_calls: null,

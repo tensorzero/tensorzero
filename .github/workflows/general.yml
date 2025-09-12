@@ -8,11 +8,9 @@ on:
   pull_request:
     branches: ["main"]
 
-# When triggered from the merge queue, cancel any existing workflow runs for the same PR branch
-# Otherwise, use the unique run id for the concurrency group, to prevent anything from getting cancelled
 concurrency:
-  group: ${{ github.event_name == 'merge_group' && format('{0}-{1}', github.workflow, github.ref) || github.run_id }}
-  cancel-in-progress: true
+  group: ${{ github.ref == 'refs/heads/main' && github.run_id || format('{0}-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   FORCE_COLOR: 1
@@ -23,6 +21,7 @@ env:
 jobs:
   check-version-consistency:
     runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -40,6 +39,7 @@ jobs:
       id-token: write
 
     runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -53,6 +53,9 @@ jobs:
         run: |
           docker load < gateway-container.tar
           docker load < ui-container.tar
+          # Retag the loaded images to match what docker-compose expects
+          docker tag tensorzero/gateway:sha-${{ github.sha }} tensorzero/gateway:latest
+          docker tag tensorzero/ui:sha-${{ github.sha }} tensorzero/ui:latest
 
       - name: Create the `object_storage` directory for the multimodal-vision-finetuning example
         run: |
@@ -71,7 +74,7 @@ jobs:
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    if: github.repository == 'tensorzero/tensorzero'
 
     steps:
       - name: Set DNS
@@ -102,6 +105,7 @@ jobs:
 
   check-node-bindings:
     runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -149,6 +153,7 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
+    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install Rust toolchain
@@ -175,6 +180,7 @@ jobs:
     runs-on: namespace-profile-tensorzero-32x64
 
     timeout-minutes: 30
+    if: github.repository == 'tensorzero/tensorzero'
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -395,11 +401,19 @@ jobs:
     # the main 'validate' job)
     runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-32x64' || 'namespace-profile-tensorzero-16x32' }}
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
+    if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
         # Only include replicated: true when running in merge queue
         replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
-        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"24.12-alpine","prefix":"24.12","allow_failure":false},{"tag":"25.7-alpine","prefix":"25.7","allow_failure":false}]') || fromJSON('[{"tag":"25.7-alpine","prefix":"25.7","allow_failure":false}]') }}
+        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"24.12-alpine","prefix":"24.12","allow_failure":false},{"tag":"latest","prefix":"","allow_failure":false}]') || fromJSON('[{"tag":"latest","prefix":"","allow_failure":false}]') }}
+        exclude:
+          # Use 25.7-alpine instead of latest for replicated tests in merge group
+          - replicated: true
+            clickhouse_version:
+              { "tag": "latest", "prefix": "", "allow_failure": false }
+          # Add 25.7-alpine for replicated tests in merge group
+        include: ${{ github.event_name == 'merge_group' && fromJSON('[{"clickhouse_version":{"tag":"25.7-alpine","prefix":"25.7","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -448,11 +462,11 @@ jobs:
 
       - name: Launch non-replicated ClickHouse container for E2E tests
         if: matrix.replicated == false
-        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up clickhouse --wait
+        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
 
       - name: Launch replicated ClickHouse container for E2E tests
         if: matrix.replicated == true
-        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml up clickhouse-01 clickhouse-02 clickhouse-03 --wait
+        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml up --wait
 
       # Make an HTTP request to ClickHouse and check that the version matches '${{ matrix.clickhouse_version }}'
       - name: Check ClickHouse version
@@ -551,6 +565,7 @@ jobs:
   # Run 'cargo test-optimization' against mock-inference-provider
   mock-optimization-tests:
     runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
     env:
       OPENAI_API_KEY: not_used
       FIREWORKS_API_KEY: not_used
@@ -637,7 +652,7 @@ jobs:
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
-    if: always()
+    if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [
         check-version-consistency,

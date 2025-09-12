@@ -1,3 +1,4 @@
+use crate::http::TensorzeroHttpClient;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
 #[cfg(feature = "pyo3")]
@@ -17,7 +18,7 @@ use crate::model::{
     UninitializedModelProvider, UninitializedProviderConfig,
 };
 use crate::optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput};
-use crate::providers::helpers::{TensorZeroRequestBuilderExt, UrlParseErrExt};
+use crate::providers::helpers::UrlParseErrExt;
 use crate::providers::openai::OpenAIRequestMessage;
 use crate::providers::openai::{tensorzero_to_openai_assistant_message, OpenAITool};
 use crate::providers::together::{
@@ -377,7 +378,7 @@ impl UninitializedTogetherSFTConfig {
     /// For detailed parameter documentation, see: https://docs.together.ai/reference/post-fine-tunes
     ///
     /// :param model: Name of the base model to run fine-tune job on.
-    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::TOGETHER_API_KEY". See docs for more details.
+    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like `env::TOGETHER_API_KEY`. See docs for more details.
     /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
     /// :param n_epochs: Number of complete passes through the training dataset. Default: 1. Higher values may improve results but increase cost and overfitting risk.
     /// :param n_checkpoints: Number of intermediate model versions saved during training. Default: 1.
@@ -518,7 +519,7 @@ impl TogetherSFTConfig {
     /// Uploads the given rows as a Together file, returning the file ID
     async fn upload_file(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         api_key: &SecretString,
         items: &[TogetherSupervisedRow<'_>],
         purpose: &'static str,
@@ -692,7 +693,7 @@ impl Optimizer for TogetherSFTConfig {
 
     async fn launch(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
@@ -816,7 +817,7 @@ impl Optimizer for TogetherSFTConfig {
 impl JobHandle for TogetherSFTJobHandle {
     async fn poll(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
         let together_credentials = build_creds_caching_default(
@@ -854,15 +855,14 @@ impl JobHandle for TogetherSFTJobHandle {
                 error: None,
             }),
             TogetherJobStatus::Completed => {
-                let model_name =
-                    res.model_output_name
-                        .ok_or(Error::new(ErrorDetails::InferenceServer {
-                            message: "Missing model_output_name in Together job response"
-                                .to_string(),
-                            provider_type: PROVIDER_TYPE.to_string(),
-                            raw_request: None,
-                            raw_response: None,
-                        }))?;
+                let model_name = res.model_output_name.ok_or_else(|| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: "Missing model_output_name in Together job response".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: None,
+                    })
+                })?;
 
                 let model_provider = UninitializedModelProvider {
                     config: UninitializedProviderConfig::Together {

@@ -1,5 +1,6 @@
 use crate::db::clickhouse::TableName;
 use crate::function::FunctionConfigType;
+use crate::http::TensorzeroHttpClient;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
     content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
@@ -13,7 +14,6 @@ use futures::try_join;
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::IntoPyObjectExt;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, future::Future, pin::Pin};
@@ -21,7 +21,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::inference::types::Text;
-use crate::stored_inference::{SimpleStoredSampleInfo, StoredSample};
+use crate::stored_inference::{SimpleStoredSampleInfo, StoredOutput, StoredSample};
 use crate::{
     config::Config,
     db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
@@ -525,7 +525,7 @@ pub async fn insert_datapoint(
     dataset_name: String,
     params: InsertDatapointParams,
     config: &Config,
-    http_client: &Client,
+    http_client: &TensorzeroHttpClient,
     clickhouse: &ClickHouseConnectionInfo,
 ) -> Result<Vec<Uuid>, Error> {
     validate_dataset_name(&dataset_name)?;
@@ -642,7 +642,7 @@ pub async fn insert_datapoint(
                 // Validate the outputs against the output schema
                 let output_schema = json
                     .output_schema
-                    .unwrap_or(json_function_config.output_schema.value.clone());
+                    .unwrap_or_else(|| json_function_config.output_schema.value.clone());
                 let dynamic_demonstration_info =
                     DynamicDemonstrationInfo::Json(output_schema.clone());
                 let output = if let Some(output) = json.output {
@@ -1370,7 +1370,8 @@ impl StoredSample for Datapoint {
             Datapoint::Chat(datapoint) => SimpleStoredSampleInfo {
                 function_name: datapoint.function_name,
                 input: datapoint.input,
-                output: datapoint.output,
+                output: datapoint.output.clone(),
+                stored_output: datapoint.output.map(StoredOutput::Chat),
                 dispreferred_outputs: Vec::default(),
                 tool_params: datapoint.tool_params,
                 output_schema: None,
@@ -1379,6 +1380,7 @@ impl StoredSample for Datapoint {
                 tags: datapoint.tags.unwrap_or_default(),
             },
             Datapoint::Json(datapoint) => {
+                let stored_output = datapoint.output.clone().map(StoredOutput::Json);
                 let output = datapoint.output.map(|output| match output.raw {
                     Some(raw) => vec![ContentBlockChatOutput::Text(Text { text: raw })],
                     None => vec![],
@@ -1387,6 +1389,7 @@ impl StoredSample for Datapoint {
                     function_name: datapoint.function_name,
                     input: datapoint.input,
                     output,
+                    stored_output,
                     dispreferred_outputs: Vec::default(),
                     tool_params: None,
                     output_schema: Some(datapoint.output_schema),

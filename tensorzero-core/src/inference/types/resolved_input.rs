@@ -1,7 +1,14 @@
+use std::future::Future;
+use std::pin::Pin;
+
+use futures::FutureExt;
+use object_store::{PutMode, PutOptions};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{storage::StoragePath, Base64File, Role, Thought};
+use crate::config::{Config, ObjectStoreInfo};
+use crate::error::{Error, ErrorDetails};
 use crate::inference::types::file::Base64FileMetadata;
 use crate::inference::types::stored_input::StoredFile;
 use crate::inference::types::stored_input::{
@@ -19,17 +26,68 @@ use pyo3::prelude::*;
 /// Like `Input`, but with all network resources resolved.
 /// Currently, this is just used to fetch image URLs in the image input,
 /// so that we always pass a base64-encoded image to the model provider.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq)]
+// TODO - should we remove the Serialize impl entirely, rather than rely on it
+// for the Pyo3 'str' impl?
+#[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
+#[cfg_attr(any(feature = "pyo3", test), serde(deny_unknown_fields))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct ResolvedInput {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        any(feature = "pyo3", test),
+        serde(skip_serializing_if = "Option::is_none")
+    )]
     pub system: Option<Value>,
 
-    #[serde(default)]
+    #[cfg_attr(any(feature = "pyo3", test), serde(default))]
     pub messages: Vec<ResolvedInputMessage>,
+}
+
+async fn write_file(
+    object_store: &Option<ObjectStoreInfo>,
+    raw: Base64File,
+    storage_path: StoragePath,
+) -> Result<(), Error> {
+    if let Some(object_store) = object_store {
+        // The store might be explicitly disabled
+        if let Some(store) = object_store.object_store.as_ref() {
+            let data = raw.data()?;
+            let bytes = aws_smithy_types::base64::decode(data).map_err(|e| {
+                Error::new(ErrorDetails::ObjectStoreWrite {
+                    message: format!("Failed to decode file as base64: {e:?}"),
+                    path: storage_path.clone(),
+                })
+            })?;
+            let res = store
+                .put_opts(
+                    &storage_path.path,
+                    bytes.into(),
+                    PutOptions {
+                        mode: PutMode::Create,
+                        ..Default::default()
+                    },
+                )
+                .await;
+            match res {
+                Ok(_) | Err(object_store::Error::AlreadyExists { .. }) => {}
+                Err(e) => {
+                    return Err(ErrorDetails::ObjectStoreWrite {
+                        message: format!("Failed to write file to object store: {e:?}"),
+                        path: storage_path.clone(),
+                    }
+                    .into());
+                }
+            }
+        }
+    } else {
+        return Err(ErrorDetails::InternalError {
+            message: "Called `write_file` with no object store configured".to_string(),
+        }
+        .into());
+    }
+    Ok(())
 }
 
 /// Produces a `StoredInput` from a `ResolvedInput` by discarding the data for any nested `File`s.
@@ -45,8 +103,43 @@ impl ResolvedInput {
                 .collect(),
         }
     }
+
+    /// Writes all the files in the input to the object store,
+    /// returning a list of futures (one per file)
+    #[must_use]
+    pub fn write_all_files<'a>(
+        self,
+        config: &'a Config,
+    ) -> Vec<Pin<Box<dyn Future<Output = ()> + Send + 'a>>> {
+        let mut futures = Vec::new();
+        if config.gateway.observability.enabled.unwrap_or(true) {
+            for message in self.messages {
+                for content_block in message.content {
+                    if let ResolvedInputMessageContent::File(file) = content_block {
+                        let FileWithPath {
+                            file: raw,
+                            storage_path,
+                        } = *file;
+
+                        futures.push(
+                            (async {
+                                if let Err(e) =
+                                    write_file(&config.object_store_info, raw, storage_path).await
+                                {
+                                    tracing::error!("Failed to write image to object store: {e:?}");
+                                }
+                            })
+                            .boxed(),
+                        );
+                    }
+                }
+            }
+        }
+        futures
+    }
 }
 
+#[cfg(feature = "pyo3")]
 impl std::fmt::Display for ResolvedInput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
@@ -72,8 +165,11 @@ impl ResolvedInput {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq)]
+// TODO - should we remove the Serialize impl entirely, rather than rely on it
+// for the Pyo3 'str' impl?
+#[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
+#[cfg_attr(any(feature = "pyo3", test), serde(deny_unknown_fields))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -95,6 +191,7 @@ impl ResolvedInputMessage {
     }
 }
 
+#[cfg(feature = "pyo3")]
 impl std::fmt::Display for ResolvedInputMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
@@ -126,8 +223,14 @@ impl ResolvedInputMessage {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq)]
+// TODO - should we remove the Serialize impl entirely, rather than rely on it
+// for the Pyo3 'str' impl?
+#[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
+#[cfg_attr(
+    any(feature = "pyo3", test),
+    serde(tag = "type", rename_all = "snake_case")
+)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub enum ResolvedInputMessageContent {
@@ -140,7 +243,7 @@ pub enum ResolvedInputMessageContent {
         value: String,
     },
     Thought(Thought),
-    #[serde(alias = "image")]
+    #[cfg_attr(any(feature = "pyo3", test), serde(alias = "image"))]
     File(Box<FileWithPath>),
     Unknown {
         data: Value,

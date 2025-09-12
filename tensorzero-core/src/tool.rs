@@ -296,8 +296,7 @@ pub struct DynamicToolParams {
     pub parallel_tool_calls: Option<bool>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, derive(Default))]
+#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct BatchDynamicToolParams {
     pub allowed_tools: Option<Vec<Option<Vec<String>>>>,
     pub additional_tools: Option<Vec<Option<Vec<Tool>>>>,
@@ -455,6 +454,7 @@ impl ToolCallOutput {
 
 impl ToolCallConfig {
     #[cfg(test)]
+    #[expect(clippy::missing_panics_doc)]
     pub fn implicit_from_value(value: &Value) -> Self {
         let parameters = StaticJSONSchema::from_value(value.clone()).unwrap();
         let implicit_tool_config = ToolConfig::Implicit(ImplicitToolConfig { parameters });

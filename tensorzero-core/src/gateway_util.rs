@@ -5,7 +5,6 @@ use std::sync::Arc;
 use crate::endpoints::openai_compatible::RouterExt;
 use axum::extract::{rejection::JsonRejection, FromRequest, Json, Request};
 use axum::Router;
-use reqwest::{Client, Proxy};
 use serde::de::DeserializeOwned;
 use tokio::runtime::Handle;
 use tokio::sync::oneshot::Sender;
@@ -18,6 +17,7 @@ use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
+use crate::http::TensorzeroHttpClient;
 
 /// Represents an active gateway (either standalone or embedded)
 /// The contained `app_state` can be freely cloned and dropped.
@@ -83,7 +83,7 @@ impl Drop for GatewayHandle {
 #[expect(clippy::manual_non_exhaustive)]
 pub struct AppStateData {
     pub config: Arc<Config>,
-    pub http_client: Client,
+    pub http_client: TensorzeroHttpClient,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
@@ -109,7 +109,7 @@ impl GatewayHandle {
         clickhouse_url: Option<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
-        let http_client = setup_http_client()?;
+        let http_client = TensorzeroHttpClient::new()?;
         Ok(Self::new_with_clickhouse_and_http_client(
             config,
             clickhouse_connection_info,
@@ -117,9 +117,11 @@ impl GatewayHandle {
         ))
     }
 
+    /// # Panics
+    /// Panics if a `TensorzeroHttpClient` cannot be constructed
     #[cfg(test)]
     pub fn new_unit_test_data(config: Arc<Config>, clickhouse_healthy: bool) -> Self {
-        let http_client = reqwest::Client::new();
+        let http_client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_mock(clickhouse_healthy);
         Self::new_with_clickhouse_and_http_client(config, clickhouse_connection_info, http_client)
     }
@@ -127,7 +129,7 @@ impl GatewayHandle {
     pub fn new_with_clickhouse_and_http_client(
         config: Arc<Config>,
         clickhouse_connection_info: ClickHouseConnectionInfo,
-        http_client: Client,
+        http_client: TensorzeroHttpClient,
     ) -> Self {
         let cancel_token = CancellationToken::new();
         setup_howdy(
@@ -146,6 +148,12 @@ impl GatewayHandle {
             _private: (),
         }
     }
+}
+
+pub async fn setup_clickhouse_without_config(
+    clickhouse_url: String,
+) -> Result<ClickHouseConnectionInfo, Error> {
+    setup_clickhouse(&Config::default(), Some(clickhouse_url), true).await
 }
 
 pub async fn setup_clickhouse(
@@ -247,35 +255,6 @@ where
 
         Ok(StructuredJson(deserialized))
     }
-}
-
-// This is set high enough that it should never be hit for a normal model response.
-// In the future, we may want to allow overriding this at the model provider level.
-const DEFAULT_HTTP_CLIENT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
-
-pub fn setup_http_client() -> Result<Client, Error> {
-    let mut http_client_builder = Client::builder().timeout(DEFAULT_HTTP_CLIENT_TIMEOUT);
-
-    if cfg!(feature = "e2e_tests") {
-        if let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY") {
-            tracing::info!("Using proxy URL from TENSORZERO_E2E_PROXY: {proxy_url}");
-            http_client_builder = http_client_builder
-                .proxy(Proxy::all(proxy_url).map_err(|e| {
-                    Error::new(ErrorDetails::AppState {
-                        message: format!("Invalid proxy URL: {e}"),
-                    })
-                })?)
-                // When running e2e tests, we use `provider-proxy` as an MITM proxy
-                // for caching, so we need to accept the invalid (self-signed) cert.
-                .danger_accept_invalid_certs(true);
-        }
-    }
-
-    http_client_builder.build().map_err(|e| {
-        Error::new(ErrorDetails::AppState {
-            message: format!("Failed to build HTTP client: {e}"),
-        })
-    })
 }
 
 // We hold on to these fields so that their Drop impls run when `ShutdownHandle` is dropped

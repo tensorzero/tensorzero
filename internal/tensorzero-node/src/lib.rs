@@ -4,8 +4,10 @@ use url::Url;
 
 use tensorzero::{
     Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams, InferenceOutput,
-    OptimizationJobHandle,
+    OptimizationJobHandle, QUANTILES,
 };
+
+mod database;
 
 #[macro_use]
 extern crate napi_derive;
@@ -119,12 +121,20 @@ impl TensorZeroClient {
 }
 
 #[napi]
-pub async fn get_config(config_path: String) -> Result<String, napi::Error> {
-    let config =
-        tensorzero::get_config_no_verify_credentials(Path::new(&config_path).to_path_buf())
-            .await
-            .map_err(|e| napi::Error::from_reason(format!("Failed to get config: {e}")))?;
+pub async fn get_config(config_path: Option<String>) -> Result<String, napi::Error> {
+    let config_path = config_path
+        .as_ref()
+        .map(Path::new)
+        .map(|path| path.to_path_buf());
+    let config = tensorzero::get_config_no_verify_credentials(config_path)
+        .await
+        .map_err(|e| napi::Error::from_reason(format!("Failed to get config: {e}")))?;
     let config_str =
         serde_json::to_string(&config).map_err(|e| napi::Error::from_reason(e.to_string()))?;
     Ok(config_str)
+}
+
+#[napi]
+pub fn get_quantiles() -> Vec<f64> {
+    QUANTILES.to_vec()
 }

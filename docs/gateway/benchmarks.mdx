@@ -9,36 +9,41 @@ It's written in Rust and designed to handle extreme concurrency with sub-millise
 
 <Tip>
 
-See [Performance & Latency Tips](/gateway/guides/performance-latency/) for more details on maximizing performance in production settings.
+See ["Optimize latency and throughput" guide](/deployment/optimize-latency-and-throughput/) for more details on maximizing performance in production settings.
 
 </Tip>
 
 ## TensorZero Gateway vs. LiteLLM
 
-> **TLDR: TensorZero achieves 100x lower P99 latency overhead while handling 100x the load.**
+- **TensorZero achieves sub-millisecond latency overhead even at 10,000 QPS.**
+- **LiteLLM degrades at hundreds of QPS and fails entirely at 1,000 QPS.**
 
 We benchmarked the TensorZero Gateway against the popular LiteLLM Proxy (LiteLLM Gateway).
 
-In a `c7i.xlarge` instance on AWS (4 vCPUs, 8 GB RAM), LiteLLM crashes when concurrency exceeds a few hundred QPS.
-TensorZero Gateway handles 10k+ QPS in the same instance without sweating.
+In a `c7i.xlarge` instance on AWS (4 vCPUs, 8 GB RAM), LiteLLM fails when concurrency reaches 1,000 QPS with the vast majority of requests timing out.
+TensorZero Gateway handles 10,000 QPS in the same instance with 100% success rate and sub-millisecond latencies.
 
-Even with a 100x difference in throughput, the TensorZero Gateway achieves 25-100x+ lower latency.
-The difference is especially pronounced at the tail: 100x+ lower P99 latency.
-Building in Rust (TensorZero) led to consistent sub-millisecond latency overhead under extreme load, whereas Python (LiteLLM) often becomes a bottleneck.
+Even at low loads where LiteLLM is stable (100 QPS), TensorZero at 10,000 QPS achieves significantly lower latencies.
+Building in Rust (TensorZero) led to consistent sub-millisecond latency overhead under extreme load, whereas Python (LiteLLM) becomes a bottleneck even at moderate loads.
 
-| Latency | LiteLLM Proxy <br /> (100 QPS) | TensorZero Gateway <br /> (10,000 QPS) |
-| :-----: | :----------------------------: | :------------------------------------: |
-|  Mean   |             8.36ms             |                 0.21ms                 |
-|   50%   |             7.00ms             |                 0.19ms                 |
-|   90%   |             7.53ms             |                 0.25ms                 |
-|   95%   |             7.79ms             |                 0.28ms                 |
-|   99%   |            66.68ms             |                 0.57ms                 |
+### Latency Comparison
+
+| Latency | LiteLLM Proxy <br /> (100 QPS) | LiteLLM Proxy <br /> (500 QPS) | LiteLLM Proxy <br /> (1,000 QPS) | TensorZero Gateway <br /> (10,000 QPS) |
+| :-----: | :----------------------------: | :----------------------------: | :------------------------------: | :------------------------------------: |
+|  Mean   |             4.91ms             |             7.45ms             |             Failure              |                 0.37ms                 |
+|   50%   |             4.83ms             |             5.81ms             |             Failure              |                 0.35ms                 |
+|   90%   |             5.26ms             |            10.02ms             |             Failure              |                 0.50ms                 |
+|   95%   |             5.41ms             |            13.40ms             |             Failure              |                 0.58ms                 |
+|   99%   |             5.87ms             |            39.69ms             |             Failure              |                 0.94ms                 |
+
+At 1,000 QPS, LiteLLM fails entirely with the vast majority of requests timing out, while TensorZero continues to operate smoothly even at 10x that load.
 
 **Technical Notes:**
 
-- We use a `c7i.xlarge` instance on AWS (4 vCPUs, 8 GB RAM).
+- We use a `c7i.xlarge` instance on AWS (4 vCPUs, 8 GB RAM) running Ubuntu 24.04.2 LTS.
 - We use a mock OpenAI inference provider for both benchmarks.
 - The load generator, both gateways, and the mock inference provider all run on the same instance.
 - We configured `observability.enabled = false` (i.e. disabled logging inferences to ClickHouse) in the TensorZero Gateway to make the scenarios comparable. (Even then, the observability features run asynchronously in the background, so they wouldn't materially affect latency given a powerful enough ClickHouse deployment.)
+- The most recent benchmark run was conducted on July 30, 2025. It used TensorZero `2025.5.7` and LiteLLM `1.74.9`.
 
 Read more about the technical details and reproduction instructions [here](https://github.com/tensorzero/tensorzero/tree/main/gateway/benchmarks).

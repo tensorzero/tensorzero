@@ -2,14 +2,19 @@ use serde_json::json;
 use std::collections::HashMap;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::inference::types::{
-    ContentBlock, ContentBlockChatOutput, ModelInput, RequestMessage, ResolvedInput,
-    ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
+    ContentBlock, ContentBlockChatOutput, ModelInput, RequestMessage, Role, StoredInput,
+    StoredInputMessage, StoredInputMessageContent, Text,
 };
-use tensorzero_core::optimization::dicl::insert_dicl_examples_with_batching;
+use tensorzero_core::optimization::dicl::{
+    dicl_examples_exist, insert_dicl_examples_with_batching,
+};
 use tensorzero_core::stored_inference::RenderedSample;
 use uuid::Uuid;
 
 fn create_test_rendered_sample(input: &str, output: &str) -> RenderedSample {
+    let output_vec = vec![ContentBlockChatOutput::Text(Text {
+        text: output.to_string(),
+    })];
     RenderedSample {
         function_name: "test_function".to_string(),
         input: ModelInput {
@@ -21,18 +26,19 @@ fn create_test_rendered_sample(input: &str, output: &str) -> RenderedSample {
                 })],
             }],
         },
-        stored_input: ResolvedInput {
+        stored_input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!(input),
                 }],
             }],
         },
-        output: Some(vec![ContentBlockChatOutput::Text(Text {
-            text: output.to_string(),
-        })]),
+        output: Some(output_vec.clone()),
+        stored_output: Some(tensorzero_core::stored_inference::StoredOutput::Chat(
+            output_vec,
+        )),
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
         tool_params: None,
@@ -46,6 +52,10 @@ fn create_test_rendered_sample(input: &str, output: &str) -> RenderedSample {
 async fn test_insert_dicl_examples_success() {
     let clickhouse = get_clickhouse().await;
 
+    // Generate unique names to ensure test isolation
+    let function_name = format!("test_function_e2e_{}", Uuid::now_v7());
+    let variant_name = format!("test_variant_e2e_{}", Uuid::now_v7());
+
     let samples = vec![
         create_test_rendered_sample("test input 1", "test output 1"),
         create_test_rendered_sample("test input 2", "test output 2"),
@@ -57,8 +67,8 @@ async fn test_insert_dicl_examples_success() {
     let result = insert_dicl_examples_with_batching(
         &clickhouse,
         examples_with_embeddings,
-        "test_function_e2e",
-        "test_variant_e2e",
+        &function_name,
+        &variant_name,
         10, // batch_size
     )
     .await;
@@ -67,9 +77,9 @@ async fn test_insert_dicl_examples_success() {
 
     // Verify the data was actually written to ClickHouse by querying the DynamicInContextLearningExample table
     // We should find exactly 2 rows with the expected function_name and variant_name
-    let query = "SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = 'test_function_e2e' AND variant_name = 'test_variant_e2e'";
+    let query = format!("SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'");
     let count_result = clickhouse
-        .run_query_synchronous_no_params(query.to_string())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     let count_str = count_result.response;
@@ -83,6 +93,10 @@ async fn test_insert_dicl_examples_success() {
 #[tokio::test]
 async fn test_insert_dicl_examples_multiple_chunks() {
     let clickhouse = get_clickhouse().await;
+
+    // Generate unique names to ensure test isolation
+    let function_name = format!("test_function_chunks_e2e_{}", Uuid::now_v7());
+    let variant_name = format!("test_variant_chunks_e2e_{}", Uuid::now_v7());
 
     // Create 5 examples with batch size of 2, should create 3 batches (2+2+1)
     let samples = (0..5)
@@ -99,8 +113,8 @@ async fn test_insert_dicl_examples_multiple_chunks() {
     let result = insert_dicl_examples_with_batching(
         &clickhouse,
         examples_with_embeddings,
-        "test_function_chunks_e2e",
-        "test_variant_chunks_e2e",
+        &function_name,
+        &variant_name,
         2, // Small batch size to force multiple batches
     )
     .await;
@@ -109,9 +123,9 @@ async fn test_insert_dicl_examples_multiple_chunks() {
 
     // Verify the chunking logic worked correctly by checking that all 5 examples were inserted
     // This test specifically validates that the chunking with size 2 creates 3 chunks (2+2+1) and all data is preserved
-    let query = "SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = 'test_function_chunks_e2e' AND variant_name = 'test_variant_chunks_e2e'";
+    let query = format!("SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'");
     let count_result = clickhouse
-        .run_query_synchronous_no_params(query.to_string())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     let count_str = count_result.response;
@@ -126,13 +140,17 @@ async fn test_insert_dicl_examples_multiple_chunks() {
 async fn test_insert_dicl_examples_with_empty_input() {
     let clickhouse = get_clickhouse().await;
 
+    // Generate unique names to ensure test isolation
+    let function_name = format!("test_function_empty_e2e_{}", Uuid::now_v7());
+    let variant_name = format!("test_variant_empty_e2e_{}", Uuid::now_v7());
+
     let examples_with_embeddings: Vec<(RenderedSample, Vec<f64>)> = vec![];
 
     let result = insert_dicl_examples_with_batching(
         &clickhouse,
         examples_with_embeddings,
-        "test_function_empty_e2e",
-        "test_variant_empty_e2e",
+        &function_name,
+        &variant_name,
         10,
     )
     .await;
@@ -142,9 +160,9 @@ async fn test_insert_dicl_examples_with_empty_input() {
 
     // Verify that no data was written to ClickHouse for empty input
     // This confirms that empty inputs are handled properly without creating spurious database entries
-    let query = "SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = 'test_function_empty_e2e' AND variant_name = 'test_variant_empty_e2e'";
+    let query = format!("SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'");
     let count_result = clickhouse
-        .run_query_synchronous_no_params(query.to_string())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
     let count_str = count_result.response;
@@ -159,6 +177,9 @@ async fn test_insert_dicl_examples_with_empty_input() {
 async fn test_insert_dicl_examples_json_serialization() {
     let clickhouse = get_clickhouse().await;
 
+    // Generate unique variant name to ensure test isolation
+    let variant_name = format!("test_variant_json_e2e_{}", Uuid::now_v7());
+
     // Test with special characters that need proper JSON encoding
     let sample = create_test_rendered_sample(
         "input with \"quotes\" and \n newlines",
@@ -171,7 +192,7 @@ async fn test_insert_dicl_examples_json_serialization() {
         &clickhouse,
         examples_with_embeddings,
         "test_function_json_e2e",
-        "test_variant_json_e2e",
+        &variant_name,
         10,
     )
     .await;
@@ -180,9 +201,9 @@ async fn test_insert_dicl_examples_json_serialization() {
 
     // Verify that the data with special characters was correctly inserted and can be retrieved
     // This test ensures JSON serialization handles quotes, newlines, and Unicode characters properly
-    let count_query = "SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = 'test_function_json_e2e' AND variant_name = 'test_variant_json_e2e'";
+    let count_query = format!("SELECT COUNT(*) as count FROM DynamicInContextLearningExample WHERE function_name = 'test_function_json_e2e' AND variant_name = '{variant_name}'");
     let count_result = clickhouse
-        .run_query_synchronous_no_params(count_query.to_string())
+        .run_query_synchronous_no_params(count_query)
         .await
         .unwrap();
     let count_str = count_result.response;
@@ -193,9 +214,9 @@ async fn test_insert_dicl_examples_json_serialization() {
     );
 
     // Also verify that the input and output contain the expected special characters
-    let content_query = "SELECT input, output FROM DynamicInContextLearningExample WHERE function_name = 'test_function_json_e2e' AND variant_name = 'test_variant_json_e2e' FORMAT JSONEachRow";
+    let content_query = format!("SELECT input, output FROM DynamicInContextLearningExample WHERE function_name = 'test_function_json_e2e' AND variant_name = '{variant_name}' FORMAT JSONEachRow");
     let content_result = clickhouse
-        .run_query_synchronous_no_params(content_query.to_string())
+        .run_query_synchronous_no_params(content_query)
         .await
         .unwrap();
     let content_str = content_result.response;
@@ -216,5 +237,72 @@ async fn test_insert_dicl_examples_json_serialization() {
     assert!(
         output_str.contains("àáâã"),
         "Output should contain Unicode chars: {output_str}"
+    );
+}
+
+#[tokio::test]
+async fn test_dicl_examples_exist() {
+    let clickhouse = get_clickhouse().await;
+
+    // Generate unique names to ensure test isolation
+    let function_name = format!("test_function_exists_{}", Uuid::now_v7());
+    let variant_name = format!("test_variant_exists_{}", Uuid::now_v7());
+    let non_existent_variant = format!("test_variant_non_existent_{}", Uuid::now_v7());
+
+    // First, check that no examples exist for the variant
+    let exists_before = dicl_examples_exist(&clickhouse, &function_name, &variant_name)
+        .await
+        .unwrap();
+    assert!(
+        !exists_before,
+        "Expected no DICL examples to exist initially for variant '{variant_name}'"
+    );
+
+    // Insert some examples
+    let samples = vec![
+        create_test_rendered_sample("test input 1", "test output 1"),
+        create_test_rendered_sample("test input 2", "test output 2"),
+    ];
+    let embeddings = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
+    let examples_with_embeddings: Vec<(RenderedSample, Vec<f64>)> =
+        samples.into_iter().zip(embeddings.into_iter()).collect();
+
+    let insert_result = insert_dicl_examples_with_batching(
+        &clickhouse,
+        examples_with_embeddings,
+        &function_name,
+        &variant_name,
+        10,
+    )
+    .await;
+    assert!(insert_result.is_ok(), "Failed to insert DICL examples");
+
+    // Now check that examples exist for the variant
+    let exists_after = dicl_examples_exist(&clickhouse, &function_name, &variant_name)
+        .await
+        .unwrap();
+    assert!(
+        exists_after,
+        "Expected DICL examples to exist after insertion for variant '{variant_name}'"
+    );
+
+    // Check that a non-existent variant returns false
+    let non_existent = dicl_examples_exist(&clickhouse, &function_name, &non_existent_variant)
+        .await
+        .unwrap();
+    assert!(
+        !non_existent,
+        "Expected no DICL examples to exist for non-existent variant '{non_existent_variant}'"
+    );
+
+    // Also check that a different function name returns false
+    let different_function = format!("different_function_{}", Uuid::now_v7());
+    let different_function_exists =
+        dicl_examples_exist(&clickhouse, &different_function, &variant_name)
+            .await
+            .unwrap();
+    assert!(
+        !different_function_exists,
+        "Expected no DICL examples to exist for different function '{different_function}'"
     );
 }
