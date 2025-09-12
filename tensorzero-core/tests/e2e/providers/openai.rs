@@ -1145,6 +1145,10 @@ async fn test_embedding_request() {
         )
         .await
         .unwrap();
+    assert!(
+        !response.cached,
+        "Response was incorrectly cached: {response:?}"
+    );
     let [first_embedding] = response.embeddings.as_slice() else {
         panic!("Expected exactly one embedding");
     };
