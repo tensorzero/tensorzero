@@ -12,6 +12,7 @@ use pyo3::exceptions::PyKeyError;
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::IntoPyObjectExt;
+use rate_limiting::RateLimitingConfig;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -48,6 +49,7 @@ use std::error::Error as StdError;
 
 pub mod gateway;
 pub mod path;
+pub mod rate_limiting;
 mod span_map;
 #[cfg(test)]
 mod tests;
@@ -83,6 +85,7 @@ pub struct Config {
     pub provider_types: ProviderTypesConfig,
     pub optimizers: HashMap<String, OptimizerInfo>,
     pub postgres: PostgresConfig,
+    pub rate_limiting: RateLimitingConfig,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
@@ -701,6 +704,7 @@ impl Config {
             provider_types: uninitialized_config.provider_types,
             optimizers,
             postgres: uninitialized_config.postgres,
+            rate_limiting: uninitialized_config.rate_limiting,
         };
 
         // Initialize the templates
@@ -1080,6 +1084,8 @@ pub struct UninitializedConfig {
     pub optimizers: HashMap<String, UninitializedOptimizerInfo>, // optimizer name => optimizer config
     #[serde(default)]
     pub postgres: PostgresConfig,
+    #[serde(default)]
+    pub rate_limiting: RateLimitingConfig,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
