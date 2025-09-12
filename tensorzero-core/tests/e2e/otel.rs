@@ -203,6 +203,7 @@ pub async fn test_capture_simple_inference_spans() {
     assert_eq!(model_provider_span.status, Status::Unset);
     let model_provider_attr_map = attrs_to_map(&model_provider_span.attributes);
     assert_eq!(model_provider_attr_map["provider_name"], "dummy".into());
+    println!("{:?}", model_provider_attr_map);
     assert_eq!(
         model_provider_attr_map["gen_ai.operation.name"],
         "chat".into()

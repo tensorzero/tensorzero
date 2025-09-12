@@ -435,10 +435,13 @@ pub struct OtlpTracesConfig {
 /// The OTLP generative AI format being used:
 /// - OpenTelemetry: https://opentelemetry.io/docs/specs/semconv/gen-ai/
 /// - OpenInference: https://arize.com/docs/ax/observe/tracing/tracing-concepts/what-is-openinference
-#[derive(Debug, Default, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub enum OtlpTracesFormat {
     #[default]
+    #[serde(alias = "opentelemetry")]
     OpenTelemetry,
+    #[serde(alias = "openinference")]
     OpenInference,
 }
 

@@ -2581,3 +2581,55 @@ async fn test_glob_merge_non_map() {
         )
     );
 }
+
+#[tokio::test]
+async fn test_otlp_traces_format_config() {
+    let config_str = r#"
+          [gateway.export.otlp.traces]
+          enabled = true
+          format = "openinference"
+      "#;
+    let config = toml::from_str(config_str).unwrap();
+    let config = Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect("config failed to load");
+    let format = config.gateway.export.otlp.traces.format;
+    OTLP_TRACE_FORMAT
+        .scope(format, async {
+            let format = otlp_trace_format();
+            assert_eq!(format, OtlpTracesFormat::OpenInference);
+        })
+        .await;
+}
+
+#[tokio::test]
+async fn test_otlp_traces_format_default() {
+    let config_str = r#"
+          [gateway.export.otlp.traces]
+          enabled = true
+      "#;
+    let config = toml::from_str(config_str).unwrap();
+    let config = Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect("config failed to load");
+    let format = config.gateway.export.otlp.traces.format;
+    OTLP_TRACE_FORMAT
+        .scope(format, async {
+            let format = otlp_trace_format();
+            assert_eq!(format, OtlpTracesFormat::OpenTelemetry);
+        })
+        .await;
+}
+
+#[tokio::test]
+async fn test_otlp_traces_format_deny() {
+    let config_str = r#"
+          [gateway.export.otlp.traces]
+          enabled = true
+          format = "invalidformat"
+      "#;
+    let config = toml::from_str(config_str).unwrap();
+    Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect_err("invalid `gateway.export.otlp.traces` format");
+}
