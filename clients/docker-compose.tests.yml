@@ -285,6 +285,10 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # Buildkite analytics
       BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
+    volumes:
+      # Mount test files and fixtures for image tests
+      - ../tensorzero-core/tests:/app/tensorzero-core/tests:ro
+      - ../tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro
     depends_on:
       gateway:
         condition: service_healthy
