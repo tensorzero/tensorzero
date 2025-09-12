@@ -47,6 +47,7 @@
 //!   and passed along to `TracerWrapper::build_with_context` when the span is closed and exported.
 use std::hash::Hash;
 use std::hash::Hasher;
+use std::time::Duration;
 
 use axum::extract::MatchedPath;
 use axum::middleware::Next;
@@ -257,6 +258,9 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
         default_tracer: tracer,
         default_provider: provider,
         custom_tracers: Cache::builder()
+            .max_capacity(32)
+            // Expire entries that have been idle for 1 hour
+            .time_to_idle(Duration::from_secs(60 * 60))
             .eviction_listener(move |_key, val: CustomTracer, _reason| {
                 // When we evict a `CustomTracer` from the cache, shut it down, and add the shutdown task
                 // to `shutdown_tasks` so that we can wait for all of the custom tracers to shut down
