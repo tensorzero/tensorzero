@@ -162,3 +162,9 @@ We recommend setting up observability early to monitor your LLM application and 
 Optionally, you can provide the following command line argument to customize the gateway's logging format:
 
 - `--log-format`: Set the logging format to either `pretty` (default) or `json`.
+
+### Add a status or health check
+
+The TensorZero Gateway exposes endpoints for status and health checks.
+The `/status` endpoint checks that the gateway is running successfully.
+The `/health` endpoint additionally checks that it can communicate with ClickHouse (if observability is enabled).

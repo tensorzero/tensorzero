@@ -110,7 +110,12 @@ See our [GitHub repository](https://github.com/tensorzero/tensorzero/blob/main/u
 
 ## Configure
 
-### Optional Environment Variables
+### Add a health check
+
+The TensorZero UI exposes the `/health` endpoint for health checks.
+This endpoint checks that the UI is running, the associated configuration is valid, and the ClickHouse connection is healthy.
+
+### Customize the deployment
 
 The TensorZero UI supports the following optional environment variables.
 
