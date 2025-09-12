@@ -39,7 +39,6 @@ export default function DatasetTable({
   counts: DatasetCountInfo[];
 }) {
   const fetcher = useFetcher();
-  const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [datasetToDelete, setDatasetToDelete] = useState<string | null>(null);
 
@@ -77,9 +76,7 @@ export default function DatasetTable({
             <Button
               variant="ghost"
               size="icon"
-              className={
-                hoveredRow === info.row.original.dataset_name ? "" : "invisible"
-              }
+              className="opacity-60 transition-opacity hover:opacity-100"
               onClick={() => {
                 setDatasetToDelete(info.row.original.dataset_name);
                 setDeleteDialogOpen(true);
@@ -92,7 +89,7 @@ export default function DatasetTable({
         enableSorting: false,
       }),
     ],
-    [hoveredRow],
+    [],
   );
 
   const table = useReactTable({
@@ -170,12 +167,7 @@ export default function DatasetTable({
             <TableEmptyState message="No datasets found" />
           ) : (
             table.getRowModel().rows.map((row) => (
-              <TableRow
-                key={row.id}
-                id={row.original.dataset_name}
-                onMouseEnter={() => setHoveredRow(row.original.dataset_name)}
-                onMouseLeave={() => setHoveredRow(null)}
-              >
+              <TableRow key={row.id} id={row.original.dataset_name}>
                 {row.getVisibleCells().map((cell, index) => (
                   <TableCell
                     key={cell.id}
