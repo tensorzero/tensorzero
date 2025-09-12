@@ -3056,7 +3056,8 @@ def test_text_arguments_deprecation_1170_warning(sync_client: TensorZeroGateway)
                     {
                         "role": "user",
                         # Intentionally ignore the type error to check the deprecation warning
-                        "content": [Text(type="text", text={"country": "Japan"})],  # type: ignore
+                        # type: ignore
+                        "content": [Text(type="text", text={"country": "Japan"})],
                     }
                 ],
             },
@@ -3398,7 +3399,7 @@ async def test_async_cannot_enable_batch_writes():
 
 def test_http_client_no_spurious_log(capfd: CaptureFixture[str]):
     client = TensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=get_gateway_url(),
         verbose_errors=True,
     )
     assert client is not None
@@ -3410,7 +3411,7 @@ def test_http_client_no_spurious_log(capfd: CaptureFixture[str]):
 @pytest.mark.asyncio
 async def test_async_http_client_no_spurious_log(capfd: CaptureFixture[str]):
     client_fut = AsyncTensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=get_gateway_url(),
         verbose_errors=True,
     )
     assert inspect.isawaitable(client_fut)
@@ -3424,7 +3425,7 @@ async def test_async_http_client_no_spurious_log(capfd: CaptureFixture[str]):
 def test_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
     client = TensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+        clickhouse_url=get_clickhouse_url(),
     )
     assert client is not None
     captured = capfd.readouterr()
@@ -3436,7 +3437,7 @@ def test_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
 async def test_async_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
     client_fut = AsyncTensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+        clickhouse_url=get_clickhouse_url(),
     )
     assert inspect.isawaitable(client_fut)
     client = await client_fut

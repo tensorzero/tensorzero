@@ -55,7 +55,7 @@ def test_sync_openai_rft(
         grader=grader,
         n_epochs=1,
         reasoning_effort="low",
-        api_base="http://localhost:3030/openai/",
+        api_base=f"{get_mock_inference_provider_base_url()}/openai/",
     )
     optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
         train_samples=mixed_rendered_samples,
@@ -240,7 +240,7 @@ async def test_async_openai_rft(
         grader=grader,
         n_epochs=1,
         reasoning_effort="low",
-        api_base="http://localhost:3030/openai/",
+        api_base=f"{get_mock_inference_provider_base_url()}/openai/",
     )
     optimization_job_handle = (
         await embedded_async_client.experimental_launch_optimization(

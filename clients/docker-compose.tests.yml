@@ -104,44 +104,43 @@ services:
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       TMPDIR: /tmp
       # API Keys
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-dummy}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-dummy}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-dummy}
       AWS_REGION: ${AWS_REGION:-us-east-1}
-      AZURE_OPENAI_API_BASE: ${AZURE_OPENAI_API_BASE:-}
-      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
-      AZURE_OPENAI_DEPLOYMENT_ID: ${AZURE_OPENAI_DEPLOYMENT_ID:-}
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-      FIREWORKS_API_KEY: ${FIREWORKS_API_KEY:-}
-      FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-}
-      GCP_VERTEX_CREDENTIALS_PATH: /app/gcp_jwt_key.json
-      GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
-      GCP_STORAGE_ACCESS_KEY_ID: ${GCP_STORAGE_ACCESS_KEY_ID:-}
-      GCP_STORAGE_SECRET_ACCESS_KEY: ${GCP_STORAGE_SECRET_ACCESS_KEY:-}
-      GOOGLE_AI_STUDIO_API_KEY: ${GOOGLE_AI_STUDIO_API_KEY:-}
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
-      HYPERBOLIC_API_KEY: ${HYPERBOLIC_API_KEY:-}
-      MODAL_KEY: ${MODAL_KEY:-}
-      MODAL_SECRET: ${MODAL_SECRET:-}
-      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
-      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
-      SGLANG_API_KEY: ${SGLANG_API_KEY:-}
-      TGI_API_KEY: ${TGI_API_KEY:-}
-      TOGETHER_API_KEY: ${TOGETHER_API_KEY:-}
-      VLLM_API_KEY: ${VLLM_API_KEY:-}
-      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
-      XAI_API_KEY: ${XAI_API_KEY:-}
+      AZURE_AI_FOUNDRY_API_KEY: ${AZURE_AI_FOUNDRY_API_KEY:-dummy}
+      AZURE_OPENAI_API_BASE: ${AZURE_OPENAI_API_BASE:-dummy}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-dummy}
+      AZURE_OPENAI_DEPLOYMENT_ID: ${AZURE_OPENAI_DEPLOYMENT_ID:-dummy}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-dummy}
+      FIREWORKS_API_KEY: ${FIREWORKS_API_KEY:-dummy}
+      FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-dummy}
+      GCP_VERTEX_CREDENTIALS_PATH: ${GCP_VERTEX_CREDENTIALS_PATH:-dummy}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-dummy}
+      GCP_STORAGE_ACCESS_KEY_ID: ${GCP_STORAGE_ACCESS_KEY_ID:-dummy}
+      GCP_STORAGE_SECRET_ACCESS_KEY: ${GCP_STORAGE_SECRET_ACCESS_KEY:-dummy}
+      GOOGLE_AI_STUDIO_API_KEY: ${GOOGLE_AI_STUDIO_API_KEY:-dummy}
+      GROQ_API_KEY: ${GROQ_API_KEY:-dummy}
+      HYPERBOLIC_API_KEY: ${HYPERBOLIC_API_KEY:-dummy}
+      MODAL_KEY: ${MODAL_KEY:-dummy}
+      MODAL_SECRET: ${MODAL_SECRET:-dummy}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-dummy}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-dummy}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-dummy}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-dummy}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-dummy}
+      SGLANG_API_KEY: ${SGLANG_API_KEY:-dummy}
+      TGI_API_KEY: ${TGI_API_KEY:-dummy}
+      TOGETHER_API_KEY: ${TOGETHER_API_KEY:-dummy}
+      VLLM_API_KEY: ${VLLM_API_KEY:-dummy}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-dummy}
+      XAI_API_KEY: ${XAI_API_KEY:-dummy}
     command: [--config-file, tensorzero-core/tests/e2e/tensorzero.toml]
     volumes:
       # Mount the e2e directory so the config path exists inside the container
       - ../tensorzero-core/tests/e2e:/app/tensorzero-core/tests/e2e:ro
       # Mount the fixtures directory so template paths can be resolved
       - ../tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro
-      # Mount GCP JWT key file
-      - ../gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
       # Shared tmpdir filesystem
       - shared-tmpdir:/tmp
     depends_on:
@@ -208,12 +207,37 @@ services:
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       TMPDIR: /tmp
       # API Keys
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-dummy}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-dummy}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-dummy}
       AWS_REGION: ${AWS_REGION:-us-east-1}
+      AZURE_AI_FOUNDRY_API_KEY: ${AZURE_AI_FOUNDRY_API_KEY:-dummy}
+      AZURE_OPENAI_API_BASE: ${AZURE_OPENAI_API_BASE:-dummy}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-dummy}
+      AZURE_OPENAI_DEPLOYMENT_ID: ${AZURE_OPENAI_DEPLOYMENT_ID:-dummy}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-dummy}
       FIREWORKS_API_KEY: "notused"
+      FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-dummy}
+      GCP_VERTEX_CREDENTIALS_PATH: /app/gcp_jwt_key.json
+      GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
+      GCP_STORAGE_ACCESS_KEY_ID: ${GCP_STORAGE_ACCESS_KEY_ID:-dummy}
+      GCP_STORAGE_SECRET_ACCESS_KEY: ${GCP_STORAGE_SECRET_ACCESS_KEY:-dummy}
+      GOOGLE_AI_STUDIO_API_KEY: ${GOOGLE_AI_STUDIO_API_KEY:-dummy}
+      GROQ_API_KEY: ${GROQ_API_KEY:-dummy}
+      HYPERBOLIC_API_KEY: ${HYPERBOLIC_API_KEY:-dummy}
+      MODAL_KEY: ${MODAL_KEY:-dummy}
+      MODAL_SECRET: ${MODAL_SECRET:-dummy}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-dummy}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-dummy}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-dummy}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-dummy}
+      SGLANG_API_KEY: ${SGLANG_API_KEY:-dummy}
+      TGI_API_KEY: ${TGI_API_KEY:-dummy}
       TOGETHER_API_KEY: "notused"
+      VLLM_API_KEY: ${VLLM_API_KEY:-dummy}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-dummy}
+      XAI_API_KEY: ${XAI_API_KEY:-dummy}
       # Buildkite analytics
       BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
     volumes:
@@ -221,6 +245,8 @@ services:
       - ../tensorzero-core/tests:/app/tensorzero-core/tests:ro
       - ../tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro
       - ../examples:/app/examples:ro
+      # Mount GCP JWT key file
+      - ../../../gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
       # Shared tmpdir filesystem
       - shared-tmpdir:/tmp
     depends_on:

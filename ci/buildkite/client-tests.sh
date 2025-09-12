@@ -25,7 +25,8 @@ buildkite-agent artifact download fixtures.tar.gz ui/fixtures
 test ui/fixtures/fixtures.tar.gz
 tar -xzvf ui/fixtures/fixtures.tar.gz
 
-
+# Write the GCP JWT key to a file
+echo $(buildkite-agent secret get GCP_JWT_KEY) > gcp_jwt_key.json
 
 
 # ------------------------------------------------------------------------------
