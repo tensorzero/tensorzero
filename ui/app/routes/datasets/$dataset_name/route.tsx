@@ -17,6 +17,11 @@ import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
 import { logger } from "~/utils/logger";
+import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
+import { useFetcher } from "react-router";
+import { DeleteButton } from "~/components/utils/DeleteButton";
+import { staleDatapoint } from "~/utils/clickhouse/datasets.server";
+import { getConfig } from "~/utils/config/index.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { dataset_name } = params;
@@ -46,12 +51,57 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return { rows, count_info, pageSize, offset, rowsAdded, rowsSkipped };
 }
 
+export async function action({ request, params }: Route.ActionArgs) {
+  const { dataset_name } = params;
+  const formData = await request.formData();
+  const action = formData.get("action");
+
+  if (action === "delete") {
+    if (!dataset_name) {
+      throw data("Dataset name is required", { status: 400 });
+    }
+    const client = await getNativeTensorZeroClient();
+    const result = await client.staleDataset(dataset_name);
+    return result;
+  }
+
+  if (action === "delete_datapoint") {
+    const datapoint_id = formData.get("datapoint_id");
+    const function_name = formData.get("function_name");
+    const function_type = formData.get("function_type");
+
+    if (!datapoint_id || !function_name || !function_type) {
+      throw data("Missing required fields for datapoint deletion", {
+        status: 400,
+      });
+    }
+
+    const config = await getConfig();
+    const functionConfig = config.functions[function_name as string];
+    if (!functionConfig) {
+      throw data("Function configuration not found", { status: 404 });
+    }
+
+    await staleDatapoint(
+      dataset_name,
+      datapoint_id as string,
+      functionConfig.type,
+    );
+
+    return { success: true };
+  }
+
+  return null;
+}
+
 export default function DatasetDetailPage({
   loaderData,
 }: Route.ComponentProps) {
   const { rows, count_info, pageSize, offset, rowsAdded, rowsSkipped } =
     loaderData;
   const { toast } = useToast();
+  const fetcher = useFetcher();
+  const navigate = useNavigate();
 
   // Use useEffect to show toast only after component mounts
   useEffect(() => {
@@ -65,7 +115,34 @@ export default function DatasetDetailPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rowsAdded, toast]);
 
-  const navigate = useNavigate();
+  // Handle successful deletion
+  useEffect(() => {
+    if (fetcher.data && fetcher.state === "idle") {
+      if (fetcher.data.success === true) {
+        // Datapoint deletion
+        toast({
+          title: "Datapoint Deleted",
+          description: "The datapoint has been deleted successfully.",
+        });
+        // Reload the page to refresh the datapoints list
+        window.location.reload();
+      } else {
+        // Dataset deletion
+        toast({
+          title: "Dataset Deleted",
+          description: `Dataset "${count_info.dataset_name}" has been deleted successfully.`,
+        });
+        // Navigate back to datasets list
+        navigate("/datasets");
+      }
+    }
+  }, [fetcher.data, fetcher.state, toast, count_info.dataset_name, navigate]);
+
+  const handleDelete = () => {
+    const formData = new FormData();
+    formData.append("action", "delete");
+    fetcher.submit(formData, { method: "post" });
+  };
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("offset", String(offset + pageSize));
@@ -83,7 +160,15 @@ export default function DatasetDetailPage({
         heading={`Dataset`}
         name={count_info.dataset_name}
         count={count_info.count}
-      />
+      >
+        <div className="flex justify-start">
+          <DeleteButton
+            onClick={handleDelete}
+            isLoading={fetcher.state === "submitting"}
+          />
+        </div>
+      </PageHeader>
+
       <SectionLayout>
         <DatasetRowSearchBar dataset_name={count_info.dataset_name} />
         <DatasetRowTable rows={rows} dataset_name={count_info.dataset_name} />
@@ -94,6 +179,7 @@ export default function DatasetDetailPage({
           disableNext={offset + pageSize >= count_info.count}
         />
       </SectionLayout>
+
       <Toaster />
     </PageLayout>
   );
