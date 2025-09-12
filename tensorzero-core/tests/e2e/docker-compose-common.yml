@@ -35,16 +35,6 @@ services:
       start_period: 30s
       start_interval: 1s
       timeout: 1s
-
-  # Tempo runs as user 10001, and docker compose creates the volume as root.
-  # As such, we need to chown the volume in order for Tempo to start correctly.
-  init:
-    image: &tempoImage grafana/tempo:latest
-    user: root
-    entrypoint:
-      - "chown"
-      - "10001:10001"
-      - "/var/tempo"
       
   memcached:
     image: memcached:1.6.38
@@ -63,7 +53,6 @@ services:
     ports:
       - "3200:3200" # tempo
     depends_on:
-      - init
       - memcached
 
   otel-collector:
