@@ -87,7 +87,6 @@ impl UninitializedModelConfig {
         self,
         model_name: &str,
         provider_types: &ProviderTypesConfig,
-        otlp_format: OtlpTracesFormat,
     ) -> Result<ModelConfig, Error> {
         // We want `ModelProvider` to know its own name (from the 'providers' config section).
         // We first deserialize to `HashMap<Arc<str>, UninitializedModelProvider>`, and then
@@ -107,7 +106,6 @@ impl UninitializedModelConfig {
                         extra_headers: provider.extra_headers,
                         timeouts: provider.timeouts,
                         discard_unknown_chunks: provider.discard_unknown_chunks,
-                        otlp_format,
                     },
                 ))
             },
@@ -652,8 +650,6 @@ pub struct UninitializedModelProvider {
     /// know how to correctly merge them.
     #[serde(default)]
     pub discard_unknown_chunks: bool,
-    #[serde(default)]
-    pub otlp_format: OtlpTracesFormat,
 }
 
 #[derive(Debug, Serialize)]
@@ -669,7 +665,6 @@ pub struct ModelProvider {
     pub timeouts: TimeoutsConfig,
     /// See `UninitializedModelProvider.discard_unknown_chunks`.
     pub discard_unknown_chunks: bool,
-    pub otlp_format: OtlpTracesFormat,
 }
 
 impl ModelProvider {
@@ -1882,7 +1877,6 @@ impl ShorthandModelConfig for ModelConfig {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
-                    otlp_format,
                 },
             )]),
             timeouts: Default::default(),

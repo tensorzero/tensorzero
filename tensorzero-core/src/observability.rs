@@ -63,13 +63,8 @@ impl PartialEq for CustomTracerKey {
 
 impl Eq for CustomTracerKey {}
 
-pub trait TracerType {}
-
-impl TracerType for OtlpCustomTracer {}
-impl TracerType for OpenInferenceTracer {}
-
 #[derive(Clone, Debug)]
-struct OtlpCustomTracer {
+struct CustomTracer {
     inner: SdkTracer,
     provider: SdkTracerProvider,
 }
@@ -77,11 +72,9 @@ struct OtlpCustomTracer {
 pub struct TracerWrapper {
     default_tracer: SdkTracer,
     default_provider: SdkTracerProvider,
-    custom_tracers: Cache<CustomTracerKey, OtlpCustomTracer>,
+    custom_tracers: Cache<CustomTracerKey, CustomTracer>,
     shutdown_tasks: TaskTracker,
 }
-
-pub struct OpenInferenceTracerWrapper {}
 
 fn build_tracer<T: SpanExporter + 'static>(
     metadata: MetadataMap,
@@ -117,7 +110,7 @@ fn build_tracer<T: SpanExporter + 'static>(
     Ok((provider, tracer))
 }
 
-impl Tracer for OtlpTracerWrapper {
+impl Tracer for TracerWrapper {
     type Span = <SdkTracer as Tracer>::Span;
 
     fn build_with_context(
@@ -132,7 +125,7 @@ impl Tracer for OtlpTracerWrapper {
                     key.extra_headers.clone(),
                     None,
                 )?;
-                Ok::<_, Error>(OtlpCustomTracer {
+                Ok::<_, Error>(CustomTracer {
                     inner: tracer,
                     provider,
                 })
