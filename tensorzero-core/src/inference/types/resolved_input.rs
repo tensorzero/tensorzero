@@ -1,7 +1,14 @@
+use std::future::Future;
+use std::pin::Pin;
+
+use futures::FutureExt;
+use object_store::{PutMode, PutOptions};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{storage::StoragePath, Base64File, Role, Thought};
+use crate::config::{Config, ObjectStoreInfo};
+use crate::error::{Error, ErrorDetails};
 use crate::inference::types::file::Base64FileMetadata;
 use crate::inference::types::stored_input::StoredFile;
 use crate::inference::types::stored_input::{
@@ -39,6 +46,51 @@ pub struct ResolvedInput {
     pub messages: Vec<ResolvedInputMessage>,
 }
 
+async fn write_file(
+    object_store: &Option<ObjectStoreInfo>,
+    raw: Base64File,
+    storage_path: StoragePath,
+) -> Result<(), Error> {
+    if let Some(object_store) = object_store {
+        // The store might be explicitly disabled
+        if let Some(store) = object_store.object_store.as_ref() {
+            let data = raw.data()?;
+            let bytes = aws_smithy_types::base64::decode(data).map_err(|e| {
+                Error::new(ErrorDetails::ObjectStoreWrite {
+                    message: format!("Failed to decode file as base64: {e:?}"),
+                    path: storage_path.clone(),
+                })
+            })?;
+            let res = store
+                .put_opts(
+                    &storage_path.path,
+                    bytes.into(),
+                    PutOptions {
+                        mode: PutMode::Create,
+                        ..Default::default()
+                    },
+                )
+                .await;
+            match res {
+                Ok(_) | Err(object_store::Error::AlreadyExists { .. }) => {}
+                Err(e) => {
+                    return Err(ErrorDetails::ObjectStoreWrite {
+                        message: format!("Failed to write file to object store: {e:?}"),
+                        path: storage_path.clone(),
+                    }
+                    .into());
+                }
+            }
+        }
+    } else {
+        return Err(ErrorDetails::InternalError {
+            message: "Called `write_file` with no object store configured".to_string(),
+        }
+        .into());
+    }
+    Ok(())
+}
+
 /// Produces a `StoredInput` from a `ResolvedInput` by discarding the data for any nested `File`s.
 /// The data can be recovered later by re-fetching from the object store using `StoredInput::reresolve`.
 impl ResolvedInput {
@@ -51,6 +103,40 @@ impl ResolvedInput {
                 .map(ResolvedInputMessage::into_stored_input_message)
                 .collect(),
         }
+    }
+
+    /// Writes all the files in the input to the object store,
+    /// returning a list of futures (one per file)
+    #[must_use]
+    pub fn write_all_files<'a>(
+        self,
+        config: &'a Config,
+    ) -> Vec<Pin<Box<dyn Future<Output = ()> + Send + 'a>>> {
+        let mut futures = Vec::new();
+        if config.gateway.observability.enabled.unwrap_or(true) {
+            for message in self.messages {
+                for content_block in message.content {
+                    if let ResolvedInputMessageContent::File(file) = content_block {
+                        let FileWithPath {
+                            file: raw,
+                            storage_path,
+                        } = *file;
+
+                        futures.push(
+                            (async {
+                                if let Err(e) =
+                                    write_file(&config.object_store_info, raw, storage_path).await
+                                {
+                                    tracing::error!("Failed to write image to object store: {e:?}");
+                                }
+                            })
+                            .boxed(),
+                        );
+                    }
+                }
+            }
+        }
+        futures
     }
 }
 
