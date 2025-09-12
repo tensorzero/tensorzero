@@ -214,6 +214,8 @@ function tensorZeroStoredContentToInputContent(
   switch (content.type) {
     case "text":
       return content;
+    case "template":
+      return content;
     case "tool_call":
       return {
         type: "tool_call",
@@ -495,6 +497,7 @@ function resolvedInputMessageContentToTensorZeroContent(
     case "tool_call":
     case "tool_result":
     case "thought":
+    case "template":
     case "unknown":
       return content;
     case "file":
@@ -535,6 +538,8 @@ function resolvedInputMessageContentToClientInputMessageContent(
         type: "text",
         arguments: content.arguments,
       };
+    case "template":
+      return content;
     case "unstructured_text":
       return {
         type: "text",

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashSet;
 
 use backon::Retryable;
 use futures::future::join_all;
@@ -228,6 +229,12 @@ impl Variant for BestOfNSamplingConfig {
     // We only return templates for the evaluator variant.
     fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
         self.evaluator.inner.get_all_template_paths()
+    }
+
+    fn get_all_explicit_template_names(&self) -> HashSet<String> {
+        // The candidate variants will  already have 'get_all_explicit_template_names' called on them,
+        // so we don't need to look them up here
+        self.evaluator.inner.get_all_explicit_template_names()
     }
 
     async fn start_batch_inference<'a>(

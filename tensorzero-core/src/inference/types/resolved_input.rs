@@ -14,6 +14,7 @@ use crate::inference::types::stored_input::StoredFile;
 use crate::inference::types::stored_input::{
     StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
+use crate::inference::types::TemplateInput;
 use crate::tool::{ToolCall, ToolResult};
 
 #[cfg(feature = "pyo3")]
@@ -235,8 +236,9 @@ impl ResolvedInputMessage {
 #[cfg_attr(test, ts(export))]
 pub enum ResolvedInputMessageContent {
     Text {
-        value: Value,
+        text: String,
     },
+    Template(TemplateInput),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
     RawText {
@@ -255,8 +257,11 @@ pub enum ResolvedInputMessageContent {
 impl ResolvedInputMessageContent {
     pub fn into_stored_input_message_content(self) -> StoredInputMessageContent {
         match self {
-            ResolvedInputMessageContent::Text { value } => {
-                StoredInputMessageContent::Text { value }
+            ResolvedInputMessageContent::Text { text } => StoredInputMessageContent::Text {
+                value: Value::String(text),
+            },
+            ResolvedInputMessageContent::Template(template) => {
+                StoredInputMessageContent::Template(template)
             }
             ResolvedInputMessageContent::ToolCall(tool_call) => {
                 StoredInputMessageContent::ToolCall(tool_call)

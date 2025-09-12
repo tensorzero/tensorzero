@@ -76,10 +76,12 @@ export function TextMessage({
 
 export function ParameterizedMessage({
   parameters,
+  templateName,
   isEditing,
   onChange,
 }: {
   parameters?: unknown;
+  templateName?: string;
   isEditing?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onChange?: (value: any) => void;
@@ -87,10 +89,14 @@ export function ParameterizedMessage({
   const formattedJson = useFormattedJson(parameters ?? {});
   const [jsonError, setJsonError] = useState<string | null>(null);
 
+  const labelText = templateName
+    ? `Template: ${templateName}`
+    : "Template Arguments";
+
   return (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
       <Label
-        text={`Template Arguments`}
+        text={labelText}
         icon={<BlocksIcon className="text-fg-muted h-3 w-3" />}
       />
       <CodeEditor

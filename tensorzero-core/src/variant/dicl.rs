@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use serde::Deserialize;
@@ -264,6 +265,10 @@ impl Variant for DiclConfig {
 
     fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
         vec![]
+    }
+
+    fn get_all_explicit_template_names(&self) -> HashSet<String> {
+        HashSet::new()
     }
 
     async fn start_batch_inference<'a>(
@@ -784,7 +789,7 @@ mod tests {
                     role: Role::User,
                     content: vec![
                         ResolvedInputMessageContent::Text {
-                            value: json!("Hello, assistant!"),
+                            text: "Hello, assistant!".to_string(),
                         },
                         ResolvedInputMessageContent::ToolCall(ToolCall {
                             id: "tool_call_1".to_string(),
@@ -796,7 +801,7 @@ mod tests {
                 ResolvedInputMessage {
                     role: Role::Assistant,
                     content: vec![ResolvedInputMessageContent::Text {
-                        value: json!("Here are the search results for rust programming."),
+                        text: "Here are the search results for rust programming.".to_string(),
                     }],
                 },
             ],

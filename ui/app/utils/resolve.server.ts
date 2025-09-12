@@ -92,6 +92,7 @@ async function resolveContent(
     case "raw_text":
     case "thought":
     case "unknown":
+    case "template":
       return content;
     case "text":
       return prepareDisplayText(content, role, functionConfig);

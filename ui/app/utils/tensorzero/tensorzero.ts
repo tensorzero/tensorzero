@@ -49,6 +49,12 @@ export const TextArgumentsContentSchema = z.object({
   arguments: JsonValueSchema,
 });
 
+export const TemplateContentSchema = z.object({
+  type: z.literal("template"),
+  name: z.string(),
+  arguments: JsonValueSchema,
+});
+
 export const RawTextContentSchema = z.object({
   type: z.literal("raw_text"),
   value: z.string(),
@@ -100,6 +106,7 @@ export const InputMessageContentSchema = z.union([
   ImageContentSchema,
   thoughtContentSchema,
   UnknownContentSchema,
+  TemplateContentSchema,
 ]);
 
 export type InputMessageContent = z.infer<typeof InputMessageContentSchema>;

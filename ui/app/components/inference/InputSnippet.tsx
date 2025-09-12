@@ -174,6 +174,19 @@ function renderContentBlock(
           }}
         />
       );
+
+    case "template":
+      return (
+        <ParameterizedMessage
+          key={key}
+          parameters={block.arguments}
+          templateName={block.name}
+          isEditing={isEditing}
+          onChange={(updatedArguments) => {
+            onChange?.({ ...block, arguments: updatedArguments });
+          }}
+        />
+      );
   }
 }
 

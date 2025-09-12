@@ -642,3 +642,27 @@ export const UnknownAndThoughtContent: Story = {
     ],
   },
 };
+
+export const TemplateInput: Story = {
+  args: {
+    system:
+      "You are a helpful assistant that responds to prompts generated from templates.",
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "template",
+            name: "question_answering",
+            arguments: {
+              question: "What is the capital of France?",
+              context:
+                "France is a country in Western Europe with Paris as its capital and largest city.",
+              format: "brief",
+            },
+          },
+        ],
+      },
+    ],
+  },
+};
