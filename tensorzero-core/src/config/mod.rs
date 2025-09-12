@@ -12,6 +12,7 @@ use pyo3::exceptions::PyKeyError;
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::IntoPyObjectExt;
+use rate_limiting::RateLimitingConfig;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -48,6 +49,7 @@ use std::error::Error as StdError;
 
 pub mod gateway;
 pub mod path;
+pub mod rate_limiting;
 mod span_map;
 #[cfg(test)]
 mod tests;
@@ -82,6 +84,8 @@ pub struct Config {
     pub object_store_info: Option<ObjectStoreInfo>,
     pub provider_types: ProviderTypesConfig,
     pub optimizers: HashMap<String, OptimizerInfo>,
+    pub postgres: PostgresConfig,
+    pub rate_limiting: RateLimitingConfig,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
@@ -699,6 +703,8 @@ impl Config {
             object_store_info,
             provider_types: uninitialized_config.provider_types,
             optimizers,
+            postgres: uninitialized_config.postgres,
+            rate_limiting: uninitialized_config.rate_limiting,
         };
 
         // Initialize the templates
@@ -1076,6 +1082,10 @@ pub struct UninitializedConfig {
     pub object_storage: Option<StorageKind>,
     #[serde(default)]
     pub optimizers: HashMap<String, UninitializedOptimizerInfo>, // optimizer name => optimizer config
+    #[serde(default)]
+    pub postgres: PostgresConfig,
+    #[serde(default)]
+    pub rate_limiting: RateLimitingConfig,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -1489,5 +1499,26 @@ impl PathWithContents {
     pub fn from_path(path: ResolvedTomlPath) -> Result<Self, Error> {
         let contents = path.read()?;
         Ok(Self { path, contents })
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(default)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct PostgresConfig {
+    #[serde(default = "default_connection_pool_size")]
+    pub connection_pool_size: u32,
+}
+
+fn default_connection_pool_size() -> u32 {
+    20
+}
+
+impl Default for PostgresConfig {
+    fn default() -> Self {
+        Self {
+            connection_pool_size: 20,
+        }
     }
 }

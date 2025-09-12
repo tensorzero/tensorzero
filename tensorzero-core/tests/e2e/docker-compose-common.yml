@@ -42,10 +42,18 @@ services:
     #command: --set=extensions.jaeger_storage.backends.some_store.memory.max_traces=1
     command: --config /jaeger/config.yaml
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:14269/health"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:14269/health",
+        ]
       interval: 1s
       timeout: 3s
-      retries: 60    
+      retries: 60
     ports:
       - "16686:16686" # Browser UI
   otel-collector:
@@ -58,3 +66,11 @@ services:
     depends_on:
       jaeger:
         condition: service_healthy
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: tensorzero-e2e-tests
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"

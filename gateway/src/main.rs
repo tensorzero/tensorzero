@@ -16,8 +16,9 @@ use tower_http::trace::{DefaultOnFailure, TraceLayer};
 use tracing::Level;
 
 use tensorzero_core::config::{Config, ConfigFileGlob};
-use tensorzero_core::db::clickhouse::migration_manager::manual_run_migrations;
+use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::db::postgres::manual_run_postgres_migrations;
 use tensorzero_core::endpoints;
 use tensorzero_core::endpoints::openai_compatible::RouterExt as _;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
@@ -95,9 +96,18 @@ async fn main() {
 
     let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
     if args.run_migrations_only {
-        manual_run_migrations()
+        manual_run_clickhouse_migrations()
             .await
-            .expect_pretty("Failed to run migrations");
+            .expect_pretty("Failed to run ClickHouse migrations");
+        // Remove once we are ready for Postgres in prime time.
+        // We also should remove the expect behavior from ClickHouse so this command will warn
+        // if it doesn't have clickhouse or doesn't have postgres and then run migrations for the
+        // databases it does have URLs for
+        if std::env::var("TENSORZERO_POSTGRES_URL").is_ok() {
+            manual_run_postgres_migrations()
+                .await
+                .expect_pretty("Failed to run PostgreSQL migrations");
+        }
         return;
     }
 

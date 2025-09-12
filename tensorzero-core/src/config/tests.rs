@@ -251,6 +251,8 @@ async fn test_config_from_toml_table_valid() {
         config.tools.get("get_temperature_with_name").unwrap().name,
         "get_temperature"
     );
+
+    assert_eq!(config.postgres.connection_pool_size, 10);
 }
 
 /// Ensure that the config parsing correctly handles the `gateway.bind_address` field

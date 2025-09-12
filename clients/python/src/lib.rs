@@ -153,11 +153,12 @@ impl LocalHttpGateway {
 }
 
 #[pyfunction]
-#[pyo3(signature = (*, config_file, clickhouse_url, async_setup))]
+#[pyo3(signature = (*, config_file, clickhouse_url, postgres_url, async_setup))]
 fn _start_http_gateway(
     py: Python<'_>,
     config_file: Option<String>,
     clickhouse_url: Option<String>,
+    postgres_url: Option<String>,
     async_setup: bool,
 ) -> PyResult<Bound<'_, PyAny>> {
     warn_no_config(py, config_file.as_deref())?;
@@ -165,6 +166,7 @@ fn _start_http_gateway(
         let (addr, handle) = tensorzero_core::gateway_util::start_openai_compatible_gateway(
             config_file,
             clickhouse_url,
+            postgres_url,
         )
         .await?;
         Ok(LocalHttpGateway {
@@ -631,7 +633,7 @@ impl TensorZeroGateway {
     }
 
     #[classmethod]
-    #[pyo3(signature = (*, config_file=None, clickhouse_url=None, timeout=None))]
+    #[pyo3(signature = (*, config_file=None, clickhouse_url=None, postgres_url=None, timeout=None))]
     /// Initialize the TensorZero client, using an embedded gateway.
     /// This connects to ClickHouse (if provided) and runs DB migrations.
     ///
@@ -643,6 +645,7 @@ impl TensorZeroGateway {
         cls: &Bound<'_, PyType>,
         config_file: Option<&str>,
         clickhouse_url: Option<String>,
+        postgres_url: Option<String>,
         timeout: Option<f64>,
     ) -> PyResult<Py<TensorZeroGateway>> {
         warn_no_config(cls.py(), config_file)?;
@@ -653,6 +656,7 @@ impl TensorZeroGateway {
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: config_file.map(PathBuf::from),
             clickhouse_url,
+            postgres_url,
             timeout,
             verify_credentials: true,
             allow_batch_writes: false,
@@ -1276,7 +1280,7 @@ impl AsyncTensorZeroGateway {
     // as `AsyncTensorZeroGateway` would be completely async *except* for this one method
     // (which potentially takes a very long time due to running DB migrations).
     #[classmethod]
-    #[pyo3(signature = (*, config_file=None, clickhouse_url=None, timeout=None, async_setup=true))]
+    #[pyo3(signature = (*, config_file=None, clickhouse_url=None, postgres_url=None, timeout=None, async_setup=true))]
     /// Initialize the TensorZero client, using an embedded gateway.
     /// This connects to ClickHouse (if provided) and runs DB migrations.
     ///
@@ -1290,6 +1294,7 @@ impl AsyncTensorZeroGateway {
         cls: &Bound<'_, PyType>,
         config_file: Option<&str>,
         clickhouse_url: Option<String>,
+        postgres_url: Option<String>,
         timeout: Option<f64>,
         async_setup: bool,
     ) -> PyResult<Py<PyAny>> {
@@ -1301,6 +1306,7 @@ impl AsyncTensorZeroGateway {
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: config_file.map(PathBuf::from),
             clickhouse_url,
+            postgres_url,
             timeout,
             verify_credentials: true,
             allow_batch_writes: false,

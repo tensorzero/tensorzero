@@ -2,7 +2,10 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_core::{
     config::{Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType},
-    db::clickhouse::test_helpers::{select_feedback_clickhouse, select_feedback_tags_clickhouse},
+    db::{
+        clickhouse::test_helpers::{select_feedback_clickhouse, select_feedback_tags_clickhouse},
+        postgres::PostgresConnectionInfo,
+    },
     endpoints::feedback::{feedback, Params},
     gateway_util::GatewayHandle,
     http::TensorzeroHttpClient,
@@ -179,9 +182,10 @@ async fn e2e_test_comment_feedback_validation_disabled() {
     let mut config = Config::default();
     let clickhouse = get_clickhouse().await;
     config.gateway.unstable_disable_feedback_target_validation = true;
-    let handle = GatewayHandle::new_with_clickhouse_and_http_client(
+    let handle = GatewayHandle::new_with_database_and_http_client(
         config.into(),
         clickhouse.clone(),
+        PostgresConnectionInfo::Disabled,
         TensorzeroHttpClient::new().unwrap(),
     );
     let inference_id = Uuid::now_v7();
@@ -1210,9 +1214,10 @@ async fn e2e_test_float_feedback_validation_disabled() {
         .insert("user_score".to_string(), metric_config);
     let clickhouse = get_clickhouse().await;
     config.gateway.unstable_disable_feedback_target_validation = true;
-    let handle = GatewayHandle::new_with_clickhouse_and_http_client(
+    let handle = GatewayHandle::new_with_database_and_http_client(
         config.into(),
         clickhouse.clone(),
+        PostgresConnectionInfo::Disabled,
         TensorzeroHttpClient::new().unwrap(),
     );
     let inference_id = Uuid::now_v7();
@@ -1444,9 +1449,10 @@ async fn e2e_test_boolean_feedback_validation_disabled() {
         .insert("task_success".to_string(), metric_config);
     let clickhouse = get_clickhouse().await;
     config.gateway.unstable_disable_feedback_target_validation = true;
-    let handle = GatewayHandle::new_with_clickhouse_and_http_client(
+    let handle = GatewayHandle::new_with_database_and_http_client(
         config.into(),
         clickhouse.clone(),
+        PostgresConnectionInfo::Disabled,
         TensorzeroHttpClient::new().unwrap(),
     );
     let inference_id = Uuid::now_v7();

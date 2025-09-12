@@ -23,11 +23,13 @@ impl TensorZeroClient {
     pub async fn build_embedded(
         config_path: String,
         clickhouse_url: Option<String>,
+        postgres_url: Option<String>,
         timeout: Option<f64>,
     ) -> Result<Self, napi::Error> {
         let client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(Path::new(&config_path).to_path_buf()),
             clickhouse_url,
+            postgres_url,
             timeout: timeout.map(Duration::from_secs_f64),
             verify_credentials: false,
             allow_batch_writes: false,
