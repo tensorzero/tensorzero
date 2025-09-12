@@ -610,6 +610,36 @@ impl Client {
         }
     }
 
+    #[cfg(feature = "e2e_tests")]
+    pub async fn start_batch_inference(
+        &self,
+        params: tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams,
+    ) -> Result<
+        tensorzero_core::endpoints::batch_inference::PrepareBatchInferenceOutput,
+        TensorZeroError,
+    > {
+        match &*self.mode {
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InternalError {
+                    message: "batch_inference is not yet implemented for HTTPGateway mode"
+                        .to_string(),
+                })
+                .into(),
+            }),
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::batch_inference::start_batch_inference(
+                        gateway.handle.app_state.clone(),
+                        params,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await?)
+            }
+        }
+    }
+
     pub async fn get_object(
         &self,
         storage_path: StoragePath,

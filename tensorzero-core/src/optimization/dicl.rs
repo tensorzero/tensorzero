@@ -23,7 +23,7 @@ use crate::{
     variant::{dicl::UninitializedDiclConfig, RetryConfig},
 };
 use futures::future::try_join_all;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
@@ -269,16 +269,18 @@ impl Optimizer for DiclOptimizationConfig {
         // 2. Check that the function does not have tools configured (DICL doesn't support tools)
         validate_function_config(&self.function_name, function_config)?;
 
-        // 3. Check that the variant name is not already in the function variants (unless appending is enabled)
-        let variants = match &**function_config {
-            FunctionConfig::Chat(chat_config) => &chat_config.variants,
-            FunctionConfig::Json(json_config) => &json_config.variants,
-        };
-
-        if !self.append_to_existing_variants && variants.contains_key(&self.variant_name) {
+        // 3. Check if DICL examples already exist in the database for this variant (unless appending is enabled)
+        if !self.append_to_existing_variants
+            && dicl_examples_exist(
+                clickhouse_connection_info,
+                &self.function_name,
+                &self.variant_name,
+            )
+            .await?
+        {
             return Err(Error::new(ErrorDetails::Config {
                 message: format!(
-                    "variant '{}' already exists in function '{}' - DICL optimization cannot overwrite existing variants",
+                    "variant '{}' already has DICL examples in the database for function '{}' - set append_to_existing_variants=true to append to existing variants",
                     self.variant_name, self.function_name
                 ),
             }));
@@ -753,6 +755,33 @@ pub async fn insert_dicl_examples_with_batching(
     );
 
     Ok(())
+}
+
+/// Checks if DICL examples exist in ClickHouse for a given function and variant
+pub async fn dicl_examples_exist(
+    clickhouse: &ClickHouseConnectionInfo,
+    function_name: &str,
+    variant_name: &str,
+) -> Result<bool, Error> {
+    let query = r"
+        SELECT 1
+        FROM DynamicInContextLearningExample
+        WHERE function_name = {function_name:String}
+        AND variant_name = {variant_name:String}
+        LIMIT 1
+    ";
+
+    let params = HashMap::from([
+        ("function_name", function_name),
+        ("variant_name", variant_name),
+    ]);
+
+    let result = clickhouse
+        .run_query_synchronous(query.to_string(), &params)
+        .await?;
+
+    // If the query returns "1", examples exist; if empty, they don't
+    Ok(result.response.trim() == "1")
 }
 
 #[cfg(test)]
