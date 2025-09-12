@@ -128,7 +128,7 @@ pub async fn inference_handler(
     let trace_format = config.gateway.export.otlp.traces.format;
     let response = OTLP_TRACE_FORMAT
         .scope(trace_format, async {
-            inference(config, &http_client, clickhouse_connection_info, params, ()).await
+            inference(config, &http_client, clickhouse_connection_info, params).await
         })
         .await?;
 

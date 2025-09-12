@@ -22,7 +22,7 @@ use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::config::{
-    Config, ErrorContext, ObjectStoreInfo, SchemaData, UninitializedVariantInfo, OTLP_TRACE_FORMAT,
+    Config, ErrorContext, SchemaData, UninitializedVariantInfo, OTLP_TRACE_FORMAT,
 };
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::embeddings::EmbeddingModelTable;
@@ -155,7 +155,7 @@ pub async fn inference_handler(
     let trace_format = config.gateway.export.otlp.traces.format;
     let inference_output = OTLP_TRACE_FORMAT
         .scope(trace_format, async {
-            inference(config, &http_client, clickhouse_connection_info, params, ()).await
+            inference(config, &http_client, clickhouse_connection_info, params).await
         })
         .await?;
     match inference_output {
