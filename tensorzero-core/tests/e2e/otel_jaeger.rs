@@ -82,6 +82,10 @@ async fn test_jaeger_trace_export(
 
     let mut builder = client
         .post(get_gateway_endpoint("/inference"))
+        .header(
+            "TensorZero-OTLP-Traces-Extra-Header-x-dummy-tensorzero",
+            "my-new-tenant".to_string(),
+        )
         .json(&payload);
 
     if let Some((custom_key, custom_value)) = &custom_header {
