@@ -69,25 +69,17 @@ set +e
 # Run tests in parallel
 docker compose -f clients/docker-compose.tests.yml run --rm -T \
   -e TENSORZERO_CI=1 \
-  python-client-tests &
-PYTHON_PID=$!
-
-docker compose -f clients/docker-compose.tests.yml run --rm -T \
-  -e TENSORZERO_CI=1 \
-  openai-node-client-tests &
-NODE_PID=$!
-
-docker compose -f clients/docker-compose.tests.yml run --rm -T \
-  -e TENSORZERO_CI=1 \
-  openai-go-client-tests &
-GO_PID=$!
-
-# Wait for all tests
-wait $PYTHON_PID
+  python-client-tests
 PYTHON_EXIT_CODE=$?
-wait $NODE_PID
+
+docker compose -f clients/docker-compose.tests.yml run --rm -T \
+  -e TENSORZERO_CI=1 \
+  openai-node-client-tests
 NODE_EXIT_CODE=$?
-wait $GO_PID
+
+docker compose -f clients/docker-compose.tests.yml run --rm -T \
+  -e TENSORZERO_CI=1 \
+  openai-go-client-tests
 GO_EXIT_CODE=$?
 
 set -e

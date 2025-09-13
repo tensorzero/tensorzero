@@ -246,7 +246,7 @@ services:
       - ../tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro
       - ../examples:/app/examples:ro
       # Mount GCP JWT key file
-      - ../../../gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
+      - ../gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
       # Shared tmpdir filesystem
       - shared-tmpdir:/tmp
     depends_on:
