@@ -1,6 +1,8 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-#[cfg(test)]
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::ops::Deref;
+
+use crate::error::Error;
 
 /// NOTE: this file deserializes rate limiting configuration from a shorthand format only
 /// [[rate_limiting.rules]]
@@ -50,7 +52,7 @@ impl Default for RateLimitingConfig {
 #[cfg_attr(test, ts(export))]
 struct RateLimitingConfigRule {
     limits: Vec<RateLimit>,
-    scope: Vec<RateLimitingConfigScope>,
+    scope: RateLimitingConfigScopes,
     #[serde(flatten)]
     priority: RateLimitingConfigPriority,
 }
@@ -157,7 +159,8 @@ impl<'de> Deserialize<'de> for RateLimitingConfigRule {
 
         Ok(RateLimitingConfigRule {
             limits,
-            scope: remaining.scope,
+            scope: RateLimitingConfigScopes::new(remaining.scope)
+                .map_err(serde::de::Error::custom)?,
             priority: remaining.priority,
         })
     }
@@ -208,7 +211,56 @@ impl<'de> Deserialize<'de> for RateLimitingConfigPriority {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+/// Wrapper type for rate limiting scopes.
+/// Forces them to be sorted on construction
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+struct RateLimitingConfigScopes(Vec<RateLimitingConfigScope>);
+
+impl RateLimitingConfigScopes {
+    /// Creates a new instance of `RateLimitingConfigScopes`.
+    /// Ensures that there are no duplicate scopes and sorts them.
+    fn new(mut scopes: Vec<RateLimitingConfigScope>) -> Result<Self, &'static str> {
+        // First, we check to make sure there are no duplicate scopes
+        if scopes.len() != scopes.iter().collect::<HashSet<_>>().len() {
+            return Err("duplicate scopes are not allowed in the same rule");
+        }
+        // We sort the scopes so we are guaranteed a
+        // stable order when generating the key
+        scopes.sort();
+        Ok(RateLimitingConfigScopes(scopes))
+    }
+
+    /// Returns the key (as a Vec) if the scope matches the given info, or None if it does not.
+    pub fn get_key_if_matches<'a>(
+        &'a self,
+        info: &'a ScopeInfo,
+    ) -> Option<Vec<RateLimitingScopeKey<'a>>> {
+        self.0
+            .iter()
+            .map(|scope| scope.get_key_if_matches(info))
+            .collect::<Option<Vec<_>>>()
+    }
+}
+
+impl Deref for RateLimitingConfigScopes {
+    type Target = Vec<RateLimitingConfigScope>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+// IMPORTANT: the types below are used to set up scopes and keys for rate limiting.
+// We need the keys that have already been used in production to remain stable.
+// So, we cannot change the sort order.
+// As scope types are added, please append new ones at the end to maintain a stable sort order,
+// and add a test each time that ensures the sort order is maintained as further changes are made.
+//
+// Note to reviewer:  what else could we do to ensure the sort order is maintained across future changes?
+
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(untagged)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -218,7 +270,7 @@ enum RateLimitingConfigScope {
     // function_name = "my_function"
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 struct TagRateLimitingConfigScope {
@@ -226,12 +278,37 @@ struct TagRateLimitingConfigScope {
     tag_value: TagValueScope,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+impl TagRateLimitingConfigScope {
+    fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<RateLimitingScopeKey<'a>> {
+        let Some(value) = info.tags.get(&self.tag_key)?
+
+        match self.tag_value {
+            TagValueScope::Concrete(ref expected_value) => {
+                if value == expected_value {
+                    Some(RateLimitingScopeKey::TagConcrete {
+                        key: &self.tag_key,
+                        value,
+                    })
+                } else {
+                    None
+                }
+            }
+            TagValueScope::Any => Some(RateLimitingScopeKey::TagAny { key: &self.tag_key }),
+            TagValueScope::All => Some(RateLimitingScopeKey::TagEach {
+                key: &self.tag_key,
+                value,
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 enum TagValueScope {
     Concrete(String),
-    Wildcard,
+    Any,
+    All,
 }
 
 impl Serialize for TagValueScope {
@@ -241,7 +318,8 @@ impl Serialize for TagValueScope {
     {
         match self {
             TagValueScope::Concrete(s) => serializer.serialize_str(s),
-            TagValueScope::Wildcard => serializer.serialize_str("tensorzero::*"),
+            TagValueScope::Any => serializer.serialize_str("tensorzero::any"),
+            TagValueScope::All => serializer.serialize_str("tensorzero::all"),
         }
     }
 }
@@ -252,8 +330,10 @@ impl<'de> Deserialize<'de> for TagValueScope {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        if s == "tensorzero::*" {
-            Ok(TagValueScope::Wildcard)
+        if s == "tensorzero::any" {
+            Ok(TagValueScope::Any)
+        } else if s == "tensorzero::all" {
+            Ok(TagValueScope::All)
         } else {
             Ok(TagValueScope::Concrete(s))
         }
@@ -261,28 +341,29 @@ impl<'de> Deserialize<'de> for TagValueScope {
 }
 
 impl RateLimitingConfigScope {
-    #[cfg(test)]
-    fn matches(&self, info: &ScopeInfo) -> bool {
+    fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<RateLimitingScopeKey<'a>> {
         match self {
-            RateLimitingConfigScope::Tag(tag) => {
-                let Some(info_value) = info.tags.get(&tag.tag_key) else {
-                    return false;
-                };
-
-                match tag.tag_value {
-                    TagValueScope::Concrete(ref value) => info_value == value,
-                    TagValueScope::Wildcard => true,
-                }
-            }
+            RateLimitingConfigScope::Tag(tag) => tag.get_key_if_matches(info),
         }
     }
+}
+
+/// Type that lists the different ways a Scope + matching ScopeInfo can be
+/// serialized into a key.
+/// We need this struct to have stable serialization behavior because we want rate limits to be stable
+/// across releases.
+#[derive(Debug, Serialize)]
+#[serde(tag = "type")]
+#[expect(clippy::enum_variant_names)]
+enum RateLimitingScopeKey<'a> {
+    TagAny { key: &'a str },
+    TagEach { key: &'a str, value: &'a str },
+    TagConcrete { key: &'a str, value: &'a str },
 }
 
 // Utility struct to pass in at "check time"
 // This should contain the information about the current request
 // needed to determine if a rate limit is exceeded.
-#[cfg(test)]
-#[expect(dead_code)]
 struct ScopeInfo<'a> {
     function_name: &'a str,
     model_name: &'a str,
@@ -405,6 +486,27 @@ mod tests {
     }
 
     #[test]
+    fn test_scope_tag_configuration_all() {
+        let toml_str = r#"
+            [[rules]]
+            model_inferences_per_second = 10
+            priority = 1
+            scope = [
+                { tag_key = "user_id", tag_value = "tensorzero::all" }
+            ]
+        "#;
+
+        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.rules.len(), 1);
+        assert_eq!(config.rules[0].scope.len(), 1);
+
+        // Check scope filter with All value
+        let RateLimitingConfigScope::Tag(tag_scope) = &config.rules[0].scope[0];
+        assert_eq!(tag_scope.tag_key, "user_id");
+        assert_eq!(tag_scope.tag_value, TagValueScope::All);
+    }
+
+    #[test]
     fn test_scope_tag_configuration() {
         let toml_str = r#"
             [[rules]]
@@ -412,26 +514,45 @@ mod tests {
             priority = 1
             scope = [
                 { tag_key = "user_id", tag_value = "123" },
-                { tag_key = "application_id", tag_value = "tensorzero::*" }
+                { tag_key = "application_id", tag_value = "tensorzero::any" }
             ]
         "#;
 
         let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.rules.len(), 1);
-        assert_eq!(config.rules[0].scope.len(), 2);
 
-        // Check first scope filter
-        let RateLimitingConfigScope::Tag(tag_scope) = &config.rules[0].scope[0];
-        assert_eq!(tag_scope.tag_key, "user_id");
-        assert_eq!(
-            tag_scope.tag_value,
-            TagValueScope::Concrete("123".to_string())
-        );
+        let check_config = |config: RateLimitingConfig| {
+            assert_eq!(config.rules.len(), 1);
+            assert_eq!(config.rules[0].scope.len(), 2);
 
-        // Check second scope filter with special value
-        let RateLimitingConfigScope::Tag(tag_scope) = &config.rules[0].scope[1];
-        assert_eq!(tag_scope.tag_key, "application_id");
-        assert_eq!(tag_scope.tag_value, TagValueScope::Wildcard);
+            // Check first scope filter
+            let RateLimitingConfigScope::Tag(tag_scope) = &config.rules[0].scope[0];
+            assert_eq!(tag_scope.tag_key, "application_id");
+            assert_eq!(tag_scope.tag_value, TagValueScope::Any);
+
+            // Check second scope filter with special value
+            let RateLimitingConfigScope::Tag(tag_scope) = &config.rules[0].scope[1];
+            assert_eq!(tag_scope.tag_key, "user_id");
+            assert_eq!(
+                tag_scope.tag_value,
+                TagValueScope::Concrete("123".to_string())
+            );
+        };
+
+        check_config(config);
+
+        // Check again with opposite ordering of scopes to ensure stable sorting
+        let toml_str = r#"
+            [[rules]]
+            model_inferences_per_second = 10
+            priority = 1
+            scope = [
+                { tag_key = "application_id", tag_value = "tensorzero::any" },
+                { tag_key = "user_id", tag_value = "123" }
+            ]
+        "#;
+
+        let config = toml::from_str(toml_str).unwrap();
+        check_config(config);
     }
 
     #[test]
@@ -456,7 +577,7 @@ mod tests {
             model_inferences_per_day = 100
             priority = 1
             scope = [
-                { tag_key = "user_id", tag_value = "tensorzero::*" }
+                { tag_key = "user_id", tag_value = "tensorzero::any" }
             ]
 
             # Application 2, for each user
@@ -465,7 +586,7 @@ mod tests {
             priority = 2
             scope = [
                 { tag_key = "application_id", tag_value = "2" },
-                { tag_key = "user_id", tag_value = "tensorzero::*" }
+                { tag_key = "user_id", tag_value = "tensorzero::any" }
             ]
         "#;
 
@@ -573,7 +694,7 @@ mod tests {
         // Check Users rule scope details
         let RateLimitingConfigScope::Tag(users_scope) = &config.rules[2].scope[0];
         assert_eq!(users_scope.tag_key, "user_id");
-        assert_eq!(users_scope.tag_value, TagValueScope::Wildcard);
+        assert_eq!(users_scope.tag_value, TagValueScope::Any);
 
         // Check Application 2 scope details (first scope: application_id = "2")
         let RateLimitingConfigScope::Tag(app2_scope_0) = &app2_rule.scope[0];
@@ -586,7 +707,7 @@ mod tests {
         // Check Application 2 scope details (second scope: user_id = wildcard)
         let RateLimitingConfigScope::Tag(app2_scope_1) = &app2_rule.scope[1];
         assert_eq!(app2_scope_1.tag_key, "user_id");
-        assert_eq!(app2_scope_1.tag_value, TagValueScope::Wildcard);
+        assert_eq!(app2_scope_1.tag_value, TagValueScope::Any);
     }
 
     #[test]
@@ -905,118 +1026,5 @@ mod tests {
 
         let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_scope_matches() {
-        // Test case 1: Concrete tag value exact match
-        let concrete_scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Concrete("123".to_string()),
-        });
-
-        let mut tags = HashMap::new();
-        tags.insert("user_id".to_string(), "123".to_string());
-        let info = ScopeInfo {
-            function_name: "test_function",
-            model_name: "test_model",
-            tags: &tags,
-        };
-        assert!(concrete_scope.matches(&info));
-
-        // Test case 2: Concrete tag value no match
-        let mut tags = HashMap::new();
-        tags.insert("user_id".to_string(), "456".to_string());
-        let info = ScopeInfo {
-            function_name: "test_function",
-            model_name: "test_model",
-            tags: &tags,
-        };
-        assert!(!concrete_scope.matches(&info));
-
-        // Test case 3: Concrete tag missing key
-        let mut tags = HashMap::new();
-        tags.insert("application_id".to_string(), "app1".to_string());
-        let info = ScopeInfo {
-            function_name: "test_function",
-            model_name: "test_model",
-            tags: &tags,
-        };
-        assert!(!concrete_scope.matches(&info));
-
-        // Test case 4: Wildcard tag value with existing key
-        let wildcard_scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Wildcard,
-        });
-
-        let mut tags = HashMap::new();
-        tags.insert("user_id".to_string(), "any_value".to_string());
-        let info = ScopeInfo {
-            function_name: "test_function",
-            model_name: "test_model",
-            tags: &tags,
-        };
-        assert!(wildcard_scope.matches(&info));
-
-        // Test case 5: Wildcard tag value with different values
-        let test_values = vec!["123", "456", "user_abc", ""];
-        for value in test_values {
-            let mut tags = HashMap::new();
-            tags.insert("user_id".to_string(), value.to_string());
-            let info = ScopeInfo {
-                function_name: "test_function",
-                model_name: "test_model",
-                tags: &tags,
-            };
-            assert!(
-                wildcard_scope.matches(&info),
-                "Wildcard should match value: {value}"
-            );
-        }
-
-        // Test case 6: Wildcard tag missing key
-        let mut tags = HashMap::new();
-        tags.insert("application_id".to_string(), "app1".to_string());
-        let info = ScopeInfo {
-            function_name: "test_function",
-            model_name: "test_model",
-            tags: &tags,
-        };
-        assert!(!wildcard_scope.matches(&info));
-
-        // Test case 7: Empty tags
-        let tags = HashMap::new();
-        let info = ScopeInfo {
-            function_name: "test_function",
-            model_name: "test_model",
-            tags: &tags,
-        };
-        assert!(!concrete_scope.matches(&info));
-
-        // Test case 8: Case sensitive tag keys
-        let mut tags = HashMap::new();
-        tags.insert("User_Id".to_string(), "123".to_string()); // Different case
-        let info = ScopeInfo {
-            function_name: "test_function",
-            model_name: "test_model",
-            tags: &tags,
-        };
-        assert!(!concrete_scope.matches(&info));
-
-        // Test case 9: Case sensitive tag values
-        let case_sensitive_scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Concrete("abc".to_string()),
-        });
-
-        let mut tags = HashMap::new();
-        tags.insert("user_id".to_string(), "ABC".to_string()); // Different case
-        let info = ScopeInfo {
-            function_name: "test_function",
-            model_name: "test_model",
-            tags: &tags,
-        };
-        assert!(!case_sensitive_scope.matches(&info));
     }
 }
