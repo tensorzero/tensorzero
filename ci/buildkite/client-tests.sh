@@ -65,17 +65,17 @@ echo "All shared infrastructure and fixtures are ready!"
 set +e
 
 # Run tests in parallel
-docker compose -f clients/docker-compose.tests.yml run --rm \
+docker compose -f clients/docker-compose.tests.yml run --rm -T \
   -e TENSORZERO_CI=1 \
   python-client-tests &
 PYTHON_PID=$!
 
-docker compose -f clients/docker-compose.tests.yml run --rm \
+docker compose -f clients/docker-compose.tests.yml run --rm -T \
   -e TENSORZERO_CI=1 \
   openai-node-client-tests &
 NODE_PID=$!
 
-docker compose -f clients/docker-compose.tests.yml run --rm \
+docker compose -f clients/docker-compose.tests.yml run --rm -T \
   -e TENSORZERO_CI=1 \
   openai-go-client-tests &
 GO_PID=$!
