@@ -203,7 +203,6 @@ services:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
       TENSORZERO_MINIO_URL: http://minio:9000
       TENSORZERO_MOCK_INFERENCE_PROVIDER_BASE_URL: http://mock-inference-provider:3030
-      TENSORZERO_E2E_PROXY: http://provider-proxy:3003
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       TMPDIR: /tmp
       # API Keys
