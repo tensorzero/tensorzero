@@ -3,11 +3,10 @@ set -euo pipefail
 
 # Common CI trap helper
 source ci/buildkite/utils/trap-helpers.sh
-# Print logs from the ClickHouse compose stack on exit
-tz_setup_compose_logs_trap tensorzero-core/tests/e2e/docker-compose.clickhouse.yml
+tz_setup_compose_logs_trap tensorzero-core/tests/e2e/docker-compose.tests.yml
 
 # Set BUILDKITE_ANALYTICS_TOKEN
-export BUILDKITE_ANALYTICS_TOKEN=$(buildkite-agent secret get CLICKHOUSE_TESTS_ANALYTICS_ACCESS_TOKEN)
+export BUILDKITE_ANALYTICS_TOKEN=$(buildkite-agent secret get CLIENT_TESTS_ANALYTICS_ACCESS_TOKEN)
 
 if [ -z "$BUILDKITE_ANALYTICS_TOKEN" ]; then
     echo "Error: BUILDKITE_ANALYTICS_TOKEN is not set"
@@ -39,10 +38,7 @@ echo "Logged in to Docker Hub"
 # ------------------------------------------------------------------------------
 # Environment for image tags and test config
 # ------------------------------------------------------------------------------
-export TENSORZERO_GATEWAY_TAG=ci-sha-$SHORT_HASH
-export TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=ci-sha-$SHORT_HASH
-export TENSORZERO_PYTHON_CLIENT_TESTS_TAG=ci-sha-$SHORT_HASH
-export TENSORZERO_OPENAI_NODE_CLIENT_TESTS_TAG=ci-sha-$SHORT_HASH
+export TENSORZERO_COMMIT_TAG=ci-sha-$SHORT_HASH
 export TENSORZERO_SKIP_LARGE_FIXTURES=1
 
 # ------------------------------------------------------------------------------

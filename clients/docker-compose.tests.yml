@@ -31,7 +31,7 @@ services:
       timeout: 1s
 
   mock-inference-provider:
-    image: tensorzero/mock-inference-provider:${TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG:-latest}
+    image: tensorzero/mock-inference-provider:${TENSORZERO_COMMIT_TAG}
     build:
       context: ..
       dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
@@ -61,7 +61,7 @@ services:
       timeout: 1s
 
   provider-proxy:
-    image: tensorzero/provider-proxy:${TENSORZERO_PROVIDER_PROXY_TAG:-latest}
+    image: tensorzero/provider-proxy:${TENSORZERO_COMMIT_TAG}
     build:
       context: ..
       dockerfile: provider-proxy/Dockerfile
@@ -89,7 +89,7 @@ services:
         condition: service_healthy
 
   gateway:
-    image: tensorzero/gateway-e2e:${TENSORZERO_GATEWAY_TAG:-latest}
+    image: tensorzero/gateway-e2e:${TENSORZERO_COMMIT_TAG}
     build:
       context: ..
       dockerfile: tensorzero-core/tests/e2e/Dockerfile.gateway.e2e
@@ -166,7 +166,7 @@ services:
       start_interval: 1s
       timeout: 1s
   fixtures:
-    image: tensorzero/fixtures:${TENSORZERO_FIXTURES_TAG:-latest}
+    image: tensorzero/fixtures:${TENSORZERO_COMMIT_TAG}
     build:
       context: ..
       dockerfile: ui/fixtures/Dockerfile
@@ -193,7 +193,7 @@ services:
       start_period: 5s # Give the script time to start
 
   python-client-tests:
-    image: tensorzero/python-client-tests:${TENSORZERO_PYTHON_CLIENT_TESTS_TAG:-latest}
+    image: tensorzero/python-client-tests:${TENSORZERO_COMMIT_TAG}
     build:
       context: ..
       dockerfile: clients/python/tests/Dockerfile
@@ -264,7 +264,7 @@ services:
         condition: service_healthy
 
   openai-node-client-tests:
-    image: tensorzero/openai-node-client-tests:${TENSORZERO_OPENAI_NODE_CLIENT_TESTS_TAG:-latest}
+    image: tensorzero/openai-node-client-tests:${TENSORZERO_COMMIT_TAG}
     build:
       context: ..
       dockerfile: clients/openai-node/tests/Dockerfile
@@ -295,7 +295,7 @@ services:
         condition: service_healthy
 
   openai-go-client-tests:
-    image: tensorzero/openai-go-client-tests:${TENSORZERO_OPENAI_GO_CLIENT_TESTS_TAG:-latest}
+    image: tensorzero/openai-go-client-tests:${TENSORZERO_COMMIT_TAG}
     build:
       context: ..
       dockerfile: clients/openai-go/tests/Dockerfile
