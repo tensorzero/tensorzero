@@ -1,6 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
+# ------------------------------------------------------------------------------
+# Set the short commit hash and commit tag early (needed for trap helpers)
+# ------------------------------------------------------------------------------
+SHORT_HASH=${BUILDKITE_COMMIT:0:7}
+export TENSORZERO_COMMIT_TAG=ci-sha-$SHORT_HASH
+
 # Common CI trap helper
 source ci/buildkite/utils/trap-helpers.sh
 tz_setup_compose_logs_trap clients/docker-compose.tests.yml
@@ -13,11 +19,6 @@ if [ -z "$BUILDKITE_ANALYTICS_TOKEN" ]; then
     exit 1
 fi
 
-
-# ------------------------------------------------------------------------------
-# Set the short commit hash
-# ------------------------------------------------------------------------------
-SHORT_HASH=${BUILDKITE_COMMIT:0:7}
 
 # Get the fixtures
 buildkite-agent artifact download fixtures.tar.gz ui/fixtures
@@ -36,9 +37,8 @@ echo "$DOCKER_HUB_ACCESS_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --passw
 echo "Logged in to Docker Hub"
 
 # ------------------------------------------------------------------------------
-# Environment for image tags and test config
+# Environment for test config
 # ------------------------------------------------------------------------------
-export TENSORZERO_COMMIT_TAG=ci-sha-$SHORT_HASH
 export TENSORZERO_SKIP_LARGE_FIXTURES=1
 
 # ------------------------------------------------------------------------------
