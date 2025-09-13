@@ -280,7 +280,7 @@ struct TagRateLimitingConfigScope {
 
 impl TagRateLimitingConfigScope {
     fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<RateLimitingScopeKey<'a>> {
-        let Some(value) = info.tags.get(&self.tag_key)?
+        let value = info.tags.get(&self.tag_key)?;
 
         match self.tag_value {
             TagValueScope::Concrete(ref expected_value) => {
