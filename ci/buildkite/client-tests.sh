@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Common CI trap helper
 source ci/buildkite/utils/trap-helpers.sh
-tz_setup_compose_logs_trap tensorzero-core/tests/e2e/docker-compose.tests.yml
+tz_setup_compose_logs_trap clients/docker-compose.tests.yml
 
 # Set BUILDKITE_ANALYTICS_TOKEN
 export BUILDKITE_ANALYTICS_TOKEN=$(buildkite-agent secret get CLIENT_TESTS_ANALYTICS_ACCESS_TOKEN)
