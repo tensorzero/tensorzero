@@ -476,6 +476,7 @@ impl EmbeddingProvider for EmbeddingProviderInfo {
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
+        // TODO (Viraj): add a rate limit check here
         let response_fut = self
             .inner
             .embed(request, client, dynamic_api_keys, model_provider_data);

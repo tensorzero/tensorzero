@@ -1183,6 +1183,7 @@ impl ModelProvider {
         client: &TensorzeroHttpClient,
         api_keys: &InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
+        // TODO (Viraj): add a rate limit check here
         match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider.infer(request, client, api_keys, self).await
@@ -1252,6 +1253,7 @@ impl ModelProvider {
         client: &TensorzeroHttpClient,
         api_keys: &InferenceCredentials,
     ) -> Result<StreamAndRawRequest, Error> {
+        // TODO (Viraj): add a rate limit check here
         let (stream, raw_request) = match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await

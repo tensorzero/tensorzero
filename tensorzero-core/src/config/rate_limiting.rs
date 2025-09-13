@@ -231,7 +231,8 @@ struct TagRateLimitingConfigScope {
 #[cfg_attr(test, ts(export))]
 enum TagValueScope {
     Concrete(String),
-    Wildcard,
+    Any,
+    All,
 }
 
 impl Serialize for TagValueScope {
@@ -241,7 +242,8 @@ impl Serialize for TagValueScope {
     {
         match self {
             TagValueScope::Concrete(s) => serializer.serialize_str(s),
-            TagValueScope::Wildcard => serializer.serialize_str("tensorzero::*"),
+            TagValueScope::Any => serializer.serialize_str("tensorzero::any"),
+            TagValueScope::All => serializer.serialize_str("tensorzero::all"),
         }
     }
 }
@@ -252,8 +254,10 @@ impl<'de> Deserialize<'de> for TagValueScope {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        if s == "tensorzero::*" {
-            Ok(TagValueScope::Wildcard)
+        if s == "tensorzero::any" {
+            Ok(TagValueScope::Any)
+        } else if s == "tensorzero::all" {
+            Ok(TagValueScope::All)
         } else {
             Ok(TagValueScope::Concrete(s))
         }
