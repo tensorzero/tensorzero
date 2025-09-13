@@ -40,6 +40,8 @@ echo "Logged in to Docker Hub"
 # Environment for test config
 # ------------------------------------------------------------------------------
 export TENSORZERO_SKIP_LARGE_FIXTURES=1
+# Get all env vars (credentials)
+source ci/buildkite/utils/live-tests-env.sh
 
 # ------------------------------------------------------------------------------
 # Pull images referenced by the compose file
