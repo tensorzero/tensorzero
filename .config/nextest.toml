@@ -67,12 +67,9 @@ e2e_groq = { max-threads = 1 }
 # Run ClickHouse migration tests serially to avoid conflicts
 clickhouse_migration = { max-threads = 1 }
 
-# Require that nothing else runs at the same time as a Jaeger test,
-# so that we can find our Jaeger traces (without other tests
-# flushing our target spans out of the Jaeger buffer).
 [[profile.default.overrides]]
-filter = 'test(test_jaeger)'
-threads-required = 'num-test-threads'
+filter = 'test(test_otel_export)'
+slow-timeout = { period = "60s", terminate-after = 2 }
 
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::aws_bedrock::)'
