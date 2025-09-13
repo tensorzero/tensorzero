@@ -24,6 +24,7 @@ async fn make_embedded_gateway() -> tensorzero::Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        postgres_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,

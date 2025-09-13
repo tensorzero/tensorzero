@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 pub mod clickhouse;
+pub mod postgres;
 
 #[async_trait]
 pub trait DatabaseConnection: SelectQueries + HealthCheckable + Send + Sync {}
