@@ -17,6 +17,7 @@ use crate::cache::{
     cache_lookup, cache_lookup_streaming, start_cache_write, start_cache_write_streaming,
     CacheData, ModelProviderRequest, NonStreamingCacheData, StreamingCacheData,
 };
+use crate::config::rate_limiting::{RateLimitingConfig, ScopeInfo};
 use crate::config::{skip_credential_validation, ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
@@ -281,6 +282,7 @@ impl ModelConfig {
                 model_provider_request,
                 clients.http_client,
                 clients.credentials,
+                clients.rate_limiting_config,
             )
             .instrument(span!(
                 Level::INFO,
@@ -335,6 +337,7 @@ impl ModelConfig {
                 model_provider_request,
                 clients.http_client,
                 clients.credentials,
+                clients.rate_limiting_config,
             )
             .await?;
 
@@ -1182,6 +1185,8 @@ impl ModelProvider {
         request: ModelProviderRequest<'_>,
         client: &TensorzeroHttpClient,
         api_keys: &InferenceCredentials,
+        rate_limiting_config: &RateLimitingConfig,
+        scope_info: &ScopeInfo<'_>,
     ) -> Result<ProviderInferenceResponse, Error> {
         // TODO (Viraj): add a rate limit check here
         match &self.config {
@@ -1252,6 +1257,8 @@ impl ModelProvider {
         request: ModelProviderRequest<'_>,
         client: &TensorzeroHttpClient,
         api_keys: &InferenceCredentials,
+        rate_limiting_config: &RateLimitingConfig,
+        scope_info: &ScopeInfo<'_>,
     ) -> Result<StreamAndRawRequest, Error> {
         // TODO (Viraj): add a rate limit check here
         let (stream, raw_request) = match &self.config {

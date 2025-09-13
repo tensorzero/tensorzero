@@ -1,7 +1,5 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-#[cfg(test)]
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 
 /// NOTE: this file deserializes rate limiting configuration from a shorthand format only
@@ -368,12 +366,8 @@ enum RateLimitingScopeKey<'a> {
 // Utility struct to pass in at "check time"
 // This should contain the information about the current request
 // needed to determine if a rate limit is exceeded.
-#[cfg(test)]
-struct ScopeInfo<'a> {
-    #[expect(dead_code)]
+pub struct ScopeInfo<'a> {
     function_name: &'a str,
-    #[expect(dead_code)]
-    model_name: &'a str,
     tags: &'a HashMap<String, String>,
 }
 
