@@ -596,17 +596,12 @@ impl Client {
                 }
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                let client = self.mode.clone();
                 Ok(with_embedded_timeout(*timeout, async {
                     let res = tensorzero_core::endpoints::inference::inference(
                         gateway.handle.app_state.config.clone(),
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.clickhouse_connection_info.clone(),
                         params.try_into().map_err(err_to_http)?,
-                        // Make the stream hold on to a reference to the client,
-                        // so that we client is only dropped after all streams have finished
-                        // See 'create_stream' and 'GatewayHandle' for more details
-                        client,
                     )
                     .await
                     .map_err(err_to_http)?;
@@ -618,6 +613,36 @@ impl Client {
                             Ok(InferenceOutput::Streaming(stream))
                         }
                     }
+                })
+                .await?)
+            }
+        }
+    }
+
+    #[cfg(feature = "e2e_tests")]
+    pub async fn start_batch_inference(
+        &self,
+        params: tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams,
+    ) -> Result<
+        tensorzero_core::endpoints::batch_inference::PrepareBatchInferenceOutput,
+        TensorZeroError,
+    > {
+        match &*self.mode {
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InternalError {
+                    message: "batch_inference is not yet implemented for HTTPGateway mode"
+                        .to_string(),
+                })
+                .into(),
+            }),
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::batch_inference::start_batch_inference(
+                        gateway.handle.app_state.clone(),
+                        params,
+                    )
+                    .await
+                    .map_err(err_to_http)
                 })
                 .await?)
             }

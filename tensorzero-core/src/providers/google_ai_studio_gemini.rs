@@ -1552,9 +1552,10 @@ mod tests {
             ..Default::default()
         };
         let result = GeminiRequest::new(&inference_request);
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "Google AI Studio Gemini requires at least one message".to_string()
             }
@@ -2255,7 +2256,7 @@ mod tests {
         let result = GoogleAIStudioCredentials::try_from(generic);
         assert!(result.is_err());
         assert!(matches!(
-            result.unwrap_err().get_owned_details(),
+            result.unwrap_err().get_details(),
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }
@@ -2574,7 +2575,7 @@ mod tests {
         // Verify error is returned
         assert!(result.is_err());
         let error = result.unwrap_err();
-        let details = error.get_owned_details();
+        let details = error.get_details();
         if let ErrorDetails::InferenceServer { message, .. } = details {
             assert!(message.contains("no candidates"));
         } else {
