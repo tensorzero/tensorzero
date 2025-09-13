@@ -64,7 +64,7 @@ pub struct DiclOptimizationConfig {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "DiclOptimizationConfig"))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "DICLOptimizationConfig"))]
 pub struct UninitializedDiclOptimizationConfig {
     pub embedding_model: String,
     pub variant_name: String,
