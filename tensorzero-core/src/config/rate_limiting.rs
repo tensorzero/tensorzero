@@ -441,10 +441,7 @@ impl RateLimitingConfigScopes {
     }
 
     /// Returns the key (as a Vec) if the scope matches the given info, or None if it does not.
-    fn get_key_if_matches<'a>(
-        &'a self,
-        info: &'a ScopeInfo,
-    ) -> Option<Vec<RateLimitingScopeKey>> {
+    fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<Vec<RateLimitingScopeKey>> {
         self.0
             .iter()
             .map(|scope| scope.get_key_if_matches(info))
@@ -492,7 +489,9 @@ impl TagRateLimitingConfigScope {
                     None
                 }
             }
-            TagValueScope::Any => Some(RateLimitingScopeKey::TagAny { key: self.tag_key.clone() }),
+            TagValueScope::Any => Some(RateLimitingScopeKey::TagAny {
+                key: self.tag_key.clone(),
+            }),
             TagValueScope::All => Some(RateLimitingScopeKey::TagEach {
                 key: self.tag_key.clone(),
                 value: value.clone(),

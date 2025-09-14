@@ -1,4 +1,5 @@
-use crate::config::rate_limiting::RateLimitResourceUsage;
+use crate::config::rate_limiting::{RateLimitResourceUsage, TicketBorrow};
+use crate::db::postgres::PostgresConnectionInfo;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::stored_input::StoredFile;
 use crate::serde_util::{
@@ -1638,6 +1639,8 @@ pub struct CollectChunksArgs<'a, 'b> {
     pub cached: bool,
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
+    pub ticket_borrow: TicketBorrow,
+    pub postgres_connection_info: PostgresConnectionInfo,
 }
 
 // Modify the collect_chunks function to accept CollectChunksArgs
@@ -1663,6 +1666,8 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         cached,
         extra_body,
         extra_headers,
+        ticket_borrow,
+        postgres_connection_info,
     } = args;
 
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
@@ -1890,6 +1895,12 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         latency: latency.clone(),
         finish_reason,
     });
+    if let Ok(actual_resource_usage) = model_response.resource_usage() {
+        // TODO: spawn
+        ticket_borrow
+            .return_tickets(&postgres_connection_info, actual_resource_usage)
+            .await?;
+    }
     let model_inference_response =
         ModelInferenceResponse::new(model_response, model_provider_name, cached);
     let original_response = model_inference_response.raw_response.clone();

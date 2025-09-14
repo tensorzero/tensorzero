@@ -427,6 +427,7 @@ pub async fn inference<T: Send + 'static>(
                 inference_metadata,
                 stream,
                 clickhouse_connection_info,
+                postgres_connection_info,
                 extra_handle,
             );
 
@@ -598,6 +599,7 @@ fn create_stream<T: Send + 'static>(
     metadata: InferenceMetadata,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
+    postgres_connection_info: PostgresConnectionInfo,
     // An arbitrary 'handle' parameter, which is guaranteed to be dropped after `clickhouse_connection_info`
     // This is used by the embedded Rust client to ensure that we only drop the last reference to the client
     // after all outstanding streams have finished (so that we can block in `Drop` from Python without risking
@@ -715,6 +717,8 @@ fn create_stream<T: Send + 'static>(
                     cached,
                     extra_body: extra_body.clone(),
                     extra_headers: extra_headers.clone(),
+                    ticket_borrow,
+                    postgres_connection_info,
                 };
                 let inference_response: Result<InferenceResult, Error> =
                     collect_chunks(collect_chunks_args).await;
