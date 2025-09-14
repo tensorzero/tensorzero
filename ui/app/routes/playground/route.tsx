@@ -61,6 +61,7 @@ function getCleanVariantName(variant: PlaygroundVariantInfo) {
     );
     return originalVariantName;
   }
+  throw new Error(`Unknown variant type: ${JSON.stringify(variant)}`);
 }
 
 function getDisplayVariantName(variant: PlaygroundVariantInfo) {
@@ -76,6 +77,7 @@ function getDisplayVariantName(variant: PlaygroundVariantInfo) {
       </span>
     );
   }
+  throw new Error(`Unknown variant type: ${JSON.stringify(variant)}`);
 }
 
 export function shouldRevalidate(arg: ShouldRevalidateFunctionArgs) {

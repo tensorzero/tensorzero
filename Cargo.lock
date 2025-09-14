@@ -1530,7 +1530,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2025.9.1"
+version = "2025.9.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -1813,7 +1813,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2025.9.1"
+version = "2025.9.3"
 dependencies = [
  "axum",
  "clap",
@@ -2999,6 +2999,7 @@ dependencies = [
  "async-stream",
  "axum",
  "chrono",
+ "clap",
  "eventsource-stream",
  "futures",
  "mimalloc",
@@ -5055,7 +5056,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-core"
-version = "2025.9.1"
+version = "2025.9.3"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -5098,6 +5099,7 @@ dependencies = [
  "minijinja",
  "moka",
  "object_store",
+ "once_cell",
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry-semantic-conventions",
@@ -5156,7 +5158,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2025.9.1"
+version = "2025.9.3"
 dependencies = [
  "napi",
  "napi-build",
@@ -5170,7 +5172,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.9.1"
+version = "2025.9.3"
 dependencies = [
  "futures",
  "pyo3",

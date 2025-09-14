@@ -1564,9 +1564,10 @@ mod tests {
             ..Default::default()
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
-        let details = anthropic_request_body.unwrap_err().get_owned_details();
+        let error = anthropic_request_body.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "Anthropic requires at least one message".to_string(),
             }
@@ -2086,9 +2087,10 @@ mod tests {
             "raw request".to_string(),
             "raw response".to_string(),
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceClient {
                 message: "raw response".to_string(),
                 status_code: Some(response_code),
@@ -2103,9 +2105,10 @@ mod tests {
             "raw request".to_string(),
             "raw response".to_string(),
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceClient {
                 message: "raw response".to_string(),
                 status_code: Some(response_code),
@@ -2120,9 +2123,10 @@ mod tests {
             "raw request".to_string(),
             "raw response".to_string(),
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceClient {
                 message: "raw response".to_string(),
                 status_code: Some(response_code),
@@ -2137,9 +2141,10 @@ mod tests {
             "raw request".to_string(),
             "raw response".to_string(),
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: "raw response".to_string(),
                 raw_request: Some("raw request".to_string()),
@@ -2153,9 +2158,10 @@ mod tests {
             "raw request".to_string(),
             "raw response".to_string(),
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: "raw response".to_string(),
                 raw_request: Some("raw request".to_string()),
@@ -2464,9 +2470,10 @@ mod tests {
             &mut current_tool_name,
             false,
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
                 raw_request: None,
@@ -2595,9 +2602,10 @@ mod tests {
             &mut current_tool_name,
             false,
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: r#"{"message":"Test error"}"#.to_string(),
                 raw_request: None,
@@ -2908,7 +2916,7 @@ mod tests {
         let result = AnthropicCredentials::try_from(generic);
         assert!(result.is_err());
         assert!(matches!(
-            result.unwrap_err().get_owned_details(),
+            result.unwrap_err().get_details(),
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }

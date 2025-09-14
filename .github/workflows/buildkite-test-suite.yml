@@ -4,8 +4,8 @@ run-name: "Buildkite Test Suite: ${{ github.event.pull_request.title || github.r
 on:
   workflow_dispatch:
 
-  pull_request:
-    branches: ["main"]
+  # pull_request:
+  #   branches: ["main"]
 
 jobs:
   unit-tests:

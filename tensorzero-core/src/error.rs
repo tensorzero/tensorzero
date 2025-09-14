@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use axum::http::StatusCode;
@@ -101,28 +102,28 @@ impl<T: Debug + Display> Display for DisplayOrDebugGateway<T> {
     }
 }
 
-#[derive(Debug, Error, Serialize)]
+#[derive(Clone, Debug, Error, Serialize)]
 #[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
 #[error(transparent)]
 // As long as the struct member is private, we force people to use the `new` method and log the error.
-// We box `ErrorDetails` per the `clippy::result_large_err` lint
-pub struct Error(Box<ErrorDetails>);
+// We arc `ErrorDetails` per the `clippy::result_large_err` lint, as well as to make it cloneable
+pub struct Error(Arc<ErrorDetails>);
 
 impl Error {
     pub fn new(details: ErrorDetails) -> Self {
         details.log();
-        Error(Box::new(details))
+        Error(Arc::new(details))
     }
 
     pub fn new_with_err_logging(details: ErrorDetails, err_logging: bool) -> Self {
         if err_logging {
             details.log();
         }
-        Error(Box::new(details))
+        Error(Arc::new(details))
     }
 
     pub fn new_without_logging(details: ErrorDetails) -> Self {
-        Error(Box::new(details))
+        Error(Arc::new(details))
     }
 
     pub fn status_code(&self) -> StatusCode {
@@ -131,10 +132,6 @@ impl Error {
 
     pub fn get_details(&self) -> &ErrorDetails {
         &self.0
-    }
-
-    pub fn get_owned_details(self) -> ErrorDetails {
-        *self.0
     }
 
     pub fn log(&self) {
