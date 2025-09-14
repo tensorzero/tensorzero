@@ -59,7 +59,7 @@ impl RateLimitingConfig {
         let ticket_requests = ticket_requests?;
         let results = client.consume_tickets(ticket_requests).await?;
         check_borrowed_rate_limits(&limits, &results)?;
-        Ok(TicketBorrow::new(results, limits)?)
+        TicketBorrow::new(results, limits)
     }
 
     fn get_active_limits<'a>(&'a self, scope_info: &'a ScopeInfo) -> Vec<ActiveRateLimit> {
