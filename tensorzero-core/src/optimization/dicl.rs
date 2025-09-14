@@ -6,7 +6,10 @@ use serde_json::json;
 use crate::{
     cache::CacheOptions,
     config::{Config, UninitializedVariantConfig},
-    db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
+    db::{
+        clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
+        postgres::PostgresConnectionInfo,
+    },
     embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
     endpoints::inference::{InferenceClients, InferenceCredentials},
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
@@ -520,6 +523,7 @@ async fn process_embedding_batch(
         http_client: client,
         credentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
+        postgres_connection_info: &PostgresConnectionInfo::Disabled,
         cache_options: &cache_options,
         tags: &HashMap::default(),
         rate_limiting_config: &config.rate_limiting,

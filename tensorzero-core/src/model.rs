@@ -17,7 +17,6 @@ use crate::cache::{
     cache_lookup, cache_lookup_streaming, start_cache_write, start_cache_write_streaming,
     CacheData, ModelProviderRequest, NonStreamingCacheData, StreamingCacheData,
 };
-use crate::config::rate_limiting::RateLimitingConfig;
 use crate::config::{skip_credential_validation, ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
@@ -1179,7 +1178,14 @@ impl ModelProvider {
         clients: &InferenceClients<'_>,
         scope_info: &ScopeInfo<'_>,
     ) -> Result<ProviderInferenceResponse, Error> {
-        // TODO (Viraj): add a rate limit check here
+        clients
+            .rate_limiting_config
+            .borrow_tickets(
+                clients.postgres_connection_info,
+                scope_info,
+                &request.request.estimated_resource_usage()?,
+            )
+            .await?;
         match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider
@@ -1297,7 +1303,14 @@ impl ModelProvider {
         clients: &InferenceClients<'_>,
         scope_info: &ScopeInfo<'_>,
     ) -> Result<StreamAndRawRequest, Error> {
-        // TODO (Viraj): add a rate limit check here
+        clients
+            .rate_limiting_config
+            .borrow_tickets(
+                clients.postgres_connection_info,
+                scope_info,
+                &request.request.estimated_resource_usage()?,
+            )
+            .await?;
         let (stream, raw_request) = match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider

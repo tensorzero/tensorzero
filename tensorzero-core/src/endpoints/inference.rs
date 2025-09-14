@@ -25,6 +25,7 @@ use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::config::rate_limiting::RateLimitingConfig;
 use crate::config::{Config, ErrorContext, ObjectStoreInfo, SchemaData, UninitializedVariantInfo};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
+use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -151,12 +152,20 @@ pub async fn inference_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        postgres_connection_info,
         ..
     }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
-    let inference_output =
-        inference(config, &http_client, clickhouse_connection_info, params, ()).await?;
+    let inference_output = inference(
+        config,
+        &http_client,
+        clickhouse_connection_info,
+        postgres_connection_info,
+        params,
+        (),
+    )
+    .await?;
     match inference_output {
         InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
         InferenceOutput::Streaming(stream) => {
@@ -210,6 +219,7 @@ pub async fn inference<T: Send + 'static>(
     config: Arc<Config>,
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
+    postgres_connection_info: PostgresConnectionInfo,
     params: Params,
     // See 'create_stream' for more details about this parameter
     extra_handle: T,
@@ -317,6 +327,7 @@ pub async fn inference<T: Send + 'static>(
     let inference_clients = InferenceClients {
         http_client,
         clickhouse_connection_info: &clickhouse_connection_info,
+        postgres_connection_info: &postgres_connection_info,
         credentials: &params.credentials,
         cache_options: &(params.cache_options, dryrun).into(),
         tags: &params.tags,
@@ -1163,6 +1174,7 @@ impl InferenceResponseChunk {
 pub struct InferenceClients<'a> {
     pub http_client: &'a TensorzeroHttpClient,
     pub clickhouse_connection_info: &'a ClickHouseConnectionInfo,
+    pub postgres_connection_info: &'a PostgresConnectionInfo,
     pub credentials: &'a InferenceCredentials,
     pub cache_options: &'a CacheOptions,
     pub tags: &'a HashMap<String, String>,

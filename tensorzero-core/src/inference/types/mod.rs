@@ -1,4 +1,4 @@
-use crate::config::rate_limiting::{RateLimitResource, RateLimitResourceRequests};
+use crate::config::rate_limiting::RateLimitResourceRequests;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::stored_input::StoredFile;
 use crate::serde_util::{

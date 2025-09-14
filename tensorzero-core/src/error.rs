@@ -465,6 +465,10 @@ pub enum ErrorDetails {
     ProviderNotFound {
         provider_name: String,
     },
+    RateLimitExceeded {
+        key: String,
+        tickets_remaining: u64,
+    },
     Serialization {
         message: String,
     },
@@ -629,6 +633,7 @@ impl ErrorDetails {
             ErrorDetails::PostgresMigration { .. } => tracing::Level::ERROR,
             ErrorDetails::PostgresResult { .. } => tracing::Level::ERROR,
             ErrorDetails::PostgresQuery { .. } => tracing::Level::ERROR,
+            ErrorDetails::RateLimitExceeded { .. } => tracing::Level::WARN,
             ErrorDetails::Serialization { .. } => tracing::Level::ERROR,
             ErrorDetails::StreamError { .. } => tracing::Level::ERROR,
             ErrorDetails::ToolNotFound { .. } => tracing::Level::WARN,
@@ -746,6 +751,7 @@ impl ErrorDetails {
             ErrorDetails::PostgresQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::PostgresResult { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::PostgresMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::RateLimitExceeded { .. } => StatusCode::TOO_MANY_REQUESTS,
             ErrorDetails::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::StreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ToolNotFound { .. } => StatusCode::BAD_REQUEST,
@@ -1241,6 +1247,16 @@ impl std::fmt::Display for ErrorDetails {
             },
             ErrorDetails::ProviderNotFound { provider_name } => {
                 write!(f, "Provider not found: {provider_name}")
+            }
+            ErrorDetails::RateLimitExceeded {
+                key,
+                tickets_remaining,
+            } => {
+                // TODO: improve this error
+                write!(
+                    f,
+                    "Rate limit exceeded for key {key} with {tickets_remaining} tickets remaining"
+                )
             }
             ErrorDetails::StreamError { source } => {
                 write!(f, "Error in streaming response: {source}")

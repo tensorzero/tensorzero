@@ -1,5 +1,5 @@
-use crate::db::{ConsumeTicketsRequest, RateLimitQueries};
-use crate::error::Error;
+use crate::db::{ConsumeTicketsRequest, ConsumeTicketsResult, RateLimitQueries};
+use crate::error::{Error, ErrorDetails};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
 
@@ -48,15 +48,14 @@ impl RateLimitingConfig {
         scope_info: &ScopeInfo<'_>,
         rate_limit_resource_requests: &RateLimitResourceRequests,
     ) -> Result<(), Error> {
-        let ticket_requests: Result<Vec<ConsumeTicketsRequest>, Error> = self
-            .get_active_limits(scope_info)
+        let limits = self.get_active_limits(scope_info);
+        let ticket_requests: Result<Vec<ConsumeTicketsRequest>, Error> = limits
             .iter()
             .map(|limit| limit.get_consume_tickets_request(rate_limit_resource_requests))
             .collect();
         let ticket_requests = ticket_requests?;
-        client.consume_tickets(&ticket_requests).await?;
-        // TODO: Handle the result
-        Ok(())
+        let results = client.consume_tickets(&ticket_requests).await?;
+        check_borrowed_rate_limits(&limits, &results)
     }
 
     // pub fn return_tickets(
@@ -98,6 +97,24 @@ impl RateLimitingConfig {
             .flatten()
             .collect()
     }
+}
+/// Assumes these are the same length.
+fn check_borrowed_rate_limits(
+    limits: &[ActiveRateLimit],
+    results: &[ConsumeTicketsResult],
+) -> Result<(), Error> {
+    // Loop over the zip of these two arrays
+    // if !result.success return a nice error
+    for (limit, result) in limits.iter().zip(results.iter()) {
+        if !result.success {
+            // TODO: improve the error informatin here
+            return Err(Error::new(ErrorDetails::RateLimitExceeded {
+                key: limit.into_key()?,
+                tickets_remaining: result.tickets_remaining,
+            }));
+        }
+    }
+    Ok(())
 }
 
 struct ActiveRateLimit<'a> {

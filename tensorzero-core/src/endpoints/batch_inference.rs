@@ -111,6 +111,7 @@ pub async fn start_batch_inference_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        postgres_connection_info,
         ..
     }): AppState,
     StructuredJson(params): StructuredJson<StartBatchInferenceParams>,
@@ -205,6 +206,7 @@ pub async fn start_batch_inference_handler(
     let inference_clients = InferenceClients {
         http_client: &http_client,
         clickhouse_connection_info: &clickhouse_connection_info,
+        postgres_connection_info: &postgres_connection_info,
         credentials: &params.credentials,
         cache_options: &cache_options,
         rate_limiting_config: &config.rate_limiting,
