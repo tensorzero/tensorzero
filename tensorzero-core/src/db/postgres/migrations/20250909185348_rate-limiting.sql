@@ -59,27 +59,28 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION consume_resource_tickets(
+-- Function to get the current balance without modification.
+CREATE OR REPLACE FUNCTION get_resource_bucket_balance(
     p_key TEXT,
-    p_requested BIGINT,
     p_capacity BIGINT,
     p_refill_amount BIGINT,
     p_refill_interval INTERVAL
 )
-RETURNS TABLE (success BOOLEAN, tickets_remaining BIGINT, tickets_consumed BIGINT)
+RETURNS BIGINT
 LANGUAGE plpgsql AS $$
 DECLARE
     bucket_state record;
     refilled_state calculated_bucket_state;
-    is_successful boolean;
 BEGIN
-    -- Step 1: Atomically get-or-create the bucket, locking the row.
-    INSERT INTO resource_bucket (key, tickets, balance_as_of)
-    VALUES (p_key, p_capacity, now())
-    ON CONFLICT (key) DO UPDATE SET key = EXCLUDED.key
-    RETURNING * INTO bucket_state;
+    -- Step 1: Find the bucket.
+    SELECT * INTO bucket_state FROM resource_bucket WHERE key = p_key;
 
-    -- Step 2: Calculate the refilled state using the helper function.
+    -- Step 2: If the bucket doesn't exist, the balance is the capacity.
+    IF NOT FOUND THEN
+        RETURN p_capacity;
+    END IF;
+
+    -- Step 3: If the bucket exists, calculate its current refilled state.
     SELECT * INTO refilled_state
     FROM _calculate_refilled_state(
         bucket_state.tickets,
@@ -89,73 +90,206 @@ BEGIN
         p_refill_interval
     );
 
-    -- Step 3: Determine if the consumption is successful.
-    is_successful := refilled_state.available_tickets >= p_requested;
-
-    IF is_successful THEN
-        tickets_remaining := refilled_state.available_tickets - p_requested;
-        tickets_consumed := p_requested;
-    ELSE
-        tickets_remaining := refilled_state.available_tickets;
-        tickets_consumed := 0;
-    END IF;
-
-    -- Step 4: Update the bucket with the new state.
-    UPDATE resource_bucket
-    SET
-        tickets = tickets_remaining,
-        balance_as_of = refilled_state.new_balance_as_of
-    WHERE key = p_key;
-
-    -- Step 5: Return the result.
-    RETURN QUERY SELECT is_successful, tickets_remaining, tickets_consumed;
+    -- Step 4: Return the available tickets from the calculated state.
+    RETURN refilled_state.available_tickets;
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION return_resource_tickets(
-    p_key TEXT,
-    p_amount BIGINT,
-    p_capacity BIGINT,
-    p_refill_amount BIGINT,
-    p_refill_interval INTERVAL
+-- Function to atomically consume tickets from multiple resource buckets.
+CREATE OR REPLACE FUNCTION consume_multiple_resource_tickets(
+    p_keys TEXT[],
+    p_requested_amounts BIGINT[],
+    p_capacities BIGINT[],
+    p_refill_amounts BIGINT[],
+    p_refill_intervals INTERVAL[]
 )
-RETURNS TABLE (returned_tickets BIGINT)
+RETURNS TABLE (key TEXT, is_successful BOOLEAN, tickets_remaining BIGINT, tickets_consumed BIGINT)
 LANGUAGE plpgsql AS $$
 DECLARE
-    bucket_state record;
+    i INT;
+    bucket_state RECORD;
     refilled_state calculated_bucket_state;
-    final_balance BIGINT;
+    failure_detected BOOLEAN := false;
+    temp_row RECORD;
 BEGIN
-    -- Step 1: Atomically lock the row, creating it if it doesn't exist.
-    INSERT INTO resource_bucket (key, tickets, balance_as_of)
-    VALUES (p_key, p_capacity, now())
-    ON CONFLICT (key) DO UPDATE SET key = EXCLUDED.key
-    RETURNING * INTO bucket_state;
+    -- Input validation: check for consistent array lengths
+    IF array_length(p_keys, 1) IS NULL OR
+       array_length(p_keys, 1) != array_length(p_requested_amounts, 1) OR
+       array_length(p_keys, 1) != array_length(p_capacities, 1) OR
+       array_length(p_keys, 1) != array_length(p_refill_amounts, 1) OR
+       array_length(p_keys, 1) != array_length(p_refill_intervals, 1) THEN
+        RAISE EXCEPTION 'Input arrays must have the same length';
+    END IF;
 
-    -- Step 2: Calculate the refilled state using the helper function.
-    SELECT * INTO refilled_state
-    FROM _calculate_refilled_state(
-        bucket_state.tickets,
-        bucket_state.balance_as_of,
-        p_capacity,
-        p_refill_amount,
-        p_refill_interval
-    );
+    -- Input validation: check for duplicate keys
+    IF array_length(p_keys, 1) > 0 AND array_length(p_keys, 1) != (SELECT count(DISTINCT k) FROM unnest(p_keys) AS k) THEN
+        RAISE EXCEPTION 'Duplicate keys are not allowed in the input array';
+    END IF;
 
-    -- Step 3: Calculate the new balance, capped at capacity.
-    final_balance := least(
-        refilled_state.available_tickets + p_amount,
-        p_capacity
-    );
+    -- Create a temporary table to store intermediate results
+    CREATE TEMP TABLE temp_bucket_states (
+        key TEXT PRIMARY KEY,
+        requested BIGINT,
+        capacity BIGINT,
+        refill_amount BIGINT,
+        refill_interval INTERVAL,
+        refilled_tickets BIGINT,
+        new_balance_as_of TIMESTAMPTZ
+    ) ON COMMIT DROP;
 
-    -- Step 4: Update the bucket with the new balance and timestamp.
-    UPDATE resource_bucket
-    SET
-        tickets = final_balance,
-        balance_as_of = refilled_state.new_balance_as_of
-    WHERE key = p_key;
+    -- Populate temp table from input arrays
+    FOR i IN 1..array_length(p_keys, 1) LOOP
+        INSERT INTO temp_bucket_states (key, requested, capacity, refill_amount, refill_interval)
+        VALUES (p_keys[i], p_requested_amounts[i], p_capacities[i], p_refill_amounts[i], p_refill_intervals[i]);
+    END LOOP;
 
-    -- Step 5: Return the result.
-    RETURN QUERY SELECT final_balance;
+    -- Pass 1: Lock rows in a consistent order, calculate new states, and check for sufficiency.
+    FOR temp_row IN SELECT * FROM temp_bucket_states ORDER BY key LOOP
+        -- Atomically get-or-create the bucket, locking the row.
+        INSERT INTO resource_bucket (key, tickets, balance_as_of)
+        VALUES (temp_row.key, temp_row.capacity, now())
+        ON CONFLICT (key) DO UPDATE SET key = EXCLUDED.key
+        RETURNING * INTO bucket_state;
+
+        -- Calculate the refilled state.
+        SELECT * INTO refilled_state
+        FROM _calculate_refilled_state(
+            bucket_state.tickets,
+            bucket_state.balance_as_of,
+            temp_row.capacity,
+            temp_row.refill_amount,
+            temp_row.refill_interval
+        );
+
+        -- Store calculated values back into the temp table
+        UPDATE temp_bucket_states
+        SET refilled_tickets = refilled_state.available_tickets,
+            new_balance_as_of = refilled_state.new_balance_as_of
+        WHERE key = temp_row.key;
+
+        -- Check for failure.
+        IF NOT failure_detected AND refilled_state.available_tickets < temp_row.requested THEN
+            failure_detected := true;
+        END IF;
+    END LOOP;
+
+    -- Pass 2: Commit changes based on whether a failure was detected.
+    IF failure_detected THEN
+        -- Failure: Update buckets to their refilled state without consuming tickets.
+        FOR temp_row IN SELECT * FROM temp_bucket_states LOOP
+            UPDATE resource_bucket
+            SET tickets = temp_row.refilled_tickets,
+                balance_as_of = temp_row.new_balance_as_of
+            WHERE resource_bucket.key = temp_row.key;
+        END LOOP;
+    ELSE
+        -- Success: Update all buckets with consumed amounts.
+        FOR temp_row IN SELECT * FROM temp_bucket_states LOOP
+            UPDATE resource_bucket
+            SET tickets = temp_row.refilled_tickets - temp_row.requested,
+                balance_as_of = temp_row.new_balance_as_of
+            WHERE resource_bucket.key = temp_row.key;
+        END LOOP;
+    END IF;
+
+    -- Pass 3: Return the final state for each key.
+    RETURN QUERY
+        SELECT
+            t.key,
+            NOT failure_detected,
+            CASE
+                WHEN failure_detected THEN t.refilled_tickets
+                ELSE t.refilled_tickets - t.requested
+            END::BIGINT,
+            CASE
+                WHEN failure_detected THEN 0::BIGINT
+                ELSE t.requested
+            END::BIGINT
+        FROM temp_bucket_states t;
+END;
+$$;
+
+-- Function to atomically return tickets to multiple resource buckets.
+CREATE OR REPLACE FUNCTION return_multiple_resource_tickets(
+    p_keys TEXT[],
+    p_amounts BIGINT[],
+    p_capacities BIGINT[],
+    p_refill_amounts BIGINT[],
+    p_refill_intervals INTERVAL[]
+)
+RETURNS TABLE (key_returned TEXT, final_balance BIGINT)
+LANGUAGE plpgsql AS $$
+DECLARE
+    i INT;
+    bucket_state RECORD;
+    refilled_state calculated_bucket_state;
+    temp_row RECORD;
+    new_balance BIGINT;
+BEGIN
+    -- Input validation: check for consistent array lengths
+    IF array_length(p_keys, 1) IS NULL OR
+       array_length(p_keys, 1) != array_length(p_amounts, 1) OR
+       array_length(p_keys, 1) != array_length(p_capacities, 1) OR
+       array_length(p_keys, 1) != array_length(p_refill_amounts, 1) OR
+       array_length(p_keys, 1) != array_length(p_refill_intervals, 1) THEN
+        RAISE EXCEPTION 'Input arrays must have the same length';
+    END IF;
+
+    -- Input validation: check for duplicate keys
+    IF array_length(p_keys, 1) > 0 AND array_length(p_keys, 1) != (SELECT count(DISTINCT k) FROM unnest(p_keys) AS k) THEN
+        RAISE EXCEPTION 'Duplicate keys are not allowed in the input array';
+    END IF;
+
+    -- Create a temporary table to store inputs
+    CREATE TEMP TABLE temp_return_states (
+        key TEXT PRIMARY KEY,
+        amount BIGINT,
+        capacity BIGINT,
+        refill_amount BIGINT,
+        refill_interval INTERVAL
+    ) ON COMMIT DROP;
+
+    -- Populate temp table from input arrays
+    FOR i IN 1..array_length(p_keys, 1) LOOP
+        INSERT INTO temp_return_states (key, amount, capacity, refill_amount, refill_interval)
+        VALUES (p_keys[i], p_amounts[i], p_capacities[i], p_refill_amounts[i], p_refill_intervals[i]);
+    END LOOP;
+
+    -- Lock rows in a consistent order, calculate new state, and update.
+    FOR temp_row IN SELECT * FROM temp_return_states ORDER BY key LOOP
+        -- Atomically get-or-create the bucket, locking the row.
+        INSERT INTO resource_bucket (key, tickets, balance_as_of)
+        VALUES (temp_row.key, temp_row.capacity, now())
+        ON CONFLICT (key) DO UPDATE SET key = EXCLUDED.key
+        RETURNING * INTO bucket_state;
+
+        -- Calculate the refilled state.
+        SELECT * INTO refilled_state
+        FROM _calculate_refilled_state(
+            bucket_state.tickets,
+            bucket_state.balance_as_of,
+            temp_row.capacity,
+            temp_row.refill_amount,
+            temp_row.refill_interval
+        );
+
+        -- Calculate the new balance, capped at capacity.
+        new_balance := least(
+            refilled_state.available_tickets + temp_row.amount,
+            temp_row.capacity
+        );
+
+        -- Update the bucket with the new balance and timestamp.
+        UPDATE resource_bucket
+        SET
+            tickets = new_balance,
+            balance_as_of = refilled_state.new_balance_as_of
+        WHERE key = temp_row.key;
+
+        -- Prepare the row for the return query.
+        key_returned := temp_row.key;
+        final_balance := new_balance;
+        RETURN NEXT;
+    END LOOP;
 END;
 $$;
