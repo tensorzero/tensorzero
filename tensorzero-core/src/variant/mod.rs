@@ -15,6 +15,7 @@ use tokio::time::Duration;
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::config::rate_limiting::TicketBorrow;
 use crate::config::PathWithContents;
 use crate::config::TimeoutsConfig;
 use crate::embeddings::EmbeddingModelTable;
@@ -193,6 +194,7 @@ pub struct ModelUsedInfo {
     pub input_messages: Vec<RequestMessage>,
     pub inference_params: InferenceParams,
     pub cached: bool,
+    pub ticket_borrow: TicketBorrow,
     // These responses will get added into the final inference result (after `collect_chunks` finishes)
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
 }
@@ -726,6 +728,7 @@ async fn infer_model_request_stream<'request>(
                 cached,
             },
         messages: input_messages,
+        ticket_borrow,
     } = (|| async {
         model_config
             .infer_stream(&request, clients, &model_name)
@@ -744,6 +747,7 @@ async fn infer_model_request_stream<'request>(
         system,
         input_messages,
         cached,
+        ticket_borrow,
     };
     let config_type = function.config_type();
     let stream =

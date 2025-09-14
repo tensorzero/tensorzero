@@ -22,7 +22,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
-use crate::config::rate_limiting::RateLimitingConfig;
+use crate::config::rate_limiting::{RateLimitingConfig, TicketBorrow};
 use crate::config::{Config, ErrorContext, ObjectStoreInfo, SchemaData, UninitializedVariantInfo};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
@@ -117,7 +117,7 @@ pub struct Params {
     pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct InferenceMetadata {
     pub function_name: String,
     pub variant_name: String,
@@ -141,6 +141,7 @@ struct InferenceMetadata {
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub include_original_response: bool,
+    pub ticket_borrow: TicketBorrow,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -417,6 +418,7 @@ pub async fn inference<T: Send + 'static>(
                 extra_body,
                 extra_headers,
                 include_original_response: params.include_original_response,
+                ticket_borrow: model_used_info.ticket_borrow,
             };
 
             let stream = create_stream(
@@ -686,6 +688,7 @@ fn create_stream<T: Send + 'static>(
                 extra_body,
                 extra_headers,
                 include_original_response: _,
+                ticket_borrow,
             } = metadata;
 
             let config = config.clone();

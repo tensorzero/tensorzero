@@ -1,7 +1,10 @@
-use crate::db::{ConsumeTicketsReciept, ConsumeTicketsRequest, RateLimitQueries};
-use crate::error::{Error, ErrorDetails};
+use crate::db::{
+    ConsumeTicketsReciept, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest,
+};
+use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 /// NOTE: this file deserializes rate limiting configuration from a shorthand format only
 /// [[rate_limiting.rules]]
@@ -47,28 +50,19 @@ impl RateLimitingConfig {
         client: &impl RateLimitQueries,
         scope_info: &'a ScopeInfo<'a>,
         rate_limit_resource_requests: &RateLimitResourceUsage,
-    ) -> Result<TicketBorrow<'a>, Error> {
+    ) -> Result<TicketBorrow, Error> {
         let limits = self.get_active_limits(scope_info);
         let ticket_requests: Result<Vec<ConsumeTicketsRequest>, Error> = limits
             .iter()
             .map(|limit| limit.get_consume_tickets_request(rate_limit_resource_requests))
             .collect();
         let ticket_requests = ticket_requests?;
-        let results = client.consume_tickets(&ticket_requests).await?;
+        let results = client.consume_tickets(ticket_requests).await?;
         check_borrowed_rate_limits(&limits, &results)?;
-        Ok(TicketBorrow::new(ticket_requests, results, limits))
+        Ok(TicketBorrow::new(results, limits)?)
     }
 
-    pub async fn return_tickets(
-        &self,
-        _client: &impl RateLimitQueries,
-        _ticket_borrow: TicketBorrow<'_>,
-        _actual_usage: RateLimitResourceUsage,
-    ) -> Result<(), Error> {
-        todo!()
-    }
-
-    fn get_active_limits<'a>(&'a self, scope_info: &'a ScopeInfo) -> Vec<ActiveRateLimit<'a>> {
+    fn get_active_limits<'a>(&'a self, scope_info: &'a ScopeInfo) -> Vec<ActiveRateLimit> {
         if !self.enabled {
             return vec![];
         }
@@ -117,17 +111,26 @@ fn check_borrowed_rate_limits(
     Ok(())
 }
 
-struct ActiveRateLimit<'a> {
-    limit: &'a RateLimit,
-    scope_key: Vec<RateLimitingScopeKey<'a>>,
+#[derive(Debug)]
+struct ActiveRateLimit {
+    limit: Arc<RateLimit>,
+    scope_key: Vec<RateLimitingScopeKey>,
 }
 
-impl ActiveRateLimit<'_> {
+impl ActiveRateLimit {
     pub fn get_consume_tickets_request(
         &self,
         requests: &RateLimitResourceUsage,
     ) -> Result<ConsumeTicketsRequest, Error> {
-        let requested = requests.get_request(self.limit.resource);
+        let request_amount = requests.get_usage(self.limit.resource);
+        self.get_consume_tickets_request_for_return(request_amount)
+    }
+
+    /// Use this one if the actual usage > the borrowed usage
+    pub fn get_consume_tickets_request_for_return(
+        &self,
+        requested: u64,
+    ) -> Result<ConsumeTicketsRequest, Error> {
         Ok(ConsumeTicketsRequest {
             key: self.get_key()?,
             capacity: self.limit.capacity,
@@ -136,12 +139,23 @@ impl ActiveRateLimit<'_> {
             requested,
         })
     }
+
+    /// Use this one if the borrowed usage < the actual usage
+    pub fn get_return_tickets_request(&self, returned: u64) -> Result<ReturnTicketsRequest, Error> {
+        Ok(ReturnTicketsRequest {
+            key: self.get_key()?,
+            capacity: self.limit.capacity,
+            refill_amount: self.limit.refill_rate,
+            refill_interval: self.limit.interval.to_duration(),
+            returned,
+        })
+    }
 }
 
 #[derive(Serialize)]
 struct ActiveRateLimitKeyHelper<'a> {
     resource: RateLimitResource,
-    scope_key: &'a [RateLimitingScopeKey<'a>],
+    scope_key: &'a [RateLimitingScopeKey],
 }
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize)]
@@ -163,7 +177,7 @@ impl std::fmt::Display for ActiveRateLimitKey {
     }
 }
 
-impl ActiveRateLimit<'_> {
+impl ActiveRateLimit {
     pub fn get_key(&self) -> Result<ActiveRateLimitKey, Error> {
         let key = ActiveRateLimitKeyHelper {
             resource: self.limit.resource,
@@ -190,7 +204,7 @@ impl Default for RateLimitingConfig {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 struct RateLimitingConfigRule {
-    limits: Vec<RateLimit>,
+    limits: Vec<Arc<RateLimit>>,
     scope: RateLimitingConfigScopes,
     #[serde(flatten)]
     priority: RateLimitingConfigPriority,
@@ -201,7 +215,7 @@ impl RateLimitingConfigRule {
         &'a self,
         scope_info: &'a ScopeInfo<'a>,
         max_priority: &mut usize,
-    ) -> Option<Vec<ActiveRateLimit<'a>>> {
+    ) -> Option<Vec<ActiveRateLimit>> {
         let key = self.scope.get_key_if_matches(scope_info)?;
         if let RateLimitingConfigPriority::Priority(priority) = self.priority {
             if priority > *max_priority {
@@ -212,7 +226,7 @@ impl RateLimitingConfigRule {
             self.limits
                 .iter()
                 .map(|limit| ActiveRateLimit {
-                    limit,
+                    limit: limit.clone(),
                     scope_key: key.clone(),
                 })
                 .collect(),
@@ -246,7 +260,7 @@ pub struct RateLimitResourceUsage {
 }
 
 impl RateLimitResourceUsage {
-    pub fn get_request(&self, resource: RateLimitResource) -> u64 {
+    pub fn get_usage(&self, resource: RateLimitResource) -> u64 {
         match resource {
             RateLimitResource::ModelInference => self.model_inference,
             RateLimitResource::Token => self.token,
@@ -315,14 +329,14 @@ impl<'de> Deserialize<'de> for RateLimitingConfigRule {
                     serde::de::value::StrDeserializer::new(parts[1]),
                 )?;
 
-                limits.push(RateLimit {
+                limits.push(Arc::new(RateLimit {
                     resource,
                     interval,
                     // We internally represent as a token bucket algorithm but for now
                     // we only take configuration that assumes the bucket is the size of one period
                     capacity: amount,
                     refill_rate: amount,
-                });
+                }));
 
                 // Track keys to remove
                 rate_limit_keys.push(key.clone());
@@ -430,7 +444,7 @@ impl RateLimitingConfigScopes {
     fn get_key_if_matches<'a>(
         &'a self,
         info: &'a ScopeInfo,
-    ) -> Option<Vec<RateLimitingScopeKey<'a>>> {
+    ) -> Option<Vec<RateLimitingScopeKey>> {
         self.0
             .iter()
             .map(|scope| scope.get_key_if_matches(info))
@@ -464,24 +478,24 @@ struct TagRateLimitingConfigScope {
 }
 
 impl TagRateLimitingConfigScope {
-    fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<RateLimitingScopeKey<'a>> {
+    fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<RateLimitingScopeKey> {
         let value = info.tags.get(&self.tag_key)?;
 
         match self.tag_value {
             TagValueScope::Concrete(ref expected_value) => {
                 if value == expected_value {
                     Some(RateLimitingScopeKey::TagConcrete {
-                        key: &self.tag_key,
-                        value,
+                        key: self.tag_key.clone(),
+                        value: value.clone(),
                     })
                 } else {
                     None
                 }
             }
-            TagValueScope::Any => Some(RateLimitingScopeKey::TagAny { key: &self.tag_key }),
+            TagValueScope::Any => Some(RateLimitingScopeKey::TagAny { key: self.tag_key.clone() }),
             TagValueScope::All => Some(RateLimitingScopeKey::TagEach {
-                key: &self.tag_key,
-                value,
+                key: self.tag_key.clone(),
+                value: value.clone(),
             }),
         }
     }
@@ -526,7 +540,7 @@ impl<'de> Deserialize<'de> for TagValueScope {
 }
 
 impl RateLimitingConfigScope {
-    fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<RateLimitingScopeKey<'a>> {
+    fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<RateLimitingScopeKey> {
         match self {
             RateLimitingConfigScope::Tag(tag) => tag.get_key_if_matches(info),
         }
@@ -539,30 +553,87 @@ impl RateLimitingConfigScope {
 /// across releases.
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type")]
-pub enum RateLimitingScopeKey<'a> {
-    TagAny { key: &'a str },
-    TagEach { key: &'a str, value: &'a str },
-    TagConcrete { key: &'a str, value: &'a str },
+pub enum RateLimitingScopeKey {
+    TagAny { key: String },
+    TagEach { key: String, value: String },
+    TagConcrete { key: String, value: String },
 }
 
+// TODO: is there a way to enforce that this struct is consumed by return_tickets?
 #[must_use]
-pub struct TicketBorrow<'a> {
-    requests: Vec<ConsumeTicketsRequest>,
+#[derive(Debug)]
+pub struct TicketBorrow {
     reciepts: Vec<ConsumeTicketsReciept>,
-    active_limits: Vec<ActiveRateLimit<'a>>,
+    active_limits: Vec<ActiveRateLimit>,
 }
 
-impl<'a> TicketBorrow<'a> {
-    fn new(
-        requests: Vec<ConsumeTicketsRequest>,
-        reciepts: Vec<ConsumeTicketsReciept>,
-        active_limits: Vec<ActiveRateLimit<'a>>,
-    ) -> Self {
+impl TicketBorrow {
+    pub fn empty() -> Self {
         Self {
-            requests,
+            reciepts: Vec::new(),
+            active_limits: Vec::new(),
+        }
+    }
+
+    fn new(
+        reciepts: Vec<ConsumeTicketsReciept>,
+        active_limits: Vec<ActiveRateLimit>,
+    ) -> Result<Self, Error> {
+        // Assert all vectors have the same length
+        let reciepts_len = reciepts.len();
+        let active_limits_len = active_limits.len();
+
+        if reciepts_len != active_limits_len {
+            return Err(Error::new(ErrorDetails::Inference {
+            message: format!(
+                "TicketBorrow has ragged arrays: reciepts.len()={reciepts_len}, active_limits.len()={active_limits_len}. {IMPOSSIBLE_ERROR_MESSAGE}",
+            )
+        }));
+        }
+
+        Ok(Self {
             reciepts,
             active_limits,
+        })
+    }
+
+    fn iter(&self) -> impl Iterator<Item = (&ConsumeTicketsReciept, &ActiveRateLimit)> {
+        self.reciepts.iter().zip(self.active_limits.iter())
+    }
+
+    pub async fn return_tickets(
+        self,
+        client: &impl RateLimitQueries,
+        actual_usage: RateLimitResourceUsage,
+    ) -> Result<(), Error> {
+        let mut requests = Vec::new();
+        let mut returns = Vec::new();
+        for (reciept, active_limit) in self.iter() {
+            let actual_usage_this_request = actual_usage.get_usage(active_limit.limit.resource);
+            match actual_usage_this_request.cmp(&reciept.tickets_consumed) {
+                std::cmp::Ordering::Greater => {
+                    // Actual usage exceeds borrowed, add the difference to requests and log a warning
+                    let difference = actual_usage_this_request - reciept.tickets_consumed;
+                    requests.push(active_limit.get_consume_tickets_request_for_return(difference)?);
+                }
+                std::cmp::Ordering::Less => {
+                    // Borrowed exceeds actual usage, add the difference to returns
+                    let difference = reciept.tickets_consumed - actual_usage_this_request;
+                    returns.push(active_limit.get_return_tickets_request(difference)?);
+                }
+                std::cmp::Ordering::Equal => (),
+            };
         }
+
+        let (consume_result, return_result) = tokio::join!(
+            client.consume_tickets(requests),
+            client.return_tickets(returns)
+        );
+
+        consume_result?;
+        return_result?;
+
+        Ok(())
     }
 }
 

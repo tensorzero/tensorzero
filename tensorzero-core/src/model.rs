@@ -25,7 +25,7 @@ use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 use crate::providers::dummy::DummyProvider;
 use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
 
-use crate::config::rate_limiting::ScopeInfo;
+use crate::config::rate_limiting::{ScopeInfo, TicketBorrow};
 use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
@@ -321,6 +321,7 @@ impl ModelConfig {
                 return Ok(StreamResponseAndMessages {
                     response: cache_lookup,
                     messages: model_provider_request.request.messages.clone(),
+                    ticket_borrow: TicketBorrow::empty(),
                 });
             }
         }
@@ -329,6 +330,7 @@ impl ModelConfig {
         let StreamAndRawRequest {
             stream,
             raw_request,
+            ticket_borrow,
         } = provider
             .infer_stream(model_provider_request, clients, &scope_info)
             .await?;
@@ -369,6 +371,7 @@ impl ModelConfig {
                 cached: false,
             },
             messages: model_provider_request.request.messages.clone(),
+            ticket_borrow,
         })
     }
 
@@ -1159,11 +1162,13 @@ impl UninitializedProviderConfig {
 struct StreamAndRawRequest {
     stream: tracing_futures::Instrumented<PeekableProviderInferenceResponseStream>,
     raw_request: String,
+    ticket_borrow: TicketBorrow,
 }
 
 pub struct StreamResponseAndMessages {
     pub response: StreamResponse,
     pub messages: Vec<RequestMessage>,
+    pub ticket_borrow: TicketBorrow,
 }
 
 impl ModelProvider {
@@ -1291,13 +1296,8 @@ impl ModelProvider {
         }?;
         if let Ok(actual_resource_usage) = provider_inference_response.resource_usage() {
             // TODO: spawn
-            clients
-                .rate_limiting_config
-                .return_tickets(
-                    clients.postgres_connection_info,
-                    ticket_borrow,
-                    actual_resource_usage,
-                )
+            ticket_borrow
+                .return_tickets(clients.postgres_connection_info, actual_resource_usage)
                 .await?;
         }
         Ok(provider_inference_response)
@@ -1315,7 +1315,7 @@ impl ModelProvider {
         clients: &InferenceClients<'_>,
         scope_info: &ScopeInfo<'_>,
     ) -> Result<StreamAndRawRequest, Error> {
-        clients
+        let ticket_borrow = clients
             .rate_limiting_config
             .consume_tickets(
                 clients.postgres_connection_info,
@@ -1434,6 +1434,7 @@ impl ModelProvider {
         Ok(StreamAndRawRequest {
             stream: stream.instrument(Span::current()),
             raw_request,
+            ticket_borrow,
         })
     }
 

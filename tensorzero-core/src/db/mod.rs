@@ -75,12 +75,12 @@ pub trait RateLimitQueries {
     /// It is an atomic operation so no tickets will be consumed if any request fails.
     async fn consume_tickets(
         &self,
-        requests: &[ConsumeTicketsRequest],
+        requests: Vec<ConsumeTicketsRequest>,
     ) -> Result<Vec<ConsumeTicketsReciept>, Error>;
 
     async fn return_tickets(
         &self,
-        requests: &[ReturnTicketsRequest],
+        requests: Vec<ReturnTicketsRequest>,
     ) -> Result<Vec<ReturnTicketsResult>, Error>;
 
     async fn get_balance(
@@ -100,6 +100,7 @@ pub struct ConsumeTicketsRequest {
     pub refill_interval: TimeDelta,
 }
 
+#[derive(Debug)]
 pub struct ConsumeTicketsReciept {
     pub key: ActiveRateLimitKey,
     pub success: bool,

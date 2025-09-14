@@ -517,13 +517,8 @@ impl EmbeddingProviderInfo {
             response_fut.await?
         };
         if let Ok(actual_resource_usage) = response.resource_usage() {
-            clients
-                .rate_limiting_config
-                .return_tickets(
-                    clients.postgres_connection_info,
-                    ticket_borrow,
-                    actual_resource_usage,
-                )
+            ticket_borrow
+                .return_tickets(clients.postgres_connection_info, actual_resource_usage)
                 .await?;
         }
         Ok(response)

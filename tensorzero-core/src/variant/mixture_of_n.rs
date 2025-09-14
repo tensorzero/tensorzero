@@ -7,6 +7,7 @@ use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
 use crate::config::{ErrorContext, PathWithContents, SchemaData};
+use crate::config::rate_limiting::TicketBorrow;
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
@@ -303,6 +304,7 @@ pub fn stream_inference_from_non_stream(
             }
         },
         cached: model_inference_result.cached,
+        ticket_borrow: TicketBorrow::empty(),
     };
     let stream = make_stream_from_non_stream(inference_result, Some(usage))?;
     Ok((stream, model_used_info))
