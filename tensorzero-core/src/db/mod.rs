@@ -1,14 +1,17 @@
 use crate::error::Error;
 use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use serde::{Deserialize, Serialize};
 
 pub mod clickhouse;
 pub mod postgres;
 
 #[async_trait]
-pub trait DatabaseConnection: SelectQueries + HealthCheckable + Send + Sync {}
+pub trait ClickHouseConnection: SelectQueries + HealthCheckable + Send + Sync {}
+
+#[async_trait]
+pub trait PostgresConnection: RateLimitQueries + HealthCheckable + Send + Sync {}
 
 #[async_trait]
 pub trait HealthCheckable {
@@ -64,4 +67,53 @@ pub struct ModelLatencyDatapoint {
     pub count: u64,
 }
 
-impl<T: SelectQueries + HealthCheckable + Send + Sync> DatabaseConnection for T {}
+impl<T: SelectQueries + HealthCheckable + Send + Sync> ClickHouseConnection for T {}
+
+pub trait RateLimitQueries {
+    /// This function will fail if any of the requests individually fail.
+    /// It is an atomic operation so no tickets will be consumed if any request fails.
+    async fn consume_tickets(
+        &self,
+        requests: &Vec<ConsumeTicketsRequest>,
+    ) -> Result<Vec<ConsumeTicketsResult>, Error>;
+
+    async fn return_tickets(
+        &self,
+        requests: &Vec<ReturnTicketsRequest>,
+    ) -> Result<Vec<ReturnTicketsResult>, Error>;
+
+    async fn get_balance(
+        &self,
+        key: &str,
+        capacity: u64,
+        refill_amount: u64,
+        refill_interval: TimeDelta,
+    ) -> Result<u64, Error>;
+}
+
+pub struct ConsumeTicketsRequest {
+    pub key: String,
+    pub requested: u64,
+    pub capacity: u64,
+    pub refill_amount: u64,
+    pub refill_interval: TimeDelta,
+}
+
+pub struct ConsumeTicketsResult {
+    pub key: String,
+    pub success: bool,
+    pub tickets_remaining: u64,
+    pub tickets_consumed: u64,
+}
+
+pub struct ReturnTicketsRequest {
+    pub key: String,
+    pub returned: u64,
+}
+
+pub struct ReturnTicketsResult {
+    pub key: String,
+    pub balance: u64,
+}
+
+impl<T: RateLimitQueries + HealthCheckable + Send + Sync> PostgresConnection for T {}

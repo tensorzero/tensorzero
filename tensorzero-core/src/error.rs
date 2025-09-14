@@ -454,6 +454,14 @@ pub enum ErrorDetails {
     PostgresMigration {
         message: String,
     },
+    PostgresQuery {
+        function_name: Option<String>,
+        message: String,
+    },
+    PostgresResult {
+        result_type: &'static str,
+        message: String,
+    },
     ProviderNotFound {
         provider_name: String,
     },
@@ -619,6 +627,8 @@ impl ErrorDetails {
             ErrorDetails::ProviderNotFound { .. } => tracing::Level::ERROR,
             ErrorDetails::PostgresConnectionInitialization { .. } => tracing::Level::ERROR,
             ErrorDetails::PostgresMigration { .. } => tracing::Level::ERROR,
+            ErrorDetails::PostgresResult { .. } => tracing::Level::ERROR,
+            ErrorDetails::PostgresQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::Serialization { .. } => tracing::Level::ERROR,
             ErrorDetails::StreamError { .. } => tracing::Level::ERROR,
             ErrorDetails::ToolNotFound { .. } => tracing::Level::WARN,
@@ -733,6 +743,8 @@ impl ErrorDetails {
             ErrorDetails::PostgresConnectionInitialization { .. } => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
+            ErrorDetails::PostgresQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::PostgresResult { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::PostgresMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::StreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -1207,6 +1219,28 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::PostgresMigration { message } => {
                 write!(f, "Postgres migration failed with message: {message}")
+            }
+            ErrorDetails::PostgresResult {
+                result_type,
+                message,
+            } => {
+                write!(
+                    f,
+                    "Unexpected Postgres result of type {result_type}: {message}"
+                )
+            }
+            ErrorDetails::PostgresQuery {
+                function_name,
+                message,
+            } => {
+                if function_name.is_none() {
+                    write!(f, "Postgres query failed: {message}")
+                } else {
+                    write!(
+                        f,
+                        "Postgres query failed in function {function_name} with message: {message}"
+                    )
+                }
             }
             ErrorDetails::ProviderNotFound { provider_name } => {
                 write!(f, "Provider not found: {provider_name}")
