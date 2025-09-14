@@ -30,6 +30,9 @@ importers:
       '@types/uuid':
         specifier: ^10.0.0
         version: 10.0.0
+      buildkite-test-collector:
+        specifier: ^1.9.1
+        version: 1.9.1
       eslint:
         specifier: ^9.30.1
         version: 9.30.1(jiti@2.4.2)
