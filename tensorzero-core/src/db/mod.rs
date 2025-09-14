@@ -1,3 +1,4 @@
+use crate::config::rate_limiting::ActiveRateLimitKey;
 use crate::error::Error;
 use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 use async_trait::async_trait;
@@ -75,7 +76,7 @@ pub trait RateLimitQueries {
     async fn consume_tickets(
         &self,
         requests: &[ConsumeTicketsRequest],
-    ) -> Result<Vec<ConsumeTicketsResult>, Error>;
+    ) -> Result<Vec<ConsumeTicketsReciept>, Error>;
 
     async fn return_tickets(
         &self,
@@ -92,22 +93,22 @@ pub trait RateLimitQueries {
 }
 
 pub struct ConsumeTicketsRequest {
-    pub key: String,
+    pub key: ActiveRateLimitKey,
     pub requested: u64,
     pub capacity: u64,
     pub refill_amount: u64,
     pub refill_interval: TimeDelta,
 }
 
-pub struct ConsumeTicketsResult {
-    pub key: String,
+pub struct ConsumeTicketsReciept {
+    pub key: ActiveRateLimitKey,
     pub success: bool,
     pub tickets_remaining: u64,
     pub tickets_consumed: u64,
 }
 
 pub struct ReturnTicketsRequest {
-    pub key: String,
+    pub key: ActiveRateLimitKey,
     pub returned: u64,
     pub capacity: u64,
     pub refill_amount: u64,
@@ -115,7 +116,7 @@ pub struct ReturnTicketsRequest {
 }
 
 pub struct ReturnTicketsResult {
-    pub key: String,
+    pub key: ActiveRateLimitKey,
     pub balance: u64,
 }
 

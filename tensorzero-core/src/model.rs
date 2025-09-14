@@ -1178,15 +1178,15 @@ impl ModelProvider {
         clients: &InferenceClients<'_>,
         scope_info: &ScopeInfo<'_>,
     ) -> Result<ProviderInferenceResponse, Error> {
-        clients
+        let ticket_borrow = clients
             .rate_limiting_config
-            .borrow_tickets(
+            .consume_tickets(
                 clients.postgres_connection_info,
                 scope_info,
                 &request.request.estimated_resource_usage()?,
             )
             .await?;
-        match &self.config {
+        let provider_inference_response = match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider
                     .infer(request, clients.http_client, clients.credentials, self)
@@ -1288,7 +1288,19 @@ impl ModelProvider {
                     .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
+        }?;
+        if let Ok(actual_resource_usage) = provider_inference_response.resource_usage() {
+            // TODO: spawn
+            clients
+                .rate_limiting_config
+                .return_tickets(
+                    clients.postgres_connection_info,
+                    ticket_borrow,
+                    actual_resource_usage,
+                )
+                .await?;
         }
+        Ok(provider_inference_response)
     }
 
     #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference",
@@ -1305,7 +1317,7 @@ impl ModelProvider {
     ) -> Result<StreamAndRawRequest, Error> {
         clients
             .rate_limiting_config
-            .borrow_tickets(
+            .consume_tickets(
                 clients.postgres_connection_info,
                 scope_info,
                 &request.request.estimated_resource_usage()?,

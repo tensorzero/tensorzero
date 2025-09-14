@@ -11,6 +11,7 @@ use tokio::sync::OnceCell;
 use url::Url;
 use uuid::Uuid;
 
+use crate::config::rate_limiting::ActiveRateLimitKey;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::Thought;
 
@@ -466,7 +467,7 @@ pub enum ErrorDetails {
         provider_name: String,
     },
     RateLimitExceeded {
-        key: String,
+        key: ActiveRateLimitKey,
         tickets_remaining: u64,
     },
     Serialization {

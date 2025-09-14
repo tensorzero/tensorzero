@@ -6,6 +6,9 @@ use crate::cache::{
     embedding_cache_lookup, start_cache_write, CacheData, EmbeddingCacheData,
     EmbeddingModelProviderRequest,
 };
+use crate::config::rate_limiting::{
+    RateLimitResourceUsage, RateLimitedRequest, RateLimitedResponse, ScopeInfo,
+};
 use crate::config::{ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
@@ -146,13 +149,11 @@ impl EmbeddingModelConfig {
                         return Ok(cache_lookup);
                     }
                 }
+                let scope_info = ScopeInfo {
+                    tags: &HashMap::default(),
+                };
                 let response = provider_config
-                    .embed(
-                        request,
-                        clients.http_client,
-                        clients.credentials,
-                        &provider_config.into(),
-                    )
+                    .embed(request, clients, &scope_info, &provider_config.into())
                     .await;
 
                 match response {
@@ -248,6 +249,12 @@ pub struct EmbeddingRequest {
     pub encoding_format: EmbeddingEncodingFormat,
 }
 
+impl RateLimitedRequest for EmbeddingRequest {
+    fn estimated_resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
+        todo!()
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct EmbeddingProviderRequest<'request> {
     pub request: &'request EmbeddingRequest,
@@ -273,6 +280,12 @@ pub struct EmbeddingProviderResponse {
     pub raw_response: String,
     pub usage: Usage,
     pub latency: Latency,
+}
+
+impl RateLimitedResponse for EmbeddingProviderResponse {
+    fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
+        todo!()
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -411,7 +424,6 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
         })
     }
 }
-
 pub trait EmbeddingProvider {
     fn embed(
         &self,
@@ -468,34 +480,53 @@ impl From<&EmbeddingProviderRequestInfo> for ModelProviderRequestInfo {
     }
 }
 
-impl EmbeddingProvider for EmbeddingProviderInfo {
+impl EmbeddingProviderInfo {
     async fn embed(
         &self,
         request: &EmbeddingRequest,
-        client: &TensorzeroHttpClient,
-        dynamic_api_keys: &InferenceCredentials,
+        clients: &InferenceClients<'_>,
+        scope_info: &ScopeInfo<'_>,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
-        // TODO (Viraj): add a rate limit check here
-        let response_fut = self
-            .inner
-            .embed(request, client, dynamic_api_keys, model_provider_data);
-        Ok(
-            if let Some(timeout_ms) = self.timeouts.non_streaming.total_ms {
-                let timeout = Duration::from_millis(timeout_ms);
-                tokio::time::timeout(timeout, response_fut)
-                    .await
-                    .unwrap_or_else(|_: Elapsed| {
-                        Err(Error::new(ErrorDetails::ModelProviderTimeout {
-                            provider_name: self.provider_name.to_string(),
-                            timeout,
-                            streaming: false,
-                        }))
-                    })?
-            } else {
-                response_fut.await?
-            },
-        )
+        let ticket_borrow = clients
+            .rate_limiting_config
+            .consume_tickets(
+                clients.postgres_connection_info,
+                scope_info,
+                &request.estimated_resource_usage()?,
+            )
+            .await?;
+        let response_fut = self.inner.embed(
+            request,
+            clients.http_client,
+            clients.credentials,
+            model_provider_data,
+        );
+        let response = if let Some(timeout_ms) = self.timeouts.non_streaming.total_ms {
+            let timeout = Duration::from_millis(timeout_ms);
+            tokio::time::timeout(timeout, response_fut)
+                .await
+                .unwrap_or_else(|_: Elapsed| {
+                    Err(Error::new(ErrorDetails::ModelProviderTimeout {
+                        provider_name: self.provider_name.to_string(),
+                        timeout,
+                        streaming: false,
+                    }))
+                })?
+        } else {
+            response_fut.await?
+        };
+        if let Ok(actual_resource_usage) = response.resource_usage() {
+            clients
+                .rate_limiting_config
+                .return_tickets(
+                    clients.postgres_connection_info,
+                    ticket_borrow,
+                    actual_resource_usage,
+                )
+                .await?;
+        }
+        Ok(response)
     }
 }
 

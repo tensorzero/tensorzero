@@ -1,5 +1,6 @@
-use crate::db::{ConsumeTicketsRequest, ConsumeTicketsResult, RateLimitQueries};
+use crate::db::{ConsumeTicketsReciept, ConsumeTicketsRequest, RateLimitQueries};
 use crate::error::{Error, ErrorDetails};
+use crate::inference::types::ProviderInferenceResponse;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
 
@@ -42,12 +43,13 @@ pub struct ScopeInfo<'a> {
 }
 
 impl RateLimitingConfig {
-    pub async fn borrow_tickets(
-        &self,
+    #[must_use]
+    pub async fn consume_tickets<'a>(
+        &'a self,
         client: &impl RateLimitQueries,
-        scope_info: &ScopeInfo<'_>,
-        rate_limit_resource_requests: &RateLimitResourceRequests,
-    ) -> Result<(), Error> {
+        scope_info: &'a ScopeInfo<'a>,
+        rate_limit_resource_requests: &RateLimitResourceUsage,
+    ) -> Result<TicketBorrow<'a>, Error> {
         let limits = self.get_active_limits(scope_info);
         let ticket_requests: Result<Vec<ConsumeTicketsRequest>, Error> = limits
             .iter()
@@ -55,16 +57,18 @@ impl RateLimitingConfig {
             .collect();
         let ticket_requests = ticket_requests?;
         let results = client.consume_tickets(&ticket_requests).await?;
-        check_borrowed_rate_limits(&limits, &results)
+        check_borrowed_rate_limits(&limits, &results)?;
+        Ok(TicketBorrow::new(ticket_requests, results, limits))
     }
 
-    // pub fn return_tickets(
-    //     &self,
-    //     scope_info: &ScopeInfo,
-    //     client: &impl RateLimitQueries,
-    // ) -> Result<(), Error> {
-    //     todo!()
-    // }
+    pub async fn return_tickets(
+        &self,
+        _client: &impl RateLimitQueries,
+        _ticket_borrow: TicketBorrow<'_>,
+        _actual_usage: RateLimitResourceUsage,
+    ) -> Result<(), Error> {
+        todo!()
+    }
 
     fn get_active_limits<'a>(&'a self, scope_info: &'a ScopeInfo) -> Vec<ActiveRateLimit<'a>> {
         if !self.enabled {
@@ -101,13 +105,11 @@ impl RateLimitingConfig {
 /// Assumes these are the same length.
 fn check_borrowed_rate_limits(
     limits: &[ActiveRateLimit],
-    results: &[ConsumeTicketsResult],
+    results: &[ConsumeTicketsReciept],
 ) -> Result<(), Error> {
-    // Loop over the zip of these two arrays
-    // if !result.success return a nice error
     for (limit, result) in limits.iter().zip(results.iter()) {
         if !result.success {
-            // TODO: improve the error informatin here
+            // TODO: improve the error information here
             return Err(Error::new(ErrorDetails::RateLimitExceeded {
                 key: limit.into_key()?,
                 tickets_remaining: result.tickets_remaining,
@@ -125,7 +127,7 @@ struct ActiveRateLimit<'a> {
 impl ActiveRateLimit<'_> {
     pub fn get_consume_tickets_request(
         &self,
-        requests: &RateLimitResourceRequests,
+        requests: &RateLimitResourceUsage,
     ) -> Result<ConsumeTicketsRequest, Error> {
         let requested = requests.get_request(self.limit.resource);
         Ok(ConsumeTicketsRequest {
@@ -139,19 +141,38 @@ impl ActiveRateLimit<'_> {
 }
 
 #[derive(Serialize)]
-struct ActiveRateLimitKey<'a> {
+struct ActiveRateLimitKeyHelper<'a> {
     resource: RateLimitResource,
     scope_key: &'a [RateLimitingScopeKey<'a>],
 }
 
+#[derive(Debug, PartialEq, Clone, serde::Serialize)]
+pub struct ActiveRateLimitKey(pub String);
+
+impl ActiveRateLimitKey {
+    pub fn new(key: String) -> Self {
+        ActiveRateLimitKey(key)
+    }
+
+    pub fn into_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for ActiveRateLimitKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl ActiveRateLimit<'_> {
-    pub fn into_key(&self) -> Result<String, Error> {
-        let key = ActiveRateLimitKey {
+    pub fn into_key(&self) -> Result<ActiveRateLimitKey, Error> {
+        let key = ActiveRateLimitKeyHelper {
             resource: self.limit.resource,
             scope_key: &self.scope_key,
         };
 
-        Ok(serde_json::to_string(&key)?)
+        Ok(ActiveRateLimitKey(serde_json::to_string(&key)?))
     }
 }
 
@@ -221,12 +242,12 @@ pub enum RateLimitResource {
     // Cent, // or something more granular?
 }
 
-pub struct RateLimitResourceRequests {
-    pub model_inference: u64,
-    pub token: u64,
+pub struct RateLimitResourceUsage {
+    model_inference: u64,
+    token: u64,
 }
 
-impl RateLimitResourceRequests {
+impl RateLimitResourceUsage {
     pub fn get_request(&self, resource: RateLimitResource) -> u64 {
         match resource {
             RateLimitResource::ModelInference => self.model_inference,
@@ -419,14 +440,6 @@ impl RateLimitingConfigScopes {
     }
 }
 
-// impl Deref for RateLimitingConfigScopes {
-//     type Target = Vec<RateLimitingConfigScope>;
-
-//     fn deref(&self) -> &Self::Target {
-//         &self.0
-//     }
-// }
-
 // IMPORTANT: the types below are used to set up scopes and keys for rate limiting.
 // We need the keys that have already been used in production to remain stable.
 // So, we cannot change the sort order.
@@ -434,7 +447,6 @@ impl RateLimitingConfigScopes {
 // and add a test each time that ensures the sort order is maintained as further changes are made.
 //
 // Note to reviewer:  what else could we do to ensure the sort order is maintained across future changes?
-
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(untagged)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -536,10 +548,48 @@ pub enum RateLimitingScopeKey<'a> {
     TagConcrete { key: &'a str, value: &'a str },
 }
 
+pub struct TicketBorrow<'a> {
+    requests: Vec<ConsumeTicketsRequest>,
+    reciepts: Vec<ConsumeTicketsReciept>,
+    active_limits: Vec<ActiveRateLimit<'a>>,
+}
+
+impl<'a> TicketBorrow<'a> {
+    fn new(
+        requests: Vec<ConsumeTicketsRequest>,
+        reciepts: Vec<ConsumeTicketsReciept>,
+        active_limits: Vec<ActiveRateLimit<'a>>,
+    ) -> Self {
+        Self {
+            requests,
+            reciepts,
+            active_limits,
+        }
+    }
+}
+
+pub trait RateLimitedRequest {
+    fn estimated_resource_usage(&self) -> Result<RateLimitResourceUsage, Error>;
+}
+
+pub trait RateLimitedResponse {
+    fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error>;
+}
+
 #[cfg(test)]
 mod tests {
+    use std::ops::Deref;
+
     use super::*;
     use toml;
+
+    impl Deref for RateLimitingConfigScopes {
+        type Target = Vec<RateLimitingConfigScope>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.0
+        }
+    }
 
     #[test]
     fn test_basic_rate_limit_deserialization() {
@@ -1156,7 +1206,7 @@ mod tests {
             [[rules]]
             model_inferences_per_second = 1
             tokens_per_minute = 2
-            cents_per_hour = 3
+            // cents_per_hour = 3
             priority = 0
         ";
 
@@ -1167,7 +1217,7 @@ mod tests {
         let resources: Vec<_> = config.rules[0].limits.iter().map(|l| l.resource).collect();
         assert!(resources.contains(&RateLimitResource::ModelInference));
         assert!(resources.contains(&RateLimitResource::Token));
-        assert!(resources.contains(&RateLimitResource::Cent));
+        // assert!(resources.contains(&RateLimitResource::Cent));
     }
 
     #[test]
