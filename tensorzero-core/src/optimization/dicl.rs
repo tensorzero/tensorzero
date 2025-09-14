@@ -510,10 +510,7 @@ async fn process_embedding_batch(
             .await?
             .ok_or_else(|| {
                 Error::new(ErrorDetails::Config {
-                    message: format!(
-                        "embedding model '{}' not found in configuration",
-                        model_name
-                    ),
+                    message: format!("embedding model '{model_name}' not found in configuration",),
                 })
             })?;
 

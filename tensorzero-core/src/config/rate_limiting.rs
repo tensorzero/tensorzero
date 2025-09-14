@@ -1,6 +1,5 @@
 use crate::db::{ConsumeTicketsReciept, ConsumeTicketsRequest, RateLimitQueries};
 use crate::error::{Error, ErrorDetails};
-use crate::inference::types::ProviderInferenceResponse;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
 
@@ -43,7 +42,6 @@ pub struct ScopeInfo<'a> {
 }
 
 impl RateLimitingConfig {
-    #[must_use]
     pub async fn consume_tickets<'a>(
         &'a self,
         client: &impl RateLimitQueries,
@@ -111,7 +109,7 @@ fn check_borrowed_rate_limits(
         if !result.success {
             // TODO: improve the error information here
             return Err(Error::new(ErrorDetails::RateLimitExceeded {
-                key: limit.into_key()?,
+                key: limit.get_key()?,
                 tickets_remaining: result.tickets_remaining,
             }));
         }
@@ -131,7 +129,7 @@ impl ActiveRateLimit<'_> {
     ) -> Result<ConsumeTicketsRequest, Error> {
         let requested = requests.get_request(self.limit.resource);
         Ok(ConsumeTicketsRequest {
-            key: self.into_key()?,
+            key: self.get_key()?,
             capacity: self.limit.capacity,
             refill_amount: self.limit.refill_rate,
             refill_interval: self.limit.interval.to_duration(),
@@ -166,7 +164,7 @@ impl std::fmt::Display for ActiveRateLimitKey {
 }
 
 impl ActiveRateLimit<'_> {
-    pub fn into_key(&self) -> Result<ActiveRateLimitKey, Error> {
+    pub fn get_key(&self) -> Result<ActiveRateLimitKey, Error> {
         let key = ActiveRateLimitKeyHelper {
             resource: self.limit.resource,
             scope_key: &self.scope_key,
@@ -214,7 +212,7 @@ impl RateLimitingConfigRule {
             self.limits
                 .iter()
                 .map(|limit| ActiveRateLimit {
-                    limit: &limit,
+                    limit,
                     scope_key: key.clone(),
                 })
                 .collect(),
@@ -541,13 +539,13 @@ impl RateLimitingConfigScope {
 /// across releases.
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type")]
-#[expect(clippy::enum_variant_names)]
 pub enum RateLimitingScopeKey<'a> {
     TagAny { key: &'a str },
     TagEach { key: &'a str, value: &'a str },
     TagConcrete { key: &'a str, value: &'a str },
 }
 
+#[must_use]
 pub struct TicketBorrow<'a> {
     requests: Vec<ConsumeTicketsRequest>,
     reciepts: Vec<ConsumeTicketsReciept>,
