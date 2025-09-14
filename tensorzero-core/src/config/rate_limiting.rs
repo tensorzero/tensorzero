@@ -255,15 +255,22 @@ pub enum RateLimitResource {
 }
 
 pub struct RateLimitResourceUsage {
-    model_inference: u64,
-    token: u64,
+    model_inferences: u64,
+    tokens: u64,
 }
 
 impl RateLimitResourceUsage {
+    pub fn new(model_inferences: u64, tokens: u64) -> Self {
+        Self {
+            model_inferences,
+            tokens,
+        }
+    }
+
     pub fn get_usage(&self, resource: RateLimitResource) -> u64 {
         match resource {
-            RateLimitResource::ModelInference => self.model_inference,
-            RateLimitResource::Token => self.token,
+            RateLimitResource::ModelInference => self.model_inferences,
+            RateLimitResource::Token => self.tokens,
         }
     }
 }
@@ -642,6 +649,14 @@ pub trait RateLimitedRequest {
 
 pub trait RateLimitedResponse {
     fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error>;
+}
+
+/// We can estimate as a rough upper bound that every 2 characters are 1 token.
+/// This is true for the vast majority of LLMs used today but is not a hard bound.
+/// We can revisit this estimate in the future.
+pub fn get_estimated_tokens(text: &str) -> u64 {
+    // Implement logic to estimate tokens based on text length or other factors
+    (text.len() as u64) / 2
 }
 
 #[cfg(test)]

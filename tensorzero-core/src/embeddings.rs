@@ -7,7 +7,8 @@ use crate::cache::{
     EmbeddingModelProviderRequest,
 };
 use crate::config::rate_limiting::{
-    RateLimitResourceUsage, RateLimitedRequest, RateLimitedResponse, ScopeInfo,
+    get_estimated_tokens, RateLimitResourceUsage, RateLimitedRequest, RateLimitedResponse,
+    ScopeInfo,
 };
 use crate::config::{ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
@@ -234,6 +235,16 @@ impl EmbeddingInput {
             EmbeddingInput::Batch(texts) => texts.first(),
         }
     }
+
+    pub fn estimated_resource_usage(&self) -> u64 {
+        match self {
+            EmbeddingInput::Single(text) => get_estimated_tokens(text),
+            EmbeddingInput::Batch(texts) => texts
+                .iter()
+                .map(|text| get_estimated_tokens(text))
+                .sum::<u64>(),
+        }
+    }
 }
 
 impl From<String> for EmbeddingInput {
@@ -251,7 +262,10 @@ pub struct EmbeddingRequest {
 
 impl RateLimitedRequest for EmbeddingRequest {
     fn estimated_resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
-        todo!()
+        Ok(RateLimitResourceUsage::new(
+            self.input.estimated_resource_usage(),
+            1,
+        ))
     }
 }
 
