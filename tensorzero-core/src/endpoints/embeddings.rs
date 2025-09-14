@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use serde::Deserialize;
 use tracing::instrument;
@@ -72,6 +72,10 @@ pub async fn embeddings(
         credentials: &params.credentials,
         cache_options: &(params.cache_options, dryrun).into(),
         clickhouse_connection_info: &clickhouse_connection_info,
+        // NOTE: we do not support tags for embeddings yet
+        // we should fix this once the tags are implemented
+        tags: &HashMap::default(),
+        rate_limiting_config: &config.rate_limiting,
     };
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)

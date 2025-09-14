@@ -277,12 +277,14 @@ impl ModelConfig {
                 return Ok(cache_lookup);
             }
         }
+        let scope_info = ScopeInfo { tags: clients.tags };
         let response = provider
             .infer(
                 model_provider_request,
                 clients.http_client,
                 clients.credentials,
                 clients.rate_limiting_config,
+                &scope_info,
             )
             .instrument(span!(
                 Level::INFO,
@@ -328,6 +330,7 @@ impl ModelConfig {
                 });
             }
         }
+        let scope_info = ScopeInfo { tags: clients.tags };
 
         let StreamAndRawRequest {
             stream,
@@ -338,6 +341,7 @@ impl ModelConfig {
                 clients.http_client,
                 clients.credentials,
                 clients.rate_limiting_config,
+                &scope_info,
             )
             .await?;
 

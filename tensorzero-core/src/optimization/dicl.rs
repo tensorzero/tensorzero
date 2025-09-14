@@ -23,7 +23,7 @@ use crate::{
     variant::{dicl::UninitializedDiclConfig, RetryConfig},
 };
 use futures::future::try_join_all;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
@@ -502,7 +502,7 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
 
 /// Processes a batch of input texts to get embeddings
 async fn process_embedding_batch(
-    embedding_model_config: &EmbeddingModelConfig,
+    config: &Config,
     model_name: &str,
     client: &TensorzeroHttpClient,
     credentials: &InferenceCredentials,
@@ -523,6 +523,7 @@ async fn process_embedding_batch(
         credentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
         cache_options: &cache_options,
+        tags: &HashMap::default(),
     };
 
     let response = embedding_model_config

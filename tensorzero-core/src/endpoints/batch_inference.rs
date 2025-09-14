@@ -207,6 +207,8 @@ pub async fn start_batch_inference_handler(
         clickhouse_connection_info: &clickhouse_connection_info,
         credentials: &params.credentials,
         cache_options: &cache_options,
+        rate_limiting_config: &config.rate_limiting,
+        tags: &HashMap::default(), // NOTE: we currently do not rate limit batch inference
     };
 
     let inference_models = InferenceModels {

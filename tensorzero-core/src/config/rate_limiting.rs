@@ -367,8 +367,7 @@ enum RateLimitingScopeKey<'a> {
 // This should contain the information about the current request
 // needed to determine if a rate limit is exceeded.
 pub struct ScopeInfo<'a> {
-    function_name: &'a str,
-    tags: &'a HashMap<String, String>,
+    pub tags: &'a HashMap<String, String>,
 }
 
 #[cfg(test)]

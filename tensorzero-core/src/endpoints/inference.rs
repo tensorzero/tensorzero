@@ -22,7 +22,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
-use crate::config::rate_limiting::{RateLimitingConfig, ScopeInfo};
+use crate::config::rate_limiting::RateLimitingConfig;
 use crate::config::{Config, ErrorContext, ObjectStoreInfo, SchemaData, UninitializedVariantInfo};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::embeddings::EmbeddingModelTable;
