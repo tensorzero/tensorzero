@@ -1,6 +1,7 @@
+use crate::db::{ConsumeTicketsRequest, RateLimitQueries};
+use crate::error::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
-use std::ops::Deref;
 
 /// NOTE: this file deserializes rate limiting configuration from a shorthand format only
 /// [[rate_limiting.rules]]
@@ -33,6 +34,110 @@ pub struct RateLimitingConfig {
     enabled: bool, // TODO: default true, Postgres required if rules is nonempty.
 }
 
+// Utility struct to pass in at "check time"
+// This should contain the information about the current request
+// needed to determine if a rate limit is exceeded.
+pub struct ScopeInfo<'a> {
+    pub tags: &'a HashMap<String, String>,
+}
+
+impl RateLimitingConfig {
+    pub async fn borrow_tickets(
+        &self,
+        client: &impl RateLimitQueries,
+        scope_info: &ScopeInfo<'_>,
+        rate_limit_resource_requests: &RateLimitResourceRequests,
+    ) -> Result<(), Error> {
+        let ticket_requests: Result<Vec<ConsumeTicketsRequest>, Error> = self
+            .get_active_limits(scope_info)
+            .iter()
+            .map(|limit| limit.get_consume_tickets_request(rate_limit_resource_requests))
+            .collect();
+        let ticket_requests = ticket_requests?;
+        client.consume_tickets(&ticket_requests).await?;
+        // TODO: Handle the result
+        Ok(())
+    }
+
+    // pub fn return_tickets(
+    //     &self,
+    //     scope_info: &ScopeInfo,
+    //     client: &impl RateLimitQueries,
+    // ) -> Result<(), Error> {
+    //     todo!()
+    // }
+
+    fn get_active_limits<'a>(&'a self, scope_info: &'a ScopeInfo) -> Vec<ActiveRateLimit<'a>> {
+        if !self.enabled {
+            return vec![];
+        }
+        let mut max_priority: usize = 0;
+
+        // First pass: collect matching limits and find max priority
+        let matching_limits: Vec<_> = self
+            .rules
+            .iter()
+            .map(|rule| {
+                rule.get_rate_limits_if_match_update_priority(scope_info, &mut max_priority)
+            })
+            .collect();
+
+        // Second pass: filter and flatten based on priority
+        self.rules
+            .iter()
+            .zip(matching_limits)
+            .filter_map(|(rule, limits_opt)| match (&rule.priority, limits_opt) {
+                (RateLimitingConfigPriority::Always, Some(limits)) => Some(limits),
+                (RateLimitingConfigPriority::Priority(priority), Some(limits))
+                    if *priority == max_priority =>
+                {
+                    Some(limits)
+                }
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+}
+
+struct ActiveRateLimit<'a> {
+    limit: &'a RateLimit,
+    scope_key: Vec<RateLimitingScopeKey<'a>>,
+}
+
+impl ActiveRateLimit<'_> {
+    pub fn get_consume_tickets_request(
+        &self,
+        requests: &RateLimitResourceRequests,
+    ) -> Result<ConsumeTicketsRequest, Error> {
+        let requested = requests.get_request(self.limit.resource);
+        Ok(ConsumeTicketsRequest {
+            key: self.into_key()?,
+            capacity: self.limit.capacity,
+            refill_amount: self.limit.refill_rate,
+            refill_interval: self.limit.interval.to_duration(),
+            requested,
+        })
+    }
+}
+
+#[derive(Serialize)]
+struct ActiveRateLimitKey<'a> {
+    resource: RateLimitResource,
+    scope_key: &'a [RateLimitingScopeKey<'a>],
+}
+
+impl ActiveRateLimit<'_> {
+    pub fn into_key(&self) -> Result<String, Error> {
+        let key = ActiveRateLimitKey {
+            resource: self.limit.resource,
+            scope_key: &self.scope_key,
+        };
+
+        Ok(serde_json::to_string(&key)?)
+    }
+}
+
 fn default_enabled() -> bool {
     true
 }
@@ -55,37 +160,89 @@ struct RateLimitingConfigRule {
     priority: RateLimitingConfigPriority,
 }
 
+impl RateLimitingConfigRule {
+    fn get_rate_limits_if_match_update_priority<'a>(
+        &'a self,
+        scope_info: &'a ScopeInfo<'a>,
+        max_priority: &mut usize,
+    ) -> Option<Vec<ActiveRateLimit<'a>>> {
+        let key = self.scope.get_key_if_matches(scope_info)?;
+        if let RateLimitingConfigPriority::Priority(priority) = self.priority {
+            if priority > *max_priority {
+                *max_priority = priority;
+            }
+        }
+        Some(
+            self.limits
+                .iter()
+                .map(|limit| ActiveRateLimit {
+                    limit: &limit,
+                    scope_key: key.clone(),
+                })
+                .collect(),
+        )
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 struct RateLimit {
-    resource: RateLimitResource,
-    interval: RateLimitInterval,
-    amount: usize,
+    pub resource: RateLimitResource,
+    pub interval: RateLimitInterval,
+    pub capacity: u64,
+    pub refill_rate: u64,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-enum RateLimitResource {
+pub enum RateLimitResource {
     ModelInference,
     Token,
-    Cent, // or something more granular?
+    // Cent, // or something more granular?
+}
+
+pub struct RateLimitResourceRequests {
+    pub model_inference: u64,
+    pub token: u64,
+}
+
+impl RateLimitResourceRequests {
+    pub fn get_request(&self, resource: RateLimitResource) -> u64 {
+        match resource {
+            RateLimitResource::ModelInference => self.model_inference,
+            RateLimitResource::Token => self.token,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-enum RateLimitInterval {
+pub enum RateLimitInterval {
     Second,
     Minute,
     Hour,
     Day,
     Week,
     Month,
-} // implement a getter for a chrono::TimeDelta or something
+}
+
+impl RateLimitInterval {
+    pub fn to_duration(&self) -> chrono::Duration {
+        match self {
+            RateLimitInterval::Second => chrono::Duration::seconds(1),
+            RateLimitInterval::Minute => chrono::Duration::minutes(1),
+            RateLimitInterval::Hour => chrono::Duration::hours(1),
+            RateLimitInterval::Day => chrono::Duration::days(1),
+            RateLimitInterval::Week => chrono::Duration::weeks(1),
+            RateLimitInterval::Month => chrono::Duration::days(30),
+        }
+    }
+}
 
 impl<'de> Deserialize<'de> for RateLimitingConfigRule {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -114,7 +271,7 @@ impl<'de> Deserialize<'de> for RateLimitingConfigRule {
                     serde::de::Error::custom(format!(
                         "Rate limit value for '{key}' must be a positive integer",
                     ))
-                })? as usize;
+                })? as u64;
 
                 let resource = parse_resource(parts[0]).map_err(serde::de::Error::custom)?;
 
@@ -125,7 +282,10 @@ impl<'de> Deserialize<'de> for RateLimitingConfigRule {
                 limits.push(RateLimit {
                     resource,
                     interval,
-                    amount,
+                    // We internally represent as a token bucket algorithm but for now
+                    // we only take configuration that assumes the bucket is the size of one period
+                    capacity: amount,
+                    refill_rate: amount,
                 });
 
                 // Track keys to remove
@@ -168,7 +328,7 @@ fn parse_resource(resource_str: &str) -> Result<RateLimitResource, String> {
     match resource_str {
         "model_inferences" => Ok(RateLimitResource::ModelInference),
         "tokens" => Ok(RateLimitResource::Token),
-        "cents" => Ok(RateLimitResource::Cent),
+        // "cents" => Ok(RateLimitResource::Cent),
         _ => Err(format!("Unknown resource: {resource_str}")),
     }
 }
@@ -231,8 +391,7 @@ impl RateLimitingConfigScopes {
     }
 
     /// Returns the key (as a Vec) if the scope matches the given info, or None if it does not.
-    #[cfg(test)]
-    pub fn get_key_if_matches<'a>(
+    fn get_key_if_matches<'a>(
         &'a self,
         info: &'a ScopeInfo,
     ) -> Option<Vec<RateLimitingScopeKey<'a>>> {
@@ -243,13 +402,13 @@ impl RateLimitingConfigScopes {
     }
 }
 
-impl Deref for RateLimitingConfigScopes {
-    type Target = Vec<RateLimitingConfigScope>;
+// impl Deref for RateLimitingConfigScopes {
+//     type Target = Vec<RateLimitingConfigScope>;
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
 
 // IMPORTANT: the types below are used to set up scopes and keys for rate limiting.
 // We need the keys that have already been used in production to remain stable.
@@ -277,7 +436,6 @@ struct TagRateLimitingConfigScope {
     tag_value: TagValueScope,
 }
 
-#[cfg(test)]
 impl TagRateLimitingConfigScope {
     fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<RateLimitingScopeKey<'a>> {
         let value = info.tags.get(&self.tag_key)?;
@@ -340,7 +498,6 @@ impl<'de> Deserialize<'de> for TagValueScope {
     }
 }
 
-#[cfg(test)]
 impl RateLimitingConfigScope {
     fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<RateLimitingScopeKey<'a>> {
         match self {
@@ -353,21 +510,13 @@ impl RateLimitingConfigScope {
 /// serialized into a key.
 /// We need this struct to have stable serialization behavior because we want rate limits to be stable
 /// across releases.
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type")]
 #[expect(clippy::enum_variant_names)]
-#[cfg(test)]
-enum RateLimitingScopeKey<'a> {
+pub enum RateLimitingScopeKey<'a> {
     TagAny { key: &'a str },
     TagEach { key: &'a str, value: &'a str },
     TagConcrete { key: &'a str, value: &'a str },
-}
-
-// Utility struct to pass in at "check time"
-// This should contain the information about the current request
-// needed to determine if a rate limit is exceeded.
-pub struct ScopeInfo<'a> {
-    pub tags: &'a HashMap<String, String>,
 }
 
 #[cfg(test)]
@@ -1109,11 +1258,7 @@ mod tests {
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "123".to_string());
 
-        let info = ScopeInfo {
-            function_name: "test_function",
-            model_name: "test_model",
-            tags: &tags,
-        };
+        let info = ScopeInfo { tags: &tags };
 
         let key = scope.get_key_if_matches(&info).unwrap();
         match key {
@@ -1135,11 +1280,7 @@ mod tests {
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "456".to_string());
 
-        let info = ScopeInfo {
-            function_name: "test_function",
-            model_name: "test_model",
-            tags: &tags,
-        };
+        let info = ScopeInfo { tags: &tags };
 
         let key = scope.get_key_if_matches(&info);
         assert!(key.is_none());
@@ -1155,11 +1296,7 @@ mod tests {
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "any_value".to_string());
 
-        let info = ScopeInfo {
-            function_name: "test_function",
-            model_name: "test_model",
-            tags: &tags,
-        };
+        let info = ScopeInfo { tags: &tags };
 
         let key = scope.get_key_if_matches(&info).unwrap();
         match key {
@@ -1180,11 +1317,7 @@ mod tests {
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "specific_value".to_string());
 
-        let info = ScopeInfo {
-            function_name: "test_function",
-            model_name: "test_model",
-            tags: &tags,
-        };
+        let info = ScopeInfo { tags: &tags };
 
         let key = scope.get_key_if_matches(&info).unwrap();
         match key {
@@ -1205,11 +1338,7 @@ mod tests {
 
         let tags = HashMap::new(); // Empty tags
 
-        let info = ScopeInfo {
-            function_name: "test_function",
-            model_name: "test_model",
-            tags: &tags,
-        };
+        let info = ScopeInfo { tags: &tags };
 
         let key = scope.get_key_if_matches(&info);
         assert!(key.is_none());
@@ -1220,11 +1349,7 @@ mod tests {
         let scopes = RateLimitingConfigScopes::new(vec![]).unwrap();
 
         let tags = HashMap::new();
-        let info = ScopeInfo {
-            function_name: "test_function",
-            model_name: "test_model",
-            tags: &tags,
-        };
+        let info = ScopeInfo { tags: &tags };
 
         let keys = scopes.get_key_if_matches(&info).unwrap();
         assert_eq!(keys.len(), 0);
@@ -1241,11 +1366,7 @@ mod tests {
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "123".to_string());
 
-        let info = ScopeInfo {
-            function_name: "test_function",
-            model_name: "test_model",
-            tags: &tags,
-        };
+        let info = ScopeInfo { tags: &tags };
 
         let keys = scopes.get_key_if_matches(&info).unwrap();
         assert_eq!(keys.len(), 1);
@@ -1270,11 +1391,7 @@ mod tests {
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "456".to_string());
 
-        let info = ScopeInfo {
-            function_name: "test_function",
-            model_name: "test_model",
-            tags: &tags,
-        };
+        let info = ScopeInfo { tags: &tags };
 
         let keys = scopes.get_key_if_matches(&info);
         assert!(keys.is_none());
@@ -1296,11 +1413,7 @@ mod tests {
         tags.insert("application_id".to_string(), "app123".to_string());
         tags.insert("user_id".to_string(), "user456".to_string());
 
-        let info = ScopeInfo {
-            function_name: "test_function",
-            model_name: "test_model",
-            tags: &tags,
-        };
+        let info = ScopeInfo { tags: &tags };
 
         let keys = scopes.get_key_if_matches(&info).unwrap();
         assert_eq!(keys.len(), 2);
@@ -1338,11 +1451,7 @@ mod tests {
         tags.insert("application_id".to_string(), "app123".to_string());
         tags.insert("user_id".to_string(), "user789".to_string()); // Different value
 
-        let info = ScopeInfo {
-            function_name: "test_function",
-            model_name: "test_model",
-            tags: &tags,
-        };
+        let info = ScopeInfo { tags: &tags };
 
         // Should return None because not all scopes match
         let keys = scopes.get_key_if_matches(&info);
@@ -1367,22 +1476,14 @@ mod tests {
         tags1.insert("application_id".to_string(), "app123".to_string());
         tags1.insert("user_id".to_string(), "user456".to_string());
 
-        let info1 = ScopeInfo {
-            function_name: "function1",
-            model_name: "model1",
-            tags: &tags1,
-        };
+        let info1 = ScopeInfo { tags: &tags1 };
 
         // Second ScopeInfo with different tag values but same structure
         let mut tags2 = HashMap::new();
         tags2.insert("application_id".to_string(), "app789".to_string());
         tags2.insert("user_id".to_string(), "user101".to_string());
 
-        let info2 = ScopeInfo {
-            function_name: "function2",
-            model_name: "model2",
-            tags: &tags2,
-        };
+        let info2 = ScopeInfo { tags: &tags2 };
 
         let keys1 = scopes.get_key_if_matches(&info1).unwrap();
         let keys2 = scopes.get_key_if_matches(&info2).unwrap();
@@ -1482,11 +1583,7 @@ mod tests {
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "123".to_string());
 
-        let info = ScopeInfo {
-            function_name: "test_function",
-            model_name: "test_model",
-            tags: &tags,
-        };
+        let info = ScopeInfo { tags: &tags };
 
         // Test each scope individually to verify different key types
         let key_concrete = scope_concrete.get_key_if_matches(&info).unwrap();

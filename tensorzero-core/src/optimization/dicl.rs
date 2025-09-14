@@ -7,9 +7,7 @@ use crate::{
     cache::CacheOptions,
     config::{Config, UninitializedVariantConfig},
     db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
-    embeddings::{
-        Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingModelConfig, EmbeddingRequest,
-    },
+    embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
     endpoints::inference::{InferenceClients, InferenceCredentials},
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     function::FunctionConfig,
@@ -270,20 +268,6 @@ impl Optimizer for DiclOptimizationConfig {
             }));
         }
 
-        // 4. Check that the embedding model exists in the config
-        let embedding_model_config = config
-            .embedding_models
-            .get(&self.embedding_model)
-            .await?
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::Config {
-                    message: format!(
-                        "embedding model '{}' not found in configuration",
-                        self.embedding_model
-                    ),
-                })
-            })?;
-
         tracing::info!(
             "Starting DICL optimization for function '{}' variant '{}' with {} examples",
             self.function_name,
@@ -309,7 +293,7 @@ impl Optimizer for DiclOptimizationConfig {
 
         // Process embeddings with batching and concurrency control
         let all_embeddings = process_embeddings_with_batching(
-            &embedding_model_config,
+            config,
             &self.embedding_model,
             client,
             credentials,
@@ -516,6 +500,20 @@ async fn process_embedding_batch(
         encoding_format: EmbeddingEncodingFormat::Float,
     };
 
+    let embedding_model_config =
+        config
+            .embedding_models
+            .get(model_name)
+            .await?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "embedding model '{}' not found in configuration",
+                        model_name
+                    ),
+                })
+            })?;
+
     // Create InferenceClients context for the embedding model
     let cache_options = CacheOptions::default();
     let clients = InferenceClients {
@@ -524,6 +522,7 @@ async fn process_embedding_batch(
         clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
         cache_options: &cache_options,
         tags: &HashMap::default(),
+        rate_limiting_config: &config.rate_limiting,
     };
 
     let response = embedding_model_config
@@ -550,7 +549,7 @@ async fn process_embedding_batch(
 /// Processes all embedding batches with concurrency control
 #[expect(clippy::too_many_arguments)]
 async fn process_embeddings_with_batching(
-    embedding_model_config: &EmbeddingModelConfig,
+    config: &Config,
     model_name: &str,
     client: &TensorzeroHttpClient,
     credentials: &InferenceCredentials,
@@ -590,7 +589,7 @@ async fn process_embeddings_with_batching(
                 })?;
 
                 let result = process_embedding_batch(
-                    embedding_model_config,
+                    config,
                     model_name,
                     client,
                     credentials,

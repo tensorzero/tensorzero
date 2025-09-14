@@ -17,7 +17,7 @@ use crate::cache::{
     cache_lookup, cache_lookup_streaming, start_cache_write, start_cache_write_streaming,
     CacheData, ModelProviderRequest, NonStreamingCacheData, StreamingCacheData,
 };
-use crate::config::rate_limiting::{RateLimitingConfig, ScopeInfo};
+use crate::config::rate_limiting::RateLimitingConfig;
 use crate::config::{skip_credential_validation, ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
@@ -26,6 +26,7 @@ use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 use crate::providers::dummy::DummyProvider;
 use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
 
+use crate::config::rate_limiting::ScopeInfo;
 use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
@@ -279,13 +280,7 @@ impl ModelConfig {
         }
         let scope_info = ScopeInfo { tags: clients.tags };
         let response = provider
-            .infer(
-                model_provider_request,
-                clients.http_client,
-                clients.credentials,
-                clients.rate_limiting_config,
-                &scope_info,
-            )
+            .infer(model_provider_request, clients, &scope_info)
             .instrument(span!(
                 Level::INFO,
                 "infer",
@@ -336,13 +331,7 @@ impl ModelConfig {
             stream,
             raw_request,
         } = provider
-            .infer_stream(
-                model_provider_request,
-                clients.http_client,
-                clients.credentials,
-                clients.rate_limiting_config,
-                &scope_info,
-            )
+            .infer_stream(model_provider_request, clients, &scope_info)
             .await?;
 
         // Note - we cache the chunks here so that we store the raw model provider input and response chunks
@@ -1187,65 +1176,111 @@ impl ModelProvider {
     async fn infer(
         &self,
         request: ModelProviderRequest<'_>,
-        client: &TensorzeroHttpClient,
-        api_keys: &InferenceCredentials,
-        rate_limiting_config: &RateLimitingConfig,
+        clients: &InferenceClients<'_>,
         scope_info: &ScopeInfo<'_>,
     ) -> Result<ProviderInferenceResponse, Error> {
         // TODO (Viraj): add a rate limit check here
         match &self.config {
             ProviderConfig::Anthropic(provider) => {
-                provider.infer(request, client, api_keys, self).await
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::AWSBedrock(provider) => {
-                provider.infer(request, client, api_keys, self).await
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::AWSSagemaker(provider) => {
-                provider.infer(request, client, api_keys, self).await
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::Azure(provider) => {
-                provider.infer(request, client, api_keys, self).await
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::Fireworks(provider) => {
-                provider.infer(request, client, api_keys, self).await
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::GCPVertexAnthropic(provider) => {
-                provider.infer(request, client, api_keys, self).await
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::GCPVertexGemini(provider) => {
-                provider.infer(request, client, api_keys, self).await
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
             }
-            ProviderConfig::Groq(provider) => provider.infer(request, client, api_keys, self).await,
+            ProviderConfig::Groq(provider) => {
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
+            }
             ProviderConfig::GoogleAIStudioGemini(provider) => {
-                provider.infer(request, client, api_keys, self).await
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::Hyperbolic(provider) => {
-                provider.infer(request, client, api_keys, self).await
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::Mistral(provider) => {
-                provider.infer(request, client, api_keys, self).await
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::OpenAI(provider) => {
-                provider.infer(request, client, api_keys, self).await
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::OpenRouter(provider) => {
-                provider.infer(request, client, api_keys, self).await
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::Together(provider) => {
-                provider.infer(request, client, api_keys, self).await
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::SGLang(provider) => {
-                provider.infer(request, client, api_keys, self).await
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
             }
-            ProviderConfig::VLLM(provider) => provider.infer(request, client, api_keys, self).await,
-            ProviderConfig::XAI(provider) => provider.infer(request, client, api_keys, self).await,
-            ProviderConfig::TGI(provider) => provider.infer(request, client, api_keys, self).await,
+            ProviderConfig::VLLM(provider) => {
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
+            }
+            ProviderConfig::XAI(provider) => {
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
+            }
+            ProviderConfig::TGI(provider) => {
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
+            }
             ProviderConfig::DeepSeek(provider) => {
-                provider.infer(request, client, api_keys, self).await
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
-                provider.infer(request, client, api_keys, self).await
+                provider
+                    .infer(request, clients.http_client, clients.credentials, self)
+                    .await
             }
         }
     }
@@ -1259,73 +1294,111 @@ impl ModelProvider {
     async fn infer_stream(
         &self,
         request: ModelProviderRequest<'_>,
-        client: &TensorzeroHttpClient,
-        api_keys: &InferenceCredentials,
-        rate_limiting_config: &RateLimitingConfig,
+        clients: &InferenceClients<'_>,
         scope_info: &ScopeInfo<'_>,
     ) -> Result<StreamAndRawRequest, Error> {
         // TODO (Viraj): add a rate limit check here
         let (stream, raw_request) = match &self.config {
             ProviderConfig::Anthropic(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::AWSBedrock(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::AWSSagemaker(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::Azure(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::Fireworks(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::GCPVertexAnthropic(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::GCPVertexGemini(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::GoogleAIStudioGemini(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::Groq(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::Hyperbolic(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::Mistral(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::OpenAI(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::OpenRouter(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::Together(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::SGLang(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::XAI(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::VLLM(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::TGI(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             ProviderConfig::DeepSeek(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
-                provider.infer_stream(request, client, api_keys, self).await
+                provider
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .await
             }
         }?;
 

@@ -1,3 +1,4 @@
+use crate::config::rate_limiting::{RateLimitResource, RateLimitResourceRequests};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::stored_input::StoredFile;
 use crate::serde_util::{
@@ -607,6 +608,10 @@ pub struct ModelInferenceRequest<'a> {
 impl<'a> ModelInferenceRequest<'a> {
     pub fn borrow_stop_sequences(&'a self) -> Option<Cow<'a, [String]>> {
         self.stop_sequences.as_ref().map(borrow_cow)
+    }
+
+    pub fn estimated_resource_usage(&self) -> Result<RateLimitResourceRequests, Error> {
+        todo!()
     }
 }
 

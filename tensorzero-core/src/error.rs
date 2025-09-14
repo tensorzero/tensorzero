@@ -1232,16 +1232,13 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::PostgresQuery {
                 function_name,
                 message,
-            } => {
-                if function_name.is_none() {
-                    write!(f, "Postgres query failed: {message}")
-                } else {
-                    write!(
-                        f,
-                        "Postgres query failed in function {function_name} with message: {message}"
-                    )
-                }
-            }
+            } => match function_name {
+                Some(function_name) => write!(
+                    f,
+                    "Postgres query failed in function {function_name} with message: {message}"
+                ),
+                None => write!(f, "Postgres query failed: {message}"),
+            },
             ErrorDetails::ProviderNotFound { provider_name } => {
                 write!(f, "Provider not found: {provider_name}")
             }
