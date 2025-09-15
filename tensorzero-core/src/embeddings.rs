@@ -6,10 +6,6 @@ use crate::cache::{
     embedding_cache_lookup, start_cache_write, CacheData, EmbeddingCacheData,
     EmbeddingModelProviderRequest,
 };
-use crate::config::rate_limiting::{
-    get_estimated_tokens, RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
-    RateLimitedResponse, ScopeInfo,
-};
 use crate::config::{ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
@@ -20,6 +16,10 @@ use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
 use crate::model_table::BaseModelTable;
 use crate::model_table::ShorthandModelConfig;
 use crate::providers::azure::AzureProvider;
+use crate::rate_limiting::{
+    get_estimated_tokens, RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
+    RateLimitedResponse, ScopeInfo,
+};
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},

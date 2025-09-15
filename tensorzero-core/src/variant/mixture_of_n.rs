@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
-use crate::config::rate_limiting::TicketBorrow;
 use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
@@ -22,6 +21,7 @@ use crate::inference::types::{
     Usage,
 };
 use crate::model::ModelTable;
+use crate::rate_limiting::TicketBorrow;
 use crate::tool::ToolCallChunk;
 use crate::{
     endpoints::inference::InferenceParams,

@@ -1,3 +1,4 @@
+use crate::rate_limiting::RateLimitingConfig;
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
 ///            IT IS MEANT FOR INTERNAL USE ONLY.
 ///            EXPECT FREQUENT, UNANNOUNCED BREAKING CHANGES.
@@ -12,7 +13,6 @@ use pyo3::exceptions::PyKeyError;
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::IntoPyObjectExt;
-use rate_limiting::RateLimitingConfig;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;

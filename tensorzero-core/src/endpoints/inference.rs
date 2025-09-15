@@ -21,7 +21,6 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
-use crate::config::rate_limiting::{RateLimitingConfig, TicketBorrow};
 use crate::config::{Config, ErrorContext, SchemaData, UninitializedVariantInfo};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
@@ -43,6 +42,7 @@ use crate::inference::types::{
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
+use crate::rate_limiting::{RateLimitingConfig, TicketBorrow};
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;

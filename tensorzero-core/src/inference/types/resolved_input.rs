@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{storage::StoragePath, Base64File, Role, Thought};
-use crate::config::rate_limiting::RateLimitedInputContent;
 use crate::config::{Config, ObjectStoreInfo};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::file::Base64FileMetadata;
@@ -15,6 +14,7 @@ use crate::inference::types::stored_input::StoredFile;
 use crate::inference::types::stored_input::{
     StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
+use crate::rate_limiting::RateLimitedInputContent;
 use crate::tool::{ToolCall, ToolResult};
 
 #[cfg(feature = "pyo3")]

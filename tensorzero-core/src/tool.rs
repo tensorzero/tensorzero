@@ -11,9 +11,9 @@ use serde_json::Value;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use crate::{
-    config::rate_limiting::{get_estimated_tokens, RateLimitedInputContent},
     error::{Error, ErrorDetails},
     jsonschema_util::{DynamicJSONSchema, StaticJSONSchema},
+    rate_limiting::{get_estimated_tokens, RateLimitedInputContent},
 };
 
 /* A Tool is a function that can be called by an LLM

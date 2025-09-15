@@ -1,5 +1,5 @@
-use crate::config::rate_limiting::ActiveRateLimitKey;
 use crate::error::Error;
+use crate::rate_limiting::ActiveRateLimitKey;
 use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 use async_trait::async_trait;
 use chrono::{DateTime, TimeDelta, Utc};

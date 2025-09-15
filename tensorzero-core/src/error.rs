@@ -12,9 +12,9 @@ use tokio::sync::OnceCell;
 use url::Url;
 use uuid::Uuid;
 
-use crate::config::rate_limiting::ActiveRateLimitKey;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::Thought;
+use crate::rate_limiting::ActiveRateLimitKey;
 
 /// Controls whether to include raw request/response details in error output
 ///

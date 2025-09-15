@@ -15,7 +15,6 @@ use tokio::time::Duration;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::config::rate_limiting::TicketBorrow;
 use crate::config::PathWithContents;
 use crate::config::TimeoutsConfig;
 use crate::embeddings::EmbeddingModelTable;
@@ -41,6 +40,7 @@ use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::model::StreamResponse;
 use crate::model::StreamResponseAndMessages;
+use crate::rate_limiting::TicketBorrow;
 use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 

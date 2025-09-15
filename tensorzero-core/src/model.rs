@@ -25,7 +25,6 @@ use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 use crate::providers::dummy::DummyProvider;
 use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
 
-use crate::config::rate_limiting::{RateLimitedRequest, ScopeInfo, TicketBorrow};
 use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
@@ -43,6 +42,7 @@ use crate::providers::helpers::peek_first_chunk;
 use crate::providers::hyperbolic::HyperbolicProvider;
 use crate::providers::sglang::SGLangProvider;
 use crate::providers::tgi::TGIProvider;
+use crate::rate_limiting::{RateLimitedRequest, ScopeInfo, TicketBorrow};
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
