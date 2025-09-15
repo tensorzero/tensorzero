@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{storage::StoragePath, Base64File, Role, Thought};
+use crate::config::rate_limiting::RateLimitedInputContent;
 use crate::config::{Config, ObjectStoreInfo};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::file::Base64FileMetadata;
@@ -316,6 +317,12 @@ impl std::fmt::Display for FileWithPath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+impl RateLimitedInputContent for FileWithPath {
+    fn estimated_input_token_usage(&self) -> u64 {
+        todo!("Implement estimated_input_token_usage for FileWithPath")
     }
 }
 

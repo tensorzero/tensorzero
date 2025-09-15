@@ -11,6 +11,7 @@ use serde_json::Value;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use crate::{
+    config::rate_limiting::{get_estimated_tokens, RateLimitedInputContent},
     error::{Error, ErrorDetails},
     jsonschema_util::{DynamicJSONSchema, StaticJSONSchema},
 };
@@ -325,6 +326,12 @@ impl std::fmt::Display for ToolCall {
     }
 }
 
+impl RateLimitedInputContent for ToolCall {
+    fn estimated_input_token_usage(&self) -> u64 {
+        get_estimated_tokens(&self.name) + get_estimated_tokens(&self.arguments)
+    }
+}
+
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl ToolCall {
@@ -481,6 +488,14 @@ impl std::fmt::Display for ToolResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+impl RateLimitedInputContent for ToolResult {
+    fn estimated_input_token_usage(&self) -> u64 {
+        get_estimated_tokens(&self.name)
+            + get_estimated_tokens(&self.result)
+            + get_estimated_tokens(&self.id)
     }
 }
 

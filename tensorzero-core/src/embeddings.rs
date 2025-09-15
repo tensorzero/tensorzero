@@ -7,8 +7,8 @@ use crate::cache::{
     EmbeddingModelProviderRequest,
 };
 use crate::config::rate_limiting::{
-    get_estimated_tokens, RateLimitResourceUsage, RateLimitedRequest, RateLimitedResponse,
-    ScopeInfo,
+    get_estimated_tokens, RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
+    RateLimitedResponse, ScopeInfo,
 };
 use crate::config::{ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
@@ -235,8 +235,10 @@ impl EmbeddingInput {
             EmbeddingInput::Batch(texts) => texts.first(),
         }
     }
+}
 
-    pub fn estimated_resource_usage(&self) -> u64 {
+impl RateLimitedInputContent for EmbeddingInput {
+    fn estimated_input_token_usage(&self) -> u64 {
         match self {
             EmbeddingInput::Single(text) => get_estimated_tokens(text),
             EmbeddingInput::Batch(texts) => texts
@@ -262,10 +264,10 @@ pub struct EmbeddingRequest {
 
 impl RateLimitedRequest for EmbeddingRequest {
     fn estimated_resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
-        Ok(RateLimitResourceUsage::new(
-            self.input.estimated_resource_usage(),
-            1,
-        ))
+        Ok(RateLimitResourceUsage {
+            model_inferences: 1,
+            tokens: self.input.estimated_input_token_usage(),
+        })
     }
 }
 
@@ -297,8 +299,11 @@ pub struct EmbeddingProviderResponse {
 }
 
 impl RateLimitedResponse for EmbeddingProviderResponse {
-    fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
-        todo!()
+    fn resource_usage(&self) -> RateLimitResourceUsage {
+        RateLimitResourceUsage {
+            model_inferences: 1,
+            tokens: self.usage.total_tokens() as u64,
+        }
     }
 }
 
@@ -495,7 +500,7 @@ impl From<&EmbeddingProviderRequestInfo> for ModelProviderRequestInfo {
 }
 
 impl EmbeddingProviderInfo {
-    async fn embed(
+    pub async fn embed(
         &self,
         request: &EmbeddingRequest,
         clients: &InferenceClients<'_>,
@@ -530,11 +535,9 @@ impl EmbeddingProviderInfo {
         } else {
             response_fut.await?
         };
-        if let Ok(actual_resource_usage) = response.resource_usage() {
-            ticket_borrow
-                .return_tickets(clients.postgres_connection_info, actual_resource_usage)
-                .await?;
-        }
+        ticket_borrow
+            .return_tickets(clients.postgres_connection_info, response.resource_usage())
+            .await?;
         Ok(response)
     }
 }

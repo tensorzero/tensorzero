@@ -255,18 +255,11 @@ pub enum RateLimitResource {
 }
 
 pub struct RateLimitResourceUsage {
-    model_inferences: u64,
-    tokens: u64,
+    pub model_inferences: u64,
+    pub tokens: u64,
 }
 
 impl RateLimitResourceUsage {
-    pub fn new(model_inferences: u64, tokens: u64) -> Self {
-        Self {
-            model_inferences,
-            tokens,
-        }
-    }
-
     pub fn get_usage(&self, resource: RateLimitResource) -> u64 {
         match resource {
             RateLimitResource::ModelInference => self.model_inferences,
@@ -647,8 +640,12 @@ pub trait RateLimitedRequest {
     fn estimated_resource_usage(&self) -> Result<RateLimitResourceUsage, Error>;
 }
 
+pub trait RateLimitedInputContent {
+    fn estimated_input_token_usage(&self) -> u64;
+}
+
 pub trait RateLimitedResponse {
-    fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error>;
+    fn resource_usage(&self) -> RateLimitResourceUsage;
 }
 
 /// We can estimate as a rough upper bound that every 2 characters are 1 token.

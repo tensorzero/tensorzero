@@ -467,6 +467,7 @@ pub enum ErrorDetails {
         key: ActiveRateLimitKey,
         tickets_remaining: u64,
     },
+    RateLimitMissingMaxTokens,
     Serialization {
         message: String,
     },
@@ -632,6 +633,7 @@ impl ErrorDetails {
             ErrorDetails::PostgresResult { .. } => tracing::Level::ERROR,
             ErrorDetails::PostgresQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::RateLimitExceeded { .. } => tracing::Level::WARN,
+            ErrorDetails::RateLimitMissingMaxTokens { .. } => tracing::Level::WARN,
             ErrorDetails::Serialization { .. } => tracing::Level::ERROR,
             ErrorDetails::StreamError { .. } => tracing::Level::ERROR,
             ErrorDetails::ToolNotFound { .. } => tracing::Level::WARN,
@@ -750,6 +752,7 @@ impl ErrorDetails {
             ErrorDetails::PostgresResult { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::PostgresMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::RateLimitExceeded { .. } => StatusCode::TOO_MANY_REQUESTS,
+            ErrorDetails::RateLimitMissingMaxTokens { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::StreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ToolNotFound { .. } => StatusCode::BAD_REQUEST,
@@ -1255,6 +1258,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Rate limit exceeded for key {key} with {tickets_remaining} tickets remaining"
                 )
+            }
+            ErrorDetails::RateLimitMissingMaxTokens {} => {
+                write!(f, "Missing max tokens for rate limited request.")
             }
             ErrorDetails::StreamError { source } => {
                 write!(f, "Error in streaming response: {source}")

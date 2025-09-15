@@ -1,4 +1,7 @@
-use crate::config::rate_limiting::{RateLimitResourceUsage, TicketBorrow};
+use crate::config::rate_limiting::{
+    get_estimated_tokens, RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
+    TicketBorrow,
+};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::stored_input::StoredFile;
@@ -324,6 +327,12 @@ impl std::fmt::Display for Text {
     }
 }
 
+impl RateLimitedInputContent for Text {
+    fn estimated_input_token_usage(&self) -> u64 {
+        get_estimated_tokens(&self.text)
+    }
+}
+
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Text {
@@ -350,6 +359,14 @@ pub struct Thought {
         skip_serializing_if = "Option::is_none"
     )]
     pub provider_type: Option<String>,
+}
+
+impl RateLimitedInputContent for Thought {
+    fn estimated_input_token_usage(&self) -> u64 {
+        self.text
+            .as_ref()
+            .map_or(0, |text| get_estimated_tokens(text))
+    }
 }
 
 /// Core representation of the types of content that could go into a model provider
@@ -397,6 +414,19 @@ impl ContentBlock {
                 data,
                 model_provider_name,
             },
+        }
+    }
+}
+
+impl RateLimitedInputContent for ContentBlock {
+    fn estimated_input_token_usage(&self) -> u64 {
+        match self {
+            ContentBlock::Text(text) => text.estimated_input_token_usage(),
+            ContentBlock::ToolCall(tool_call) => tool_call.estimated_input_token_usage(),
+            ContentBlock::ToolResult(tool_result) => tool_result.estimated_input_token_usage(),
+            ContentBlock::File(file) => file.estimated_input_token_usage(),
+            ContentBlock::Thought(thought) => thought.estimated_input_token_usage(),
+            ContentBlock::Unknown { .. } => 0,
         }
     }
 }
@@ -507,6 +537,15 @@ impl RequestMessage {
     }
 }
 
+impl RateLimitedInputContent for RequestMessage {
+    fn estimated_input_token_usage(&self) -> u64 {
+        self.content
+            .iter()
+            .map(|content| content.estimated_input_token_usage())
+            .sum()
+    }
+}
+
 /// The message type that we directly store in ClickHouse.
 /// This is almost identical to `RequestMessage`, but without `File` data.
 /// Only the object-storage path is actually stored in clickhouse
@@ -610,9 +649,28 @@ impl<'a> ModelInferenceRequest<'a> {
     pub fn borrow_stop_sequences(&'a self) -> Option<Cow<'a, [String]>> {
         self.stop_sequences.as_ref().map(borrow_cow)
     }
+}
 
-    pub fn estimated_resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
-        todo!()
+impl RateLimitedRequest for ModelInferenceRequest<'_> {
+    fn estimated_resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
+        let system_tokens = self
+            .system
+            .as_ref()
+            .map(|s| get_estimated_tokens(s))
+            .unwrap_or(0);
+        let messages_tokens: u64 = self
+            .messages
+            .iter()
+            .map(|m| m.estimated_input_token_usage())
+            .sum();
+        let output_tokens = self
+            .max_tokens
+            .ok_or_else(|| Error::new(ErrorDetails::RateLimitMissingMaxTokens))?
+            as u64;
+        Ok(RateLimitResourceUsage {
+            tokens: system_tokens + messages_tokens + output_tokens,
+            model_inferences: 1,
+        })
     }
 }
 
@@ -676,7 +734,10 @@ pub struct ProviderInferenceResponse {
 
 impl ProviderInferenceResponse {
     pub fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
-        todo!()
+        Ok(RateLimitResourceUsage {
+            model_inferences: 1,
+            tokens: self.usage.total_tokens() as u64,
+        })
     }
 }
 
@@ -685,6 +746,12 @@ impl ProviderInferenceResponse {
 pub struct Usage {
     pub input_tokens: u32,
     pub output_tokens: u32,
+}
+
+impl Usage {
+    pub fn total_tokens(&self) -> u32 {
+        self.input_tokens + self.output_tokens
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

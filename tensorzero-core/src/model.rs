@@ -25,7 +25,7 @@ use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 use crate::providers::dummy::DummyProvider;
 use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
 
-use crate::config::rate_limiting::{ScopeInfo, TicketBorrow};
+use crate::config::rate_limiting::{RateLimitedRequest, ScopeInfo, TicketBorrow};
 use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
