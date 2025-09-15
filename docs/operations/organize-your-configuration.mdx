@@ -29,6 +29,14 @@ You can instruct TensorZero to load multiple configuration files by specifying a
 Under the hood, TensorZero will concatenate the configuration files, with special handling for paths.
 For example, you can declare a model in one file and use it in a variant declared in another file.
 If the configuration includes a path (e.g. template, schema), the path will be resolved relative to that configuration file's directory.
+For example:
+
+```toml
+[functions.my_function.variants.my_variant]
+# ...
+system_template = "templates/system.minijinja"  # relative to this TOML file
+# ...
+```
 
 ## Enable template file system access to reuse shared snippets
 
