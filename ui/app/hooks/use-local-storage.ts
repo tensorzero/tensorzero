@@ -45,6 +45,11 @@ const getLocalStorageServerSnapshot = () => {
   return null;
 };
 
+/**
+ * A hook to synchronize data with the browser's localStorage API,
+ * for persistent client-side storage.
+ * @returns [value, setValue], similar to useState()
+ */
 export function useLocalStorage<T extends Value>(
   key: string,
   initialValue?: T,
