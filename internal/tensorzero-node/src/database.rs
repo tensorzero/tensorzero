@@ -60,16 +60,6 @@ impl DatabaseClient {
     }
 
     #[napi]
-    pub async fn count_episodes(&self) -> Result<String, napi::Error> {
-        let count = self
-            .0
-            .count_episodes()
-            .await
-            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        serde_json::to_string(&count).map_err(|e| napi::Error::from_reason(e.to_string()))
-    }
-
-    #[napi]
     pub async fn query_episode_table_bounds(&self) -> Result<String, napi::Error> {
         let bounds = self
             .0

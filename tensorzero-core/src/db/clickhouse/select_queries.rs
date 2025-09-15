@@ -179,7 +179,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                         uint_to_uuid(max(max_inference_id_uint)) as last_inference_id,
                         episode_id_uint
                     FROM EpisodeById
-                    WHERE episode_id_uint <= uuid_now AND {where_clause}
+                    WHERE {where_clause}
                     GROUP BY episode_id_uint
                     ORDER BY episode_id_uint ASC
                     LIMIT {page_size}
@@ -198,7 +198,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(max_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
                     uint_to_uuid(max(max_inference_id_uint)) as last_inference_id
                 FROM EpisodeById
-                WHERE episode_id_uint <= uuid_now AND {where_clause}
+                WHERE {where_clause}
                 GROUP BY episode_id_uint
                 ORDER BY episode_id_uint DESC
                 LIMIT {page_size}
@@ -226,13 +226,11 @@ impl SelectQueries for ClickHouseConnectionInfo {
 
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error> {
         let query = r"
-            WITH (SELECT toUInt128(generateUUIDv7())) AS uuid_now
             SELECT
                 uint_to_uuid(min(episode_id_uint)) as first_id,
                 uint_to_uuid(max(episode_id_uint)) as last_id,
                 count() as count
             FROM EpisodeById
-            WHERE episode_id_uint <= uuid_now
             FORMAT JSONEachRow"
             .to_string();
         let response = self.run_query_synchronous_no_params(query).await?;
@@ -242,20 +240,5 @@ impl SelectQueries for ClickHouseConnectionInfo {
                 message: e.to_string(),
             })
         })
-    }
-
-    async fn count_episodes(&self) -> Result<u64, Error> {
-        let query = "WITH (SELECT toUInt128(generateUUIDv7())) AS uuid_now SELECT count() FROM EpisodeById WHERE episode_id_uint <= uuid_now".to_string();
-        let response = self.run_query_synchronous_no_params(query).await?;
-        let count = response
-            .response
-            .trim()
-            .parse()
-            .map_err(|e: std::num::ParseIntError| {
-                Error::new(ErrorDetails::ClickHouseDeserialization {
-                    message: e.to_string(),
-                })
-            })?;
-        Ok(count)
     }
 }

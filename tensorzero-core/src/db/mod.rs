@@ -36,8 +36,6 @@ pub trait SelectQueries {
     ) -> Result<Vec<EpisodeByIdRow>, Error>;
 
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
-
-    async fn count_episodes(&self) -> Result<u64, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]

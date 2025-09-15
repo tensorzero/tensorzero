@@ -2,6 +2,7 @@ use super::check_table_exists;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
+use crate::uuid_util::get_dynamic_evaluation_cutoff_uuid;
 use async_trait::async_trait;
 use std::time::Duration;
 
@@ -74,7 +75,7 @@ impl Migration for Migration0038<'_> {
                 r"CREATE TABLE IF NOT EXISTS EpisodeById{on_cluster_name} (
                         episode_id_uint UInt128,
                         count AggregateFunction(count, UInt32),
-                        inference_ids AggregateFunction(groupArray, Array(UUID)),
+                        inference_ids AggregateFunction(groupArray, UUID),
                         min_inference_id_uint SimpleAggregateFunction(min, UInt128),
                         max_inference_id_uint SimpleAggregateFunction(max, UInt128)
                     )
@@ -85,11 +86,12 @@ impl Migration for Migration0038<'_> {
             .await?;
 
         // If not a clean start, restrict MV ingestion to rows >= view timestamp.
-        let view_where_clause = if clean_start {
-            String::new()
+        let view_condition = if clean_start {
+            "1=1".to_string()
         } else {
-            format!("WHERE UUIDv7ToDateTime(id) >= fromUnixTimestamp64Nano({view_timestamp_nanos})")
+            format!("UUIDv7ToDateTime(id) >= fromUnixTimestamp64Nano({view_timestamp_nanos})")
         };
+        let cutoff_uuid = get_dynamic_evaluation_cutoff_uuid();
 
         // Build MV for ChatInference table
         let query = format!(
@@ -100,11 +102,11 @@ impl Migration for Migration0038<'_> {
             SELECT
                 toUInt128(episode_id) as episode_id_uint,
                 countState() as count,
-                groupArrayState()([id]) as inference_ids,
+                groupArrayState()(id) as inference_ids,
                 toUInt128(min(id)) as min_inference_id_uint,
                 toUInt128(max(id)) as max_inference_id_uint
             FROM ChatInference
-            {view_where_clause}
+            WHERE {view_condition} AND toUInt128(episode_id) < toUInt128(toUUID('{cutoff_uuid}'))
             GROUP BY toUInt128(episode_id)
             "
         );
@@ -120,11 +122,11 @@ impl Migration for Migration0038<'_> {
             SELECT
                 toUInt128(episode_id) as episode_id_uint,
                 countState() as count,
-                groupArrayState()([id]) as inference_ids,
+                groupArrayState()(id) as inference_ids,
                 toUInt128(min(id)) as min_inference_id_uint,
                 toUInt128(max(id)) as max_inference_id_uint
             FROM JsonInference
-            {view_where_clause}
+            WHERE {view_condition} AND toUInt128(episode_id) < toUInt128(toUUID('{cutoff_uuid}'))
             GROUP BY toUInt128(episode_id)
             "
         );
@@ -153,11 +155,12 @@ impl Migration for Migration0038<'_> {
                     SELECT
                         toUInt128(episode_id) as episode_id_uint,
                         countState() as count,
-                        groupArrayState()([id]) as inference_ids,
+                        groupArrayState()(id) as inference_ids,
                         toUInt128(min(id)) as min_inference_id_uint,
                         toUInt128(max(id)) as max_inference_id_uint
                     FROM ChatInference
                     WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
+                        AND toUInt128(episode_id) < toUInt128(toUUID('{cutoff_uuid}'))
                     GROUP BY toUInt128(episode_id)
                     "
                 );
@@ -184,11 +187,12 @@ impl Migration for Migration0038<'_> {
                     SELECT
                         toUInt128(episode_id) as episode_id_uint,
                         countState() as count,
-                        groupArrayState()([id]) as inference_ids,
+                        groupArrayState()(id) as inference_ids,
                         toUInt128(min(id)) as min_inference_id_uint,
                         toUInt128(max(id)) as max_inference_id_uint
                     FROM JsonInference
                     WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
+                          AND toUInt128(episode_id) < toUInt128(toUUID('{cutoff_uuid}'))
                     GROUP BY toUInt128(episode_id)
                     "
                 );

@@ -107,7 +107,7 @@ export async function loader() {
 
   // Create the promises
   const countsInfoPromise = countInferencesByFunction();
-  const numEpisodesPromise = nativeDatabaseClient.countEpisodes();
+  const episodesPromise = nativeDatabaseClient.queryEpisodeTableBounds();
   const datasetCountsPromise = getDatasetCounts({});
   const numEvaluationRunsPromise = countTotalEvaluationRuns();
   const numDynamicEvaluationRunsPromise = countDynamicEvaluationRuns();
@@ -139,8 +139,8 @@ export async function loader() {
     return `${numVariants} variants`;
   });
 
-  const numEpisodesDesc = numEpisodesPromise.then(
-    (numEpisodes) => `${numEpisodes.toLocaleString()} episodes`,
+  const numEpisodesDesc = episodesPromise.then(
+    (result) => `${result.count.toLocaleString()} episodes`,
   );
 
   const numDatasetsDesc = datasetCountsPromise.then(

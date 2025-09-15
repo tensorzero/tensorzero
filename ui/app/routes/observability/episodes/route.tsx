@@ -21,26 +21,24 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
   const databaseClient = await getNativeDatabaseClient();
 
-  const [episodes, bounds, totalCount] = await Promise.all([
+  const [episodes, bounds] = await Promise.all([
     databaseClient.queryEpisodeTable(
       pageSize,
       before || undefined,
       after || undefined,
     ),
     databaseClient.queryEpisodeTableBounds(),
-    databaseClient.countEpisodes(),
   ]);
 
   return {
     episodes,
     pageSize,
     bounds,
-    totalCount,
   };
 }
 
 export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
-  const { episodes, pageSize, bounds, totalCount } = loaderData;
+  const { episodes, pageSize, bounds } = loaderData;
   const navigate = useNavigate();
 
   const topEpisode = episodes.at(0);
@@ -70,7 +68,7 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader heading="Episodes" count={totalCount} />
+      <PageHeader heading="Episodes" count={bounds.count} />
       <SectionLayout>
         <EpisodeSearchBar />
         <EpisodesTable episodes={episodes} />

@@ -172,9 +172,4 @@ export class DatabaseClient {
     const bounds = await this.nativeDatabaseClient.queryEpisodeTableBounds();
     return JSON.parse(bounds) as TableBoundsWithCount;
   }
-
-  async countEpisodes(): Promise<bigint> {
-    const count = await this.nativeDatabaseClient.countEpisodes();
-    return JSON.parse(count) as bigint;
-  }
 }

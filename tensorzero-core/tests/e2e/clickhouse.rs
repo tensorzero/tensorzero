@@ -862,6 +862,14 @@ async fn test_clickhouse_migration_manager() {
     let output_token_total: u64 = response.response.trim().parse().unwrap();
     assert_eq!(output_token_total, 200000000);
 
+    // Check that the EpisodeById migration worked
+    let response = clickhouse
+        .run_query_synchronous_no_params("SELECT count() FROM EpisodeById".to_string())
+        .await
+        .unwrap();
+    let episode_count: u64 = response.response.trim().parse().unwrap();
+    assert_eq!(episode_count, 20002095);
+
     // Since we've already ran all of the migrations, we shouldn't have written any new records
     // except for Migration0029 (which runs every time)
 
