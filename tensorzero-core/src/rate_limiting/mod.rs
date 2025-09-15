@@ -992,20 +992,4 @@ mod tests {
             &self.0
         }
     }
-
-    impl RateLimitingConfigScopes {
-        /// Creates a new instance of `RateLimitingConfigScopes`.
-        /// Ensures that there are no duplicate scopes and sorts them.
-        fn new(mut scopes: Vec<RateLimitingConfigScope>) -> Result<Self, &'static str> {
-            // First, we check to make sure there are no duplicate scopes
-            use std::collections::HashSet;
-            if scopes.len() != scopes.iter().collect::<HashSet<_>>().len() {
-                return Err("duplicate scopes are not allowed in the same rule");
-            }
-            // We sort the scopes so we are guaranteed a
-            // stable order when generating the key
-            scopes.sort();
-            Ok(RateLimitingConfigScopes(scopes))
-        }
-    }
 }
