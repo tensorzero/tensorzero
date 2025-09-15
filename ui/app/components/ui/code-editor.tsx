@@ -196,6 +196,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           onClick={() => copy(value)}
           disabled={!mounted || !isCopyAvailable}
           title={didCopy ? "Copied!" : "Copy to clipboard"}
+          className="h-6 w-6"
         >
           {didCopy ? (
             <CheckCheckIcon className="h-2 w-2" />
@@ -208,7 +209,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           size="iconSm"
           onClick={() => setWordWrap((wrap) => !wrap)}
           aria-pressed={wordWrap}
-          className="flex h-6 w-6 cursor-pointer items-center justify-center p-3 text-xs"
+          className="h-6 w-6"
           title="Toggle word wrap"
         >
           <span className="relative flex h-full w-full items-center justify-center">
