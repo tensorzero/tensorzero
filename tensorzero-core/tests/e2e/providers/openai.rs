@@ -8,13 +8,13 @@ use tensorzero::{File, Input, InputMessage, InputMessageContent, Role};
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_core::config::ProviderTypesConfig;
 use tensorzero_core::config::TimeoutsConfig;
+use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::embeddings::{
     Embedding, EmbeddingEncodingFormat, EmbeddingModelConfig, EmbeddingProvider,
     EmbeddingProviderConfig, EmbeddingRequest, UninitializedEmbeddingProviderConfig,
 };
 use tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams;
 use tensorzero_core::endpoints::inference::{InferenceClients, InferenceCredentials};
-use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::{Latency, ModelInferenceRequestJsonMode, TextKind};
 use uuid::Uuid;

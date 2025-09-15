@@ -92,6 +92,7 @@ pub trait RateLimitQueries {
     ) -> Result<u64, Error>;
 }
 
+#[derive(Debug)]
 pub struct ConsumeTicketsRequest {
     pub key: ActiveRateLimitKey,
     pub requested: u64,

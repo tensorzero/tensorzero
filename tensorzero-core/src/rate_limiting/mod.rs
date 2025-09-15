@@ -53,12 +53,17 @@ impl RateLimitingConfig {
         &'a self,
         client: &impl RateLimitQueries,
         scope_info: &'a ScopeInfo<'a>,
-        rate_limit_resource_requests: &RateLimitResourceUsage,
+        rate_limited_request: &impl RateLimitedRequest,
+        // rate_limit_resource_requests: &RateLimitResourceUsage,
     ) -> Result<TicketBorrow, Error> {
         let limits = self.get_active_limits(scope_info);
+        if limits.is_empty() {
+            return Ok(TicketBorrow::empty());
+        }
+        let rate_limit_resource_requests = rate_limited_request.estimated_resource_usage()?;
         let ticket_requests: Result<Vec<ConsumeTicketsRequest>, Error> = limits
             .iter()
-            .map(|limit| limit.get_consume_tickets_request(rate_limit_resource_requests))
+            .map(|limit| limit.get_consume_tickets_request(&rate_limit_resource_requests))
             .collect();
         let ticket_requests = ticket_requests?;
         let results = client.consume_tickets(ticket_requests).await?;
@@ -169,10 +174,6 @@ impl ActiveRateLimitKey {
     pub fn new(key: String) -> Self {
         ActiveRateLimitKey(key)
     }
-
-    pub fn into_str(&self) -> &str {
-        &self.0
-    }
 }
 
 impl std::fmt::Display for ActiveRateLimitKey {
@@ -273,7 +274,7 @@ pub enum RateLimitInterval {
 }
 
 impl RateLimitInterval {
-    pub fn to_duration(&self) -> chrono::Duration {
+    pub fn to_duration(self) -> chrono::Duration {
         match self {
             RateLimitInterval::Second => chrono::Duration::seconds(1),
             RateLimitInterval::Minute => chrono::Duration::minutes(1),
@@ -420,6 +421,7 @@ impl Serialize for TagValueScope {
 /// across releases.
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type")]
+#[expect(clippy::enum_variant_names)]
 pub enum RateLimitingScopeKey {
     TagAny { key: String },
     TagEach { key: String, value: String },

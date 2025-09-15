@@ -643,10 +643,7 @@ mod tests {
 
     use crate::cache::{CacheEnabledMode, CacheOptions};
     use crate::config::{SchemaData, UninitializedSchemas};
-    use crate::db::{
-        clickhouse::ClickHouseConnectionInfo,
-        postgres::PostgresConnectionInfo,
-    };
+    use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
     use crate::embeddings::EmbeddingModelTable;
     use crate::endpoints::inference::{
         ChatCompletionInferenceParams, InferenceCredentials, InferenceIds,

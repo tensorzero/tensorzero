@@ -867,10 +867,7 @@ mod tests {
     use super::*;
     use crate::cache::{CacheEnabledMode, CacheOptions};
     use crate::config::SchemaData;
-    use crate::db::{
-        clickhouse::ClickHouseConnectionInfo,
-        postgres::PostgresConnectionInfo,
-    };
+    use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::error::ErrorDetails;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};

@@ -509,11 +509,7 @@ impl EmbeddingProviderInfo {
     ) -> Result<EmbeddingProviderResponse, Error> {
         let ticket_borrow = clients
             .rate_limiting_config
-            .consume_tickets(
-                clients.postgres_connection_info,
-                scope_info,
-                &request.estimated_resource_usage()?,
-            )
+            .consume_tickets(clients.postgres_connection_info, scope_info, request)
             .await?;
         let response_fut = self.inner.embed(
             request,
@@ -672,10 +668,7 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        db::{
-            clickhouse::ClickHouseConnectionInfo,
-            postgres::PostgresConnectionInfo,
-        },
+        db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     };
 
     use super::*;

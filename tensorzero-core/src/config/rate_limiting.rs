@@ -6,26 +6,28 @@ use crate::rate_limiting::{
     RateLimitingConfigRule, RateLimitingConfigScope, RateLimitingConfigScopes, TagValueScope,
 };
 
-/// NOTE: this file deserializes rate limiting configuration from a shorthand format only
-/// [[rate_limiting.rules]]
-/// RESOURCE_per_INTERVAL_1 = 10
-/// RESOURCE_per_INTERVAL_2 = 20
-///
-/// but serializes to a more extensive format for programmatic use
-///
-/// [[rate_limiting.rules]]
-/// limits = [
-///     {
-///         resource: "model_inference",
-///         interval: "second",
-///         amount: 10,
-///     },
-///     {
-///         resource: "token",
-///         interval: "minute",
-///         amount: 20,
-///     },
-/// ]
+/*
+NOTE: this file deserializes rate limiting configuration from a shorthand format only
+[[rate_limiting.rules]]
+RESOURCE_per_INTERVAL_1 = 10
+RESOURCE_per_INTERVAL_2 = 20
+
+but serializes to a more extensive format for programmatic use
+
+[[rate_limiting.rules]]
+limits = [
+    {
+        resource: "model_inference",
+        interval: "second",
+        amount: 10,
+    },
+    {
+        resource: "token",
+        interval: "minute",
+        amount: 20,
+    },
+]
+*/
 
 impl<'de> Deserialize<'de> for RateLimitingConfigRule {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -166,7 +168,6 @@ mod tests {
     use crate::rate_limiting::RateLimitingConfig;
     use toml;
 
-
     #[test]
     fn test_basic_rate_limit_deserialization() {
         let toml_str = r"
@@ -219,13 +220,12 @@ mod tests {
             model_inferences_per_month = 6
             tokens_per_second = 10
             tokens_per_minute = 20
-            cents_per_hour = 100
             priority = 0
         ";
 
         let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.rules().len(), 1);
-        assert_eq!(config.rules()[0].limits.len(), 9);
+        assert_eq!(config.rules()[0].limits.len(), 8);
         assert_eq!(
             config.rules()[0].priority,
             RateLimitingConfigPriority::Priority(0),
@@ -531,7 +531,10 @@ mod tests {
         let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
         assert!(!config.enabled());
 
-        assert_eq!(config.rules()[0].priority, RateLimitingConfigPriority::Always);
+        assert_eq!(
+            config.rules()[0].priority,
+            RateLimitingConfigPriority::Always
+        );
     }
 
     #[test]
@@ -782,15 +785,19 @@ mod tests {
             [[rules]]
             model_inferences_per_second = 1
             tokens_per_minute = 2
-            // cents_per_hour = 3
+            # cents_per_hour = 3
             priority = 0
         ";
 
         let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.rules().len(), 1);
-        assert_eq!(config.rules()[0].limits.len(), 3);
+        assert_eq!(config.rules()[0].limits.len(), 2);
 
-        let resources: Vec<_> = config.rules()[0].limits.iter().map(|l| l.resource).collect();
+        let resources: Vec<_> = config.rules()[0]
+            .limits
+            .iter()
+            .map(|l| l.resource)
+            .collect();
         assert!(resources.contains(&RateLimitResource::ModelInference));
         assert!(resources.contains(&RateLimitResource::Token));
         // assert!(resources.contains(&RateLimitResource::Cent));

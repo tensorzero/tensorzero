@@ -42,7 +42,7 @@ use crate::providers::helpers::peek_first_chunk;
 use crate::providers::hyperbolic::HyperbolicProvider;
 use crate::providers::sglang::SGLangProvider;
 use crate::providers::tgi::TGIProvider;
-use crate::rate_limiting::{RateLimitedRequest, ScopeInfo, TicketBorrow};
+use crate::rate_limiting::{ScopeInfo, TicketBorrow};
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -1188,7 +1188,7 @@ impl ModelProvider {
             .consume_tickets(
                 clients.postgres_connection_info,
                 scope_info,
-                &request.request.estimated_resource_usage()?,
+                request.request,
             )
             .await?;
         let provider_inference_response = match &self.config {
@@ -1320,7 +1320,7 @@ impl ModelProvider {
             .consume_tickets(
                 clients.postgres_connection_info,
                 scope_info,
-                &request.request.estimated_resource_usage()?,
+                request.request,
             )
             .await?;
         let (stream, raw_request) = match &self.config {
@@ -2067,10 +2067,7 @@ mod tests {
     use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         cache::CacheOptions,
-        db::{
-            clickhouse::ClickHouseConnectionInfo,
-            postgres::PostgresConnectionInfo,
-        },
+        db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         inference::types::{
             ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk,
         },

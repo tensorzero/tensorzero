@@ -541,7 +541,7 @@ impl RateLimitedInputContent for RequestMessage {
     fn estimated_input_token_usage(&self) -> u64 {
         self.content
             .iter()
-            .map(|content| content.estimated_input_token_usage())
+            .map(RateLimitedInputContent::estimated_input_token_usage)
             .sum()
     }
 }
@@ -661,7 +661,7 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
         let messages_tokens: u64 = self
             .messages
             .iter()
-            .map(|m| m.estimated_input_token_usage())
+            .map(RateLimitedInputContent::estimated_input_token_usage)
             .sum();
         let output_tokens = self
             .max_tokens

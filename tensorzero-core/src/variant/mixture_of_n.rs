@@ -861,10 +861,7 @@ mod tests {
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
         config::{SchemaData, UninitializedSchemas},
-        db::{
-            clickhouse::ClickHouseConnectionInfo,
-            postgres::PostgresConnectionInfo,
-        },
+        db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
         function::{FunctionConfigChat, FunctionConfigJson},
         http::TensorzeroHttpClient,

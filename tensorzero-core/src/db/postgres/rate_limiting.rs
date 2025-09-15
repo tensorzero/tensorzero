@@ -25,16 +25,15 @@ impl RateLimitQueries for PostgresConnectionInfo {
         &self,
         requests: Vec<ConsumeTicketsRequest>,
     ) -> Result<Vec<ConsumeTicketsReciept>, Error> {
+        if requests.is_empty() {
+            return Ok(vec![]);
+        }
         let pool = self.get_pool().ok_or_else(|| {
             Error::new(ErrorDetails::PostgresQuery {
                 message: "PostgreSQL connection is disabled".to_string(),
                 function_name: None,
             })
         })?;
-
-        if requests.is_empty() {
-            return Ok(vec![]);
-        }
 
         let keys: Vec<String> = requests.iter().map(|r| r.key.0.clone()).collect();
         let requested_amounts: Vec<i64> = requests.iter().map(|r| r.requested as i64).collect();
@@ -83,6 +82,9 @@ impl RateLimitQueries for PostgresConnectionInfo {
         &self,
         requests: Vec<ReturnTicketsRequest>,
     ) -> Result<Vec<ReturnTicketsResult>, Error> {
+        if requests.is_empty() {
+            return Ok(vec![]);
+        }
         let pool = self.get_pool().ok_or_else(|| {
             Error::new(ErrorDetails::PostgresQuery {
                 message: "PostgreSQL connection is disabled".to_string(),
@@ -90,15 +92,8 @@ impl RateLimitQueries for PostgresConnectionInfo {
             })
         })?;
 
-        if requests.is_empty() {
-            return Ok(vec![]);
-        }
-
         // ideally we don't have to clone the keys here
-        let keys: Vec<String> = requests
-            .iter()
-            .map(|r| r.key.into_str().to_string())
-            .collect();
+        let keys: Vec<String> = requests.iter().map(|r| r.key.to_string()).collect();
         let amounts: Vec<i64> = requests.iter().map(|r| r.returned as i64).collect();
         let capacities: Vec<i64> = requests.iter().map(|r| r.capacity as i64).collect();
         let refill_amounts: Vec<i64> = requests.iter().map(|r| r.refill_amount as i64).collect();
