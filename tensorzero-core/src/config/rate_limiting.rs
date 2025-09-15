@@ -7,12 +7,12 @@ use crate::rate_limiting::{
 };
 
 /*
-NOTE: this file deserializes rate limiting configuration from a shorthand format only
+This file deserializes rate limiting configuration from a shorthand format only
 [[rate_limiting.rules]]
 RESOURCE_per_INTERVAL_1 = 10
-RESOURCE_per_INTERVAL_2 = 20
+RESOURCE_per_INTERVAL_2 = { capacity =  20, refill_rate = 10 }
 
-but serializes to a more extensive format for programmatic use
+but the same config serializes to a more extensive format for programmatic use
 
 [[rate_limiting.rules]]
 limits = [
@@ -28,6 +28,20 @@ limits = [
     },
 ]
 */
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BucketConfig {
+    capacity: u64,
+    refill_rate: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum CapacityHelper {
+    Bucket(BucketConfig),
+    Amount(u64),
+}
 
 impl<'de> Deserialize<'de> for RateLimitingConfigRule {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -51,12 +65,15 @@ impl<'de> Deserialize<'de> for RateLimitingConfigRule {
                     )));
                 }
 
-                // Extract the amount as usize
-                let amount = value.as_integer().ok_or_else(|| {
-                    serde::de::Error::custom(format!(
-                        "Rate limit value for '{key}' must be a positive integer",
-                    ))
-                })? as u64;
+                let value =
+                    CapacityHelper::deserialize(value.clone()).map_err(|_| {
+                        serde::de::Error::custom("Rate limit value must either be a nonnegative integer or { capacity = .., refill_rate = .. } where both are nonnegative integers")
+                    })?;
+
+                let (capacity, refill_rate) = match value {
+                    CapacityHelper::Amount(amount) => (amount, amount),
+                    CapacityHelper::Bucket(bucket) => (bucket.capacity, bucket.refill_rate),
+                };
 
                 let resource = parse_resource(parts[0]).map_err(serde::de::Error::custom)?;
 
@@ -69,8 +86,8 @@ impl<'de> Deserialize<'de> for RateLimitingConfigRule {
                     interval,
                     // We internally represent as a token bucket algorithm but for now
                     // we only take configuration that assumes the bucket is the size of one period
-                    capacity: amount,
-                    refill_rate: amount,
+                    capacity,
+                    refill_rate,
                 }));
 
                 // Track keys to remove
@@ -640,7 +657,8 @@ mod tests {
 
         if let Err(e) = result {
             let error_msg = e.to_string();
-            assert!(error_msg.contains("must be a positive integer"));
+            println!("{}", error_msg);
+            assert!(error_msg.contains("must either be a nonnegative integer"));
         }
     }
 
@@ -656,7 +674,8 @@ mod tests {
 
         if let Err(e) = result {
             let error_msg = e.to_string();
-            assert!(error_msg.contains("must be a positive integer"));
+            println!("{}", error_msg);
+            assert!(error_msg.contains("must either be a nonnegative integer"));
         }
     }
 
@@ -822,6 +841,123 @@ mod tests {
             [[rules]]
             Tokens_per_second = 10
         ";
+
+        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_bucket_format_simple() {
+        let toml_str = r#"
+            [[rules]]
+            tokens_per_minute = { capacity = 100, refill_rate = 50 }
+            priority = 1
+        "#;
+
+        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.rules().len(), 1);
+        assert_eq!(config.rules()[0].limits.len(), 1);
+
+        let limit = &config.rules()[0].limits[0];
+        assert_eq!(limit.capacity, 100);
+        assert_eq!(limit.refill_rate, 50);
+        assert!(matches!(limit.resource, RateLimitResource::Token));
+        assert!(matches!(limit.interval, RateLimitInterval::Minute));
+    }
+
+    #[test]
+    fn test_bucket_format_mixed_with_simple() {
+        let toml_str = r#"
+            [[rules]]
+            tokens_per_minute = { capacity = 100, refill_rate = 50 }
+            model_inferences_per_second = 10
+            priority = 1
+        "#;
+
+        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.rules().len(), 1);
+        assert_eq!(config.rules()[0].limits.len(), 2);
+
+        // Check bucket format limit
+        let bucket_limit = config.rules()[0]
+            .limits
+            .iter()
+            .find(|l| matches!(l.resource, RateLimitResource::Token))
+            .unwrap();
+        assert_eq!(bucket_limit.capacity, 100);
+        assert_eq!(bucket_limit.refill_rate, 50);
+
+        // Check simple format limit
+        let simple_limit = config.rules()[0]
+            .limits
+            .iter()
+            .find(|l| matches!(l.resource, RateLimitResource::ModelInference))
+            .unwrap();
+        assert_eq!(simple_limit.capacity, 10);
+        assert_eq!(simple_limit.refill_rate, 10);
+    }
+
+    #[test]
+    fn test_bucket_format_multiple_resources() {
+        let toml_str = r#"
+            [[rules]]
+            tokens_per_minute = { capacity = 100, refill_rate = 50 }
+            model_inferences_per_hour = { capacity = 1000, refill_rate = 200 }
+            priority = 1
+        "#;
+
+        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.rules().len(), 1);
+        assert_eq!(config.rules()[0].limits.len(), 2);
+
+        let token_limit = config.rules()[0]
+            .limits
+            .iter()
+            .find(|l| matches!(l.resource, RateLimitResource::Token))
+            .unwrap();
+        assert_eq!(token_limit.capacity, 100);
+        assert_eq!(token_limit.refill_rate, 50);
+
+        let inference_limit = config.rules()[0]
+            .limits
+            .iter()
+            .find(|l| matches!(l.resource, RateLimitResource::ModelInference))
+            .unwrap();
+        assert_eq!(inference_limit.capacity, 1000);
+        assert_eq!(inference_limit.refill_rate, 200);
+    }
+
+    #[test]
+    fn test_bucket_format_invalid_missing_capacity() {
+        let toml_str = r#"
+            [[rules]]
+            tokens_per_minute = { refill_rate = 50 }
+            priority = 1
+        "#;
+
+        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_bucket_format_invalid_missing_refill_rate() {
+        let toml_str = r#"
+            [[rules]]
+            tokens_per_minute = { capacity = 100 }
+            priority = 1
+        "#;
+
+        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_bucket_format_invalid_extra_fields() {
+        let toml_str = r#"
+            [[rules]]
+            tokens_per_minute = { capacity = 100, refill_rate = 50, extra_field = 123 }
+            priority = 1
+        "#;
 
         let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
