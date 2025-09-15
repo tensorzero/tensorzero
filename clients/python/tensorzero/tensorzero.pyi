@@ -145,7 +145,7 @@ class OptimizationJobInfo:
     def estimated_finish(self) -> Optional[int]: ...
 
 @final
-class DiclOptimizationConfig:
+class DICLOptimizationConfig:
     def __init__(
         self,
         *,
@@ -157,6 +157,7 @@ class DiclOptimizationConfig:
         max_concurrency: Optional[int] = None,
         k: Optional[int] = None,
         model: Optional[str] = None,
+        append_to_existing_variants: Optional[bool] = None,
         credentials: Optional[str] = None,
     ) -> None: ...
 
@@ -318,8 +319,8 @@ class BestOfNSamplingConfig:
     pass
 
 @final
-class DiclConfig:
-    pass
+class DICLConfig:
+    __deprecated__: str = ...
 
 @final
 class MixtureOfNConfig:
@@ -337,7 +338,7 @@ class VariantsConfig:
     ) -> Union[
         ChatCompletionConfig,
         BestOfNSamplingConfig,
-        DiclConfig,
+        DICLConfig,
         MixtureOfNConfig,
         ChainOfThoughtConfig,
     ]: ...
@@ -1086,8 +1087,8 @@ __all__ = [
     "ChainOfThoughtConfig",
     "Config",
     "Datapoint",
-    "DiclOptimizationConfig",
-    "DiclConfig",
+    "DICLOptimizationConfig",
+    "DICLConfig",
     "FunctionConfigChat",
     "FunctionConfigJson",
     "FunctionsConfig",

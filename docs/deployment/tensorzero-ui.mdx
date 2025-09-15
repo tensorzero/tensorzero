@@ -1,24 +1,29 @@
 ---
-title: TensorZero UI Deployment Guide
-sidebarTitle: Deployment Guide
-description: Learn more about deploying the TensorZero UI.
+title: Deploy the TensorZero UI
+description: Learn how to deploy and customize the TensorZero UI.
 ---
 
 The TensorZero UI is a self-hosted web application that streamlines the use of TensorZero with features like observability and optimization.
 It's easy to get started with the TensorZero UI.
 
-<Tip>
+## Deploy
 
-See the [TensorZero Gateway Deployment Guide](/gateway/deployment/) for more details on how to deploy the gateway and ClickHouse database.
+<Steps>
 
-</Tip>
+<Step title="Configure the TensorZero Gateway">
 
-## Setup
+[Deploy the TensorZero Gateway](/deployment/tensorzero-gateway/) and configure `TENSORZERO_GATEWAY_URL`.
 
-To use the TensorZero UI, you only need your ClickHouse database URL (`TENSORZERO_CLICKHOUSE_URL`) and TensorZero Gateway URL (`TENSORZERO_GATEWAY_URL`).
-Optionally, you can also provide credentials for fine-tuning APIs.
+For example, if the gateway is running locally, you can set `TENSORZERO_GATEWAY_URL=http://localhost:3000`.
 
-### Credentials for Fine-tuning
+</Step>
+
+<Step title="Configure ClickHouse">
+
+[Deploy ClickHouse](/deployment/tensorzero-gateway/) and configure `TENSORZERO_CLICKHOUSE_URL`.
+
+</Step>
+<Step title="Configure model provider credentials">
 
 The TensorZero UI integrates with model providers like OpenAI to streamline workflows like fine-tuning.
 To use these features, you need to provide credentials for the relevant model providers as environment variables.
@@ -29,27 +34,19 @@ The supported fine-tuning providers and their required credentials (environment 
 | Provider     | Required Credentials                       |
 | ------------ | ------------------------------------------ |
 | Fireworks AI | `FIREWORKS_ACCOUNT_ID` `FIREWORKS_API_KEY` |
+| GCP Vertex   | GCP account credentials                    |
 | OpenAI       | `OPENAI_API_KEY`                           |
 | Together AI  | `TOGETHER_API_KEY`                         |
-| GCP Vertex   | GCP account credentials                    |
 
-We're planning to add support for more fine-tuning providers in the near future.
+</Step>
 
-### Optional Environment Variables
-
-The TensorZero UI supports the following optional environment variables.
-
-You can set `TENSORZERO_UI_CONFIG_PATH` to a custom path to the TensorZero configuration file.
-When using the official Docker image, this value defaults to `/app/config/tensorzero.toml`.
-
-For certain uncommon scenarios (e.g. IPv6), you can also customize `HOST` inside the UI container.
-See the Vite documentation for more details.
-
-## Deployment
+<Step title="Deploy the TensorZero UI">
 
 The TensorZero UI is available on Docker Hub as `tensorzero/ui`.
 
-<Accordion title="Running with Docker Compose (Recommended)" defaultOpen="true">
+<AccordionGroup>
+
+<Accordion title="Running with Docker Compose">
 
 You can easily run the TensorZero UI using Docker Compose:
 
@@ -75,7 +72,7 @@ For more details, see the example `docker-compose.yml` file in the [GitHub repos
 
 </Accordion>
 
-<Accordion title="Running with Docker (Recommended)" defaultOpen="true">
+<Accordion title="Running with Docker">
 
 Alternatively, you can launch the UI directly with the following command:
 
@@ -104,3 +101,26 @@ Alternatively, you can build the UI from source.
 See our [GitHub repository](https://github.com/tensorzero/tensorzero/blob/main/ui/) for more details.
 
 </Accordion>
+
+</AccordionGroup>
+
+</Step>
+
+</Steps>
+
+## Configure
+
+### Add a health check
+
+The TensorZero UI exposes an endpoint for health checks.
+This `/health` endpoint checks that the UI is running, the associated configuration is valid, and the ClickHouse connection is healthy.
+
+### Customize the deployment
+
+The TensorZero UI supports the following optional environment variables.
+
+You can set `TENSORZERO_UI_CONFIG_PATH` to a custom path to the TensorZero configuration file.
+When using the official Docker image, this value defaults to `/app/config/tensorzero.toml`.
+
+For certain uncommon scenarios (e.g. IPv6), you can also customize `HOST` inside the UI container.
+See the Vite documentation for more details.
