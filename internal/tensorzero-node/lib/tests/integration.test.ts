@@ -40,6 +40,7 @@ async function buildClient() {
     UI_FIXTURES_CONFIG_PATH,
     undefined,
     undefined,
+    undefined,
   );
 }
 
