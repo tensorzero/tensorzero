@@ -3935,7 +3935,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
                     "content": [{"type": "text", "arguments": {"country": "Japan"}}]
                 }
             ]}],
-        "tags": [{"test_type": "json_mode"}]
+        "tags": [{"test_type": "json_mode_v2"}]
     });
 
     let response = Client::new()
@@ -4095,7 +4095,7 @@ pub async fn test_poll_existing_json_mode_batch_inference_request_with_provider(
         "pending",
         Some(HashMap::from([(
             "test_type".to_string(),
-            "json_mode".to_string(),
+            "json_mode_v2".to_string(),
         )])),
     )
     .await;
@@ -4179,7 +4179,7 @@ pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider
         &provider.variant_name,
         Some(HashMap::from([(
             "test_type".to_string(),
-            "json_mode".to_string(),
+            "json_mode"_v2.to_string(),
         )])),
     )
     .await;
