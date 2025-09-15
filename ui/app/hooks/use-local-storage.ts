@@ -6,10 +6,19 @@ import {
   type SetStateAction,
 } from "react";
 
-type Value = string | null | undefined;
+type Value = string | boolean | object | null | undefined;
 
 function dispatchStorageEvent(key: string, newValue: Value) {
-  window.dispatchEvent(new StorageEvent("storage", { key, newValue }));
+  const _newValue =
+    newValue !== null && newValue !== undefined
+      ? JSON.stringify(newValue)
+      : newValue;
+  window.dispatchEvent(
+    new StorageEvent("storage", {
+      key,
+      newValue: _newValue,
+    }),
+  );
 }
 
 const setLocalStorageItem = (key: string, value: Value) => {
@@ -42,17 +51,16 @@ export function useLocalStorage<T extends Value>(
 ): [T, React.Dispatch<React.SetStateAction<T>>] {
   const getSnapshot = () => getLocalStorageItem(key);
 
-  const store =
-    useSyncExternalStore(
-      useLocalStorageSubscribe,
-      getSnapshot,
-      getLocalStorageServerSnapshot,
-    ) ?? "";
+  const store = useSyncExternalStore(
+    useLocalStorageSubscribe,
+    getSnapshot,
+    getLocalStorageServerSnapshot,
+  );
 
   const setState = useCallback<Dispatch<SetStateAction<T>>>(
     (v) => {
       try {
-        const nextState = typeof v === "function" ? v(JSON.parse(store)) : v;
+        const nextState = typeof v === "function" ? v(JSON.parse(store!)) : v;
 
         if (nextState === undefined || nextState === null) {
           removeLocalStorageItem(key);

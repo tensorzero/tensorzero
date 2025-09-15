@@ -154,13 +154,12 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     autoDetectLanguage ? detectLanguage(value) : allowedLanguages[0],
   );
 
-  const [_wordWrap, setWordWrap] = useLocalStorage(
+  const [wordWrap, setWordWrap] = useLocalStorage(
     "word-wrap",
-    DEFAULT_WORD_WRAP_LANGUAGES.includes(language).toString(),
+    DEFAULT_WORD_WRAP_LANGUAGES.includes(language),
   );
-  const wordWrap = JSON.parse(_wordWrap);
   const toggleWordWrap = useCallback(() => {
-    setWordWrap((wrap) => (!JSON.parse(wrap)).toString());
+    setWordWrap((wrap) => !wrap);
   }, [setWordWrap]);
   const { copy, didCopy, isCopyAvailable } = useCopy();
   const [mounted, setMounted] = useState(false);
