@@ -4179,7 +4179,7 @@ pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider
         &provider.variant_name,
         Some(HashMap::from([(
             "test_type".to_string(),
-            "json_mode"_v2.to_string(),
+            "json_mode_v2".to_string(),
         )])),
     )
     .await;
