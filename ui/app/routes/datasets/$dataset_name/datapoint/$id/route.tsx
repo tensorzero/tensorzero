@@ -174,6 +174,14 @@ export async function action({ request }: ActionFunctionArgs) {
         };
       }
     }
+
+    return data(
+      {
+        success: false,
+        error: "Invalid action specified",
+      },
+      { status: 400 },
+    );
   } catch (error) {
     logger.error("Error processing datapoint action:", error);
     const errorMessage = error instanceof Error ? error.message : String(error);

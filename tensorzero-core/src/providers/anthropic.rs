@@ -2,7 +2,7 @@ use futures::StreamExt;
 use lazy_static::lazy_static;
 use mime::MediaType;
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource};
+use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -15,6 +15,7 @@ use url::Url;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::resolved_input::FileWithPath;
@@ -146,7 +147,7 @@ impl InferenceProvider for AnthropicProvider {
             provider_name: _,
             model_name: tensorzero_model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -241,7 +242,7 @@ impl InferenceProvider for AnthropicProvider {
             provider_name: _,
             model_name,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         api_key: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -288,7 +289,7 @@ impl InferenceProvider for AnthropicProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
+        _client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -300,7 +301,7 @@ impl InferenceProvider for AnthropicProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -314,7 +315,7 @@ impl InferenceProvider for AnthropicProvider {
 /// Modified from the example [here](https://github.com/64bit/async-openai/blob/5c9c817b095e3bacb2b6c9804864cdf8b15c795e/async-openai/src/client.rs#L433)
 /// At a high level, this function is handling low-level EventSource details and mapping the objects returned by Anthropic into our `InferenceResultChunk` type
 fn stream_anthropic(
-    mut event_source: EventSource,
+    mut event_source: TensorZeroEventSource,
     start_time: Instant,
     model_provider: &ModelProvider,
 ) -> ProviderInferenceResponseStreamInner {
@@ -1563,9 +1564,10 @@ mod tests {
             ..Default::default()
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
-        let details = anthropic_request_body.unwrap_err().get_owned_details();
+        let error = anthropic_request_body.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "Anthropic requires at least one message".to_string(),
             }
@@ -2085,9 +2087,10 @@ mod tests {
             "raw request".to_string(),
             "raw response".to_string(),
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceClient {
                 message: "raw response".to_string(),
                 status_code: Some(response_code),
@@ -2102,9 +2105,10 @@ mod tests {
             "raw request".to_string(),
             "raw response".to_string(),
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceClient {
                 message: "raw response".to_string(),
                 status_code: Some(response_code),
@@ -2119,9 +2123,10 @@ mod tests {
             "raw request".to_string(),
             "raw response".to_string(),
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceClient {
                 message: "raw response".to_string(),
                 status_code: Some(response_code),
@@ -2136,9 +2141,10 @@ mod tests {
             "raw request".to_string(),
             "raw response".to_string(),
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: "raw response".to_string(),
                 raw_request: Some("raw request".to_string()),
@@ -2152,9 +2158,10 @@ mod tests {
             "raw request".to_string(),
             "raw response".to_string(),
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: "raw response".to_string(),
                 raw_request: Some("raw request".to_string()),
@@ -2463,9 +2470,10 @@ mod tests {
             &mut current_tool_name,
             false,
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
                 raw_request: None,
@@ -2594,9 +2602,10 @@ mod tests {
             &mut current_tool_name,
             false,
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: r#"{"message":"Test error"}"#.to_string(),
                 raw_request: None,
@@ -2907,7 +2916,7 @@ mod tests {
         let result = AnthropicCredentials::try_from(generic);
         assert!(result.is_err());
         assert!(matches!(
-            result.unwrap_err().get_owned_details(),
+            result.unwrap_err().get_details(),
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }

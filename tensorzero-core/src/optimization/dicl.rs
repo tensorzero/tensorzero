@@ -13,6 +13,7 @@ use crate::{
     endpoints::inference::{InferenceClients, InferenceCredentials},
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     function::FunctionConfig,
+    http::TensorzeroHttpClient,
     model::{build_creds_caching_default, CredentialLocation},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput},
     providers::openai::{
@@ -22,7 +23,7 @@ use crate::{
     variant::{dicl::UninitializedDiclConfig, RetryConfig},
 };
 use futures::future::try_join_all;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
@@ -215,7 +216,7 @@ impl Optimizer for DiclOptimizationConfig {
 
     async fn launch(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
@@ -254,16 +255,17 @@ impl Optimizer for DiclOptimizationConfig {
         // 2. Check that the function does not have tools configured (DICL doesn't support tools)
         validate_function_config(&self.function_name, function_config)?;
 
-        // 3. Check that the variant name is not already in the function variants
-        let variants = match &**function_config {
-            FunctionConfig::Chat(chat_config) => &chat_config.variants,
-            FunctionConfig::Json(json_config) => &json_config.variants,
-        };
-
-        if variants.contains_key(&self.variant_name) {
+        // 3. Check if DICL examples already exist in the database for this variant
+        if dicl_examples_exist(
+            clickhouse_connection_info,
+            &self.function_name,
+            &self.variant_name,
+        )
+        .await?
+        {
             return Err(Error::new(ErrorDetails::Config {
                 message: format!(
-                    "variant '{}' already exists in function '{}' - DICL optimization cannot overwrite existing variants",
+                    "variant '{}' already has DICL examples in the database for function '{}' - DICL optimization cannot overwrite existing variants",
                     self.variant_name, self.function_name
                 ),
             }));
@@ -369,7 +371,7 @@ impl Optimizer for DiclOptimizationConfig {
 impl JobHandle for DiclOptimizationJobHandle {
     async fn poll(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
         // DICL optimization is synchronous, so it's always complete once launched
@@ -503,7 +505,7 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
 async fn process_embedding_batch(
     embedding_model_config: &EmbeddingModelConfig,
     model_name: &str,
-    client: &reqwest::Client,
+    client: &TensorzeroHttpClient,
     credentials: &InferenceCredentials,
     batch_texts: Vec<String>,
     batch_index: usize,
@@ -550,7 +552,7 @@ async fn process_embedding_batch(
 async fn process_embeddings_with_batching(
     embedding_model_config: &EmbeddingModelConfig,
     model_name: &str,
-    client: &reqwest::Client,
+    client: &TensorzeroHttpClient,
     credentials: &InferenceCredentials,
     input_texts: Vec<String>,
     batch_size: usize,
@@ -740,6 +742,33 @@ pub async fn insert_dicl_examples_with_batching(
     Ok(())
 }
 
+/// Checks if DICL examples exist in ClickHouse for a given function and variant
+pub async fn dicl_examples_exist(
+    clickhouse: &ClickHouseConnectionInfo,
+    function_name: &str,
+    variant_name: &str,
+) -> Result<bool, Error> {
+    let query = r"
+        SELECT 1
+        FROM DynamicInContextLearningExample
+        WHERE function_name = {function_name:String}
+        AND variant_name = {variant_name:String}
+        LIMIT 1
+    ";
+
+    let params = HashMap::from([
+        ("function_name", function_name),
+        ("variant_name", variant_name),
+    ]);
+
+    let result = clickhouse
+        .run_query_synchronous(query.to_string(), &params)
+        .await?;
+
+    // If the query returns "1", examples exist; if empty, they don't
+    Ok(result.response.trim() == "1")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -793,7 +822,7 @@ mod tests {
     async fn test_process_embedding_batch_success() {
         let embedding_model = create_test_embedding_model();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["hello".to_string(), "world".to_string()];
 
@@ -820,7 +849,7 @@ mod tests {
     async fn test_process_embedding_batch_with_dimensions() {
         let embedding_model = create_test_embedding_model();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["hello".to_string()];
         let dimensions = Some(512);
@@ -846,7 +875,7 @@ mod tests {
     async fn test_process_embedding_batch_failure() {
         let embedding_model = create_test_embedding_model_with_failure();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["test".to_string()];
 
@@ -868,7 +897,7 @@ mod tests {
     async fn test_process_embeddings_with_batching_success() {
         let embedding_model = create_test_embedding_model();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let input_texts = vec![
             "text1".to_string(),
@@ -901,7 +930,7 @@ mod tests {
     async fn test_process_embeddings_with_batching_respects_concurrency() {
         let embedding_model = create_test_embedding_model();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let input_texts = vec!["1".to_string(), "2".to_string(), "3".to_string()];
 
