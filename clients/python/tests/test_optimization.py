@@ -4,7 +4,7 @@ from typing import List
 import pytest
 from tensorzero import (
     AsyncTensorZeroGateway,
-    DiclOptimizationConfig,
+    DICLOptimizationConfig,
     FireworksSFTConfig,
     OpenAIRFTConfig,
     OpenAISFTConfig,
@@ -75,15 +75,16 @@ def test_sync_dicl_chat(
     embedded_sync_client: TensorZeroGateway,
     chat_function_rendered_samples: List[RenderedSample],
 ):
-    optimization_config = DiclOptimizationConfig(
+    optimization_config = DICLOptimizationConfig(
         embedding_model="text-embedding-3-small",
-        variant_name=f"test_dicl_{uuid7()}",
+        variant_name="test_dicl_chat",
         function_name="basic_test",
         dimensions=None,
         batch_size=None,
         max_concurrency=None,
         k=None,
         model=None,
+        append_to_existing_variants=True,
         credentials=None,
     )
     optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
@@ -104,7 +105,7 @@ def test_sync_dicl_json(
     embedded_sync_client: TensorZeroGateway,
     json_function_rendered_samples: List[RenderedSample],
 ):
-    optimization_config = DiclOptimizationConfig(
+    optimization_config = DICLOptimizationConfig(
         embedding_model="text-embedding-3-small",
         variant_name=f"test_dicl_json_{uuid7()}",
         function_name="json_success",
@@ -262,15 +263,16 @@ async def test_async_dicl_chat(
     embedded_async_client: AsyncTensorZeroGateway,
     chat_function_rendered_samples: List[RenderedSample],
 ):
-    optimization_config = DiclOptimizationConfig(
+    optimization_config = DICLOptimizationConfig(
         embedding_model="text-embedding-3-small",
-        variant_name=f"test_dicl_{uuid7()}",
+        variant_name="test_dicl_chat",
         function_name="basic_test",
         dimensions=None,
         batch_size=None,
         max_concurrency=None,
         k=None,
         model=None,
+        append_to_existing_variants=True,
         credentials=None,
     )
     optimization_job_handle = (
@@ -294,7 +296,7 @@ async def test_async_dicl_json(
     embedded_async_client: AsyncTensorZeroGateway,
     json_function_rendered_samples: List[RenderedSample],
 ):
-    optimization_config = DiclOptimizationConfig(
+    optimization_config = DICLOptimizationConfig(
         embedding_model="text-embedding-3-small",
         variant_name=f"test_dicl_json_{uuid7()}",
         function_name="json_success",

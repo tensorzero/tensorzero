@@ -1,7 +1,9 @@
 import typing as t
+import warnings
 from importlib.metadata import version
 
 import httpx
+from typing_extensions import Any, deprecated
 
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import (
@@ -10,8 +12,8 @@ from .tensorzero import (
     ChatCompletionConfig,
     Config,
     Datapoint,
-    DiclConfig,
-    DiclOptimizationConfig,
+    DICLConfig,
+    DICLOptimizationConfig,
     FireworksSFTConfig,
     FunctionConfigChat,
     FunctionConfigJson,
@@ -93,11 +95,27 @@ RenderedStoredInference = RenderedSample
 ChatDatapoint = Datapoint.Chat
 JsonDatapoint = Datapoint.Json
 
+
+# CAREFUL: deprecated
+class DiclOptimizationConfig:
+    def __new__(cls, *args: Any, **kwargs: Any):
+        warnings.warn(
+            "Please use `DICLOptimizationConfig` instead of `DiclOptimizationConfig`. In a future release, `DiclOptimizationConfig` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return DICLOptimizationConfig(*args, **kwargs)
+
+
+# CAREFUL: deprecated alias
+DiclConfig = deprecated("Use DICLConfig instead")(DICLConfig)
+
+
 OptimizationConfig = t.Union[
     OpenAISFTConfig,
     FireworksSFTConfig,
     TogetherSFTConfig,
-    DiclOptimizationConfig,
+    DICLOptimizationConfig,
     OpenAIRFTConfig,
 ]
 ChatInferenceOutput = t.List[ContentBlock]
@@ -118,7 +136,8 @@ __all__ = [
     "Config",
     "ContentBlock",
     "Datapoint",
-    "DiclOptimizationConfig",
+    "DiclOptimizationConfig",  # DEPRECATED
+    "DICLOptimizationConfig",
     "DynamicEvaluationRunEpisodeResponse",
     "DynamicEvaluationRunResponse",
     "ExtraBody",
@@ -134,7 +153,8 @@ __all__ = [
     "VariantsConfig",
     "ChatCompletionConfig",
     "BestOfNSamplingConfig",
-    "DiclConfig",
+    "DiclConfig",  # DEPRECATED
+    "DICLConfig",
     "MixtureOfNConfig",
     "ChainOfThoughtConfig",
     "ImageBase64",
