@@ -77,13 +77,14 @@ def test_sync_dicl_chat(
 ):
     optimization_config = DICLOptimizationConfig(
         embedding_model="text-embedding-3-small",
-        variant_name=f"test_dicl_{uuid7()}",
+        variant_name="test_dicl_chat",
         function_name="basic_test",
         dimensions=None,
         batch_size=None,
         max_concurrency=None,
         k=None,
         model=None,
+        append_to_existing_variants=True,
         credentials=None,
     )
     optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
@@ -264,13 +265,14 @@ async def test_async_dicl_chat(
 ):
     optimization_config = DICLOptimizationConfig(
         embedding_model="text-embedding-3-small",
-        variant_name=f"test_dicl_{uuid7()}",
+        variant_name="test_dicl_chat",
         function_name="basic_test",
         dimensions=None,
         batch_size=None,
         max_concurrency=None,
         k=None,
         model=None,
+        append_to_existing_variants=True,
         credentials=None,
     )
     optimization_job_handle = (
