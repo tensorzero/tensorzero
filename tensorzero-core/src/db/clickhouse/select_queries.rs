@@ -160,9 +160,24 @@ impl SelectQueries for ClickHouseConnectionInfo {
             ),
             (None, None) => ("1=1", vec![], false),
         };
+        // This is a Bad Hack to account for ClickHouse's Bad Query Planning
+        // Clickhouse will not optimize queries with either GROUP BY or FINAL
+        // when reading the primary key with a LIMIT
+        // https://clickhouse.com/docs/sql-reference/statements/select/order-by#optimization-of-data-reading
+        // So, we select the last page_size_overestimate episodes in descending order
+        // Then we group by episode_id_uint and count the number of inferences
+        // Finally, we order by episode_id_uint correctly and limit the result to page_size
+        let page_size_overestimate = 5 * page_size;
+
         let query = if is_after {
             format!(
-                r"
+                r"WITH potentially_duplicated_episode_ids AS (
+                    SELECT episode_id_uint
+                    FROM EpisodeById
+                    WHERE {where_clause}
+                    ORDER BY episode_id_uint ASC
+                    LIMIT {page_size_overestimate}
+                )
                 SELECT
                     episode_id,
                     count,
@@ -172,30 +187,40 @@ impl SelectQueries for ClickHouseConnectionInfo {
                 FROM (
                     SELECT
                         uint_to_uuid(episode_id_uint) as episode_id,
-                        (count) as count,
-                        formatDateTime(UUIDv7ToDateTime(uint_to_uuid((min_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
-                        formatDateTime(UUIDv7ToDateTime(uint_to_uuid((max_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
-                        uint_to_uuid((max_inference_id_uint)) as last_inference_id,
+                        count() as count,
+                        formatDateTime(UUIDv7ToDateTime(uint_to_uuid(min(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+                        formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
+                        uint_to_uuid(max(id_uint)) as last_inference_id,
                         episode_id_uint
-                    FROM EpisodeById FINAL
-                    WHERE {where_clause}
+                    FROM InferenceByEpisodeId
+                    WHERE episode_id_uint IN (SELECT episode_id_uint FROM potentially_duplicated_episode_ids)
+                    GROUP BY episode_id_uint
                     ORDER BY episode_id_uint ASC
                     LIMIT {page_size}
                 )
                 ORDER BY episode_id_uint DESC
-                FORMAT JSONEachRow"
+                FORMAT JSONEachRow
+                "
             )
         } else {
             format!(
                 r"
+                WITH potentially_duplicated_episode_ids AS (
+                    SELECT episode_id_uint
+                    FROM EpisodeById
+                    WHERE {where_clause}
+                    ORDER BY episode_id_uint DESC
+                    LIMIT {page_size_overestimate}
+                )
                 SELECT
                     uint_to_uuid(episode_id_uint) as episode_id,
-                    (count) as count,
-                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid((min_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
-                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid((max_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
-                    uint_to_uuid((max_inference_id_uint)) as last_inference_id
-                FROM EpisodeById FINAL
-                WHERE {where_clause}
+                    count() as count,
+                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(min(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
+                    uint_to_uuid(max(id_uint)) as last_inference_id
+                FROM InferenceByEpisodeId
+                WHERE episode_id_uint IN (SELECT episode_id_uint FROM potentially_duplicated_episode_ids)
+                GROUP BY episode_id_uint
                 ORDER BY episode_id_uint DESC
                 LIMIT {page_size}
                 FORMAT JSONEachRow
