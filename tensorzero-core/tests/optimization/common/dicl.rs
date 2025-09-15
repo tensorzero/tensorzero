@@ -72,7 +72,7 @@ pub async fn test_dicl_optimization_chat() {
     } else {
         "text-embedding-3-small".to_string()
     };
-    let variant_name = "test_dicl_chat".to_string();
+    let variant_name = format!("test_dicl_chat_{}", Uuid::now_v7());
     let function_name = "basic_test".to_string();
     let model = "openai::gpt-4o-mini-2024-07-18".to_string();
     let k = 3;
@@ -338,7 +338,7 @@ pub async fn test_dicl_optimization_json() {
     } else {
         "text-embedding-3-small".to_string()
     };
-    let variant_name = "test_dicl_json".to_string();
+    let variant_name = format!("test_dicl_json_{}", Uuid::now_v7());
     let function_name = "basic_test".to_string();
     let model = "openai::gpt-4o-mini-2024-07-18".to_string();
     let k = 3;
@@ -1047,7 +1047,7 @@ pub async fn run_dicl_workflow_with_client(client: &tensorzero::Client) {
         optimizer_config: UninitializedOptimizerInfo {
             inner: UninitializedOptimizerConfig::Dicl(UninitializedDiclOptimizationConfig {
                 embedding_model: "dummy-embedding-model".to_string(),
-                variant_name: "test_dicl_workflow".to_string(),
+                variant_name: format!("test_dicl_workflow_{}", Uuid::now_v7()),
                 function_name: "basic_test".to_string(),
                 ..Default::default()
             }),
