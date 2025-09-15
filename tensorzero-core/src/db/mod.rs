@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 pub mod clickhouse;
+pub mod postgres;
 
 #[async_trait]
 pub trait DatabaseConnection: SelectQueries + HealthCheckable + Send + Sync {}
