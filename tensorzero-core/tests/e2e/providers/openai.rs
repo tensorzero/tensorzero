@@ -10,13 +10,14 @@ use tensorzero_core::config::ProviderTypesConfig;
 use tensorzero_core::config::TimeoutsConfig;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::embeddings::{
-    Embedding, EmbeddingEncodingFormat, EmbeddingModelConfig, EmbeddingProvider,
-    EmbeddingProviderConfig, EmbeddingRequest, UninitializedEmbeddingProviderConfig,
+    Embedding, EmbeddingEncodingFormat, EmbeddingModelConfig, EmbeddingProviderConfig,
+    EmbeddingRequest, UninitializedEmbeddingProviderConfig,
 };
 use tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams;
 use tensorzero_core::endpoints::inference::{InferenceClients, InferenceCredentials};
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::{Latency, ModelInferenceRequestJsonMode, TextKind};
+use tensorzero_core::rate_limiting::ScopeInfo;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -1236,6 +1237,7 @@ async fn test_embedding_request() {
 
 #[tokio::test]
 async fn test_embedding_sanity_check() {
+    let clickhouse = get_clickhouse().await;
     let provider_config_serialized = r#"
     type = "openai"
     model_name = "text-embedding-3-small"
@@ -1275,12 +1277,27 @@ async fn test_embedding_sanity_check() {
     };
     let request_info = (&provider_config).into();
     let api_keys = InferenceCredentials::default();
+    let clients = InferenceClients {
+        http_client: &client,
+        clickhouse_connection_info: &clickhouse,
+        postgres_connection_info: &PostgresConnectionInfo::Disabled,
+        credentials: &api_keys,
+        cache_options: &CacheOptions {
+            max_age_s: None,
+            enabled: CacheEnabledMode::On,
+        },
+        tags: &Default::default(),
+        rate_limiting_config: &Default::default(),
+    };
+    let scope_info = ScopeInfo {
+        tags: &HashMap::new(),
+    };
 
     // Compute all 3 embeddings concurrently
     let (response_a, response_b, response_c) = tokio::join!(
-        provider_config.embed(&embedding_request_a, &client, &api_keys, &request_info),
-        provider_config.embed(&embedding_request_b, &client, &api_keys, &request_info),
-        provider_config.embed(&embedding_request_c, &client, &api_keys, &request_info)
+        provider_config.embed(&embedding_request_a, &clients, &scope_info, &request_info),
+        provider_config.embed(&embedding_request_b, &clients, &scope_info, &request_info),
+        provider_config.embed(&embedding_request_c, &clients, &scope_info, &request_info)
     );
 
     // Unwrap the results
