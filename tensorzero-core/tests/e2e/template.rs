@@ -101,6 +101,8 @@ async fn e2e_test_template_no_schema() {
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
     let clickhouse = get_clickhouse().await;
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
