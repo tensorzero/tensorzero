@@ -63,7 +63,7 @@ test.describe("Dataset Deletion", () => {
     await expect(page.getByText("Delete Datapoint")).toBeVisible();
     await expect(
       page.getByText(
-        "Are you sure you want to delete this datapoint? This action cannot be undone.",
+        "The datapoint will be marked as stale in the database (soft deletion). This action cannot be undone.",
       ),
     ).toBeVisible();
 
