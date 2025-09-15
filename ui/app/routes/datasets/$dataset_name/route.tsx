@@ -21,7 +21,7 @@ import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.serv
 import { useFetcher } from "react-router";
 import { DeleteButton } from "~/components/utils/DeleteButton";
 import { staleDatapoint } from "~/utils/clickhouse/datasets.server";
-import { getConfig } from "~/utils/config/index.server";
+import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { dataset_name } = params;
@@ -77,7 +77,10 @@ export async function action({ request, params }: Route.ActionArgs) {
     }
 
     const config = await getConfig();
-    const functionConfig = config.functions[function_name as string];
+    const functionConfig = await getFunctionConfig(
+      function_name as string,
+      config,
+    );
     if (!functionConfig) {
       throw data("Function configuration not found", { status: 404 });
     }

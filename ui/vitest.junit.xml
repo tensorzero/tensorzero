@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="91" failures="0" errors="0" time="18.277078292">
+    <testsuite name="app/utils/supervised_fine_tuning/native.test.ts" timestamp="2025-09-15T14:41:47.403Z" hostname="Coles-MacBook-Pro.local" tests="1" failures="0" errors="0" skipped="0" time="2.068914416">
+        <testcase classname="app/utils/supervised_fine_tuning/native.test.ts" name="native sft &gt; should launch a job and poll it" time="2.06796">
+        </testcase>
+    </testsuite>
+    <testsuite name="app/utils/tensorzero.test.ts" timestamp="2025-09-15T14:41:47.403Z" hostname="Coles-MacBook-Pro.local" tests="2" failures="0" errors="0" skipped="0" time="0.063920084">
+        <testcase classname="app/utils/tensorzero.test.ts" name="update datapoints &gt; should preserve original source_inference_id and set is_custom when updating datapoint" time="0.055011083">
+        </testcase>
+        <testcase classname="app/utils/tensorzero.test.ts" name="update datapoints &gt; should list datapoints" time="0.00820425">
+        </testcase>
+    </testsuite>
+    <testsuite name="app/utils/clickhouse/evaluations.test.ts" timestamp="2025-09-15T14:41:47.404Z" hostname="Coles-MacBook-Pro.local" tests="22" failures="0" errors="0" skipped="0" time="0.829566542">
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="getEvaluationRunInfos &gt; should return correct run infos for specific evaluation run ids" time="0.027821084">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="getEvaluationRunInfos &gt; should return empty array when no matching run ids are found" time="0.009073458">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="getEvaluationRunInfos &gt; should handle a single run id correctly" time="0.00634075">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="searchEvaluationRuns &gt; should return matching run ids when searching by evaluation_run_id prefix" time="0.050665">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="searchEvaluationRuns &gt; should return matching run ids when searching by variant_name for models" time="0.040354042">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="searchEvaluationRuns &gt; should return matching run ids when searching by partial variant_name" time="0.007816375">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="searchEvaluationRuns &gt; should handle case-insensitive search" time="0.008134042">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="searchEvaluationRuns &gt; should return empty array when no matches found" time="0.060696167">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="getEvaluationResults &gt; should return correct results for haiku evaluation" time="0.106447709">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="getEvaluationResults &gt; should return correct results for entity_extraction evaluation that skips a staled datapoint" time="0.086542041">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="getEvaluationResults &gt; should return correct results for ragged haiku evaluation" time="0.053075916">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="getEvaluationStatistics &gt; should return correct statistics for haiku evaluation" time="0.032588708">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="getEvaluationStatistics &gt; should return correct statistics for entity_extraction evaluation" time="0.048469209">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="countDatapointsForEvaluation &gt; should return correct number of datapoints for haiku evaluation" time="0.009753666">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="countDatapointsForEvaluation &gt; should return correct number of datapoints for entity_extraction evaluation" time="0.007897666">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="countTotalEvaluationRuns &gt; should return correct number of evaluation runs" time="0.01996425">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="getEvaluationRunInfo &gt; should return correct evaluation run info" time="0.0651165">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="getEvaluationsForDatapoint &gt; should return empty array for nonexistent datapoint" time="0.018756625">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="getEvaluationsForDatapoint &gt; should return correct array for chat datapoint" time="0.068525875">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="getEvaluationsForDatapoint &gt; should return correct array for json datapoint" time="0.033871917">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="getEvaluationRunInfosForDatapoint &gt; should return correct evaluation run info for ragged json datapoint" time="0.046758834">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/evaluations.test.ts" name="getEvaluationRunInfosForDatapoint &gt; should return correct evaluation run info for ragged haiku datapoint" time="0.0195175">
+        </testcase>
+    </testsuite>
+    <testsuite name="app/utils/clickhouse/inference.test.ts" timestamp="2025-09-15T14:41:47.405Z" hostname="Coles-MacBook-Pro.local" tests="31" failures="0" errors="0" skipped="0" time="2.40122325">
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="countInferencesForFunction returns correct counts" time="0.022423291">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="countInferencesForVariant returns correct counts" time="0.015502458">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryInferenceTable" time="0.182815084">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryInferenceTable pagination samples front and near-end pages correctly" time="0.422972667">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryInferenceTable pages through results correctly using after with inference ID" time="0.089935583">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryInferenceTable after future timestamp is empty" time="0.004682167">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryInferenceTable before past timestamp is empty" time="0.004127541">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryInferenceTableByEpisodeId pages through initial and final pages correctly using before with episode_id" time="0.090644125">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryInferenceTableByEpisodeId pages through a sample of results correctly using after with episode_id" time="0.245171042">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryInferenceTableBounds" time="0.048797458">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryEpisodeTableBounds" time="0.060694833">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryInferenceTableBounds with episode_id" time="0.067765584">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryInferenceTableBounds with invalid episode_id" time="0.064903542">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryInferenceTableByFunctionName" time="0.225339166">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryInferenceTableBoundsByFunctionName" time="0.043488083">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryInferenceTableByVariantName" time="0.224697958">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryInferenceTableBoundsByVariantName" time="0.05870875">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryEpisodeTable" time="0.283543">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="countInferencesForEpisode" time="0.004587625">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="countInferencesForEpisode with invalid episode_id" time="0.003953875">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryInferenceById for chat inference" time="0.023379542">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryInferenceById for missing inference" time="0.009914791">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryInferenceById for json inference" time="0.010228708">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="countInferencesByFunction" time="0.016442041">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="queryModelInferencesByInferenceId" time="0.00838475">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="getAdjacentInferenceIds &gt; returns adjacent inference ids" time="0.02526575">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="getAdjacentInferenceIds &gt; returns null for previous inference id if current inference is first" time="0.028862625">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="getAdjacentInferenceIds &gt; returns null for next inference id if current inference is last" time="0.029797">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="getAdjacentEpisodeIds &gt; returns adjacent episode ids" time="0.024060792">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="getAdjacentEpisodeIds &gt; returns null for previous episode id if current episode is first" time="0.028706667">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/inference.test.ts" name="getAdjacentEpisodeIds &gt; returns null for next episode id if current episode is last" time="0.029455375">
+        </testcase>
+    </testsuite>
+    <testsuite name="app/utils/clickhouse/datasets.test.ts" timestamp="2025-09-15T14:41:47.408Z" hostname="Coles-MacBook-Pro.local" tests="35" failures="0" errors="0" skipped="0" time="12.913454">
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="countRowsForDataset &gt; returns the correct number of rows for a specific function" time="0.016433584">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="countRowsForDataset &gt; returns the correct number of rows for a specific variant" time="0.006470542">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="countRowsForDataset &gt; throws an error if function_name is not provided but variant_name is" time="0.000642125">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="countRowsForDataset &gt; returns the correct number of rows when filtering by a specific metric" time="0.013643208">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="countRowsForDataset &gt; returns correct count for boolean metrics at inference level" time="0.086897209">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="countRowsForDataset &gt; returns correct count for boolean metrics at episode level" time="0.031103041">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="countRowsForDataset &gt; returns correct count for float metrics at inference level" time="0.068792625">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="countRowsForDataset &gt; returns correct count for float metrics at episode level" time="0.086379125">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="countRowsForDataset &gt; returns correct count for demonstration metrics" time="0.046847459">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="countRowsForDataset &gt; returns correct count for rows with both metric filter and demonstration join" time="0.084999959">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="getDatasetCounts &gt; returns the correct counts for all datasets" time="0.009490667">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="getDatasetCounts &gt; returns the correct counts for a specific function" time="0.006814458">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="getNumberOfDatasets &gt; returns the correct number of datasets" time="0.025962792">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="getDatasetRows &gt; returns the correct rows for a specific dataset" time="0.018130208">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="getDatasetRows &gt; paging through the rows of foo" time="0.159102375">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="getDatasetRows &gt; paging through bar dataset" time="0.050083458">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="getDatapoint &gt; returns the correct datapoint for a specific dataset (json)" time="0.018844">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="getDatapoint &gt; returns the correct datapoint for a specific dataset (chat)" time="0.005445708">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="getDatapoint &gt; empty result" time="0.00509825">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="datapoint operations &gt; chat datapoint lifecycle - insert, get, delete" time="1.056602709">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="datapoint operations &gt; json datapoint lifecycle - insert, get, delete" time="1.032724375">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="datapoint operations &gt; handles non-existent datapoint retrieval" time="0.007246042">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="datapoint operations &gt; handles duplicate insertions gracefully" time="1.025774791">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="datapoint operations &gt; handles staling of non-existent datapoint" time="0.004468583">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="countDatapointsForDatasetFunction &gt; returns the correct count for a dataset and chat function" time="0.005838375">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="countDatapointsForDatasetFunction &gt; returns the correct count for a dataset and json function" time="0.005418709">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="countDatapointsForDatasetFunction &gt; returns 0 for a non-existent dataset and real function" time="0.006819291">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="countDatapointsForDatasetFunction &gt; returns 0 for a real dataset and non-existent function" time="0.000075708">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="insertRowsForDataset &gt; handles invalid dataset names" time="0.000290334">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="insertRowsForDataset &gt; correctly handles incremental insertions for json" time="0.073947208">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="insertRowsForDataset &gt; correctly handles incremental insertions for chat" time="7.876003917">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="insertDatapoint &gt; handles invalid dataset names" time="0.001099292">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="getAdjacentDatapointIds &gt; returns the correct adjacent datapoint ids" time="1.035614083">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="getAdjacentDatapointIds &gt; returns null for next_id if there is no next datapoint" time="0.018440375">
+        </testcase>
+        <testcase classname="app/utils/clickhouse/datasets.test.ts" name="getAdjacentDatapointIds &gt; returns null for previous_id if there is no previous datapoint" time="0.019107">
+        </testcase>
+    </testsuite>
+</testsuites>
