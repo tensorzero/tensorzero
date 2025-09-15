@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useCopy } from "~/hooks/use-copy";
+import { useLocalStorage } from "@uidotdev/usehooks";
 import CodeMirror from "@uiw/react-codemirror";
 import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
@@ -153,7 +154,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     autoDetectLanguage ? detectLanguage(value) : allowedLanguages[0],
   );
 
-  const [wordWrap, setWordWrap] = useState(
+  const [wordWrap, setWordWrap] = useLocalStorage(
+    "word-wrap",
     DEFAULT_WORD_WRAP_LANGUAGES.includes(language),
   );
   const { copy, didCopy, isCopyAvailable } = useCopy();
