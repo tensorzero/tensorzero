@@ -9,7 +9,7 @@ use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -549,6 +549,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                     tool_choice: ToolChoice::Auto,
                     parallel_tool_calls: None,
                     description: None,
+                    all_explicit_templates_names: HashSet::new(),
                 })),
                 DEFAULT_FUNCTION_NAME.to_string(),
             ))

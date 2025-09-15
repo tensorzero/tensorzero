@@ -879,7 +879,7 @@ fn validate_feedback_specific_tags(tags: &HashMap<String, String>) -> Result<(),
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
     use std::sync::Arc;
 
     use crate::config::{Config, MetricConfig, MetricConfigOptimize, SchemaData};
@@ -1295,6 +1295,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
                 description: None,
+                all_explicit_templates_names: HashSet::new(),
             })));
 
         // Case 1: a string passed to a chat function
@@ -1421,6 +1422,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(output_schema.clone()).unwrap(),
             implicit_tool_call_config,
             description: None,
+            all_template_names: HashSet::new(),
         })));
 
         // Case 5: a JSON function with correct output
