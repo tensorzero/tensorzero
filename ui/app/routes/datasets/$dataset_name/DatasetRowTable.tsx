@@ -29,11 +29,14 @@ import {
 export default function DatasetRowTable({
   rows,
   dataset_name,
+  fetcher,
 }: {
   rows: DatasetDetailRow[];
   dataset_name: string;
+  fetcher?: ReturnType<typeof useFetcher>;
 }) {
-  const fetcher = useFetcher();
+  const defaultFetcher = useFetcher();
+  const activeFetcher = fetcher || defaultFetcher;
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [datapointToDelete, setDatapointToDelete] =
     useState<DatasetDetailRow | null>(null);
@@ -135,7 +138,7 @@ export default function DatasetRowTable({
                     datapointToDelete.function_name,
                   );
                   formData.append("function_type", datapointToDelete.type);
-                  fetcher.submit(formData, { method: "post" });
+                  activeFetcher.submit(formData, { method: "post" });
                 }
                 setDeleteDialogOpen(false);
                 setDatapointToDelete(null);

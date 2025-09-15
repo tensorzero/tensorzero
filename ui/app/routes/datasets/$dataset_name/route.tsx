@@ -4,7 +4,7 @@ import {
 } from "~/utils/clickhouse/datasets.server";
 import type { Route } from "./+types/route";
 import DatasetRowTable from "./DatasetRowTable";
-import { data, isRouteErrorResponse } from "react-router";
+import { data, isRouteErrorResponse, redirect } from "react-router";
 import { useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import DatasetRowSearchBar from "./DatasetRowSearchBar";
@@ -18,7 +18,7 @@ import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
 import { logger } from "~/utils/logger";
 import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
-import { useFetcher } from "react-router";
+import { useFetcher, useRevalidator } from "react-router";
 import { DeleteButton } from "~/components/utils/DeleteButton";
 import { staleDatapoint } from "~/utils/clickhouse/datasets.server";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
@@ -61,8 +61,9 @@ export async function action({ request, params }: Route.ActionArgs) {
       throw data("Dataset name is required", { status: 400 });
     }
     const client = await getNativeTensorZeroClient();
-    const result = await client.staleDataset(dataset_name);
-    return result;
+    await client.staleDataset(dataset_name);
+    // Redirect to datasets list after successful deletion
+    return redirect("/datasets");
   }
 
   if (action === "delete_datapoint") {
@@ -105,6 +106,7 @@ export default function DatasetDetailPage({
   const { toast } = useToast();
   const fetcher = useFetcher();
   const navigate = useNavigate();
+  const revalidator = useRevalidator();
 
   // Use useEffect to show toast only after component mounts
   useEffect(() => {
@@ -127,19 +129,12 @@ export default function DatasetDetailPage({
           title: "Datapoint Deleted",
           description: "The datapoint has been deleted successfully.",
         });
-        // Reload the page to refresh the datapoints list
-        window.location.reload();
-      } else {
-        // Dataset deletion
-        toast({
-          title: "Dataset Deleted",
-          description: `Dataset "${count_info.dataset_name}" has been deleted successfully.`,
-        });
-        // Navigate back to datasets list
-        navigate("/datasets");
+        // Refresh the data to show updated datapoints list
+        revalidator.revalidate();
       }
+      // Note: Dataset deletion is now handled by server-side redirect
     }
-  }, [fetcher.data, fetcher.state, toast, count_info.dataset_name, navigate]);
+  }, [fetcher.data, fetcher.state, toast, revalidator]);
 
   const handleDelete = () => {
     const formData = new FormData();
@@ -174,7 +169,11 @@ export default function DatasetDetailPage({
 
       <SectionLayout>
         <DatasetRowSearchBar dataset_name={count_info.dataset_name} />
-        <DatasetRowTable rows={rows} dataset_name={count_info.dataset_name} />
+        <DatasetRowTable
+          rows={rows}
+          dataset_name={count_info.dataset_name}
+          fetcher={fetcher}
+        />
         <PageButtons
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
