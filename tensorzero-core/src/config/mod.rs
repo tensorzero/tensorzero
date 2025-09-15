@@ -57,6 +57,9 @@ tokio::task_local! {
     /// This is used when running in e2e test mode, and by the 'evaluations' binary
     /// We need to access this from async code (e.g. when looking up GCP SDK credentials),
     /// so this needs to be a tokio task-local (as a task may be moved between threads)
+    ///
+    /// Since this needs to be accessed from a `Deserialize` impl, it needs to
+    /// be stored in a `static`, since we cannot pass in extra parameters when calling `Deserialize::deserialize`
     pub(crate) static SKIP_CREDENTIAL_VALIDATION: ();
 }
 
