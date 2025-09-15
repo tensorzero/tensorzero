@@ -172,14 +172,13 @@ impl SelectQueries for ClickHouseConnectionInfo {
                 FROM (
                     SELECT
                         uint_to_uuid(episode_id_uint) as episode_id,
-                        countMerge(count) as count,
-                        formatDateTime(UUIDv7ToDateTime(uint_to_uuid(min(min_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
-                        formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(max_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
-                        uint_to_uuid(max(max_inference_id_uint)) as last_inference_id,
+                        (count) as count,
+                        formatDateTime(UUIDv7ToDateTime(uint_to_uuid((min_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+                        formatDateTime(UUIDv7ToDateTime(uint_to_uuid((max_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
+                        uint_to_uuid((max_inference_id_uint)) as last_inference_id,
                         episode_id_uint
-                    FROM EpisodeById
+                    FROM EpisodeById FINAL
                     WHERE {where_clause}
-                    GROUP BY episode_id_uint
                     ORDER BY episode_id_uint ASC
                     LIMIT {page_size}
                 )
@@ -191,13 +190,12 @@ impl SelectQueries for ClickHouseConnectionInfo {
                 r"
                 SELECT
                     uint_to_uuid(episode_id_uint) as episode_id,
-                    countMerge(count) as count,
-                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(min(min_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
-                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(max_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
-                    uint_to_uuid(max(max_inference_id_uint)) as last_inference_id
-                FROM EpisodeById
+                    (count) as count,
+                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid((min_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid((max_inference_id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
+                    uint_to_uuid((max_inference_id_uint)) as last_inference_id
+                FROM EpisodeById FINAL
                 WHERE {where_clause}
-                GROUP BY episode_id_uint
                 ORDER BY episode_id_uint DESC
                 LIMIT {page_size}
                 FORMAT JSONEachRow

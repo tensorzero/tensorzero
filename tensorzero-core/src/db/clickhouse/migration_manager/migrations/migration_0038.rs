@@ -74,7 +74,7 @@ impl Migration for Migration0038<'_> {
             .run_query_synchronous_no_params(format!(
                 r"CREATE TABLE IF NOT EXISTS EpisodeById{on_cluster_name} (
                         episode_id_uint UInt128,
-                        count AggregateFunction(count, UInt32),
+                        count SimpleAggregateFunction(sum, UInt64),
                         inference_ids AggregateFunction(groupArray, UUID),
                         min_inference_id_uint SimpleAggregateFunction(min, UInt128),
                         max_inference_id_uint SimpleAggregateFunction(max, UInt128)
@@ -101,7 +101,7 @@ impl Migration for Migration0038<'_> {
             AS
             SELECT
                 toUInt128(episode_id) as episode_id_uint,
-                countState() as count,
+                1 as count,
                 groupArrayState()(id) as inference_ids,
                 toUInt128(min(id)) as min_inference_id_uint,
                 toUInt128(max(id)) as max_inference_id_uint
@@ -121,7 +121,7 @@ impl Migration for Migration0038<'_> {
             AS
             SELECT
                 toUInt128(episode_id) as episode_id_uint,
-                countState() as count,
+                1 as count,
                 groupArrayState()(id) as inference_ids,
                 toUInt128(min(id)) as min_inference_id_uint,
                 toUInt128(max(id)) as max_inference_id_uint
@@ -154,7 +154,7 @@ impl Migration for Migration0038<'_> {
                     INSERT INTO EpisodeById
                     SELECT
                         toUInt128(episode_id) as episode_id_uint,
-                        countState() as count,
+                        1 as count,
                         groupArrayState()(id) as inference_ids,
                         toUInt128(min(id)) as min_inference_id_uint,
                         toUInt128(max(id)) as max_inference_id_uint
@@ -186,7 +186,7 @@ impl Migration for Migration0038<'_> {
                     INSERT INTO EpisodeById
                     SELECT
                         toUInt128(episode_id) as episode_id_uint,
-                        countState() as count,
+                        1 as count,
                         groupArrayState()(id) as inference_ids,
                         toUInt128(min(id)) as min_inference_id_uint,
                         toUInt128(max(id)) as max_inference_id_uint
