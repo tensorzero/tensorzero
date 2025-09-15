@@ -15,7 +15,7 @@ use crate::serde_util::deserialize_json_string;
 use crate::tool::{ToolCallConfig, ToolCallOutput};
 use blake3::Hash;
 use clap::ValueEnum;
-use serde::de::DeserializeOwned;
+use serde::de::{DeserializeOwned, IgnoredAny};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -236,15 +236,19 @@ impl CacheOutput for NonStreamingCacheData {
     async fn should_write_to_cache(&self, cache_validation_info: CacheValidationInfo) -> bool {
         for block in &self.blocks {
             if let ContentBlockOutput::ToolCall(tool_call) = block {
-                // Only skip writing to the cache when the function has a tool config,
-                // so that we know how to validate the tool names and arguments
                 if cache_validation_info.tool_config.is_some() {
+                    // If we have a tool config, validate against the schema
                     let output = ToolCallOutput::new(
                         tool_call.clone(),
                         cache_validation_info.tool_config.as_ref(),
                     )
                     .await;
                     if output.name.is_none() || output.arguments.is_none() {
+                        return false;
+                    }
+                } else {
+                    // If we don't have a tool config, then just check that the arguments are valid JSON
+                    if serde_json::from_str::<IgnoredAny>(&tool_call.arguments).is_err() {
                         return false;
                     }
                 }
