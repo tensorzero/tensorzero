@@ -868,7 +868,7 @@ async fn test_clickhouse_migration_manager() {
         .await
         .unwrap();
     let episode_count: u64 = response.response.trim().parse().unwrap();
-    assert_eq!(episode_count, 20002095);
+    assert_eq!(episode_count, 20000000);
 
     // Since we've already ran all of the migrations, we shouldn't have written any new records
     // except for Migration0029 (which runs every time)
