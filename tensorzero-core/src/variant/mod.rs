@@ -92,7 +92,7 @@ pub struct BestOfNSamplingConfigPyClass {
 }
 
 #[cfg(feature = "pyo3")]
-#[pyclass(name = "DiclConfig")]
+#[pyclass(name = "DICLConfig")]
 pub struct DiclConfigPyClass {
     pub inner: Arc<VariantInfo>,
 }
