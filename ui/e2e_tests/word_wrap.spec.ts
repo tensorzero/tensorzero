@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test("should show the datapoint detail page", async ({ page }) => {
+test("ensure word wrap persists between pages", async ({ page }) => {
   await page.goto(
     "/datasets/foo/datapoint/0196374b-d575-77b3-ac22-91806c67745c",
   );
