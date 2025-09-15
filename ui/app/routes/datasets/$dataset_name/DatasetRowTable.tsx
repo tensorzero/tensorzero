@@ -107,8 +107,8 @@ export default function DatasetRowTable({
           <DialogHeader>
             <DialogTitle>Delete Datapoint</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this datapoint? This action cannot
-              be undone.
+              The datapoint will be marked as stale in the database (soft
+              deletion). This action cannot be undone.
               {datapointToDelete && (
                 <div className="text-muted-foreground mt-2 text-sm">
                   <strong>ID:</strong> {datapointToDelete.id}
