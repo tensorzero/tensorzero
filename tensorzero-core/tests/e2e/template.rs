@@ -482,6 +482,7 @@ async fn e2e_test_named_system_template_no_schema() {
     let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path.to_owned()),
         clickhouse_url: None,
+        postgres_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -543,6 +544,7 @@ async fn e2e_test_named_system_template_with_schema() {
     let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path.to_owned()),
         clickhouse_url: Some(CLICKHOUSE_URL.to_string()),
+        postgres_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
