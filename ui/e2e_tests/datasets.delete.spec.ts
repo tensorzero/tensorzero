@@ -74,11 +74,12 @@ test.describe("Dataset Deletion", () => {
     await expect(page.getByText("Delete Datapoint")).not.toBeVisible();
     await page.waitForLoadState("networkidle");
 
-    // Verify the page still loads correctly
-    await expect(
-      page.getByRole("heading", { name: "Dataset" }),
-    ).not.toBeVisible();
-    await expect(page.getByText(datasetName).nth(1)).not.toBeVisible();
+    // Verify the deleted datapoint is no longer in the table
+    // await expect(firstRow).not.toBeVisible();
+    await expect(page).toHaveURL(/\/datasets\/?$/, { timeout: 15000 });
+    await expect(page.getByText(datasetName)).toHaveCount(0, {
+      timeout: 10000,
+    });
   });
 
   test("should cancel datapoint deletion when clicking cancel", async ({
@@ -183,5 +184,44 @@ test.describe("Dataset Deletion", () => {
 
     // Verify the delete button is back to its original state
     await expect(datasetDeleteButton).toBeVisible();
+  });
+
+  test("should redirect to datasets list when deleting the last datapoint", async ({
+    page,
+  }) => {
+    // Create a unique test dataset
+    const datasetName = await createTestDataset(page, "last-datapoint-test");
+
+    await page.goto(`/datasets/${datasetName}`);
+
+    // Wait for the page to load
+    await expect(page.getByRole("heading", { name: "Dataset" })).toBeVisible();
+    await expect(page.getByText(datasetName).nth(1)).toBeVisible();
+
+    // Verify there's only one datapoint in the table
+    const rows = page.locator("tbody tr");
+    await expect(rows).toHaveCount(1);
+
+    // Get the single datapoint row
+    const firstRow = rows.first();
+    await expect(firstRow).toBeVisible();
+
+    // Click the delete button in the last column
+    const deleteButton = firstRow.locator("td").last().locator("button");
+    await expect(deleteButton).toBeVisible();
+    await deleteButton.click();
+
+    // Wait for the confirmation dialog
+    await expect(page.getByText("Delete Datapoint")).toBeVisible();
+
+    // Click "Delete" to confirm
+    await page.getByRole("button", { name: "Delete" }).click();
+
+    // Wait for redirect to datasets list page
+    await expect(page).toHaveURL("/datasets", { timeout: 10000 });
+    await expect(page.getByText("Dataset Name")).toBeVisible();
+
+    // Verify the dataset is no longer in the list (since it's now empty)
+    await expect(page.getByText(datasetName)).not.toBeVisible();
   });
 });

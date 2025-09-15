@@ -18,7 +18,7 @@ import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
 import { logger } from "~/utils/logger";
 import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
-import { useFetcher, useRevalidator } from "react-router";
+import { useFetcher } from "react-router";
 import { DeleteButton } from "~/components/utils/DeleteButton";
 import { staleDatapoint } from "~/utils/clickhouse/datasets.server";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
@@ -92,6 +92,17 @@ export async function action({ request, params }: Route.ActionArgs) {
       functionConfig.type,
     );
 
+    // Check if this was the last datapoint in the dataset
+    const counts = await getDatasetCounts({});
+    const count_info = counts.find(
+      (count) => count.dataset_name === dataset_name,
+    );
+
+    // If no datapoints remain, redirect to datasets list
+    if (!count_info || count_info.count === 0) {
+      return redirect("/datasets");
+    }
+
     return { success: true };
   }
 
@@ -106,7 +117,6 @@ export default function DatasetDetailPage({
   const { toast } = useToast();
   const fetcher = useFetcher();
   const navigate = useNavigate();
-  const revalidator = useRevalidator();
 
   // Use useEffect to show toast only after component mounts
   useEffect(() => {
@@ -119,22 +129,6 @@ export default function DatasetDetailPage({
     // TODO: Fix and stop ignoring lint rule
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rowsAdded, toast]);
-
-  // Handle successful deletion
-  useEffect(() => {
-    if (fetcher.data && fetcher.state === "idle") {
-      if (fetcher.data.success === true) {
-        // Datapoint deletion
-        toast({
-          title: "Datapoint Deleted",
-          description: "The datapoint has been deleted successfully.",
-        });
-        // Refresh the data to show updated datapoints list
-        revalidator.revalidate();
-      }
-      // Note: Dataset deletion is now handled by server-side redirect
-    }
-  }, [fetcher.data, fetcher.state, toast, revalidator]);
 
   const handleDelete = () => {
     const formData = new FormData();
@@ -169,11 +163,7 @@ export default function DatasetDetailPage({
 
       <SectionLayout>
         <DatasetRowSearchBar dataset_name={count_info.dataset_name} />
-        <DatasetRowTable
-          rows={rows}
-          dataset_name={count_info.dataset_name}
-          fetcher={fetcher}
-        />
+        <DatasetRowTable rows={rows} dataset_name={count_info.dataset_name} />
         <PageButtons
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}

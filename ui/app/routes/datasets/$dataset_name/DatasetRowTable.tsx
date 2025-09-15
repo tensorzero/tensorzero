@@ -15,7 +15,7 @@ import {
 } from "~/components/ui/TableItems";
 import { Button } from "~/components/ui/button";
 import { Trash } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useFetcher } from "react-router";
 import {
   Dialog,
@@ -29,17 +29,25 @@ import {
 export default function DatasetRowTable({
   rows,
   dataset_name,
-  fetcher,
 }: {
   rows: DatasetDetailRow[];
   dataset_name: string;
-  fetcher?: ReturnType<typeof useFetcher>;
 }) {
-  const defaultFetcher = useFetcher();
-  const activeFetcher = fetcher || defaultFetcher;
+  const activeFetcher = useFetcher();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [datapointToDelete, setDatapointToDelete] =
     useState<DatasetDetailRow | null>(null);
+
+  // Handle successful deletion
+  useEffect(() => {
+    if (activeFetcher.data && activeFetcher.state === "idle") {
+      if (activeFetcher.data.success === true) {
+        // Close the dialog
+        setDeleteDialogOpen(false);
+        setDatapointToDelete(null);
+      }
+    }
+  }, [activeFetcher.data, activeFetcher.state]);
 
   return (
     <div>
@@ -138,10 +146,11 @@ export default function DatasetRowTable({
                     datapointToDelete.function_name,
                   );
                   formData.append("function_type", datapointToDelete.type);
-                  activeFetcher.submit(formData, { method: "post" });
+                  activeFetcher.submit(formData, {
+                    method: "post",
+                    action: ".",
+                  });
                 }
-                setDeleteDialogOpen(false);
-                setDatapointToDelete(null);
               }}
             >
               <Trash className="inline h-4 w-4" />
