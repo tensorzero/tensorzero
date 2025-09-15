@@ -170,7 +170,6 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     end_time,
                     last_inference_id
                 FROM (
-                    WITH (SELECT toUInt128(generateUUIDv7())) AS uuid_now
                     SELECT
                         uint_to_uuid(episode_id_uint) as episode_id,
                         countMerge(count) as count,
@@ -190,7 +189,6 @@ impl SelectQueries for ClickHouseConnectionInfo {
         } else {
             format!(
                 r"
-                WITH (SELECT toUInt128(generateUUIDv7())) AS uuid_now
                 SELECT
                     uint_to_uuid(episode_id_uint) as episode_id,
                     countMerge(count) as count,
