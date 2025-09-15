@@ -181,6 +181,7 @@ jobs:
         id: e2e_tests
         env:
           TENSORZERO_CI: 1
+          TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures"
         run: pnpm ui:test:e2e --grep-invert "@credentials"
 
       - name: Print Docker Compose logs
