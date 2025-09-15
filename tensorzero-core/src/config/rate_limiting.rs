@@ -162,18 +162,10 @@ impl<'de> Deserialize<'de> for TagValueScope {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Deref;
-
     use super::*;
+    use crate::rate_limiting::RateLimitingConfig;
     use toml;
 
-    impl Deref for RateLimitingConfigScopes {
-        type Target = Vec<RateLimitingConfigScope>;
-
-        fn deref(&self) -> &Self::Target {
-            &self.0
-        }
-    }
 
     #[test]
     fn test_basic_rate_limit_deserialization() {
@@ -185,9 +177,9 @@ mod tests {
         ";
 
         let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.rules.len(), 1);
+        assert_eq!(config.rules().len(), 1);
 
-        let rule = &config.rules[0];
+        let rule = &config.rules()[0];
         assert_eq!(rule.limits.len(), 2);
 
         assert_eq!(rule.priority, RateLimitingConfigPriority::Always);
@@ -232,10 +224,10 @@ mod tests {
         ";
 
         let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.rules.len(), 1);
-        assert_eq!(config.rules[0].limits.len(), 9);
+        assert_eq!(config.rules().len(), 1);
+        assert_eq!(config.rules()[0].limits.len(), 9);
         assert_eq!(
-            config.rules[0].priority,
+            config.rules()[0].priority,
             RateLimitingConfigPriority::Priority(0),
         );
     }
@@ -253,16 +245,16 @@ mod tests {
         ";
 
         let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.rules.len(), 2);
+        assert_eq!(config.rules().len(), 2);
 
         // First rule with explicit priority
-        match &config.rules[0].priority {
+        match &config.rules()[0].priority {
             RateLimitingConfigPriority::Priority(p) => assert_eq!(*p, 5),
             RateLimitingConfigPriority::Always => panic!("Expected priority value"),
         }
 
         // Second rule with default priority (0)
-        match &config.rules[1].priority {
+        match &config.rules()[1].priority {
             RateLimitingConfigPriority::Priority(p) => assert_eq!(*p, 0),
             RateLimitingConfigPriority::Always => panic!("Expected default priority value"),
         }
@@ -277,9 +269,9 @@ mod tests {
         ";
 
         let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.rules.len(), 1);
+        assert_eq!(config.rules().len(), 1);
 
-        match &config.rules[0].priority {
+        match &config.rules()[0].priority {
             RateLimitingConfigPriority::Always => {}
             RateLimitingConfigPriority::Priority(_) => panic!("Expected always priority"),
         }
@@ -297,13 +289,13 @@ mod tests {
         "#;
 
         let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.rules.len(), 1);
-        assert_eq!(config.rules[0].scope.len(), 1);
+        assert_eq!(config.rules().len(), 1);
+        assert_eq!(config.rules()[0].scope.len(), 1);
 
         // Check scope filter with All value
-        let RateLimitingConfigScope::Tag(tag_scope) = &config.rules[0].scope[0];
-        assert_eq!(tag_scope.tag_key, "user_id");
-        assert_eq!(tag_scope.tag_value, TagValueScope::All);
+        let RateLimitingConfigScope::Tag(tag_scope) = &config.rules()[0].scope[0];
+        assert_eq!(tag_scope.tag_key(), "user_id");
+        assert_eq!(tag_scope.tag_value(), &TagValueScope::All);
     }
 
     #[test]
@@ -321,20 +313,20 @@ mod tests {
         let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
 
         let check_config = |config: RateLimitingConfig| {
-            assert_eq!(config.rules.len(), 1);
-            assert_eq!(config.rules[0].scope.len(), 2);
+            assert_eq!(config.rules().len(), 1);
+            assert_eq!(config.rules()[0].scope.len(), 2);
 
             // Check first scope filter
-            let RateLimitingConfigScope::Tag(tag_scope) = &config.rules[0].scope[0];
-            assert_eq!(tag_scope.tag_key, "application_id");
-            assert_eq!(tag_scope.tag_value, TagValueScope::Any);
+            let RateLimitingConfigScope::Tag(tag_scope) = &config.rules()[0].scope[0];
+            assert_eq!(tag_scope.tag_key(), "application_id");
+            assert_eq!(tag_scope.tag_value(), &TagValueScope::Any);
 
             // Check second scope filter with special value
-            let RateLimitingConfigScope::Tag(tag_scope) = &config.rules[0].scope[1];
-            assert_eq!(tag_scope.tag_key, "user_id");
+            let RateLimitingConfigScope::Tag(tag_scope) = &config.rules()[0].scope[1];
+            assert_eq!(tag_scope.tag_key(), "user_id");
             assert_eq!(
-                tag_scope.tag_value,
-                TagValueScope::Concrete("123".to_string())
+                tag_scope.tag_value(),
+                &TagValueScope::Concrete("123".to_string())
             );
         };
 
@@ -391,10 +383,10 @@ mod tests {
         "#;
 
         let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.rules.len(), 4);
+        assert_eq!(config.rules().len(), 4);
 
         // Global fallback (always = true, no scope)
-        let global_rule = &config.rules[0];
+        let global_rule = &config.rules()[0];
         match &global_rule.priority {
             RateLimitingConfigPriority::Always => {}
             RateLimitingConfigPriority::Priority(_) => panic!("Expected always priority"),
@@ -424,7 +416,7 @@ mod tests {
         assert_eq!(global_token_limit.capacity, 1000);
 
         // Application 1 rule (priority 1)
-        let app1_rule = &config.rules[1];
+        let app1_rule = &config.rules()[1];
         match &app1_rule.priority {
             RateLimitingConfigPriority::Priority(p) => assert_eq!(*p, 1),
             RateLimitingConfigPriority::Always => panic!("Expected priority 1"),
@@ -444,7 +436,7 @@ mod tests {
         assert_eq!(app1_inference_limit.capacity, 10000);
 
         // Users rule (priority 1)
-        let users_rule = &config.rules[2];
+        let users_rule = &config.rules()[2];
         match &users_rule.priority {
             RateLimitingConfigPriority::Priority(p) => assert_eq!(*p, 1),
             RateLimitingConfigPriority::Always => panic!("Expected priority 1"),
@@ -464,7 +456,7 @@ mod tests {
         assert_eq!(users_inference_limit.capacity, 100);
 
         // Application 2 rule (priority 2, multiple scope filters)
-        let app2_rule = &config.rules[3];
+        let app2_rule = &config.rules()[3];
         match &app2_rule.priority {
             RateLimitingConfigPriority::Priority(p) => assert_eq!(*p, 2),
             RateLimitingConfigPriority::Always => panic!("Expected priority 2"),
@@ -484,30 +476,30 @@ mod tests {
         assert_eq!(app2_token_limit.capacity, 5000);
 
         // Check Application 1 scope details
-        let RateLimitingConfigScope::Tag(app1_scope) = &config.rules[1].scope[0];
-        assert_eq!(app1_scope.tag_key, "application_id");
+        let RateLimitingConfigScope::Tag(app1_scope) = &config.rules()[1].scope[0];
+        assert_eq!(app1_scope.tag_key(), "application_id");
         assert_eq!(
-            app1_scope.tag_value,
-            TagValueScope::Concrete("1".to_string())
+            app1_scope.tag_value(),
+            &TagValueScope::Concrete("1".to_string())
         );
 
         // Check Users rule scope details
-        let RateLimitingConfigScope::Tag(users_scope) = &config.rules[2].scope[0];
-        assert_eq!(users_scope.tag_key, "user_id");
-        assert_eq!(users_scope.tag_value, TagValueScope::Any);
+        let RateLimitingConfigScope::Tag(users_scope) = &config.rules()[2].scope[0];
+        assert_eq!(users_scope.tag_key(), "user_id");
+        assert_eq!(users_scope.tag_value(), &TagValueScope::Any);
 
         // Check Application 2 scope details (first scope: application_id = "2")
         let RateLimitingConfigScope::Tag(app2_scope_0) = &app2_rule.scope[0];
-        assert_eq!(app2_scope_0.tag_key, "application_id");
+        assert_eq!(app2_scope_0.tag_key(), "application_id");
         assert_eq!(
-            app2_scope_0.tag_value,
-            TagValueScope::Concrete("2".to_string())
+            app2_scope_0.tag_value(),
+            &TagValueScope::Concrete("2".to_string())
         );
 
         // Check Application 2 scope details (second scope: user_id = wildcard)
         let RateLimitingConfigScope::Tag(app2_scope_1) = &app2_rule.scope[1];
-        assert_eq!(app2_scope_1.tag_key, "user_id");
-        assert_eq!(app2_scope_1.tag_value, TagValueScope::Any);
+        assert_eq!(app2_scope_1.tag_key(), "user_id");
+        assert_eq!(app2_scope_1.tag_value(), &TagValueScope::Any);
     }
 
     #[test]
@@ -519,10 +511,10 @@ mod tests {
         ";
 
         let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
-        assert!(config.enabled);
+        assert!(config.enabled());
 
         assert_eq!(
-            config.rules[0].priority,
+            config.rules()[0].priority,
             RateLimitingConfigPriority::Priority(10)
         );
     }
@@ -537,9 +529,9 @@ mod tests {
         ";
 
         let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
-        assert!(!config.enabled);
+        assert!(!config.enabled());
 
-        assert_eq!(config.rules[0].priority, RateLimitingConfigPriority::Always);
+        assert_eq!(config.rules()[0].priority, RateLimitingConfigPriority::Always);
     }
 
     #[test]
@@ -549,8 +541,8 @@ mod tests {
         ";
 
         let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.rules.len(), 0);
-        assert!(config.enabled);
+        assert_eq!(config.rules().len(), 0);
+        assert!(config.enabled());
     }
 
     // Error case tests
@@ -710,9 +702,9 @@ mod tests {
         ";
 
         let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.rules.len(), 1);
+        assert_eq!(config.rules().len(), 1);
 
-        match &config.rules[0].priority {
+        match &config.rules()[0].priority {
             RateLimitingConfigPriority::Priority(p) => assert_eq!(*p, 1),
             RateLimitingConfigPriority::Always => panic!("Expected priority value"),
         }
@@ -754,8 +746,8 @@ mod tests {
         ";
 
         let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.rules.len(), 1);
-        assert_eq!(config.rules[0].limits.len(), 0);
+        assert_eq!(config.rules().len(), 1);
+        assert_eq!(config.rules()[0].limits.len(), 0);
     }
 
     #[test]
@@ -767,8 +759,8 @@ mod tests {
         ";
 
         let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.rules.len(), 1);
-        assert_eq!(config.rules[0].limits[0].capacity, 0);
+        assert_eq!(config.rules().len(), 1);
+        assert_eq!(config.rules()[0].limits[0].capacity, 0);
     }
 
     #[test]
@@ -780,8 +772,8 @@ mod tests {
         ";
 
         let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.rules.len(), 1);
-        assert_eq!(config.rules[0].limits[0].capacity, 9223372036854775807);
+        assert_eq!(config.rules().len(), 1);
+        assert_eq!(config.rules()[0].limits[0].capacity, 9223372036854775807);
     }
 
     #[test]
@@ -795,10 +787,10 @@ mod tests {
         ";
 
         let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.rules.len(), 1);
-        assert_eq!(config.rules[0].limits.len(), 3);
+        assert_eq!(config.rules().len(), 1);
+        assert_eq!(config.rules()[0].limits.len(), 3);
 
-        let resources: Vec<_> = config.rules[0].limits.iter().map(|l| l.resource).collect();
+        let resources: Vec<_> = config.rules()[0].limits.iter().map(|l| l.resource).collect();
         assert!(resources.contains(&RateLimitResource::ModelInference));
         assert!(resources.contains(&RateLimitResource::Token));
         // assert!(resources.contains(&RateLimitResource::Cent));

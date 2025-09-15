@@ -672,7 +672,10 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        db::clickhouse::ClickHouseConnectionInfo,
+        db::{
+            clickhouse::ClickHouseConnectionInfo,
+            postgres::PostgresConnectionInfo,
+        },
     };
 
     use super::*;
@@ -719,12 +722,15 @@ mod tests {
                 "fallback",
                 &InferenceClients {
                     http_client: &TensorzeroHttpClient::new().unwrap(),
+                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
+                    postgres_connection_info: &PostgresConnectionInfo::Disabled,
                     credentials: &InferenceCredentials::default(),
                     cache_options: &CacheOptions {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
-                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
+                    tags: &Default::default(),
+                    rate_limiting_config: &Default::default(),
                 },
             )
             .await;

@@ -14,6 +14,7 @@ use tensorzero_core::embeddings::{
 };
 use tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams;
 use tensorzero_core::endpoints::inference::{InferenceClients, InferenceCredentials};
+use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::{Latency, ModelInferenceRequestJsonMode, TextKind};
 use uuid::Uuid;
@@ -1135,12 +1136,15 @@ async fn test_embedding_request() {
             &model_name,
             &InferenceClients {
                 http_client: &TensorzeroHttpClient::new().unwrap(),
-                credentials: &api_keys,
                 clickhouse_connection_info: &clickhouse,
+                postgres_connection_info: &PostgresConnectionInfo::Disabled,
+                credentials: &api_keys,
                 cache_options: &CacheOptions {
                     max_age_s: None,
                     enabled: CacheEnabledMode::On,
                 },
+                tags: &Default::default(),
+                rate_limiting_config: &Default::default(),
             },
         )
         .await
@@ -1211,12 +1215,15 @@ async fn test_embedding_request() {
             &model_name,
             &InferenceClients {
                 http_client: &TensorzeroHttpClient::new().unwrap(),
-                credentials: &api_keys,
                 clickhouse_connection_info: &clickhouse,
+                postgres_connection_info: &PostgresConnectionInfo::Disabled,
+                credentials: &api_keys,
                 cache_options: &CacheOptions {
                     max_age_s: None,
                     enabled: CacheEnabledMode::On,
                 },
+                tags: &Default::default(),
+                rate_limiting_config: &Default::default(),
             },
         )
         .await

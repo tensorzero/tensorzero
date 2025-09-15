@@ -39,6 +39,16 @@ pub struct ScopeInfo<'a> {
 }
 
 impl RateLimitingConfig {
+    #[cfg(test)]
+    pub fn rules(&self) -> &Vec<RateLimitingConfigRule> {
+        &self.rules
+    }
+
+    #[cfg(test)]
+    pub fn enabled(&self) -> bool {
+        self.enabled
+    }
+
     pub async fn consume_tickets<'a>(
         &'a self,
         client: &impl RateLimitQueries,
@@ -347,6 +357,16 @@ pub struct TagRateLimitingConfigScope {
 }
 
 impl TagRateLimitingConfigScope {
+    #[cfg(test)]
+    pub fn tag_key(&self) -> &str {
+        &self.tag_key
+    }
+
+    #[cfg(test)]
+    pub fn tag_value(&self) -> &TagValueScope {
+        &self.tag_value
+    }
+
     fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<RateLimitingScopeKey> {
         let value = info.tags.get(&self.tag_key)?;
 
@@ -924,7 +944,7 @@ mod tests {
 
         // Verify each produces the correct key variant
         match key_concrete {
-            RateLimitingScopeKey::TagConcrete { key, value } => {
+            RateLimitingScopeKey::TagConcrete { ref key, ref value } => {
                 assert_eq!(key, "user_id");
                 assert_eq!(value, "123");
             }
@@ -932,14 +952,14 @@ mod tests {
         }
 
         match key_any {
-            RateLimitingScopeKey::TagAny { key } => {
+            RateLimitingScopeKey::TagAny { ref key } => {
                 assert_eq!(key, "user_id");
             }
             _ => panic!("Expected TagAny variant"),
         }
 
         match key_all {
-            RateLimitingScopeKey::TagEach { key, value } => {
+            RateLimitingScopeKey::TagEach { ref key, ref value } => {
                 assert_eq!(key, "user_id");
                 assert_eq!(value, "123");
             }

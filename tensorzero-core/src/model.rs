@@ -2067,7 +2067,10 @@ mod tests {
     use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         cache::CacheOptions,
-        db::clickhouse::ClickHouseConnectionInfo,
+        db::{
+            clickhouse::ClickHouseConnectionInfo,
+            postgres::PostgresConnectionInfo,
+        },
         inference::types::{
             ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk,
         },
@@ -2120,11 +2123,14 @@ mod tests {
         let clients = InferenceClients {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
         };
 
         // Try inferring the good model only
@@ -2227,11 +2233,14 @@ mod tests {
         let clients = InferenceClients {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
         };
         // Try inferring the good model only
         let request = ModelInferenceRequest {
@@ -2367,17 +2376,21 @@ mod tests {
                     cached: _,
                 },
             messages: _input,
+            ticket_borrow: _,
         } = model_config
             .infer_stream(
                 &request,
                 &InferenceClients {
                     http_client: &TensorzeroHttpClient::new().unwrap(),
                     clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
+                    postgres_connection_info: &PostgresConnectionInfo::Disabled,
                     credentials: &api_keys,
                     cache_options: &CacheOptions {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
+                    tags: &Default::default(),
+                    rate_limiting_config: &Default::default(),
                 },
                 "my_model",
             )
@@ -2437,11 +2450,14 @@ mod tests {
                 &InferenceClients {
                     http_client: &TensorzeroHttpClient::new().unwrap(),
                     clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
+                    postgres_connection_info: &PostgresConnectionInfo::Disabled,
                     credentials: &api_keys,
                     cache_options: &CacheOptions {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
+                    tags: &Default::default(),
+                    rate_limiting_config: &Default::default(),
                 },
                 "my_model",
             )
@@ -2542,17 +2558,21 @@ mod tests {
                     cached: _,
                 },
             messages: _,
+            ticket_borrow: _,
         } = model_config
             .infer_stream(
                 &request,
                 &InferenceClients {
                     http_client: &TensorzeroHttpClient::new().unwrap(),
                     clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
+                    postgres_connection_info: &PostgresConnectionInfo::Disabled,
                     credentials: &api_keys,
                     cache_options: &CacheOptions {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
+                    tags: &Default::default(),
+                    rate_limiting_config: &Default::default(),
                 },
                 "my_model",
             )
@@ -2625,11 +2645,14 @@ mod tests {
         let clients = InferenceClients {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
         };
 
         let request = ModelInferenceRequest {
@@ -2677,11 +2700,14 @@ mod tests {
         let clients = InferenceClients {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -2735,11 +2761,14 @@ mod tests {
         let clients = InferenceClients {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
         };
 
         let request = ModelInferenceRequest {
@@ -2786,11 +2815,14 @@ mod tests {
         let clients = InferenceClients {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
         };
         let response = model_config
             .infer(&request, &clients, model_name)

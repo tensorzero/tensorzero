@@ -1311,6 +1311,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             include_original_response: false,
+            ticket_borrow: TicketBorrow::empty(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();
@@ -1364,6 +1365,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             include_original_response: false,
+            ticket_borrow: TicketBorrow::empty(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();

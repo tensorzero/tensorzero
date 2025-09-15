@@ -150,7 +150,7 @@ mod tests {
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
 
-        let result = embeddings(config, &http_client, clickhouse_connection_info, params).await;
+        let result = embeddings(config, &http_client, clickhouse_connection_info, PostgresConnectionInfo::Disabled, params).await;
 
         // The function should succeed
         assert!(result.is_ok());
@@ -178,7 +178,7 @@ mod tests {
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
 
-        let result = embeddings(config, &http_client, clickhouse_connection_info, params).await;
+        let result = embeddings(config, &http_client, clickhouse_connection_info, PostgresConnectionInfo::Disabled, params).await;
 
         // The function should fail with ModelNotFound
         assert!(result.is_err());

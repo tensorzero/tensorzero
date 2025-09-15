@@ -779,18 +779,19 @@ mod tests {
         endpoints::inference::InferenceCredentials,
     };
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     // Helper functions to create test embedding models using the Dummy provider
 
-    fn create_test_embedding_model() -> EmbeddingModelConfig {
+    fn create_test_embedding_model_config() -> Config {
         create_test_embedding_model_with_name("test-embedding")
     }
 
-    fn create_test_embedding_model_with_failure() -> EmbeddingModelConfig {
+    fn create_test_embedding_model_with_failure_config() -> Config {
         create_test_embedding_model_with_name("error") // This will cause the dummy provider to fail
     }
 
-    fn create_test_embedding_model_with_name(model_name: &str) -> EmbeddingModelConfig {
+    fn create_test_embedding_model_with_name(model_name: &str) -> Config {
         #[cfg(any(test, feature = "e2e_tests"))]
         {
             use crate::providers::dummy::DummyProvider;
@@ -807,10 +808,16 @@ mod tests {
                     extra_body: None,
                 },
             );
-            EmbeddingModelConfig {
+            let embedding_model_config = EmbeddingModelConfig {
                 routing: vec![Arc::from("dummy")],
                 providers,
                 timeouts: TimeoutsConfig::default(),
+            };
+            Config {
+                embedding_models: HashMap::from([(Arc::from(model_name), embedding_model_config)])
+                    .try_into()
+                    .unwrap(),
+                ..Default::default()
             }
         }
         #[cfg(not(any(test, feature = "e2e_tests")))]
@@ -821,14 +828,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_embedding_batch_success() {
-        let embedding_model = create_test_embedding_model();
+        let config = create_test_embedding_model_config();
 
         let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["hello".to_string(), "world".to_string()];
 
         let result = process_embedding_batch(
-            &embedding_model,
+            &config,
             "test-embedding",
             &client,
             &credentials,
@@ -848,7 +855,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_embedding_batch_with_dimensions() {
-        let embedding_model = create_test_embedding_model();
+        let config = create_test_embedding_model_config();
 
         let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
@@ -856,7 +863,7 @@ mod tests {
         let dimensions = Some(512);
 
         let result = process_embedding_batch(
-            &embedding_model,
+            &config,
             "test-embedding",
             &client,
             &credentials,
@@ -874,14 +881,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_embedding_batch_failure() {
-        let embedding_model = create_test_embedding_model_with_failure();
+        let config = create_test_embedding_model_with_failure_config();
 
         let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["test".to_string()];
 
         let result = process_embedding_batch(
-            &embedding_model,
+            &config,
             "error", // Use "error" model name to trigger failure
             &client,
             &credentials,
@@ -896,7 +903,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_embeddings_with_batching_success() {
-        let embedding_model = create_test_embedding_model();
+        let config = create_test_embedding_model_config();
 
         let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
@@ -907,7 +914,7 @@ mod tests {
         ];
 
         let result = process_embeddings_with_batching(
-            &embedding_model,
+            &config,
             "test-embedding",
             &client,
             &credentials,
@@ -929,14 +936,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_embeddings_with_batching_respects_concurrency() {
-        let embedding_model = create_test_embedding_model();
+        let config = create_test_embedding_model_config();
 
         let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let input_texts = vec!["1".to_string(), "2".to_string(), "3".to_string()];
 
         let result = process_embeddings_with_batching(
-            &embedding_model,
+            &config,
             "test-embedding",
             &client,
             &credentials,

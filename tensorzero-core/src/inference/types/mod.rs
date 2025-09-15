@@ -2814,6 +2814,8 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            ticket_borrow: TicketBorrow::empty(),
         };
         let result = collect_chunks(collect_chunks_args).await;
         assert_eq!(
@@ -2879,6 +2881,8 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            ticket_borrow: TicketBorrow::empty(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
@@ -2974,6 +2978,8 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            ticket_borrow: TicketBorrow::empty(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -3054,6 +3060,8 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            ticket_borrow: TicketBorrow::empty(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(result.usage_considering_cached(), usage);
@@ -3142,6 +3150,8 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            ticket_borrow: TicketBorrow::empty(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(result.usage_considering_cached(), usage);
@@ -3254,6 +3264,8 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            ticket_borrow: TicketBorrow::empty(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -3361,6 +3373,8 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            ticket_borrow: TicketBorrow::empty(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -3497,6 +3511,8 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            ticket_borrow: TicketBorrow::empty(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -3618,6 +3634,8 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            ticket_borrow: TicketBorrow::empty(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -3704,6 +3722,8 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            ticket_borrow: TicketBorrow::empty(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -3781,6 +3801,8 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            ticket_borrow: TicketBorrow::empty(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -3862,6 +3884,8 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            ticket_borrow: TicketBorrow::empty(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -3927,6 +3951,8 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            ticket_borrow: TicketBorrow::empty(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -4044,6 +4070,8 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            ticket_borrow: TicketBorrow::empty(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
