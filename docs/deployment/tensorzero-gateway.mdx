@@ -167,4 +167,13 @@ Optionally, you can provide the following command line argument to customize the
 
 The TensorZero Gateway exposes endpoints for status and health checks.
 The `/status` endpoint checks that the gateway is running successfully.
+
+```json title="GET /status"
+{ "status": "ok" }
+```
+
 The `/health` endpoint additionally checks that it can communicate with ClickHouse (if observability is enabled).
+
+```json title="GET /health"
+{ "gateway": "ok", "clickhouse": "ok" }
+```
