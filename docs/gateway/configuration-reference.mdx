@@ -59,21 +59,6 @@ When this field is set to `true`, the gateway will log more verbose errors to as
 
 If set to `true`, TensorZero will not collect or share [pseudonymous usage analytics](/gateway/deployment/#disabling-pseudonymous-usage-analytics).
 
-### `enable_template_filesystem_access`
-
-- **Type:** boolean
-- **Required:** no (default: `false`)
-
-Enabling this setting will allow MiniJinja templates to load sub-templates from the file system (using the `include` directive).
-Paths must be relative to `tensorzero.toml`, and can only access files in that directory or its sub-directories.
-
-<Warning>
-
-Make sure to sanitize all user-provided template data before using this setting.
-Otherwise, a malicious input could read unintended files in the file system.
-
-</Warning>
-
 ### `export.otlp.traces.enabled`
 
 - **Type:** boolean
@@ -155,6 +140,29 @@ If `false`, the gateway will not use ClickHouse.
 observability.enabled = true
 # ...
 ```
+
+### `template_filesystem_access`
+
+- **Type:** object
+- **Required:** no (default disabled)
+
+Enabling this setting will allow MiniJinja templates to load sub-templates from the file system using the `include` directive.
+
+The object has two fields:
+
+- `enabled` (boolean): Determines whether to enable file system access for templates.
+- `base_path` (string, optional): Determines the base path for template file system access.
+
+If you use a single configuration file, the `base_path` will be the directory containing the configuration file.
+If you split your configuration into multiple files, you must specify `gateway.template_filesystem_access.base_path` (see [Organize your configuration](/operations/organize-your-configuration) for details).
+The `include` paths must be relative to `base_path`, and can only access files in that directory or its sub-directories.
+
+<Warning>
+
+Make sure to sanitize all user-provided template data before using this setting.
+Otherwise, a malicious input could read unintended files in the file system.
+
+</Warning>
 
 ## `[models.model_name]`
 
