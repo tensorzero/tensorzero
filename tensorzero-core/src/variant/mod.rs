@@ -9,6 +9,7 @@ use pyo3::prelude::*;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::time::error::Elapsed;
 use tokio::time::Duration;
@@ -229,6 +230,7 @@ pub trait Variant {
     ) -> Result<(), Error>;
 
     fn get_all_template_paths(&self) -> Vec<&PathWithContents>;
+    fn get_all_explicit_template_names(&self) -> HashSet<String>;
 
     async fn start_batch_inference<'a>(
         &'a self,
@@ -566,6 +568,16 @@ impl Variant for VariantInfo {
             VariantConfig::Dicl(params) => params.get_all_template_paths(),
             VariantConfig::MixtureOfN(params) => params.get_all_template_paths(),
             VariantConfig::ChainOfThought(params) => params.get_all_template_paths(),
+        }
+    }
+
+    fn get_all_explicit_template_names(&self) -> HashSet<String> {
+        match &self.inner {
+            VariantConfig::ChatCompletion(params) => params.get_all_explicit_template_names(),
+            VariantConfig::BestOfNSampling(params) => params.get_all_explicit_template_names(),
+            VariantConfig::Dicl(params) => params.get_all_explicit_template_names(),
+            VariantConfig::MixtureOfN(params) => params.get_all_explicit_template_names(),
+            VariantConfig::ChainOfThought(params) => params.get_all_explicit_template_names(),
         }
     }
 }
@@ -948,6 +960,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
+            all_explicit_templates_names: HashSet::new(),
         });
         let json_mode = JsonMode::Off;
 
@@ -995,6 +1008,7 @@ mod tests {
             output_schema: output_schema.clone(),
             implicit_tool_call_config: implicit_tool_call_config.clone(),
             description: None,
+            all_template_names: HashSet::new(),
         });
 
         let json_mode = JsonMode::On;
@@ -1151,6 +1165,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
+            all_explicit_templates_names: HashSet::new(),
         });
 
         let request_messages = vec![RequestMessage {
@@ -1264,6 +1279,7 @@ mod tests {
                 parallel_tool_calls: None,
             },
             description: None,
+            all_template_names: HashSet::new(),
         });
         let output_schema = json!({
             "type": "object",
@@ -1446,6 +1462,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
+            all_explicit_templates_names: HashSet::new(),
         });
 
         let request_messages = vec![RequestMessage {
@@ -1587,6 +1604,7 @@ mod tests {
             tool_choice: crate::tool::ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
+            all_explicit_templates_names: HashSet::new(),
         });
 
         // Create an input message
@@ -1733,6 +1751,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
+            all_explicit_templates_names: HashSet::new(),
         })));
 
         let request_messages = vec![RequestMessage {

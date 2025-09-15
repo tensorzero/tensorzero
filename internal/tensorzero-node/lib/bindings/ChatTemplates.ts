@@ -9,5 +9,6 @@ export type ChatTemplates = {
   [key in string]?: {
     template: PathWithContents;
     schema: StaticJSONSchema | null;
+    legacy_definition: boolean;
   };
 };

@@ -9826,7 +9826,7 @@ pub async fn check_json_mode_inference_response(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": {"country": "Japan"}}]
+                "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
             }
         ]
     });
@@ -10095,7 +10095,7 @@ pub async fn check_dynamic_json_mode_inference_response(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]
         });
@@ -10359,7 +10359,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": {"country": "Japan"}}]
+                "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
             }
         ]
     });
@@ -11526,7 +11526,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": {"country": "Japan"}}]
+                "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
             }
         ]
     });

@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -161,6 +163,10 @@ impl Variant for ChainOfThoughtConfig {
 
     fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
         self.inner.get_all_template_paths()
+    }
+
+    fn get_all_explicit_template_names(&self) -> HashSet<String> {
+        self.inner.get_all_explicit_template_names()
     }
 
     async fn start_batch_inference<'a>(
