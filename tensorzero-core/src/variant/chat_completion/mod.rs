@@ -1,3 +1,4 @@
+use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
@@ -12,13 +13,14 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
 use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeadersConfig};
+use crate::inference::types::resolved_input::{
+    LazyResolvedInput, LazyResolvedInputMessage, LazyResolvedInputMessageContent,
+};
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultStream,
     ModelInferenceRequest, RequestMessage, Role,
 };
-use crate::inference::types::{
-    InferenceResult, ModelInput, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent,
-};
+use crate::inference::types::{InferenceResult, ModelInput, ResolvedInputMessage};
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
@@ -159,12 +161,14 @@ impl UninitializedChatCompletionConfig {
 }
 
 impl ChatCompletionConfig {
-    pub fn prepare_request_message(
+    // NOTE - this method can become synchronous again once
+    // we add a `LazyRequestMessage` type
+    pub async fn prepare_request_message(
         &self,
-        template_config: &TemplateConfig,
-        message: &ResolvedInputMessage,
+        template_config: &TemplateConfig<'_>,
+        message: &LazyResolvedInputMessage,
     ) -> Result<RequestMessage, Error> {
-        prepare_request_message(message, template_config, &self.templates)
+        prepare_request_message(message, template_config, &self.templates).await
     }
 
     pub fn prepare_system_message(
@@ -181,9 +185,9 @@ impl ChatCompletionConfig {
         )
     }
 
-    fn prepare_request<'a, 'request>(
+    async fn prepare_request<'a, 'request>(
         &'a self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         stream: bool,
@@ -192,11 +196,13 @@ impl ChatCompletionConfig {
     where
         'a: 'request,
     {
-        let messages = input
-            .messages
-            .iter()
-            .map(|message| self.prepare_request_message(inference_config.templates, message))
-            .collect::<Result<Vec<_>, _>>()?;
+        let messages = try_join_all(
+            input
+                .messages
+                .iter()
+                .map(|message| self.prepare_request_message(inference_config.templates, message)),
+        )
+        .await?;
         let system =
             self.prepare_system_message(inference_config.templates, input.system.as_ref())?;
 
@@ -246,10 +252,10 @@ impl ChatCompletionConfig {
 
 /// Prepare a ModelInput using the same machinery as is used by core TensorZero to prepare
 /// chat completions requests.
-pub fn prepare_model_input(
+pub async fn prepare_model_input(
     system: Option<&Value>,
     messages: &[ResolvedInputMessage],
-    templates_config: &TemplateConfig,
+    templates_config: &TemplateConfig<'_>,
     chat_templates: &ChatTemplates,
 ) -> Result<ModelInput, Error> {
     let system = prepare_system_message(
@@ -261,11 +267,14 @@ pub fn prepare_model_input(
     )?;
     let mut templated_messages = Vec::with_capacity(messages.len());
     for message in messages {
-        templated_messages.push(prepare_request_message(
-            message,
-            templates_config,
-            chat_templates,
-        )?);
+        templated_messages.push(
+            prepare_request_message(
+                &message.clone().into_lazy_resolved_input_message(),
+                templates_config,
+                chat_templates,
+            )
+            .await?,
+        );
     }
     Ok(ModelInput {
         system,
@@ -319,15 +328,15 @@ fn prepare_system_message(
     }})
 }
 
-fn prepare_request_message(
-    message: &ResolvedInputMessage,
-    templates_config: &TemplateConfig,
+async fn prepare_request_message(
+    message: &LazyResolvedInputMessage,
+    templates_config: &TemplateConfig<'_>,
     chat_templates: &ChatTemplates,
 ) -> Result<RequestMessage, Error> {
     let mut content = Vec::new();
     for block in &message.content {
         match block {
-            ResolvedInputMessageContent::Text { text } => {
+            LazyResolvedInputMessageContent::Text { text } => {
                 let template = chat_templates.get_implicit_template(message.role);
                 let text_content = match template {
                     Some(template) if template.legacy_definition => {
@@ -343,7 +352,7 @@ fn prepare_request_message(
                 };
                 content.push(text_content.into());
             }
-            ResolvedInputMessageContent::Template(template_input) => {
+            LazyResolvedInputMessageContent::Template(template_input) => {
                 let template = chat_templates
                     .get_named_template(&template_input.name)
                     .ok_or_else(|| {
@@ -362,24 +371,27 @@ fn prepare_request_message(
                 )?;
                 content.push(text_content.into());
             }
-            ResolvedInputMessageContent::RawText { value: text } => {
+            LazyResolvedInputMessageContent::RawText { value: text } => {
                 content.push(text.clone().into());
             }
             // The following two clones are probably removable.
             // We will need to implement a ToolCallRef type or something so that we can avoid cloning the ToolCall and ToolResult.
-            ResolvedInputMessageContent::ToolCall(tool_call) => {
+            LazyResolvedInputMessageContent::ToolCall(tool_call) => {
                 content.push(ContentBlock::ToolCall(tool_call.clone()));
             }
-            ResolvedInputMessageContent::ToolResult(tool_result) => {
+            LazyResolvedInputMessageContent::ToolResult(tool_result) => {
                 content.push(ContentBlock::ToolResult(tool_result.clone()));
             }
-            ResolvedInputMessageContent::File(image) => {
-                content.push(ContentBlock::File(image.clone()));
+            LazyResolvedInputMessageContent::File(image) => {
+                // NOTE - since `RequestMessage` currently requires files to be fully resolved,
+                // we need to await the future here. In an upcoming PR, we will introduce a `LazyRequestMessage` type,
+                // which will allow us to just pass along the future without awaiting it.
+                content.push(ContentBlock::File(Box::new(image.clone().await?)));
             }
-            ResolvedInputMessageContent::Thought(thought) => {
+            LazyResolvedInputMessageContent::Thought(thought) => {
                 content.push(ContentBlock::Thought(thought.clone()));
             }
-            ResolvedInputMessageContent::Unknown {
+            LazyResolvedInputMessageContent::Unknown {
                 data,
                 model_provider_name,
             } => {
@@ -400,7 +412,7 @@ fn prepare_request_message(
 impl Variant for ChatCompletionConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -408,13 +420,15 @@ impl Variant for ChatCompletionConfig {
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
         let mut inference_params = inference_params;
-        let request = self.prepare_request(
-            input,
-            function,
-            inference_config,
-            false,
-            &mut inference_params,
-        )?;
+        let request = self
+            .prepare_request(
+                input,
+                function,
+                inference_config,
+                false,
+                &mut inference_params,
+            )
+            .await?;
         let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
@@ -435,7 +449,7 @@ impl Variant for ChatCompletionConfig {
 
     async fn infer_stream<'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -443,13 +457,15 @@ impl Variant for ChatCompletionConfig {
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         let mut inference_params = inference_params;
-        let request = self.prepare_request(
-            input,
-            function,
-            inference_config,
-            true,
-            &mut inference_params,
-        )?;
+        let request = self
+            .prepare_request(
+                input,
+                function,
+                inference_config,
+                true,
+                &mut inference_params,
+            )
+            .await?;
         let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
@@ -563,7 +579,7 @@ impl Variant for ChatCompletionConfig {
 
     async fn start_batch_inference<'a>(
         &'a self,
-        inputs: &[ResolvedInput],
+        inputs: &[LazyResolvedInput],
         models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_configs: &'a [InferenceConfig<'a>],
@@ -580,8 +596,9 @@ impl Variant for ChatCompletionConfig {
             .zip(&mut inference_params)
             .zip(inference_configs)
         {
-            let request =
-                self.prepare_request(input, function, inference_config, false, inference_param)?;
+            let request = self
+                .prepare_request(input, function, inference_config, false, inference_param)
+                .await?;
             inference_requests.push(request);
         }
         let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
@@ -723,8 +740,8 @@ mod tests {
         providers::dummy::{DUMMY_INFER_RESPONSE_CONTENT, DUMMY_STREAMING_RESPONSE},
     };
 
-    #[test]
-    fn test_prepare_request_message() {
+    #[tokio::test]
+    async fn test_prepare_request_message() {
         let templates = get_test_template_config();
         // Part 1: test without templates
         let chat_completion_config = ChatCompletionConfig {
@@ -746,13 +763,14 @@ mod tests {
         };
 
         // Test case 1: Regular user message
-        let input_message = ResolvedInputMessage {
+        let input_message = LazyResolvedInputMessage {
             role: Role::User,
             content: vec!["Hello, how are you?".to_string().into()],
         };
-        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
-        assert!(result.is_ok());
-        let prepared_message = result.unwrap();
+        let prepared_message = chat_completion_config
+            .prepare_request_message(&templates, &input_message)
+            .await
+            .unwrap();
         match prepared_message {
             RequestMessage {
                 role: Role::User,
@@ -764,13 +782,14 @@ mod tests {
         }
 
         // Test case 2: Assistant message
-        let input_message = ResolvedInputMessage {
+        let input_message = LazyResolvedInputMessage {
             role: Role::Assistant,
             content: vec!["I'm doing well, thank you!".to_string().into()],
         };
-        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
-        assert!(result.is_ok());
-        let prepared_message = result.unwrap();
+        let prepared_message = chat_completion_config
+            .prepare_request_message(&templates, &input_message)
+            .await
+            .unwrap();
         match prepared_message {
             RequestMessage {
                 role: Role::Assistant,
@@ -784,15 +803,16 @@ mod tests {
             _ => panic!("Expected Assistant message"),
         }
         // Test case 3: Invalid JSON input
-        let input_message = ResolvedInputMessage {
+        let input_message = LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+            content: vec![LazyResolvedInputMessageContent::Template(TemplateInput {
                 name: "user".to_string(),
                 arguments: json!({"invalid": "json"}).as_object().unwrap().clone(),
             })],
         };
         let result = chat_completion_config
             .prepare_request_message(&templates, &input_message)
+            .await
             .unwrap_err();
         assert_eq!(
             result,
@@ -835,9 +855,9 @@ mod tests {
         .unwrap();
 
         // Test case 4: Assistant message with template
-        let input_message = ResolvedInputMessage {
+        let input_message = LazyResolvedInputMessage {
             role: Role::Assistant,
-            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+            content: vec![LazyResolvedInputMessageContent::Template(TemplateInput {
                 name: "assistant".to_string(),
                 arguments: json!({"reason": "it's against my ethical guidelines"})
                     .as_object()
@@ -847,6 +867,7 @@ mod tests {
         };
         let prepared_message = chat_completion_config
             .prepare_request_message(&templates, &input_message)
+            .await
             .unwrap();
         match prepared_message {
             RequestMessage {
@@ -862,9 +883,9 @@ mod tests {
         }
 
         // Test case 5: User message with template
-        let input_message = ResolvedInputMessage {
+        let input_message = LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+            content: vec![LazyResolvedInputMessageContent::Template(TemplateInput {
                 name: "user".to_string(),
                 arguments: json!({"name": "John", "age": 30})
                     .as_object()
@@ -872,9 +893,10 @@ mod tests {
                     .clone(),
             })],
         };
-        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
-        assert!(result.is_ok());
-        let prepared_message = result.unwrap();
+        let prepared_message = chat_completion_config
+            .prepare_request_message(&templates, &input_message)
+            .await
+            .unwrap();
         match prepared_message {
             RequestMessage {
                 role: Role::User,
@@ -889,14 +911,16 @@ mod tests {
         }
 
         // Test case 6: User message with bad input (missing required field)
-        let input_message = ResolvedInputMessage {
+        let input_message = LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+            content: vec![LazyResolvedInputMessageContent::Template(TemplateInput {
                 name: "user".to_string(),
                 arguments: json!({"name": "Alice"}).as_object().unwrap().clone(), // Missing "age" field
             })],
         };
-        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
+        let result = chat_completion_config
+            .prepare_request_message(&templates, &input_message)
+            .await;
         assert!(result.is_err());
         match result.unwrap_err().get_details() {
             ErrorDetails::MiniJinjaTemplateRender { message, .. } => {
@@ -936,12 +960,13 @@ mod tests {
             },
         )
         .unwrap();
-        let input_message = ResolvedInputMessage {
+        let input_message = LazyResolvedInputMessage {
             role: Role::User,
             content: vec!["This is a plain string".to_string().into()],
         };
-        let result =
-            chat_completion_config_non_legacy.prepare_request_message(&templates, &input_message);
+        let result = chat_completion_config_non_legacy
+            .prepare_request_message(&templates, &input_message)
+            .await;
         let prepared_message = result.unwrap();
         match prepared_message {
             RequestMessage {
@@ -1204,11 +1229,11 @@ mod tests {
             timeouts: Default::default(),
         };
         // Test case 1: invalid message (String passed when template required)
-        let messages = vec![ResolvedInputMessage {
+        let messages = vec![LazyResolvedInputMessage {
             role: Role::User,
             content: vec!["Hello".to_string().into()],
         }];
-        let input = ResolvedInput {
+        let input = LazyResolvedInput {
             system: Some(Value::String("Hello".to_string())),
             messages,
         };
@@ -1253,11 +1278,11 @@ mod tests {
 
         // Test case 2: invalid model in request
         let inference_params = InferenceParams::default();
-        let messages = vec![ResolvedInputMessage {
+        let messages = vec![LazyResolvedInputMessage {
             role: Role::User,
             content: vec![],
         }];
-        let input = ResolvedInput {
+        let input = LazyResolvedInput {
             system: Some(json!({"assistant_name": "R2-D2"})),
             messages,
         };
@@ -1490,9 +1515,9 @@ mod tests {
             weight: Some(1.0),
             ..Default::default()
         };
-        let input = ResolvedInput {
+        let input = LazyResolvedInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![LazyResolvedInputMessage {
                 role: Role::User,
                 content: vec!["What is the weather in Brooklyn?".to_string().into()],
             }],
@@ -1645,9 +1670,9 @@ mod tests {
             }
             InferenceResult::Chat(_) => panic!("Expected Json inference response"),
         }
-        let messages = vec![ResolvedInputMessage {
+        let messages = vec![LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+            content: vec![LazyResolvedInputMessageContent::Template(TemplateInput {
                 name: "user".to_string(),
                 arguments: json!({"name": "Luke", "age": 20})
                     .as_object()
@@ -1655,7 +1680,7 @@ mod tests {
                     .clone(),
             })],
         }];
-        let input = ResolvedInput {
+        let input = LazyResolvedInput {
             system: Some(json!({"assistant_name": "R2-D2"})),
             messages,
         };
@@ -2088,9 +2113,9 @@ mod tests {
         };
         // Test case 1: Model inference fails because of model issues
         let inference_params = InferenceParams::default();
-        let messages = vec![ResolvedInputMessage {
+        let messages = vec![LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+            content: vec![LazyResolvedInputMessageContent::Template(TemplateInput {
                 name: "user".to_string(),
                 arguments: json!({"name": "Luke", "age": 20})
                     .as_object()
@@ -2098,7 +2123,7 @@ mod tests {
                     .clone(),
             })],
         }];
-        let input = ResolvedInput {
+        let input = LazyResolvedInput {
             system: Some(json!({"assistant_name": "R2-D2"})),
             messages,
         };
@@ -2294,7 +2319,7 @@ mod tests {
     #[tokio::test]
     async fn test_prepare_request_params() {
         // We won't vary these parameters in this test
-        let input = ResolvedInput {
+        let input = LazyResolvedInput {
             system: None,
             messages: vec![],
         };
@@ -2341,6 +2366,7 @@ mod tests {
                 stream,
                 &mut inference_params,
             )
+            .await
             .unwrap();
         assert_eq!(model_request.temperature, Some(0.5));
         assert_eq!(model_request.max_tokens, Some(100));
@@ -2369,6 +2395,7 @@ mod tests {
                 stream,
                 &mut inference_params,
             )
+            .await
             .unwrap();
         assert_eq!(model_request.temperature, Some(1.));
         assert_eq!(model_request.max_tokens, Some(200));
@@ -2450,6 +2477,7 @@ mod tests {
                 stream,
                 &mut inference_params,
             )
+            .await
             .unwrap();
         assert_eq!(model_request.temperature, Some(0.5));
         assert_eq!(model_request.max_tokens, Some(100));
@@ -2488,6 +2516,7 @@ mod tests {
                 stream,
                 &mut inference_params,
             )
+            .await
             .unwrap();
         assert_eq!(model_request.temperature, Some(0.9));
         assert_eq!(model_request.max_tokens, None);
@@ -2529,6 +2558,7 @@ mod tests {
                 stream,
                 &mut inference_params,
             )
+            .await
             .unwrap();
         assert_eq!(
             model_request.output_schema,
