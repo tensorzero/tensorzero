@@ -28,7 +28,7 @@ import {
   getTensorZeroClient,
 } from "~/utils/tensorzero.server";
 import { ParameterCard } from "./InferenceParameters";
-import { TagsEditor } from "~/components/tags";
+import { TagsEditor } from "~/components/tags/TagsEditor";
 import { ModelInferencesTable } from "./ModelInferencesTable";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
