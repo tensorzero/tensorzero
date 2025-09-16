@@ -139,6 +139,10 @@
               "deployment/clickhouse",
               "deployment/optimize-latency-and-throughput"
             ]
+          },
+          {
+            "group": "Operations",
+            "pages": ["operations/organize-your-configuration"]
           }
         ]
       }
