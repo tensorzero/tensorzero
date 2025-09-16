@@ -40,3 +40,28 @@ test("should show the function detail page for default function", async ({
   // Assert that "error" is not in the page
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
+
+// http://localhost:5173/observability/functions/tensorzero::default
+
+const toolSearchWikipedia = {
+  name: "search_wikipedia",
+  description:
+    "Search Wikipedia for pages that match the query. Returns a list of page titles.",
+};
+
+test("should open drawer when tool name is clicked", async ({ page }) => {
+  await page.goto("/observability/functions/multi_hop_rag_agent");
+
+  // ensure the drawer is not open by default
+  const drawer = await page.getByRole("dialog");
+  await expect(drawer).not.toBeVisible();
+
+  // open the drawer
+  const toolButton = await page.getByText(toolSearchWikipedia.name);
+  await toolButton.click();
+  await expect(drawer).toBeVisible();
+
+  // ensure that the drawer shows the correct description
+  const desc = await page.getByText(toolSearchWikipedia.description);
+  await expect(desc.first()).toBeVisible();
+});
