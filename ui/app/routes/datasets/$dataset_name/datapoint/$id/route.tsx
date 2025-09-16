@@ -245,7 +245,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const [output, setOutput] = useState<
     ContentBlockChatOutput[] | JsonInferenceOutput | null
   >(datapoint.output ?? null);
-  const [tags, setTags] = useState<Record<string, string>>(datapoint.tags || {});
+  const [tags, setTags] = useState<Record<string, string>>(
+    datapoint.tags || {},
+  );
   const [isEditing, setIsEditing] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -259,7 +261,15 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
       JSON.stringify(tags) !== JSON.stringify(originalTags);
 
     return isEditing && (hasInputChanged || hasOutputChanged || hasTagsChanged);
-  }, [isEditing, input, output, tags, originalInput, originalOutput, originalTags]);
+  }, [
+    isEditing,
+    input,
+    output,
+    tags,
+    originalInput,
+    originalOutput,
+    originalTags,
+  ]);
 
   const toggleEditing = () => setIsEditing(!isEditing);
 

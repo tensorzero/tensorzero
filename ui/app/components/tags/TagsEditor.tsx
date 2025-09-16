@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { X, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -21,20 +21,15 @@ interface TagsEditorProps {
 }
 
 export function TagsEditor({ tags, onTagsChange, isEditing }: TagsEditorProps) {
-  // Use try-catch to handle cases where useNavigate is not available (e.g., Storybook)
-  let navigate: ReturnType<typeof useNavigate> | null = null;
-  try {
-    navigate = useNavigate();
-  } catch (error) {
-    // Navigation not available (e.g., in Storybook), continue without it
-    navigate = null;
-  }
+  const navigate = useNavigate();
 
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
 
   // Sort tags alphabetically by key
-  const sortedTagEntries = Object.entries(tags).sort(([a], [b]) => a.localeCompare(b));
+  const sortedTagEntries = Object.entries(tags).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
 
   // Navigation logic from TagsTable component
   const navigableKeys = [
@@ -43,7 +38,7 @@ export function TagsEditor({ tags, onTagsChange, isEditing }: TagsEditorProps) {
     "tensorzero::evaluator_inference_id",
     "tensorzero::dynamic_evaluation_run_id",
   ];
-  
+
   // Add conditional navigation keys
   if (tags["tensorzero::evaluation_name"]) {
     navigableKeys.push("tensorzero::evaluation_run_id");
@@ -55,7 +50,7 @@ export function TagsEditor({ tags, onTagsChange, isEditing }: TagsEditorProps) {
   // Navigation handler from TagsTable
   const handleRowClick = (key: string, value: string) => {
     // Only navigate if not in editing mode and navigation is available
-    if (!isEditing && navigate && navigableKeys.includes(key)) {
+    if (!isEditing && navigableKeys.includes(key)) {
       switch (key) {
         case "tensorzero::evaluation_run_id": {
           const evaluationName = tags["tensorzero::evaluation_name"];
@@ -94,13 +89,13 @@ export function TagsEditor({ tags, onTagsChange, isEditing }: TagsEditorProps) {
   const handleAddTag = () => {
     const trimmedKey = newKey.trim();
     const trimmedValue = newValue.trim();
-    
+
     if (trimmedKey && trimmedValue && onTagsChange) {
       // Prevent users from adding system tags
       if (trimmedKey.startsWith("tensorzero::")) {
         return; // Silently ignore system tag attempts
       }
-      
+
       const updatedTags = { ...tags, [trimmedKey]: trimmedValue };
       onTagsChange(updatedTags);
       setNewKey("");
@@ -140,16 +135,14 @@ export function TagsEditor({ tags, onTagsChange, isEditing }: TagsEditorProps) {
           ) : (
             sortedTagEntries.map(([key, value]) => {
               const isSystemTag = key.startsWith("tensorzero::");
-              const isNavigable = !isEditing && navigate && navigableKeys.includes(key);
-              
+              const isNavigable = !isEditing && navigableKeys.includes(key);
+
               return (
-                <TableRow 
+                <TableRow
                   key={key}
                   onClick={() => handleRowClick(key, value)}
                   className={
-                    isNavigable
-                      ? "hover:bg-bg-subtle cursor-pointer"
-                      : ""
+                    isNavigable ? "hover:bg-bg-subtle cursor-pointer" : ""
                   }
                 >
                   <TableCell>
@@ -166,7 +159,7 @@ export function TagsEditor({ tags, onTagsChange, isEditing }: TagsEditorProps) {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleRemoveTag(key)}
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                          className="text-muted-foreground hover:text-destructive h-6 w-6 p-0"
                         >
                           <Trash2 className="h-3 w-3" />
                         </Button>
@@ -190,8 +183,8 @@ export function TagsEditor({ tags, onTagsChange, isEditing }: TagsEditorProps) {
               onChange={(e) => setNewKey(e.target.value)}
               onKeyPress={handleKeyPress}
               className={`w-48 font-mono text-sm ${
-                newKey.trim().startsWith("tensorzero::") 
-                  ? "border-destructive focus:border-destructive" 
+                newKey.trim().startsWith("tensorzero::")
+                  ? "border-destructive focus:border-destructive"
                   : ""
               }`}
             />
@@ -208,19 +201,20 @@ export function TagsEditor({ tags, onTagsChange, isEditing }: TagsEditorProps) {
               size="sm"
               onClick={handleAddTag}
               disabled={
-                !newKey.trim() || 
-                !newValue.trim() || 
+                !newKey.trim() ||
+                !newValue.trim() ||
                 newKey.trim().startsWith("tensorzero::")
               }
               className="px-3"
             >
-              <Plus className="h-3 w-3 mr-1" />
+              <Plus className="mr-1 h-3 w-3" />
               Add
             </Button>
           </div>
           {newKey.trim().startsWith("tensorzero::") && (
-            <p className="text-sm text-destructive">
-              System tags (starting with "tensorzero::") cannot be added manually.
+            <p className="text-destructive text-sm">
+              System tags (starting with "tensorzero::") cannot be added
+              manually.
             </p>
           )}
         </div>

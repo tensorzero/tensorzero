@@ -26,7 +26,7 @@ const TagsEditorWrapper = ({
 
   return (
     <div className="w-[600px] p-4">
-      <h3 className="text-lg font-semibold mb-4">
+      <h3 className="mb-4 text-lg font-semibold">
         Tags Editor ({isEditing ? "Editing" : "Read-only"})
       </h3>
       <TagsEditor tags={tags} onTagsChange={setTags} isEditing={isEditing} />
@@ -73,7 +73,7 @@ export const EditingMode: Story = {
     <TagsEditorWrapper
       initialTags={{
         apple: "fruit",
-        banana: "yellow", 
+        banana: "yellow",
         "tensorzero::system_tag": "system_value",
         zebra: "animal",
       }}

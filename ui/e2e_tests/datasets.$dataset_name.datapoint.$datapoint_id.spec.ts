@@ -120,7 +120,7 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   // Test 1: Add a new tag
   const testKey1 = "environment";
   const testValue1 = "test";
-  
+
   await page.getByPlaceholder("Key").fill(testKey1);
   await page.getByPlaceholder("Value").fill(testValue1);
   await page.getByRole("button", { name: "Add" }).click();
@@ -132,7 +132,7 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   // Test 2: Add another tag to test sorting
   const testKey2 = "author";
   const testValue2 = "e2e-test";
-  
+
   await page.getByPlaceholder("Key").fill(testKey2);
   await page.getByPlaceholder("Value").fill(testValue2);
   await page.getByRole("button", { name: "Add" }).click();
@@ -144,15 +144,19 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   // Test 3: Try to add a system tag (should be prevented)
   const systemKey = "tensorzero::blocked";
   const systemValue = "should_not_work";
-  
+
   await page.getByPlaceholder("Key").fill(systemKey);
   await page.getByPlaceholder("Value").fill(systemValue);
-  
+
   // The Add button should be disabled
   await expect(page.getByRole("button", { name: "Add" })).toBeDisabled();
-  
+
   // Should show error message
-  await expect(page.getByText("System tags (starting with \"tensorzero::\") cannot be added manually.")).toBeVisible();
+  await expect(
+    page.getByText(
+      'System tags (starting with "tensorzero::") cannot be added manually.',
+    ),
+  ).toBeVisible();
 
   // Clear the system tag input
   await page.getByPlaceholder("Key").clear();
@@ -174,7 +178,10 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   await page.getByRole("button", { name: "Edit" }).click();
 
   // Find and click the delete button for the first tag (should be "author" due to alphabetical sorting)
-  const deleteButton = page.locator("table tr").filter({ hasText: testKey2 }).getByRole("button");
+  const deleteButton = page
+    .locator("table tr")
+    .filter({ hasText: testKey2 })
+    .getByRole("button");
   await deleteButton.click();
 
   // Verify the tag is removed from the table
@@ -187,7 +194,7 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
 
   // Test 6: Save again and reload the page to verify persistence
   await page.getByRole("button", { name: "Save" }).click();
-  
+
   // Reload the page to verify tags persist across page loads
   await page.reload();
   await page.waitForLoadState("networkidle");

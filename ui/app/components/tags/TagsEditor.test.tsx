@@ -36,7 +36,7 @@ describe("TagsEditor component logic", () => {
     };
     const keyToRemove = "experiment";
 
-    const updatedTags = { ...existingTags };
+    const updatedTags = { ...existingTags } as Record<string, string>;
     delete updatedTags[keyToRemove];
 
     expect(updatedTags).toEqual({
@@ -58,7 +58,10 @@ describe("TagsEditor component logic", () => {
     expect(tagEntries.length).toBe(3);
     expect(tagEntries).toContainEqual(["user_id", "123"]);
     expect(tagEntries).toContainEqual(["experiment", "A"]);
-    expect(tagEntries).toContainEqual(["tensorzero::system_tag", "system_value"]);
+    expect(tagEntries).toContainEqual([
+      "tensorzero::system_tag",
+      "system_value",
+    ]);
   });
 
   it("should validate tag input properly", () => {
@@ -94,7 +97,7 @@ describe("TagsEditor component logic", () => {
 
     // System tags should be blocked
     expect(systemTagKey.startsWith("tensorzero::")).toBe(true);
-    
+
     // Regular tags should be allowed
     expect(regularKey.startsWith("tensorzero::")).toBe(false);
   });
@@ -102,7 +105,6 @@ describe("TagsEditor component logic", () => {
   it("should validate system tag prevention in add logic", () => {
     const existingTags = { user_id: "123" };
     const systemKey = "tensorzero::blocked";
-    const systemValue = "should_not_be_added";
     const regularKey = "allowed";
     const regularValue = "can_be_added";
 
@@ -118,7 +120,10 @@ describe("TagsEditor component logic", () => {
 
     // Regular tag should be allowed
     if (trimmedRegularKey && !trimmedRegularKey.startsWith("tensorzero::")) {
-      const updatedTags = { ...existingTags, [trimmedRegularKey]: regularValue };
+      const updatedTags = {
+        ...existingTags,
+        [trimmedRegularKey]: regularValue,
+      };
       expect(updatedTags).toEqual({
         user_id: "123",
         allowed: "can_be_added",
@@ -129,13 +134,15 @@ describe("TagsEditor component logic", () => {
   it("should sort tags alphabetically by key", () => {
     const unsortedTags = {
       zebra: "last",
-      apple: "first", 
+      apple: "first",
       "tensorzero::system": "middle",
       banana: "second",
     };
 
-    const sortedEntries = Object.entries(unsortedTags).sort(([a], [b]) => a.localeCompare(b));
-    
+    const sortedEntries = Object.entries(unsortedTags).sort(([a], [b]) =>
+      a.localeCompare(b),
+    );
+
     expect(sortedEntries[0][0]).toBe("apple");
     expect(sortedEntries[1][0]).toBe("banana");
     expect(sortedEntries[2][0]).toBe("tensorzero::system");
@@ -145,7 +152,7 @@ describe("TagsEditor component logic", () => {
   it("should identify navigable keys correctly", () => {
     const navigableKeys = [
       "tensorzero::evaluation_name",
-      "tensorzero::dataset_name", 
+      "tensorzero::dataset_name",
       "tensorzero::evaluator_inference_id",
       "tensorzero::dynamic_evaluation_run_id",
     ];
@@ -180,19 +187,21 @@ describe("TagsEditor component logic", () => {
       "tensorzero::evaluation_name": "test_eval",
       user_tag: "value",
     };
-    
+
     // In read-only mode (isEditing: false) without onTagsChange callback
     // The component should still work for displaying tags and navigation
-    const sortedEntries = Object.entries(tags).sort(([a], [b]) => a.localeCompare(b));
-    
+    const sortedEntries = Object.entries(tags).sort(([a], [b]) =>
+      a.localeCompare(b),
+    );
+
     expect(sortedEntries.length).toBe(2);
     expect(sortedEntries[0][0]).toBe("tensorzero::evaluation_name");
     expect(sortedEntries[1][0]).toBe("user_tag");
-    
+
     // Simulating that onTagsChange is undefined (not provided)
     const onTagsChange = undefined;
     expect(onTagsChange).toBeUndefined();
-    
+
     // The component should handle this gracefully
   });
 });
