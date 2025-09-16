@@ -9,17 +9,17 @@ import {
 import { ChevronDown } from "lucide-react";
 import { Compare } from "~/components/icons/Icons";
 
-export interface TryWithVariantButtonProps {
+export interface TryWithButtonProps {
   variants: string[];
   onVariantSelect: (variant: string) => void;
   isLoading: boolean;
 }
 
-export function TryWithVariantButton({
+export function TryWithButton({
   variants,
   onVariantSelect,
   isLoading,
-}: TryWithVariantButtonProps) {
+}: TryWithButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (

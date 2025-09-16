@@ -380,7 +380,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             canSave={canSave}
             onSave={handleSave}
             onReset={handleReset}
-            showTryWithVariant={
+            showTryWithButton={
               datapoint.function_name !== "tensorzero::default"
             }
           />

@@ -50,7 +50,7 @@ import {
   type VariantResponseInfo,
 } from "~/routes/api/tensorzero/inference.utils";
 import { ActionBar } from "~/components/layout/ActionBar";
-import { TryWithVariantButton } from "~/components/inference/TryWithVariantButton";
+import { TryWithButton } from "~/components/inference/TryWithButton";
 import { AddToDatasetButton } from "./AddToDatasetButton";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
@@ -414,7 +414,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         )}
 
         <ActionBar>
-          <TryWithVariantButton
+          <TryWithButton
             variants={variants}
             onVariantSelect={onVariantSelect}
             isLoading={variantInferenceIsLoading}
