@@ -202,7 +202,19 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   await expect(tagsSection3.locator("table")).toContainText(testKey1);
   await expect(tagsSection3.locator("table")).toContainText(testValue1);
 
-  // Test 6: Save again and verify persistence after redirect
+  // Test 6: Edit an existing tag by overwriting it
+  const newTestValue1 = "production"; // New value for environment tag
+
+  await page.getByPlaceholder("Key").fill(testKey1); // Use same key "environment"
+  await page.getByPlaceholder("Value").fill(newTestValue1);
+  await page.getByRole("button", { name: "Add" }).click();
+
+  // Verify the tag value was overwritten (old value gone, new value present)
+  await expect(tagsSection3.locator("table")).toContainText(testKey1);
+  await expect(tagsSection3.locator("table")).toContainText(newTestValue1);
+  await expect(tagsSection3.locator("table")).not.toContainText(testValue1); // Old value should be gone
+
+  // Test 7: Save again and verify persistence after redirect
   await page.getByRole("button", { name: "Save" }).click();
 
   // Wait for the save to complete and potential redirect (new datapoint ID)
@@ -216,25 +228,27 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
     new RegExp(`/datasets/${datasetName}/datapoint/[^/]+$`),
   );
 
-  // Verify only the remaining tag is still present after the save/redirect
+  // Verify only the remaining tag with updated value is present after the save/redirect
   const tagsSection4 = page
     .locator("section")
     .filter({ has: page.getByRole("heading", { name: "Tags" }) });
   await expect(tagsSection4.locator("table")).toContainText(testKey1);
-  await expect(tagsSection4.locator("table")).toContainText(testValue1);
+  await expect(tagsSection4.locator("table")).toContainText(newTestValue1); // New value
+  await expect(tagsSection4.locator("table")).not.toContainText(testValue1); // Old value should be gone
   await expect(tagsSection4.locator("table")).not.toContainText(testKey2);
   await expect(tagsSection4.locator("table")).not.toContainText(testValue2);
 
-  // Test 7: Reload the page to verify persistence
+  // Test 8: Reload the page to verify persistence
   await page.reload();
   await page.waitForLoadState("networkidle");
 
-  // Verify tags are still present after page reload
+  // Verify tags are still present after page reload with the updated value
   const tagsSection5 = page
     .locator("section")
     .filter({ has: page.getByRole("heading", { name: "Tags" }) });
   await expect(tagsSection5.locator("table")).toContainText(testKey1);
-  await expect(tagsSection5.locator("table")).toContainText(testValue1);
+  await expect(tagsSection5.locator("table")).toContainText(newTestValue1); // New value
+  await expect(tagsSection5.locator("table")).not.toContainText(testValue1); // Old value should be gone
   await expect(tagsSection5.locator("table")).not.toContainText(testKey2);
   await expect(tagsSection5.locator("table")).not.toContainText(testValue2);
 });
