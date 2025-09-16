@@ -28,7 +28,7 @@ import {
   getTensorZeroClient,
 } from "~/utils/tensorzero.server";
 import { ParameterCard } from "./InferenceParameters";
-import { TagsTable } from "~/components/utils/TagsTable";
+import { TagsEditor } from "~/components/tags";
 import { ModelInferencesTable } from "./ModelInferencesTable";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
@@ -519,7 +519,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Tags" />
-          <TagsTable tags={inference.tags} />
+          <TagsEditor tags={inference.tags} onTagsChange={() => {}} isEditing={false} />
         </SectionLayout>
 
         <SectionLayout>

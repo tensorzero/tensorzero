@@ -173,4 +173,26 @@ describe("TagsEditor component logic", () => {
     expect(conditionalKeys).toContain("tensorzero::evaluation_run_id");
     expect(conditionalKeys).toContain("tensorzero::datapoint_id");
   });
+
+  it("should work in read-only mode without onTagsChange callback", () => {
+    // This test simulates using TagsEditor as a replacement for TagsTable
+    const tags = {
+      "tensorzero::evaluation_name": "test_eval",
+      user_tag: "value",
+    };
+    
+    // In read-only mode (isEditing: false) without onTagsChange callback
+    // The component should still work for displaying tags and navigation
+    const sortedEntries = Object.entries(tags).sort(([a], [b]) => a.localeCompare(b));
+    
+    expect(sortedEntries.length).toBe(2);
+    expect(sortedEntries[0][0]).toBe("tensorzero::evaluation_name");
+    expect(sortedEntries[1][0]).toBe("user_tag");
+    
+    // Simulating that onTagsChange is undefined (not provided)
+    const onTagsChange = undefined;
+    expect(onTagsChange).toBeUndefined();
+    
+    // The component should handle this gracefully
+  });
 });

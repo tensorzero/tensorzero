@@ -16,7 +16,7 @@ import { useNavigate } from "react-router";
 
 interface TagsEditorProps {
   tags: Record<string, string>;
-  onTagsChange: (tags: Record<string, string>) => void;
+  onTagsChange?: (tags: Record<string, string>) => void;
   isEditing: boolean;
 }
 
@@ -95,7 +95,7 @@ export function TagsEditor({ tags, onTagsChange, isEditing }: TagsEditorProps) {
     const trimmedKey = newKey.trim();
     const trimmedValue = newValue.trim();
     
-    if (trimmedKey && trimmedValue) {
+    if (trimmedKey && trimmedValue && onTagsChange) {
       // Prevent users from adding system tags
       if (trimmedKey.startsWith("tensorzero::")) {
         return; // Silently ignore system tag attempts
@@ -109,9 +109,11 @@ export function TagsEditor({ tags, onTagsChange, isEditing }: TagsEditorProps) {
   };
 
   const handleRemoveTag = (keyToRemove: string) => {
-    const updatedTags = { ...tags };
-    delete updatedTags[keyToRemove];
-    onTagsChange(updatedTags);
+    if (onTagsChange) {
+      const updatedTags = { ...tags };
+      delete updatedTags[keyToRemove];
+      onTagsChange(updatedTags);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
