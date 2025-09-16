@@ -10,3 +10,4 @@
   * borrow request generation
   * return request generation
   * accounting
+* add a check for duplicate ScopeKeys
