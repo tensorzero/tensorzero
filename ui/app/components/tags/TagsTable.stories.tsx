@@ -27,7 +27,7 @@ const TagsTableWrapper = ({
   return (
     <div className="w-[600px] p-4">
       <h3 className="mb-4 text-lg font-semibold">
-        Tags Editor ({isEditing ? "Editing" : "Read-only"})
+        Tags Table ({isEditing ? "Editing" : "Read-only"})
       </h3>
       <TagsTable tags={tags} onTagsChange={setTags} isEditing={isEditing} />
     </div>
