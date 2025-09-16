@@ -16,13 +16,18 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Get gateway URL from environment or fallback to localhost
+const getGatewayUrl = () => {
+  return process.env.TENSORZERO_GATEWAY_URL || "http://127.0.0.1:3000";
+};
+
 // Client setup
 let client: OpenAI;
 
 beforeAll(() => {
   client = new OpenAI({
     apiKey: "donotuse",
-    baseURL: "http://127.0.0.1:3000/openai/v1",
+    baseURL: `${getGatewayUrl()}/openai/v1`,
   });
 });
 
@@ -1409,7 +1414,7 @@ it("should handle multi-turn parallel tool calls using TensorZero gateway direct
 
   // First request to get tool calls
   const firstResponse = await fetch(
-    "http://127.0.0.1:3000/openai/v1/chat/completions",
+    `${getGatewayUrl()}/openai/v1/chat/completions`,
     {
       method: "POST",
       headers: {
@@ -1457,7 +1462,7 @@ it("should handle multi-turn parallel tool calls using TensorZero gateway direct
 
   // Second request with tool responses
   const secondResponse = await fetch(
-    "http://127.0.0.1:3000/openai/v1/chat/completions",
+    `${getGatewayUrl()}/openai/v1/chat/completions`,
     {
       method: "POST",
       headers: {
