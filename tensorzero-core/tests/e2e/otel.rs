@@ -12,12 +12,14 @@ use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     FeedbackParams, InferenceOutput, Role,
 };
-use tensorzero_core::inference::types::TextKind;
 use tensorzero_core::observability::build_opentelemetry_layer;
+use tensorzero_core::{config::OtlpTracesFormat, inference::types::TextKind};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
-use crate::providers::common::{make_embedded_gateway, make_embedded_gateway_no_config};
+use crate::providers::common::{
+    make_embedded_gateway, make_embedded_gateway_no_config, make_embedded_gateway_with_config,
+};
 
 type CapturedSpans = Arc<Mutex<Option<Vec<SpanData>>>>;
 
@@ -104,10 +106,27 @@ pub fn attrs_to_map(attrs: &[KeyValue]) -> HashMap<String, Value> {
 }
 
 #[tokio::test]
-pub async fn test_capture_simple_inference_spans() {
+pub async fn test_capture_simple_inference_spans_genai_tags() {
+    test_capture_simple_inference_spans(OtlpTracesFormat::OpenTelemetry, "opentelemetry").await;
+}
+
+#[tokio::test]
+pub async fn test_capture_simple_inference_spans_openinference_tags() {
+    test_capture_simple_inference_spans(OtlpTracesFormat::OpenInference, "openinference").await;
+}
+
+pub async fn test_capture_simple_inference_spans(mode: OtlpTracesFormat, config_mode: &str) {
     let exporter = install_capturing_otel_exporter();
 
-    let client = make_embedded_gateway_no_config().await;
+    let config = format!(
+        "
+    [gateway.export.otlp.traces]
+    enabled = true
+    format = \"{config_mode}\"
+    "
+    );
+
+    let client = make_embedded_gateway_with_config(&config).await;
     let res = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
@@ -203,15 +222,34 @@ pub async fn test_capture_simple_inference_spans() {
     assert_eq!(model_provider_span.status, Status::Unset);
     let model_provider_attr_map = attrs_to_map(&model_provider_span.attributes);
     assert_eq!(model_provider_attr_map["provider_name"], "dummy".into());
-    assert_eq!(
-        model_provider_attr_map["gen_ai.operation.name"],
-        "chat".into()
-    );
-    assert_eq!(model_provider_attr_map["gen_ai.system"], "dummy".into());
-    assert_eq!(
-        model_provider_attr_map["gen_ai.request.model"],
-        "good".into()
-    );
+
+    match mode {
+        OtlpTracesFormat::OpenTelemetry => {
+            assert_eq!(
+                model_provider_attr_map["gen_ai.operation.name"],
+                "chat".into()
+            );
+            assert_eq!(model_provider_attr_map["gen_ai.system"], "dummy".into());
+            assert_eq!(
+                model_provider_attr_map["gen_ai.request.model"],
+                "good".into()
+            );
+            assert!(!model_provider_attr_map.contains_key("openinference.span.kind"));
+            assert!(!model_provider_attr_map.contains_key("llm.system"));
+            assert!(!model_provider_attr_map.contains_key("llm.model_name"));
+        }
+        OtlpTracesFormat::OpenInference => {
+            assert_eq!(
+                model_provider_attr_map["openinference.span.kind"],
+                "LLM".into()
+            );
+            assert_eq!(model_provider_attr_map["llm.system"], "dummy".into());
+            assert_eq!(model_provider_attr_map["llm.model_name"], "good".into());
+            assert!(!model_provider_attr_map.contains_key("gen_ai.operation.name"));
+            assert!(!model_provider_attr_map.contains_key("gen_ai.system"));
+            assert!(!model_provider_attr_map.contains_key("gen_ai.request.model"));
+        }
+    }
     assert_eq!(model_attr_map["stream"], false.into());
 
     assert_eq!(

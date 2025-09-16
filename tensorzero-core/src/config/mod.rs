@@ -422,6 +422,18 @@ pub struct OtlpTracesConfig {
     /// Enable OpenTelemetry traces export to the configured OTLP endpoint (configured via OTLP environment variables)
     #[serde(default)]
     pub enabled: bool,
+    #[serde(default)]
+    pub format: OtlpTracesFormat,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub enum OtlpTracesFormat {
+    #[default]
+    OpenTelemetry,
+    OpenInference,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]

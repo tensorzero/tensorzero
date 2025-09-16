@@ -1141,6 +1141,7 @@ async fn test_embedding_request() {
                     max_age_s: None,
                     enabled: CacheEnabledMode::On,
                 },
+                otlp_config: &Default::default(),
             },
         )
         .await
@@ -1217,6 +1218,7 @@ async fn test_embedding_request() {
                     max_age_s: None,
                     enabled: CacheEnabledMode::On,
                 },
+                otlp_config: &Default::default(),
             },
         )
         .await

@@ -1353,6 +1353,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            otlp_config: &Default::default(),
         };
         let input = ResolvedInput {
             system: None,

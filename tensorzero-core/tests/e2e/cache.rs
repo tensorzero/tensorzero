@@ -89,6 +89,7 @@ async fn test_cache_write_and_read() {
         request: &model_inference_request,
         model_name: "test_model",
         provider_name: "test_provider",
+        otlp_config: &Default::default(),
     };
 
     // Read (should be None)
@@ -214,6 +215,7 @@ async fn test_cache_stream_write_and_read() {
         request: &model_inference_request,
         model_name: "test_model",
         provider_name: "test_provider",
+        otlp_config: &Default::default(),
     };
 
     // Read (should be None)

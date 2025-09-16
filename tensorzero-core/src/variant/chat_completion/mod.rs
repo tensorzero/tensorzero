@@ -1081,6 +1081,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            otlp_config: &Default::default(),
         };
         let templates = get_test_template_config();
         let system_template = get_system_template();
@@ -2026,6 +2027,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            otlp_config: &Default::default(),
         };
         let templates = Box::leak(Box::new(get_test_template_config()));
         let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();

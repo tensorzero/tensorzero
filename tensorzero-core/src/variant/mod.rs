@@ -1138,6 +1138,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            otlp_config: &Default::default(),
         };
         let templates = get_test_template_config();
         let inference_params = InferenceParams::default();
@@ -1435,6 +1436,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            otlp_config: &Default::default(),
         };
         let templates = get_test_template_config();
         let inference_params = InferenceParams::default();
@@ -1594,6 +1596,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            otlp_config: &Default::default(),
         };
         let retry_config = RetryConfig::default();
         // Create a dummy function config (chat completion)
@@ -1739,6 +1742,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            otlp_config: &Default::default(),
         };
         let inference_params = InferenceParams::default();
 
