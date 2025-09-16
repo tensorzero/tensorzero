@@ -1014,4 +1014,514 @@ mod tests {
             &self.0
         }
     }
+
+    // Consolidated comprehensive unit tests
+
+    #[test]
+    fn test_rate_limiting_config_states() {
+        // Test default configuration
+        let default_config = RateLimitingConfig::default();
+        assert!(default_config.enabled());
+        assert!(default_config.rules().is_empty());
+
+        // Test enabled/disabled states
+        let config_enabled = RateLimitingConfig {
+            rules: vec![],
+            enabled: true,
+        };
+        assert!(config_enabled.enabled());
+
+        let config_disabled = RateLimitingConfig {
+            rules: vec![],
+            enabled: false,
+        };
+        assert!(!config_disabled.enabled());
+
+        // Test get_active_limits behavior
+        let mut tags = HashMap::new();
+        tags.insert("user_id".to_string(), "123".to_string());
+        let scope_info = ScopeInfo { tags: &tags };
+
+        // Disabled config should return empty limits
+        let active_limits_disabled = config_disabled.get_active_limits(&scope_info);
+        assert!(active_limits_disabled.is_empty());
+
+        // Enabled config with no rules should return empty limits
+        let active_limits_no_rules = config_enabled.get_active_limits(&scope_info);
+        assert!(active_limits_no_rules.is_empty());
+    }
+
+    #[test]
+    fn test_rate_limiting_config_priority_logic() {
+        // Create test limits
+        let token_limit = Arc::new(RateLimit {
+            resource: RateLimitResource::Token,
+            interval: RateLimitInterval::Minute,
+            capacity: 100,
+            refill_rate: 10,
+        });
+
+        let inference_limit = Arc::new(RateLimit {
+            resource: RateLimitResource::ModelInference,
+            interval: RateLimitInterval::Hour,
+            capacity: 50,
+            refill_rate: 5,
+        });
+
+        let _scope = RateLimitingConfigScopes::new(vec![RateLimitingConfigScope::Tag(
+            TagRateLimitingConfigScope {
+                tag_key: "user_id".to_string(),
+                tag_value: TagValueScope::Any,
+            },
+        )])
+        .unwrap();
+
+        let mut tags = HashMap::new();
+        tags.insert("user_id".to_string(), "test".to_string());
+        let scope_info = ScopeInfo { tags: &tags };
+
+        // Test 1: Always priority beats numeric priority
+        let rule_priority_5 = RateLimitingConfigRule {
+            limits: vec![token_limit.clone()],
+            scope: RateLimitingConfigScopes::new(vec![RateLimitingConfigScope::Tag(
+                TagRateLimitingConfigScope {
+                    tag_key: "user_id".to_string(),
+                    tag_value: TagValueScope::Any,
+                },
+            )])
+            .unwrap(),
+            priority: RateLimitingConfigPriority::Priority(5),
+        };
+
+        let rule_always = RateLimitingConfigRule {
+            limits: vec![inference_limit.clone()],
+            scope: RateLimitingConfigScopes::new(vec![RateLimitingConfigScope::Tag(
+                TagRateLimitingConfigScope {
+                    tag_key: "user_id".to_string(),
+                    tag_value: TagValueScope::Any,
+                },
+            )])
+            .unwrap(),
+            priority: RateLimitingConfigPriority::Always,
+        };
+
+        let config_always_vs_numeric = RateLimitingConfig {
+            rules: vec![rule_priority_5, rule_always],
+            enabled: true,
+        };
+
+        let active_limits = config_always_vs_numeric.get_active_limits(&scope_info);
+        // Should have both limits: the Always rule and the highest priority rule
+        assert_eq!(active_limits.len(), 2);
+        let resources: Vec<RateLimitResource> = active_limits
+            .iter()
+            .map(|limit| limit.limit.resource)
+            .collect();
+        assert!(resources.contains(&RateLimitResource::Token));
+        assert!(resources.contains(&RateLimitResource::ModelInference));
+
+        // Test 2: Highest numeric priority wins among numeric priorities
+        let rule_priority_3 = RateLimitingConfigRule {
+            limits: vec![token_limit.clone()],
+            scope: RateLimitingConfigScopes::new(vec![RateLimitingConfigScope::Tag(
+                TagRateLimitingConfigScope {
+                    tag_key: "user_id".to_string(),
+                    tag_value: TagValueScope::Any,
+                },
+            )])
+            .unwrap(),
+            priority: RateLimitingConfigPriority::Priority(3),
+        };
+
+        let rule_priority_7 = RateLimitingConfigRule {
+            limits: vec![inference_limit.clone()],
+            scope: RateLimitingConfigScopes::new(vec![RateLimitingConfigScope::Tag(
+                TagRateLimitingConfigScope {
+                    tag_key: "user_id".to_string(),
+                    tag_value: TagValueScope::Any,
+                },
+            )])
+            .unwrap(),
+            priority: RateLimitingConfigPriority::Priority(7),
+        };
+
+        let config_numeric_priorities = RateLimitingConfig {
+            rules: vec![rule_priority_3, rule_priority_7],
+            enabled: true,
+        };
+
+        let active_limits = config_numeric_priorities.get_active_limits(&scope_info);
+        // Should only have the limit from priority 7 rule
+        assert_eq!(active_limits.len(), 1);
+        assert_eq!(
+            active_limits[0].limit.resource,
+            RateLimitResource::ModelInference
+        );
+
+        // Test 3: Multiple limits in same rule
+        let rule_multiple_limits = RateLimitingConfigRule {
+            limits: vec![token_limit.clone(), inference_limit.clone()],
+            scope: RateLimitingConfigScopes::new(vec![RateLimitingConfigScope::Tag(
+                TagRateLimitingConfigScope {
+                    tag_key: "user_id".to_string(),
+                    tag_value: TagValueScope::Any,
+                },
+            )])
+            .unwrap(),
+            priority: RateLimitingConfigPriority::Always,
+        };
+
+        let config_multiple_limits = RateLimitingConfig {
+            rules: vec![rule_multiple_limits],
+            enabled: true,
+        };
+
+        let active_limits = config_multiple_limits.get_active_limits(&scope_info);
+        assert_eq!(active_limits.len(), 2);
+        let resources: Vec<RateLimitResource> = active_limits
+            .iter()
+            .map(|limit| limit.limit.resource)
+            .collect();
+        assert!(resources.contains(&RateLimitResource::Token));
+        assert!(resources.contains(&RateLimitResource::ModelInference));
+    }
+
+    #[test]
+    fn test_rate_limit_interval_to_duration() {
+        assert_eq!(
+            RateLimitInterval::Second.to_duration(),
+            chrono::Duration::seconds(1)
+        );
+        assert_eq!(
+            RateLimitInterval::Minute.to_duration(),
+            chrono::Duration::minutes(1)
+        );
+        assert_eq!(
+            RateLimitInterval::Hour.to_duration(),
+            chrono::Duration::hours(1)
+        );
+        assert_eq!(
+            RateLimitInterval::Day.to_duration(),
+            chrono::Duration::days(1)
+        );
+        assert_eq!(
+            RateLimitInterval::Week.to_duration(),
+            chrono::Duration::weeks(1)
+        );
+        assert_eq!(
+            RateLimitInterval::Month.to_duration(),
+            chrono::Duration::days(30)
+        );
+    }
+
+    #[test]
+    fn test_active_rate_limit_keys() {
+        // Test basic key generation and content validation
+        let token_limit = Arc::new(RateLimit {
+            resource: RateLimitResource::Token,
+            interval: RateLimitInterval::Minute,
+            capacity: 100,
+            refill_rate: 10,
+        });
+
+        let inference_limit = Arc::new(RateLimit {
+            resource: RateLimitResource::ModelInference,
+            interval: RateLimitInterval::Minute,
+            capacity: 100,
+            refill_rate: 10,
+        });
+
+        let concrete_scope_key = vec![RateLimitingScopeKey::TagConcrete {
+            key: "user_id".to_string(),
+            value: "123".to_string(),
+        }];
+
+        let any_scope_key = vec![RateLimitingScopeKey::TagAny {
+            key: "app_id".to_string(),
+        }];
+
+        let active_limit_token = ActiveRateLimit {
+            limit: token_limit.clone(),
+            scope_key: concrete_scope_key.clone(),
+        };
+
+        let key = active_limit_token.get_key().unwrap();
+
+        // Test key content - should contain resource and scope info
+        let key_str = key.to_string();
+        assert!(key_str.contains("token") || key_str.contains("Token"));
+        assert!(key_str.contains("TagConcrete") || key_str.contains("tag_concrete"));
+        assert!(key_str.contains("user_id"));
+        assert!(key_str.contains("123"));
+
+        // Test key stability - same inputs should produce same key
+        let active_limit_token2 = ActiveRateLimit {
+            limit: token_limit.clone(),
+            scope_key: concrete_scope_key.clone(),
+        };
+
+        let key2 = active_limit_token2.get_key().unwrap();
+        assert_eq!(key.0, key2.0);
+
+        // Test different resources produce different keys
+        let active_limit_inference = ActiveRateLimit {
+            limit: inference_limit,
+            scope_key: concrete_scope_key.clone(),
+        };
+
+        let key_inference = active_limit_inference.get_key().unwrap();
+        assert_ne!(key.0, key_inference.0);
+
+        // Test different scopes produce different keys
+        let active_limit_different_scope = ActiveRateLimit {
+            limit: token_limit,
+            scope_key: any_scope_key,
+        };
+
+        let key_different_scope = active_limit_different_scope.get_key().unwrap();
+        assert_ne!(key.0, key_different_scope.0);
+    }
+
+    #[test]
+    fn test_active_rate_limit_requests() {
+        // Test consume tickets request for Token resource
+        let token_limit = Arc::new(RateLimit {
+            resource: RateLimitResource::Token,
+            interval: RateLimitInterval::Minute,
+            capacity: 100,
+            refill_rate: 10,
+        });
+
+        let token_active_limit = ActiveRateLimit {
+            limit: token_limit.clone(),
+            scope_key: vec![RateLimitingScopeKey::TagConcrete {
+                key: "user_id".to_string(),
+                value: "123".to_string(),
+            }],
+        };
+
+        let usage = RateLimitResourceUsage {
+            model_inferences: 5,
+            tokens: 50,
+        };
+
+        let consume_request = token_active_limit
+            .get_consume_tickets_request(&usage)
+            .unwrap();
+        assert_eq!(consume_request.requested, 50); // tokens usage
+        assert_eq!(consume_request.capacity, 100);
+        assert_eq!(consume_request.refill_amount, 10);
+        assert_eq!(
+            consume_request.refill_interval,
+            chrono::Duration::minutes(1)
+        );
+
+        // Test return tickets request for ModelInference resource
+        let inference_limit = Arc::new(RateLimit {
+            resource: RateLimitResource::ModelInference,
+            interval: RateLimitInterval::Hour,
+            capacity: 20,
+            refill_rate: 5,
+        });
+
+        let inference_active_limit = ActiveRateLimit {
+            limit: inference_limit.clone(),
+            scope_key: vec![RateLimitingScopeKey::TagAny {
+                key: "app_id".to_string(),
+            }],
+        };
+
+        let return_request = inference_active_limit
+            .get_return_tickets_request(3)
+            .unwrap();
+        assert_eq!(return_request.returned, 3);
+        assert_eq!(return_request.capacity, 20);
+        assert_eq!(return_request.refill_amount, 5);
+        assert_eq!(return_request.refill_interval, chrono::Duration::hours(1));
+
+        // Test consume tickets request for ModelInference resource
+        let inference_consume_request = inference_active_limit
+            .get_consume_tickets_request(&usage)
+            .unwrap();
+        assert_eq!(inference_consume_request.requested, 5); // model_inferences usage
+        assert_eq!(inference_consume_request.capacity, 20);
+        assert_eq!(inference_consume_request.refill_amount, 5);
+        assert_eq!(
+            inference_consume_request.refill_interval,
+            chrono::Duration::hours(1)
+        );
+
+        // Test resource usage mapping works correctly
+        assert_eq!(usage.get_usage(RateLimitResource::Token), 50);
+        assert_eq!(usage.get_usage(RateLimitResource::ModelInference), 5);
+    }
+
+    #[test]
+    fn test_ticket_borrow_lifecycle() {
+        use crate::db::ConsumeTicketsReciept;
+
+        // Test empty borrow creation
+        let empty_borrow = TicketBorrow::empty();
+        assert_eq!(empty_borrow.reciepts.len(), 0);
+        assert_eq!(empty_borrow.active_limits.len(), 0);
+
+        // Test valid borrow creation
+        let limit = Arc::new(RateLimit {
+            resource: RateLimitResource::Token,
+            interval: RateLimitInterval::Minute,
+            capacity: 100,
+            refill_rate: 10,
+        });
+
+        let active_limit = ActiveRateLimit {
+            limit,
+            scope_key: vec![RateLimitingScopeKey::TagConcrete {
+                key: "user_id".to_string(),
+                value: "123".to_string(),
+            }],
+        };
+
+        let receipt = ConsumeTicketsReciept {
+            key: active_limit.get_key().unwrap(),
+            success: true,
+            tickets_remaining: 50,
+            tickets_consumed: 50,
+        };
+
+        let valid_borrow = TicketBorrow::new(vec![receipt], vec![active_limit]).unwrap();
+        assert_eq!(valid_borrow.reciepts.len(), 1);
+        assert_eq!(valid_borrow.active_limits.len(), 1);
+
+        // Test iterator functionality
+        let mut iter_count = 0;
+        for (r, a) in valid_borrow.iter() {
+            assert_eq!(r.success, true);
+            assert_eq!(r.tickets_consumed, 50);
+            assert_eq!(a.limit.resource, RateLimitResource::Token);
+            iter_count += 1;
+        }
+        assert_eq!(iter_count, 1);
+
+        // Test mismatched array lengths error
+        let limit2 = Arc::new(RateLimit {
+            resource: RateLimitResource::ModelInference,
+            interval: RateLimitInterval::Hour,
+            capacity: 20,
+            refill_rate: 5,
+        });
+
+        let active_limit2 = ActiveRateLimit {
+            limit: limit2,
+            scope_key: vec![RateLimitingScopeKey::TagAny {
+                key: "app_id".to_string(),
+            }],
+        };
+
+        // Try to create with mismatched array lengths
+        let receipt2 = ConsumeTicketsReciept {
+            key: active_limit2.get_key().unwrap(),
+            success: true,
+            tickets_remaining: 10,
+            tickets_consumed: 10,
+        };
+
+        let mismatched_result = TicketBorrow::new(vec![receipt2], vec![]);
+        assert!(mismatched_result.is_err());
+
+        // Another mismatch test - more active limits than receipts
+        let receipt3 = ConsumeTicketsReciept {
+            key: active_limit2.get_key().unwrap(),
+            success: true,
+            tickets_remaining: 15,
+            tickets_consumed: 15,
+        };
+
+        let mismatched_result2 = TicketBorrow::new(vec![receipt3], vec![active_limit2]);
+        assert!(mismatched_result2.is_ok()); // This should actually work - 1:1 ratio
+    }
+
+    #[test]
+    fn test_get_estimated_tokens() {
+        assert_eq!(get_estimated_tokens(""), 0);
+        assert_eq!(get_estimated_tokens("ab"), 1);
+        assert_eq!(get_estimated_tokens("abcd"), 2);
+        assert_eq!(get_estimated_tokens("hello world"), 5);
+
+        let long_text = "a".repeat(1000);
+        assert_eq!(get_estimated_tokens(&long_text), 500);
+    }
+
+    #[test]
+    fn test_check_borrowed_rate_limits() {
+        use crate::db::ConsumeTicketsReciept;
+        use crate::error::ErrorDetails;
+
+        let limit = Arc::new(RateLimit {
+            resource: RateLimitResource::Token,
+            interval: RateLimitInterval::Minute,
+            capacity: 100,
+            refill_rate: 10,
+        });
+
+        let active_limit = ActiveRateLimit {
+            limit,
+            scope_key: vec![RateLimitingScopeKey::TagConcrete {
+                key: "user_id".to_string(),
+                value: "123".to_string(),
+            }],
+        };
+
+        // Test success case
+        let success_receipt = ConsumeTicketsReciept {
+            key: active_limit.get_key().unwrap(),
+            success: true,
+            tickets_remaining: 50,
+            tickets_consumed: 50,
+        };
+
+        let success_result = check_borrowed_rate_limits(&[active_limit], &[success_receipt]);
+        assert!(success_result.is_ok());
+
+        // Create a new active limit for the failure test since we used the original
+        let active_limit2 = ActiveRateLimit {
+            limit: Arc::new(RateLimit {
+                resource: RateLimitResource::Token,
+                interval: RateLimitInterval::Minute,
+                capacity: 100,
+                refill_rate: 10,
+            }),
+            scope_key: vec![RateLimitingScopeKey::TagConcrete {
+                key: "user_id".to_string(),
+                value: "123".to_string(),
+            }],
+        };
+
+        // Test failure case
+        let failure_receipt = ConsumeTicketsReciept {
+            key: active_limit2.get_key().unwrap(),
+            success: false,
+            tickets_remaining: 0,
+            tickets_consumed: 0,
+        };
+
+        let failure_result = check_borrowed_rate_limits(&[active_limit2], &[failure_receipt]);
+        assert!(failure_result.is_err());
+
+        match failure_result {
+            Err(error) => {
+                if let ErrorDetails::RateLimitExceeded {
+                    tickets_remaining, ..
+                } = error.get_details()
+                {
+                    assert_eq!(*tickets_remaining, 0);
+                } else {
+                    panic!(
+                        "Expected RateLimitExceeded error, got: {:?}",
+                        error.get_details()
+                    );
+                }
+            }
+            Ok(_) => panic!("Expected an error, but got Ok"),
+        }
+    }
 }
