@@ -10,6 +10,7 @@ import Chip from "~/components/ui/Chip";
 import { Calendar, Dataset } from "~/components/icons/Icons";
 import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
 import { getFunctionTypeIcon } from "~/utils/icon";
+import { TagsBadges } from "~/components/feedback/TagsBadges";
 
 interface BasicInfoProps {
   datapoint: ParsedDatasetRow;
@@ -104,6 +105,13 @@ export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
             label={formatDateWithSeconds(new Date(datapoint.updated_at))}
             tooltip={timestampTooltip}
           />
+        </BasicInfoItemContent>
+      </BasicInfoItem>
+
+      <BasicInfoItem>
+        <BasicInfoItemTitle>Tags</BasicInfoItemTitle>
+        <BasicInfoItemContent>
+          <TagsBadges tags={datapoint.tags || {}} />
         </BasicInfoItemContent>
       </BasicInfoItem>
     </BasicInfoLayout>
