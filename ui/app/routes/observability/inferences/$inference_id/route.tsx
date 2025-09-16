@@ -519,7 +519,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Tags" />
-          <TagsEditor tags={inference.tags} onTagsChange={() => {}} isEditing={false} />
+          <TagsEditor tags={inference.tags} isEditing={false} />
         </SectionLayout>
 
         <SectionLayout>
