@@ -706,8 +706,6 @@ fn create_stream(
                         extra_headers,
                     };
                     let config = config.clone();
-                        // TODO - should we resolve this earlier in sync write mode, so that we can reject the request with
-                        // an error if it fails?
                         match input.resolve().await {
                             Ok(input) => {
                                 let clickhouse_connection_info = clickhouse_connection_info.clone();

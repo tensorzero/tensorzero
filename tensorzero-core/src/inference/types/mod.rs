@@ -19,7 +19,7 @@
 //!  These types are almost the same as the `LazyResolvedInput`/`LazyResolvedInputMessage`/`LazyResolvedInputMessageContent` types,
 //!  but each file future is now resolved to an in-memory file. No network requests are needed to resolve any data
 //!  within these input types.
-//!  Templates have been applied.
+//!  Templates have been not yet been applied.
 //! * `RequestMessage/ContentBlock`:
 //!
 //!  These types hold input specialized for a particular variant.
