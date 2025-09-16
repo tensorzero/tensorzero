@@ -41,8 +41,6 @@ test("should show the function detail page for default function", async ({
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
 
-// http://localhost:5173/observability/functions/tensorzero::default
-
 const toolSearchWikipedia = {
   name: "search_wikipedia",
   description:
