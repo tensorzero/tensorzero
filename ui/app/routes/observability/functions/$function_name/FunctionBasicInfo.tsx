@@ -6,7 +6,7 @@ import {
   BasicInfoItemTitle,
   BasicInfoItemContent,
 } from "~/components/layout/BasicInfoLayout";
-import { ToolDrawer } from "~/components/function/ToolDrawer";
+import { ToolDetails } from "~/components/function/ToolDetails";
 import Chip from "~/components/ui/Chip";
 
 interface BasicInfoProps {
@@ -18,7 +18,7 @@ export default function BasicInfo({ functionConfig }: BasicInfoProps) {
 
   return (
     <BasicInfoLayout>
-      <ToolDrawer selectedTool={tool} onClose={() => setTool(null)} />
+      <ToolDetails selectedTool={tool} onClose={() => setTool(null)} />
       {functionConfig.description && (
         <BasicInfoItem>
           <BasicInfoItemTitle>Description</BasicInfoItemTitle>

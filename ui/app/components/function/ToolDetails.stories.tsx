@@ -1,13 +1,13 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { ToolDrawer } from "./ToolDrawer";
+import { ToolDetails } from "./ToolDetails";
 import type { Config } from "tensorzero-node";
 import { useState } from "react";
 import { ConfigProvider } from "~/context/config";
 import { Button } from "../ui/button";
 
 const meta = {
-  title: "UI/ToolDrawer",
-  component: ToolDrawer,
+  title: "UI/ToolDetails",
+  component: ToolDetails,
   decorators: [
     (Story) => (
       <div className="w-sm p-4">
@@ -15,7 +15,7 @@ const meta = {
       </div>
     ),
   ],
-} satisfies Meta<typeof ToolDrawer>;
+} satisfies Meta<typeof ToolDetails>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -58,7 +58,7 @@ export const Default: Story = {
     return (
       <ConfigProvider value={mockConfig}>
         <Button onClick={() => setTool("search_wikipedia")}>Open</Button>
-        <ToolDrawer selectedTool={tool} onClose={() => setTool(null)} />
+        <ToolDetails selectedTool={tool} onClose={() => setTool(null)} />
       </ConfigProvider>
     );
   },

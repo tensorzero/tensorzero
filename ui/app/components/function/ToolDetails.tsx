@@ -23,12 +23,12 @@ import {
   BasicInfoLayout,
 } from "../layout/BasicInfoLayout";
 
-interface ToolDrawerProps {
+interface ToolDetailsProps {
   selectedTool: string | null;
   onClose?: () => void;
 }
 
-export function ToolDrawer({ selectedTool, onClose }: ToolDrawerProps) {
+export function ToolDetails({ selectedTool, onClose }: ToolDetailsProps) {
   const { tools } = useConfig();
 
   const [tool, setTool] = useState<StaticToolConfig>(Object.values(tools)[0]!);
