@@ -59,9 +59,7 @@ pub struct DiclConfig {
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
     pub json_mode: Option<JsonMode>,
-    #[cfg_attr(test, ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
-    #[cfg_attr(test, ts(skip))]
     pub extra_headers: Option<ExtraHeadersConfig>,
     pub retries: RetryConfig,
 }
@@ -85,12 +83,10 @@ pub struct UninitializedDiclConfig {
     pub seed: Option<u32>,
     pub json_mode: Option<JsonMode>,
     #[serde(default)]
-    #[ts(skip)]
     pub extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
     pub retries: RetryConfig,
     #[serde(default)]
-    #[ts(skip)]
     pub extra_headers: Option<ExtraHeadersConfig>,
 }
 

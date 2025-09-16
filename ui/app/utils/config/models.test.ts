@@ -23,6 +23,8 @@ describe("dump_optimizer_output", () => {
                 ttft_ms: null,
               },
             },
+            extra_body: null,
+            extra_headers: null,
           },
         },
         timeouts: {
@@ -54,6 +56,14 @@ describe("dump_optimizer_output", () => {
             api_key_location: null,
             discard_unknown_chunks: false,
             timeouts: {} as TimeoutsConfig,
+            extra_body: [
+              { pointer: "/temperature", value: 0.123 },
+              { pointer: "/my-delete", delete: true },
+            ],
+            extra_headers: [
+              { name: "my-first-header", value: "my-value" },
+              { name: "my-second-header", delete: true },
+            ],
           },
         },
         timeouts: {
@@ -67,8 +77,28 @@ describe("dump_optimizer_output", () => {
       },
     };
     const result_string = dump_optimizer_output(optimizerOutput);
-    expect(result_string).toBe(
-      '[models.gpt-4o]\nrouting = [ "gpt-4o" ]\n\n[models.gpt-4o.providers.gpt-4o]\ntype = "openai"\nmodel_name = "gpt-4o"\ndiscard_unknown_chunks = false',
-    );
+    expect(result_string).toBe(`[models.gpt-4o]
+routing = [ "gpt-4o" ]
+
+[models.gpt-4o.providers.gpt-4o]
+type = "openai"
+model_name = "gpt-4o"
+discard_unknown_chunks = false
+
+[[models.gpt-4o.providers.gpt-4o.extra_body]]
+pointer = "/temperature"
+value = 0.123
+
+[[models.gpt-4o.providers.gpt-4o.extra_body]]
+pointer = "/my-delete"
+delete = true
+
+[[models.gpt-4o.providers.gpt-4o.extra_headers]]
+name = "my-first-header"
+value = "my-value"
+
+[[models.gpt-4o.providers.gpt-4o.extra_headers]]
+name = "my-second-header"
+delete = true`);
   });
 });

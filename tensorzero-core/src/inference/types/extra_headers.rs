@@ -1,13 +1,15 @@
 use super::{deserialize_delete, serialize_delete};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[serde(transparent)]
+#[ts(export, as = "Vec<ExtraHeader>")]
 pub struct ExtraHeadersConfig {
     pub data: Vec<ExtraHeader>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export, type = r#"{name: string} & ({value: string} | {delete: true})"#)]
 pub struct ExtraHeader {
     pub name: String,
     #[serde(flatten)]

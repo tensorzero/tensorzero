@@ -2,13 +2,15 @@ use super::{deserialize_delete, serialize_delete};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[serde(transparent)]
+#[ts(export, as = "Vec<ExtraBodyReplacement>")]
 pub struct ExtraBodyConfig {
     pub data: Vec<ExtraBodyReplacement>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export, type = r#"{pointer: string} & ({value: any} | {delete: true})"#)]
 pub struct ExtraBodyReplacement {
     pub pointer: String,
     #[serde(flatten)]

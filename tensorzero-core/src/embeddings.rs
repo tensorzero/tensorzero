@@ -443,7 +443,6 @@ pub struct EmbeddingProviderInfo {
     pub inner: EmbeddingProviderConfig,
     pub timeouts: TimeoutsConfig,
     pub provider_name: Arc<str>,
-    #[cfg_attr(test, ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
 }
 

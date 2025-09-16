@@ -658,6 +658,8 @@ function variantInfoToUninitalizedVariantInfo(
         stop_sequences: inner.stop_sequences,
         json_mode: inner.json_mode,
         retries: inner.retries,
+        extra_body: inner.extra_body,
+        extra_headers: inner.extra_headers,
       };
 
     case "best_of_n_sampling":
@@ -690,6 +692,8 @@ function variantInfoToUninitalizedVariantInfo(
           stop_sequences: inner.evaluator.stop_sequences,
           json_mode: inner.evaluator.json_mode,
           retries: inner.evaluator.retries,
+          extra_body: inner.evaluator.extra_body,
+          extra_headers: inner.evaluator.extra_headers,
         },
       };
 
@@ -711,6 +715,8 @@ function variantInfoToUninitalizedVariantInfo(
         seed: inner.seed,
         json_mode: inner.json_mode,
         retries: inner.retries,
+        extra_body: inner.extra_body,
+        extra_headers: inner.extra_headers,
       };
 
     case "mixture_of_n":
@@ -743,6 +749,8 @@ function variantInfoToUninitalizedVariantInfo(
           stop_sequences: inner.fuser.stop_sequences,
           json_mode: inner.fuser.json_mode,
           retries: inner.fuser.retries,
+          extra_body: inner.fuser.extra_body,
+          extra_headers: inner.fuser.extra_headers,
         },
       };
 
@@ -770,6 +778,8 @@ function variantInfoToUninitalizedVariantInfo(
         stop_sequences: inner.stop_sequences,
         json_mode: inner.json_mode,
         retries: inner.retries,
+        extra_body: inner.extra_body,
+        extra_headers: inner.extra_headers,
       };
 
     default:
