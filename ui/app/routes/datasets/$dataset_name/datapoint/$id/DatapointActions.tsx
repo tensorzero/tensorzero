@@ -40,8 +40,8 @@ export function DatapointActions({
     <ActionBar>
       {showTryWithButton && (
         <TryWithButton
-          variants={variants}
-          onVariantSelect={onVariantSelect}
+          options={variants}
+          onOptionSelect={onVariantSelect}
           isLoading={variantInferenceIsLoading}
         />
       )}

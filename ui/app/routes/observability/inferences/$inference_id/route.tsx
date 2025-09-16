@@ -32,7 +32,7 @@ import { TagsTable } from "~/components/utils/TagsTable";
 import { ModelInferencesTable } from "./ModelInferencesTable";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { useFunctionConfig } from "~/context/config";
+import { useConfig, useFunctionConfig } from "~/context/config";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import {
@@ -398,6 +398,24 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     }
   }, [humanFeedbackFetcher.data, humanFeedbackFetcher.state, navigate]);
 
+  const config = useConfig();
+
+  const isDefault = inference.function_name === "tensorzero::default";
+
+  const modelsSet = new Set<string>([
+    // models successfully used with default function
+    ...model_inferences.map(({ model_name }) => model_name),
+    // all configured models in config
+    ...Object.keys(config.models),
+    // TODO(bret): list of popular/common model choices
+    // see https://github.com/tensorzero/tensorzero/issues/1396#issuecomment-3286424944
+  ]);
+  const models = [...modelsSet].sort();
+
+  const options = isDefault ? models : variants;
+  const onModelSelect = onVariantSelect;
+  const onSelect = isDefault ? onModelSelect : onVariantSelect;
+
   return (
     <PageLayout>
       <PageHeader label="Inference" name={inference.id}>
@@ -415,9 +433,10 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <ActionBar>
           <TryWithButton
-            variants={variants}
-            onVariantSelect={onVariantSelect}
+            options={options}
+            onOptionSelect={onSelect}
             isLoading={variantInferenceIsLoading}
+            model={isDefault}
           />
           <AddToDatasetButton
             onDatasetSelect={handleAddToDataset}
