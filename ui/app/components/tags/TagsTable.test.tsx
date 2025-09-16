@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-describe("TagsEditor component logic", () => {
+describe("TagsTable component logic", () => {
   const mockTags = {
     user_id: "123",
     experiment: "A",
@@ -182,7 +182,7 @@ describe("TagsEditor component logic", () => {
   });
 
   it("should work in read-only mode without onTagsChange callback", () => {
-    // This test simulates using TagsEditor as a replacement for TagsTable
+    // This test simulates using TagsTable as a replacement for TagsTable
     const tags = {
       "tensorzero::evaluation_name": "test_eval",
       user_tag: "value",

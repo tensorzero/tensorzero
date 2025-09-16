@@ -14,13 +14,13 @@ import {
 import { Code } from "~/components/ui/code";
 import { useNavigate } from "react-router";
 
-interface TagsEditorProps {
+interface TagsTableProps {
   tags: Record<string, string>;
   onTagsChange?: (tags: Record<string, string>) => void;
   isEditing: boolean;
 }
 
-export function TagsEditor({ tags, onTagsChange, isEditing }: TagsEditorProps) {
+export function TagsTable({ tags, onTagsChange, isEditing }: TagsTableProps) {
   const navigate = useNavigate();
 
   const [newKey, setNewKey] = useState("");

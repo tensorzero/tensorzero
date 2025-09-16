@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { useState } from "react";
-import { TagsEditor } from "./TagsEditor";
+import { TagsTable } from "./TagsTable";
 
-const meta: Meta<typeof TagsEditor> = {
-  title: "Tags/TagsEditor",
-  component: TagsEditor,
+const meta: Meta<typeof TagsTable> = {
+  title: "Tags/TagsTable",
+  component: TagsTable,
   parameters: {
     layout: "centered",
   },
@@ -15,7 +15,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 // Interactive wrapper component to handle state
-const TagsEditorWrapper = ({
+const TagsTableWrapper = ({
   initialTags,
   isEditing,
 }: {
@@ -29,14 +29,14 @@ const TagsEditorWrapper = ({
       <h3 className="mb-4 text-lg font-semibold">
         Tags Editor ({isEditing ? "Editing" : "Read-only"})
       </h3>
-      <TagsEditor tags={tags} onTagsChange={setTags} isEditing={isEditing} />
+      <TagsTable tags={tags} onTagsChange={setTags} isEditing={isEditing} />
     </div>
   );
 };
 
 export const ReadOnlyWithTags: Story = {
   render: () => (
-    <TagsEditorWrapper
+    <TagsTableWrapper
       initialTags={{
         apple: "fruit",
         banana: "yellow",
@@ -49,12 +49,12 @@ export const ReadOnlyWithTags: Story = {
 };
 
 export const ReadOnlyEmpty: Story = {
-  render: () => <TagsEditorWrapper initialTags={{}} isEditing={false} />,
+  render: () => <TagsTableWrapper initialTags={{}} isEditing={false} />,
 };
 
 export const ReadOnlyWithNavigableSystemTags: Story = {
   render: () => (
-    <TagsEditorWrapper
+    <TagsTableWrapper
       initialTags={{
         "tensorzero::dataset_name": "sample_dataset",
         "tensorzero::datapoint_id": "123456789",
@@ -70,7 +70,7 @@ export const ReadOnlyWithNavigableSystemTags: Story = {
 
 export const EditingMode: Story = {
   render: () => (
-    <TagsEditorWrapper
+    <TagsTableWrapper
       initialTags={{
         apple: "fruit",
         banana: "yellow",
@@ -83,5 +83,5 @@ export const EditingMode: Story = {
 };
 
 export const EditingModeEmpty: Story = {
-  render: () => <TagsEditorWrapper initialTags={{}} isEditing={true} />,
+  render: () => <TagsTableWrapper initialTags={{}} isEditing={true} />,
 };

@@ -21,7 +21,7 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { Badge } from "~/components/ui/badge";
-import { TagsEditor } from "~/components/tags/TagsEditor";
+import { TagsTable } from "~/components/tags/TagsTable";
 import { useFunctionConfig } from "~/context/config";
 import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference.utils";
 import {
@@ -430,11 +430,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Tags" />
-          <TagsEditor
-            tags={tags}
-            onTagsChange={setTags}
-            isEditing={isEditing}
-          />
+          <TagsTable tags={tags} onTagsChange={setTags} isEditing={isEditing} />
         </SectionLayout>
       </SectionsGroup>
 
