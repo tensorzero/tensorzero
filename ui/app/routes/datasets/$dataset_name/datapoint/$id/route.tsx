@@ -51,6 +51,7 @@ import type {
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
+  console.log(formData);
 
   try {
     const rawData = {
@@ -76,12 +77,15 @@ export async function action({ request }: ActionFunctionArgs) {
       source_inference_id: formData.get("source_inference_id"),
       is_custom: true,
     };
+    console.log(rawData);
 
     const cleanedData = Object.fromEntries(
       Object.entries(rawData).filter(([, value]) => value !== undefined),
     );
+    console.log(cleanedData);
     const parsedFormData: ParsedDatasetRow =
       ParsedDatasetRowSchema.parse(cleanedData);
+    console.log(parsedFormData);
     const config = await getConfig();
     const functionConfig = await getFunctionConfig(
       parsedFormData.function_name,
@@ -94,6 +98,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
     const functionType = functionConfig.type;
+    console.log(functionType);
 
     const action = formData.get("action");
     if (action === "delete") {
@@ -121,6 +126,8 @@ export async function action({ request }: ActionFunctionArgs) {
       const transformedOutput = transformOutputForTensorZero(
         parsedFormData.output,
       );
+      console.log(transformedInput);
+      console.log(transformedOutput);
 
       try {
         // For future reference:
@@ -143,10 +150,13 @@ export async function action({ request }: ActionFunctionArgs) {
             ...baseDatapoint,
             output_schema: parsedFormData.output_schema,
           };
-        } else if (functionType === "chat" && "tool_params" in parsedFormData) {
+        } else if (functionType === "chat") {
           datapoint = {
             ...baseDatapoint,
-            tool_params: parsedFormData.tool_params,
+            tool_params:
+              "tool_params" in parsedFormData
+                ? parsedFormData.tool_params
+                : undefined,
           };
         } else {
           throw new Error(
