@@ -87,7 +87,7 @@ test("should be able to add, edit and save a datapoint", async ({ page }) => {
 
 test("should be able to add, edit, and delete tags", async ({ page }) => {
   await page.goto(
-    "/observability/inferences/0196368f-1ae8-7551-b5df-9a61593eb307",
+    "/observability/inferences/0196a0ea-c165-7b93-85e9-0e9f2ff0fcea",
   );
   await page.waitForLoadState("networkidle");
   const datasetName =
