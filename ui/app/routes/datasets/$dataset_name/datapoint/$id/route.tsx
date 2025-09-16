@@ -143,10 +143,13 @@ export async function action({ request }: ActionFunctionArgs) {
             ...baseDatapoint,
             output_schema: parsedFormData.output_schema,
           };
-        } else if (functionType === "chat" && "tool_params" in parsedFormData) {
+        } else if (functionType === "chat") {
           datapoint = {
             ...baseDatapoint,
-            tool_params: parsedFormData.tool_params,
+            tool_params:
+              "tool_params" in parsedFormData
+                ? parsedFormData.tool_params
+                : undefined,
           };
         } else {
           throw new Error(
