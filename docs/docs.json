@@ -58,7 +58,6 @@
               "gateway/clients",
               "gateway/configuration-reference",
               "gateway/data-model",
-              "gateway/integrations",
               {
                 "group": "API Reference",
                 "pages": [
@@ -118,30 +117,36 @@
               "operations/export-prometheus-metrics",
               "operations/extend-tensorzero"
             ]
-          },
+          }
+        ]
+      },
+      {
+        "tab": "Integrations",
+        "groups": [
           {
             "group": "Model Providers",
             "pages": [
-              "gateway/guides/providers/anthropic",
-              "gateway/guides/providers/aws-bedrock",
-              "gateway/guides/providers/aws-sagemaker",
-              "gateway/guides/providers/azure",
-              "gateway/guides/providers/deepseek",
-              "gateway/guides/providers/fireworks",
-              "gateway/guides/providers/gcp-vertex-ai-anthropic",
-              "gateway/guides/providers/gcp-vertex-ai-gemini",
-              "gateway/guides/providers/google-ai-studio-gemini",
-              "gateway/guides/providers/groq",
-              "gateway/guides/providers/hyperbolic",
-              "gateway/guides/providers/mistral",
-              "gateway/guides/providers/openai-compatible",
-              "gateway/guides/providers/openai",
-              "gateway/guides/providers/openrouter",
-              "gateway/guides/providers/sglang",
-              "gateway/guides/providers/tgi",
-              "gateway/guides/providers/together",
-              "gateway/guides/providers/vllm",
-              "gateway/guides/providers/xai"
+              "integrations/model-providers/index",
+              "integrations/model-providers/anthropic",
+              "integrations/model-providers/aws-bedrock",
+              "integrations/model-providers/aws-sagemaker",
+              "integrations/model-providers/azure",
+              "integrations/model-providers/deepseek",
+              "integrations/model-providers/fireworks",
+              "integrations/model-providers/gcp-vertex-ai-anthropic",
+              "integrations/model-providers/gcp-vertex-ai-gemini",
+              "integrations/model-providers/google-ai-studio-gemini",
+              "integrations/model-providers/groq",
+              "integrations/model-providers/hyperbolic",
+              "integrations/model-providers/mistral",
+              "integrations/model-providers/openai-compatible",
+              "integrations/model-providers/openai",
+              "integrations/model-providers/openrouter",
+              "integrations/model-providers/sglang",
+              "integrations/model-providers/tgi",
+              "integrations/model-providers/together",
+              "integrations/model-providers/vllm",
+              "integrations/model-providers/xai"
             ]
           }
         ]
@@ -305,6 +310,22 @@
     {
       "source": "/gateway/guides/extending-tensorzero/",
       "destination": "/operations/extend-tensorzero"
+    },
+    {
+      "source": "/gateway/integrations",
+      "destination": "/integrations/model-providers"
+    },
+    {
+      "source": "/gateway/integrations/",
+      "destination": "/integrations/model-providers"
+    },
+    {
+      "source": "/gateway/guides/providers/:provider*",
+      "destination": "/integrations/model-providers/:provider*"
+    },
+    {
+      "source": "/gateway/guides/providers/:provider*/",
+      "destination": "/integrations/model-providers/:provider*"
     }
   ]
 }
