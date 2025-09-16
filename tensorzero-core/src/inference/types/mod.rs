@@ -2,33 +2,39 @@
 //!
 //! During inference processing, we transform between several different input types:
 //! * Input/InputMessage/InputMessageContent:
-//!     These types hold an input request deserialized directly from the client.
-//!     At this point, we have not fetched any network resources (e.g. file urls),
-//!     and we may have various legacy input types (e.g. `{"type": "text", "value": ...}`).
-//!     Templates have not yet been applied
+//!
+//!   These types hold an input request deserialized directly from the client.
+//!   At this point, we have not fetched any network resources (e.g. file urls),
+//!   and we may have various legacy input types (e.g. `{"type": "text", "value": ...}`).
+//!   Templates have not yet been applied
 //! * `LazyResolvedInput`/`LazyResolvedInputMessage`/`LazyResolvedInputMessageContent`:
-//!     These types hold input with legacy input types normalized
-//!     (e.g. a `{"type": "text", "value": ...}` block is converted to a `{"type": "text", "template": <role>, "arguments": {}}` block
-//!     with the template name chosen based on the message role).
-//!     We also construct (but do not yet `.await`) and store futures to fetch any file urls in the input.
-//!     Templates have not yet been applied
+//!
+//!   These types hold input with legacy input types normalized
+//!   (e.g. a `{"type": "text", "value": ...}` block is converted to a `{"type": "text", "template": <role>, "arguments": {}}` block
+//!   with the template name chosen based on the message role).
+//!   We also construct (but do not yet `.await`) and store futures to fetch any file urls in the input.
+//!   Templates have not yet been applied
 //! * `ResolvedInput/ResolvedInputMessage/ResolvedInputMessageContent`:
-//!    These types are almost the same as the `LazyResolvedInput`/`LazyResolvedInputMessage`/`LazyResolvedInputMessageContent` types,
-//!    but each file future is now resolved to an in-memory file. No network requests are needed to resolve any data
-//!    within these input types.
-//!    Templates have been applied.
+//!
+//!  These types are almost the same as the `LazyResolvedInput`/`LazyResolvedInputMessage`/`LazyResolvedInputMessageContent` types,
+//!  but each file future is now resolved to an in-memory file. No network requests are needed to resolve any data
+//!  within these input types.
+//!  Templates have been applied.
 //! * `RequestMessage/ContentBlock`:
-//!    These types hold input specialized for a particular variant.
-//!    Templating has been applied, which prevents converting back to a `LazyResolvedInput`/`ResolvedInput` type.
-//!    All files are fully resolved to in-memory files.
+//!
+//!  These types hold input specialized for a particular variant.
+//!  Templating has been applied, which prevents converting back to a `LazyResolvedInput`/`ResolvedInput` type.
+//!  All files are fully resolved to in-memory files.
 //! * `StoredInput/StoredInputMessage/StoredInputMessageContent`:
-//!    These types represent the actual data written to `ChatInference`/`JsonInference` in ClickHouse.
-//!    Files are stored as object store paths, without the actual file contents (since we only write paths to ClickHouse)
-//!    Templating has been applied.
+//!
+//!  These types represent the actual data written to `ChatInference`/`JsonInference` in ClickHouse.
+//!  Files are stored as object store paths, without the actual file contents (since we only write paths to ClickHouse)
+//!  Templating has been applied.
 //! * `StoredRequestMessage/StoredContentBlock`:
-//!    These types represent the actual data written to `ModelInference` in ClickHouse.
-//!    Files are stored as object store paths, without the actual file contents (since we only write paths to ClickHouse)
-//!    Templating has been applied.
+//!
+//!  These types represent the actual data written to `ModelInference` in ClickHouse.
+//!  Files are stored as object store paths, without the actual file contents (since we only write paths to ClickHouse)
+//!  Templating has been applied.
 //!
 //! During normal inference processing, the types are transformed as:
 //!
