@@ -125,4 +125,20 @@ describe("TagsEditor component logic", () => {
       });
     }
   });
+
+  it("should sort tags alphabetically by key", () => {
+    const unsortedTags = {
+      zebra: "last",
+      apple: "first", 
+      "tensorzero::system": "middle",
+      banana: "second",
+    };
+
+    const sortedEntries = Object.entries(unsortedTags).sort(([a], [b]) => a.localeCompare(b));
+    
+    expect(sortedEntries[0][0]).toBe("apple");
+    expect(sortedEntries[1][0]).toBe("banana");
+    expect(sortedEntries[2][0]).toBe("tensorzero::system");
+    expect(sortedEntries[3][0]).toBe("zebra");
+  });
 });
