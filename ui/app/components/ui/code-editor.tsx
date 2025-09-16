@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useCopy } from "~/hooks/use-copy";
+import { useLocalStorage } from "~/hooks/use-local-storage";
 import CodeMirror from "@uiw/react-codemirror";
 import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
@@ -153,9 +154,13 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     autoDetectLanguage ? detectLanguage(value) : allowedLanguages[0],
   );
 
-  const [wordWrap, setWordWrap] = useState(
+  const [wordWrap, setWordWrap] = useLocalStorage(
+    "word-wrap",
     DEFAULT_WORD_WRAP_LANGUAGES.includes(language),
   );
+  const toggleWordWrap = useCallback(() => {
+    setWordWrap((wrap) => !wrap);
+  }, [setWordWrap]);
   const { copy, didCopy, isCopyAvailable } = useCopy();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -207,7 +212,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         <Button
           variant={"secondary"}
           size="iconSm"
-          onClick={() => setWordWrap((wrap) => !wrap)}
+          onClick={() => toggleWordWrap()}
           aria-pressed={wordWrap}
           className="h-6 w-6"
           title="Toggle word wrap"
