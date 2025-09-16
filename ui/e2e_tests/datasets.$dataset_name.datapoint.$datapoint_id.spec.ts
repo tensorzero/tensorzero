@@ -70,20 +70,39 @@ test("should be able to add, edit and save a json datapoint", async ({
   // Edit the input
   const topic = v7();
   const input = `{"topic":"${topic}"}`;
-
   await page.locator("div[contenteditable='true']").first().fill(input);
+
+  // Edit the output
+  const output = `{
+    "person": [
+      "Ian Thorpe",
+      "Garry Kasparov"
+    ],
+    "organization": [],
+    "location": [
+      "Australia",
+      "Russia"
+    ],
+    "miscellaneous": [
+    ]
+  }`;
+  await page.locator("div[contenteditable='true']").last().fill(output);
 
   // Save the datapoint
   await page.getByRole("button", { name: "Save" }).click();
 
+  // Wait for save to complete
+  await page.waitForLoadState("networkidle");
+
   // Assert that "error" is not in the page
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 
-  // Assert that the input is updated
-  await expect(page.getByText(input)).toBeVisible();
+  // Assert that both input and output are updated
+  await expect(page.getByText(input, { exact: true })).toBeVisible();
+  await expect(page.getByText("Garry Kasparov")).toBeVisible();
 
   // Should show "Custom" badge and link original inference
-  await expect(page.getByText("Custom")).toBeVisible();
+  await expect(page.getByText("Custom", { exact: true })).toBeVisible();
   await expect(page.getByText("Inference", { exact: true })).toBeVisible();
 });
 
@@ -125,22 +144,30 @@ test("should be able to add, edit and save a chat datapoint", async ({
   // Click the edit button
   await page.getByRole("button", { name: "Edit" }).click();
 
-  // Edit the output
-  const topic = v7();
-  const output = `fdfasdfdsfafs ${topic}`;
+  // Edit the input (first contenteditable element)
+  const inputTopic = v7();
+  const inputMessage = `Tell me about ${inputTopic}`;
+  await page.locator("div[contenteditable='true']").first().fill(inputMessage);
 
+  // Edit the output (last contenteditable element)
+  const outputTopic = v7();
+  const output = `Here's information about ${outputTopic}`;
   await page.locator("div[contenteditable='true']").last().fill(output);
 
   // Save the datapoint
   await page.getByRole("button", { name: "Save" }).click();
 
+  // Wait for save to complete
+  await page.waitForLoadState("networkidle");
+
   // Assert that "error" is not in the page
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 
-  // Assert that the output is updated
-  await expect(page.getByText(output)).toBeVisible();
+  // Assert that both input and output are updated
+  await expect(page.getByText(inputMessage, { exact: true })).toBeVisible();
+  await expect(page.getByText(output, { exact: true })).toBeVisible();
 
   // Should show "Custom" badge and link original inference
-  await expect(page.getByText("Custom")).toBeVisible();
+  await expect(page.getByText("Custom", { exact: true })).toBeVisible();
   await expect(page.getByText("Inference", { exact: true })).toBeVisible();
 });
