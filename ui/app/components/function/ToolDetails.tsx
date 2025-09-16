@@ -1,13 +1,6 @@
-import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerFooter,
-  DrawerHeader,
-} from "~/components/ui/drawer";
-import { Button } from "../ui/button";
+import { Sheet, SheetContent } from "~/components/ui/sheet";
 import { useConfig } from "~/context/config";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { StaticToolConfig } from "tensorzero-node";
 import { CodeEditor } from "../ui/code-editor";
 import {
@@ -24,68 +17,70 @@ import {
 } from "../layout/BasicInfoLayout";
 
 interface ToolDetailsProps {
-  selectedTool: string | null;
+  toolName: string | null;
   onClose?: () => void;
 }
 
-export function ToolDetails({ selectedTool, onClose }: ToolDetailsProps) {
+export function ToolDetails({ toolName, onClose }: ToolDetailsProps) {
   const { tools } = useConfig();
 
-  const [tool, setTool] = useState<StaticToolConfig>(Object.values(tools)[0]!);
+  const [tool, setTool] = useState<StaticToolConfig | undefined>(
+    Object.values(tools)[0],
+  );
+  const [open, setOpen] = useState(false);
 
-  // We update the tool using an effect to ensure that there
-  // is never an edge case where the contents of the <Drawer>
-  // are empty. We don't want the content to disappear when it
-  // animates away
   useEffect(() => {
-    if (!selectedTool) return;
+    if (!toolName) return;
 
-    const tool = tools[selectedTool];
-    if (!tool)
-      throw new Error(`"${selectedTool}" is not present in config.tools`);
-    console.log({ tool });
+    const tool = tools[toolName];
+    if (!tool) throw new Error(`"${toolName}" is not present in config.tools`);
+
     setTool(tool);
-  }, [tools, selectedTool]);
+    setOpen(true);
+  }, [tools, toolName]);
+
+  const onOpenChange = useCallback(
+    (v: boolean) => {
+      setOpen(v);
+      if (!v) onClose?.();
+    },
+    [onClose],
+  );
+
+  if (!tool) return null;
 
   return (
-    <Drawer open={selectedTool !== null} onClose={onClose}>
-      <DrawerContent>
-        <DrawerHeader>
-          <PageHeader name={tool.name} label={"Tool Information"}>
-            <BasicInfoLayout>
-              <BasicInfoItem>
-                <BasicInfoItemTitle>Description</BasicInfoItemTitle>
-                <BasicInfoItemContent wrap>
-                  <span className="text-sm md:px-2">{tool.description}</span>
-                </BasicInfoItemContent>
-              </BasicInfoItem>
-              <BasicInfoItem>
-                <BasicInfoItemTitle>Strict</BasicInfoItemTitle>
-                <BasicInfoItemContent wrap>
-                  <span className="text-sm md:px-2">
-                    {tool.strict ? "True" : "False"}
-                  </span>
-                </BasicInfoItemContent>
-              </BasicInfoItem>
-            </BasicInfoLayout>
-          </PageHeader>
-          <SectionsGroup>
-            <SectionLayout>
-              <SectionHeader heading="Schema" />
-              <CodeEditor
-                allowedLanguages={["json"]}
-                value={JSON.stringify(tool.parameters, null, 2)}
-                readOnly
-              />
-            </SectionLayout>
-          </SectionsGroup>
-        </DrawerHeader>
-        <DrawerFooter>
-          <DrawerClose>
-            <Button>Close</Button>
-          </DrawerClose>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent>
+        <PageHeader name={tool.name} label={"Tool Information"}>
+          <BasicInfoLayout>
+            <BasicInfoItem>
+              <BasicInfoItemTitle>Description</BasicInfoItemTitle>
+              <BasicInfoItemContent wrap>
+                <span className="text-sm md:px-2">{tool.description}</span>
+              </BasicInfoItemContent>
+            </BasicInfoItem>
+            <BasicInfoItem>
+              <BasicInfoItemTitle>Strict</BasicInfoItemTitle>
+              <BasicInfoItemContent wrap>
+                <span className="text-sm md:px-2">
+                  {tool.strict ? "True" : "False"}
+                </span>
+              </BasicInfoItemContent>
+            </BasicInfoItem>
+          </BasicInfoLayout>
+        </PageHeader>
+        <SectionsGroup>
+          <SectionLayout>
+            <SectionHeader heading="Schema" />
+            <CodeEditor
+              allowedLanguages={["json"]}
+              value={JSON.stringify(tool.parameters, null, 2)}
+              readOnly
+            />
+          </SectionLayout>
+        </SectionsGroup>
+      </SheetContent>
+    </Sheet>
   );
 }

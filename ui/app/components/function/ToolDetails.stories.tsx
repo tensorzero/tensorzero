@@ -50,15 +50,15 @@ const mockConfig = {
 
 export const Default: Story = {
   args: {
-    selectedTool: null,
+    toolName: null,
   },
   render: function DefaultStory(args) {
-    const [tool, setTool] = useState<string | null>(args.selectedTool);
+    const [tool, setTool] = useState<string | null>(args.toolName);
 
     return (
       <ConfigProvider value={mockConfig}>
         <Button onClick={() => setTool("search_wikipedia")}>Open</Button>
-        <ToolDetails selectedTool={tool} onClose={() => setTool(null)} />
+        <ToolDetails toolName={tool} onClose={() => setTool(null)} />
       </ConfigProvider>
     );
   },

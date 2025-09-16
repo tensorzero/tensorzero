@@ -14,11 +14,14 @@ interface BasicInfoProps {
 }
 
 export default function BasicInfo({ functionConfig }: BasicInfoProps) {
-  const [tool, setTool] = useState<string | null>(null);
+  const [selectedTool, setSelectedTool] = useState<string | null>(null);
 
   return (
     <BasicInfoLayout>
-      <ToolDetails selectedTool={tool} onClose={() => setTool(null)} />
+      <ToolDetails
+        toolName={selectedTool}
+        onClose={() => setSelectedTool(null)}
+      />
       {functionConfig.description && (
         <BasicInfoItem>
           <BasicInfoItemTitle>Description</BasicInfoItemTitle>
@@ -42,7 +45,7 @@ export default function BasicInfo({ functionConfig }: BasicInfoProps) {
                       key={tool}
                       label={tool}
                       font="mono"
-                      onClick={() => setTool(tool)}
+                      onClick={() => setSelectedTool(tool)}
                     />
                   ))}
                 </div>
