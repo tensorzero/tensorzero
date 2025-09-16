@@ -9,7 +9,10 @@ pub struct ExtraHeadersConfig {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export, type = r#"{name: string} & ({value: string} | {delete: true})"#)]
+#[ts(
+    export,
+    type = r#"{name: string} & ({value: string} | {delete: true})"#
+)]
 pub struct ExtraHeader {
     pub name: String,
     #[serde(flatten)]

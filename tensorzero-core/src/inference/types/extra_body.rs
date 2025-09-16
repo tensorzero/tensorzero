@@ -10,7 +10,10 @@ pub struct ExtraBodyConfig {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export, type = r#"{pointer: string} & ({value: any} | {delete: true})"#)]
+#[ts(
+    export,
+    type = r#"{pointer: string} & ({value: any} | {delete: true})"#
+)]
 pub struct ExtraBodyReplacement {
     pub pointer: String,
     #[serde(flatten)]
