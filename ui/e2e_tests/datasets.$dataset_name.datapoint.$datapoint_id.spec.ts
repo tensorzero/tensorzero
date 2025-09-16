@@ -171,3 +171,68 @@ test("should be able to add, edit and save a chat datapoint", async ({
   await expect(page.getByText("Custom", { exact: true })).toBeVisible();
   await expect(page.getByText("Inference", { exact: true })).toBeVisible();
 });
+
+test("should be able to add, edit and save a chat datapoint with tool call", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/0196a0e8-a760-7a90-9f8a-8925365133b6",
+  );
+  await page.waitForLoadState("networkidle");
+  const datasetName =
+    "test_tool_dataset_" + Math.random().toString(36).substring(2, 15);
+
+  // Click on the Add to dataset button
+  await page.getByText("Add to dataset").click();
+
+  // Wait for the CommandInput by its placeholder text to be visible
+  const commandInput = page.getByPlaceholder("Create or find a dataset...");
+  await commandInput.waitFor({ state: "visible" });
+  await commandInput.fill(datasetName);
+
+  // Wait for the "Create" option to appear in the dropdown
+  const createOption = page
+    .locator("[cmdk-item]")
+    .filter({ hasText: datasetName });
+  await createOption.waitFor({ state: "visible" });
+  await createOption.click();
+
+  // Click on the "Inference Output" button
+  await page.getByText("Inference Output").click();
+
+  // Wait for navigation to the new page
+  await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
+    timeout: 10000,
+  });
+
+  await expect(page.getByText("Custom")).not.toBeVisible();
+
+  // Click the edit button
+  await page.getByRole("button", { name: "Edit" }).click();
+
+  // Edit the input (first contenteditable element)
+  const inputTopic = v7();
+  const inputMessage = `Tell me about ${inputTopic}`;
+  await page.locator("div[contenteditable='true']").first().fill(inputMessage);
+
+  // Edit the output (last contenteditable element)
+  const output = `{"thought": "I should have a bagel for lunch."}`;
+  await page.locator("div[contenteditable='true']").last().fill(output);
+
+  // Save the datapoint
+  await page.getByRole("button", { name: "Save" }).click();
+
+  // Wait for save to complete
+  await page.waitForLoadState("networkidle");
+
+  // Assert that "error" is not in the page
+  await expect(page.getByText("error", { exact: false })).not.toBeVisible();
+
+  // Assert that both input and output are updated
+  await expect(page.getByText(inputMessage, { exact: true })).toBeVisible();
+  await expect(page.getByText("bagel for lunch")).toBeVisible();
+
+  // Should show "Custom" badge and link original inference
+  await expect(page.getByText("Custom", { exact: true })).toBeVisible();
+  await expect(page.getByText("Inference", { exact: true })).toBeVisible();
+});
