@@ -75,7 +75,6 @@
                   "gateway/guides/batch-inference",
                   "gateway/guides/credential-management",
                   "gateway/guides/episodes",
-                  "gateway/guides/experimentation",
                   "gateway/guides/extending-tensorzero",
                   "gateway/guides/inference-caching",
                   "gateway/guides/inference-time-optimizations",
@@ -130,6 +129,10 @@
                 ]
               }
             ]
+          },
+          {
+            "group": "Experimentation",
+            "pages": ["experimentation/set-up-ab-tests"]
           },
           {
             "group": "Deployment",
@@ -245,6 +248,14 @@
     {
       "source": "/gateway/guides/performance-latency/",
       "destination": "/deployment/optimize-latency-and-throughput"
+    },
+    {
+      "source": "/gateway/guides/experimentation",
+      "destination": "/experimentation/set-up-ab-tests"
+    },
+    {
+      "source": "/gateway/guides/experimentation/",
+      "destination": "/experimentation/set-up-ab-tests"
     },
     {
       "source": "/gateway/deployment",
