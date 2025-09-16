@@ -14,6 +14,7 @@ This example shows how to deploy the TensorZero (including the TensorZero Gatewa
 - Ingress controller installed in your cluster (e.g. `traefik-ingress-controller-v3`)
 - StorageClass configured for persistent volumes (e.g. `ebs-gp3-retain`)
 - Sufficient resources for running ClickHouse and TensorZero services (recommend at least 4GB memory for minikube)
+- If `monitoring.enabled` is set, [Prometheus Operator](https://prometheus-operator.dev/) needs to be installed in your cluster
 
 ## Installing the Chart
 
