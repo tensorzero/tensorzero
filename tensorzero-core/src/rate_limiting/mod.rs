@@ -8,18 +8,52 @@ use crate::db::{
 };
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct RateLimitingConfig {
+    rules: Vec<RateLimitingConfigRule>,
+    enabled: bool, // TODO: default true, Postgres required if rules is nonempty.
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UninitializedRateLimitingConfig {
     #[serde(default)]
     rules: Vec<RateLimitingConfigRule>,
     #[serde(default = "default_enabled")]
     enabled: bool, // TODO: default true, Postgres required if rules is nonempty.
 }
 
+impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
+    type Error = Error;
+    fn try_from(config: UninitializedRateLimitingConfig) -> Result<Self, Self::Error> {
+        // Make sure no rules have duplicated RateLimitingConfigScopes
+        let mut scopes = HashSet::new();
+        for rule in &config.rules {
+            if !scopes.insert(rule.scope.clone()) {
+                return Err(Error::new(ErrorDetails::DuplicateRateLimitingConfigScope {
+                    scope: rule.scope.clone(),
+                }));
+            }
+        }
+        Ok(Self {
+            rules: config.rules,
+            enabled: config.enabled,
+        })
+    }
+}
+
 fn default_enabled() -> bool {
     true
+}
+
+impl Default for UninitializedRateLimitingConfig {
+    fn default() -> Self {
+        Self {
+            rules: Vec::new(),
+            enabled: true,
+        }
+    }
 }
 
 impl Default for RateLimitingConfig {
@@ -296,7 +330,7 @@ pub enum RateLimitingConfigPriority {
 
 /// Wrapper type for rate limiting scopes.
 /// Forces them to be sorted on construction
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Hash, Serialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct RateLimitingConfigScopes(Vec<RateLimitingConfigScope>);

@@ -4,6 +4,7 @@ use std::sync::Arc;
 use crate::rate_limiting::{
     RateLimit, RateLimitInterval, RateLimitResource, RateLimitingConfigPriority,
     RateLimitingConfigRule, RateLimitingConfigScope, RateLimitingConfigScopes, TagValueScope,
+    UninitializedRateLimitingConfig,
 };
 
 /*
@@ -194,7 +195,9 @@ mod tests {
             always = true
         ";
 
-        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
 
         let rule = &config.rules()[0];
@@ -240,7 +243,9 @@ mod tests {
             priority = 0
         ";
 
-        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits.len(), 8);
         assert_eq!(
@@ -251,17 +256,25 @@ mod tests {
 
     #[test]
     fn test_priority_configuration() {
-        let toml_str = r"
+        let toml_str = r#"
             [[rules]]
             model_inferences_per_second = 10
             priority = 5
+            scope = [
+                { tag_key = "user_id", tag_value = "123" }
+            ]
 
             [[rules]]
             tokens_per_minute = 100
             priority = 0
-        ";
+            scope = [
+                { tag_key = "app_id", tag_value = "456" }
+            ]
+        "#;
 
-        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 2);
 
         // First rule with explicit priority
@@ -285,7 +298,9 @@ mod tests {
             always = true
         ";
 
-        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
 
         match &config.rules()[0].priority {
@@ -305,7 +320,9 @@ mod tests {
             ]
         "#;
 
-        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].scope.len(), 1);
 
@@ -327,7 +344,9 @@ mod tests {
             ]
         "#;
 
-        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
 
         let check_config = |config: RateLimitingConfig| {
             assert_eq!(config.rules().len(), 1);
@@ -360,7 +379,9 @@ mod tests {
             ]
         "#;
 
-        let config = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         check_config(config);
     }
 
@@ -399,7 +420,9 @@ mod tests {
             ]
         "#;
 
-        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 4);
 
         // Global fallback (always = true, no scope)
@@ -527,7 +550,9 @@ mod tests {
             priority = 10
         ";
 
-        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert!(config.enabled());
 
         assert_eq!(
@@ -545,7 +570,9 @@ mod tests {
             always = true
         ";
 
-        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert!(!config.enabled());
 
         assert_eq!(
@@ -560,7 +587,9 @@ mod tests {
             enabled = true
         ";
 
-        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 0);
         assert!(config.enabled());
     }
@@ -574,7 +603,7 @@ mod tests {
             invalid_key = 10
         ";
 
-        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -585,7 +614,7 @@ mod tests {
             tokens_minute = 10
         ";
 
-        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -597,7 +626,7 @@ mod tests {
             priority = 0
         ";
 
-        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
 
         if let Err(e) = result {
@@ -614,7 +643,7 @@ mod tests {
             invalid_resource_per_second = 10
         ";
 
-        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
 
         if let Err(e) = result {
@@ -630,7 +659,7 @@ mod tests {
             tokens_per_invalid_interval = 10
         ";
 
-        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -641,7 +670,7 @@ mod tests {
             tokens_per_minute = -10
         ";
 
-        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -652,7 +681,7 @@ mod tests {
             tokens_per_minute = \"not_a_number\"
         ";
 
-        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
 
         if let Err(e) = result {
@@ -669,7 +698,7 @@ mod tests {
             tokens_per_minute = 10.5
         ";
 
-        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
 
         if let Err(e) = result {
@@ -688,7 +717,7 @@ mod tests {
             always = true
         ";
 
-        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
 
         if let Err(e) = result {
@@ -705,7 +734,7 @@ mod tests {
             always = false
         ";
 
-        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
 
         if let Err(e) = result {
@@ -723,7 +752,9 @@ mod tests {
             priority = 1
         ";
 
-        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
 
         match &config.rules()[0].priority {
@@ -742,7 +773,7 @@ mod tests {
             ]
         ";
 
-        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -756,7 +787,7 @@ mod tests {
             ]
         ";
 
-        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -767,7 +798,9 @@ mod tests {
             priority = 1
         ";
 
-        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits.len(), 0);
     }
@@ -780,7 +813,9 @@ mod tests {
             priority = 0
         ";
 
-        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits[0].capacity, 0);
     }
@@ -793,7 +828,9 @@ mod tests {
             priority = 0
         ";
 
-        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits[0].capacity, 9223372036854775807);
     }
@@ -808,7 +845,9 @@ mod tests {
             priority = 0
         ";
 
-        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits.len(), 2);
 
@@ -830,7 +869,7 @@ mod tests {
             tokens_per_Second = 10
         ";
 
-        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -842,7 +881,7 @@ mod tests {
             Tokens_per_second = 10
         ";
 
-        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -854,7 +893,9 @@ mod tests {
             priority = 1
         "#;
 
-        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits.len(), 1);
 
@@ -874,7 +915,9 @@ mod tests {
             priority = 1
         "#;
 
-        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits.len(), 2);
 
@@ -906,7 +949,9 @@ mod tests {
             priority = 1
         "#;
 
-        let config: RateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits.len(), 2);
 
@@ -935,7 +980,7 @@ mod tests {
             priority = 1
         "#;
 
-        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -947,7 +992,7 @@ mod tests {
             priority = 1
         "#;
 
-        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -959,7 +1004,54 @@ mod tests {
             priority = 1
         "#;
 
-        let result: Result<RateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_duplicate_scope_validation() {
+        let toml_str = r#"
+            [[rules]]
+            model_inferences_per_second = 10
+            priority = 1
+            scope = [
+                { tag_key = "user_id", tag_value = "123" }
+            ]
+
+            [[rules]]
+            tokens_per_minute = 100
+            priority = 2
+            scope = [
+                { tag_key = "user_id", tag_value = "123" }
+            ]
+        "#;
+
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let result: Result<RateLimitingConfig, _> = uninitialized_config.try_into();
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+
+        // Check that it's specifically a duplicate scope error
+        match error.get_details() {
+            crate::error::ErrorDetails::DuplicateRateLimitingConfigScope { scope } => {
+                // Verify the scope contains the expected tag
+                assert_eq!(scope.len(), 1);
+                match &scope[0] {
+                    crate::rate_limiting::RateLimitingConfigScope::Tag(tag) => {
+                        assert_eq!(tag.tag_key(), "user_id");
+                        assert_eq!(
+                            tag.tag_value(),
+                            &crate::rate_limiting::TagValueScope::Concrete("123".to_string())
+                        );
+                    }
+                }
+            }
+            _ => panic!(
+                "Expected DuplicateRateLimitingConfigScope error, got: {:?}",
+                error.get_details()
+            ),
+        }
     }
 }

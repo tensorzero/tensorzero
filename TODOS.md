@@ -1,5 +1,4 @@
 * Improve error information in rate limiting
-* test "hills" of usage and with different scope patterns
 * test error handling with message info
 * add load test
 * remove this file

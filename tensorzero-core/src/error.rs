@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::Thought;
-use crate::rate_limiting::ActiveRateLimitKey;
+use crate::rate_limiting::{ActiveRateLimitKey, RateLimitingConfigScopes};
 
 /// Controls whether to include raw request/response details in error output
 ///
@@ -240,6 +240,9 @@ pub enum ErrorDetails {
     DiclMissingOutput,
     DuplicateTool {
         name: String,
+    },
+    DuplicateRateLimitingConfigScope {
+        scope: RateLimitingConfigScopes,
     },
     DynamicEndpointNotFound {
         key_name: String,
@@ -568,6 +571,7 @@ impl ErrorDetails {
             ErrorDetails::DatapointNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::DiclMissingOutput => tracing::Level::ERROR,
             ErrorDetails::DuplicateTool { .. } => tracing::Level::WARN,
+            ErrorDetails::DuplicateRateLimitingConfigScope { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicEndpointNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
@@ -679,6 +683,7 @@ impl ErrorDetails {
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DiclMissingOutput => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DuplicateTool { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::DuplicateRateLimitingConfigScope { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicEndpointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -942,6 +947,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::DuplicateTool { name } => {
                 write!(f, "Duplicate tool name: {name}. Tool names must be unique.")
+            }
+            ErrorDetails::DuplicateRateLimitingConfigScope { scope } => {
+                write!(f, "Duplicate rate limiting config scope: {scope:?}. Rate limiting config scopes must be unique.")
             }
             ErrorDetails::DynamicJsonSchema { message } => {
                 write!(

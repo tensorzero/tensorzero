@@ -1,4 +1,4 @@
-use crate::rate_limiting::RateLimitingConfig;
+use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
 ///            IT IS MEANT FOR INTERNAL USE ONLY.
 ///            EXPECT FREQUENT, UNANNOUNCED BREAKING CHANGES.
@@ -707,7 +707,7 @@ impl Config {
             provider_types: uninitialized_config.provider_types,
             optimizers,
             postgres: uninitialized_config.postgres,
-            rate_limiting: uninitialized_config.rate_limiting,
+            rate_limiting: uninitialized_config.rate_limiting.try_into()?,
         };
 
         // Initialize the templates
@@ -1088,7 +1088,7 @@ pub struct UninitializedConfig {
     #[serde(default)]
     pub postgres: PostgresConfig,
     #[serde(default)]
-    pub rate_limiting: RateLimitingConfig,
+    pub rate_limiting: UninitializedRateLimitingConfig,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
