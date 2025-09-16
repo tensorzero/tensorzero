@@ -132,7 +132,7 @@
           },
           {
             "group": "Experimentation",
-            "pages": ["experimentation/set-up-ab-tests"]
+            "pages": ["experimentation/run-ab-tests"]
           },
           {
             "group": "Deployment",
@@ -251,11 +251,11 @@
     },
     {
       "source": "/gateway/guides/experimentation",
-      "destination": "/experimentation/set-up-ab-tests"
+      "destination": "/experimentation/run-ab-tests"
     },
     {
       "source": "/gateway/guides/experimentation/",
-      "destination": "/experimentation/set-up-ab-tests"
+      "destination": "/experimentation/run-ab-tests"
     },
     {
       "source": "/gateway/deployment",
