@@ -52,6 +52,22 @@ export const ReadOnlyEmpty: Story = {
   render: () => <TagsEditorWrapper initialTags={{}} isEditing={false} />,
 };
 
+export const ReadOnlyWithNavigableSystemTags: Story = {
+  render: () => (
+    <TagsEditorWrapper
+      initialTags={{
+        "tensorzero::dataset_name": "sample_dataset",
+        "tensorzero::datapoint_id": "123456789",
+        "tensorzero::evaluation_name": "test_evaluation",
+        "tensorzero::evaluation_run_id": "run_abc123",
+        "tensorzero::evaluator_inference_id": "inference_xyz789",
+        user_tag: "custom_value",
+      }}
+      isEditing={false}
+    />
+  ),
+};
+
 export const EditingMode: Story = {
   render: () => (
     <TagsEditorWrapper

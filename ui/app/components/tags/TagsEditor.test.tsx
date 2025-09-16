@@ -141,4 +141,36 @@ describe("TagsEditor component logic", () => {
     expect(sortedEntries[2][0]).toBe("tensorzero::system");
     expect(sortedEntries[3][0]).toBe("zebra");
   });
+
+  it("should identify navigable keys correctly", () => {
+    const navigableKeys = [
+      "tensorzero::evaluation_name",
+      "tensorzero::dataset_name", 
+      "tensorzero::evaluator_inference_id",
+      "tensorzero::dynamic_evaluation_run_id",
+    ];
+
+    const tagsWithNavigableKeys = {
+      "tensorzero::evaluation_name": "test_eval",
+      "tensorzero::dataset_name": "test_dataset",
+      user_tag: "value",
+    };
+
+    // Check base navigable keys
+    expect(navigableKeys.includes("tensorzero::evaluation_name")).toBe(true);
+    expect(navigableKeys.includes("tensorzero::dataset_name")).toBe(true);
+    expect(navigableKeys.includes("user_tag")).toBe(false);
+
+    // Check conditional keys
+    const conditionalKeys = [];
+    if (tagsWithNavigableKeys["tensorzero::evaluation_name"]) {
+      conditionalKeys.push("tensorzero::evaluation_run_id");
+    }
+    if (tagsWithNavigableKeys["tensorzero::dataset_name"]) {
+      conditionalKeys.push("tensorzero::datapoint_id");
+    }
+
+    expect(conditionalKeys).toContain("tensorzero::evaluation_run_id");
+    expect(conditionalKeys).toContain("tensorzero::datapoint_id");
+  });
 });

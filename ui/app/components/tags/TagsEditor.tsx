@@ -12,6 +12,7 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import { Code } from "~/components/ui/code";
+import { useNavigate } from "react-router";
 
 interface TagsEditorProps {
   tags: Record<string, string>;
@@ -20,11 +21,75 @@ interface TagsEditorProps {
 }
 
 export function TagsEditor({ tags, onTagsChange, isEditing }: TagsEditorProps) {
+  // Use try-catch to handle cases where useNavigate is not available (e.g., Storybook)
+  let navigate: ReturnType<typeof useNavigate> | null = null;
+  try {
+    navigate = useNavigate();
+  } catch (error) {
+    // Navigation not available (e.g., in Storybook), continue without it
+    navigate = null;
+  }
+
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
 
   // Sort tags alphabetically by key
   const sortedTagEntries = Object.entries(tags).sort(([a], [b]) => a.localeCompare(b));
+
+  // Navigation logic from TagsTable component
+  const navigableKeys = [
+    "tensorzero::evaluation_name",
+    "tensorzero::dataset_name",
+    "tensorzero::evaluator_inference_id",
+    "tensorzero::dynamic_evaluation_run_id",
+  ];
+  
+  // Add conditional navigation keys
+  if (tags["tensorzero::evaluation_name"]) {
+    navigableKeys.push("tensorzero::evaluation_run_id");
+  }
+  if (tags["tensorzero::dataset_name"]) {
+    navigableKeys.push("tensorzero::datapoint_id");
+  }
+
+  // Navigation handler from TagsTable
+  const handleRowClick = (key: string, value: string) => {
+    // Only navigate if not in editing mode and navigation is available
+    if (!isEditing && navigate && navigableKeys.includes(key)) {
+      switch (key) {
+        case "tensorzero::evaluation_run_id": {
+          const evaluationName = tags["tensorzero::evaluation_name"];
+          if (!evaluationName) {
+            return;
+          }
+          navigate(
+            `/evaluations/${evaluationName}?evaluation_run_ids=${value}`,
+          );
+          break;
+        }
+        case "tensorzero::datapoint_id": {
+          const datasetName = tags["tensorzero::dataset_name"];
+          if (!datasetName) {
+            return;
+          }
+          navigate(`/datasets/${datasetName}/datapoint/${value}`);
+          break;
+        }
+        case "tensorzero::evaluation_name":
+          navigate(`/evaluations/${value}`);
+          break;
+        case "tensorzero::dataset_name":
+          navigate(`/datasets/${value}`);
+          break;
+        case "tensorzero::evaluator_inference_id":
+          navigate(`/observability/inferences/${value}`);
+          break;
+        case "tensorzero::dynamic_evaluation_run_id":
+          navigate(`/dynamic_evaluations/runs/${value}`);
+          break;
+      }
+    }
+  };
 
   const handleAddTag = () => {
     const trimmedKey = newKey.trim();
@@ -73,8 +138,18 @@ export function TagsEditor({ tags, onTagsChange, isEditing }: TagsEditorProps) {
           ) : (
             sortedTagEntries.map(([key, value]) => {
               const isSystemTag = key.startsWith("tensorzero::");
+              const isNavigable = !isEditing && navigate && navigableKeys.includes(key);
+              
               return (
-                <TableRow key={key}>
+                <TableRow 
+                  key={key}
+                  onClick={() => handleRowClick(key, value)}
+                  className={
+                    isNavigable
+                      ? "hover:bg-bg-subtle cursor-pointer"
+                      : ""
+                  }
+                >
                   <TableCell>
                     <Code>{key}</Code>
                   </TableCell>
