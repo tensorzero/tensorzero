@@ -186,6 +186,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     return exts;
   }, [language, wordWrap, readOnly]);
 
+  const buttonClassName =
+    "flex h-6 w-6 cursor-pointer items-center justify-center p-3 text-xs";
+
   return (
     // `min-width: 0` If within a grid parent, prevent editor from overflowing its grid cell and force horizontal scrolling
     <div className={cn("group relative isolate min-w-0 rounded-sm", className)}>
@@ -194,6 +197,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           variant="secondary"
           size="iconSm"
           onClick={() => copy(value)}
+          className={buttonClassName}
           disabled={!mounted || !isCopyAvailable}
           title={didCopy ? "Copied!" : "Copy to clipboard"}
         >
@@ -204,11 +208,11 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           )}
         </Button>
         <Button
-          variant={"secondary"}
+          variant="secondary"
           size="iconSm"
           onClick={() => setWordWrap((wrap) => !wrap)}
           aria-pressed={wordWrap}
-          className="flex h-6 w-6 cursor-pointer items-center justify-center p-3 text-xs"
+          className={buttonClassName}
           title="Toggle word wrap"
         >
           <span className="relative flex h-full w-full items-center justify-center">
