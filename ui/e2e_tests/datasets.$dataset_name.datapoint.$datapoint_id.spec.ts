@@ -112,10 +112,14 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   await page.getByRole("button", { name: "Edit" }).click();
 
   // Wait for the tags section to be visible
-  await expect(page.getByText("Tags")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tags" })).toBeVisible();
 
-  // Verify the tags table is present but empty initially
-  await expect(page.getByText("No tags found")).toBeVisible();
+  // Verify the tags section is present (may have system tags or be empty initially)
+  // Use a more specific locator that targets the tags section
+  const tagsSection = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "Tags" }) });
+  await expect(tagsSection.locator("table")).toBeVisible();
 
   // Test 1: Add a new tag
   const testKey1 = "environment";
@@ -126,8 +130,8 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   await page.getByRole("button", { name: "Add" }).click();
 
   // Verify the tag appears in the table
-  await expect(page.locator("table")).toContainText(testKey1);
-  await expect(page.locator("table")).toContainText(testValue1);
+  await expect(tagsSection.locator("table")).toContainText(testKey1);
+  await expect(tagsSection.locator("table")).toContainText(testValue1);
 
   // Test 2: Add another tag to test sorting
   const testKey2 = "author";
@@ -138,8 +142,8 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   await page.getByRole("button", { name: "Add" }).click();
 
   // Verify both tags appear in the table (should be sorted alphabetically)
-  await expect(page.locator("table")).toContainText(testKey2);
-  await expect(page.locator("table")).toContainText(testValue2);
+  await expect(tagsSection.locator("table")).toContainText(testKey2);
+  await expect(tagsSection.locator("table")).toContainText(testValue2);
 
   // Test 3: Try to add a system tag (should be prevented)
   const systemKey = "tensorzero::blocked";
@@ -169,42 +173,68 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 
   // Verify tags are still visible in read-only mode
-  await expect(page.locator("table")).toContainText(testKey1);
-  await expect(page.locator("table")).toContainText(testValue1);
-  await expect(page.locator("table")).toContainText(testKey2);
-  await expect(page.locator("table")).toContainText(testValue2);
+  const tagsSection2 = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "Tags" }) });
+  await expect(tagsSection2.locator("table")).toContainText(testKey1);
+  await expect(tagsSection2.locator("table")).toContainText(testValue1);
+  await expect(tagsSection2.locator("table")).toContainText(testKey2);
+  await expect(tagsSection2.locator("table")).toContainText(testValue2);
 
   // Test 5: Edit mode again and delete a tag
   await page.getByRole("button", { name: "Edit" }).click();
 
   // Find and click the delete button for the first tag (should be "author" due to alphabetical sorting)
-  const deleteButton = page
+  const tagsSection3 = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "Tags" }) });
+  const deleteButton = tagsSection3
     .locator("table tr")
     .filter({ hasText: testKey2 })
     .getByRole("button");
   await deleteButton.click();
 
   // Verify the tag is removed from the table
-  await expect(page.locator("table")).not.toContainText(testKey2);
-  await expect(page.locator("table")).not.toContainText(testValue2);
+  await expect(tagsSection3.locator("table")).not.toContainText(testKey2);
+  await expect(tagsSection3.locator("table")).not.toContainText(testValue2);
 
   // But the other tag should still be there
-  await expect(page.locator("table")).toContainText(testKey1);
-  await expect(page.locator("table")).toContainText(testValue1);
+  await expect(tagsSection3.locator("table")).toContainText(testKey1);
+  await expect(tagsSection3.locator("table")).toContainText(testValue1);
 
-  // Test 6: Save again and reload the page to verify persistence
+  // Test 6: Save again and verify persistence after redirect
   await page.getByRole("button", { name: "Save" }).click();
 
-  // Reload the page to verify tags persist across page loads
-  await page.reload();
+  // Wait for the save to complete and potential redirect (new datapoint ID)
   await page.waitForLoadState("networkidle");
-
-  // Verify only the remaining tag is present
-  await expect(page.locator("table")).toContainText(testKey1);
-  await expect(page.locator("table")).toContainText(testValue1);
-  await expect(page.locator("table")).not.toContainText(testKey2);
-  await expect(page.locator("table")).not.toContainText(testValue2);
 
   // Assert that "error" is not in the page
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
+
+  // Verify we're still on a datapoint page (URL should have changed to new ID)
+  await expect(page.url()).toMatch(
+    new RegExp(`/datasets/${datasetName}/datapoint/[^/]+$`),
+  );
+
+  // Verify only the remaining tag is still present after the save/redirect
+  const tagsSection4 = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "Tags" }) });
+  await expect(tagsSection4.locator("table")).toContainText(testKey1);
+  await expect(tagsSection4.locator("table")).toContainText(testValue1);
+  await expect(tagsSection4.locator("table")).not.toContainText(testKey2);
+  await expect(tagsSection4.locator("table")).not.toContainText(testValue2);
+
+  // Test 7: Reload the page to verify persistence
+  await page.reload();
+  await page.waitForLoadState("networkidle");
+
+  // Verify tags are still present after page reload
+  const tagsSection5 = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "Tags" }) });
+  await expect(tagsSection5.locator("table")).toContainText(testKey1);
+  await expect(tagsSection5.locator("table")).toContainText(testValue1);
+  await expect(tagsSection5.locator("table")).not.toContainText(testKey2);
+  await expect(tagsSection5.locator("table")).not.toContainText(testValue2);
 });
