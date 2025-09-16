@@ -3,7 +3,7 @@ import { useState } from "react";
 import { TagsEditor } from "./TagsEditor";
 
 const meta: Meta<typeof TagsEditor> = {
-  title: "Components/TagsEditor",
+  title: "Tags/TagsEditor",
   component: TagsEditor,
   parameters: {
     layout: "centered",

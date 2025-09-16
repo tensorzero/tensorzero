@@ -21,7 +21,7 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { Badge } from "~/components/ui/badge";
-import { TagsEditor } from "~/components/feedback/TagsEditor";
+import { TagsEditor } from "~/components/tags/TagsEditor";
 import { useFunctionConfig } from "~/context/config";
 import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference.utils";
 import {
