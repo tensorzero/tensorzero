@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT key_returned, final_balance\n             FROM return_multiple_resource_tickets($1, $2, $3, $4, $5)",
+  "query": "SELECT bucket_key_returned as key_returned, final_balance\n             FROM return_multiple_resource_tickets($1, $2, $3, $4, $5)",
   "describe": {
     "columns": [
       {
@@ -28,5 +28,5 @@
       null
     ]
   },
-  "hash": "1ce6d926828cb349f75dc7014f3a9685edafdf51f46aa3bdeb5e5db3fddd118e"
+  "hash": "1975ecaf2913207959a4951af399535d3c8846a3cfa39f7d16724a9bd81f0f0e"
 }

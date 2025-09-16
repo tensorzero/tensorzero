@@ -53,7 +53,7 @@ impl RateLimitQueries for PostgresConnectionInfo {
 
         let responses = sqlx::query_as!(
             ConsumeTicketsResponse,
-            "SELECT key, is_successful as success, tickets_remaining, tickets_consumed
+            "SELECT bucket_key as key, is_successful as success, tickets_remaining, tickets_consumed
              FROM consume_multiple_resource_tickets($1, $2, $3, $4, $5)",
             &keys,
             &requested_amounts,
@@ -111,7 +111,7 @@ impl RateLimitQueries for PostgresConnectionInfo {
 
         let responses = sqlx::query_as!(
             ReturnTicketsResponse,
-            "SELECT key_returned, final_balance
+            "SELECT bucket_key_returned as key_returned, final_balance
              FROM return_multiple_resource_tickets($1, $2, $3, $4, $5)",
             &keys,
             &amounts,

@@ -73,7 +73,7 @@ DECLARE
     refilled_state calculated_bucket_state;
 BEGIN
     -- Step 1: Find the bucket.
-    SELECT * INTO bucket_state FROM resource_bucket WHERE key = p_key;
+    SELECT * INTO bucket_state FROM resource_bucket WHERE resource_bucket.key = p_key;
 
     -- Step 2: If the bucket doesn't exist, the balance is the capacity.
     IF NOT FOUND THEN
@@ -103,7 +103,7 @@ CREATE OR REPLACE FUNCTION consume_multiple_resource_tickets(
     p_refill_amounts BIGINT[],
     p_refill_intervals INTERVAL[]
 )
-RETURNS TABLE (key TEXT, is_successful BOOLEAN, tickets_remaining BIGINT, tickets_consumed BIGINT)
+RETURNS TABLE (bucket_key TEXT, is_successful BOOLEAN, tickets_remaining BIGINT, tickets_consumed BIGINT)
 LANGUAGE plpgsql AS $$
 DECLARE
     i INT;
@@ -122,7 +122,10 @@ BEGIN
     END IF;
 
     -- Input validation: check for duplicate keys
-    IF array_length(p_keys, 1) > 0 AND array_length(p_keys, 1) != (SELECT count(DISTINCT k) FROM unnest(p_keys) AS k) THEN
+    IF array_length(p_keys, 1) > 0 AND array_length(p_keys, 1) != (
+        SELECT COUNT(DISTINCT key_column)
+        FROM unnest(p_keys) AS keys(key_column)
+    ) THEN
         RAISE EXCEPTION 'Duplicate keys are not allowed in the input array';
     END IF;
 
@@ -144,7 +147,7 @@ BEGIN
     END LOOP;
 
     -- Pass 1: Lock rows in a consistent order, calculate new states, and check for sufficiency.
-    FOR temp_row IN SELECT * FROM temp_bucket_states ORDER BY key LOOP
+    FOR temp_row IN SELECT * FROM temp_bucket_states ORDER BY temp_bucket_states.key LOOP
         -- Atomically get-or-create the bucket, locking the row.
         INSERT INTO resource_bucket (key, tickets, balance_as_of)
         VALUES (temp_row.key, temp_row.capacity, now())
@@ -165,7 +168,7 @@ BEGIN
         UPDATE temp_bucket_states
         SET refilled_tickets = refilled_state.available_tickets,
             new_balance_as_of = refilled_state.new_balance_as_of
-        WHERE key = temp_row.key;
+        WHERE temp_bucket_states.key = temp_row.key;
 
         -- Check for failure.
         IF NOT failure_detected AND refilled_state.available_tickets < temp_row.requested THEN
@@ -195,7 +198,7 @@ BEGIN
     -- Pass 3: Return the final state for each key.
     RETURN QUERY
         SELECT
-            t.key,
+            t.key AS bucket_key,
             NOT failure_detected,
             CASE
                 WHEN failure_detected THEN t.refilled_tickets
@@ -217,7 +220,7 @@ CREATE OR REPLACE FUNCTION return_multiple_resource_tickets(
     p_refill_amounts BIGINT[],
     p_refill_intervals INTERVAL[]
 )
-RETURNS TABLE (key_returned TEXT, final_balance BIGINT)
+RETURNS TABLE (bucket_key_returned TEXT, final_balance BIGINT)
 LANGUAGE plpgsql AS $$
 DECLARE
     i INT;
@@ -236,7 +239,10 @@ BEGIN
     END IF;
 
     -- Input validation: check for duplicate keys
-    IF array_length(p_keys, 1) > 0 AND array_length(p_keys, 1) != (SELECT count(DISTINCT k) FROM unnest(p_keys) AS k) THEN
+    IF array_length(p_keys, 1) > 0 AND array_length(p_keys, 1) != (
+        SELECT COUNT(DISTINCT key_column)
+        FROM unnest(p_keys) AS keys(key_column)
+    ) THEN
         RAISE EXCEPTION 'Duplicate keys are not allowed in the input array';
     END IF;
 
@@ -256,7 +262,7 @@ BEGIN
     END LOOP;
 
     -- Lock rows in a consistent order, calculate new state, and update.
-    FOR temp_row IN SELECT * FROM temp_return_states ORDER BY key LOOP
+    FOR temp_row IN SELECT * FROM temp_return_states ORDER BY temp_return_states.key LOOP
         -- Atomically get-or-create the bucket, locking the row.
         INSERT INTO resource_bucket (key, tickets, balance_as_of)
         VALUES (temp_row.key, temp_row.capacity, now())
@@ -284,10 +290,10 @@ BEGIN
         SET
             tickets = new_balance,
             balance_as_of = refilled_state.new_balance_as_of
-        WHERE key = temp_row.key;
+        WHERE resource_bucket.key = temp_row.key;
 
         -- Prepare the row for the return query.
-        key_returned := temp_row.key;
+        bucket_key_returned := temp_row.key;
         final_balance := new_balance;
         RETURN NEXT;
     END LOOP;
