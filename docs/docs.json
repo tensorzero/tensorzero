@@ -46,7 +46,6 @@
               "gateway/tutorial",
               "gateway/guides/batch-inference",
               "gateway/guides/episodes",
-              "gateway/guides/experimentation",
               "gateway/guides/inference-caching",
               "gateway/guides/inference-time-optimizations",
               "gateway/guides/metrics-feedback",
@@ -96,6 +95,10 @@
                 ]
               }
             ]
+          },
+          {
+            "group": "Experimentation",
+            "pages": ["experimentation/run-ab-tests"]
           },
           {
             "group": "Deployment",
@@ -246,6 +249,14 @@
     {
       "source": "/gateway/guides/performance-latency/",
       "destination": "/deployment/optimize-latency-and-throughput"
+    },
+    {
+      "source": "/gateway/guides/experimentation",
+      "destination": "/experimentation/run-ab-tests"
+    },
+    {
+      "source": "/gateway/guides/experimentation/",
+      "destination": "/experimentation/run-ab-tests"
     },
     {
       "source": "/gateway/deployment",

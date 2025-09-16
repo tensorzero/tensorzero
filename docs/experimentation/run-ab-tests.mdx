@@ -1,6 +1,6 @@
 ---
-title: Experimentation (A/B Testing)
-description: Learn how to use experimentation to test and iterate on your LLM applications.
+title: Run A/B tests
+description: Learn how to use experimentation to test and iterate on your LLM applications with confidence.
 ---
 
 The TensorZero Gateway provides built-in support for experimentation (A/B testing) through variants.
@@ -43,19 +43,19 @@ With the configuration above, the gateway will sample between the the variants w
 
 You can also set variant weights to control the probability of each variant being chosen.
 
-```diff lang="toml"
-  [functions.draft_email]
-  type = "chat"
+```toml
+[functions.draft_email]
+type = "chat"
 
-  [functions.draft_email.variants.gpt_4o_mini]
-  type = "chat_completion"
-  model = "openai::gpt-4o-mini"
-+ weight = 0.9
+[functions.draft_email.variants.gpt_4o_mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+weight = 0.9
 
-  [functions.draft_email.variants.claude_3_5_haiku]
-  type = "chat_completion"
-  model = "anthropic::claude-3.5-haiku"
-+ weight = 0.1
+[functions.draft_email.variants.claude_3_5_haiku]
+type = "chat_completion"
+model = "anthropic::claude-3.5-haiku"
+weight = 0.1
 ```
 
 With the configuration above, the gateway will sample `gpt_4o_mini` 90% of the time and `claude_3_5_haiku` 10% of the time.
