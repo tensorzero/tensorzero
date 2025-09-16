@@ -108,7 +108,7 @@ impl InputMessage {
         let content = futures::future::try_join_all(
             self.content
                 .into_iter()
-                .map(|content| content.resolve(context)),
+                .map(|content| content.resolve(self.role, context)),
         )
         .await?;
         Ok(ResolvedInputMessage {
@@ -119,20 +119,29 @@ impl InputMessage {
 }
 
 impl InputMessageContent {
+    /// The 'role' parameter is only used to handle legacy role-based templates (`{"type": "text", "value": ...}`).
+    /// Once we removed support for these input blocks (and only support `{"type": "template", "name": "...", "arguments": ...}`),
+    /// we can remove the 'role' parameter.
     pub async fn resolve(
         self,
+        role: Role,
         context: &FetchContext<'_>,
     ) -> Result<ResolvedInputMessageContent, Error> {
         Ok(match self {
             InputMessageContent::Text(TextKind::Text { text }) => {
-                ResolvedInputMessageContent::Text {
-                    value: Value::String(text),
-                }
+                ResolvedInputMessageContent::Text { text }
+            }
+            InputMessageContent::Template(template) => {
+                ResolvedInputMessageContent::Template(template)
             }
             InputMessageContent::Text(TextKind::Arguments { arguments }) => {
-                ResolvedInputMessageContent::Text {
-                    value: Value::Object(arguments),
-                }
+                // Map the legacy `{{"type": "text", "arguments": ...}}` format to an explicit
+                // `{{"type": "template", "name": "<role>", "arguments": ...}}` format, with the template
+                // name chosen based on the message role.
+                ResolvedInputMessageContent::Template(TemplateInput {
+                    name: role.implicit_template_name().to_string(),
+                    arguments,
+                })
             }
             InputMessageContent::ToolCall(tool_call) => {
                 ResolvedInputMessageContent::ToolCall(tool_call.try_into()?)
@@ -148,7 +157,20 @@ impl InputMessageContent {
                 tracing::warn!(
                     r#"Deprecation Warning: `{{"type": "text", "value", ...}}` is deprecated. Please use `{{"type": "text", "text": "String input"}}` or `{{"type": "text", "arguments": {{..}}}} ` instead."#
                 );
-                ResolvedInputMessageContent::Text { value }
+                match value {
+                    Value::String(text) => ResolvedInputMessageContent::Text { text },
+                    Value::Object(arguments) => {
+                        ResolvedInputMessageContent::Template(TemplateInput {
+                            name: role.implicit_template_name().to_string(),
+                            arguments,
+                        })
+                    }
+                    _ => {
+                        return Err(Error::new(ErrorDetails::InvalidMessage {
+                            message: r#"The 'value' field in a `{"type": "text", "value": ... }` content block must be a string or object"#.to_string(),
+                        }));
+                    }
+                }
             }
             InputMessageContent::File(file) => {
                 let storage_kind = context
@@ -189,10 +211,19 @@ pub struct InputMessage {
     pub content: Vec<InputMessageContent>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[ts(export)]
+#[serde(deny_unknown_fields)]
+pub struct TemplateInput {
+    pub name: String,
+    pub arguments: Map<String, Value>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InputMessageContent {
     Text(TextKind),
+    Template(TemplateInput),
     ToolCall(ToolCallInput),
     ToolResult(ToolResult),
     RawText {
@@ -996,9 +1027,7 @@ impl From<String> for InputMessageContent {
 #[cfg(test)]
 impl From<String> for ResolvedInputMessageContent {
     fn from(text: String) -> Self {
-        ResolvedInputMessageContent::Text {
-            value: Value::String(text),
-        }
+        ResolvedInputMessageContent::Text { text }
     }
 }
 
@@ -1006,12 +1035,6 @@ impl From<String> for ResolvedInputMessageContent {
 impl From<String> for ContentBlockChatOutput {
     fn from(text: String) -> Self {
         ContentBlockChatOutput::Text(Text { text })
-    }
-}
-
-impl From<Value> for ResolvedInputMessageContent {
-    fn from(value: Value) -> Self {
-        ResolvedInputMessageContent::Text { value }
     }
 }
 
@@ -2064,6 +2087,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
     use crate::config::SchemaData;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
@@ -2836,6 +2861,7 @@ mod tests {
             implicit_tool_call_config,
             output_schema,
             description: None,
+            all_template_names: HashSet::new(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -3116,6 +3142,7 @@ mod tests {
             implicit_tool_call_config,
             output_schema,
             description: None,
+            all_template_names: HashSet::new(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -3214,6 +3241,7 @@ mod tests {
             implicit_tool_call_config,
             output_schema,
             description: None,
+            all_template_names: HashSet::new(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -4053,7 +4081,7 @@ mod tests {
         let input = json!({
             "role": "user",
             "content": [
-                {"type": "text", "value": {"complex": "json", "with": ["nested", "array"]}},
+                {"type": "template", "name": "user", "arguments": {"complex": "json", "with": ["nested", "array"]}},
                 {"type": "tool_call", "id": "456", "name": "another_tool", "arguments": {"key": "value"}}
             ]
         });
@@ -4061,10 +4089,13 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 2);
         match &message.content[0] {
-            InputMessageContent::Text(TextKind::LegacyValue { value }) => {
+            InputMessageContent::Template(TemplateInput { name, arguments }) => {
+                assert_eq!(name, "user");
                 assert_eq!(
-                    value,
-                    &json!({"complex": "json", "with": ["nested", "array"]})
+                    arguments,
+                    json!({"complex": "json", "with": ["nested", "array"]})
+                        .as_object()
+                        .unwrap()
                 );
             }
             _ => panic!("Expected Text content with JSON object"),

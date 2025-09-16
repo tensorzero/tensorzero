@@ -145,7 +145,7 @@ class OptimizationJobInfo:
     def estimated_finish(self) -> Optional[int]: ...
 
 @final
-class DiclOptimizationConfig:
+class DICLOptimizationConfig:
     def __init__(
         self,
         *,
@@ -157,6 +157,7 @@ class DiclOptimizationConfig:
         max_concurrency: Optional[int] = None,
         k: Optional[int] = None,
         model: Optional[str] = None,
+        append_to_existing_variants: Optional[bool] = None,
         credentials: Optional[str] = None,
     ) -> None: ...
 
@@ -318,8 +319,8 @@ class BestOfNSamplingConfig:
     pass
 
 @final
-class DiclConfig:
-    pass
+class DICLConfig:
+    __deprecated__: str = ...
 
 @final
 class MixtureOfNConfig:
@@ -337,7 +338,7 @@ class VariantsConfig:
     ) -> Union[
         ChatCompletionConfig,
         BestOfNSamplingConfig,
-        DiclConfig,
+        DICLConfig,
         MixtureOfNConfig,
         ChainOfThoughtConfig,
     ]: ...
@@ -416,6 +417,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         *,
         config_file: Optional[str] = None,
         clickhouse_url: Optional[str] = None,
+        postgres_url: Optional[str] = None,
         timeout: Optional[float] = None,
     ) -> "TensorZeroGateway":
         """
@@ -423,7 +425,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
         :param config_file: (Optional) The path to the TensorZero configuration file.
         :param clickhouse_url: (Optional) The URL of the ClickHouse database.
-        :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
+        :param postgres_url: (Optional) The URL of the Postgres database.
+        :param timeout: (Optional) The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
         """
 
     def inference(
@@ -756,6 +759,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         *,
         config_file: Optional[str] = None,
         clickhouse_url: Optional[str] = None,
+        postgres_url: Optional[str] = None,
         timeout: Optional[float] = None,
         async_setup: bool = True,
     ) -> Union[Awaitable["AsyncTensorZeroGateway"], "AsyncTensorZeroGateway"]:
@@ -764,7 +768,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
         :param config_file: (Optional) The path to the TensorZero configuration file.
         :param clickhouse_url: (Optional) The URL of the ClickHouse database.
-        :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
+        :param postgres_url: (Optional) The URL of the Postgres database.
+        :param timeout: (Optional) The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
         :param async_setup (Optional): If True, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and return an `AsyncTensorZeroGateway` directly.
         """
 
@@ -1070,6 +1075,7 @@ def _start_http_gateway(
     *,
     config_file: Optional[str],
     clickhouse_url: Optional[str],
+    postgres_url: Optional[str],
     async_setup: bool,
 ) -> Union[Any, Awaitable[Any]]: ...
 @final
@@ -1086,8 +1092,8 @@ __all__ = [
     "ChainOfThoughtConfig",
     "Config",
     "Datapoint",
-    "DiclOptimizationConfig",
-    "DiclConfig",
+    "DICLOptimizationConfig",
+    "DICLConfig",
     "FunctionConfigChat",
     "FunctionConfigJson",
     "FunctionsConfig",

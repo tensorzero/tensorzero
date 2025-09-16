@@ -9,5 +9,6 @@ export type UninitializedDiclOptimizationConfig = {
   max_concurrency: number;
   k: number;
   model: string;
+  append_to_existing_variants: boolean;
   credentials: string | null;
 };

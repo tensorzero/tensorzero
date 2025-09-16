@@ -444,6 +444,13 @@ pub enum ErrorDetails {
     OutputValidation {
         source: Box<Error>,
     },
+    // TODO once 3496 merges: change both of these to taking sqlx errors rather than string
+    PostgresConnectionInitialization {
+        message: String,
+    },
+    PostgresMigration {
+        message: String,
+    },
     ProviderNotFound {
         provider_name: String,
     },
@@ -607,6 +614,8 @@ impl ErrorDetails {
             ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::OptimizationResponse { .. } => tracing::Level::ERROR,
             ErrorDetails::ProviderNotFound { .. } => tracing::Level::ERROR,
+            ErrorDetails::PostgresConnectionInitialization { .. } => tracing::Level::ERROR,
+            ErrorDetails::PostgresMigration { .. } => tracing::Level::ERROR,
             ErrorDetails::Serialization { .. } => tracing::Level::ERROR,
             ErrorDetails::StreamError { .. } => tracing::Level::ERROR,
             ErrorDetails::ToolNotFound { .. } => tracing::Level::WARN,
@@ -718,6 +727,10 @@ impl ErrorDetails {
             ErrorDetails::OutputParsing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OutputValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ProviderNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::PostgresConnectionInitialization { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            ErrorDetails::PostgresMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::StreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ToolNotFound { .. } => StatusCode::BAD_REQUEST,
@@ -1182,6 +1195,15 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::OutputValidation { source } => {
                 write!(f, "Output validation failed with messages: {source}")
+            }
+            ErrorDetails::PostgresConnectionInitialization { message } => {
+                write!(
+                    f,
+                    "Postgres connection initialization failed with message: {message}"
+                )
+            }
+            ErrorDetails::PostgresMigration { message } => {
+                write!(f, "Postgres migration failed with message: {message}")
             }
             ErrorDetails::ProviderNotFound { provider_name } => {
                 write!(f, "Provider not found: {provider_name}")
