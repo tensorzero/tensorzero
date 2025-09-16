@@ -106,6 +106,14 @@ The following table lists the configurable parameters of the chart and their def
 | `persistence.storageClass`   | Storage class name         | `""`                            |
 | `persistence.mountPath`      | Mount path in containers   | `/app/storage`                  |
 
+### Monitoring Configuration
+
+| Parameter             | Description                                   | Default |
+|-----------------------|-----------------------------------------------|---------|
+| `monitoring.enabled`  | Enable ServiceMonitor creation                | `false` |
+| `monitoring.interval` | Scrape interval                               | `"30s"` |
+| `monitoring.labels`   | Additional labels to attach to ServiceMonitor | `{}`    |
+
 ### ClickHouse Configuration
 
 This chart requires a ClickHouse instance for observability. We recommend using Altinity's ClickHouse Helm chart, which offers better cross-platform support (including ARM64 architecture).

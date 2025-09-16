@@ -2,6 +2,11 @@
 nameOverride: ""
 fullnameOverride: ""
 
+monitoring:
+  enabled: false
+  interval: "30s"
+  labels: {}
+
 # Gateway Configuration
 gateway:
   replicaCount: 1
