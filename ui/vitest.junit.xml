@@ -1,29 +1,23 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<testsuites name="vitest tests" tests="11" failures="0" errors="0" time="0.010974023">
-    <testsuite name="app/components/feedback/TagsBadges.test.tsx" timestamp="2025-09-16T03:08:30.227Z" hostname="runnervmf4ws1" tests="4" failures="0" errors="0" skipped="0" time="0.004307516">
-        <testcase classname="app/components/feedback/TagsBadges.test.tsx" name="TagsBadges component logic &gt; should truncate display text longer than 20 characters" time="0.001605769">
+<testsuites name="vitest tests" tests="9" failures="0" errors="0" time="0.005250083">
+    <testsuite name="app/components/feedback/TagsEditor.test.tsx" timestamp="2025-09-16T03:15:11.011Z" hostname="runnervmf4ws1" tests="9" failures="0" errors="0" skipped="0" time="0.005250083">
+        <testcase classname="app/components/feedback/TagsEditor.test.tsx" name="TagsEditor component logic &gt; should identify system tags correctly" time="0.001318867">
         </testcase>
-        <testcase classname="app/components/feedback/TagsBadges.test.tsx" name="TagsBadges component logic &gt; should identify system tags correctly" time="0.000333096">
+        <testcase classname="app/components/feedback/TagsEditor.test.tsx" name="TagsEditor component logic &gt; should handle adding new tags to existing tags object" time="0.000629538">
         </testcase>
-        <testcase classname="app/components/feedback/TagsBadges.test.tsx" name="TagsBadges component logic &gt; should handle empty tags object" time="0.000307589">
+        <testcase classname="app/components/feedback/TagsEditor.test.tsx" name="TagsEditor component logic &gt; should handle removing tags from tags object" time="0.000289742">
         </testcase>
-        <testcase classname="app/components/feedback/TagsBadges.test.tsx" name="TagsBadges component logic &gt; should process multiple tags correctly" time="0.000403026">
+        <testcase classname="app/components/feedback/TagsEditor.test.tsx" name="TagsEditor component logic &gt; should handle empty tags object" time="0.000190807">
         </testcase>
-    </testsuite>
-    <testsuite name="app/components/feedback/TagsEditor.test.tsx" timestamp="2025-09-16T03:08:30.230Z" hostname="runnervmf4ws1" tests="7" failures="0" errors="0" skipped="0" time="0.006666507">
-        <testcase classname="app/components/feedback/TagsEditor.test.tsx" name="TagsEditor component logic &gt; should identify system tags correctly" time="0.001761918">
+        <testcase classname="app/components/feedback/TagsEditor.test.tsx" name="TagsEditor component logic &gt; should process tag entries correctly" time="0.000492291">
         </testcase>
-        <testcase classname="app/components/feedback/TagsEditor.test.tsx" name="TagsEditor component logic &gt; should handle adding new tags to existing tags object" time="0.000903611">
+        <testcase classname="app/components/feedback/TagsEditor.test.tsx" name="TagsEditor component logic &gt; should validate tag input properly" time="0.000257712">
         </testcase>
-        <testcase classname="app/components/feedback/TagsEditor.test.tsx" name="TagsEditor component logic &gt; should handle removing tags from tags object" time="0.000384902">
+        <testcase classname="app/components/feedback/TagsEditor.test.tsx" name="TagsEditor component logic &gt; should filter out system tags when determining removable tags" time="0.000465812">
         </testcase>
-        <testcase classname="app/components/feedback/TagsEditor.test.tsx" name="TagsEditor component logic &gt; should handle empty tags object" time="0.000261143">
+        <testcase classname="app/components/feedback/TagsEditor.test.tsx" name="TagsEditor component logic &gt; should prevent adding system tags" time="0.000166542">
         </testcase>
-        <testcase classname="app/components/feedback/TagsEditor.test.tsx" name="TagsEditor component logic &gt; should process tag entries correctly" time="0.000781245">
-        </testcase>
-        <testcase classname="app/components/feedback/TagsEditor.test.tsx" name="TagsEditor component logic &gt; should validate tag input properly" time="0.000352202">
-        </testcase>
-        <testcase classname="app/components/feedback/TagsEditor.test.tsx" name="TagsEditor component logic &gt; should filter out system tags when determining removable tags" time="0.000666813">
+        <testcase classname="app/components/feedback/TagsEditor.test.tsx" name="TagsEditor component logic &gt; should validate system tag prevention in add logic" time="0.0002723">
         </testcase>
     </testsuite>
 </testsuites>

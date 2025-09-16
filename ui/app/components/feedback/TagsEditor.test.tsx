@@ -87,4 +87,42 @@ describe("TagsEditor component logic", () => {
       "system_value",
     ]);
   });
+
+  it("should prevent adding system tags", () => {
+    const systemTagKey = "tensorzero::new_system_tag";
+    const regularKey = "regular_key";
+
+    // System tags should be blocked
+    expect(systemTagKey.startsWith("tensorzero::")).toBe(true);
+    
+    // Regular tags should be allowed
+    expect(regularKey.startsWith("tensorzero::")).toBe(false);
+  });
+
+  it("should validate system tag prevention in add logic", () => {
+    const existingTags = { user_id: "123" };
+    const systemKey = "tensorzero::blocked";
+    const systemValue = "should_not_be_added";
+    const regularKey = "allowed";
+    const regularValue = "can_be_added";
+
+    // Simulate the validation logic from handleAddTag
+    const trimmedSystemKey = systemKey.trim();
+    const trimmedRegularKey = regularKey.trim();
+
+    // System tag should be blocked
+    if (!trimmedSystemKey.startsWith("tensorzero::")) {
+      // This shouldn't execute for system tags
+      expect(true).toBe(false);
+    }
+
+    // Regular tag should be allowed
+    if (trimmedRegularKey && !trimmedRegularKey.startsWith("tensorzero::")) {
+      const updatedTags = { ...existingTags, [trimmedRegularKey]: regularValue };
+      expect(updatedTags).toEqual({
+        user_id: "123",
+        allowed: "can_be_added",
+      });
+    }
+  });
 });

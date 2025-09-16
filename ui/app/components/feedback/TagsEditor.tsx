@@ -40,8 +40,16 @@ export function TagsEditor({ tags, onTagsChange, isEditing }: TagsEditorProps) {
   }
 
   const handleAddTag = () => {
-    if (newKey.trim() && newValue.trim()) {
-      const updatedTags = { ...tags, [newKey.trim()]: newValue.trim() };
+    const trimmedKey = newKey.trim();
+    const trimmedValue = newValue.trim();
+    
+    if (trimmedKey && trimmedValue) {
+      // Prevent users from adding system tags
+      if (trimmedKey.startsWith("tensorzero::")) {
+        return; // Silently ignore system tag attempts
+      }
+      
+      const updatedTags = { ...tags, [trimmedKey]: trimmedValue };
       onTagsChange(updatedTags);
       setNewKey("");
       setNewValue("");
@@ -100,7 +108,11 @@ export function TagsEditor({ tags, onTagsChange, isEditing }: TagsEditorProps) {
           value={newKey}
           onChange={(e) => setNewKey(e.target.value)}
           onKeyPress={handleKeyPress}
-          className="w-32 font-mono text-sm"
+          className={`w-32 font-mono text-sm ${
+            newKey.trim().startsWith("tensorzero::") 
+              ? "border-destructive focus:border-destructive" 
+              : ""
+          }`}
         />
         <Input
           placeholder="Value"
@@ -114,12 +126,21 @@ export function TagsEditor({ tags, onTagsChange, isEditing }: TagsEditorProps) {
           variant="outline"
           size="sm"
           onClick={handleAddTag}
-          disabled={!newKey.trim() || !newValue.trim()}
+          disabled={
+            !newKey.trim() || 
+            !newValue.trim() || 
+            newKey.trim().startsWith("tensorzero::")
+          }
           className="px-3"
         >
           <Plus className="h-3 w-3" />
         </Button>
       </div>
+      {newKey.trim().startsWith("tensorzero::") && (
+        <p className="text-sm text-destructive">
+          System tags (starting with "tensorzero::") cannot be added manually.
+        </p>
+      )}
     </div>
   );
 }
