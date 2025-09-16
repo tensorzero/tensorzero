@@ -28,7 +28,7 @@ interface ToolDrawerProps {
   onClose?: () => void;
 }
 
-export default function ToolDrawer({ selectedTool, onClose }: ToolDrawerProps) {
+export function ToolDrawer({ selectedTool, onClose }: ToolDrawerProps) {
   const { tools } = useConfig();
 
   const [tool, setTool] = useState<StaticToolConfig>(Object.values(tools)[0]!);

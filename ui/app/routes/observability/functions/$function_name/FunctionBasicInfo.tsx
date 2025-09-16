@@ -6,7 +6,7 @@ import {
   BasicInfoItemTitle,
   BasicInfoItemContent,
 } from "~/components/layout/BasicInfoLayout";
-import ToolDrawer from "~/components/function/ToolDrawer";
+import { ToolDrawer } from "~/components/function/ToolDrawer";
 import Chip from "~/components/ui/Chip";
 
 interface BasicInfoProps {
