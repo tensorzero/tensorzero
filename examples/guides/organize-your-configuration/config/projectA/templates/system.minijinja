@@ -1,0 +1,6 @@
+You're a helpful assistant.
+{#
+  `include` directives require `gateway.template_filesystem_access.enabled = true`.
+  The path is relative to `gateway.template_filesystem_access.base_path`.
+#}
+{% include 'shared/prompt.minijinja' %}

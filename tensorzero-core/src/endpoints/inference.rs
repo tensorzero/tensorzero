@@ -9,7 +9,7 @@ use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -32,6 +32,7 @@ use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
+use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
     collect_chunks, ChatInferenceDatabaseInsert, ChatInferenceResultChunk, CollectChunksArgs,
     ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
@@ -119,7 +120,7 @@ struct InferenceMetadata {
     pub variant_name: String,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
-    pub input: ResolvedInput,
+    pub input: LazyResolvedInput,
     pub dryrun: bool,
     pub start_time: Instant,
     pub inference_params: InferenceParams,
@@ -332,13 +333,10 @@ pub async fn inference(
         models: &config.models,
         embedding_models: &config.embedding_models,
     };
-    let resolved_input = params
-        .input
-        .resolve(&FetchContext {
-            client: http_client,
-            object_store_info: &config.object_store_info,
-        })
-        .await?;
+    let resolved_input = params.input.into_lazy_resolved_input(FetchContext {
+        client: http_client,
+        object_store_info: &config.object_store_info,
+    })?;
     // Keep sampling variants until one succeeds
     while !candidate_variants.is_empty() {
         let (variant_name, variant) =
@@ -472,21 +470,22 @@ pub async fn inference(
                 // is cancelled. This reduces the chances that we only write to some tables and not others
                 // (but this is inherently best-effort due to ClickHouse's lack of transactions).
                 let write_future = tokio::spawn(async move {
-                    write_inference(
+                    let _: () = write_inference(
                         &clickhouse_connection_info,
                         &config,
-                        resolved_input,
+                        resolved_input.clone().resolve().await?,
                         result_to_write,
                         write_metadata,
                     )
                     .await;
+                    Ok::<_, Error>(())
                 });
                 if !async_writes {
                     write_future.await.map_err(|e| {
                         Error::new(ErrorDetails::InternalError {
                             message: format!("Failed to await ClickHouse inference write: {e:?}"),
                         })
-                    })?;
+                    })??;
                 }
             }
 
@@ -565,6 +564,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                     tool_choice: ToolChoice::Auto,
                     parallel_tool_calls: None,
                     description: None,
+                    all_explicit_templates_names: HashSet::new(),
                 })),
                 DEFAULT_FUNCTION_NAME.to_string(),
             ))
@@ -726,15 +726,23 @@ fn create_stream(
                         extra_headers,
                     };
                     let config = config.clone();
+                        match input.resolve().await {
+                            Ok(input) => {
+                                let clickhouse_connection_info = clickhouse_connection_info.clone();
+                                write_inference(
+                                    &clickhouse_connection_info,
+                                    &config,
+                                    input,
+                                    inference_response,
+                                    write_metadata,
+                                ).await;
+                            },
+                            Err(e) => {
+                                tracing::error!("Failed to resolve input: {e:?}");
 
-                        let clickhouse_connection_info = clickhouse_connection_info.clone();
-                        write_inference(
-                            &clickhouse_connection_info,
-                            &config,
-                            input,
-                            inference_response,
-                            write_metadata,
-                        ).await;
+                            }
+                        };
+
 
                 }
                 drop(clickhouse_connection_info);
@@ -1290,7 +1298,7 @@ mod tests {
             variant_name: "test_variant".to_string(),
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            input: ResolvedInput {
+            input: LazyResolvedInput {
                 messages: vec![],
                 system: None,
             },
@@ -1344,7 +1352,7 @@ mod tests {
             variant_name: "test_variant".to_string(),
             inference_id: Uuid::now_v7(),
             episode_id: Uuid::now_v7(),
-            input: ResolvedInput {
+            input: LazyResolvedInput {
                 messages: vec![],
                 system: None,
             },

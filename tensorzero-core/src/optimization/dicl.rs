@@ -793,7 +793,7 @@ mod tests {
         embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo},
         endpoints::inference::InferenceCredentials,
     };
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
     use std::sync::Arc;
 
     // Helper functions to create test embedding models using the Dummy provider
@@ -1224,6 +1224,8 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             description: None,
+
+            all_explicit_templates_names: HashSet::new(),
         })
     }
 
@@ -1238,6 +1240,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
+            all_explicit_templates_names: HashSet::new(),
         })
     }
 
@@ -1266,6 +1269,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: None,
+            all_template_names: HashSet::new(),
         })
     }
 
@@ -1301,6 +1305,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config: invalid_tool_call_config,
             description: None,
+            all_template_names: HashSet::new(),
         })
     }
 

@@ -163,6 +163,7 @@ export * from "./TagNode";
 export * from "./TagRateLimitingConfigScope";
 export * from "./TagValueScope";
 export * from "./TemplateFilesystemAccess";
+export * from "./TemplateInput";
 export * from "./TemplateWithSchema";
 export * from "./Text";
 export * from "./TextKind";

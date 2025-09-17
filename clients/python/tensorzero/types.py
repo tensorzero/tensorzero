@@ -28,6 +28,13 @@ class ContentBlock(ABC, HasTypeField):
 
 
 @dataclass
+class Template(ContentBlock):
+    name: str
+    arguments: Any
+    type: str = "template"
+
+
+@dataclass
 class Text(ContentBlock):
     text: Optional[str] = None
     arguments: Optional[Any] = None

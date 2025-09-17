@@ -510,12 +510,10 @@ enum GCPVertexAnthropicMessageContent<'a> {
     },
 }
 
-impl<'a> TryFrom<&'a ContentBlock>
-    for Option<FlattenUnknown<'a, GCPVertexAnthropicMessageContent<'a>>>
-{
-    type Error = Error;
-
-    fn try_from(block: &'a ContentBlock) -> Result<Self, Self::Error> {
+impl<'a> GCPVertexAnthropicMessageContent<'a> {
+    fn from_content_block(
+        block: &'a ContentBlock,
+    ) -> Result<Option<FlattenUnknown<'a, GCPVertexAnthropicMessageContent<'a>>>, Error> {
         match block {
             ContentBlock::Text(Text { text }) => Ok(Some(FlattenUnknown::Normal(
                 GCPVertexAnthropicMessageContent::Text { text },
@@ -601,23 +599,19 @@ struct GCPVertexAnthropicMessage<'a> {
     content: Vec<FlattenUnknown<'a, GCPVertexAnthropicMessageContent<'a>>>,
 }
 
-impl<'a> TryFrom<&'a RequestMessage> for GCPVertexAnthropicMessage<'a> {
-    type Error = Error;
-
-    fn try_from(
-        inference_message: &'a RequestMessage,
-    ) -> Result<GCPVertexAnthropicMessage<'a>, Self::Error> {
-        let content: Vec<FlattenUnknown<GCPVertexAnthropicMessageContent>> = inference_message
+impl<'a> GCPVertexAnthropicMessage<'a> {
+    fn from_request_message(message: &'a RequestMessage) -> Result<Self, Error> {
+        let content: Vec<FlattenUnknown<GCPVertexAnthropicMessageContent>> = message
             .content
             .iter()
-            .map(TryInto::try_into)
+            .map(GCPVertexAnthropicMessageContent::from_content_block)
             .collect::<Result<Vec<Option<FlattenUnknown<GCPVertexAnthropicMessageContent>>>, _>>()?
             .into_iter()
             .flatten()
             .collect();
 
         Ok(GCPVertexAnthropicMessage {
-            role: inference_message.role.into(),
+            role: message.role.into(),
             content,
         })
     }
@@ -660,7 +654,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
         let request_messages: Vec<GCPVertexAnthropicMessage> = request
             .messages
             .iter()
-            .map(GCPVertexAnthropicMessage::try_from)
+            .map(GCPVertexAnthropicMessage::from_request_message)
             .filter_ok(|m| !m.content.is_empty())
             .collect::<Result<Vec<_>, _>>()?;
         let mut messages = prepare_messages(request_messages)?;
@@ -1331,11 +1325,9 @@ mod tests {
     fn test_try_from_content_block() {
         let text_content_block = "test".to_string().into();
         let anthropic_content_block =
-            Option::<FlattenUnknown<GCPVertexAnthropicMessageContent>>::try_from(
-                &text_content_block,
-            )
-            .unwrap()
-            .unwrap();
+            GCPVertexAnthropicMessageContent::from_content_block(&text_content_block)
+                .unwrap()
+                .unwrap();
         assert_eq!(
             anthropic_content_block,
             FlattenUnknown::Normal(GCPVertexAnthropicMessageContent::Text { text: "test" })
@@ -1347,11 +1339,9 @@ mod tests {
             arguments: serde_json::to_string(&json!({"type": "string"})).unwrap(),
         });
         let anthropic_content_block =
-            Option::<FlattenUnknown<GCPVertexAnthropicMessageContent>>::try_from(
-                &tool_call_content_block,
-            )
-            .unwrap()
-            .unwrap();
+            GCPVertexAnthropicMessageContent::from_content_block(&tool_call_content_block)
+                .unwrap()
+                .unwrap();
         assert_eq!(
             anthropic_content_block,
             FlattenUnknown::Normal(GCPVertexAnthropicMessageContent::ToolUse {
@@ -1370,7 +1360,7 @@ mod tests {
             content: vec!["test".to_string().into()],
         };
         let anthropic_message =
-            GCPVertexAnthropicMessage::try_from(&inference_request_message).unwrap();
+            GCPVertexAnthropicMessage::from_request_message(&inference_request_message).unwrap();
         assert_eq!(
             anthropic_message,
             GCPVertexAnthropicMessage {
@@ -1387,7 +1377,7 @@ mod tests {
             content: vec!["test_assistant".to_string().into()],
         };
         let anthropic_message =
-            GCPVertexAnthropicMessage::try_from(&inference_request_message).unwrap();
+            GCPVertexAnthropicMessage::from_request_message(&inference_request_message).unwrap();
         assert_eq!(
             anthropic_message,
             GCPVertexAnthropicMessage {
@@ -1410,7 +1400,7 @@ mod tests {
             })],
         };
         let anthropic_message =
-            GCPVertexAnthropicMessage::try_from(&inference_request_message).unwrap();
+            GCPVertexAnthropicMessage::from_request_message(&inference_request_message).unwrap();
         assert_eq!(
             anthropic_message,
             GCPVertexAnthropicMessage {
@@ -1504,8 +1494,8 @@ mod tests {
             GCPVertexAnthropicRequestBody {
                 anthropic_version: ANTHROPIC_API_VERSION,
                 messages: vec![
-                    GCPVertexAnthropicMessage::try_from(&messages[0]).unwrap(),
-                    GCPVertexAnthropicMessage::try_from(&messages[1]).unwrap(),
+                    GCPVertexAnthropicMessage::from_request_message(&messages[0]).unwrap(),
+                    GCPVertexAnthropicMessage::from_request_message(&messages[1]).unwrap(),
                     listening_message.clone(),
                 ],
                 max_tokens: 32_000,
@@ -1572,7 +1562,7 @@ mod tests {
                             })
                         ],
                     },
-                    GCPVertexAnthropicMessage::try_from(&messages[2]).unwrap(),
+                    GCPVertexAnthropicMessage::from_request_message(&messages[2]).unwrap(),
                     listening_message.clone(),
                 ],
                 max_tokens: 100,
@@ -1633,9 +1623,9 @@ mod tests {
             GCPVertexAnthropicRequestBody {
                 anthropic_version: ANTHROPIC_API_VERSION,
                 messages: vec![
-                    GCPVertexAnthropicMessage::try_from(&messages[0]).unwrap(),
-                    GCPVertexAnthropicMessage::try_from(&messages[1]).unwrap(),
-                    GCPVertexAnthropicMessage::try_from(&messages[2]).unwrap(),
+                    GCPVertexAnthropicMessage::from_request_message(&messages[0]).unwrap(),
+                    GCPVertexAnthropicMessage::from_request_message(&messages[1]).unwrap(),
+                    GCPVertexAnthropicMessage::from_request_message(&messages[2]).unwrap(),
                 ],
                 max_tokens: 100,
                 stream: Some(true),

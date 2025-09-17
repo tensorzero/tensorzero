@@ -1119,7 +1119,7 @@ async fn e2e_test_inference_json_success() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": {"country": "Japan"}}]
+                "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
             }
         ]
     });
@@ -1270,7 +1270,7 @@ async fn e2e_test_variant_failover() {
             "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": {"type": "tacos", "quantity": 13}}]
+                "content": [{"type": "template", "name": "user", "arguments": {"type": "tacos", "quantity": 13}}]
             }
         ]}
     );
@@ -2655,7 +2655,10 @@ pub async fn e2e_test_dynamic_api_key() {
     assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
     let response_json = response.json::<Value>().await.unwrap();
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
-    assert!(error_message.contains("API key missing for provider Dummy"));
+    assert!(
+        error_message.contains("API key missing for provider Dummy"),
+        "Unexpected error message: {error_message}"
+    );
 
     let payload = json!({
         "function_name": "basic_test",
@@ -3130,7 +3133,7 @@ async fn test_dummy_only_inference_invalid_default_function_arg() {
     let response_text = response.text().await.unwrap();
     assert!(
         response_text.contains(
-            "Message has non-string content but there is no schema given for role system."
+            "System message has non-string content but there is no template `system` in any variant"
         ),
         "Unexpected error message: {response_text}",
     );
@@ -3676,7 +3679,7 @@ async fn check_json_cot_inference_response(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": {"country": "Japan"}}]
+                "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
             }
         ]
     });
