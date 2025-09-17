@@ -2,10 +2,17 @@
 nameOverride: ""
 fullnameOverride: ""
 
+# Monitoring configurations
 monitoring:
-  enabled: false
-  interval: "30s"
-  labels: {}
+  # Configurations for metrics scraping via Prometheus
+  metrics:
+    # Enable creation of ServiceMonitor for the TensorZero gateway. Requires
+    # Prometheus Operator to already exist on your clsuter.
+    enabled: false
+    # The desired scrape interval for the ServiceMonitor.
+    interval: "30s"
+    # Additional label key-values to attach to the created ServiceMonitor.
+    labels: {}
 
 # Gateway Configuration
 gateway:

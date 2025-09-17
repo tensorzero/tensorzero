@@ -109,11 +109,11 @@ The following table lists the configurable parameters of the chart and their def
 
 ### Monitoring Configuration
 
-| Parameter             | Description                                   | Default |
-|-----------------------|-----------------------------------------------|---------|
-| `monitoring.enabled`  | Enable ServiceMonitor creation                | `false` |
-| `monitoring.interval` | Scrape interval                               | `"30s"` |
-| `monitoring.labels`   | Additional labels to attach to ServiceMonitor | `{}`    |
+| Parameter                     | Description                                   | Default |
+|-------------------------------|-----------------------------------------------|---------|
+| `monitoring.metrics.enabled`  | Enable ServiceMonitor creation                | `false` |
+| `monitoring.metrics.interval` | Scrape interval                               | `"30s"` |
+| `monitoring.metrics.labels`   | Additional labels to attach to ServiceMonitor | `{}`    |
 
 ### ClickHouse Configuration
 

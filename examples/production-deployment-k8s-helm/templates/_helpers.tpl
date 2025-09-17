@@ -58,7 +58,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 Monitoring labels
 */}}
 {{- define "tensorzero.monitorLabels" -}}
-{{- range $label, $value := .Values.monitoring.labels }}
+{{- range $label, $value := .Values.monitoring.metrics.labels }}
 {{ $label }}: {{ $value }}
 {{- end }}
 {{- end }}

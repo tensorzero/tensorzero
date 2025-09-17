@@ -1,4 +1,4 @@
-{{- if .Values.monitoring.enabled }}
+{{- if .Values.monitoring.metrics.enabled }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -9,7 +9,7 @@ metadata:
     app.kubernetes.io/component: gateway
 spec:
   endpoints:
-    - interval: {{ .Values.monitoring.interval | default "30s" }}
+    - interval: {{ .Values.monitoring.metrics.interval | default "30s" }}
       targetPort: 3000
       path: /metrics
   selector:
