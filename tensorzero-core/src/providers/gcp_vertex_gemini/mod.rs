@@ -1583,10 +1583,8 @@ pub struct GCPVertexGeminiContent<'a> {
     parts: Vec<FlattenUnknown<'a, GCPVertexGeminiContentPart<'a>>>,
 }
 
-impl<'a> TryFrom<&'a RequestMessage> for GCPVertexGeminiContent<'a> {
-    type Error = Error;
-
-    fn try_from(message: &'a RequestMessage) -> Result<Self, Error> {
+impl<'a> GCPVertexGeminiContent<'a> {
+    fn from_request_message(message: &'a RequestMessage) -> Result<Self, Error> {
         tensorzero_to_gcp_vertex_gemini_content(
             message.role.into(),
             Cow::Borrowed(&message.content),
@@ -1825,7 +1823,7 @@ impl<'a> GCPVertexGeminiRequest<'a> {
         let contents: Vec<GCPVertexGeminiContent> = request
             .messages
             .iter()
-            .map(GCPVertexGeminiContent::try_from)
+            .map(GCPVertexGeminiContent::from_request_message)
             .filter_ok(|m| !m.parts.is_empty())
             .collect::<Result<_, _>>()?;
         let (tools, tool_config) = prepare_tools(request, model_name);
@@ -1880,15 +1878,10 @@ impl<'a> GCPVertexGeminiRequest<'a> {
 
 pub fn prepare_gcp_vertex_gemini_messages<'a>(
     messages: &'a [RequestMessage],
-    provider_type: &str,
 ) -> Result<Vec<GCPVertexGeminiContent<'a>>, Error> {
     let mut gcp_vertex_gemini_messages = Vec::with_capacity(messages.len());
     for message in messages {
-        gcp_vertex_gemini_messages.push(tensorzero_to_gcp_vertex_gemini_content(
-            message.role.into(),
-            Cow::Borrowed(&message.content),
-            provider_type,
-        )?);
+        gcp_vertex_gemini_messages.push(GCPVertexGeminiContent::from_request_message(message)?);
     }
     Ok(gcp_vertex_gemini_messages)
 }
@@ -2592,7 +2585,7 @@ mod tests {
             role: Role::User,
             content: vec!["Hello, world!".to_string().into()],
         };
-        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
+        let content = GCPVertexGeminiContent::from_request_message(&message).unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::User);
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
@@ -2606,7 +2599,7 @@ mod tests {
             role: Role::Assistant,
             content: vec!["Hello, world!".to_string().into()],
         };
-        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
+        let content = GCPVertexGeminiContent::from_request_message(&message).unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::Model);
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
@@ -2626,7 +2619,8 @@ mod tests {
                 }),
             ],
         };
-        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
+        let content = GCPVertexGeminiContent::from_request_message(&message).unwrap();
+
         assert_eq!(content.role, GCPVertexGeminiRole::Model);
         assert_eq!(content.parts.len(), 2);
         assert_eq!(
@@ -2653,7 +2647,7 @@ mod tests {
                 result: r#"{"temperature": 25, "conditions": "sunny"}"#.to_string(),
             })],
         };
-        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
+        let content = GCPVertexGeminiContent::from_request_message(&message).unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::User);
         assert_eq!(content.parts.len(), 1);
         assert_eq!(

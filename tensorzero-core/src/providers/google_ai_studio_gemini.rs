@@ -440,10 +440,8 @@ struct GeminiContent<'a> {
     parts: Vec<GeminiContentPart<'a>>,
 }
 
-impl<'a> TryFrom<&'a RequestMessage> for GeminiContent<'a> {
-    type Error = Error;
-
-    fn try_from(message: &'a RequestMessage) -> Result<Self, Self::Error> {
+impl<'a> GeminiContent<'a> {
+    fn from_request_message(message: &'a RequestMessage) -> Result<Self, Error> {
         let role = GeminiRole::from(message.role);
         let mut output = Vec::with_capacity(message.content.len());
         let mut iter = message.content.iter();
@@ -764,7 +762,7 @@ impl<'a> GeminiRequest<'a> {
         let contents: Vec<GeminiContent> = request
             .messages
             .iter()
-            .map(GeminiContent::try_from)
+            .map(GeminiContent::from_request_message)
             .filter_ok(|m| !m.parts.is_empty())
             .collect::<Result<_, _>>()?;
         let (tools, tool_config) = prepare_tools(request);
@@ -1354,7 +1352,7 @@ mod tests {
             role: Role::User,
             content: vec!["Hello, world!".to_string().into()],
         };
-        let content = GeminiContent::try_from(&message).unwrap();
+        let content = GeminiContent::from_request_message(&message).unwrap();
         assert_eq!(content.role, GeminiRole::User);
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
@@ -1372,7 +1370,7 @@ mod tests {
             role: Role::Assistant,
             content: vec!["Hello, world!".to_string().into()],
         };
-        let content = GeminiContent::try_from(&message).unwrap();
+        let content = GeminiContent::from_request_message(&message).unwrap();
         assert_eq!(content.role, GeminiRole::Model);
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
@@ -1396,7 +1394,7 @@ mod tests {
                 }),
             ],
         };
-        let content = GeminiContent::try_from(&message).unwrap();
+        let content = GeminiContent::from_request_message(&message).unwrap();
         assert_eq!(content.role, GeminiRole::Model);
         assert_eq!(content.parts.len(), 2);
         assert_eq!(
@@ -1431,7 +1429,7 @@ mod tests {
                 result: r#"{"temperature": 25, "conditions": "sunny"}"#.to_string(),
             })],
         };
-        let content = GeminiContent::try_from(&message).unwrap();
+        let content = GeminiContent::from_request_message(&message).unwrap();
         assert_eq!(content.role, GeminiRole::User);
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
