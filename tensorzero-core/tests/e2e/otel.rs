@@ -17,9 +17,7 @@ use tensorzero_core::{config::OtlpTracesFormat, inference::types::TextKind};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
-use crate::providers::common::{
-    make_embedded_gateway, make_embedded_gateway_no_config, make_embedded_gateway_with_config,
-};
+use crate::providers::common::{make_embedded_gateway, make_embedded_gateway_with_config};
 
 type CapturedSpans = Arc<Mutex<Option<Vec<SpanData>>>>;
 
@@ -267,7 +265,14 @@ pub async fn test_capture_model_error() {
     let episode_uuid = Uuid::now_v7();
     let exporter = install_capturing_otel_exporter();
 
-    let client = make_embedded_gateway_no_config().await;
+    let config = format!(
+        "
+    [gateway.export.otlp.traces]
+    enabled = true
+    "
+    );
+
+    let client = make_embedded_gateway_with_config(&config).await;
     let _err = client
         .inference(ClientInferenceParams {
             episode_id: Some(episode_uuid),
