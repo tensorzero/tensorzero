@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type {
   ContentBlockChatOutput,
   JsonInferenceOutput,
@@ -263,14 +263,26 @@ function ChatInferenceOutputComponent({
                     content={JSON.stringify(block.data)}
                   />
                 );
-              case "thought":
-                return (
-                  <TextMessage
-                    key={index}
-                    label="Thought"
-                    content={block.text || ""}
-                  />
+              case "thought": {
+                const footer = (
+                  <>
+                    Signature:{" "}
+                    <span className="text-fg-muted italic">
+                      {block.signature}
+                    </span>
+                  </>
                 );
+
+                return (
+                  <Fragment key={index}>
+                    <TextMessage
+                      label="Thought"
+                      content={block.text || ""}
+                      footer={footer}
+                    />
+                  </Fragment>
+                );
+              }
             }
           })}
         </SnippetMessage>
