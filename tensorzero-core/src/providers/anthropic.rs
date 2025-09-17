@@ -958,7 +958,8 @@ impl From<AnthropicStopReason> for FinishReason {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 struct AnthropicResponseWithMetadata<'a> {
     response: AnthropicResponse,
     raw_response: String,
