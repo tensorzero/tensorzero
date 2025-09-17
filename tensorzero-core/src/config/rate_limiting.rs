@@ -4,7 +4,6 @@ use std::sync::Arc;
 use crate::rate_limiting::{
     RateLimit, RateLimitInterval, RateLimitResource, RateLimitingConfigPriority,
     RateLimitingConfigRule, RateLimitingConfigScope, RateLimitingConfigScopes, TagValueScope,
-    UninitializedRateLimitingConfig,
 };
 
 /*
@@ -183,7 +182,7 @@ impl<'de> Deserialize<'de> for TagValueScope {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rate_limiting::RateLimitingConfig;
+    use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
     use toml;
 
     #[test]
@@ -686,8 +685,7 @@ mod tests {
 
         if let Err(e) = result {
             let error_msg = e.to_string();
-            println!("{}", error_msg);
-            assert!(error_msg.contains("must either be a nonnegative integer"));
+            assert!(error_msg.contains("must either be a nonnegative integer"),);
         }
     }
 
@@ -703,7 +701,6 @@ mod tests {
 
         if let Err(e) = result {
             let error_msg = e.to_string();
-            println!("{}", error_msg);
             assert!(error_msg.contains("must either be a nonnegative integer"));
         }
     }
@@ -887,11 +884,11 @@ mod tests {
 
     #[test]
     fn test_bucket_format_simple() {
-        let toml_str = r#"
+        let toml_str = r"
             [[rules]]
             tokens_per_minute = { capacity = 100, refill_rate = 50 }
             priority = 1
-        "#;
+        ";
 
         let uninitialized_config: UninitializedRateLimitingConfig =
             toml::from_str(toml_str).unwrap();
@@ -908,12 +905,12 @@ mod tests {
 
     #[test]
     fn test_bucket_format_mixed_with_simple() {
-        let toml_str = r#"
+        let toml_str = r"
             [[rules]]
             tokens_per_minute = { capacity = 100, refill_rate = 50 }
             model_inferences_per_second = 10
             priority = 1
-        "#;
+        ";
 
         let uninitialized_config: UninitializedRateLimitingConfig =
             toml::from_str(toml_str).unwrap();
@@ -942,12 +939,12 @@ mod tests {
 
     #[test]
     fn test_bucket_format_multiple_resources() {
-        let toml_str = r#"
+        let toml_str = r"
             [[rules]]
             tokens_per_minute = { capacity = 100, refill_rate = 50 }
             model_inferences_per_hour = { capacity = 1000, refill_rate = 200 }
             priority = 1
-        "#;
+        ";
 
         let uninitialized_config: UninitializedRateLimitingConfig =
             toml::from_str(toml_str).unwrap();
@@ -974,11 +971,11 @@ mod tests {
 
     #[test]
     fn test_bucket_format_invalid_missing_capacity() {
-        let toml_str = r#"
+        let toml_str = r"
             [[rules]]
             tokens_per_minute = { refill_rate = 50 }
             priority = 1
-        "#;
+        ";
 
         let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
@@ -986,11 +983,11 @@ mod tests {
 
     #[test]
     fn test_bucket_format_invalid_missing_refill_rate() {
-        let toml_str = r#"
+        let toml_str = r"
             [[rules]]
             tokens_per_minute = { capacity = 100 }
             priority = 1
-        "#;
+        ";
 
         let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
@@ -998,11 +995,11 @@ mod tests {
 
     #[test]
     fn test_bucket_format_invalid_extra_fields() {
-        let toml_str = r#"
+        let toml_str = r"
             [[rules]]
             tokens_per_minute = { capacity = 100, refill_rate = 50, extra_field = 123 }
             priority = 1
-        "#;
+        ";
 
         let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());

@@ -8,6 +8,24 @@ use crate::db::{
 };
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 
+/*
+ * The high level flow for our rate limiting system is:
+ *   1. The caller constructs a ScopeInfo containing the information
+ *      about the current provider request that determines what rate limit scopes apply.
+ *   2. The caller calls `RateLimitingConfig::consume_tickets`. Here, we:
+ *       a) use the ScopeInfo to determine which rate limit scopes apply
+ *       b) estimate (conservatively) the resource consumption of the request
+ *       c) consume tickets from the rate limit scopes
+ *       d) actually attempt to consume the tickets from Postgres
+ *       e) check success, throw an error on failure, and return a TicketBorrow
+ *   3. The caller calls `TicketBorrow::return_tickets` with the actual usage observed.
+ *      This will figure out post-facto bookkeeping for over- or under-consumption.
+ *   Important Note: the Postgres database has a string column `key`
+ *      that is used to identify a particular active rate limit.
+ *      This is
+ *
+ */
+
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -88,7 +106,6 @@ impl RateLimitingConfig {
         client: &impl RateLimitQueries,
         scope_info: &'a ScopeInfo<'a>,
         rate_limited_request: &impl RateLimitedRequest,
-        // rate_limit_resource_requests: &RateLimitResourceUsage,
     ) -> Result<TicketBorrow, Error> {
         let limits = self.get_active_limits(scope_info);
         if limits.is_empty() {
@@ -105,6 +122,10 @@ impl RateLimitingConfig {
         TicketBorrow::new(results, limits)
     }
 
+    /// Given a particular scope, finds the RateLimits that are active for that scope.
+    /// We follow a two-pass approach:
+    /// 1. First pass: collect matching limits and find max priority
+    /// 2. Second pass: filter and flatten based on priority
     fn get_active_limits<'a>(&'a self, scope_info: &'a ScopeInfo) -> Vec<ActiveRateLimit> {
         if !self.enabled {
             return vec![];
@@ -280,6 +301,7 @@ pub enum RateLimitResource {
     // Cent, // or something more granular?
 }
 
+#[derive(Debug)]
 pub struct RateLimitResourceUsage {
     pub model_inferences: u64,
     pub tokens: u64,
@@ -358,6 +380,10 @@ impl RateLimitingConfigScopes {
     }
 }
 
+trait Scope {
+    fn get_key_if_matches(&self, info: &ScopeInfo) -> Option<RateLimitingScopeKey>;
+}
+
 // IMPORTANT: the types below are used to set up scopes and keys for rate limiting.
 // We need the keys that have already been used in production to remain stable.
 // So, we cannot change the sort order.
@@ -375,8 +401,8 @@ pub enum RateLimitingConfigScope {
     // function_name = "my_function"
 }
 
-impl RateLimitingConfigScope {
-    fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<RateLimitingScopeKey> {
+impl Scope for RateLimitingConfigScope {
+    fn get_key_if_matches(&self, info: &ScopeInfo) -> Option<RateLimitingScopeKey> {
         match self {
             RateLimitingConfigScope::Tag(tag) => tag.get_key_if_matches(info),
         }
@@ -455,7 +481,6 @@ impl Serialize for TagValueScope {
 /// across releases.
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type")]
-#[expect(clippy::enum_variant_names)]
 pub enum RateLimitingScopeKey {
     TagAny { key: String },
     TagEach { key: String, value: String },
@@ -1429,7 +1454,7 @@ mod tests {
         // Test iterator functionality
         let mut iter_count = 0;
         for (r, a) in valid_borrow.iter() {
-            assert_eq!(r.success, true);
+            assert!(r.success);
             assert_eq!(r.tickets_consumed, 50);
             assert_eq!(a.limit.resource, RateLimitResource::Token);
             iter_count += 1;
@@ -1555,7 +1580,7 @@ mod tests {
                     );
                 }
             }
-            Ok(_) => panic!("Expected an error, but got Ok"),
+            Ok(()) => panic!("Expected an error, but got Ok"),
         }
     }
 }

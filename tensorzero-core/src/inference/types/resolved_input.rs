@@ -322,7 +322,7 @@ impl std::fmt::Display for FileWithPath {
 
 impl RateLimitedInputContent for FileWithPath {
     fn estimated_input_token_usage(&self) -> u64 {
-        todo!("Implement estimated_input_token_usage for FileWithPath")
+        10_000 // Hardcoded value for file size estimation, we will improve later
     }
 }
 

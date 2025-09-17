@@ -1,6 +1,5 @@
 use crate::db::PostgresConnectionInfo;
 use chrono::Duration;
-use futures;
 use sqlx::PgPool;
 use tensorzero_core::db::{RateLimitQueries, ReturnTicketsRequest};
 use tensorzero_core::{db::ConsumeTicketsRequest, rate_limiting::ActiveRateLimitKey};
@@ -93,7 +92,7 @@ async fn test_atomic_consistency_under_load(pool: PgPool) {
                         Duration::seconds(60),
                     ),
                     create_consume_request(
-                        &format!("unique_key_{}", i),
+                        &format!("unique_key_{i}"),
                         if i % 3 == 0 { 150 } else { 20 },
                         100,
                         10,
@@ -214,8 +213,7 @@ async fn test_race_condition_interleaved_consume_return(pool: PgPool) {
         .unwrap();
     assert!(
         final_balance <= 100,
-        "Balance should not exceed capacity: {}",
-        final_balance
+        "Balance should not exceed capacity: {final_balance}",
     );
 }
 

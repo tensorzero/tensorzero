@@ -156,6 +156,26 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Clie
     .await
     .unwrap()
 }
+
+pub async fn make_embedded_gateway_with_config_and_postgres(config: &str) -> tensorzero::Client {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
+        .expect("TENSORZERO_POSTGRES_URL must be set for rate limiting tests");
+
+    let tmp_config = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(tmp_config.path(), config).unwrap();
+    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(tmp_config.path().to_owned()),
+        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        postgres_url: Some(postgres_url),
+        timeout: None,
+        verify_credentials: true,
+        allow_batch_writes: true,
+    })
+    .build()
+    .await
+    .unwrap()
+}
+
 // We use a multi-threaded runtime so that the embedded gateway can use 'block_on'.
 // For consistency, we also use a multi-threaded runtime for the http gateway test.
 
