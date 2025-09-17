@@ -5,7 +5,6 @@
   "version": "2025.9.4",
   "scripts": {
     "build": "NODE_ENV=production react-router build",
-    "reveal": "react-router reveal",
     "dev": "react-router dev",
     "start": "NODE_ENV=production PORT=4000 react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
