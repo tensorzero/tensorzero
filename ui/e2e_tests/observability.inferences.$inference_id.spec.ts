@@ -337,8 +337,7 @@ test("should be able to add chat demonstration feedback via the inference page",
   await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
 });
 
-test.describe
-  .only("should be able to add demonstration feedback via Try with X flows", () => {
+test.describe("should be able to add demonstration feedback via Try with X flows", () => {
   const testData = [
     {
       buttonText: "Try with variant",
@@ -348,7 +347,7 @@ test.describe
     {
       buttonText: "Try with model",
       inference: "019926fd-1a06-7fe2-b7f4-2318de2f2046",
-      option: "ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j",
+      option: "gpt-4o-mini-2024-07-18",
     },
   ];
   testData.forEach(({ buttonText, inference, option }) => {
