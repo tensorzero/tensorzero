@@ -5,5 +5,6 @@ import type { RateLimitResource } from "./RateLimitResource";
 export type RateLimit = {
   resource: RateLimitResource;
   interval: RateLimitInterval;
-  amount: number;
+  capacity: bigint;
+  refill_rate: bigint;
 };

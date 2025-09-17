@@ -134,6 +134,7 @@ export * from "./RateLimitingConfig";
 export * from "./RateLimitingConfigPriority";
 export * from "./RateLimitingConfigRule";
 export * from "./RateLimitingConfigScope";
+export * from "./RateLimitingConfigScopes";
 export * from "./RenderedSample";
 export * from "./RequestMessage";
 export * from "./ResolvedInput";
