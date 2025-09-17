@@ -1111,9 +1111,9 @@ async fn test_embedding_request() {
         EmbeddingProviderConfig::OpenAI(_)
     ));
 
-    // Inject randomness into the model name to ensure that the first request
+    // Inject randomness into the model request to ensure that the first request
     // is a cache miss
-    let model_name = format!("my-embedding-{}", Uuid::now_v7());
+    let model_name = "my_embedding".to_string();
 
     let model_config = EmbeddingModelConfig {
         routing: vec![model_name.as_str().into()],
@@ -1124,7 +1124,7 @@ async fn test_embedding_request() {
     };
 
     let request = EmbeddingRequest {
-        input: "This is a test input".to_string().into(),
+        input: format!("This is a test input: {}", Uuid::now_v7()).into(),
         dimensions: None,
         encoding_format: EmbeddingEncodingFormat::Float,
     };
@@ -1189,14 +1189,18 @@ async fn test_embedding_request() {
         !parsed_raw_request.is_null(),
         "Parsed raw request should not be null"
     );
-    // Hardcoded since the input is 5 tokens
-    assert_eq!(response.usage.input_tokens, 5);
+    // The randomness affects the exact number of tokens, so we just check that it's at least 20
+    assert!(
+        response.usage.input_tokens >= 20,
+        "Unexpected input tokens: {}",
+        response.usage.input_tokens
+    );
     assert_eq!(response.usage.output_tokens, 0);
     match response.latency {
         Latency::NonStreaming { response_time } => {
             assert!(
-                response_time.as_millis() > 10,
-                "Response time should be greater than 10ms: {}",
+                response_time.as_millis() > 100,
+                "Response time should be greater than 100ms: {}",
                 response_time.as_millis()
             );
         }
@@ -1223,7 +1227,11 @@ async fn test_embedding_request() {
         .unwrap();
     assert!(cached_response.cached);
     assert_eq!(response.embeddings, cached_response.embeddings);
-    assert_eq!(cached_response.usage.input_tokens, 5);
+    assert!(
+        cached_response.usage.input_tokens >= 20,
+        "Unexpected input tokens: {}",
+        cached_response.usage.input_tokens
+    );
     assert_eq!(cached_response.usage.output_tokens, 0);
 }
 
