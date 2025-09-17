@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   ContentBlockChatOutput,
   JsonInferenceOutput,
@@ -274,13 +274,12 @@ function ChatInferenceOutputComponent({
                 );
 
                 return (
-                  <Fragment key={index}>
-                    <TextMessage
-                      label="Thought"
-                      content={block.text || ""}
-                      footer={footer}
-                    />
-                  </Fragment>
+                  <TextMessage
+                    key={index}
+                    label="Thought"
+                    content={block.text || ""}
+                    footer={footer}
+                  />
                 );
               }
             }
