@@ -337,16 +337,15 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
       variantInferenceFetcher.state === "loading");
 
   const { submit } = variantInferenceFetcher;
-  const onVariantSelect = (variant: string) => {
+  const processRequest = (
+    option: string,
+    args: Parameters<typeof prepareInferenceActionRequest>[0],
+  ) => {
     try {
-      const request = prepareInferenceActionRequest({
-        resource: inference,
-        source: variantSource,
-        variant,
-      });
+      const request = prepareInferenceActionRequest(args);
 
       // Set state and open modal only if request preparation succeeds
-      setSelectedVariant(variant);
+      setSelectedVariant(option);
       setOpenModal("variant-response");
 
       try {
@@ -384,6 +383,22 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     }
   };
 
+  const onVariantSelect = (variant: string) => {
+    processRequest(variant, {
+      resource: inference,
+      source: variantSource,
+      variant,
+    });
+  };
+
+  const onModelSelect = (model: string) => {
+    processRequest(model, {
+      resource: inference,
+      source: variantSource,
+      model_name: model,
+    });
+  };
+
   const humanFeedbackFetcher = useFetcherWithReset<typeof action>();
   const humanFeedbackFormError =
     humanFeedbackFetcher.state === "idle"
@@ -413,7 +428,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const models = [...modelsSet].sort();
 
   const options = isDefault ? models : variants;
-  const onModelSelect = onVariantSelect;
   const onSelect = isDefault ? onModelSelect : onVariantSelect;
 
   return (
