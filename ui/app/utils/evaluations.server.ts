@@ -290,19 +290,17 @@ export function cleanupOldEvaluations(): void {
 
   const now = new Date();
   for (const [evaluationRunId, evaluationInfo] of runningEvaluations) {
-    // Remove completed evaluations older than 1 hour
-    if (
+    const isCompleted =
       evaluationInfo.completed &&
-      now.getTime() - evaluationInfo.completed.getTime() > ONE_HOUR_MS
-    ) {
-      runningEvaluations.delete(evaluationRunId);
-    }
+      // Remove completed evaluations older than 1 hour
+      now.getTime() - evaluationInfo.completed.getTime() > ONE_HOUR_MS;
 
-    // Remove stalled evaluations older than 24 hours
-    else if (
-      now.getTime() - evaluationInfo.started.getTime() >
-      TWENTY_FOUR_HOURS_MS
-    ) {
+    const isStalled =
+      !evaluationInfo.completed &&
+      // Remove stalled evaluations older than 24 hours
+      now.getTime() - evaluationInfo.started.getTime() > TWENTY_FOUR_HOURS_MS;
+
+    if (isCompleted || isStalled) {
       runningEvaluations.delete(evaluationRunId);
     }
   }
