@@ -1876,6 +1876,8 @@ impl<'a> GCPVertexGeminiRequest<'a> {
     }
 }
 
+// Clippy gives a false positive on Rust 1.86
+#[allow(clippy::needless_lifetimes, clippy::allow_attributes)]
 pub fn prepare_gcp_vertex_gemini_messages<'a>(
     messages: &'a [RequestMessage],
 ) -> Result<Vec<GCPVertexGeminiContent<'a>>, Error> {
