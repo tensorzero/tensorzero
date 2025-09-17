@@ -296,11 +296,10 @@ export function cleanupOldEvaluations(): void {
       now.getTime() - evaluationInfo.completed.getTime() > ONE_HOUR_MS
     ) {
       runningEvaluations.delete(evaluationRunId);
-      return;
     }
 
     // Remove stalled evaluations older than 24 hours
-    if (
+    else if (
       now.getTime() - evaluationInfo.started.getTime() >
       TWENTY_FOUR_HOURS_MS
     ) {
