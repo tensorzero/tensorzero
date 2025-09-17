@@ -49,10 +49,12 @@ Please submit a PR directly once you're ready to start working on an issue.
 
 ### Documentation
 
-We're planning to open-source our documentation pages soon.
-See [issue #432](https://github.com/tensorzero/tensorzero/issues/432) for more details.
+The content for our documentation lives in the `docs/` directory.
 
-In the meantime, please open an issue if you have suggestions or find any problems with the documentation.
+For small changes (e.g. typos), feel free to open a PR directly.
+
+For larger changes, please communicate with us first to avoid duplicate work or wasted effort.
+You can start a discussion (GitHub, Slack, or Discord) or open an issue as a starting point.
 
 ### Content — Examples, Tutorials, etc.
 
