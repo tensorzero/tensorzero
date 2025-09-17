@@ -321,17 +321,13 @@ export function startPeriodicCleanup(intervalMs = ONE_HOUR_MS): () => void {
     }
   };
 
-  const init = () => {
+  if (cleanupIntervalId === undefined) {
     // Only start the interval if there are running evaluations to clean up
     if (runningEvaluations.size > 0) {
       // Run an initial cleanup immediately
       cleanupOldEvaluations();
       cleanupIntervalId = setInterval(cleanupOldEvaluations, intervalMs);
     }
-  };
-
-  if (cleanupIntervalId === undefined) {
-    init();
   } else if (runningEvaluations.size === 0) {
     // Interval is still running but there are no running evaluations to clean
     // up, so we can stop it.
