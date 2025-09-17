@@ -450,7 +450,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
             options={options}
             onOptionSelect={onSelect}
             isLoading={variantInferenceIsLoading}
-            model={isDefault}
+            isDefaultFunction={isDefault}
           />
           <AddToDatasetButton
             onDatasetSelect={handleAddToDataset}
