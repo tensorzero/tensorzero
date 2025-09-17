@@ -47,6 +47,15 @@ Please submit a PR directly once you're ready to start working on an issue.
 >
 > See the "Technical Guide" section below for more details on building and testing TensorZero.
 
+### Documentation
+
+The content for our documentation lives in the `docs/` directory.
+
+For small changes (e.g. typos), feel free to open a PR directly.
+
+For larger changes, please communicate with us first to avoid duplicate work or wasted effort.
+You can start a discussion (GitHub, Slack, or Discord) or open an issue as a starting point.
+
 ### Content — Examples, Tutorials, etc.
 
 We'd love to collaborate on examples, tutorials, and other content that showcases how to build AI applications with TensorZero.
