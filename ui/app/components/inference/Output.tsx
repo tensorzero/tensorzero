@@ -264,14 +264,14 @@ function ChatInferenceOutputComponent({
                   />
                 );
               case "thought": {
-                const footer = (
+                const footer = block.signature ? (
                   <>
                     Signature:{" "}
                     <span className="text-fg-muted italic">
                       {block.signature}
                     </span>
                   </>
-                );
+                ) : null;
 
                 return (
                   <TextMessage
