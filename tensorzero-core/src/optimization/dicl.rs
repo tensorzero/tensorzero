@@ -1216,6 +1216,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             description: None,
+
             all_explicit_templates_names: HashSet::new(),
         })
     }

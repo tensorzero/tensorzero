@@ -558,7 +558,7 @@ impl std::fmt::Display for RenderedSample {
 /// `variants` should be a map from function name to variant name, i.e. what variant to use for a particular function
 /// as the stored inference is being rendered.
 /// This does not handle resolving network resources (e.g. images).
-fn render_model_input(
+async fn render_model_input(
     resolved_input: &ResolvedInput,
     function_name: &str,
     config: &Config,
@@ -590,6 +590,7 @@ fn render_model_input(
         &config.templates,
         &chat_completion_config.templates,
     )
+    .await
 }
 
 /// Render an impl StoredSample to a RenderedStoredInference.
@@ -597,7 +598,7 @@ fn render_model_input(
 /// as the inference example is being rendered.
 ///
 /// This does not handle resolving network resources (e.g. images).
-pub fn render_stored_sample<T: StoredSample>(
+pub async fn render_stored_sample<T: StoredSample>(
     stored_sample: T,
     resolved_input: ResolvedInput,
     config: &Config,
@@ -615,7 +616,7 @@ pub fn render_stored_sample<T: StoredSample>(
         inference_id,
         tags,
     } = stored_sample.owned_simple_info();
-    let model_input = render_model_input(&resolved_input, &function_name, config, variants)?;
+    let model_input = render_model_input(&resolved_input, &function_name, config, variants).await?;
     Ok(RenderedSample {
         function_name,
         episode_id,

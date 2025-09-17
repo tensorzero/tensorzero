@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 
 use backon::Retryable;
-use futures::future::join_all;
+use futures::future::{join_all, try_join_all};
 use lazy_static::lazy_static;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -15,11 +15,12 @@ use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
+use crate::inference::types::resolved_input::LazyResolvedInput;
+use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, FunctionType, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage, Role,
 };
-use crate::inference::types::{ContentBlockOutput, ResolvedInput};
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::model::ModelTable;
 use crate::tool::{ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
@@ -129,7 +130,7 @@ lazy_static! {
 impl Variant for BestOfNSamplingConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -151,7 +152,7 @@ impl Variant for BestOfNSamplingConfig {
 
     async fn infer_stream<'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -239,7 +240,7 @@ impl Variant for BestOfNSamplingConfig {
 
     async fn start_batch_inference<'a>(
         &'a self,
-        _input: &[ResolvedInput],
+        _input: &[LazyResolvedInput],
         _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
         _inference_configs: &'a [InferenceConfig<'a>],
@@ -254,7 +255,7 @@ impl BestOfNSamplingConfig {
     /// Infer each candidate variant concurrently and return the results.
     async fn infer_candidates<'a, 'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -346,7 +347,7 @@ impl BestOfNSamplingConfig {
     /// we randomly select one of the candidates.
     async fn select_best_candidate<'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &ModelTable,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
@@ -433,15 +434,16 @@ impl BestOfNSamplingConfig {
 ///  * Return the index and the model inference result.
 async fn inner_select_best_candidate<'a, 'request>(
     evaluator: &'a BestOfNEvaluatorConfig,
-    input: &'request ResolvedInput,
+    input: &'request LazyResolvedInput,
     models: &'a ModelTable,
     inference_config: &'request InferenceConfig<'request>,
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult],
 ) -> Result<(Option<usize>, Option<ModelInferenceResponseWithMetadata>), Error> {
     let mut inference_params = InferenceParams::default();
-    let (inference_request, skipped_indices) =
-        evaluator.prepare_request(input, inference_config, candidates, &mut inference_params)?;
+    let (inference_request, skipped_indices) = evaluator
+        .prepare_request(input, inference_config, candidates, &mut inference_params)
+        .await?;
     if skipped_indices.len() == candidates.len() {
         return Err(ErrorDetails::Inference {
             message: "No valid candidates available to prepare request.".to_string(),
@@ -644,9 +646,9 @@ impl BestOfNEvaluatorConfig {
     /// # Errors
     ///
     /// Returns an `Error` if any of the candidate outputs fail to serialize or if templating fails.
-    fn prepare_request<'a>(
+    async fn prepare_request<'a>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         inference_config: &InferenceConfig<'_>,
         candidates: &[InferenceResult],
         inference_params: &mut InferenceParams,
@@ -669,15 +671,12 @@ impl BestOfNEvaluatorConfig {
             input.system.as_ref(),
             max_index,
         )?);
-        let messages = input
-            .messages
-            .iter()
-            .map(|message| {
-                self.inner
-                    .prepare_request_message(inference_config.templates, message)
-            })
-            .chain(std::iter::once(Ok(candidate_message)))
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut messages = try_join_all(input.messages.iter().map(|message| {
+            self.inner
+                .prepare_request_message(inference_config.templates, message)
+        }))
+        .await?;
+        messages.push(candidate_message);
         inference_params
             .chat_completion
             .backfill_with_variant_params(
@@ -1281,7 +1280,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
         };
-        let input = ResolvedInput {
+        let input = LazyResolvedInput {
             system: None,
             messages: vec![],
         };
@@ -1372,7 +1371,7 @@ mod tests {
             );
             ModelTable::try_from(map).expect("Failed to create model table")
         };
-        let input = ResolvedInput {
+        let input = LazyResolvedInput {
             system: None,
             messages: vec![],
         };
@@ -1441,7 +1440,7 @@ mod tests {
             );
             ModelTable::try_from(map).expect("Failed to create model table")
         };
-        let input = ResolvedInput {
+        let input = LazyResolvedInput {
             system: None,
             messages: vec![],
         };

@@ -2,6 +2,7 @@ use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
+use futures::future::join_all;
 use itertools::{izip, Itertools};
 use metrics::counter;
 use serde::{Deserialize, Serialize};
@@ -30,6 +31,8 @@ use crate::inference::types::batch::{
     BatchOutputSchemasWithSize, BatchRequestRow, BatchStatus, PollBatchInferenceResponse,
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
 };
+use crate::inference::types::resolved_input::LazyResolvedInput;
+use crate::inference::types::RequestMessage;
 use crate::inference::types::{batch::StartBatchModelInferenceWithMetadata, Input};
 use crate::inference::types::{
     current_timestamp, ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext,
@@ -37,7 +40,6 @@ use crate::inference::types::{
     JsonInferenceOutput, Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch,
     Usage,
 };
-use crate::inference::types::{RequestMessage, ResolvedInput};
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
 use crate::tool::{
@@ -228,13 +230,11 @@ pub async fn start_batch_inference(
         object_store_info: &config.object_store_info,
     };
 
-    let resolved_inputs = futures::future::try_join_all(
-        params
-            .inputs
-            .into_iter()
-            .map(|input| input.resolve(&context)),
-    )
-    .await?;
+    let resolved_inputs = params
+        .inputs
+        .into_iter()
+        .map(|input| input.into_lazy_resolved_input(context))
+        .collect::<Result<Vec<LazyResolvedInput>, Error>>()?;
 
     // Keep sampling variants until one succeeds
     // We already guarantee there is at least one inference
@@ -552,7 +552,7 @@ async fn poll_batch_inference(
 // This is only used to help with iteration in the `write_batch_inference` function
 struct BatchInferenceRowHelper<'a> {
     inference_id: &'a Uuid,
-    input: ResolvedInput,
+    input: LazyResolvedInput,
     input_messages: Vec<RequestMessage>,
     system: Option<&'a str>,
     tool_config: Option<&'a ToolCallConfig>,
@@ -565,12 +565,14 @@ struct BatchInferenceRowHelper<'a> {
 async fn write_start_batch_inference<'a>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     config: &Config,
-    inputs: Vec<ResolvedInput>,
+    inputs: Vec<LazyResolvedInput>,
     result: StartBatchModelInferenceWithMetadata<'a>,
     metadata: BatchInferenceDatabaseInsertMetadata<'a>,
     tool_configs: &[Option<ToolCallConfig>],
     inference_configs: &[InferenceConfig<'a>],
 ) -> Result<(Uuid, Vec<Uuid>), Error> {
+    let model_name = &result.model_name;
+    let model_provider_name = &result.model_provider_name;
     // Collect all the data into BatchInferenceRow structs
     let inference_rows = izip!(
         inference_configs.iter(),
@@ -612,23 +614,20 @@ async fn write_start_batch_inference<'a>(
             }
         },
     );
-    let mut rows: Vec<BatchModelInferenceRow<'_>> = vec![];
-    let mut file_futures = Vec::new();
-
-    // Process each row by serializing the stuff that needs to be serialized twice
-    for row in inference_rows {
+    let rows = join_all(inference_rows.enumerate().map(|(i, row)| async move {
         let tool_params: Option<ToolCallConfigDatabaseInsert> =
             row.tool_config.map(|tc| tc.clone().into());
 
-        file_futures.extend(row.input.clone().write_all_files(config));
+        let resolved_input = row.input.clone().resolve().await?;
+        join_all(resolved_input.clone().write_all_files(config)).await;
 
-        rows.push(BatchModelInferenceRow {
+        Ok::<_, Error>(BatchModelInferenceRow {
             inference_id: *row.inference_id,
             batch_id: result.batch_id,
             function_name: metadata.function_name.into(),
             variant_name: metadata.variant_name.into(),
-            episode_id: metadata.episode_ids[rows.len()],
-            input: row.input.into_stored_input(),
+            episode_id: metadata.episode_ids[i],
+            input: resolved_input.into_stored_input(),
             input_messages: row
                 .input_messages
                 .into_iter()
@@ -639,16 +638,26 @@ async fn write_start_batch_inference<'a>(
             inference_params: Cow::Borrowed(row.inference_params),
             output_schema: row.output_schema.map(Value::to_string),
             raw_request: Cow::Borrowed(row.raw_request),
-            model_name: Cow::Borrowed(result.model_name),
-            model_provider_name: Cow::Borrowed(&result.model_provider_name),
+            model_name: Cow::Borrowed(model_name),
+            model_provider_name: Cow::Borrowed(model_provider_name),
             tags: row.tags.unwrap_or_default(),
-        });
-    }
+        })
+    }))
+    .await;
 
-    futures::future::join_all(file_futures).await;
+    let success_rows = rows
+        .into_iter()
+        .flat_map(|res| match res {
+            Ok(row) => Some(row),
+            Err(e) => {
+                tracing::error!("Failed to resolve batch inference input: {e:?}");
+                None
+            }
+        })
+        .collect::<Vec<_>>();
 
     clickhouse_connection_info
-        .write_batched(rows.as_slice(), TableName::BatchModelInference)
+        .write_batched(success_rows.as_slice(), TableName::BatchModelInference)
         .await?;
 
     let batch_request_insert = BatchRequestRow::new(UnparsedBatchRequestRow {
