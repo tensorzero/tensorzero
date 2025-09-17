@@ -265,12 +265,11 @@ pub async fn test_capture_model_error() {
     let episode_uuid = Uuid::now_v7();
     let exporter = install_capturing_otel_exporter();
 
-    let config = format!(
-        "
+    let config = "
     [gateway.export.otlp.traces]
     enabled = true
     "
-    );
+    .to_string();
 
     let client = make_embedded_gateway_with_config(&config).await;
     let _err = client
