@@ -13,7 +13,7 @@ metadata:
     app.kubernetes.io/component: gateway
   annotations:
     # DEPRECATED: This ingress uses legacy naming and will be removed in a future release
-    # Switch DNS/load balancers to {{ $fullName }}-gateway, then set createLegacy: false
+    # Switch DNS/load balancers to {{ $fullName }}-gateway, then set gateway.ingress.createLegacyIngress=false
     helm.sh/resource-policy: keep
     {{- with .Values.gateway.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
