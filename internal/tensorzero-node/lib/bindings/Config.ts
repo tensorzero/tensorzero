@@ -8,7 +8,9 @@ import type { MetricConfig } from "./MetricConfig";
 import type { ModelConfig } from "./ModelConfig";
 import type { ObjectStoreInfo } from "./ObjectStoreInfo";
 import type { OptimizerInfo } from "./OptimizerInfo";
+import type { PostgresConfig } from "./PostgresConfig";
 import type { ProviderTypesConfig } from "./ProviderTypesConfig";
+import type { RateLimitingConfig } from "./RateLimitingConfig";
 import type { StaticToolConfig } from "./StaticToolConfig";
 
 export type Config = {
@@ -22,4 +24,6 @@ export type Config = {
   object_store_info: ObjectStoreInfo | null;
   provider_types: ProviderTypesConfig;
   optimizers: { [key in string]?: OptimizerInfo };
+  postgres: PostgresConfig;
+  rate_limiting: RateLimitingConfig;
 };

@@ -14,7 +14,10 @@ use tensorzero::{
 use tensorzero_core::{
     cache::CacheOptions,
     config::{Config, ConfigFileGlob, ProviderTypesConfig},
-    db::clickhouse::{test_helpers::CLICKHOUSE_URL, ClickHouseConnectionInfo, ClickhouseFormat},
+    db::{
+        clickhouse::{test_helpers::CLICKHOUSE_URL, ClickHouseConnectionInfo, ClickhouseFormat},
+        postgres::PostgresConnectionInfo,
+    },
     endpoints::inference::InferenceClients,
     http::TensorzeroHttpClient,
     inference::types::{
@@ -182,8 +185,11 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
             let clients = InferenceClients {
                 http_client: &client,
                 clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
+                postgres_connection_info: &PostgresConnectionInfo::Disabled,
                 credentials: &HashMap::new(),
                 cache_options: &CacheOptions::default(),
+                tags: &Default::default(),
+                rate_limiting_config: &Default::default(),
             };
             // We didn't produce a real model, so there's nothing to test
             if use_mock_inference_provider() {

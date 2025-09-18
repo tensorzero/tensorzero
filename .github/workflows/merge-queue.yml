@@ -8,6 +8,7 @@ on:
       - "docs/**"
   schedule:
     - cron: "0 0 * * *" # Runs at 00:00 UTC every day
+  push:
 
 # When triggered from the merge queue, cancel any existing workflow runs for the same PR branch
 # Otherwise, use the unique run id for the concurrency group, to prevent anything from getting cancelled
