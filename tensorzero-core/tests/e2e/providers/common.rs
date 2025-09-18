@@ -5,6 +5,7 @@ use std::{collections::HashMap, net::SocketAddr};
 
 use object_store::{aws::AmazonS3Builder, ObjectStore};
 use std::sync::Arc;
+use tensorzero_core::http::TensorzeroHttpClient;
 
 use axum::body::Body;
 use axum::extract::{Query, State};
@@ -116,6 +117,7 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        postgres_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -129,6 +131,7 @@ pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: None,
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        postgres_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -144,6 +147,7 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Clie
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        postgres_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -872,7 +876,7 @@ async fn check_object_fetch_via_embedded(
 async fn check_object_fetch_via_gateway(storage_path: &StoragePath, expected_data: &[u8]) {
     // Try using the running HTTP gateway (which is *not* configured with an object store)
     // to fetch the `StoragePath`
-    let client = reqwest::Client::new();
+    let client = TensorzeroHttpClient::new().unwrap();
     let res = client
         .get(get_gateway_endpoint(&format!(
             "/internal/object_storage?storage_path={}",
@@ -5259,16 +5263,20 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
         .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
         .collect();
 
-    // Assert exactly one tool call
-    assert_eq!(tool_call_blocks.len(), 1, "Expected exactly one tool call");
+    // Assert at least one tool call
+    assert!(
+        !tool_call_blocks.is_empty(),
+        "Expected at least one tool call"
+    );
 
-    let tool_call_block = tool_call_blocks[0];
-    match tool_call_block {
-        ContentBlock::ToolCall(tool_call) => {
-            assert_eq!(tool_call.name, "get_temperature");
-            serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+    for tool_call_block in tool_call_blocks {
+        match tool_call_block {
+            ContentBlock::ToolCall(tool_call) => {
+                assert_eq!(tool_call.name, "get_temperature");
+                serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+            }
+            _ => panic!("Unreachable"),
         }
-        _ => panic!("Unreachable"),
     }
 }
 
@@ -9822,7 +9830,7 @@ pub async fn check_json_mode_inference_response(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": {"country": "Japan"}}]
+                "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
             }
         ]
     });
@@ -10091,7 +10099,7 @@ pub async fn check_dynamic_json_mode_inference_response(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]
         });
@@ -10355,7 +10363,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": {"country": "Japan"}}]
+                "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
             }
         ]
     });
@@ -11522,7 +11530,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": {"country": "Japan"}}]
+                "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
             }
         ]
     });

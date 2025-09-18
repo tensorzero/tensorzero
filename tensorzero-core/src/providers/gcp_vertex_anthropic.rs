@@ -6,7 +6,7 @@ use std::time::Duration;
 use futures::StreamExt;
 use itertools::Itertools;
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource};
+use reqwest_eventsource::Event;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt::Debug;
@@ -22,6 +22,7 @@ use crate::error::{
     warn_discarded_thought_block, warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error,
     ErrorDetails,
 };
+use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::file::require_image;
@@ -195,8 +196,9 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             request,
             provider_name,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -292,8 +294,9 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -342,7 +345,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
+        _client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -354,7 +357,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -368,7 +371,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 /// Modified from the example [here](https://github.com/64bit/async-openai/blob/5c9c817b095e3bacb2b6c9804864cdf8b15c795e/async-openai/src/client.rs#L433)
 /// At a high level, this function is handling low-level EventSource details and mapping the objects returned by Anthropic into our `InferenceResultChunk` type
 fn stream_anthropic(
-    mut event_source: EventSource,
+    mut event_source: TensorZeroEventSource,
     start_time: Instant,
     model_provider: &ModelProvider,
 ) -> ProviderInferenceResponseStreamInner {
@@ -509,12 +512,10 @@ enum GCPVertexAnthropicMessageContent<'a> {
     },
 }
 
-impl<'a> TryFrom<&'a ContentBlock>
-    for Option<FlattenUnknown<'a, GCPVertexAnthropicMessageContent<'a>>>
-{
-    type Error = Error;
-
-    fn try_from(block: &'a ContentBlock) -> Result<Self, Self::Error> {
+impl<'a> GCPVertexAnthropicMessageContent<'a> {
+    fn from_content_block(
+        block: &'a ContentBlock,
+    ) -> Result<Option<FlattenUnknown<'a, GCPVertexAnthropicMessageContent<'a>>>, Error> {
         match block {
             ContentBlock::Text(Text { text }) => Ok(Some(FlattenUnknown::Normal(
                 GCPVertexAnthropicMessageContent::Text { text },
@@ -600,23 +601,19 @@ struct GCPVertexAnthropicMessage<'a> {
     content: Vec<FlattenUnknown<'a, GCPVertexAnthropicMessageContent<'a>>>,
 }
 
-impl<'a> TryFrom<&'a RequestMessage> for GCPVertexAnthropicMessage<'a> {
-    type Error = Error;
-
-    fn try_from(
-        inference_message: &'a RequestMessage,
-    ) -> Result<GCPVertexAnthropicMessage<'a>, Self::Error> {
-        let content: Vec<FlattenUnknown<GCPVertexAnthropicMessageContent>> = inference_message
+impl<'a> GCPVertexAnthropicMessage<'a> {
+    fn from_request_message(message: &'a RequestMessage) -> Result<Self, Error> {
+        let content: Vec<FlattenUnknown<GCPVertexAnthropicMessageContent>> = message
             .content
             .iter()
-            .map(TryInto::try_into)
+            .map(GCPVertexAnthropicMessageContent::from_content_block)
             .collect::<Result<Vec<Option<FlattenUnknown<GCPVertexAnthropicMessageContent>>>, _>>()?
             .into_iter()
             .flatten()
             .collect();
 
         Ok(GCPVertexAnthropicMessage {
-            role: inference_message.role.into(),
+            role: message.role.into(),
             content,
         })
     }
@@ -659,7 +656,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
         let request_messages: Vec<GCPVertexAnthropicMessage> = request
             .messages
             .iter()
-            .map(GCPVertexAnthropicMessage::try_from)
+            .map(GCPVertexAnthropicMessage::from_request_message)
             .filter_ok(|m| !m.content.is_empty())
             .collect::<Result<Vec<_>, _>>()?;
         let mut messages = prepare_messages(request_messages)?;
@@ -1330,11 +1327,9 @@ mod tests {
     fn test_try_from_content_block() {
         let text_content_block = "test".to_string().into();
         let anthropic_content_block =
-            Option::<FlattenUnknown<GCPVertexAnthropicMessageContent>>::try_from(
-                &text_content_block,
-            )
-            .unwrap()
-            .unwrap();
+            GCPVertexAnthropicMessageContent::from_content_block(&text_content_block)
+                .unwrap()
+                .unwrap();
         assert_eq!(
             anthropic_content_block,
             FlattenUnknown::Normal(GCPVertexAnthropicMessageContent::Text { text: "test" })
@@ -1346,11 +1341,9 @@ mod tests {
             arguments: serde_json::to_string(&json!({"type": "string"})).unwrap(),
         });
         let anthropic_content_block =
-            Option::<FlattenUnknown<GCPVertexAnthropicMessageContent>>::try_from(
-                &tool_call_content_block,
-            )
-            .unwrap()
-            .unwrap();
+            GCPVertexAnthropicMessageContent::from_content_block(&tool_call_content_block)
+                .unwrap()
+                .unwrap();
         assert_eq!(
             anthropic_content_block,
             FlattenUnknown::Normal(GCPVertexAnthropicMessageContent::ToolUse {
@@ -1369,7 +1362,7 @@ mod tests {
             content: vec!["test".to_string().into()],
         };
         let anthropic_message =
-            GCPVertexAnthropicMessage::try_from(&inference_request_message).unwrap();
+            GCPVertexAnthropicMessage::from_request_message(&inference_request_message).unwrap();
         assert_eq!(
             anthropic_message,
             GCPVertexAnthropicMessage {
@@ -1386,7 +1379,7 @@ mod tests {
             content: vec!["test_assistant".to_string().into()],
         };
         let anthropic_message =
-            GCPVertexAnthropicMessage::try_from(&inference_request_message).unwrap();
+            GCPVertexAnthropicMessage::from_request_message(&inference_request_message).unwrap();
         assert_eq!(
             anthropic_message,
             GCPVertexAnthropicMessage {
@@ -1409,7 +1402,7 @@ mod tests {
             })],
         };
         let anthropic_message =
-            GCPVertexAnthropicMessage::try_from(&inference_request_message).unwrap();
+            GCPVertexAnthropicMessage::from_request_message(&inference_request_message).unwrap();
         assert_eq!(
             anthropic_message,
             GCPVertexAnthropicMessage {
@@ -1457,9 +1450,10 @@ mod tests {
         };
         let anthropic_request_body =
             GCPVertexAnthropicRequestBody::new("claude-opus-4@20250514", &inference_request);
-        let details = anthropic_request_body.unwrap_err().get_owned_details();
+        let error = anthropic_request_body.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "Anthropic requires at least one message".to_string(),
             }
@@ -1502,8 +1496,8 @@ mod tests {
             GCPVertexAnthropicRequestBody {
                 anthropic_version: ANTHROPIC_API_VERSION,
                 messages: vec![
-                    GCPVertexAnthropicMessage::try_from(&messages[0]).unwrap(),
-                    GCPVertexAnthropicMessage::try_from(&messages[1]).unwrap(),
+                    GCPVertexAnthropicMessage::from_request_message(&messages[0]).unwrap(),
+                    GCPVertexAnthropicMessage::from_request_message(&messages[1]).unwrap(),
                     listening_message.clone(),
                 ],
                 max_tokens: 32_000,
@@ -1570,7 +1564,7 @@ mod tests {
                             })
                         ],
                     },
-                    GCPVertexAnthropicMessage::try_from(&messages[2]).unwrap(),
+                    GCPVertexAnthropicMessage::from_request_message(&messages[2]).unwrap(),
                     listening_message.clone(),
                 ],
                 max_tokens: 100,
@@ -1631,9 +1625,9 @@ mod tests {
             GCPVertexAnthropicRequestBody {
                 anthropic_version: ANTHROPIC_API_VERSION,
                 messages: vec![
-                    GCPVertexAnthropicMessage::try_from(&messages[0]).unwrap(),
-                    GCPVertexAnthropicMessage::try_from(&messages[1]).unwrap(),
-                    GCPVertexAnthropicMessage::try_from(&messages[2]).unwrap(),
+                    GCPVertexAnthropicMessage::from_request_message(&messages[0]).unwrap(),
+                    GCPVertexAnthropicMessage::from_request_message(&messages[1]).unwrap(),
+                    GCPVertexAnthropicMessage::from_request_message(&messages[2]).unwrap(),
                 ],
                 max_tokens: 100,
                 stream: Some(true),
@@ -1998,9 +1992,10 @@ mod tests {
         };
         let response_code = StatusCode::BAD_REQUEST;
         let result = handle_anthropic_error(response_code, error_body.clone());
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceClient {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
@@ -2013,9 +2008,10 @@ mod tests {
         );
         let response_code = StatusCode::UNAUTHORIZED;
         let result = handle_anthropic_error(response_code, error_body.clone());
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceClient {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
@@ -2028,9 +2024,10 @@ mod tests {
         );
         let response_code = StatusCode::TOO_MANY_REQUESTS;
         let result = handle_anthropic_error(response_code, error_body.clone());
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceClient {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
@@ -2044,9 +2041,10 @@ mod tests {
         let response_code = StatusCode::NOT_FOUND;
         let result = handle_anthropic_error(response_code, error_body.clone());
         assert!(result.is_err());
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
                 raw_request: None,
@@ -2058,9 +2056,10 @@ mod tests {
         );
         let response_code = StatusCode::INTERNAL_SERVER_ERROR;
         let result = handle_anthropic_error(response_code, error_body.clone());
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
                 raw_request: None,
@@ -2420,9 +2419,10 @@ mod tests {
             &mut current_tool_id,
             false,
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
                 raw_request: None,
@@ -2533,9 +2533,10 @@ mod tests {
             &mut current_tool_id,
             false,
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockStart".to_string(),
                 raw_request: None,
@@ -2569,9 +2570,10 @@ mod tests {
             &mut current_tool_id,
             false,
         );
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InferenceServer {
                 message: r#"{"message":"Test error"}"#.to_string(),
                 raw_request: None,

@@ -15,6 +15,7 @@ use crate::embeddings::{
 };
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
@@ -194,8 +195,9 @@ impl InferenceProvider for AzureProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         api_key: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -287,8 +289,9 @@ impl InferenceProvider for AzureProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -329,7 +332,7 @@ impl InferenceProvider for AzureProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
+        _client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -341,7 +344,7 @@ impl InferenceProvider for AzureProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -355,7 +358,7 @@ impl EmbeddingProvider for AzureProvider {
     async fn embed(
         &self,
         request: &EmbeddingRequest,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
@@ -939,7 +942,7 @@ mod tests {
         let result = AzureCredentials::try_from(generic);
         assert!(result.is_err());
         assert!(matches!(
-            result.unwrap_err().get_owned_details(),
+            result.unwrap_err().get_details(),
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }

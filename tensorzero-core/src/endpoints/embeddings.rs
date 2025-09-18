@@ -10,6 +10,7 @@ use crate::{
     embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
     endpoints::inference::InferenceClients,
     error::{Error, ErrorDetails},
+    http::TensorzeroHttpClient,
     inference::types::Usage,
 };
 
@@ -36,7 +37,7 @@ pub struct Params {
 )]
 pub async fn embeddings(
     config: Arc<Config>,
-    http_client: &reqwest::Client,
+    http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     params: Params,
 ) -> Result<EmbeddingResponse, Error> {
@@ -71,6 +72,7 @@ pub async fn embeddings(
         credentials: &params.credentials,
         cache_options: &(params.cache_options, dryrun).into(),
         clickhouse_connection_info: &clickhouse_connection_info,
+        otlp_config: &config.gateway.export.otlp,
     };
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)
@@ -130,7 +132,7 @@ mod tests {
 
         let config = Arc::new(config);
 
-        let http_client = reqwest::Client::new();
+        let http_client = TensorzeroHttpClient::new().unwrap();
         let params = Params {
             input: EmbeddingInput::Single("test input".to_string()),
             model_name: "test-model".to_string(),
@@ -158,7 +160,7 @@ mod tests {
         // Create an empty config with no embedding models
         let config = Arc::new(Config::default());
 
-        let http_client = reqwest::Client::new();
+        let http_client = TensorzeroHttpClient::new().unwrap();
         let params = Params {
             input: EmbeddingInput::Single("test input".to_string()),
             model_name: "nonexistent-model".to_string(),

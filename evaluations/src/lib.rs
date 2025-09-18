@@ -93,6 +93,12 @@ pub async fn run_evaluation(
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
         .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
     debug!(clickhouse_url = %clickhouse_url, "ClickHouse URL resolved");
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
+    if let Some(postgres_url) = postgres_url.as_ref() {
+        debug!(postgres_url = %postgres_url, "PostgreSQL URL resolved");
+    } else {
+        debug!("PostgreSQL URL not provided");
+    }
 
     // We do not validate credentials here since we just want the evaluator config
     // If we are using an embedded gateway, credentials are validated when that is initialized
@@ -127,6 +133,7 @@ pub async fn run_evaluation(
         }
         None => ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(args.config_file),
+            postgres_url,
             clickhouse_url: Some(clickhouse_url.clone()),
             timeout: None,
             verify_credentials: true,
@@ -184,7 +191,7 @@ pub async fn run_evaluation(
         let datapoint = Arc::new(datapoint);
         let datapoint_id = datapoint.id();
         let abort_handle = join_set.spawn(async move {
-            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&clients_clone.tensorzero_client).await?)?);
+            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&clients_clone.tensorzero_client).await?));
             let inference_response = Arc::new(
                 infer_datapoint(InferDatapointParams {
                     clients: &clients_clone,

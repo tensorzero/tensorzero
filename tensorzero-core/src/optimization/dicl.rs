@@ -13,6 +13,7 @@ use crate::{
     endpoints::inference::{InferenceClients, InferenceCredentials},
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     function::FunctionConfig,
+    http::TensorzeroHttpClient,
     model::{build_creds_caching_default, CredentialLocation},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput},
     providers::openai::{
@@ -22,7 +23,7 @@ use crate::{
     variant::{dicl::UninitializedDiclConfig, RetryConfig},
 };
 use futures::future::try_join_all;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
@@ -42,6 +43,10 @@ fn default_model() -> String {
     "openai::gpt-4o-mini-2024-07-18".to_string()
 }
 
+fn default_append_to_existing_variants() -> bool {
+    false
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -54,6 +59,7 @@ pub struct DiclOptimizationConfig {
     pub max_concurrency: usize,
     pub k: u32,
     pub model: Arc<str>,
+    pub append_to_existing_variants: bool,
     #[serde(skip)]
     pub credentials: OpenAICredentials,
     #[cfg_attr(test, ts(type = "string | null"))]
@@ -63,7 +69,7 @@ pub struct DiclOptimizationConfig {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "DiclOptimizationConfig"))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "DICLOptimizationConfig"))]
 pub struct UninitializedDiclOptimizationConfig {
     pub embedding_model: String,
     pub variant_name: String,
@@ -77,6 +83,8 @@ pub struct UninitializedDiclOptimizationConfig {
     pub k: u32,
     #[serde(default = "default_model")]
     pub model: String,
+    #[serde(default = "default_append_to_existing_variants")]
+    pub append_to_existing_variants: bool,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credentials: Option<CredentialLocation>,
 }
@@ -92,6 +100,7 @@ impl Default for UninitializedDiclOptimizationConfig {
             max_concurrency: default_max_concurrency(),
             k: default_k(),
             model: default_model(),
+            append_to_existing_variants: default_append_to_existing_variants(),
             credentials: None,
         }
     }
@@ -113,7 +122,7 @@ impl UninitializedDiclOptimizationConfig {
     /// prints out signature:
     /// ($self, /, *args, **kwargs)
     #[new]
-    #[pyo3(signature = (*, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None))]
+    #[pyo3(signature = (*, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, append_to_existing_variants=None, credentials=None))]
     #[expect(clippy::too_many_arguments)]
     pub fn new(
         embedding_model: String,
@@ -124,6 +133,7 @@ impl UninitializedDiclOptimizationConfig {
         max_concurrency: Option<usize>,
         k: Option<u32>,
         model: Option<String>,
+        append_to_existing_variants: Option<bool>,
         credentials: Option<String>,
     ) -> PyResult<Self> {
         // Use Deserialize to convert the string to a CredentialLocation
@@ -138,6 +148,8 @@ impl UninitializedDiclOptimizationConfig {
             max_concurrency: max_concurrency.unwrap_or_else(default_max_concurrency),
             k: k.unwrap_or_else(default_k),
             model: model.unwrap_or_else(default_model),
+            append_to_existing_variants: append_to_existing_variants
+                .unwrap_or_else(default_append_to_existing_variants),
             credentials,
         })
     }
@@ -152,9 +164,10 @@ impl UninitializedDiclOptimizationConfig {
     /// :param max_concurrency: The maximum concurrency to use for getting embeddings.
     /// :param k: The number of nearest neighbors to use for the DICL variant.
     /// :param model: The model to use for the DICL variant.
+    /// :param append_to_existing_variants: Whether to append to existing variants. If False (default), raises an error if the variant already exists.
     /// :param credentials: The credentials to use for embedding. This should be a string like `env::OPENAI_API_KEY`. See docs for more details.
     #[expect(unused_variables, clippy::too_many_arguments)]
-    #[pyo3(signature = (*, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, credentials=None))]
+    #[pyo3(signature = (*, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, append_to_existing_variants=None, credentials=None))]
     fn __init__(
         this: Py<Self>,
         embedding_model: String,
@@ -163,8 +176,9 @@ impl UninitializedDiclOptimizationConfig {
         dimensions: Option<u32>,
         batch_size: Option<usize>,
         max_concurrency: Option<usize>,
-        k: Option<usize>,
+        k: Option<u32>,
         model: Option<String>,
+        append_to_existing_variants: Option<bool>,
         credentials: Option<String>,
     ) -> Py<Self> {
         this
@@ -182,6 +196,7 @@ impl UninitializedDiclOptimizationConfig {
             max_concurrency: self.max_concurrency,
             k: self.k,
             model: Arc::from(self.model),
+            append_to_existing_variants: self.append_to_existing_variants,
             credentials: build_creds_caching_default(
                 self.credentials.clone(),
                 default_api_key_location(),
@@ -215,7 +230,7 @@ impl Optimizer for DiclOptimizationConfig {
 
     async fn launch(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
@@ -254,16 +269,18 @@ impl Optimizer for DiclOptimizationConfig {
         // 2. Check that the function does not have tools configured (DICL doesn't support tools)
         validate_function_config(&self.function_name, function_config)?;
 
-        // 3. Check that the variant name is not already in the function variants
-        let variants = match &**function_config {
-            FunctionConfig::Chat(chat_config) => &chat_config.variants,
-            FunctionConfig::Json(json_config) => &json_config.variants,
-        };
-
-        if variants.contains_key(&self.variant_name) {
+        // 3. Check if DICL examples already exist in the database for this variant (unless appending is enabled)
+        if !self.append_to_existing_variants
+            && dicl_examples_exist(
+                clickhouse_connection_info,
+                &self.function_name,
+                &self.variant_name,
+            )
+            .await?
+        {
             return Err(Error::new(ErrorDetails::Config {
                 message: format!(
-                    "variant '{}' already exists in function '{}' - DICL optimization cannot overwrite existing variants",
+                    "variant '{}' already has DICL examples in the database for function '{}' - set append_to_existing_variants=true to append to existing variants",
                     self.variant_name, self.function_name
                 ),
             }));
@@ -369,7 +386,7 @@ impl Optimizer for DiclOptimizationConfig {
 impl JobHandle for DiclOptimizationJobHandle {
     async fn poll(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
         // DICL optimization is synchronous, so it's always complete once launched
@@ -503,7 +520,7 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
 async fn process_embedding_batch(
     embedding_model_config: &EmbeddingModelConfig,
     model_name: &str,
-    client: &reqwest::Client,
+    client: &TensorzeroHttpClient,
     credentials: &InferenceCredentials,
     batch_texts: Vec<String>,
     batch_index: usize,
@@ -522,6 +539,8 @@ async fn process_embedding_batch(
         credentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
         cache_options: &cache_options,
+        // We don't currently perform any OTLP export in optimization workflows
+        otlp_config: &Default::default(),
     };
 
     let response = embedding_model_config
@@ -550,7 +569,7 @@ async fn process_embedding_batch(
 async fn process_embeddings_with_batching(
     embedding_model_config: &EmbeddingModelConfig,
     model_name: &str,
-    client: &reqwest::Client,
+    client: &TensorzeroHttpClient,
     credentials: &InferenceCredentials,
     input_texts: Vec<String>,
     batch_size: usize,
@@ -740,6 +759,33 @@ pub async fn insert_dicl_examples_with_batching(
     Ok(())
 }
 
+/// Checks if DICL examples exist in ClickHouse for a given function and variant
+pub async fn dicl_examples_exist(
+    clickhouse: &ClickHouseConnectionInfo,
+    function_name: &str,
+    variant_name: &str,
+) -> Result<bool, Error> {
+    let query = r"
+        SELECT 1
+        FROM DynamicInContextLearningExample
+        WHERE function_name = {function_name:String}
+        AND variant_name = {variant_name:String}
+        LIMIT 1
+    ";
+
+    let params = HashMap::from([
+        ("function_name", function_name),
+        ("variant_name", variant_name),
+    ]);
+
+    let result = clickhouse
+        .run_query_synchronous(query.to_string(), &params)
+        .await?;
+
+    // If the query returns "1", examples exist; if empty, they don't
+    Ok(result.response.trim() == "1")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -748,7 +794,7 @@ mod tests {
         embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo},
         endpoints::inference::InferenceCredentials,
     };
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     // Helper functions to create test embedding models using the Dummy provider
 
@@ -793,7 +839,7 @@ mod tests {
     async fn test_process_embedding_batch_success() {
         let embedding_model = create_test_embedding_model();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["hello".to_string(), "world".to_string()];
 
@@ -820,7 +866,7 @@ mod tests {
     async fn test_process_embedding_batch_with_dimensions() {
         let embedding_model = create_test_embedding_model();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["hello".to_string()];
         let dimensions = Some(512);
@@ -846,7 +892,7 @@ mod tests {
     async fn test_process_embedding_batch_failure() {
         let embedding_model = create_test_embedding_model_with_failure();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["test".to_string()];
 
@@ -868,7 +914,7 @@ mod tests {
     async fn test_process_embeddings_with_batching_success() {
         let embedding_model = create_test_embedding_model();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let input_texts = vec![
             "text1".to_string(),
@@ -901,7 +947,7 @@ mod tests {
     async fn test_process_embeddings_with_batching_respects_concurrency() {
         let embedding_model = create_test_embedding_model();
 
-        let client = reqwest::Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let input_texts = vec!["1".to_string(), "2".to_string(), "3".to_string()];
 
@@ -1172,6 +1218,8 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             description: None,
+
+            all_explicit_templates_names: HashSet::new(),
         })
     }
 
@@ -1186,6 +1234,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
+            all_explicit_templates_names: HashSet::new(),
         })
     }
 
@@ -1214,6 +1263,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: None,
+            all_template_names: HashSet::new(),
         })
     }
 
@@ -1249,6 +1299,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config: invalid_tool_call_config,
             description: None,
+            all_template_names: HashSet::new(),
         })
     }
 

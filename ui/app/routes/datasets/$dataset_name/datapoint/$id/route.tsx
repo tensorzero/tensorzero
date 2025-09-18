@@ -143,10 +143,13 @@ export async function action({ request }: ActionFunctionArgs) {
             ...baseDatapoint,
             output_schema: parsedFormData.output_schema,
           };
-        } else if (functionType === "chat" && "tool_params" in parsedFormData) {
+        } else if (functionType === "chat") {
           datapoint = {
             ...baseDatapoint,
-            tool_params: parsedFormData.tool_params,
+            tool_params:
+              "tool_params" in parsedFormData
+                ? parsedFormData.tool_params
+                : undefined,
           };
         } else {
           throw new Error(
@@ -174,6 +177,14 @@ export async function action({ request }: ActionFunctionArgs) {
         };
       }
     }
+
+    return data(
+      {
+        success: false,
+        error: "Invalid action specified",
+      },
+      { status: 400 },
+    );
   } catch (error) {
     logger.error("Error processing datapoint action:", error);
     const errorMessage = error instanceof Error ? error.message : String(error);

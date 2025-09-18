@@ -1,3 +1,4 @@
+use crate::http::TensorzeroHttpClient;
 /// TGI integration for TensorZero
 ///
 /// Here, we list known limitations of TGI in our experience
@@ -144,6 +145,7 @@ impl WrappedProvider for TGIProvider {
             request,
             provider_name: _,
             model_name: _,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
     ) -> Result<serde_json::Value, Error> {
         // TGI doesn't care about the `model_name` field, so we can hardcode it to "tgi"
@@ -202,7 +204,7 @@ impl InferenceProvider for TGIProvider {
     async fn infer<'a>(
         &'a self,
         model_provider_request: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -274,8 +276,9 @@ impl InferenceProvider for TGIProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -325,7 +328,7 @@ impl InferenceProvider for TGIProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
+        _client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -337,7 +340,7 @@ impl InferenceProvider for TGIProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {

@@ -1,3 +1,53 @@
+//! Main TensorZero types for inference requests and responses
+//!
+//! During inference processing, we transform between several different input types:
+//! * Input/InputMessage/InputMessageContent:
+//!
+//!   These types hold an input request deserialized directly from the client.
+//!   At this point, we have not fetched any network resources (e.g. file urls),
+//!   and we may have various legacy input types (e.g. `{"type": "text", "value": ...}`).
+//!   Templates have not yet been applied
+//! * `LazyResolvedInput`/`LazyResolvedInputMessage`/`LazyResolvedInputMessageContent`:
+//!
+//!   These types hold input with legacy input types normalized
+//!   (e.g. a `{"type": "text", "value": ...}` block is converted to a `{"type": "text", "template": <role>, "arguments": {}}` block
+//!   with the template name chosen based on the message role).
+//!   We also construct (but do not yet `.await`) and store futures to fetch any file urls in the input.
+//!   Templates have not yet been applied
+//! * `ResolvedInput/ResolvedInputMessage/ResolvedInputMessageContent`:
+//!
+//!  These types are almost the same as the `LazyResolvedInput`/`LazyResolvedInputMessage`/`LazyResolvedInputMessageContent` types,
+//!  but each file future is now resolved to an in-memory file. No network requests are needed to resolve any data
+//!  within these input types.
+//!  Templates have been not yet been applied.
+//! * `RequestMessage/ContentBlock`:
+//!
+//!  These types hold input specialized for a particular variant.
+//!  Templating has been applied, which prevents converting back to a `LazyResolvedInput`/`ResolvedInput` type.
+//!  All files are fully resolved to in-memory files.
+//! * `StoredInput/StoredInputMessage/StoredInputMessageContent`:
+//!
+//!  These types represent the actual data written to `ChatInference`/`JsonInference` in ClickHouse.
+//!  Files are stored as object store paths, without the actual file contents (since we only write paths to ClickHouse)
+//!  Templating has been applied.
+//! * `StoredRequestMessage/StoredContentBlock`:
+//!
+//!  These types represent the actual data written to `ModelInference` in ClickHouse.
+//!  Files are stored as object store paths, without the actual file contents (since we only write paths to ClickHouse)
+//!  Templating has been applied.
+//!
+//! During normal inference processing, the types are transformed as:
+//!
+//!                                                   -> `RequestMessage` -> `StoredRequestMessage`
+//! `Input` -> `LazyResolvedInput` -> `ResolvedInput`
+//!                                                   -> `StoredInput`
+//!
+//! The upper branch (constructing a `RequestMessage`) is used when invoking a chat completion variant.
+//! The lower branch (constructing a `StoredInput`) is used when we to write to `ChatInference`/`JsonInference` in ClickHouse.
+use crate::http::TensorzeroHttpClient;
+use crate::inference::types::resolved_input::{
+    LazyResolvedInput, LazyResolvedInputMessage, LazyResolvedInputMessageContent,
+};
 use crate::inference::types::stored_input::StoredFile;
 use crate::serde_util::{
     deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
@@ -10,7 +60,7 @@ use extra_headers::{FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders};
 use file::sanitize_raw_request;
 pub use file::{Base64File, File};
 use futures::stream::Peekable;
-use futures::Stream;
+use futures::{FutureExt, Stream};
 use indexmap::IndexMap;
 use itertools::Itertools;
 #[cfg(feature = "pyo3")]
@@ -80,19 +130,36 @@ pub struct Input {
     pub messages: Vec<InputMessage>,
 }
 
+#[derive(Copy, Clone)]
 pub struct FetchContext<'a> {
-    pub client: &'a reqwest::Client,
+    pub client: &'a TensorzeroHttpClient,
     pub object_store_info: &'a Option<ObjectStoreInfo>,
 }
 
 impl Input {
+    pub fn into_lazy_resolved_input(
+        self,
+        context: FetchContext<'_>,
+    ) -> Result<LazyResolvedInput, Error> {
+        Ok(LazyResolvedInput {
+            system: self.system,
+            messages: self
+                .messages
+                .into_iter()
+                .map(|message| message.into_lazy_resolved_input_message(context))
+                .collect::<Result<Vec<LazyResolvedInputMessage>, Error>>()?,
+        })
+    }
+}
+
+impl LazyResolvedInput {
     /// Resolves any nested network resources in the input.
     /// Currently, this resolves input image urls into base64-encoded images.
-    pub async fn resolve(self, context: &FetchContext<'_>) -> Result<ResolvedInput, Error> {
+    pub async fn resolve(self) -> Result<ResolvedInput, Error> {
         let messages = futures::future::try_join_all(
             self.messages
                 .into_iter()
-                .map(|message| message.resolve(context)),
+                .map(resolved_input::LazyResolvedInputMessage::resolve),
         )
         .await?;
         Ok(ResolvedInput {
@@ -103,11 +170,27 @@ impl Input {
 }
 
 impl InputMessage {
-    pub async fn resolve(self, context: &FetchContext<'_>) -> Result<ResolvedInputMessage, Error> {
+    pub fn into_lazy_resolved_input_message(
+        self,
+        context: FetchContext<'_>,
+    ) -> Result<LazyResolvedInputMessage, Error> {
+        Ok(LazyResolvedInputMessage {
+            role: self.role,
+            content: self
+                .content
+                .into_iter()
+                .map(|content| content.into_lazy_resolved_input_message(self.role, context))
+                .collect::<Result<Vec<LazyResolvedInputMessageContent>, Error>>()?,
+        })
+    }
+}
+
+impl LazyResolvedInputMessage {
+    pub async fn resolve(self) -> Result<ResolvedInputMessage, Error> {
         let content = futures::future::try_join_all(
             self.content
                 .into_iter()
-                .map(|content| content.resolve(context)),
+                .map(resolved_input::LazyResolvedInputMessageContent::resolve),
         )
         .await?;
         Ok(ResolvedInputMessage {
@@ -118,36 +201,60 @@ impl InputMessage {
 }
 
 impl InputMessageContent {
-    pub async fn resolve(
+    /// The 'role' parameter is only used to handle legacy role-based templates (`{"type": "text", "value": ...}`).
+    /// Once we removed support for these input blocks (and only support `{"type": "template", "name": "...", "arguments": ...}`),
+    /// we can remove the 'role' parameter.
+    pub fn into_lazy_resolved_input_message(
         self,
-        context: &FetchContext<'_>,
-    ) -> Result<ResolvedInputMessageContent, Error> {
+        role: Role,
+        context: FetchContext<'_>,
+    ) -> Result<LazyResolvedInputMessageContent, Error> {
         Ok(match self {
             InputMessageContent::Text(TextKind::Text { text }) => {
-                ResolvedInputMessageContent::Text {
-                    value: Value::String(text),
-                }
-            }
-            InputMessageContent::Text(TextKind::Arguments { arguments }) => {
-                ResolvedInputMessageContent::Text {
-                    value: Value::Object(arguments),
-                }
-            }
-            InputMessageContent::ToolCall(tool_call) => {
-                ResolvedInputMessageContent::ToolCall(tool_call.try_into()?)
-            }
-            InputMessageContent::ToolResult(tool_result) => {
-                ResolvedInputMessageContent::ToolResult(tool_result)
+                LazyResolvedInputMessageContent::Text { text }
             }
             InputMessageContent::RawText { value } => {
-                ResolvedInputMessageContent::RawText { value }
+                LazyResolvedInputMessageContent::RawText { value }
             }
-            InputMessageContent::Thought(thought) => ResolvedInputMessageContent::Thought(thought),
+            InputMessageContent::Thought(thought) => {
+                LazyResolvedInputMessageContent::Thought(thought)
+            }
+            InputMessageContent::Template(template) => {
+                LazyResolvedInputMessageContent::Template(template)
+            }
+            InputMessageContent::Text(TextKind::Arguments { arguments }) => {
+                // Map the legacy `{{"type": "text", "arguments": ...}}` format to an explicit
+                // `{{"type": "template", "name": "<role>", "arguments": ...}}` format, with the template
+                // name chosen based on the message role.
+                LazyResolvedInputMessageContent::Template(TemplateInput {
+                    name: role.implicit_template_name().to_string(),
+                    arguments,
+                })
+            }
+            InputMessageContent::ToolCall(tool_call) => {
+                LazyResolvedInputMessageContent::ToolCall(tool_call.try_into()?)
+            }
+            InputMessageContent::ToolResult(tool_result) => {
+                LazyResolvedInputMessageContent::ToolResult(tool_result)
+            }
             InputMessageContent::Text(TextKind::LegacyValue { value }) => {
                 tracing::warn!(
                     r#"Deprecation Warning: `{{"type": "text", "value", ...}}` is deprecated. Please use `{{"type": "text", "text": "String input"}}` or `{{"type": "text", "arguments": {{..}}}} ` instead."#
                 );
-                ResolvedInputMessageContent::Text { value }
+                match value {
+                    Value::String(text) => LazyResolvedInputMessageContent::Text { text },
+                    Value::Object(arguments) => {
+                        LazyResolvedInputMessageContent::Template(TemplateInput {
+                            name: role.implicit_template_name().to_string(),
+                            arguments,
+                        })
+                    }
+                    _ => {
+                        return Err(Error::new(ErrorDetails::InvalidMessage {
+                            message: r#"The 'value' field in a `{"type": "text", "value": ... }` content block must be a string or object"#.to_string(),
+                        }));
+                    }
+                }
             }
             InputMessageContent::File(file) => {
                 let storage_kind = context
@@ -160,14 +267,96 @@ impl InputMessageContent {
                     })?
                     .kind
                     .clone();
-                let file = file.take_or_fetch(context.client).await?;
-                let path = storage_kind.file_path(&file)?;
-                ResolvedInputMessageContent::File(Box::new(FileWithPath {
-                    file,
-                    storage_path: path,
-                }))
+                match &file {
+                    File::Url { .. } => {
+                        // Check that we have an object store *outside* of the future that we're going to store in
+                        // `LazyResolvedInputMessageContent::File`. We want to error immediately if the user tries
+                        // to use a file input without explicitly configuring an object store (either explicit enabled or disabled)
+                        let storage_kind = context
+                            .object_store_info
+                            .as_ref()
+                            .ok_or_else(|| {
+                                Error::new(ErrorDetails::ObjectStoreUnconfigured {
+                                    block_type: "file".to_string(),
+                                })
+                            })?
+                            .kind
+                            .clone();
+                        let client = context.client.clone();
+                        // Construct a future that will actually fetch the file URL from the network.
+                        // Important - we do *not* use `tokio::spawn` here. As a result, the future
+                        // will not actually begin executing (including opening the network connection)
+                        // until the first time the `Shared` wrapper is `.await`ed.
+                        // This ensures that if we never actually need to download the file
+                        // (due to model providers forwarding image urls, and object store observability being disabled),
+                        // we will skip downloading the file entirely.
+                        let delayed_file_future = async move {
+                            let file = file.take_or_fetch(&client).await?;
+                            let path = storage_kind.file_path(&file)?;
+                            Ok(FileWithPath {
+                                file,
+                                storage_path: path,
+                            })
+                        };
+                        LazyResolvedInputMessageContent::File(delayed_file_future.boxed().shared())
+                    }
+                    File::Base64 { mime_type, data } => {
+                        let file = Base64File {
+                            url: None,
+                            mime_type: mime_type.clone(),
+                            data: data.clone(),
+                        };
+
+                        let path = storage_kind.file_path(&file)?;
+
+                        // We have inline file data already, so construct
+                        LazyResolvedInputMessageContent::File(
+                            (futures::future::ready(Ok(FileWithPath {
+                                file,
+                                storage_path: path,
+                            })))
+                            .boxed()
+                            .shared(),
+                        )
+                    }
+                }
             }
             InputMessageContent::Unknown {
+                data,
+                model_provider_name,
+            } => LazyResolvedInputMessageContent::Unknown {
+                data,
+                model_provider_name,
+            },
+        })
+    }
+}
+
+impl LazyResolvedInputMessageContent {
+    pub async fn resolve(self) -> Result<ResolvedInputMessageContent, Error> {
+        Ok(match self {
+            LazyResolvedInputMessageContent::Text { text } => {
+                ResolvedInputMessageContent::Text { text }
+            }
+            LazyResolvedInputMessageContent::Template(template) => {
+                ResolvedInputMessageContent::Template(template)
+            }
+            LazyResolvedInputMessageContent::ToolCall(tool_call) => {
+                ResolvedInputMessageContent::ToolCall(tool_call)
+            }
+            LazyResolvedInputMessageContent::ToolResult(tool_result) => {
+                ResolvedInputMessageContent::ToolResult(tool_result)
+            }
+            LazyResolvedInputMessageContent::RawText { value } => {
+                ResolvedInputMessageContent::RawText { value }
+            }
+            LazyResolvedInputMessageContent::Thought(thought) => {
+                ResolvedInputMessageContent::Thought(thought)
+            }
+            LazyResolvedInputMessageContent::File(file) => {
+                ResolvedInputMessageContent::File(Box::new(file.await?))
+            }
+            LazyResolvedInputMessageContent::Unknown {
                 data,
                 model_provider_name,
             } => ResolvedInputMessageContent::Unknown {
@@ -188,10 +377,19 @@ pub struct InputMessage {
     pub content: Vec<InputMessageContent>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[ts(export)]
+#[serde(deny_unknown_fields)]
+pub struct TemplateInput {
+    pub name: String,
+    pub arguments: Map<String, Value>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InputMessageContent {
     Text(TextKind),
+    Template(TemplateInput),
     ToolCall(ToolCallInput),
     ToolResult(ToolResult),
     RawText {
@@ -995,9 +1193,14 @@ impl From<String> for InputMessageContent {
 #[cfg(test)]
 impl From<String> for ResolvedInputMessageContent {
     fn from(text: String) -> Self {
-        ResolvedInputMessageContent::Text {
-            value: Value::String(text),
-        }
+        ResolvedInputMessageContent::Text { text }
+    }
+}
+
+#[cfg(test)]
+impl From<String> for LazyResolvedInputMessageContent {
+    fn from(text: String) -> Self {
+        LazyResolvedInputMessageContent::Text { text }
     }
 }
 
@@ -1005,12 +1208,6 @@ impl From<String> for ResolvedInputMessageContent {
 impl From<String> for ContentBlockChatOutput {
     fn from(text: String) -> Self {
         ContentBlockChatOutput::Text(Text { text })
-    }
-}
-
-impl From<Value> for ResolvedInputMessageContent {
-    fn from(value: Value) -> Self {
-        ResolvedInputMessageContent::Text { value }
     }
 }
 
@@ -2063,6 +2260,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
     use crate::config::SchemaData;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
@@ -2835,6 +3034,7 @@ mod tests {
             implicit_tool_call_config,
             output_schema,
             description: None,
+            all_template_names: HashSet::new(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -3115,6 +3315,7 @@ mod tests {
             implicit_tool_call_config,
             output_schema,
             description: None,
+            all_template_names: HashSet::new(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -3213,6 +3414,7 @@ mod tests {
             implicit_tool_call_config,
             output_schema,
             description: None,
+            all_template_names: HashSet::new(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -4052,7 +4254,7 @@ mod tests {
         let input = json!({
             "role": "user",
             "content": [
-                {"type": "text", "value": {"complex": "json", "with": ["nested", "array"]}},
+                {"type": "template", "name": "user", "arguments": {"complex": "json", "with": ["nested", "array"]}},
                 {"type": "tool_call", "id": "456", "name": "another_tool", "arguments": {"key": "value"}}
             ]
         });
@@ -4060,10 +4262,13 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 2);
         match &message.content[0] {
-            InputMessageContent::Text(TextKind::LegacyValue { value }) => {
+            InputMessageContent::Template(TemplateInput { name, arguments }) => {
+                assert_eq!(name, "user");
                 assert_eq!(
-                    value,
-                    &json!({"complex": "json", "with": ["nested", "array"]})
+                    arguments,
+                    json!({"complex": "json", "with": ["nested", "array"]})
+                        .as_object()
+                        .unwrap()
                 );
             }
             _ => panic!("Expected Text content with JSON object"),

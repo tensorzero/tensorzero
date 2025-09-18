@@ -1,0 +1,126 @@
+---
+title: Deploy the TensorZero UI
+description: Learn how to deploy and customize the TensorZero UI.
+---
+
+The TensorZero UI is a self-hosted web application that streamlines the use of TensorZero with features like observability and optimization.
+It's easy to get started with the TensorZero UI.
+
+## Deploy
+
+<Steps>
+
+<Step title="Configure the TensorZero Gateway">
+
+[Deploy the TensorZero Gateway](/deployment/tensorzero-gateway/) and configure `TENSORZERO_GATEWAY_URL`.
+
+For example, if the gateway is running locally, you can set `TENSORZERO_GATEWAY_URL=http://localhost:3000`.
+
+</Step>
+
+<Step title="Configure ClickHouse">
+
+[Deploy ClickHouse](/deployment/tensorzero-gateway/) and configure `TENSORZERO_CLICKHOUSE_URL`.
+
+</Step>
+<Step title="Configure model provider credentials">
+
+The TensorZero UI integrates with model providers like OpenAI to streamline workflows like fine-tuning.
+To use these features, you need to provide credentials for the relevant model providers as environment variables.
+You don't need to provide credentials if you're not using the fine-tuning features for those providers.
+
+The supported fine-tuning providers and their required credentials (environment variables) are:
+
+| Provider     | Required Credentials                       |
+| ------------ | ------------------------------------------ |
+| Fireworks AI | `FIREWORKS_ACCOUNT_ID` `FIREWORKS_API_KEY` |
+| GCP Vertex   | GCP account credentials                    |
+| OpenAI       | `OPENAI_API_KEY`                           |
+| Together AI  | `TOGETHER_API_KEY`                         |
+
+</Step>
+
+<Step title="Deploy the TensorZero UI">
+
+The TensorZero UI is available on Docker Hub as `tensorzero/ui`.
+
+<AccordionGroup>
+
+<Accordion title="Running with Docker Compose">
+
+You can easily run the TensorZero UI using Docker Compose:
+
+```yaml
+services:
+  ui:
+    image: tensorzero/ui
+    # Mount your configuration folder (e.g. tensorzero.toml) to /app/config
+    volumes:
+      - ./config:/app/config:ro
+    # Add your environment variables the .env file
+    env_file:
+      - ${ENV_FILE:-.env}
+    # Publish the UI to port 4000
+    ports:
+      - "4000:4000"
+    restart: unless-stopped
+```
+
+Make sure to create a `.env` file with the relevant environment variables.
+
+For more details, see the example `docker-compose.yml` file in the [GitHub repository](https://github.com/tensorzero/tensorzero/blob/main/ui/docker-compose.yml).
+
+</Accordion>
+
+<Accordion title="Running with Docker">
+
+Alternatively, you can launch the UI directly with the following command:
+
+```bash
+docker run \
+    --volume ./config:/app/config:ro \
+    --env-file ./.env \
+    --publish 4000:4000 \
+    tensorzero/ui
+```
+
+Make sure to create a `.env` file with the relevant environment variables.
+
+</Accordion>
+
+<Accordion title="Running with Kubernetes (k8s) and Helm">
+
+We provide a reference Helm chart _contributed by the community_ in our [GitHub repository](https://github.com/tensorzero/tensorzero/tree/main/examples/production-deployment-k8s-helm).
+You can use it to run TensorZero in Kubernetes.
+
+</Accordion>
+
+<Accordion title="Building from source">
+
+Alternatively, you can build the UI from source.
+See our [GitHub repository](https://github.com/tensorzero/tensorzero/blob/main/ui/) for more details.
+
+</Accordion>
+
+</AccordionGroup>
+
+</Step>
+
+</Steps>
+
+## Configure
+
+### Add a health check
+
+The TensorZero UI exposes an endpoint for health checks.
+This `/health` endpoint checks that the UI is running, the associated configuration is valid, and the ClickHouse connection is healthy.
+
+### Customize the deployment
+
+The TensorZero UI supports the following optional environment variables.
+
+You can set `TENSORZERO_UI_CONFIG_PATH` to a custom path to the TensorZero configuration file.
+When using the official Docker image, this value defaults to `/app/config/tensorzero.toml`.
+
+For certain uncommon scenarios (e.g. IPv6), you can also customize `HOST` inside the UI container.
+See the Vite documentation for more details.

@@ -35,13 +35,12 @@ MAX_EXAMPLES = 1000
 DICL_VARIANT_NAME = "gpt_4o_mini_dicl"
 
 # The model to use for the DICL variant. Should match the name of the embedding model defined in your config
-DICL_EMBEDDING_MODEL = "text-embedding-3-small"
-DICL_EMBEDDING_PROVIDER = "openai"
+DICL_EMBEDDING_MODEL = "openai::text-embedding-3-small"
 
-# The model to use for generation in the DICL variant.
-DICL_GENERATION_MODEL = "gpt-4o-mini-2024-07-18"
+# The model to use for generation in the DICL variant
+DICL_GENERATION_MODEL = "openai::gpt-4o-2024-08-06"
 
-# The number of examples to retrieve for the DICL variant.
+# The number of examples to retrieve for the DICL variant
 DICL_K = 10
 
 # If the metric is a float metric, you can set the threshold to filter the data
@@ -61,25 +60,6 @@ from openai import AsyncOpenAI
 from tensorzero import TensorZeroGateway, patch_openai_client
 from tensorzero.util import uuid7
 from tqdm.asyncio import tqdm_asyncio
-
-# %% [markdown]
-# Add the following embedding model config to the tensorzero config file you specified with `CONFIG_PATH` and spin up your gateway:
-
-# %%
-embedding_model_config = {
-    "type": f"{DICL_EMBEDDING_PROVIDER}",
-    "model_name": DICL_EMBEDDING_MODEL,
-}
-full_embedding_model_config = {
-    "embedding_models": {
-        DICL_EMBEDDING_MODEL: {
-            "routing": [DICL_EMBEDDING_PROVIDER],
-            "providers": {DICL_EMBEDDING_PROVIDER: embedding_model_config},
-        }
-    }
-}
-
-print(toml.dumps(full_embedding_model_config))
 
 # %% [markdown]
 # Initialize the ClickHouse client.
@@ -224,21 +204,3 @@ full_variant_config = {
 }
 
 print(toml.dumps(full_variant_config))
-
-# %% [markdown]
-# If you haven't, also include the embedding model in the config.
-#
-
-# %%
-embedding_model_config = {
-    "embedding_models": {
-        DICL_EMBEDDING_MODEL: {
-            "routing": ["openai"],
-            "providers": {
-                "openai": {"type": "openai", "model_name": DICL_EMBEDDING_MODEL}
-            },
-        }
-    }
-}
-
-print(toml.dumps(embedding_model_config))
