@@ -43,6 +43,7 @@ export function Label({ text, icon }: LabelProps) {
 interface TextMessageProps {
   label?: string;
   content?: string;
+  footer?: string | React.ReactNode | null;
   emptyMessage?: string;
   isEditing?: boolean;
   onChange?: (value: string) => void;
@@ -51,6 +52,7 @@ interface TextMessageProps {
 export function TextMessage({
   label,
   content,
+  footer,
   emptyMessage,
   isEditing,
   onChange,
@@ -70,6 +72,9 @@ export function TextMessage({
         readOnly={!isEditing}
         onChange={onChange}
       />
+      {footer ? (
+        <div className="text-fg-tertiary text-xs font-medium">{footer}</div>
+      ) : null}
     </div>
   );
 }
