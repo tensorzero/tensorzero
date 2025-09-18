@@ -10,7 +10,7 @@ metadata:
 spec:
   endpoints:
     - interval: {{ .Values.monitoring.metrics.interval | default "30s" }}
-      targetPort: 3000
+      port: http
       path: /metrics
   selector:
     matchLabels:
