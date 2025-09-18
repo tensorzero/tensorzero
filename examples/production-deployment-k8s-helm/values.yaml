@@ -67,6 +67,7 @@ ui:
     repository: tensorzero/ui
     tag: "" # If empty, uses Chart.appVersion
     pullPolicy: IfNotPresent
+    pullSecret: "" # Optional pull secret for private registries
 
   service:
     type: ClusterIP
