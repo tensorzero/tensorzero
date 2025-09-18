@@ -43,6 +43,7 @@ export function Label({ text, icon }: LabelProps) {
 interface TextMessageProps {
   label?: string;
   content?: string;
+  footer?: string | React.ReactNode | null;
   emptyMessage?: string;
   isEditing?: boolean;
   onChange?: (value: string) => void;
@@ -51,6 +52,7 @@ interface TextMessageProps {
 export function TextMessage({
   label,
   content,
+  footer,
   emptyMessage,
   isEditing,
   onChange,
@@ -70,16 +72,21 @@ export function TextMessage({
         readOnly={!isEditing}
         onChange={onChange}
       />
+      {footer ? (
+        <div className="text-fg-tertiary text-xs font-medium">{footer}</div>
+      ) : null}
     </div>
   );
 }
 
 export function ParameterizedMessage({
   parameters,
+  templateName,
   isEditing,
   onChange,
 }: {
   parameters?: unknown;
+  templateName?: string;
   isEditing?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onChange?: (value: any) => void;
@@ -87,10 +94,14 @@ export function ParameterizedMessage({
   const formattedJson = useFormattedJson(parameters ?? {});
   const [jsonError, setJsonError] = useState<string | null>(null);
 
+  const labelText = templateName
+    ? `Template: ${templateName}`
+    : "Template Arguments";
+
   return (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
       <Label
-        text={`Template Arguments`}
+        text={labelText}
         icon={<BlocksIcon className="text-fg-muted h-3 w-3" />}
       />
       <CodeEditor

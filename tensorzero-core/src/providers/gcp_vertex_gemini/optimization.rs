@@ -63,8 +63,7 @@ impl<'a> TryFrom<&'a RenderedSample> for GCPVertexGeminiSupervisedRow<'a> {
             Some(tool_params) => tool_params.tools_available.iter().map(Into::into).collect(),
             None => vec![],
         };
-        let mut contents =
-            prepare_gcp_vertex_gemini_messages(&inference.input.messages, PROVIDER_TYPE)?;
+        let mut contents = prepare_gcp_vertex_gemini_messages(&inference.input.messages)?;
         let system_instruction =
             inference
                 .input

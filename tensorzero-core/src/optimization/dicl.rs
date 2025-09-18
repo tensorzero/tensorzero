@@ -539,6 +539,8 @@ async fn process_embedding_batch(
         credentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
         cache_options: &cache_options,
+        // We don't currently perform any OTLP export in optimization workflows
+        otlp_config: &Default::default(),
     };
 
     let response = embedding_model_config
@@ -792,7 +794,7 @@ mod tests {
         embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo},
         endpoints::inference::InferenceCredentials,
     };
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     // Helper functions to create test embedding models using the Dummy provider
 
@@ -1216,6 +1218,8 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             description: None,
+
+            all_explicit_templates_names: HashSet::new(),
         })
     }
 
@@ -1230,6 +1234,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             description: None,
+            all_explicit_templates_names: HashSet::new(),
         })
     }
 
@@ -1258,6 +1263,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: None,
+            all_template_names: HashSet::new(),
         })
     }
 
@@ -1293,6 +1299,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config: invalid_tool_call_config,
             description: None,
+            all_template_names: HashSet::new(),
         })
     }
 

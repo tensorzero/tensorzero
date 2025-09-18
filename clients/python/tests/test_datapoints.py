@@ -30,6 +30,7 @@ from tensorzero import (
     JsonDatapoint,
     JsonDatapointInsert,
     JsonInferenceDatapointInput,
+    Template,
     TensorZeroError,
     TensorZeroGateway,
     Text,
@@ -298,8 +299,8 @@ async def test_async_bulk_insert_delete_datapoints(
     assert len(datapoint.input.messages) == 1
     assert datapoint.input.messages[0].role == "user"
     assert len(datapoint.input.messages[0].content) == 1
-    assert datapoint.input.messages[0].content[0].type == "text"
-    assert isinstance(datapoint.input.messages[0].content[0], Text)
+    assert datapoint.input.messages[0].content[0].type == "template"
+    assert isinstance(datapoint.input.messages[0].content[0], Template)
     assert datapoint.input.messages[0].content[0].arguments == {"country": "US"}
     assert datapoint.output is None
     assert datapoint.is_custom

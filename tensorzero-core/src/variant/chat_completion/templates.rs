@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use serde::Serialize;
 
@@ -44,6 +47,18 @@ impl ChatTemplates {
         self.templates.get("system")
     }
 
+    pub fn get_all_explicit_template_names(&self) -> HashSet<String> {
+        let mut names = HashSet::new();
+        for (key, value) in &self.templates {
+            // Exclude legacy templates with no schema - these templates
+            // can only be invoked by a {`"type": "text", "text": "..."`} input block
+            if !(value.legacy_definition && value.schema.is_none()) {
+                names.insert(key.clone());
+            }
+        }
+        names
+    }
+
     pub fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
         self.templates.values().map(|t| &t.template).collect()
     }
@@ -84,6 +99,7 @@ impl ChatTemplates {
             (None, Some(wrapper)) => Ok(Some(TemplateWithSchema {
                 template: PathWithContents::from_path(wrapper)?,
                 schema: None,
+                legacy_definition: true,
             })),
             (None, None) => Ok(None),
             (Some(_), Some(_)) => Err(Error::new(ErrorDetails::Config {
@@ -113,6 +129,7 @@ impl ChatTemplates {
                 Ok::<_, Error>(TemplateWithSchema {
                     template: PathWithContents::from_path(x.clone())?,
                     schema: schemas.get_implicit_system_schema().cloned(),
+                    legacy_definition: true,
                 })
             })
             .transpose()?;
@@ -124,6 +141,7 @@ impl ChatTemplates {
                 Ok::<_, Error>(TemplateWithSchema {
                     template: PathWithContents::from_path(x.clone())?,
                     schema: schemas.get_implicit_user_schema().cloned(),
+                    legacy_definition: true,
                 })
             })
             .transpose()?;
@@ -135,6 +153,7 @@ impl ChatTemplates {
                 Ok::<_, Error>(TemplateWithSchema {
                     template: PathWithContents::from_path(x.clone())?,
                     schema: schemas.get_implicit_assistant_schema().cloned(),
+                    legacy_definition: true,
                 })
             })
             .transpose()?;
@@ -184,6 +203,7 @@ impl ChatTemplates {
             let template = TemplateWithSchema {
                 template: PathWithContents::from_path(template_config.path.clone())?,
                 schema: schemas.get_named_schema(template_name).cloned(),
+                legacy_definition: false,
             };
             if templates
                 .insert(template_name.clone(), Arc::new(template))

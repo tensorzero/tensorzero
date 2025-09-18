@@ -146,6 +146,7 @@ impl InferenceProvider for AnthropicProvider {
             request,
             provider_name: _,
             model_name: tensorzero_model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -241,6 +242,7 @@ impl InferenceProvider for AnthropicProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         api_key: &'a InferenceCredentials,
@@ -501,10 +503,10 @@ pub enum AnthropicDocumentType {
     Base64,
 }
 
-impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, AnthropicMessageContent<'a>>> {
-    type Error = Error;
-
-    fn try_from(block: &'a ContentBlock) -> Result<Self, Self::Error> {
+impl<'a> AnthropicMessageContent<'a> {
+    fn from_content_block(
+        block: &'a ContentBlock,
+    ) -> Result<Option<FlattenUnknown<'a, AnthropicMessageContent<'a>>>, Error> {
         match block {
             ContentBlock::Text(Text { text }) => Ok(Some(FlattenUnknown::Normal(
                 AnthropicMessageContent::Text { text },
@@ -600,22 +602,19 @@ struct AnthropicMessage<'a> {
     content: Vec<FlattenUnknown<'a, AnthropicMessageContent<'a>>>,
 }
 
-impl<'a> TryFrom<&'a RequestMessage> for AnthropicMessage<'a> {
-    type Error = Error;
-    fn try_from(
-        inference_message: &'a RequestMessage,
-    ) -> Result<AnthropicMessage<'a>, Self::Error> {
-        let content: Vec<FlattenUnknown<AnthropicMessageContent>> = inference_message
+impl<'a> AnthropicMessage<'a> {
+    fn from_request_message(message: &'a RequestMessage) -> Result<Self, Error> {
+        let content: Vec<FlattenUnknown<AnthropicMessageContent>> = message
             .content
             .iter()
-            .map(TryInto::try_into)
+            .map(AnthropicMessageContent::from_content_block)
             .collect::<Result<Vec<Option<FlattenUnknown<AnthropicMessageContent>>>, _>>()?
             .into_iter()
             .flatten()
             .collect();
 
         Ok(AnthropicMessage {
-            role: inference_message.role.into(),
+            role: message.role.into(),
             content,
         })
     }
@@ -658,7 +657,7 @@ impl<'a> AnthropicRequestBody<'a> {
         let request_messages: Vec<AnthropicMessage> = request
             .messages
             .iter()
-            .map(AnthropicMessage::try_from)
+            .map(AnthropicMessage::from_request_message)
             .collect::<Result<Vec<_>, _>>()?;
         let messages = prepare_messages(request_messages);
         let messages = if matches!(
@@ -1447,7 +1446,7 @@ mod tests {
     fn test_try_from_content_block() {
         let text_content_block: ContentBlock = "test".to_string().into();
         let anthropic_content_block =
-            Option::<FlattenUnknown<AnthropicMessageContent>>::try_from(&text_content_block)
+            AnthropicMessageContent::from_content_block(&text_content_block)
                 .unwrap()
                 .unwrap();
         assert_eq!(
@@ -1461,7 +1460,7 @@ mod tests {
             arguments: serde_json::to_string(&json!({"type": "string"})).unwrap(),
         });
         let anthropic_content_block =
-            Option::<FlattenUnknown<AnthropicMessageContent>>::try_from(&tool_call_content_block)
+            AnthropicMessageContent::from_content_block(&tool_call_content_block)
                 .unwrap()
                 .unwrap();
         assert_eq!(
@@ -1481,7 +1480,8 @@ mod tests {
             role: Role::User,
             content: vec!["test".to_string().into()],
         };
-        let anthropic_message = AnthropicMessage::try_from(&inference_request_message).unwrap();
+        let anthropic_message =
+            AnthropicMessage::from_request_message(&inference_request_message).unwrap();
         assert_eq!(
             anthropic_message,
             AnthropicMessage {
@@ -1497,7 +1497,8 @@ mod tests {
             role: Role::Assistant,
             content: vec!["test_assistant".to_string().into()],
         };
-        let anthropic_message = AnthropicMessage::try_from(&inference_request_message).unwrap();
+        let anthropic_message =
+            AnthropicMessage::from_request_message(&inference_request_message).unwrap();
         assert_eq!(
             anthropic_message,
             AnthropicMessage {
@@ -1517,7 +1518,8 @@ mod tests {
                 result: "test_tool_response".to_string(),
             })],
         };
-        let anthropic_message = AnthropicMessage::try_from(&inference_request_message).unwrap();
+        let anthropic_message =
+            AnthropicMessage::from_request_message(&inference_request_message).unwrap();
         assert_eq!(
             anthropic_message,
             AnthropicMessage {
@@ -1604,7 +1606,7 @@ mod tests {
                 model: &model,
                 messages: vec![
                     listening_message.clone(),
-                    AnthropicMessage::try_from(&inference_request.messages[0]).unwrap(),
+                    AnthropicMessage::from_request_message(&inference_request.messages[0]).unwrap(),
                     listening_message.clone(),
                 ],
                 max_tokens: 64_000,
@@ -1654,8 +1656,8 @@ mod tests {
             AnthropicRequestBody {
                 model: &model,
                 messages: vec![
-                    AnthropicMessage::try_from(&inference_request.messages[0]).unwrap(),
-                    AnthropicMessage::try_from(&inference_request.messages[1]).unwrap(),
+                    AnthropicMessage::from_request_message(&inference_request.messages[0]).unwrap(),
+                    AnthropicMessage::from_request_message(&inference_request.messages[1]).unwrap(),
                     listening_message.clone(),
                 ],
                 max_tokens: 100,
@@ -1711,7 +1713,7 @@ mod tests {
                 messages: inference_request
                     .messages
                     .iter()
-                    .map(|m| AnthropicMessage::try_from(m).unwrap())
+                    .map(|m| AnthropicMessage::from_request_message(m).unwrap())
                     .collect(),
                 max_tokens: 64_000,
                 stream: Some(false),
@@ -1763,11 +1765,11 @@ mod tests {
         assert_eq!(result.messages.len(), 4); // Original 2 messages + listening message + JSON prefill
         assert_eq!(
             result.messages[0],
-            AnthropicMessage::try_from(&inference_request.messages[0]).unwrap()
+            AnthropicMessage::from_request_message(&inference_request.messages[0]).unwrap()
         );
         assert_eq!(
             result.messages[1],
-            AnthropicMessage::try_from(&inference_request.messages[1]).unwrap()
+            AnthropicMessage::from_request_message(&inference_request.messages[1]).unwrap()
         );
         assert_eq!(result.messages[2], listening_message);
         assert_eq!(

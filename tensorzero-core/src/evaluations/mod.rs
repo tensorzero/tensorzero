@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::{collections::HashMap, sync::Arc};
 
 use serde::{Deserialize, Serialize};
@@ -5,6 +6,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 
 use crate::config::{ErrorContext, UninitializedSchemas};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
+use crate::variant::Variant;
 use crate::{
     config::{
         path::ResolvedTomlPath, MetricConfig, MetricConfigLevel, MetricConfigOptimize,
@@ -399,9 +401,13 @@ impl UninitializedEvaluatorConfig {
                         }
                     };
                 }
-                let variants = variants
+                let variants: HashMap<_, _> = variants
                     .into_iter()
                     .map(|(name, variant)| (name, Arc::new(variant)))
+                    .collect();
+                let all_template_names: HashSet<String> = variants
+                    .values()
+                    .flat_map(|v| v.get_all_explicit_template_names())
                     .collect();
                 let function_config = FunctionConfig::Json(FunctionConfigJson {
                     variants,
@@ -415,6 +421,7 @@ impl UninitializedEvaluatorConfig {
                     output_schema,
                     implicit_tool_call_config,
                     description: None,
+                    all_template_names,
                 });
                 Ok((
                     EvaluatorConfig::LLMJudge(LLMJudgeConfig {
@@ -992,6 +999,7 @@ mod tests {
             output_schema: create_test_schema(),
             implicit_tool_call_config: create_implicit_tool_call_config(create_test_schema()),
             description: None,
+            all_template_names: HashSet::new(),
         });
         functions.insert(function_name.to_string(), Arc::new(function_config));
 
@@ -1429,6 +1437,7 @@ mod tests {
                         create_test_schema(),
                     ),
                     description: None,
+                    all_template_names: HashSet::new(),
                 })),
             );
 

@@ -72,6 +72,7 @@ pub async fn embeddings(
         credentials: &params.credentials,
         cache_options: &(params.cache_options, dryrun).into(),
         clickhouse_connection_info: &clickhouse_connection_info,
+        otlp_config: &config.gateway.export.otlp,
     };
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)

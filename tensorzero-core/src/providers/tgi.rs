@@ -145,6 +145,7 @@ impl WrappedProvider for TGIProvider {
             request,
             provider_name: _,
             model_name: _,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
     ) -> Result<serde_json::Value, Error> {
         // TGI doesn't care about the `model_name` field, so we can hardcode it to "tgi"
@@ -275,6 +276,7 @@ impl InferenceProvider for TGIProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
