@@ -15,4 +15,5 @@ spec:
   selector:
     matchLabels:
       {{- include "tensorzero.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: gateway
 {{- end }}
