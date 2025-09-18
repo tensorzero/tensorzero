@@ -216,6 +216,7 @@ pub async fn start_batch_inference(
         clickhouse_connection_info: &clickhouse_connection_info,
         credentials: &params.credentials,
         cache_options: &cache_options,
+        otlp_config: &config.gateway.export.otlp,
     };
 
     let inference_models = InferenceModels {

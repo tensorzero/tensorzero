@@ -11,6 +11,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::error::Elapsed;
 use tracing::{span, Level, Span};
 use tracing_futures::{Instrument, Instrumented};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use url::Url;
 
 use crate::cache::{
@@ -18,7 +19,9 @@ use crate::cache::{
     CacheData, CacheValidationInfo, ModelProviderRequest, NonStreamingCacheData,
     StreamingCacheData,
 };
-use crate::config::{skip_credential_validation, ProviderTypesConfig, TimeoutsConfig};
+use crate::config::{
+    skip_credential_validation, OtlpConfig, OtlpTracesFormat, ProviderTypesConfig, TimeoutsConfig,
+};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::providers::aws_sagemaker::AWSSagemakerProvider;
@@ -398,6 +401,7 @@ impl ModelConfig {
                     request: &request,
                     model_name,
                     provider_name,
+                    otlp_config: clients.otlp_config,
                 };
                 let cache_key = model_provider_request.get_cache_key()?;
 
@@ -499,6 +503,7 @@ impl ModelConfig {
                     request: &request,
                     model_name,
                     provider_name,
+                    otlp_config: clients.otlp_config,
                 };
 
                 // This future includes a call to `peek_first_chunk`, so applying
@@ -1188,17 +1193,37 @@ pub struct StreamResponseAndMessages {
 }
 
 impl ModelProvider {
-    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference",
-        gen_ai.operation.name = "chat",
-        gen_ai.system = self.genai_system_name(),
-        gen_ai.request.model = self.genai_model_name(),
-    stream = false))]
+    fn apply_otlp_span_fields(&self, otlp_config: &OtlpConfig, span: Span) {
+        if otlp_config.traces.enabled {
+            match otlp_config.traces.format {
+                OtlpTracesFormat::OpenTelemetry => {
+                    span.set_attribute("gen_ai.operation.name", "chat");
+                    span.set_attribute("gen_ai.system", self.genai_system_name());
+
+                    if let Some(model_name) = self.genai_model_name() {
+                        span.set_attribute("gen_ai.request.model", model_name.to_string());
+                    }
+                }
+                OtlpTracesFormat::OpenInference => {
+                    span.set_attribute("openinference.span.kind", "LLM");
+                    span.set_attribute("llm.system", self.genai_system_name());
+
+                    if let Some(model_name) = self.genai_model_name() {
+                        span.set_attribute("llm.model_name", model_name.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference", stream = false))]
     async fn infer(
         &self,
         request: ModelProviderRequest<'_>,
         client: &TensorzeroHttpClient,
         api_keys: &InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
+        self.apply_otlp_span_fields(request.otlp_config, Span::current());
         match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider.infer(request, client, api_keys, self).await
@@ -1256,18 +1281,14 @@ impl ModelProvider {
         }
     }
 
-    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference",
-        gen_ai.operation.name = "chat",
-        gen_ai.system = self.genai_system_name(),
-        gen_ai.request.model = self.genai_model_name(),
-        time_to_first_token,
-    stream = true))]
+    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference", time_to_first_token, stream = true))]
     async fn infer_stream(
         &self,
         request: ModelProviderRequest<'_>,
         client: &TensorzeroHttpClient,
         api_keys: &InferenceCredentials,
     ) -> Result<StreamAndRawRequest, Error> {
+        self.apply_otlp_span_fields(request.otlp_config, Span::current());
         let (stream, raw_request) = match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await
@@ -2029,6 +2050,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            otlp_config: &Default::default(),
         };
 
         // Try inferring the good model only
@@ -2136,6 +2158,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            otlp_config: &Default::default(),
         };
         // Try inferring the good model only
         let request = ModelInferenceRequest {
@@ -2282,6 +2305,7 @@ mod tests {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
+                    otlp_config: &Default::default(),
                 },
                 "my_model",
             )
@@ -2346,6 +2370,7 @@ mod tests {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
+                    otlp_config: &Default::default(),
                 },
                 "my_model",
             )
@@ -2457,6 +2482,7 @@ mod tests {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
+                    otlp_config: &Default::default(),
                 },
                 "my_model",
             )
@@ -2534,6 +2560,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            otlp_config: &Default::default(),
         };
 
         let request = ModelInferenceRequest {
@@ -2586,6 +2613,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            otlp_config: &Default::default(),
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -2644,6 +2672,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            otlp_config: &Default::default(),
         };
 
         let request = ModelInferenceRequest {
@@ -2695,6 +2724,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            otlp_config: &Default::default(),
         };
         let response = model_config
             .infer(&request, &clients, model_name)

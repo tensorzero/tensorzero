@@ -539,6 +539,8 @@ async fn process_embedding_batch(
         credentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
         cache_options: &cache_options,
+        // We don't currently perform any OTLP export in optimization workflows
+        otlp_config: &Default::default(),
     };
 
     let response = embedding_model_config

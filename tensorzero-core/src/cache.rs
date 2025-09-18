@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::sync::Arc;
 
+use crate::config::OtlpConfig;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::embeddings::{EmbeddingModelResponse, EmbeddingRequest};
 use crate::error::{warn_discarded_cache_write, Error, ErrorDetails};
@@ -80,6 +81,7 @@ pub struct BaseModelProviderRequest<'request, T> {
     pub request: &'request T,
     pub model_name: &'request str,
     pub provider_name: &'request str,
+    pub otlp_config: &'request OtlpConfig,
 }
 
 // We need a manual impl to avoid adding a 'T: Copy' bound
@@ -125,6 +127,9 @@ impl EmbeddingModelProviderRequest<'_> {
             model_name,
             provider_name,
             request,
+            // The OTLP config is deliberately not included in the cache key,
+            // since it's only used to construct the OTEL span.
+            otlp_config: _,
         } = self;
         let mut hasher = blake3::Hasher::new();
         hasher.update(model_name.as_bytes());
@@ -151,6 +156,9 @@ impl ModelProviderRequest<'_> {
             model_name,
             provider_name,
             request,
+            // The OTLP config is deliberately not included in the cache key,
+            // since it's only used to construct the OTEL span.
+            otlp_config: _,
         } = self;
         let mut hasher = blake3::Hasher::new();
         hasher.update(model_name.as_bytes());
@@ -554,6 +562,7 @@ mod tests {
             request: &model_inference_request,
             model_name: "test_model",
             provider_name: "test_provider",
+            otlp_config: &Default::default(),
         };
         let cache_key = model_provider_request.get_cache_key().unwrap();
         let model_inference_request = ModelInferenceRequest {
@@ -580,6 +589,7 @@ mod tests {
             request: &model_inference_request,
             model_name: "test_model",
             provider_name: "test_provider",
+            otlp_config: &Default::default(),
         };
         let new_cache_key = model_provider_request.get_cache_key().unwrap();
         // Make sure the first two get the same cache key (and that we ignore the inference_id)
@@ -608,6 +618,7 @@ mod tests {
             request: &streaming_model_inference_request,
             model_name: "test_model",
             provider_name: "test_provider",
+            otlp_config: &Default::default(),
         };
         let streaming_cache_key = model_provider_request.get_cache_key().unwrap();
         assert_ne!(cache_key, streaming_cache_key);
