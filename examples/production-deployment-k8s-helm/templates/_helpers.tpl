@@ -59,6 +59,6 @@ Monitoring labels
 */}}
 {{- define "tensorzero.monitorLabels" -}}
 {{- range $label, $value := .Values.monitoring.metrics.labels }}
-{{ $label }}: {{ $value }}
+{{ $label }}: {{ $value | quote }}
 {{- end }}
 {{- end }}
