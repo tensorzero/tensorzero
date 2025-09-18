@@ -7,7 +7,7 @@ monitoring:
   # Configurations for metrics scraping via Prometheus
   metrics:
     # Enable creation of ServiceMonitor for the TensorZero gateway. Requires
-    # Prometheus Operator to already exist on your clsuter.
+    # Prometheus Operator to already exist on your cluster.
     enabled: false
     # The desired scrape interval for the ServiceMonitor.
     interval: "30s"
