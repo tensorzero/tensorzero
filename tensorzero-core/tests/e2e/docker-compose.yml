@@ -71,6 +71,3 @@ services:
       timeout: 1s
       retries: 48 # Retry for up to 4 minutes
       start_period: 5s # Give the script time to start
-
-volumes:
-  clickhouse-data:
