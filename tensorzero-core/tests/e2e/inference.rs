@@ -1900,6 +1900,9 @@ async fn test_original_response_mixture_of_n_flaky_fuser() {
     // requests to the flaky judge.
     let gateway = make_embedded_gateway_with_config(
         r#"
+[gateway.export.otlp.traces]
+enabled = true
+
 [functions.mixture_of_n]
 type = "chat"
 [functions.mixture_of_n.variants.variant0]
