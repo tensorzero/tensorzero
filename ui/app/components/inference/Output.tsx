@@ -267,9 +267,7 @@ function ChatInferenceOutputComponent({
                 const footer = block.signature ? (
                   <>
                     Signature:{" "}
-                    <span className="text-fg-muted italic">
-                      {block.signature}
-                    </span>
+                    <span className="font-mono text-xs">{block.signature}</span>
                   </>
                 ) : null;
 
