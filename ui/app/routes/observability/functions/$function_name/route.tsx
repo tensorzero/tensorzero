@@ -129,7 +129,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       variant_config = {
         inner: {
           type: "chat_completion",
-          model: DEFAULT_FUNCTION,
+          model: variant_count.variant_name,
           weight: null,
           templates: {},
           temperature: null,
