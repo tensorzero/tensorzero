@@ -2,7 +2,7 @@ use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
-use futures::future::join_all;
+use futures::future::{join_all, try_join_all};
 use itertools::{izip, Itertools};
 use metrics::counter;
 use serde::{Deserialize, Serialize};
@@ -629,11 +629,12 @@ async fn write_start_batch_inference<'a>(
             variant_name: metadata.variant_name.into(),
             episode_id: metadata.episode_ids[i],
             input: resolved_input.into_stored_input(),
-            input_messages: row
-                .input_messages
-                .into_iter()
-                .map(RequestMessage::into_stored_message)
-                .collect(),
+            input_messages: try_join_all(
+                row.input_messages
+                    .into_iter()
+                    .map(RequestMessage::into_stored_message),
+            )
+            .await?,
             system: row.system.map(Cow::Borrowed),
             tool_params,
             inference_params: Cow::Borrowed(row.inference_params),
@@ -929,7 +930,8 @@ pub async fn write_completed_batch_inference<'a>(
             extra_body: Default::default(),
             extra_headers: Default::default(),
         };
-        model_inference_rows_to_write.extend(inference_result.get_serialized_model_inferences());
+        model_inference_rows_to_write
+            .extend(inference_result.get_serialized_model_inferences().await);
         match inference_result {
             InferenceResult::Chat(chat_result) => {
                 let chat_inference = ChatInferenceDatabaseInsert::new(chat_result, input, metadata);

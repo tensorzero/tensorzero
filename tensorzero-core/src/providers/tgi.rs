@@ -1,4 +1,5 @@
 use crate::http::TensorzeroHttpClient;
+use async_trait::async_trait;
 /// TGI integration for TensorZero
 ///
 /// Here, we list known limitations of TGI in our experience
@@ -134,12 +135,13 @@ impl TGICredentials {
     }
 }
 
+#[async_trait]
 impl WrappedProvider for TGIProvider {
     fn thought_block_provider_type_suffix(&self) -> Cow<'static, str> {
         Cow::Borrowed("tgi")
     }
 
-    fn make_body<'a>(
+    async fn make_body<'a>(
         &'a self,
         ModelProviderRequest {
             request,
@@ -150,7 +152,7 @@ impl WrappedProvider for TGIProvider {
     ) -> Result<serde_json::Value, Error> {
         // TGI doesn't care about the `model_name` field, so we can hardcode it to "tgi"
 
-        serde_json::to_value(TGIRequest::new(PROVIDER_TYPE, request)?).map_err(|e| {
+        serde_json::to_value(TGIRequest::new(PROVIDER_TYPE, request).await?).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
                     "Error serializing TGI request: {}",
@@ -208,7 +210,7 @@ impl InferenceProvider for TGIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = self.make_body(model_provider_request)?;
+        let request_body = self.make_body(model_provider_request).await?;
         let request_url = get_chat_url(&self.api_base)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -282,8 +284,8 @@ impl InferenceProvider for TGIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body =
-            serde_json::to_value(TGIRequest::new(PROVIDER_NAME, request)?).map_err(|e| {
+        let request_body = serde_json::to_value(TGIRequest::new(PROVIDER_NAME, request).await?)
+            .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
                         "Error serializing TGI request: {}",
@@ -432,7 +434,7 @@ struct TGIRequest<'a> {
 }
 
 impl<'a> TGIRequest<'a> {
-    pub fn new(
+    pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<TGIRequest<'a>, Error> {
@@ -456,7 +458,8 @@ impl<'a> TGIRequest<'a> {
             &request.messages,
             Some(&request.json_mode),
             PROVIDER_TYPE,
-        )?;
+        )
+        .await?;
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
 
@@ -784,8 +787,8 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn test_tgi_request_new() {
+    #[tokio::test]
+    async fn test_tgi_request_new() {
         let model_name = PROVIDER_TYPE.to_string();
         let basic_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -814,7 +817,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let tgi_request = TGIRequest::new(&model_name, &basic_request).unwrap();
+        let tgi_request = TGIRequest::new(&model_name, &basic_request).await.unwrap();
 
         assert_eq!(tgi_request.model, &model_name);
         assert_eq!(tgi_request.messages.len(), 2);
@@ -852,7 +855,9 @@ mod tests {
             ..Default::default()
         };
 
-        let tgi_request = TGIRequest::new(&model_name, &request_with_tools).unwrap();
+        let tgi_request = TGIRequest::new(&model_name, &request_with_tools)
+            .await
+            .unwrap();
 
         assert_eq!(tgi_request.model, &model_name);
         assert_eq!(tgi_request.messages.len(), 2);
@@ -900,7 +905,9 @@ mod tests {
             ..Default::default()
         };
 
-        let tgi_request = TGIRequest::new(&model_name, &request_with_tools).unwrap();
+        let tgi_request = TGIRequest::new(&model_name, &request_with_tools)
+            .await
+            .unwrap();
 
         assert_eq!(tgi_request.model, &model_name);
         assert_eq!(tgi_request.messages.len(), 1);
@@ -936,7 +943,9 @@ mod tests {
             ..Default::default()
         };
 
-        let tgi_request = TGIRequest::new(&model_name, &request_with_tools).unwrap();
+        let tgi_request = TGIRequest::new(&model_name, &request_with_tools)
+            .await
+            .unwrap();
 
         assert_eq!(tgi_request.model, &model_name);
         assert_eq!(tgi_request.messages.len(), 1);
@@ -976,8 +985,8 @@ mod tests {
         );
         assert_eq!(message.finish_reason, Some(FinishReason::Stop));
     }
-    #[test]
-    fn test_tgi_response_with_metadata_try_into() {
+    #[tokio::test]
+    async fn test_tgi_response_with_metadata_try_into() {
         let valid_response = TGIResponse {
             choices: vec![TGIResponseChoice {
                 index: 0,
@@ -1021,7 +1030,9 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_value(
-                TGIRequest::new("test-model", &generic_request).unwrap(),
+                TGIRequest::new("test-model", &generic_request)
+                    .await
+                    .unwrap(),
             )
             .unwrap()
             .to_string(),

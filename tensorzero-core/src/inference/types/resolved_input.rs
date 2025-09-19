@@ -1,11 +1,14 @@
+use std::borrow::Cow;
 use std::future::Future;
 use std::pin::Pin;
 
 use futures::future::Shared;
 use futures::FutureExt;
+use mime::MediaType;
 use object_store::{PutMode, PutOptions};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use url::Url;
 
 use super::{storage::StoragePath, Base64File, Role, Thought};
 use crate::config::{Config, ObjectStoreInfo};
@@ -37,6 +40,45 @@ pub struct LazyResolvedInputMessage {
     pub content: Vec<LazyResolvedInputMessageContent>,
 }
 
+// This gets serialized as part of a `ModelInferenceRequest` when we compute a cache key.
+// TODO - decide on the precise caching behavior that we want for file URLs
+#[derive(Clone, Debug, Serialize)]
+pub enum LazyFile {
+    Url {
+        file_url: FileUrl,
+        #[serde(skip)]
+        future: FileFuture,
+    },
+    FileWithPath(FileWithPath),
+}
+
+#[cfg(any(test, feature = "e2e_tests"))]
+impl std::cmp::PartialEq for LazyFile {
+    // This is only used in tests, so it's fine to panic
+    #[expect(clippy::panic)]
+    fn eq(&self, _other: &Self) -> bool {
+        panic!("Tried to check LazyFile equality")
+    }
+}
+
+impl LazyFile {
+    pub async fn resolve(&self) -> Result<Cow<'_, FileWithPath>, Error> {
+        match self {
+            LazyFile::Url {
+                future,
+                file_url: _,
+            } => Ok(Cow::Owned(future.clone().await?)),
+            LazyFile::FileWithPath(file) => Ok(Cow::Borrowed(file)),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct FileUrl {
+    pub url: Url,
+    pub mime_type: Option<MediaType>,
+}
+
 /// Holds a lazily-resolved file from a `LazyResolvedInputMessageContent::File`.
 /// This is constructed as either:
 /// 1. An immediately-ready future, when we're converting a `ResolvedInputMessageContent` to a `LazyResolvedInputMessageContent`
@@ -61,7 +103,7 @@ pub enum LazyResolvedInputMessageContent {
     Thought(Thought),
     // When we add support for forwarding image urls to the model provider,
     // we'll store additional information here
-    File(FileFuture),
+    File(Box<LazyFile>),
     Unknown {
         data: Value,
         model_provider_name: Option<String>,
@@ -376,10 +418,9 @@ impl ResolvedInputMessageContent {
             ResolvedInputMessageContent::Thought(thought) => {
                 LazyResolvedInputMessageContent::Thought(thought)
             }
-            // We already have a resolved file, so construct an immediately-ready future
-            ResolvedInputMessageContent::File(file) => LazyResolvedInputMessageContent::File(
-                futures::future::ready(Ok(*file)).boxed().shared(),
-            ),
+            ResolvedInputMessageContent::File(file) => {
+                LazyResolvedInputMessageContent::File(Box::new(LazyFile::FileWithPath(*file)))
+            }
             ResolvedInputMessageContent::Unknown {
                 data,
                 model_provider_name,
