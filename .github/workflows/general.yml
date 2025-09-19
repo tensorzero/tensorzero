@@ -654,6 +654,11 @@ jobs:
   merge-queue-checks:
     uses: ./.github/workflows/merge-queue.yml
     if: github.event_name == 'merge_group'
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
     secrets: inherit
 
   # See 'ci/README.md' at the repository root for more details.
