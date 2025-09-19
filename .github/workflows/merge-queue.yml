@@ -1,6 +1,7 @@
 name: Merge Queue Checks
 run-name: Merge Queue Checks for ${{ github.ref }}
 
+# This intentionally does not have a 'merge_group' trigger - it's invoked from 'general.yml'
 on:
   workflow_dispatch:
   workflow_call:
