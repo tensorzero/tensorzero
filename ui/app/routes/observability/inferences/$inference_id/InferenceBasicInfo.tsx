@@ -48,7 +48,8 @@ export default function BasicInfo({
 }: BasicInfoProps) {
   const functionConfig = useFunctionConfig(inference.function_name);
   const variantType =
-    functionConfig?.variants[inference.variant_name]?.inner.type ?? "chat_completion";
+    functionConfig?.variants[inference.variant_name]?.inner.type ?? 
+    (inference.function_name === "tensorzero::default" ? "chat_completion" : undefined);
 
   // Create timestamp tooltip
   const timestampTooltip = createTimestampTooltip(inference.timestamp);
