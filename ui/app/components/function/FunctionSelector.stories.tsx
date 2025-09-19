@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { FunctionSelector } from "./FunctionSelector";
 import type { FunctionConfig } from "tensorzero-node";
 import { useState } from "react";
+import { DEFAULT_FUNCTION } from "~/utils/constants";
 
 const meta = {
   title: "UI/FunctionSelector",
@@ -19,7 +20,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const mockFunctions: Record<string, FunctionConfig> = {
-  "tensorzero::default": {
+  [DEFAULT_FUNCTION]: {
     type: "chat",
     variants: {},
     schemas: {},

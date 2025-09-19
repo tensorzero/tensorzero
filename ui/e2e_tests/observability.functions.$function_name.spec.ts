@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { DEFAULT_FUNCTION } from "~/utils/constants";
 
 test("should show the function detail page", async ({ page }) => {
   await page.goto("/observability/functions/extract_entities");
@@ -33,7 +34,7 @@ test("should show description of json function", async ({ page }) => {
 test("should show the function detail page for default function", async ({
   page,
 }) => {
-  await page.goto("/observability/functions/tensorzero::default");
+  await page.goto(`/observability/functions/${DEFAULT_FUNCTION}`);
 
   await expect(page.getByRole("heading", { name: "Variants" })).toBeVisible();
 

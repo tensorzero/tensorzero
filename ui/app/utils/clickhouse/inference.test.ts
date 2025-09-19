@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
   countInferencesForEpisode,
   queryEpisodeTable,
@@ -555,7 +556,7 @@ test("countInferencesByFunction", async () => {
       },
       {
         count: 3,
-        function_name: "tensorzero::default",
+        function_name: DEFAULT_FUNCTION,
         max_timestamp: "2025-09-08T01:42:25Z",
       },
       {

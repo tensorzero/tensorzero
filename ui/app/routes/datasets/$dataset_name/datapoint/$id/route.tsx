@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { ActionFunctionArgs, RouteHandle } from "react-router";
+import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
   data,
   isRouteErrorResponse,
@@ -383,9 +384,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             canSave={canSave}
             onSave={handleSave}
             onReset={handleReset}
-            showTryWithVariant={
-              datapoint.function_name !== "tensorzero::default"
-            }
+            showTryWithVariant={datapoint.function_name !== DEFAULT_FUNCTION}
           />
         </SectionLayout>
 

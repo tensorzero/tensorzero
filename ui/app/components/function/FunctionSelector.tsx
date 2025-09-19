@@ -6,6 +6,7 @@ import {
 import { Button } from "~/components/ui/button";
 import { ChevronDown } from "lucide-react";
 import { Functions } from "~/components/icons/Icons";
+import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
   Command,
   CommandEmpty,
@@ -47,7 +48,7 @@ export function FunctionSelector({
   const functionEntries = useMemo(
     () =>
       Object.entries(functions).filter(
-        ([name]) => !(hideDefaultFunction && name === "tensorzero::default"),
+        ([name]) => !(hideDefaultFunction && name === DEFAULT_FUNCTION),
       ),
     [functions, hideDefaultFunction],
   );
