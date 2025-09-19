@@ -110,6 +110,8 @@ export const FullyPopulated: Story = {
             num_retries: 3,
             max_delay_s: 60,
           },
+          extra_body: null,
+          extra_headers: null,
         },
         timeouts: {
           non_streaming: {
@@ -152,6 +154,8 @@ export const MinimalConfig: Story = {
             num_retries: 1,
             max_delay_s: 10,
           },
+          extra_body: null,
+          extra_headers: null,
         },
         timeouts: {
           non_streaming: {
@@ -213,6 +217,8 @@ export const WithJsonMode: Story = {
             num_retries: 2,
             max_delay_s: 30,
           },
+          extra_body: null,
+          extra_headers: null,
         },
         timeouts: {
           non_streaming: {
@@ -290,6 +296,8 @@ export const WithTemplatesOnly: Story = {
             num_retries: 1,
             max_delay_s: 10,
           },
+          extra_body: null,
+          extra_headers: null,
         },
         timeouts: {
           non_streaming: {
