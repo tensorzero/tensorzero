@@ -695,14 +695,9 @@ async fn test_clickhouse_query_episode_table_bounds() {
     assert!(bounds.first_id.is_some(), "Should have a first_id");
     assert!(bounds.last_id.is_some(), "Should have a last_id");
 
-    // Check expected values
     assert_eq!(
         bounds.first_id.unwrap().to_string(),
         "0192ced0-947e-74b3-a3d7-02fd2c54d637"
     );
-    assert_eq!(
-        bounds.last_id.unwrap().to_string(),
-        "019926fd-1a06-7fe2-b7f4-23220893d62c"
-    );
-    assert_eq!(bounds.count, 20002095);
+    // The end and count are ~guaranteed to be trampled here. We test in UI e2e tests that the behavior is as expected
 }
