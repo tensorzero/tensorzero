@@ -3,12 +3,13 @@ import { z } from "zod";
 export const ModelOptionSchema = z.object({
   displayName: z.string().nonempty("Model name is required"),
   name: z.string().nonempty("Model name is required"),
-  provider: z.enum(["openai", "fireworks"]),
+  provider: z.enum(["openai", "fireworks", "gcp_vertex_gemini"]),
 });
 
 export type ModelOption = z.infer<typeof ModelOptionSchema>;
 
 export const models: ModelOption[] = [
+  // OpenAI
   {
     displayName: "gpt-4.1-2025-04-14",
     name: "gpt-4.1-2025-04-14",
@@ -39,6 +40,8 @@ export const models: ModelOption[] = [
     name: "gpt-3.5-turbo-1106",
     provider: "openai",
   },
+
+  // Fireworks
   {
     displayName: "llama-3.1-8b-instruct",
     name: "accounts/fireworks/models/llama-v3p1-8b-instruct",
@@ -53,5 +56,12 @@ export const models: ModelOption[] = [
     displayName: "llama-3.2-3b-instruct",
     name: "accounts/fireworks/models/llama-v3p2-3b-instruct",
     provider: "fireworks",
+  },
+
+  // GCP Vertex AI Gemini
+  {
+    displayName: "gemini-2.0-flash-lite-001",
+    name: "gemini-2.0-flash-lite-001",
+    provider: "gcp_vertex_gemini",
   },
 ];
