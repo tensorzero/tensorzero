@@ -1,4 +1,6 @@
 import { test, expect } from "@playwright/test";
+import type { ProviderConfig } from "tensorzero-node";
+import { formatProvider } from "~/utils/providers";
 
 test("should show the supervised fine-tuning page", async ({ page }) => {
   await page.goto("/optimization/supervised-fine-tuning");
@@ -308,5 +310,57 @@ test.describe("Error handling", () => {
     await page
       .getByText("failed because the model is an error model")
       .waitFor({ timeout: 3000 });
+  });
+});
+
+test.describe("should expose configured providers", () => {
+  const providers: ProviderConfig["type"][] = [
+    "openai",
+    "fireworks",
+    "gcp_vertex_gemini",
+  ];
+
+  // ensure each provider we expect is in the list
+  providers.forEach((provider) => {
+    test(provider, async ({ page }) => {
+      await page.goto("/optimization/supervised-fine-tuning");
+
+      const modelName = "test-name";
+      const providerName = formatProvider(provider).name;
+
+      await page
+        .getByRole("combobox")
+        .filter({ hasText: "Select a model..." })
+        .click();
+
+      await page.getByPlaceholder("Search models...").fill(modelName);
+
+      // Wait for the options to load
+      await page
+        .getByRole("option", {
+          name: `${modelName} ${providerName}`,
+        })
+        .waitFor();
+    });
+  });
+
+  // check that the number of providers is equal (this will ensure
+  // that this test stays up to date)
+  test(`should expose all ${providers.length} configured providers`, async ({
+    page,
+  }) => {
+    await page.goto("/optimization/supervised-fine-tuning");
+
+    const modelName = "test-name";
+
+    await page
+      .getByRole("combobox")
+      .filter({ hasText: "Select a model..." })
+      .click();
+
+    await page.getByPlaceholder("Search models...").fill(modelName);
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("option")).toHaveCount(providers.length);
   });
 });
