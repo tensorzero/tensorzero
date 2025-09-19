@@ -384,7 +384,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             canSave={canSave}
             onSave={handleSave}
             onReset={handleReset}
-            showTryWithVariant={datapoint.function_name !== DEFAULT_FUNCTION}
+            showTryWithButton={datapoint.function_name !== DEFAULT_FUNCTION}
           />
         </SectionLayout>
 
