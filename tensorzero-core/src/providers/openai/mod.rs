@@ -2363,13 +2363,6 @@ struct OpenAIBatchError {
 }
 
 #[derive(Debug, Deserialize)]
-struct OpenAIBatchRequestCounts {
-    // total: u32,
-    // completed: u32,
-    // failed: u32,
-}
-
-#[derive(Debug, Deserialize)]
 struct OpenAIBatchFileRow {
     #[serde(rename = "custom_id")]
     inference_id: Uuid,
