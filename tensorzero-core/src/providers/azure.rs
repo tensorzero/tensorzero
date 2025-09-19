@@ -201,14 +201,15 @@ impl InferenceProvider for AzureProvider {
         api_key: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = serde_json::to_value(AzureRequest::new(request)?).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing Azure request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
+        let request_body =
+            serde_json::to_value(AzureRequest::new(request).await?).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error serializing Azure request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
         let endpoint = self.endpoint.get_endpoint(api_key)?;
         let request_url = get_azure_chat_url(&endpoint, &self.deployment_id)?;
         let start_time = Instant::now();
@@ -295,14 +296,15 @@ impl InferenceProvider for AzureProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(AzureRequest::new(request)?).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing Azure request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
+        let request_body =
+            serde_json::to_value(AzureRequest::new(request).await?).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error serializing Azure request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
         let endpoint = self.endpoint.get_endpoint(dynamic_api_keys)?;
         let request_url = get_azure_chat_url(&endpoint, &self.deployment_id)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
@@ -601,14 +603,15 @@ struct AzureRequest<'a> {
 }
 
 impl<'a> AzureRequest<'a> {
-    pub fn new(request: &'a ModelInferenceRequest<'_>) -> Result<AzureRequest<'a>, Error> {
+    pub async fn new(request: &'a ModelInferenceRequest<'_>) -> Result<AzureRequest<'a>, Error> {
         let response_format = AzureResponseFormat::new(request.json_mode, request.output_schema);
         let messages = prepare_openai_messages(
             request.system.as_deref().map(SystemOrDeveloper::System),
             &request.messages,
             Some(&request.json_mode),
             PROVIDER_TYPE,
-        )?;
+        )
+        .await?;
         let (tools, tool_choice, _) = prepare_openai_tools(request);
         Ok(AzureRequest {
             messages,
@@ -774,8 +777,8 @@ mod tests {
     };
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
-    #[test]
-    fn test_azure_request_new() {
+    #[tokio::test]
+    async fn test_azure_request_new() {
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -798,7 +801,7 @@ mod tests {
             ..Default::default()
         };
 
-        let azure_request = AzureRequest::new(&request_with_tools).unwrap();
+        let azure_request = AzureRequest::new(&request_with_tools).await.unwrap();
 
         assert_eq!(azure_request.messages.len(), 1);
         assert_eq!(azure_request.temperature, Some(0.5));
@@ -844,7 +847,7 @@ mod tests {
             ..Default::default()
         };
 
-        let azure_request = AzureRequest::new(&request_with_tools).unwrap();
+        let azure_request = AzureRequest::new(&request_with_tools).await.unwrap();
 
         assert_eq!(azure_request.messages.len(), 2);
         assert_eq!(azure_request.temperature, Some(0.5));
@@ -947,8 +950,8 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn test_azure_response_with_metadata_try_into() {
+    #[tokio::test]
+    async fn test_azure_response_with_metadata_try_into() {
         let valid_response = OpenAIResponse {
             choices: vec![OpenAIResponseChoice {
                 index: 0,
@@ -992,7 +995,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            raw_request: serde_json::to_string(&AzureRequest::new(&generic_request).unwrap())
+            raw_request: serde_json::to_string(&AzureRequest::new(&generic_request).await.unwrap())
                 .unwrap(),
             generic_request: &generic_request,
         };

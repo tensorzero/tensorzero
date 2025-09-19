@@ -22,9 +22,9 @@ use tensorzero_core::{
     },
     http::TensorzeroHttpClient,
     inference::types::{
-        ContentBlock, ContentBlockChatOutput, ContentBlockChunk, JsonInferenceOutput, ModelInput,
-        RequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent, Text, TextKind,
-        Usage,
+        ContentBlockChatOutput, ContentBlockChunk, JsonInferenceOutput, ModelInput,
+        ResolvedContentBlock, ResolvedRequestMessage, StoredInput, StoredInputMessage,
+        StoredInputMessageContent, Text, TextKind, Usage,
     },
     optimization::{
         dicl::UninitializedDiclOptimizationConfig, JobHandle, OptimizationJobInfo, Optimizer,
@@ -873,9 +873,9 @@ async fn validate_model_inference_clickhouse(
             .unwrap()
             .as_str()
             .unwrap();
-        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<Value> = serde_json::from_str(input_messages).unwrap();
         let output = model_inference.get("output").unwrap().as_str().unwrap();
-        let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+        let output: Vec<Value> = serde_json::from_str(output).unwrap();
 
         match model_name {
             name if name == expected_model => {
@@ -905,13 +905,13 @@ async fn validate_model_inference_clickhouse(
                 assert_eq!(input_messages.len(), 7);
                 assert_eq!(output.len(), 1);
 
-                match &output[0] {
-                    ContentBlock::Text(text) => {
-                        assert!(text.text.to_lowercase().contains("nose"));
+                // Check that output contains text with "nose"
+                if let Some(text_value) = output[0].get("text") {
+                    if let Some(text_str) = text_value.as_str() {
+                        assert!(text_str.to_lowercase().contains("nose"));
                     }
-                    _ => {
-                        panic!("Expected a text block, got {:?}", output[0]);
-                    }
+                } else {
+                    panic!("Expected a text block in output[0], got {:?}", output[0]);
                 }
             }
             name if name == expected_embedding_model => {
@@ -1155,9 +1155,9 @@ fn create_pinocchio_example(
         function_name: "basic_test".to_string(),
         input: ModelInput {
             system: system.as_ref().map(std::string::ToString::to_string),
-            messages: vec![RequestMessage {
+            messages: vec![ResolvedRequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::Text(Text {
+                content: vec![ResolvedContentBlock::Text(Text {
                     text: question.to_string(),
                 })],
             }],

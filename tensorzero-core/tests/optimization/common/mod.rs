@@ -23,8 +23,8 @@ use tensorzero_core::{
         storage::{StorageKind, StoragePath},
         stored_input::StoredFile,
         Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
-        ModelInput, RequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent,
-        Text,
+        ModelInput, RequestMessage, ResolvedContentBlock, ResolvedRequestMessage, StoredInput,
+        StoredInputMessage, StoredInputMessageContent, Text,
     },
     optimization::{
         JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
@@ -273,9 +273,9 @@ fn generate_text_example() -> RenderedSample {
         function_name: "basic_test".to_string(),
         input: ModelInput {
             system: Some(system_prompt.clone()),
-            messages: vec![RequestMessage {
+            messages: vec![ResolvedRequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::Text(Text {
+                content: vec![ResolvedContentBlock::Text(Text {
                     text: "What is the capital of France?".to_string(),
                 })],
             }],
@@ -324,19 +324,19 @@ fn generate_tool_call_example() -> RenderedSample {
         input: ModelInput {
             system: Some(system_prompt.clone()),
             messages: vec![
-                RequestMessage {
+                ResolvedRequestMessage {
                     role: Role::User,
-                    content: vec![ContentBlock::Text(Text {
+                    content: vec![ResolvedContentBlock::Text(Text {
                         text: "What is the weather in Paris?".to_string(),
                     })],
                 },
-                RequestMessage {
+                ResolvedRequestMessage {
                     role: Role::Assistant,
                     content: vec![
-                        ContentBlock::Text(Text {
+                        ResolvedContentBlock::Text(Text {
                             text: "Let me look that up for you.".to_string(),
                         }),
-                        ContentBlock::ToolCall(ToolCall {
+                        ResolvedContentBlock::ToolCall(ToolCall {
                             name: "get_weather".to_string(),
                             arguments: serde_json::json!({
                                 "location": "Paris"
@@ -346,9 +346,9 @@ fn generate_tool_call_example() -> RenderedSample {
                         }),
                     ],
                 },
-                RequestMessage {
+                ResolvedRequestMessage {
                     role: Role::User,
-                    content: vec![ContentBlock::ToolResult(ToolResult {
+                    content: vec![ResolvedContentBlock::ToolResult(ToolResult {
                         name: "get_weather".to_string(),
                         result: serde_json::json!({
                             "weather": "sunny, 25 degrees Celsius",
@@ -357,15 +357,15 @@ fn generate_tool_call_example() -> RenderedSample {
                         id: "call_1".to_string(),
                     })],
                 },
-                RequestMessage {
+                ResolvedRequestMessage {
                     role: Role::Assistant,
-                    content: vec![ContentBlock::Text(Text {
+                    content: vec![ResolvedContentBlock::Text(Text {
                         text: "The weather in Paris is sunny, 25 degrees Celsius.".to_string(),
                     })],
                 },
-                RequestMessage {
+                ResolvedRequestMessage {
                     role: Role::User,
-                    content: vec![ContentBlock::Text(Text {
+                    content: vec![ResolvedContentBlock::Text(Text {
                         text: "What is the weather in London?".to_string(),
                     })],
                 },
@@ -462,13 +462,13 @@ fn generate_image_example() -> RenderedSample {
         function_name: "basic_test".to_string(),
         input: ModelInput {
             system: Some(system_prompt.clone()),
-            messages: vec![RequestMessage {
+            messages: vec![ResolvedRequestMessage {
                 role: Role::User,
                 content: vec![
-                    ContentBlock::Text(Text {
+                    ResolvedContentBlock::Text(Text {
                         text: "What is the main color of this image?".to_string(),
                     }),
-                    ContentBlock::File(Box::new(FileWithPath {
+                    ResolvedContentBlock::File(Box::new(FileWithPath {
                         file: Base64File {
                             url: None,
                             mime_type: mime::IMAGE_PNG,
