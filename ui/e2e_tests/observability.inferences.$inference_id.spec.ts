@@ -337,8 +337,7 @@ test("should be able to add chat demonstration feedback via the inference page",
   await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
 });
 
-test.describe
-  .only("should be able to add demonstration feedback via Try with X flows", () => {
+test.describe("should be able to add demonstration feedback via Try with X flows", () => {
   const testData = [
     {
       buttonText: "Try with variant",
