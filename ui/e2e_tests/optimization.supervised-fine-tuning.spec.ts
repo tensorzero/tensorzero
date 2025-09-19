@@ -318,6 +318,7 @@ test.describe("should expose configured providers", () => {
     "openai",
     "fireworks",
     "gcp_vertex_gemini",
+    "together",
   ];
 
   // ensure each provider we expect is in the list
