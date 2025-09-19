@@ -1,0 +1,591 @@
+<testsuites id="" name="" tests="61" failures="0" skipped="0" errors="0" time="199.719026">
+<testsuite name="datasets.$dataset_name.datapoint.$datapoint_id.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="2" failures="0" skipped="0" time="2.819" errors="0">
+<testcase name="should show the datapoint detail page" classname="datasets.$dataset_name.datapoint.$datapoint_id.spec.ts" time="0.872">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/datasets.$dataset_name.dat-1daaf-w-the-datapoint-detail-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/datasets.$dataset_name.dat-1daaf-w-the-datapoint-detail-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should be able to add, edit and save a datapoint" classname="datasets.$dataset_name.datapoint.$datapoint_id.spec.ts" time="1.947">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/datasets.$dataset_name.dat-ca70f-d-edit-and-save-a-datapoint-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/datasets.$dataset_name.dat-ca70f-d-edit-and-save-a-datapoint-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="datasets.$dataset_name.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="1" failures="0" skipped="0" time="0.231" errors="0">
+<testcase name="should show the dataset detail page" classname="datasets.$dataset_name.spec.ts" time="0.231">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/datasets.$dataset_name-should-show-the-dataset-detail-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/datasets.$dataset_name-should-show-the-dataset-detail-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="datasets.builder.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="1" failures="0" skipped="0" time="0.214" errors="0">
+<testcase name="should show the dataset builder page" classname="datasets.builder.spec.ts" time="0.214">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/datasets.builder-should-show-the-dataset-builder-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/datasets.builder-should-show-the-dataset-builder-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="datasets.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="1" failures="0" skipped="0" time="0.221" errors="0">
+<testcase name="should show the dataset list page" classname="datasets.spec.ts" time="0.221">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/datasets-should-show-the-dataset-list-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/datasets-should-show-the-dataset-list-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="dynamic_evaluations.projects.$project_name.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="1" failures="0" skipped="0" time="3.853" errors="0">
+<testcase name="dynamic evaluation project page should render and show correct information" classname="dynamic_evaluations.projects.$project_name.spec.ts" time="3.853">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/dynamic_evaluations.projec-4fae0-nd-show-correct-information-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/dynamic_evaluations.projec-4fae0-nd-show-correct-information-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="dynamic_evaluations.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="1" failures="0" skipped="0" time="0.349" errors="0">
+<testcase name="should show the dynamic evaluations page and navigate to the dynamic evaluation run page" classname="dynamic_evaluations.spec.ts" time="0.349">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/dynamic_evaluations-should-4b181-dynamic-evaluation-run-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/dynamic_evaluations-should-4b181-dynamic-evaluation-run-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="evaluations.$eval_name.$datapoint_id.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="3" failures="0" skipped="0" time="4.437" errors="0">
+<testcase name="should show the evaluation result page" classname="evaluations.$eval_name.$datapoint_id.spec.ts" time="0.349">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/evaluations.$eval_name.$da-4ee16--the-evaluation-result-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/evaluations.$eval_name.$da-4ee16--the-evaluation-result-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should be able to add float feedback from the evaluation datapoint result page" classname="evaluations.$eval_name.$datapoint_id.spec.ts" time="2.318">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/evaluations.$eval_name.$da-e6ee4-ation-datapoint-result-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/evaluations.$eval_name.$da-e6ee4-ation-datapoint-result-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should be able to add bool feedback from the evaluation datapoint result page" classname="evaluations.$eval_name.$datapoint_id.spec.ts" time="1.77">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/evaluations.$eval_name.$da-6f83a-ation-datapoint-result-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/evaluations.$eval_name.$da-6f83a-ation-datapoint-result-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="evaluations.$eval_name.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="4" failures="0" skipped="0" time="4.666" errors="0">
+<testcase name="should show the evaluation result page" classname="evaluations.$eval_name.spec.ts" time="0.352">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/evaluations.$eval_name-sho-bdbeb--the-evaluation-result-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/evaluations.$eval_name-sho-bdbeb--the-evaluation-result-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Navigate through ragged evaluation results" classname="evaluations.$eval_name.spec.ts" time="0.93">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/evaluations.$eval_name-Nav-7e031-h-ragged-evaluation-results-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/evaluations.$eval_name-Nav-7e031-h-ragged-evaluation-results-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should be able to add float feedback from the evaluation result page" classname="evaluations.$eval_name.spec.ts" time="1.498">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/evaluations.$eval_name-sho-28e40--the-evaluation-result-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/evaluations.$eval_name-sho-28e40--the-evaluation-result-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should be able to add boolean feedback from the evaluation result page" classname="evaluations.$eval_name.spec.ts" time="1.886">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/evaluations.$eval_name-sho-ea0d5--the-evaluation-result-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/evaluations.$eval_name-sho-ea0d5--the-evaluation-result-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="evaluations.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="3" failures="0" skipped="0" time="93.55" errors="0">
+<testcase name="should show the evaluation result page" classname="evaluations.spec.ts" time="0.211">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/evaluations-should-show-the-evaluation-result-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/evaluations-should-show-the-evaluation-result-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="push the new run button, launch an evaluation" classname="evaluations.spec.ts" time="72.873">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/evaluations-push-the-new-run-button-launch-an-evaluation-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/evaluations-push-the-new-run-button-launch-an-evaluation-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="push the new run button, launch an image evaluation" classname="evaluations.spec.ts" time="20.466">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/evaluations-push-the-new-r-af103--launch-an-image-evaluation-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/evaluations-push-the-new-r-af103--launch-an-image-evaluation-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="homePage.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="3" failures="0" skipped="0" time="0.613" errors="0">
+<testcase name="should show the home page" classname="homePage.spec.ts" time="0.169">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/homePage-should-show-the-home-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/homePage-should-show-the-home-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="@base-path should check the health endpoint with the correct base path" classname="homePage.spec.ts" time="0.281">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/homePage--base-path-should-b4717--with-the-correct-base-path-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/homePage--base-path-should-b4717--with-the-correct-base-path-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should show 17 functions in the functions badge" classname="homePage.spec.ts" time="0.163">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/homePage-should-show-17-functions-in-the-functions-badge-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/homePage-should-show-17-functions-in-the-functions-badge-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="observability.episodes.$episode_id.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="2" failures="0" skipped="0" time="2.068" errors="0">
+<testcase name="should show the episode detail page" classname="observability.episodes.$episode_id.spec.ts" time="0.236">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.episodes.$ep-6d1ab-how-the-episode-detail-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.episodes.$ep-6d1ab-how-the-episode-detail-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should be able to add comment feedback via the episode page" classname="observability.episodes.$episode_id.spec.ts" time="1.832">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.episodes.$ep-79b97-edback-via-the-episode-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.episodes.$ep-79b97-edback-via-the-episode-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="observability.episodes.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="1" failures="0" skipped="0" time="0.189" errors="0">
+<testcase name="should show the episode list page" classname="observability.episodes.spec.ts" time="0.189">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.episodes-should-show-the-episode-list-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.episodes-should-show-the-episode-list-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="observability.functions.$function_name.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="4" failures="0" skipped="0" time="1.456" errors="0">
+<testcase name="should show the function detail page" classname="observability.functions.$function_name.spec.ts" time="0.392">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.functions.$f-1f933-ow-the-function-detail-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.functions.$f-1f933-ow-the-function-detail-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should show description of chat function" classname="observability.functions.$function_name.spec.ts" time="0.366">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.functions.$f-1084d-escription-of-chat-function-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.functions.$f-1084d-escription-of-chat-function-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should show description of json function" classname="observability.functions.$function_name.spec.ts" time="0.368">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.functions.$f-a7541-escription-of-json-function-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.functions.$f-a7541-escription-of-json-function-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should show the function detail page for default function" classname="observability.functions.$function_name.spec.ts" time="0.33">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.functions.$f-9d1e0-l-page-for-default-function-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.functions.$f-9d1e0-l-page-for-default-function-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="observability.functions.$function_name.variants.$variant_name.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="1" failures="0" skipped="0" time="0.26" errors="0">
+<testcase name="should show the variant detail page" classname="observability.functions.$function_name.variants.$variant_name.spec.ts" time="0.26">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.functions.$f-7f2c3-how-the-variant-detail-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.functions.$f-7f2c3-how-the-variant-detail-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="observability.functions.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="1" failures="0" skipped="0" time="0.231" errors="0">
+<testcase name="should show the function list page" classname="observability.functions.spec.ts" time="0.231">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.functions-should-show-the-function-list-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.functions-should-show-the-function-list-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="observability.inferences.$inference_id.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="14" failures="0" skipped="0" time="26.959" errors="0">
+<testcase name="should show the inference detail page" classname="observability.inferences.$inference_id.spec.ts" time="0.269">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.inferences.$-78f22-w-the-inference-detail-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.inferences.$-78f22-w-the-inference-detail-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should display inferences with new image content" classname="observability.inferences.$inference_id.spec.ts" time="1.665">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.inferences.$-022b9-nces-with-new-image-content-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.inferences.$-022b9-nces-with-new-image-content-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should display inferences with old image content" classname="observability.inferences.$inference_id.spec.ts" time="1.687">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.inferences.$-2cdf2-nces-with-old-image-content-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.inferences.$-2cdf2-nces-with-old-image-content-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="tag navigation works by evaluation_name" classname="observability.inferences.$inference_id.spec.ts" time="0.972">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.inferences.$-ad6f6-on-works-by-evaluation-name-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.inferences.$-ad6f6-on-works-by-evaluation-name-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="tag navigation works by datapoint_id" classname="observability.inferences.$inference_id.spec.ts" time="0.915">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.inferences.$-2eb5b-ation-works-by-datapoint-id-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.inferences.$-2eb5b-ation-works-by-datapoint-id-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should be able to add float feedback via the inference page" classname="observability.inferences.$inference_id.spec.ts" time="2.025">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.inferences.$-0ee4e-back-via-the-inference-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.inferences.$-0ee4e-back-via-the-inference-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should be able to add boolean feedback via the inference page" classname="observability.inferences.$inference_id.spec.ts" time="2.012">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.inferences.$-064e1-back-via-the-inference-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.inferences.$-064e1-back-via-the-inference-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should be able to add json demonstration feedback via the inference page" classname="observability.inferences.$inference_id.spec.ts" time="1.93">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.inferences.$-506c5-back-via-the-inference-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.inferences.$-506c5-back-via-the-inference-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should be able to add chat demonstration feedback via the inference page" classname="observability.inferences.$inference_id.spec.ts" time="1.754">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.inferences.$-54bc6-back-via-the-inference-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.inferences.$-54bc6-back-via-the-inference-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should be able to add demonstration feedback via Try with X flows › Try with variant" classname="observability.inferences.$inference_id.spec.ts" time="4.256">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.inferences.$-510ec-th-X-flows-Try-with-variant-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.inferences.$-510ec-th-X-flows-Try-with-variant-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should be able to add demonstration feedback via Try with X flows › Try with model" classname="observability.inferences.$inference_id.spec.ts" time="3.287">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.inferences.$-6b30a-with-X-flows-Try-with-model-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.inferences.$-6b30a-with-X-flows-Try-with-model-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should be able to add a datapoint from the inference page" classname="observability.inferences.$inference_id.spec.ts" time="4.381">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.inferences.$-4af10-int-from-the-inference-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.inferences.$-4af10-int-from-the-inference-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should load an inference page with a tool call" classname="observability.inferences.$inference_id.spec.ts" time="0.91">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.inferences.$-b2a29-rence-page-with-a-tool-call-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.inferences.$-b2a29-rence-page-with-a-tool-call-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="should display inferences with thought block output" classname="observability.inferences.$inference_id.spec.ts" time="0.896">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.inferences.$-80397-s-with-thought-block-output-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.inferences.$-80397-s-with-thought-block-output-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="observability.inferences.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="1" failures="0" skipped="0" time="0.226" errors="0">
+<testcase name="should show the inference list page" classname="observability.inferences.spec.ts" time="0.226">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.inferences-should-show-the-inference-list-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.inferences-should-show-the-inference-list-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="observability.models.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="6" failures="0" skipped="0" time="4.292" errors="0">
+<testcase name="Observability Models Page › should display both charts and their toggle controls" classname="observability.models.spec.ts" time="0.301">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.models-Obser-2320f-s-and-their-toggle-controls-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.models-Obser-2320f-s-and-their-toggle-controls-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Observability Models Page › should allow changing usage chart time granularity" classname="observability.models.spec.ts" time="0.634">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.models-Obser-1d116-sage-chart-time-granularity-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.models-Obser-1d116-sage-chart-time-granularity-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Observability Models Page › should allow changing usage chart metric type" classname="observability.models.spec.ts" time="0.591">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.models-Obser-c8234-ing-usage-chart-metric-type-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.models-Obser-c8234-ing-usage-chart-metric-type-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Observability Models Page › should allow changing latency chart time granularity" classname="observability.models.spec.ts" time="0.607">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.models-Obser-e89ac-ency-chart-time-granularity-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.models-Obser-e89ac-ency-chart-time-granularity-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Observability Models Page › should allow changing latency chart metric type" classname="observability.models.spec.ts" time="0.559">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.models-Obser-d20ec-g-latency-chart-metric-type-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.models-Obser-d20ec-g-latency-chart-metric-type-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Observability Models Page › should handle combinations of toggle changes" classname="observability.models.spec.ts" time="1.6">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/observability.models-Obser-c00c4-binations-of-toggle-changes-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/observability.models-Obser-c00c4-binations-of-toggle-changes-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="optimization.supervised-fine-tuning.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="7" failures="0" skipped="0" time="22.991" errors="0">
+<testcase name="should show the supervised fine-tuning page" classname="optimization.supervised-fine-tuning.spec.ts" time="0.181">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/optimization.supervised-fi-a8e78-supervised-fine-tuning-page-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/optimization.supervised-fi-a8e78-supervised-fine-tuning-page-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Custom user agent › @slow should fine-tune on filtered metric data with a mocked OpenAI server" classname="optimization.supervised-fine-tuning.spec.ts" time="4.437">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/optimization.supervised-fi-5ae63-with-a-mocked-OpenAI-server-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/optimization.supervised-fi-5ae63-with-a-mocked-OpenAI-server-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Custom user agent › @slow should fine-tune on demonstration data with a mocked OpenAI server" classname="optimization.supervised-fine-tuning.spec.ts" time="4.595">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/optimization.supervised-fi-b0bb4-with-a-mocked-OpenAI-server-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/optimization.supervised-fi-b0bb4-with-a-mocked-OpenAI-server-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Custom user agent › @slow should fine-tune on image data with a mocked OpenAI server" classname="optimization.supervised-fine-tuning.spec.ts" time="5.248">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/optimization.supervised-fi-57c5b-with-a-mocked-OpenAI-server-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/optimization.supervised-fi-57c5b-with-a-mocked-OpenAI-server-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Custom user agent › @slow should fine-tune with a mocked Fireworks server" classname="optimization.supervised-fine-tuning.spec.ts" time="5.302">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/optimization.supervised-fi-5d0b7-h-a-mocked-Fireworks-server-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/optimization.supervised-fi-5d0b7-h-a-mocked-Fireworks-server-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Custom user agent › should show demonstration metric option for write_haiku function" classname="optimization.supervised-fine-tuning.spec.ts" time="1.015">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/optimization.supervised-fi-0795a-on-for-write-haiku-function-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/optimization.supervised-fi-0795a-on-for-write-haiku-function-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Error handling › should show an error when the model is an error model" classname="optimization.supervised-fine-tuning.spec.ts" time="2.213">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/optimization.supervised-fi-f59ef-the-model-is-an-error-model-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/optimization.supervised-fi-f59ef-the-model-is-an-error-model-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="playground.spec.ts" timestamp="2025-09-19T20:49:53.909Z" hostname="chromium" tests="4" failures="0" skipped="0" time="26.193" errors="0">
+<testcase name="playground should work for a chat function that sets 2 variants" classname="playground.spec.ts" time="6.469">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/playground-playground-shou-614d9-nction-that-sets-2-variants-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/playground-playground-shou-614d9-nction-that-sets-2-variants-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="playground should work for extract_entities JSON function with 2 variants" classname="playground.spec.ts" time="3.508">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/playground-playground-shou-9c5c6-ON-function-with-2-variants-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/playground-playground-shou-9c5c6-ON-function-with-2-variants-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="playground should work for image_judger function with images in input" classname="playground.spec.ts" time="2.456">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/playground-playground-shou-efce9-nction-with-images-in-input-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/playground-playground-shou-efce9-nction-with-images-in-input-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="playground should work for data with tools" classname="playground.spec.ts" time="13.76">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/playground-playground-should-work-for-data-with-tools-chromium/video.webm]]
+
+[[ATTACHMENT|test-results/playground-playground-should-work-for-data-with-tools-chromium/trace.zip]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+</testsuites>
