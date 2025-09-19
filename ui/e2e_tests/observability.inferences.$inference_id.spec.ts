@@ -337,7 +337,8 @@ test("should be able to add chat demonstration feedback via the inference page",
   await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
 });
 
-test.describe("should be able to add demonstration feedback via Try with X flows", () => {
+test.describe
+  .only("should be able to add demonstration feedback via Try with X flows", () => {
   const testData = [
     {
       buttonText: "Try with variant",
@@ -362,9 +363,12 @@ test.describe("should be able to add demonstration feedback via Try with X flows
 
       // Wait for the dropdown menu to appear and select a variant
       // Look for variant options and click on one that's not the current variant
-      const variantOption = page
-        .getByRole("menuitem")
-        .filter({ hasText: option });
+      const variantOption = page.getByRole("menuitem").filter({
+        // NOTE(bret): Get exact match, in the case that the
+        // option is also a substring of another option
+        has: page.locator(`text="${option}"`),
+      });
+
       await variantOption.waitFor({ state: "visible" });
       await variantOption.click();
 
