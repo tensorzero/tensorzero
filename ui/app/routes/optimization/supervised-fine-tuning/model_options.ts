@@ -67,8 +67,43 @@ export const models: ModelOption[] = [
 
   // Together AI
   {
-    displayName: "llama-2-7b-chat",
-    name: "togethercomputer/llama-2-7b-chat",
+    displayName: "gpt-oss-20b",
+    name: "openai/gpt-oss-20b",
+    provider: "together",
+  },
+  {
+    displayName: "gpt-oss-120b",
+    name: "openai/gpt-oss-120b",
+    provider: "together",
+  },
+  {
+    displayName: "DeepSeek-R1-0528",
+    name: "deepseek-ai/DeepSeek-R1-0528",
+    provider: "together",
+  },
+  {
+    displayName: "gemma-3-12b-pt	",
+    name: "google/gemma-3-12b-pt	",
+    provider: "together",
+  },
+  {
+    displayName: "gemma-3-12b-it",
+    name: "google/gemma-3-12b-it",
+    provider: "together",
+  },
+  {
+    displayName: "Qwen3-14B",
+    name: "Qwen/Qwen3-14B",
+    provider: "together",
+  },
+  {
+    displayName: "Qwen3-30B-A3B-Base",
+    name: "Qwen/Qwen3-30B-A3B-Base",
+    provider: "together",
+  },
+  {
+    displayName: "Qwen3-235B-A22B",
+    name: "Qwen/Qwen3-235B-A22B",
     provider: "together",
   },
 ];
