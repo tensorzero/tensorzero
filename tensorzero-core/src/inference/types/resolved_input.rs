@@ -1,6 +1,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
+use futures::future::Shared;
 use futures::FutureExt;
 use object_store::{PutMode, PutOptions};
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,7 @@ use crate::inference::types::stored_input::StoredFile;
 use crate::inference::types::stored_input::{
     StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
+use crate::inference::types::TemplateInput;
 use crate::tool::{ToolCall, ToolResult};
 
 #[cfg(feature = "pyo3")]
@@ -22,6 +24,50 @@ use crate::inference::types::pyo3_helpers::{
 };
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+
+#[derive(Clone, Debug)]
+pub struct LazyResolvedInput {
+    pub system: Option<Value>,
+    pub messages: Vec<LazyResolvedInputMessage>,
+}
+
+#[derive(Clone, Debug)]
+pub struct LazyResolvedInputMessage {
+    pub role: Role,
+    pub content: Vec<LazyResolvedInputMessageContent>,
+}
+
+/// Holds a lazily-resolved file from a `LazyResolvedInputMessageContent::File`.
+/// This is constructed as either:
+/// 1. An immediately-ready future, when we're converting a `ResolvedInputMessageContent` to a `LazyResolvedInputMessageContent`
+/// 2. A network fetch future, when we're resolving an image url in `InputMessageContent::File`.
+///
+/// This future is `Shared`, so that we can `.await` it from multiple different model providers
+/// (if we're not forwarding an image url to the model provider), as well as when writing the
+/// file to the object store (if enabled).
+pub type FileFuture = Shared<Pin<Box<dyn Future<Output = Result<FileWithPath, Error>> + Send>>>;
+
+#[derive(Clone, Debug)]
+pub enum LazyResolvedInputMessageContent {
+    Text {
+        text: String,
+    },
+    Template(TemplateInput),
+    ToolCall(ToolCall),
+    ToolResult(ToolResult),
+    RawText {
+        value: String,
+    },
+    Thought(Thought),
+    // When we add support for forwarding image urls to the model provider,
+    // we'll store additional information here
+    File(FileFuture),
+    Unknown {
+        data: Value,
+        model_provider_name: Option<String>,
+    },
+    // We may extend this in the future to include other types of content
+}
 
 /// Like `Input`, but with all network resources resolved.
 /// Currently, this is just used to fetch image URLs in the image input,
@@ -100,6 +146,17 @@ impl ResolvedInput {
                 .messages
                 .into_iter()
                 .map(ResolvedInputMessage::into_stored_input_message)
+                .collect(),
+        }
+    }
+
+    pub fn into_lazy_resolved_input(self) -> LazyResolvedInput {
+        LazyResolvedInput {
+            system: self.system,
+            messages: self
+                .messages
+                .into_iter()
+                .map(ResolvedInputMessage::into_lazy_resolved_input_message)
                 .collect(),
         }
     }
@@ -189,6 +246,17 @@ impl ResolvedInputMessage {
                 .collect(),
         }
     }
+
+    pub fn into_lazy_resolved_input_message(self) -> LazyResolvedInputMessage {
+        LazyResolvedInputMessage {
+            role: self.role,
+            content: self
+                .content
+                .into_iter()
+                .map(ResolvedInputMessageContent::into_lazy_resolved_input_message_content)
+                .collect(),
+        }
+    }
 }
 
 #[cfg(feature = "pyo3")]
@@ -235,8 +303,9 @@ impl ResolvedInputMessage {
 #[cfg_attr(test, ts(export))]
 pub enum ResolvedInputMessageContent {
     Text {
-        value: Value,
+        text: String,
     },
+    Template(TemplateInput),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
     RawText {
@@ -255,8 +324,11 @@ pub enum ResolvedInputMessageContent {
 impl ResolvedInputMessageContent {
     pub fn into_stored_input_message_content(self) -> StoredInputMessageContent {
         match self {
-            ResolvedInputMessageContent::Text { value } => {
-                StoredInputMessageContent::Text { value }
+            ResolvedInputMessageContent::Text { text } => StoredInputMessageContent::Text {
+                value: Value::String(text),
+            },
+            ResolvedInputMessageContent::Template(template) => {
+                StoredInputMessageContent::Template(template)
             }
             ResolvedInputMessageContent::ToolCall(tool_call) => {
                 StoredInputMessageContent::ToolCall(tool_call)
@@ -277,6 +349,41 @@ impl ResolvedInputMessageContent {
                 data,
                 model_provider_name,
             } => StoredInputMessageContent::Unknown {
+                data,
+                model_provider_name,
+            },
+        }
+    }
+
+    pub fn into_lazy_resolved_input_message_content(self) -> LazyResolvedInputMessageContent {
+        match self {
+            ResolvedInputMessageContent::Text { text } => {
+                LazyResolvedInputMessageContent::Text { text }
+            }
+            ResolvedInputMessageContent::Template(template) => {
+                LazyResolvedInputMessageContent::Template(template)
+            }
+            ResolvedInputMessageContent::ToolCall(tool_call) => {
+                LazyResolvedInputMessageContent::ToolCall(tool_call)
+            }
+            ResolvedInputMessageContent::ToolResult(tool_result) => {
+                LazyResolvedInputMessageContent::ToolResult(tool_result)
+            }
+
+            ResolvedInputMessageContent::RawText { value } => {
+                LazyResolvedInputMessageContent::RawText { value }
+            }
+            ResolvedInputMessageContent::Thought(thought) => {
+                LazyResolvedInputMessageContent::Thought(thought)
+            }
+            // We already have a resolved file, so construct an immediately-ready future
+            ResolvedInputMessageContent::File(file) => LazyResolvedInputMessageContent::File(
+                futures::future::ready(Ok(*file)).boxed().shared(),
+            ),
+            ResolvedInputMessageContent::Unknown {
+                data,
+                model_provider_name,
+            } => LazyResolvedInputMessageContent::Unknown {
                 data,
                 model_provider_name,
             },

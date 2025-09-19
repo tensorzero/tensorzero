@@ -35,7 +35,7 @@ services:
       start_period: 30s
       start_interval: 1s
       timeout: 1s
-      
+
   memcached:
     image: memcached:1.6.38
     container_name: memcached
@@ -63,3 +63,11 @@ services:
       - 4317:4317 # OTLP gRPC receiver
       - 4318:4318 # OTLP http receiver
       - 55679:55679 # ZPages
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: tensorzero-e2e-tests
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"

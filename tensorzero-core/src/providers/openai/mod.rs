@@ -188,6 +188,7 @@ impl WrappedProvider for OpenAIProvider {
             request,
             provider_name: _,
             model_name: _,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
     ) -> Result<serde_json::Value, Error> {
         let request_body = serde_json::to_value(OpenAIRequest::new(&self.model_name, request)?)
@@ -332,6 +333,7 @@ impl InferenceProvider for OpenAIProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -2358,13 +2360,6 @@ struct OpenAIBatchError {
     message: String,
     param: Option<String>,
     line: Option<i32>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAIBatchRequestCounts {
-    // total: u32,
-    // completed: u32,
-    // failed: u32,
 }
 
 #[derive(Debug, Deserialize)]

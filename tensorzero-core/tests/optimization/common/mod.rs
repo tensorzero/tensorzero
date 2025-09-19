@@ -86,6 +86,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
             config_file: Some(config_path.clone()),
             clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+            postgres_url: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -183,6 +184,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
                 credentials: &HashMap::new(),
                 cache_options: &CacheOptions::default(),
+                otlp_config: &Default::default(),
             };
             // We didn't produce a real model, so there's nothing to test
             if use_mock_inference_provider() {
@@ -525,6 +527,7 @@ pub async fn make_embedded_gateway() -> Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        postgres_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,

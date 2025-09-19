@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use serde::Deserialize;
@@ -11,8 +12,11 @@ use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
 use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeadersConfig};
+use crate::inference::types::resolved_input::LazyResolvedInput;
+use crate::inference::types::resolved_input::LazyResolvedInputMessageContent;
 use crate::inference::types::ContentBlock;
 use crate::inference::types::ResolvedInput;
+use crate::inference::types::ResolvedInputMessage;
 use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::StoredInput;
 use crate::inference::types::StoredInputMessageContent;
@@ -96,7 +100,7 @@ pub struct UninitializedDiclConfig {
 impl Variant for DiclConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -160,7 +164,7 @@ impl Variant for DiclConfig {
 
     async fn infer_stream<'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -266,9 +270,13 @@ impl Variant for DiclConfig {
         vec![]
     }
 
+    fn get_all_explicit_template_names(&self) -> HashSet<String> {
+        HashSet::new()
+    }
+
     async fn start_batch_inference<'a>(
         &'a self,
-        _input: &[ResolvedInput],
+        _input: &[LazyResolvedInput],
         _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
         _inference_configs: &'a [InferenceConfig<'a>],
@@ -278,6 +286,67 @@ impl Variant for DiclConfig {
         // TODO (#493): Implement batch inference for Dicl
         Err(ErrorDetails::UnsupportedVariantForBatchInference { variant_name: None }.into())
     }
+}
+
+fn lazy_content_to_resolved_discarding_incompatible(
+    content: LazyResolvedInputMessageContent,
+) -> Result<ResolvedInputMessageContent, Error> {
+    Ok(match content {
+        LazyResolvedInputMessageContent::Text { text } => {
+            ResolvedInputMessageContent::Text { text }
+        }
+        LazyResolvedInputMessageContent::Template(template) => {
+            ResolvedInputMessageContent::Template(template)
+        }
+        LazyResolvedInputMessageContent::ToolCall(tool_call) => {
+            ResolvedInputMessageContent::ToolCall(tool_call)
+        }
+        LazyResolvedInputMessageContent::ToolResult(tool_result) => {
+            ResolvedInputMessageContent::ToolResult(tool_result)
+        }
+        LazyResolvedInputMessageContent::RawText { value } => {
+            ResolvedInputMessageContent::RawText { value }
+        }
+        LazyResolvedInputMessageContent::Thought(thought) => {
+            ResolvedInputMessageContent::Thought(thought)
+        }
+        // We cannot meaningfully embed images into dicl inputs, so reject the request.
+        LazyResolvedInputMessageContent::File(..) => {
+            return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+                content_block_type: "image".to_string(),
+                provider_type: "dicl".to_string(),
+            }));
+        }
+        // 'Unknown' blocks will need special handling (we don't want the literal string "unknown")
+        // to show up in the LLM input, so reject the request for now.
+        LazyResolvedInputMessageContent::Unknown { .. } => {
+            return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+                content_block_type: "unknown".to_string(),
+                provider_type: "dicl".to_string(),
+            }));
+        }
+    })
+}
+fn lazy_input_to_input_rejecting_incompatible(
+    input: LazyResolvedInput,
+) -> Result<ResolvedInput, Error> {
+    Ok(ResolvedInput {
+        system: input.system,
+        messages: input
+            .messages
+            .into_iter()
+            .map(|message| {
+                Ok::<_, Error>(ResolvedInputMessage {
+                    role: message.role,
+                    content: message
+                        .content
+                        .into_iter()
+                        .map(lazy_content_to_resolved_discarding_incompatible)
+                        .collect::<Result<Vec<_>, _>>()?,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    })
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -308,7 +377,7 @@ struct RawExample {
 impl DiclConfig {
     async fn retrieve_relevant_examples<'a>(
         &'a self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         embedding_models: &'a EmbeddingModelTable,
         clients: &InferenceClients<'_>,
         function_name: &str,
@@ -316,14 +385,16 @@ impl DiclConfig {
         function: &FunctionConfig,
     ) -> Result<(Vec<Example>, EmbeddingResponseWithMetadata), Error> {
         // Serialize the input so that it can be embedded
-        let serialized_input =
-            serde_json::to_string(&input.clone().into_stored_input()).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error in serializing Input in dynamic in-context learning variant: {e}"
-                    ),
-                })
-            })?;
+        let serialized_input = serde_json::to_string(
+            &lazy_input_to_input_rejecting_incompatible(input.clone())?.into_stored_input(),
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error in serializing Input in dynamic in-context learning variant: {e}"
+                ),
+            })
+        })?;
 
         let embedding_model = embedding_models
             .get(&self.embedding_model)
@@ -477,7 +548,7 @@ impl DiclConfig {
 
     fn prepare_request<'a, 'request>(
         &'a self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         examples: &[Example],
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -487,35 +558,14 @@ impl DiclConfig {
     where
         'a: 'request,
     {
-        for message in &input.messages {
-            for content in &message.content {
-                match content {
-                    // We cannot meaningfully embed images into dicl inputs, so reject the request.
-                    ResolvedInputMessageContent::File(..) => {
-                        return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
-                            content_block_type: "image".to_string(),
-                            provider_type: "dicl".to_string(),
-                        }));
-                    }
-                    // 'Unknown' blocks will need special handling (we don't want the literal string "unknown")
-                    // to show up in the LLM input, so reject the request for now.
-                    ResolvedInputMessageContent::Unknown { .. } => {
-                        return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
-                            content_block_type: "unknown".to_string(),
-                            provider_type: "dicl".to_string(),
-                        }));
-                    }
-                    _ => {}
-                }
-            }
-        }
+        let input = lazy_input_to_input_rejecting_incompatible(input.clone())?;
         let messages = examples
             .iter()
             .map(Self::prepare_message)
             .collect::<Result<Vec<Vec<RequestMessage>>, _>>()?
             .into_iter()
             .flatten()
-            .chain(std::iter::once(Self::prepare_input_message(input)?))
+            .chain(std::iter::once(Self::prepare_input_message(&input)?))
             .collect::<Vec<_>>();
 
         let system = Some(self.system_instructions.clone());
@@ -784,7 +834,7 @@ mod tests {
                     role: Role::User,
                     content: vec![
                         ResolvedInputMessageContent::Text {
-                            value: json!("Hello, assistant!"),
+                            text: "Hello, assistant!".to_string(),
                         },
                         ResolvedInputMessageContent::ToolCall(ToolCall {
                             id: "tool_call_1".to_string(),
@@ -796,7 +846,7 @@ mod tests {
                 ResolvedInputMessage {
                     role: Role::Assistant,
                     content: vec![ResolvedInputMessageContent::Text {
-                        value: json!("Here are the search results for rust programming."),
+                        text: "Here are the search results for rust programming.".to_string(),
                     }],
                 },
             ],

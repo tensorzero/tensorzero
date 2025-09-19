@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { ActionFunctionArgs, RouteHandle } from "react-router";
+import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
   data,
   isRouteErrorResponse,
@@ -143,10 +144,13 @@ export async function action({ request }: ActionFunctionArgs) {
             ...baseDatapoint,
             output_schema: parsedFormData.output_schema,
           };
-        } else if (functionType === "chat" && "tool_params" in parsedFormData) {
+        } else if (functionType === "chat") {
           datapoint = {
             ...baseDatapoint,
-            tool_params: parsedFormData.tool_params,
+            tool_params:
+              "tool_params" in parsedFormData
+                ? parsedFormData.tool_params
+                : undefined,
           };
         } else {
           throw new Error(
@@ -380,9 +384,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             canSave={canSave}
             onSave={handleSave}
             onReset={handleReset}
-            showTryWithButton={
-              datapoint.function_name !== "tensorzero::default"
-            }
+            showTryWithButton={datapoint.function_name !== DEFAULT_FUNCTION}
           />
         </SectionLayout>
 

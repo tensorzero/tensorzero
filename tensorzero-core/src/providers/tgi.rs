@@ -145,6 +145,7 @@ impl WrappedProvider for TGIProvider {
             request,
             provider_name: _,
             model_name: _,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
     ) -> Result<serde_json::Value, Error> {
         // TGI doesn't care about the `model_name` field, so we can hardcode it to "tgi"
@@ -275,6 +276,7 @@ impl InferenceProvider for TGIProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -475,19 +477,6 @@ impl<'a> TGIRequest<'a> {
             stop: request.borrow_stop_sequences(),
         })
     }
-}
-
-#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct OpenAIRequestToolCall<'a> {
-    id: &'a str,
-    r#type: OpenAIToolType,
-    function: OpenAIRequestFunctionCall<'a>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct OpenAIRequestFunctionCall<'a> {
-    name: &'a str,
-    arguments: &'a str,
 }
 
 struct TGIResponseWithMetadata<'a> {

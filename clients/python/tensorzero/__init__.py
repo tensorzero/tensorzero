@@ -72,6 +72,7 @@ from .types import (
     RawText,
     System,
     TagFilter,
+    Template,
     TensorZeroError,
     TensorZeroInternalError,
     Text,
@@ -89,7 +90,8 @@ from .types import (
     Usage,
 )
 
-RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample instead
+# DEPRECATED: use RenderedSample instead
+RenderedStoredInference = RenderedSample
 # Type aliases to preserve backward compatibility with main
 ChatDatapoint = Datapoint.Chat
 JsonDatapoint = Datapoint.Json
@@ -189,6 +191,7 @@ __all__ = [
     "RenderedSample",
     "System",
     "TagFilter",
+    "Template",
     "TensorZeroError",
     "TensorZeroGateway",
     "TensorZeroInternalError",
@@ -279,7 +282,10 @@ def patch_openai_client(
         "http://ATTENTION_TENSORZERO_PLEASE_AWAIT_RESULT_OF_PATCH_OPENAI_CLIENT.invalid/"
     )
     gateway = _start_http_gateway(
-        config_file=config_file, clickhouse_url=clickhouse_url, async_setup=async_setup
+        config_file=config_file,
+        clickhouse_url=clickhouse_url,
+        postgres_url=None,
+        async_setup=async_setup,
     )
     if async_setup:
         # In 'async_setup' mode, return a `Future` that sets the needed fields after the gateway has started
