@@ -847,7 +847,8 @@ fn message_from_request_message(message: &RequestMessage) -> Result<Message, Err
     Ok(message)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 struct ConverseOutputWithMetadata<'a> {
     output: ConverseOutput,
     latency: Latency,

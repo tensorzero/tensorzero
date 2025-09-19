@@ -549,7 +549,12 @@ pub struct Thought {
 
 /// Core representation of the types of content that could go into a model provider
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+// Once `ContentBlock::File` comes lazy, it will be questionable to compare two
+// `ContentBlock::File`s, so we will panic if we try to compare a `ContentBlock::File`,
+// The `PartialEq` impl is gated behind tests to prevent production code from
+// performing a potentially-panicking comparison.
+#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
@@ -681,7 +686,8 @@ pub enum ContentBlockChatOutput {
 
 /// A RequestMessage is a message sent to a model
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 #[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct RequestMessage {
@@ -775,7 +781,8 @@ pub enum ModelInferenceRequestJsonMode {
 /// and to convert it back to the appropriate response format.
 /// An example of the latter is that we might have prepared a request with Tools available
 /// but the client actually just wants a chat response.
-#[derive(Builder, Clone, Debug, Default, PartialEq, Serialize)]
+#[derive(Builder, Clone, Debug, Default, Serialize)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 #[builder(setter(into, strip_option), default)]
 pub struct ModelInferenceRequest<'a> {
     pub inference_id: Uuid,
@@ -809,7 +816,8 @@ impl<'a> ModelInferenceRequest<'a> {
 
 /// For use in rendering for optimization purposes
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 #[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct ModelInput {
@@ -851,7 +859,8 @@ pub enum FinishReason {
 /// a (private) provider-specific format that is then transformed into a ProviderInferenceResponse (non-streaming)
 /// or a stream of ProviderInferenceResponseChunks (streaming).
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Serialize)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 pub struct ProviderInferenceResponse {
     pub id: Uuid,
     pub created: u64,
@@ -887,7 +896,8 @@ pub enum Latency {
 
 /// After a ProviderInferenceResponse is returned to the Model,
 /// it is converted into a ModelInferenceResponse that includes additional metadata (such as the model provider name).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 pub struct ModelInferenceResponse {
     pub id: Uuid,
     pub created: u64,
@@ -905,7 +915,8 @@ pub struct ModelInferenceResponse {
 
 /// Finally, in the Variant we convert the ModelInferenceResponse into a ModelInferenceResponseWithMetadata
 /// that includes additional metadata (such as the model name).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 pub struct ModelInferenceResponseWithMetadata {
     pub id: Uuid,
     pub created: u64,
@@ -931,7 +942,8 @@ pub struct ModelInferenceResponseWithMetadata {
 /// back to a `RequestMessage` by looking up image data from the object store).
 /// We don't currently have re-resolution implemented in Rust, but we'll need to do so when
 /// we move more ui code to Rust
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 pub enum RequestMessagesOrBatch {
     /// The typical case - we have normal `RequestMessages` from client input
     Message(Vec<RequestMessage>),
