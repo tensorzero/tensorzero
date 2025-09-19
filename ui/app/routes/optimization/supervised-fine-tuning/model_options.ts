@@ -3,7 +3,7 @@ import { z } from "zod";
 export const ModelOptionSchema = z.object({
   displayName: z.string().nonempty("Model name is required"),
   name: z.string().nonempty("Model name is required"),
-  provider: z.enum(["openai", "fireworks", "gcp_vertex_gemini"]),
+  provider: z.enum(["openai", "fireworks", "gcp_vertex_gemini", "together"]),
 });
 
 export type ModelOption = z.infer<typeof ModelOptionSchema>;
@@ -63,5 +63,12 @@ export const models: ModelOption[] = [
     displayName: "gemini-2.0-flash-lite-001",
     name: "gemini-2.0-flash-lite-001",
     provider: "gcp_vertex_gemini",
+  },
+
+  // Together AI
+  {
+    displayName: "llama-2-7b-chat",
+    name: "togethercomputer/llama-2-7b-chat",
+    provider: "together",
   },
 ];
