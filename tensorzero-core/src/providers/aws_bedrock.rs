@@ -81,6 +81,7 @@ impl InferenceProvider for AWSBedrockProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
@@ -91,7 +92,7 @@ impl InferenceProvider for AWSBedrockProvider {
         let mut messages: Vec<Message> = request
             .messages
             .iter()
-            .map(Message::try_from)
+            .map(message_from_request_message)
             .filter_ok(|m| !m.content.is_empty())
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -229,6 +230,7 @@ impl InferenceProvider for AWSBedrockProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
@@ -239,7 +241,7 @@ impl InferenceProvider for AWSBedrockProvider {
         let mut messages: Vec<Message> = request
             .messages
             .iter()
-            .map(Message::try_from)
+            .map(message_from_request_message)
             .collect::<Result<Vec<_>, _>>()?;
 
         if self.model_id.contains("claude")
@@ -600,7 +602,7 @@ impl From<Role> for ConversationRole {
 /// Prefill messages for AWS Bedrock when conditions are met
 fn prefill_json_message(messages: &mut Vec<Message>) -> Result<(), Error> {
     // Add a JSON-prefill message for AWS Bedrock's JSON mode
-    messages.push(Message::try_from(&RequestMessage {
+    messages.push(message_from_request_message(&RequestMessage {
         role: Role::Assistant,
         content: vec![ContentBlock::Text(Text {
             text: "Here is the JSON requested:\n{".to_string(),
@@ -609,164 +611,162 @@ fn prefill_json_message(messages: &mut Vec<Message>) -> Result<(), Error> {
     Ok(())
 }
 
-impl TryFrom<&ContentBlock> for Option<BedrockContentBlock> {
-    type Error = Error;
+fn bedrock_content_block_from_content_block(
+    block: &ContentBlock,
+) -> Result<Option<BedrockContentBlock>, Error> {
+    match block {
+        ContentBlock::Text(Text { text }) => Ok(Some(BedrockContentBlock::Text(text.clone()))),
+        ContentBlock::ToolCall(tool_call) => {
+            // Convert the tool call arguments from String to JSON Value...
+            let input = serde_json::from_str(&tool_call.arguments).map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    raw_request: None,
+                    raw_response: Some(tool_call.arguments.clone()),
+                    status_code: Some(StatusCode::BAD_REQUEST),
+                    message: format!(
+                        "Error parsing tool call arguments as JSON Value: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
 
-    fn try_from(block: &ContentBlock) -> Result<Self, Self::Error> {
-        match block {
-            ContentBlock::Text(Text { text }) => Ok(Some(BedrockContentBlock::Text(text.clone()))),
-            ContentBlock::ToolCall(tool_call) => {
-                // Convert the tool call arguments from String to JSON Value...
-                let input = serde_json::from_str(&tool_call.arguments).map_err(|e| {
-                    Error::new(ErrorDetails::InferenceClient {
-                        raw_request: None,
-                        raw_response: Some(tool_call.arguments.clone()),
-                        status_code: Some(StatusCode::BAD_REQUEST),
-                        message: format!(
-                            "Error parsing tool call arguments as JSON Value: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?;
+            // ...then convert the JSON Value to an AWS SDK Document
+            let input = serde_json::from_value(input).map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    raw_request: None,
+                    raw_response: None,
+                    message: format!(
+                        "Error converting tool call arguments to AWS SDK Document: {e}"
+                    ),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
 
-                // ...then convert the JSON Value to an AWS SDK Document
-                let input = serde_json::from_value(input).map_err(|e| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        raw_request: None,
-                        raw_response: None,
-                        message: format!(
-                            "Error converting tool call arguments to AWS SDK Document: {e}"
-                        ),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?;
-
-                let tool_use_block = ToolUseBlock::builder()
-                    .name(tool_call.name.clone())
-                    .input(input)
-                    .tool_use_id(tool_call.id.clone())
-                    .build()
-                    .map_err(|_| {
-                        Error::new(ErrorDetails::InferenceClient {
-                            raw_request: None,
-                            raw_response: None,
-                            status_code: Some(StatusCode::BAD_REQUEST),
-                            message: "Error serializing tool call block".to_string(),
-                            provider_type: PROVIDER_TYPE.to_string(),
-                        })
-                    })?;
-
-                Ok(Some(BedrockContentBlock::ToolUse(tool_use_block)))
-            }
-            ContentBlock::ToolResult(tool_result) => {
-                let tool_result_block = ToolResultBlock::builder()
-                    .tool_use_id(tool_result.id.clone())
-                    .content(ToolResultContentBlock::Text(tool_result.result.clone()))
-                    // NOTE: The AWS Bedrock SDK doesn't include `name` in the ToolResultBlock
-                    .build()
-                    .map_err(|_| {
-                        Error::new(ErrorDetails::InferenceClient {
-                            raw_request: None,
-                            raw_response: None,
-                            status_code: Some(StatusCode::BAD_REQUEST),
-                            message: "Error serializing tool result block".to_string(),
-                            provider_type: PROVIDER_TYPE.to_string(),
-                        })
-                    })?;
-
-                Ok(Some(BedrockContentBlock::ToolResult(tool_result_block)))
-            }
-            ContentBlock::File(file) => {
-                let FileWithPath {
-                    file,
-                    storage_path: _,
-                } = &**file;
-                let file_bytes = aws_smithy_types::base64::decode(file.data()?).map_err(|e| {
+            let tool_use_block = ToolUseBlock::builder()
+                .name(tool_call.name.clone())
+                .input(input)
+                .tool_use_id(tool_call.id.clone())
+                .build()
+                .map_err(|_| {
                     Error::new(ErrorDetails::InferenceClient {
                         raw_request: None,
                         raw_response: None,
                         status_code: Some(StatusCode::BAD_REQUEST),
-                        message: format!("File was not valid base64: {e:?}"),
+                        message: "Error serializing tool call block".to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
                     })
                 })?;
-                if file.mime_type.type_() == mime::IMAGE {
-                    let image_block = ImageBlock::builder()
-                        .format(ImageFormat::from(file.mime_type.subtype()))
-                        .source(ImageSource::Bytes(file_bytes.into()))
-                        .build()
-                        .map_err(|e| {
-                            Error::new(ErrorDetails::InferenceClient {
-                                raw_request: None,
-                                raw_response: None,
-                                status_code: Some(StatusCode::BAD_REQUEST),
-                                message: format!("Error serializing image block: {e:?}"),
-                                provider_type: PROVIDER_TYPE.to_string(),
-                            })
-                        })?;
-                    Ok(Some(BedrockContentBlock::Image(image_block)))
-                } else {
-                    // Best-effort attempt to produce an AWS DocumentFormat, as their API doesn't support mime types
-                    let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
-                        Error::new(ErrorDetails::InvalidMessage {
-                            message: format!("Mime type {} has no filetype suffix", file.mime_type),
-                        })
-                    })?;
-                    let document_format = DocumentFormat::from(suffix);
-                    let document = DocumentBlock::builder()
-                        .format(document_format)
-                        // TODO: Should we allow the user to specify the file name?
-                        .name("input")
-                        .source(DocumentSource::Bytes(file_bytes.into()))
-                        .build()
-                        .map_err(|e| {
-                            Error::new(ErrorDetails::InferenceClient {
-                                raw_request: None,
-                                raw_response: None,
-                                status_code: Some(StatusCode::BAD_REQUEST),
-                                message: format!("Error serializing document block: {e:?}"),
-                                provider_type: PROVIDER_TYPE.to_string(),
-                            })
-                        })?;
-                    Ok(Some(BedrockContentBlock::Document(document)))
-                }
-            }
-            ContentBlock::Thought(thought) => {
-                if let Some(text) = &thought.text {
-                    let mut builder = ReasoningTextBlock::builder().text(text);
-                    if let Some(signature) = &thought.signature {
-                        builder = builder.signature(signature);
-                    }
-                    let block = builder.build().map_err(|e| {
-                        Error::new(ErrorDetails::InferenceClient {
-                            raw_request: None,
-                            raw_response: None,
-                            status_code: Some(StatusCode::BAD_REQUEST),
-                            message: format!("Error serializing reasoning text block: {e:?}"),
-                            provider_type: PROVIDER_TYPE.to_string(),
-                        })
-                    })?;
-                    Ok(Some(BedrockContentBlock::ReasoningContent(
-                        ReasoningContentBlock::ReasoningText(block),
-                    )))
-                } else if thought.signature.is_some() {
-                    tracing::warn!("The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet, as none of the models available at the time of implementation supported this content block correctly. If you're seeing this warning, this means that something must have changed, so please reach out to our team and we'll quickly collaborate on a solution. For now, the gateway will discard such content blocks.");
-                    Ok(None)
-                } else {
-                    // We have a thought block with no text or signature, so just ignore it
-                    tracing::warn!("The gateway received a reasoning content block with neither text nor signature. This is unsupported, so we'll drop it.");
-                    Ok(None)
-                }
-            }
-            ContentBlock::Unknown {
-                data: _,
-                model_provider_name: _,
-            } => Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
-                content_block_type: "unknown".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })),
+
+            Ok(Some(BedrockContentBlock::ToolUse(tool_use_block)))
         }
+        ContentBlock::ToolResult(tool_result) => {
+            let tool_result_block = ToolResultBlock::builder()
+                .tool_use_id(tool_result.id.clone())
+                .content(ToolResultContentBlock::Text(tool_result.result.clone()))
+                // NOTE: The AWS Bedrock SDK doesn't include `name` in the ToolResultBlock
+                .build()
+                .map_err(|_| {
+                    Error::new(ErrorDetails::InferenceClient {
+                        raw_request: None,
+                        raw_response: None,
+                        status_code: Some(StatusCode::BAD_REQUEST),
+                        message: "Error serializing tool result block".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
+
+            Ok(Some(BedrockContentBlock::ToolResult(tool_result_block)))
+        }
+        ContentBlock::File(file) => {
+            let FileWithPath {
+                file,
+                storage_path: _,
+            } = &**file;
+            let file_bytes = aws_smithy_types::base64::decode(file.data()?).map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    raw_request: None,
+                    raw_response: None,
+                    status_code: Some(StatusCode::BAD_REQUEST),
+                    message: format!("File was not valid base64: {e:?}"),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
+            if file.mime_type.type_() == mime::IMAGE {
+                let image_block = ImageBlock::builder()
+                    .format(ImageFormat::from(file.mime_type.subtype()))
+                    .source(ImageSource::Bytes(file_bytes.into()))
+                    .build()
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InferenceClient {
+                            raw_request: None,
+                            raw_response: None,
+                            status_code: Some(StatusCode::BAD_REQUEST),
+                            message: format!("Error serializing image block: {e:?}"),
+                            provider_type: PROVIDER_TYPE.to_string(),
+                        })
+                    })?;
+                Ok(Some(BedrockContentBlock::Image(image_block)))
+            } else {
+                // Best-effort attempt to produce an AWS DocumentFormat, as their API doesn't support mime types
+                let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidMessage {
+                        message: format!("Mime type {} has no filetype suffix", file.mime_type),
+                    })
+                })?;
+                let document_format = DocumentFormat::from(suffix);
+                let document = DocumentBlock::builder()
+                    .format(document_format)
+                    // TODO: Should we allow the user to specify the file name?
+                    .name("input")
+                    .source(DocumentSource::Bytes(file_bytes.into()))
+                    .build()
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InferenceClient {
+                            raw_request: None,
+                            raw_response: None,
+                            status_code: Some(StatusCode::BAD_REQUEST),
+                            message: format!("Error serializing document block: {e:?}"),
+                            provider_type: PROVIDER_TYPE.to_string(),
+                        })
+                    })?;
+                Ok(Some(BedrockContentBlock::Document(document)))
+            }
+        }
+        ContentBlock::Thought(thought) => {
+            if let Some(text) = &thought.text {
+                let mut builder = ReasoningTextBlock::builder().text(text);
+                if let Some(signature) = &thought.signature {
+                    builder = builder.signature(signature);
+                }
+                let block = builder.build().map_err(|e| {
+                    Error::new(ErrorDetails::InferenceClient {
+                        raw_request: None,
+                        raw_response: None,
+                        status_code: Some(StatusCode::BAD_REQUEST),
+                        message: format!("Error serializing reasoning text block: {e:?}"),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
+                Ok(Some(BedrockContentBlock::ReasoningContent(
+                    ReasoningContentBlock::ReasoningText(block),
+                )))
+            } else if thought.signature.is_some() {
+                tracing::warn!("The TensorZero Gateway doesn't support redacted thinking for AWS Bedrock yet, as none of the models available at the time of implementation supported this content block correctly. If you're seeing this warning, this means that something must have changed, so please reach out to our team and we'll quickly collaborate on a solution. For now, the gateway will discard such content blocks.");
+                Ok(None)
+            } else {
+                // We have a thought block with no text or signature, so just ignore it
+                tracing::warn!("The gateway received a reasoning content block with neither text nor signature. This is unsupported, so we'll drop it.");
+                Ok(None)
+            }
+        }
+        ContentBlock::Unknown {
+            data: _,
+            model_provider_name: _,
+        } => Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+            content_block_type: "unknown".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
+        })),
     }
 }
 
@@ -823,34 +823,32 @@ fn bedrock_content_block_to_output(
     }
 }
 
-impl TryFrom<&RequestMessage> for Message {
-    type Error = Error;
-
-    fn try_from(inference_message: &RequestMessage) -> Result<Message, Error> {
-        let role: ConversationRole = inference_message.role.into();
-        let content: Vec<BedrockContentBlock> = inference_message
-            .content
-            .iter()
-            .map(TryInto::try_into)
-            .collect::<Result<Vec<Option<BedrockContentBlock>>, _>>()?
-            .into_iter()
-            .flatten()
-            .collect();
-        let mut message_builder = Message::builder().role(role).set_content(Some(vec![]));
-        for block in content {
-            message_builder = message_builder.content(block);
-        }
-        let message = message_builder.build().map_err(|e| {
-            Error::new(ErrorDetails::InvalidMessage {
-                message: e.to_string(),
-            })
-        })?;
-
-        Ok(message)
+// `Message` is a foreign type, so we cannot write an `impl` block on it
+fn message_from_request_message(message: &RequestMessage) -> Result<Message, Error> {
+    let role: ConversationRole = message.role.into();
+    let content: Vec<BedrockContentBlock> = message
+        .content
+        .iter()
+        .map(bedrock_content_block_from_content_block)
+        .collect::<Result<Vec<Option<BedrockContentBlock>>, _>>()?
+        .into_iter()
+        .flatten()
+        .collect();
+    let mut message_builder = Message::builder().role(role).set_content(Some(vec![]));
+    for block in content {
+        message_builder = message_builder.content(block);
     }
+    let message = message_builder.build().map_err(|e| {
+        Error::new(ErrorDetails::InvalidMessage {
+            message: e.to_string(),
+        })
+    })?;
+
+    Ok(message)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 struct ConverseOutputWithMetadata<'a> {
     output: ConverseOutput,
     latency: Latency,

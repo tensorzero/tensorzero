@@ -184,6 +184,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
                 credentials: &HashMap::new(),
                 cache_options: &CacheOptions::default(),
+                otlp_config: &Default::default(),
             };
             // We didn't produce a real model, so there's nothing to test
             if use_mock_inference_provider() {

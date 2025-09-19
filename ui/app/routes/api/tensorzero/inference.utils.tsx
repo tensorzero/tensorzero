@@ -2,6 +2,7 @@ import * as React from "react";
 import { useFetcher, type FetcherFormProps } from "react-router";
 import type { SubmitTarget, FetcherSubmitOptions } from "react-router";
 import type { DisplayInputMessage } from "~/utils/clickhouse/common";
+import { DEFAULT_FUNCTION } from "~/utils/constants";
 import type {
   CacheParamsOptions,
   ClientInput,
@@ -214,6 +215,8 @@ function tensorZeroStoredContentToInputContent(
   switch (content.type) {
     case "text":
       return content;
+    case "template":
+      return content;
     case "tool_call":
       return {
         type: "tool_call",
@@ -345,7 +348,7 @@ export function prepareInferenceActionRequest(
   // Prepare request based on source and function type
   if (
     args.source === "inference" &&
-    args.resource.function_name === "tensorzero::default"
+    args.resource.function_name === DEFAULT_FUNCTION
   ) {
     const defaultRequest = prepareDefaultFunctionRequest(
       args.resource,
@@ -495,6 +498,7 @@ function resolvedInputMessageContentToTensorZeroContent(
     case "tool_call":
     case "tool_result":
     case "thought":
+    case "template":
     case "unknown":
       return content;
     case "file":
@@ -535,6 +539,8 @@ function resolvedInputMessageContentToClientInputMessageContent(
         type: "text",
         arguments: content.arguments,
       };
+    case "template":
+      return content;
     case "unstructured_text":
       return {
         type: "text",

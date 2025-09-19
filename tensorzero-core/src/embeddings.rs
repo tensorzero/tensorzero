@@ -3,7 +3,7 @@ use std::time::Duration;
 use std::{collections::HashMap, sync::Arc};
 
 use crate::cache::{
-    embedding_cache_lookup, start_cache_write, CacheData, EmbeddingCacheData,
+    embedding_cache_lookup, start_cache_write, CacheData, CacheValidationInfo, EmbeddingCacheData,
     EmbeddingModelProviderRequest,
 };
 use crate::config::{ProviderTypesConfig, TimeoutsConfig};
@@ -131,6 +131,7 @@ impl EmbeddingModelConfig {
                     request,
                     model_name,
                     provider_name,
+                    otlp_config: clients.otlp_config,
                 };
                 // TODO: think about how to best handle errors here
                 if clients.cache_options.enabled.read() {
@@ -168,13 +169,17 @@ impl EmbeddingModelConfig {
                                 let _ = start_cache_write(
                                     clients.clickhouse_connection_info,
                                     provider_request.get_cache_key()?,
-                                    EmbeddingCacheData {
-                                        embedding: float_data.clone(),
+                                    CacheData {
+                                        output: EmbeddingCacheData {
+                                            embedding: float_data.clone(),
+                                        },
+                                        raw_request: response.raw_request.clone(),
+                                        raw_response: response.raw_response.clone(),
+                                        input_tokens: response.usage.input_tokens,
+                                        output_tokens: response.usage.output_tokens,
+                                        finish_reason: None,
                                     },
-                                    &response.raw_request,
-                                    &response.raw_response,
-                                    &response.usage,
-                                    None,
+                                    CacheValidationInfo { tool_config: None },
                                 );
                             }
                         };
@@ -681,6 +686,7 @@ mod tests {
                         enabled: CacheEnabledMode::Off,
                     },
                     clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
+                    otlp_config: &Default::default(),
                 },
             )
             .await;

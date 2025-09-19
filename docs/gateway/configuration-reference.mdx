@@ -59,21 +59,6 @@ When this field is set to `true`, the gateway will log more verbose errors to as
 
 If set to `true`, TensorZero will not collect or share [pseudonymous usage analytics](/gateway/deployment/#disabling-pseudonymous-usage-analytics).
 
-### `enable_template_filesystem_access`
-
-- **Type:** boolean
-- **Required:** no (default: `false`)
-
-Enabling this setting will allow MiniJinja templates to load sub-templates from the file system (using the `include` directive).
-Paths must be relative to `tensorzero.toml`, and can only access files in that directory or its sub-directories.
-
-<Warning>
-
-Make sure to sanitize all user-provided template data before using this setting.
-Otherwise, a malicious input could read unintended files in the file system.
-
-</Warning>
-
 ### `export.otlp.traces.enabled`
 
 - **Type:** boolean
@@ -84,8 +69,16 @@ system](/gateway/guides/opentelemetry-otlp).
 
 <Warning>
   Note that you will still need to set the `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
-  environment variable. See above linked guide for details.
+  environment variable. See the above-linked guide for details.
 </Warning>
+
+### `export.otlp.traces.format`
+
+- **Type:** either "opentelemetry" or "openinference"
+- **Required:** no (default: `"opentelemetry"`)
+
+If set to `"opentelemetry"`, TensorZero will set `gen_ai` attributes based on the [OpenTelemetry GenAI semantic conventions](https://github.com/open-telemetry/semantic-conventions/blob/main/docs/genai/genai.md).
+If set to `"openinference"`, TensorZero will set attributes based on the [OpenInference semantic conventions](https://github.com/Arize-ai/openinference/blob/main/spec/llm_spans.md).
 
 ### `observability.async_writes`
 
@@ -155,6 +148,29 @@ If `false`, the gateway will not use ClickHouse.
 observability.enabled = true
 # ...
 ```
+
+### `template_filesystem_access`
+
+- **Type:** object
+- **Required:** no (default disabled)
+
+Enabling this setting will allow MiniJinja templates to load sub-templates from the file system using the `include` directive.
+
+The object has two fields:
+
+- `enabled` (boolean): Determines whether to enable file system access for templates.
+- `base_path` (string, optional): Determines the base path for template file system access.
+
+If you use a single configuration file, the `base_path` will be the directory containing the configuration file.
+If you split your configuration into multiple files, you must specify `gateway.template_filesystem_access.base_path` (see [Organize your configuration](/operations/organize-your-configuration) for details).
+The `include` paths must be relative to `base_path`, and can only access files in that directory or its sub-directories.
+
+<Warning>
+
+Make sure to sanitize all user-provided template data before using this setting.
+Otherwise, a malicious input could read unintended files in the file system.
+
+</Warning>
 
 ## `[models.model_name]`
 
@@ -1421,7 +1437,7 @@ routing = ["openai", "alternative-provider"]
 - **Type:** string
 - **Required:** yes
 
-Defines the types of the provider. See [Integrations &raquo; Model Providers](/gateway/integrations/#model-providers) for details.
+Defines the types of the provider. See [Integrations &raquo; Model Providers](/integrations/model-providers) for details.
 
 TensorZero currently only supports `openai` as a provider for embedding models.
 More integrations are on the way.
