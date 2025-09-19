@@ -48,7 +48,7 @@ export default function BasicInfo({
 }: BasicInfoProps) {
   const functionConfig = useFunctionConfig(inference.function_name);
   const variantType =
-    functionConfig?.variants[inference.variant_name]?.inner.type;
+    functionConfig?.variants[inference.variant_name]?.inner.type ?? "chat_completion";
 
   // Create timestamp tooltip
   const timestampTooltip = createTimestampTooltip(inference.timestamp);
