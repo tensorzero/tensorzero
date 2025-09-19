@@ -1193,7 +1193,7 @@ pub struct StreamResponseAndMessages {
 }
 
 impl ModelProvider {
-    fn apply_otlp_span_fields(&self, otlp_config: &OtlpConfig, span: Span) {
+    fn apply_otlp_span_fields_input(&self, otlp_config: &OtlpConfig, span: &Span) {
         if otlp_config.traces.enabled {
             match otlp_config.traces.format {
                 OtlpTracesFormat::OpenTelemetry => {
@@ -1216,6 +1216,49 @@ impl ModelProvider {
         }
     }
 
+    #[expect(clippy::unused_self)] // We'll need 'self' for other attributes
+    fn apply_otlp_span_fields_output(
+        &self,
+        otlp_config: &OtlpConfig,
+        span: &Span,
+        resp: &Result<ProviderInferenceResponse, Error>,
+    ) {
+        if let Ok(resp) = resp {
+            if otlp_config.traces.enabled {
+                match otlp_config.traces.format {
+                    OtlpTracesFormat::OpenTelemetry => {
+                        span.set_attribute(
+                            "gen_ai.usage.input_tokens",
+                            resp.usage.input_tokens as i64,
+                        );
+                        span.set_attribute(
+                            "gen_ai.usage.output_tokens",
+                            resp.usage.output_tokens as i64,
+                        );
+                        span.set_attribute(
+                            "gen_ai.usage.total_tokens",
+                            (resp.usage.input_tokens + resp.usage.output_tokens) as i64,
+                        );
+                    }
+                    OtlpTracesFormat::OpenInference => {
+                        span.set_attribute(
+                            "llm.token_count.prompt",
+                            resp.usage.input_tokens as i64,
+                        );
+                        span.set_attribute(
+                            "llm.token_count.completion",
+                            resp.usage.output_tokens as i64,
+                        );
+                        span.set_attribute(
+                            "llm.token_count.total",
+                            (resp.usage.input_tokens + resp.usage.output_tokens) as i64,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference", stream = false))]
     async fn infer(
         &self,
@@ -1223,8 +1266,9 @@ impl ModelProvider {
         client: &TensorzeroHttpClient,
         api_keys: &InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        self.apply_otlp_span_fields(request.otlp_config, Span::current());
-        match &self.config {
+        let span = Span::current();
+        self.apply_otlp_span_fields_input(request.otlp_config, &span);
+        let res = match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
@@ -1278,7 +1322,9 @@ impl ModelProvider {
             ProviderConfig::Dummy(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
-        }
+        };
+        self.apply_otlp_span_fields_output(request.otlp_config, &span, &res);
+        res
     }
 
     #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference", time_to_first_token, stream = true))]
@@ -1288,7 +1334,7 @@ impl ModelProvider {
         client: &TensorzeroHttpClient,
         api_keys: &InferenceCredentials,
     ) -> Result<StreamAndRawRequest, Error> {
-        self.apply_otlp_span_fields(request.otlp_config, Span::current());
+        self.apply_otlp_span_fields_input(request.otlp_config, &Span::current());
         let (stream, raw_request) = match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await
