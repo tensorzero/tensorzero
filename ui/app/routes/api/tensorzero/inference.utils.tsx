@@ -2,6 +2,7 @@ import * as React from "react";
 import { useFetcher, type FetcherFormProps } from "react-router";
 import type { SubmitTarget, FetcherSubmitOptions } from "react-router";
 import type { DisplayInputMessage } from "~/utils/clickhouse/common";
+import { DEFAULT_FUNCTION } from "~/utils/constants";
 import type {
   CacheParamsOptions,
   ClientInput,
@@ -347,7 +348,7 @@ export function prepareInferenceActionRequest(
   // Prepare request based on source and function type
   if (
     args.source === "inference" &&
-    args.resource.function_name === "tensorzero::default"
+    args.resource.function_name === DEFAULT_FUNCTION
   ) {
     const defaultRequest = prepareDefaultFunctionRequest(
       args.resource,
