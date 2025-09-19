@@ -2,6 +2,9 @@
 import type { ResolvedContentBlock } from "./ResolvedContentBlock";
 import type { Role } from "./Role";
 
+/**
+ * Like `RequestMessage`, but holds fully-resolved files instead of `LazyFile`s
+ */
 export type ResolvedRequestMessage = {
   role: Role;
   content: Array<ResolvedContentBlock>;

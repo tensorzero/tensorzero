@@ -6,6 +6,10 @@ import type { ToolCall } from "./ToolCall";
 import type { ToolResult } from "./ToolResult";
 import type { JsonValue } from "./serde_json/JsonValue";
 
+/**
+ * Like `ContentBlock`, but stores an in-memory `FileWithPath` instead of a `LazyFile`
+ * As a result, it can implement both `Serialize` and `Deserialize`
+ */
 export type ResolvedContentBlock =
   | ({ type: "text" } & Text)
   | ({ type: "tool_call" } & ToolCall)
