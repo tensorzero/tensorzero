@@ -102,6 +102,10 @@ pub const DYNAMIC_EVALUATION_THRESHOLD: Timestamp = Timestamp::from_unix_time(
     0, // bits
 );
 
+pub fn get_dynamic_evaluation_cutoff_uuid() -> Uuid {
+    Uuid::new_v7(DYNAMIC_EVALUATION_THRESHOLD)
+}
+
 pub fn generate_dynamic_evaluation_run_episode_id() -> Uuid {
     #[expect(clippy::expect_used)]
     let now = SystemTime::now()

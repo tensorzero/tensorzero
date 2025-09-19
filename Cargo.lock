@@ -5168,6 +5168,7 @@ dependencies = [
  "tensorzero",
  "ts-rs",
  "url",
+ "uuid",
 ]
 
 [[package]]

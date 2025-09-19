@@ -76,18 +76,6 @@ export const inferenceByIdRowSchema = z
 
 export type InferenceByIdRow = z.infer<typeof inferenceByIdRowSchema>;
 
-export const episodeByIdSchema = z
-  .object({
-    episode_id: z.string().uuid(),
-    count: z.number().min(1),
-    start_time: z.string().datetime(),
-    end_time: z.string().datetime(),
-    last_inference_id: z.string().uuid(),
-  })
-  .strict();
-
-export type EpisodeByIdRow = z.infer<typeof episodeByIdSchema>;
-
 export const chatInferenceRowSchema = z.object({
   id: z.string().uuid(),
   function_name: z.string(),
