@@ -31,6 +31,6 @@ default = []
 
 [dev-dependencies]
 reqwest.workspace = true
-tempfile = "3.21.0"
+tempfile = "3.22.0"
 tensorzero = { path = "../clients/rust" }
 tracing-test = "0.2"
