@@ -578,7 +578,7 @@ async fn get_all_batch_inferences(
     rows
 }
 
-struct InsertedFakeDataIds {
+pub struct InsertedFakeDataIds {
     batch_id: Uuid,
     inference_id: Uuid,
 }
@@ -928,7 +928,15 @@ pub async fn test_poll_completed_simple_image_batch_inference_request_with_provi
         Some(batch_inference) => batch_inference,
     };
     sleep(Duration::from_millis(200)).await;
+    test_poll_completed_simple_image_batch_inference_request_with_provider_and_ids(provider, ids)
+        .await;
+}
 
+pub async fn test_poll_completed_simple_image_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -1271,7 +1279,17 @@ pub async fn test_poll_completed_inference_params_batch_inference_request_with_p
         Some(batch_inference) => batch_inference,
     };
     sleep(Duration::from_millis(200)).await;
+    test_poll_completed_inference_params_batch_inference_request_with_provider_and_ids(
+        provider, ids,
+    )
+    .await;
+}
 
+pub async fn test_poll_completed_inference_params_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -1929,12 +1947,19 @@ pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider(
         None => return, // No completed batch inference found, so we can't test polling
         Some(batch_inference) => batch_inference,
     };
+    sleep(Duration::from_millis(200)).await;
+    test_poll_completed_tool_use_batch_inference_request_with_provider_and_ids(provider, ids).await;
+}
+
+pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     let batch_id = ids.batch_id;
     let inference_tags = get_tags_for_batch_inferences(&clickhouse, batch_id)
         .await
         .unwrap();
-    sleep(Duration::from_millis(200)).await;
-
     // Poll by `batch_id`
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id,
@@ -2316,7 +2341,15 @@ pub async fn test_poll_completed_allowed_tools_batch_inference_request_with_prov
         Some(batch_inference) => batch_inference,
     };
     sleep(Duration::from_millis(200)).await;
+    test_poll_completed_allowed_tools_batch_inference_request_with_provider_and_ids(provider, ids)
+        .await;
+}
 
+pub async fn test_poll_completed_allowed_tools_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -3032,7 +3065,17 @@ pub async fn test_poll_completed_multi_turn_parallel_batch_inference_request_wit
         Some(batch_inference) => batch_inference,
     };
     sleep(Duration::from_millis(200)).await;
+    test_poll_completed_multi_turn_parallel_batch_inference_request_with_provider_and_ids(
+        provider, ids,
+    )
+    .await;
+}
 
+pub async fn test_poll_completed_multi_turn_parallel_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -3126,7 +3169,15 @@ pub async fn test_poll_completed_multi_turn_batch_inference_request_with_provide
         Some(batch_inference) => batch_inference,
     };
     sleep(Duration::from_millis(200)).await;
+    test_poll_completed_multi_turn_batch_inference_request_with_provider_and_ids(provider, ids)
+        .await;
+}
 
+pub async fn test_poll_completed_multi_turn_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -3484,7 +3535,17 @@ pub async fn test_poll_completed_dynamic_tool_use_batch_inference_request_with_p
         Some(batch_inference) => batch_inference,
     };
     sleep(Duration::from_millis(200)).await;
+    test_poll_completed_dynamic_tool_use_batch_inference_request_with_provider_and_ids(
+        provider, ids,
+    )
+    .await;
+}
 
+pub async fn test_poll_completed_dynamic_tool_use_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -3847,7 +3908,17 @@ pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_
         Some(batch_inference) => batch_inference,
     };
     sleep(Duration::from_millis(200)).await;
+    test_poll_completed_parallel_tool_use_batch_inference_request_with_provider_and_ids(
+        provider, ids,
+    )
+    .await;
+}
 
+pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -4188,7 +4259,15 @@ pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider
         Some(batch_inference) => batch_inference,
     };
     sleep(Duration::from_millis(200)).await;
+    test_poll_completed_json_mode_batch_inference_request_with_provider_and_ids(provider, ids)
+        .await;
+}
 
+pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -4541,7 +4620,17 @@ pub async fn test_poll_completed_dynamic_json_mode_batch_inference_request_with_
         Some(batch_inference) => batch_inference,
     };
     sleep(Duration::from_millis(200)).await;
+    test_poll_completed_dynamic_json_mode_batch_inference_request_with_provider_and_ids(
+        provider, ids,
+    )
+    .await;
+}
 
+pub async fn test_poll_completed_dynamic_json_mode_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
