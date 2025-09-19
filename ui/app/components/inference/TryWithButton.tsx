@@ -9,17 +9,19 @@ import {
 import { ChevronDown } from "lucide-react";
 import { Compare } from "~/components/icons/Icons";
 
-export interface TryWithVariantButtonProps {
-  variants: string[];
-  onVariantSelect: (variant: string) => void;
+export interface TryWithButtonProps {
+  options: string[];
+  onOptionSelect: (variant: string) => void;
   isLoading: boolean;
+  isDefaultFunction?: boolean;
 }
 
-export function TryWithVariantButton({
-  variants,
-  onVariantSelect,
+export function TryWithButton({
+  options: variants,
+  onOptionSelect: onVariantSelect,
   isLoading,
-}: TryWithVariantButtonProps) {
+  isDefaultFunction,
+}: TryWithButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -27,7 +29,7 @@ export function TryWithVariantButton({
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" disabled={isLoading}>
           <ButtonIcon as={Compare} variant="tertiary" />
-          Try with variant
+          Try with {isDefaultFunction ? "model" : "variant"}
           <ButtonIcon as={ChevronDown} variant="tertiary" />
         </Button>
       </DropdownMenuTrigger>

@@ -32,7 +32,7 @@ import { TagsTable } from "~/components/utils/TagsTable";
 import { ModelInferencesTable } from "./ModelInferencesTable";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { useFunctionConfig } from "~/context/config";
+import { useConfig, useFunctionConfig } from "~/context/config";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import {
@@ -50,7 +50,7 @@ import {
   type VariantResponseInfo,
 } from "~/routes/api/tensorzero/inference.utils";
 import { ActionBar } from "~/components/layout/ActionBar";
-import { TryWithVariantButton } from "~/components/inference/TryWithVariantButton";
+import { TryWithButton } from "~/components/inference/TryWithButton";
 import { AddToDatasetButton } from "./AddToDatasetButton";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
@@ -59,6 +59,7 @@ import { DemonstrationFeedbackButton } from "~/components/feedback/Demonstration
 import { logger } from "~/utils/logger";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
+import { getUsedVariants } from "~/utils/clickhouse/function";
 
 export const handle: RouteHandle = {
   crumb: (match) => [match.params.inference_id!],
@@ -127,9 +128,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     });
   }
 
+  const usedVariants =
+    inference.function_name === "tensorzero::default"
+      ? await getUsedVariants(inference.function_name)
+      : [];
+
   return {
     inference,
     model_inferences,
+    usedVariants,
     feedback,
     feedback_bounds,
     hasDemonstration: demonstration_feedback.length > 0,
@@ -228,6 +235,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const {
     inference,
     model_inferences,
+    usedVariants,
     feedback,
     feedback_bounds,
     hasDemonstration,
@@ -337,16 +345,15 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
       variantInferenceFetcher.state === "loading");
 
   const { submit } = variantInferenceFetcher;
-  const onVariantSelect = (variant: string) => {
+  const processRequest = (
+    option: string,
+    args: Parameters<typeof prepareInferenceActionRequest>[0],
+  ) => {
     try {
-      const request = prepareInferenceActionRequest({
-        resource: inference,
-        source: variantSource,
-        variant,
-      });
+      const request = prepareInferenceActionRequest(args);
 
       // Set state and open modal only if request preparation succeeds
-      setSelectedVariant(variant);
+      setSelectedVariant(option);
       setOpenModal("variant-response");
 
       try {
@@ -384,6 +391,22 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     }
   };
 
+  const onVariantSelect = (variant: string) => {
+    processRequest(variant, {
+      resource: inference,
+      source: variantSource,
+      variant,
+    });
+  };
+
+  const onModelSelect = (model: string) => {
+    processRequest(model, {
+      resource: inference,
+      source: variantSource,
+      model_name: model,
+    });
+  };
+
   const humanFeedbackFetcher = useFetcherWithReset<typeof action>();
   const humanFeedbackFormError =
     humanFeedbackFetcher.state === "idle"
@@ -397,6 +420,23 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
       setOpenModal(null);
     }
   }, [humanFeedbackFetcher.data, humanFeedbackFetcher.state, navigate]);
+
+  const config = useConfig();
+
+  const isDefault = inference.function_name === "tensorzero::default";
+
+  const modelsSet = new Set<string>([
+    // models successfully used with default function
+    ...usedVariants,
+    // all configured models in config
+    ...Object.keys(config.models),
+    // TODO(bret): list of popular/common model choices
+    // see https://github.com/tensorzero/tensorzero/issues/1396#issuecomment-3286424944
+  ]);
+  const models = [...modelsSet].sort();
+
+  const options = isDefault ? models : variants;
+  const onSelect = isDefault ? onModelSelect : onVariantSelect;
 
   return (
     <PageLayout>
@@ -414,10 +454,11 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         )}
 
         <ActionBar>
-          <TryWithVariantButton
-            variants={variants}
-            onVariantSelect={onVariantSelect}
+          <TryWithButton
+            options={options}
+            onOptionSelect={onSelect}
             isLoading={variantInferenceIsLoading}
+            isDefaultFunction={isDefault}
           />
           <AddToDatasetButton
             onDatasetSelect={handleAddToDataset}

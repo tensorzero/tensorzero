@@ -337,61 +337,81 @@ test("should be able to add chat demonstration feedback via the inference page",
   await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
 });
 
-test("should be able to add demonstration feedback via Try with variant flow", async ({
-  page,
-}) => {
-  await page.goto(
-    "/observability/inferences/0196374b-0d7d-7422-b6dc-e94c572cc79b",
-  );
+test.describe("should be able to add demonstration feedback via Try with X flows", () => {
+  const testData = [
+    {
+      buttonText: "Try with variant",
+      inference: "0196374b-0d7d-7422-b6dc-e94c572cc79b",
+      option: "initial_prompt_gpt4o_mini",
+    },
+    {
+      buttonText: "Try with model",
+      inference: "019926fd-1a06-7fe2-b7f4-2318de2f2046",
+      // NOTE(bret): This option was chosen because it came
+      // from `getUsedVariants('tensorzero::default')`
+      option: "openai::gpt-4o-mini",
+    },
+  ];
+  testData.forEach(({ buttonText, inference, option }) => {
+    test(buttonText, async ({ page }) => {
+      await page.goto(`/observability/inferences/${inference}`);
 
-  // Wait for the page to load
-  await page.waitForLoadState("networkidle");
+      // Wait for the page to load
+      await page.waitForLoadState("networkidle");
 
-  // Click on "Try with variant" button
-  await page.getByText("Try with variant").click();
+      // Click on "Try with variant" button
+      await page.getByText(buttonText).click();
 
-  // Wait for the dropdown menu to appear and select a variant
-  // Look for variant options and click on one that's not the current variant
-  const variantOption = page
-    .getByRole("menuitem")
-    .filter({ hasText: "initial_prompt_gpt4o_mini" });
-  await variantOption.waitFor({ state: "visible" });
-  await variantOption.click();
+      // Wait for the dropdown menu to appear and select a variant
+      // Look for variant options and click on one that's not the current variant
+      const variantOption = page.getByRole("menuitem").filter({
+        // NOTE(bret): Get exact match, in the case that the
+        // option is also a substring of another option
+        has: page.locator(`text="${option}"`),
+      });
 
-  // Wait for the variant response modal to open and show results
-  await page.getByRole("dialog").waitFor({ state: "visible" });
+      await variantOption.waitFor({ state: "visible" });
+      await variantOption.click();
 
-  // Wait for the variant inference to complete and show the "Add as Demonstration" button
-  await page
-    .getByText("Add as Demonstration")
-    .waitFor({ state: "visible", timeout: 15000 });
+      // Wait for the variant response modal to open and show results
+      await page.getByRole("dialog").waitFor({ state: "visible" });
 
-  // Click the "Add as Demonstration" button
-  await page.getByText("Add as Demonstration").click();
+      // Wait for the variant inference to complete and show the "Add as Demonstration" button
+      const demoButton = page.getByText("Add as Demonstration");
+      await demoButton.waitFor({ state: "visible", timeout: 15000 });
 
-  // Wait for the modal to close and the page to redirect with newFeedbackId
-  await page.waitForURL((url) => url.searchParams.has("newFeedbackId"), {
-    timeout: 10000,
+      // Click the "Add as Demonstration" button
+      await demoButton.click();
+
+      // Wait for the modal to close and the page to redirect with newFeedbackId
+      await page.waitForURL((url) => url.searchParams.has("newFeedbackId"), {
+        timeout: 10000,
+      });
+
+      // Verify the modal is closed (no longer visible)
+      await expect(page.getByRole("dialog")).not.toBeVisible();
+
+      // Verify the toast appears (look for "Feedback Added" text)
+      await expect(
+        page
+          .getByRole("region", { name: /notifications/i })
+          .getByText("Feedback Added"),
+      ).toBeVisible();
+
+      // Get the feedback ID from URL and verify it appears in the feedback table
+      const newFeedbackId = new URL(page.url()).searchParams.get(
+        "newFeedbackId",
+      );
+      if (!newFeedbackId) {
+        throw new Error("newFeedbackId is not present in the url");
+      }
+
+      // Assert that the feedback ID is visible in the feedback table
+      await expect(
+        page.getByRole("cell", { name: newFeedbackId }),
+      ).toBeVisible();
+    });
   });
-
-  // Verify the modal is closed (no longer visible)
-  await expect(page.getByRole("dialog")).not.toBeVisible();
-
-  // Verify the toast appears (look for "Feedback Added" text)
-  await expect(
-    page
-      .getByRole("region", { name: /notifications/i })
-      .getByText("Feedback Added"),
-  ).toBeVisible();
-
-  // Get the feedback ID from URL and verify it appears in the feedback table
-  const newFeedbackId = new URL(page.url()).searchParams.get("newFeedbackId");
-  if (!newFeedbackId) {
-    throw new Error("newFeedbackId is not present in the url");
-  }
-
-  // Assert that the feedback ID is visible in the feedback table
-  await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
 });
 
 test("should be able to add a datapoint from the inference page", async ({

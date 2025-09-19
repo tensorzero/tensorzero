@@ -282,6 +282,13 @@ interface InferenceActionArgs {
   variant: string;
 }
 
+interface InferenceDefaultFunctionActionArgs {
+  source: "inference";
+  resource: ParsedInferenceRow;
+  variant?: undefined;
+  model_name: string;
+}
+
 interface DatapointActionArgs {
   source: "datapoint";
   resource: ParsedDatasetRow;
@@ -302,11 +309,23 @@ interface ClickHouseDatapointActionArgs {
   functionConfig: FunctionConfig;
 }
 
+type ActionArgs =
+  | InferenceActionArgs
+  | InferenceDefaultFunctionActionArgs
+  | DatapointActionArgs
+  | ClickHouseDatapointActionArgs;
+
+function isDefaultFunctionArgs(
+  args: ActionArgs,
+): args is InferenceDefaultFunctionActionArgs {
+  return (
+    args.source === "inference" &&
+    args.resource.function_name === DEFAULT_FUNCTION
+  );
+}
+
 export function prepareInferenceActionRequest(
-  args:
-    | InferenceActionArgs
-    | DatapointActionArgs
-    | ClickHouseDatapointActionArgs,
+  args: ActionArgs,
 ): ClientInferenceParams {
   // Create base ClientInferenceParams with default values
   const baseParams: ClientInferenceParams = {
@@ -346,13 +365,10 @@ export function prepareInferenceActionRequest(
   };
 
   // Prepare request based on source and function type
-  if (
-    args.source === "inference" &&
-    args.resource.function_name === DEFAULT_FUNCTION
-  ) {
+  if (isDefaultFunctionArgs(args)) {
     const defaultRequest = prepareDefaultFunctionRequest(
       args.resource,
-      args.variant,
+      args.model_name,
     );
     return { ...baseParams, ...defaultRequest };
   } else if (args.source === "clickhouse_datapoint") {
