@@ -347,7 +347,9 @@ test.describe("should be able to add demonstration feedback via Try with X flows
     {
       buttonText: "Try with model",
       inference: "019926fd-1a06-7fe2-b7f4-2318de2f2046",
-      option: "gpt-4o-mini-2024-07-18",
+      // NOTE(bret): This option was chosen because it came
+      // from `getUsedVariants('tensorzero::default')`
+      option: "openai::gpt-4o-mini",
     },
   ];
   testData.forEach(({ buttonText, inference, option }) => {

@@ -59,6 +59,7 @@ import { DemonstrationFeedbackButton } from "~/components/feedback/Demonstration
 import { logger } from "~/utils/logger";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
+import { getUsedVariants } from "~/utils/clickhouse/function";
 
 export const handle: RouteHandle = {
   crumb: (match) => [match.params.inference_id!],
@@ -127,9 +128,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     });
   }
 
+  const usedVariants =
+    inference.function_name === "tensorzero::default"
+      ? await getUsedVariants(inference.function_name)
+      : [];
+
   return {
     inference,
     model_inferences,
+    usedVariants,
     feedback,
     feedback_bounds,
     hasDemonstration: demonstration_feedback.length > 0,
@@ -228,6 +235,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const {
     inference,
     model_inferences,
+    usedVariants,
     feedback,
     feedback_bounds,
     hasDemonstration,
@@ -419,7 +427,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
   const modelsSet = new Set<string>([
     // models successfully used with default function
-    ...model_inferences.map(({ model_name }) => model_name),
+    ...usedVariants,
     // all configured models in config
     ...Object.keys(config.models),
     // TODO(bret): list of popular/common model choices
