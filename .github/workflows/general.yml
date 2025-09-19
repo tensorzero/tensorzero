@@ -653,7 +653,7 @@ jobs:
 
   merge-queue-checks:
     uses: ./.github/workflows/merge-queue.yml
-    if: github.event_name == 'merge_group'
+    #if: github.event_name == 'merge_group'
     permissions:
       # Permission to checkout the repository
       contents: read
