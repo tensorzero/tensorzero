@@ -394,7 +394,7 @@ impl UninitializedEvaluatorConfig {
                             variant.weight = Some(1.0);
                         }
                         VariantConfig::Dicl(variant) => {
-                            variant.weight = Some(1.0);
+                            variant.set_weight(Some(1.0));
                         }
                         VariantConfig::ChainOfThought(variant) => {
                             variant.inner.weight = Some(1.0);
@@ -802,24 +802,24 @@ impl UninitializedLLMJudgeVariantInfo {
                         )
                     })
                     .unwrap_or_else(crate::variant::dicl::default_system_instructions);
-                VariantConfig::Dicl(DiclConfig {
-                    weight: get_weight(params.active),
-                    embedding_model: params.embedding_model.into(),
-                    k: params.k,
-                    model: params.model.into(),
-                    system_instructions: dicl_system_instructions,
-                    temperature: params.temperature,
-                    top_p: params.top_p,
-                    presence_penalty: params.presence_penalty,
-                    frequency_penalty: params.frequency_penalty,
-                    max_tokens: params.max_tokens,
-                    seed: params.seed,
-                    json_mode: params.json_mode,
-                    extra_body: params.extra_body,
-                    extra_headers: params.extra_headers,
-                    retries: params.retries,
-                    stop_sequences: params.stop_sequences,
-                })
+                VariantConfig::Dicl(DiclConfig::new(
+                    get_weight(params.active),
+                    params.embedding_model,
+                    params.k,
+                    params.model,
+                    dicl_system_instructions,
+                    params.temperature,
+                    params.top_p,
+                    params.presence_penalty,
+                    params.frequency_penalty,
+                    params.max_tokens,
+                    params.seed,
+                    params.json_mode,
+                    params.extra_body,
+                    params.extra_headers,
+                    params.retries,
+                    params.stop_sequences,
+                ))
             }
             UninitializedLLMJudgeVariantConfig::ChainOfThought(params) => {
                 VariantConfig::ChainOfThought(ChainOfThoughtConfig {
@@ -933,21 +933,21 @@ fn check_convert_variant_to_llm_judge_variant(
         VariantConfig::Dicl(variant) => Ok(UninitializedLLMJudgeVariantConfig::Dicl(
             UninitializedLLMJudgeDiclVariantConfig {
                 active: Some(false),
-                embedding_model: variant.embedding_model.to_string(),
-                k: variant.k,
-                model: variant.model.to_string(),
+                embedding_model: variant.embedding_model().to_string(),
+                k: variant.k(),
+                model: variant.model().to_string(),
                 system_instructions: None,
-                temperature: variant.temperature,
-                top_p: variant.top_p,
-                presence_penalty: variant.presence_penalty,
-                frequency_penalty: variant.frequency_penalty,
-                max_tokens: variant.max_tokens,
-                seed: variant.seed,
-                json_mode: variant.json_mode,
-                extra_body: variant.extra_body,
-                extra_headers: variant.extra_headers,
-                retries: variant.retries,
-                stop_sequences: variant.stop_sequences,
+                temperature: variant.temperature(),
+                top_p: variant.top_p(),
+                presence_penalty: variant.presence_penalty(),
+                frequency_penalty: variant.frequency_penalty(),
+                max_tokens: variant.max_tokens(),
+                seed: variant.seed(),
+                json_mode: variant.json_mode().cloned(),
+                extra_body: variant.extra_body().cloned(),
+                extra_headers: variant.extra_headers().cloned(),
+                retries: *variant.retries(),
+                stop_sequences: variant.stop_sequences().cloned(),
             },
         )),
         VariantConfig::ChainOfThought(variant) => {
