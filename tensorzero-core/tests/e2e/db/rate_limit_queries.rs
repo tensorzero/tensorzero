@@ -394,3 +394,36 @@ async fn test_concurrent_stress(pool: PgPool) {
         "All 100 requests should succeed with sufficient capacity"
     );
 }
+
+// ===== INVALID INPUT TESTS =====
+
+#[sqlx::test(migrations = "src/db/postgres/migrations")]
+async fn test_zero_refill_interval_exception(pool: PgPool) {
+    let conn = PostgresConnectionInfo::new_with_pool(pool);
+
+    // Test zero interval throws exception
+    let zero_interval_request =
+        create_consume_request("zero_interval", 10, 100, 10, Duration::zero());
+    let result = conn.consume_tickets(vec![zero_interval_request]).await;
+    assert!(result.is_err(), "Zero interval should cause an error");
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Refill interval must be positive"),
+        "Error should mention that refill interval must be positive"
+    );
+
+    // Test negative interval throws exception
+    let negative_interval_request =
+        create_consume_request("negative_interval", 10, 100, 10, Duration::seconds(-5));
+    let result = conn.consume_tickets(vec![negative_interval_request]).await;
+    assert!(result.is_err(), "Negative interval should cause an error");
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Refill interval must be positive"),
+        "Error should mention that refill interval must be positive"
+    );
+}

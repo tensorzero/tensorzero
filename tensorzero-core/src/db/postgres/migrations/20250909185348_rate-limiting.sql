@@ -30,14 +30,14 @@ DECLARE
     v_result calculated_bucket_state;
 BEGIN
     -- Calculate how many whole refill intervals have passed.
-    IF p_refill_interval > '0 seconds'::interval THEN
+    IF p_refill_interval <= '0 seconds'::interval THEN
+        RAISE EXCEPTION 'Refill interval must be positive, got: %', p_refill_interval;
+    ELSE
         -- EPOCH FROM converts to a number of seconds
         -- Allows us to do integer division rather than interval division
         v_intervals_passed := floor(
             EXTRACT(EPOCH FROM (now() - p_balance_as_of)) / EXTRACT(EPOCH FROM p_refill_interval)
         );
-    ELSE
-        v_intervals_passed := 0;
     END IF;
 
     -- Ensure we don't go backwards in time
