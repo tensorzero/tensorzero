@@ -4,7 +4,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize, Serializer};
 
 use crate::db::{
-    ConsumeTicketsReciept, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest,
+    ConsumeTicketsReceipt, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest,
 };
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 
@@ -106,10 +106,10 @@ impl RateLimitingConfig {
         client: &impl RateLimitQueries,
         scope_info: &'a ScopeInfo<'a>,
         rate_limited_request: &impl RateLimitedRequest,
-    ) -> Result<TicketBorrow, Error> {
+    ) -> Result<TicketBorrows, Error> {
         let limits = self.get_active_limits(scope_info);
         if limits.is_empty() {
-            return Ok(TicketBorrow::empty());
+            return Ok(TicketBorrows::empty());
         }
         let rate_limit_resource_requests = rate_limited_request.estimated_resource_usage()?;
         let ticket_requests: Result<Vec<ConsumeTicketsRequest>, Error> = limits
@@ -119,7 +119,7 @@ impl RateLimitingConfig {
         let ticket_requests = ticket_requests?;
         let results = client.consume_tickets(ticket_requests).await?;
         check_borrowed_rate_limits(&limits, &results)?;
-        TicketBorrow::new(results, limits)
+        TicketBorrows::new(results, limits)
     }
 
     /// Given a particular scope, finds the RateLimits that are active for that scope.
@@ -161,7 +161,7 @@ impl RateLimitingConfig {
 /// Assumes these are the same length.
 fn check_borrowed_rate_limits(
     limits: &[ActiveRateLimit],
-    results: &[ConsumeTicketsReciept],
+    results: &[ConsumeTicketsReceipt],
 ) -> Result<(), Error> {
     for (limit, result) in limits.iter().zip(results.iter()) {
         if !result.success {
@@ -490,43 +490,48 @@ pub enum RateLimitingScopeKey {
 // TODO: is there a way to enforce that this struct is consumed by return_tickets?
 #[must_use]
 #[derive(Debug)]
-pub struct TicketBorrow {
-    reciepts: Vec<ConsumeTicketsReciept>,
-    active_limits: Vec<ActiveRateLimit>,
+pub struct TicketBorrows {
+    borrows: Vec<TicketBorrow>,
 }
 
-impl TicketBorrow {
+#[derive(Debug)]
+struct TicketBorrow {
+    receipt: ConsumeTicketsReceipt,
+    active_limit: ActiveRateLimit,
+}
+
+impl TicketBorrows {
     pub fn empty() -> Self {
         Self {
-            reciepts: Vec::new(),
-            active_limits: Vec::new(),
+            borrows: Vec::new(),
         }
     }
 
     fn new(
-        reciepts: Vec<ConsumeTicketsReciept>,
+        receipts: Vec<ConsumeTicketsReceipt>,
         active_limits: Vec<ActiveRateLimit>,
     ) -> Result<Self, Error> {
         // Assert all vectors have the same length
-        let reciepts_len = reciepts.len();
+        let receipts_len = receipts.len();
         let active_limits_len = active_limits.len();
 
-        if reciepts_len != active_limits_len {
+        if receipts_len != active_limits_len {
             return Err(Error::new(ErrorDetails::Inference {
             message: format!(
-                "TicketBorrow has ragged arrays: reciepts.len()={reciepts_len}, active_limits.len()={active_limits_len}. {IMPOSSIBLE_ERROR_MESSAGE}",
+                "TicketBorrow has ragged arrays: receipts.len()={receipts_len}, active_limits.len()={active_limits_len}. {IMPOSSIBLE_ERROR_MESSAGE}",
             )
         }));
         }
+        let borrows = receipts
+            .into_iter()
+            .zip(active_limits)
+            .map(|(receipt, active_limit)| TicketBorrow {
+                receipt,
+                active_limit,
+            })
+            .collect();
 
-        Ok(Self {
-            reciepts,
-            active_limits,
-        })
-    }
-
-    fn iter(&self) -> impl Iterator<Item = (&ConsumeTicketsReciept, &ActiveRateLimit)> {
-        self.reciepts.iter().zip(self.active_limits.iter())
+        Ok(Self { borrows })
     }
 
     pub async fn return_tickets(
@@ -536,18 +541,22 @@ impl TicketBorrow {
     ) -> Result<(), Error> {
         let mut requests = Vec::new();
         let mut returns = Vec::new();
-        for (reciept, active_limit) in self.iter() {
+        for borrow in &self.borrows {
+            let TicketBorrow {
+                receipt,
+                active_limit,
+            } = borrow;
             let actual_usage_this_request = actual_usage.get_usage(active_limit.limit.resource);
-            match actual_usage_this_request.cmp(&reciept.tickets_consumed) {
+            match actual_usage_this_request.cmp(&receipt.tickets_consumed) {
                 std::cmp::Ordering::Greater => {
                     // Actual usage exceeds borrowed, add the difference to requests and log a warning
-                    tracing::warn!("Actual usage exceeds borrowed for {:?}: {} estimated and {actual_usage_this_request} used", active_limit.limit.resource, reciept.tickets_consumed);
-                    let difference = actual_usage_this_request - reciept.tickets_consumed;
+                    tracing::warn!("Actual usage exceeds borrowed for {:?}: {} estimated and {actual_usage_this_request} used", active_limit.limit.resource, receipt.tickets_consumed);
+                    let difference = actual_usage_this_request - receipt.tickets_consumed;
                     requests.push(active_limit.get_consume_tickets_request_for_return(difference)?);
                 }
                 std::cmp::Ordering::Less => {
                     // Borrowed exceeds actual usage, add the difference to returns
-                    let difference = reciept.tickets_consumed - actual_usage_this_request;
+                    let difference = receipt.tickets_consumed - actual_usage_this_request;
                     returns.push(active_limit.get_return_tickets_request(difference)?);
                 }
                 std::cmp::Ordering::Equal => (),
@@ -1418,12 +1427,11 @@ mod tests {
 
     #[test]
     fn test_ticket_borrow_lifecycle() {
-        use crate::db::ConsumeTicketsReciept;
+        use crate::db::ConsumeTicketsReceipt;
 
         // Test empty borrow creation
-        let empty_borrow = TicketBorrow::empty();
-        assert_eq!(empty_borrow.reciepts.len(), 0);
-        assert_eq!(empty_borrow.active_limits.len(), 0);
+        let empty_borrow = TicketBorrows::empty();
+        assert_eq!(empty_borrow.borrows.len(), 0);
 
         // Test valid borrow creation
         let limit = Arc::new(RateLimit {
@@ -1441,23 +1449,26 @@ mod tests {
             }],
         };
 
-        let receipt = ConsumeTicketsReciept {
+        let receipt = ConsumeTicketsReceipt {
             key: active_limit.get_key().unwrap(),
             success: true,
             tickets_remaining: 50,
             tickets_consumed: 50,
         };
 
-        let valid_borrow = TicketBorrow::new(vec![receipt], vec![active_limit]).unwrap();
-        assert_eq!(valid_borrow.reciepts.len(), 1);
-        assert_eq!(valid_borrow.active_limits.len(), 1);
+        let valid_borrow = TicketBorrows::new(vec![receipt], vec![active_limit]).unwrap();
+        assert_eq!(valid_borrow.borrows.len(), 1);
 
         // Test iterator functionality
         let mut iter_count = 0;
-        for (r, a) in valid_borrow.iter() {
-            assert!(r.success);
-            assert_eq!(r.tickets_consumed, 50);
-            assert_eq!(a.limit.resource, RateLimitResource::Token);
+        for borrow in &valid_borrow.borrows {
+            let TicketBorrow {
+                receipt,
+                active_limit,
+            } = &borrow;
+            assert!(receipt.success);
+            assert_eq!(receipt.tickets_consumed, 50);
+            assert_eq!(active_limit.limit.resource, RateLimitResource::Token);
             iter_count += 1;
         }
         assert_eq!(iter_count, 1);
@@ -1478,25 +1489,25 @@ mod tests {
         };
 
         // Try to create with mismatched array lengths
-        let receipt2 = ConsumeTicketsReciept {
+        let receipt2 = ConsumeTicketsReceipt {
             key: active_limit2.get_key().unwrap(),
             success: true,
             tickets_remaining: 10,
             tickets_consumed: 10,
         };
 
-        let mismatched_result = TicketBorrow::new(vec![receipt2], vec![]);
+        let mismatched_result = TicketBorrows::new(vec![receipt2], vec![]);
         assert!(mismatched_result.is_err());
 
         // Another mismatch test - more active limits than receipts
-        let receipt3 = ConsumeTicketsReciept {
+        let receipt3 = ConsumeTicketsReceipt {
             key: active_limit2.get_key().unwrap(),
             success: true,
             tickets_remaining: 15,
             tickets_consumed: 15,
         };
 
-        let mismatched_result2 = TicketBorrow::new(vec![receipt3], vec![active_limit2]);
+        let mismatched_result2 = TicketBorrows::new(vec![receipt3], vec![active_limit2]);
         assert!(mismatched_result2.is_ok()); // This should actually work - 1:1 ratio
     }
 
@@ -1513,7 +1524,7 @@ mod tests {
 
     #[test]
     fn test_check_borrowed_rate_limits() {
-        use crate::db::ConsumeTicketsReciept;
+        use crate::db::ConsumeTicketsReceipt;
         use crate::error::ErrorDetails;
 
         let limit = Arc::new(RateLimit {
@@ -1532,7 +1543,7 @@ mod tests {
         };
 
         // Test success case
-        let success_receipt = ConsumeTicketsReciept {
+        let success_receipt = ConsumeTicketsReceipt {
             key: active_limit.get_key().unwrap(),
             success: true,
             tickets_remaining: 50,
@@ -1557,7 +1568,7 @@ mod tests {
         };
 
         // Test failure case
-        let failure_receipt = ConsumeTicketsReciept {
+        let failure_receipt = ConsumeTicketsReceipt {
             key: active_limit2.get_key().unwrap(),
             success: false,
             tickets_remaining: 0,

@@ -43,7 +43,7 @@ use crate::inference::types::{
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
-use crate::rate_limiting::{RateLimitingConfig, TicketBorrow};
+use crate::rate_limiting::{RateLimitingConfig, TicketBorrows};
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
@@ -138,7 +138,7 @@ struct InferenceMetadata {
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub include_original_response: bool,
-    pub ticket_borrow: TicketBorrow,
+    pub ticket_borrow: TicketBorrows,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -1319,7 +1319,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             include_original_response: false,
-            ticket_borrow: TicketBorrow::empty(),
+            ticket_borrow: TicketBorrows::empty(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();
@@ -1373,7 +1373,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             include_original_response: false,
-            ticket_borrow: TicketBorrow::empty(),
+            ticket_borrow: TicketBorrows::empty(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();

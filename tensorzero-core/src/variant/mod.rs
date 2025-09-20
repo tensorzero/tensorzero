@@ -41,7 +41,7 @@ use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::model::StreamResponse;
 use crate::model::StreamResponseAndMessages;
-use crate::rate_limiting::TicketBorrow;
+use crate::rate_limiting::TicketBorrows;
 use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 
@@ -195,7 +195,7 @@ pub struct ModelUsedInfo {
     pub input_messages: Vec<RequestMessage>,
     pub inference_params: InferenceParams,
     pub cached: bool,
-    pub ticket_borrow: TicketBorrow,
+    pub ticket_borrow: TicketBorrows,
     // These responses will get added into the final inference result (after `collect_chunks` finishes)
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
 }

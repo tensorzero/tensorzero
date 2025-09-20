@@ -22,7 +22,7 @@ use crate::inference::types::{
     JsonInferenceResultChunk, RequestMessagesOrBatch, TextChunk, ThoughtChunk, Usage,
 };
 use crate::model::ModelTable;
-use crate::rate_limiting::TicketBorrow;
+use crate::rate_limiting::TicketBorrows;
 use crate::tool::ToolCallChunk;
 use crate::{
     endpoints::inference::InferenceParams,
@@ -309,7 +309,7 @@ pub fn stream_inference_from_non_stream(
             }
         },
         cached: model_inference_result.cached,
-        ticket_borrow: TicketBorrow::empty(),
+        ticket_borrow: TicketBorrows::empty(),
     };
     let stream = make_stream_from_non_stream(inference_result, Some(usage))?;
     Ok((stream, model_used_info))

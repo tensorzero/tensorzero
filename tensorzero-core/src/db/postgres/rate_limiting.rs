@@ -3,7 +3,7 @@ use sqlx::postgres::types::PgInterval;
 
 use crate::{
     db::{
-        ConsumeTicketsReciept, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsReciept,
+        ConsumeTicketsReceipt, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsReceipt,
         ReturnTicketsRequest,
     },
     error::{Error, ErrorDetails},
@@ -24,7 +24,7 @@ impl RateLimitQueries for PostgresConnectionInfo {
     async fn consume_tickets(
         &self,
         requests: Vec<ConsumeTicketsRequest>,
-    ) -> Result<Vec<ConsumeTicketsReciept>, Error> {
+    ) -> Result<Vec<ConsumeTicketsReceipt>, Error> {
         if requests.is_empty() {
             return Ok(vec![]);
         }
@@ -81,7 +81,7 @@ impl RateLimitQueries for PostgresConnectionInfo {
     async fn return_tickets(
         &self,
         requests: Vec<ReturnTicketsRequest>,
-    ) -> Result<Vec<ReturnTicketsReciept>, Error> {
+    ) -> Result<Vec<ReturnTicketsReceipt>, Error> {
         if requests.is_empty() {
             return Ok(vec![]);
         }
@@ -199,7 +199,7 @@ struct ConsumeTicketsResponse {
     pub tickets_consumed: Option<i64>,
 }
 
-impl TryFrom<ConsumeTicketsResponse> for ConsumeTicketsReciept {
+impl TryFrom<ConsumeTicketsResponse> for ConsumeTicketsReceipt {
     type Error = Error;
 
     fn try_from(response: ConsumeTicketsResponse) -> Result<Self, Self::Error> {
@@ -246,7 +246,7 @@ impl TryFrom<ConsumeTicketsResponse> for ConsumeTicketsReciept {
                 })
             })?;
 
-        Ok(ConsumeTicketsReciept {
+        Ok(ConsumeTicketsReceipt {
             key: ActiveRateLimitKey::new(key),
             success,
             tickets_remaining,
@@ -261,7 +261,7 @@ struct ReturnTicketsResponse {
     pub final_balance: Option<i64>,
 }
 
-impl TryFrom<ReturnTicketsResponse> for ReturnTicketsReciept {
+impl TryFrom<ReturnTicketsResponse> for ReturnTicketsReceipt {
     type Error = Error;
 
     fn try_from(response: ReturnTicketsResponse) -> Result<Self, Self::Error> {
@@ -287,7 +287,7 @@ impl TryFrom<ReturnTicketsResponse> for ReturnTicketsReciept {
                 })
             })?;
 
-        Ok(ReturnTicketsReciept {
+        Ok(ReturnTicketsReceipt {
             key: ActiveRateLimitKey(key_returned),
             balance: final_balance,
         })

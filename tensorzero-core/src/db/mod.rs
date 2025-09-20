@@ -76,12 +76,12 @@ pub trait RateLimitQueries {
     async fn consume_tickets(
         &self,
         requests: Vec<ConsumeTicketsRequest>,
-    ) -> Result<Vec<ConsumeTicketsReciept>, Error>;
+    ) -> Result<Vec<ConsumeTicketsReceipt>, Error>;
 
     async fn return_tickets(
         &self,
         requests: Vec<ReturnTicketsRequest>,
-    ) -> Result<Vec<ReturnTicketsReciept>, Error>;
+    ) -> Result<Vec<ReturnTicketsReceipt>, Error>;
 
     async fn get_balance(
         &self,
@@ -102,7 +102,7 @@ pub struct ConsumeTicketsRequest {
 }
 
 #[derive(Debug)]
-pub struct ConsumeTicketsReciept {
+pub struct ConsumeTicketsReceipt {
     pub key: ActiveRateLimitKey,
     pub success: bool,
     pub tickets_remaining: u64,
@@ -117,7 +117,7 @@ pub struct ReturnTicketsRequest {
     pub refill_interval: TimeDelta,
 }
 
-pub struct ReturnTicketsReciept {
+pub struct ReturnTicketsReceipt {
     pub key: ActiveRateLimitKey,
     pub balance: u64,
 }

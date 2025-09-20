@@ -43,7 +43,7 @@ use crate::providers::helpers::peek_first_chunk;
 use crate::providers::hyperbolic::HyperbolicProvider;
 use crate::providers::sglang::SGLangProvider;
 use crate::providers::tgi::TGIProvider;
-use crate::rate_limiting::{ScopeInfo, TicketBorrow};
+use crate::rate_limiting::{ScopeInfo, TicketBorrows};
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -322,7 +322,7 @@ impl ModelConfig {
                 return Ok(StreamResponseAndMessages {
                     response: cache_lookup,
                     messages: model_provider_request.request.messages.clone(),
-                    ticket_borrow: TicketBorrow::empty(),
+                    ticket_borrow: TicketBorrows::empty(),
                 });
             }
         }
@@ -1178,13 +1178,13 @@ impl UninitializedProviderConfig {
 struct StreamAndRawRequest {
     stream: tracing_futures::Instrumented<PeekableProviderInferenceResponseStream>,
     raw_request: String,
-    ticket_borrow: TicketBorrow,
+    ticket_borrow: TicketBorrows,
 }
 
 pub struct StreamResponseAndMessages {
     pub response: StreamResponse,
     pub messages: Vec<RequestMessage>,
-    pub ticket_borrow: TicketBorrow,
+    pub ticket_borrow: TicketBorrows,
 }
 
 impl ModelProvider {
