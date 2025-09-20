@@ -27,6 +27,8 @@ pub trait SelectQueries {
         &self,
         time_window: TimeWindow,
     ) -> Result<Vec<ModelLatencyDatapoint>, Error>;
+
+    async fn count_distinct_models_used(&self) -> Result<u32, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]

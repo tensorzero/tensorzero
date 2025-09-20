@@ -130,4 +130,26 @@ impl SelectQueries for ClickHouseConnectionInfo {
             })
             .collect::<Result<Vec<_>, _>>()
     }
+
+    async fn count_distinct_models_used(&self) -> Result<u32, Error> {
+        let query =
+            "SELECT toUInt32(uniqExact(model_name)) FROM ModelProviderStatistics".to_string();
+        let response = self.run_query_synchronous_no_params(query).await?;
+        response
+            .response
+            .trim()
+            .lines()
+            .next()
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::ClickHouseDeserialization {
+                    message: "No result".to_string(),
+                })
+            })?
+            .parse()
+            .map_err(|e: std::num::ParseIntError| {
+                Error::new(ErrorDetails::ClickHouseDeserialization {
+                    message: e.to_string(),
+                })
+            })
+    }
 }

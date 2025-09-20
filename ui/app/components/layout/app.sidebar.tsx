@@ -10,6 +10,7 @@ import {
   GridCheck,
   SequenceChecks,
   Playground,
+  Model,
 } from "~/components/icons/Icons";
 import { useSidebar } from "~/components/ui/sidebar";
 import { useActivePath } from "~/hooks/use-active-path";
@@ -62,6 +63,11 @@ const navigation: NavigationSection[] = [
         title: "Functions",
         url: "/observability/functions",
         icon: Functions,
+      },
+      {
+        title: "Models",
+        url: "/observability/models",
+        icon: Model,
       },
     ],
   },
