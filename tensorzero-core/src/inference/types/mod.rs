@@ -526,7 +526,8 @@ impl std::fmt::Display for Text {
 
 impl RateLimitedInputContent for Text {
     fn estimated_input_token_usage(&self) -> u64 {
-        get_estimated_tokens(&self.text)
+        let Text { text } = self;
+        get_estimated_tokens(text)
     }
 }
 
@@ -560,9 +561,15 @@ pub struct Thought {
 
 impl RateLimitedInputContent for Thought {
     fn estimated_input_token_usage(&self) -> u64 {
-        self.text
-            .as_ref()
-            .map_or(0, |text| get_estimated_tokens(text))
+        let Thought {
+            text,
+            // We explicitly ignore these fields but list them so that this implementation is very explicit
+            #[expect(unused_variables)]
+            signature,
+            #[expect(unused_variables)]
+            provider_type,
+        } = self;
+        text.as_ref().map_or(0, |text| get_estimated_tokens(text))
     }
 }
 
@@ -736,7 +743,12 @@ impl RequestMessage {
 
 impl RateLimitedInputContent for RequestMessage {
     fn estimated_input_token_usage(&self) -> u64 {
-        self.content
+        let RequestMessage {
+            #[expect(unused_variables)]
+            role,
+            content,
+        } = self;
+        content
             .iter()
             .map(RateLimitedInputContent::estimated_input_token_usage)
             .sum()

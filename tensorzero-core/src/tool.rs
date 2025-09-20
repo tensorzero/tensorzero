@@ -328,7 +328,13 @@ impl std::fmt::Display for ToolCall {
 
 impl RateLimitedInputContent for ToolCall {
     fn estimated_input_token_usage(&self) -> u64 {
-        get_estimated_tokens(&self.name) + get_estimated_tokens(&self.arguments)
+        let ToolCall {
+            name,
+            arguments,
+            #[expect(unused_variables)]
+            id,
+        } = self;
+        get_estimated_tokens(name) + get_estimated_tokens(arguments)
     }
 }
 
@@ -493,9 +499,13 @@ impl std::fmt::Display for ToolResult {
 
 impl RateLimitedInputContent for ToolResult {
     fn estimated_input_token_usage(&self) -> u64 {
-        get_estimated_tokens(&self.name)
-            + get_estimated_tokens(&self.result)
-            + get_estimated_tokens(&self.id)
+        let ToolResult {
+            name,
+            result,
+            #[expect(unused_variables)]
+            id,
+        } = self;
+        get_estimated_tokens(name) + get_estimated_tokens(result)
     }
 }
 
