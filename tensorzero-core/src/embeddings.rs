@@ -268,9 +268,16 @@ pub struct EmbeddingRequest {
 
 impl RateLimitedRequest for EmbeddingRequest {
     fn estimated_resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
+        let EmbeddingRequest {
+            input,
+            #[expect(unused_variables)]
+            dimensions,
+            #[expect(unused_variables)]
+            encoding_format,
+        } = self;
         Ok(RateLimitResourceUsage {
             model_inferences: 1,
-            tokens: self.input.estimated_input_token_usage(),
+            tokens: input.estimated_input_token_usage(),
         })
     }
 }

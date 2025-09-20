@@ -862,20 +862,51 @@ impl<'a> ModelInferenceRequest<'a> {
 
 impl RateLimitedRequest for ModelInferenceRequest<'_> {
     fn estimated_resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
-        let system_tokens = self
-            .system
+        let ModelInferenceRequest {
+            #[expect(unused_variables)]
+            inference_id,
+            messages,
+            system,
+            #[expect(unused_variables)]
+            tool_config, // TODO: should we account for this in advance?
+            #[expect(unused_variables)]
+            temperature,
+            #[expect(unused_variables)]
+            top_p,
+            max_tokens,
+            #[expect(unused_variables)]
+            presence_penalty,
+            #[expect(unused_variables)]
+            frequency_penalty,
+            #[expect(unused_variables)]
+            seed,
+            #[expect(unused_variables)]
+            stop_sequences,
+            #[expect(unused_variables)]
+            stream,
+            #[expect(unused_variables)]
+            json_mode,
+            #[expect(unused_variables)]
+            function_type,
+            #[expect(unused_variables)]
+            output_schema,
+            #[expect(unused_variables)]
+            extra_body,
+            #[expect(unused_variables)]
+            extra_headers,
+            #[expect(unused_variables)]
+            extra_cache_key,
+        } = self;
+        let system_tokens = system
             .as_ref()
             .map(|s| get_estimated_tokens(s))
             .unwrap_or(0);
-        let messages_tokens: u64 = self
-            .messages
+        let messages_tokens: u64 = messages
             .iter()
             .map(RateLimitedInputContent::estimated_input_token_usage)
             .sum();
-        let output_tokens = self
-            .max_tokens
-            .ok_or_else(|| Error::new(ErrorDetails::RateLimitMissingMaxTokens))?
-            as u64;
+        let output_tokens =
+            max_tokens.ok_or_else(|| Error::new(ErrorDetails::RateLimitMissingMaxTokens))? as u64;
         Ok(RateLimitResourceUsage {
             tokens: system_tokens + messages_tokens + output_tokens,
             model_inferences: 1,
