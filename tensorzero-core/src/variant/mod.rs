@@ -49,6 +49,7 @@ pub mod chain_of_thought;
 pub mod chat_completion;
 pub mod dicl;
 pub mod dynamic;
+pub mod first_of_n;
 pub mod mixture_of_n;
 
 /// Holds a particular variant implementation, plus additional top-level configuration
@@ -77,6 +78,7 @@ pub enum VariantConfig {
     Dicl(dicl::DiclConfig),
     MixtureOfN(mixture_of_n::MixtureOfNConfig),
     ChainOfThought(chain_of_thought::ChainOfThoughtConfig),
+    FirstOfN(first_of_n::FirstOfNConfig),
 }
 
 #[cfg(feature = "pyo3")]
@@ -106,6 +108,12 @@ pub struct MixtureOfNConfigPyClass {
 #[cfg(feature = "pyo3")]
 #[pyclass(name = "ChainOfThoughtConfig")]
 pub struct ChainOfThoughtConfigPyClass {
+    pub inner: Arc<VariantInfo>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "FirstOfNConfig")]
+pub struct FirstOfNConfigPyClass {
     pub inner: Arc<VariantInfo>,
 }
 
@@ -251,6 +259,7 @@ impl VariantConfig {
             VariantConfig::Dicl(params) => params.weight,
             VariantConfig::MixtureOfN(params) => params.weight,
             VariantConfig::ChainOfThought(params) => params.inner.weight,
+            VariantConfig::FirstOfN(params) => params.weight,
         }
     }
 
@@ -261,6 +270,7 @@ impl VariantConfig {
             VariantConfig::Dicl(params) => params.weight = weight,
             VariantConfig::MixtureOfN(params) => params.weight = weight,
             VariantConfig::ChainOfThought(params) => params.inner.weight = weight,
+            VariantConfig::FirstOfN(params) => params.weight = weight,
         }
     }
 }
@@ -331,6 +341,18 @@ impl Variant for VariantInfo {
                         .await
                 }
                 VariantConfig::ChainOfThought(params) => {
+                    params
+                        .infer(
+                            input,
+                            models,
+                            function,
+                            inference_config,
+                            clients,
+                            inference_params,
+                        )
+                        .await
+                }
+                VariantConfig::FirstOfN(params) => {
                     params
                         .infer(
                             input,
@@ -426,6 +448,18 @@ impl Variant for VariantInfo {
                         .await
                 }
                 VariantConfig::ChainOfThought(params) => {
+                    params
+                        .infer_stream(
+                            input,
+                            models,
+                            function,
+                            inference_config,
+                            clients,
+                            inference_params,
+                        )
+                        .await
+                }
+                VariantConfig::FirstOfN(params) => {
                     params
                         .infer_stream(
                             input,
@@ -558,6 +592,18 @@ impl Variant for VariantInfo {
                     )
                     .await
             }
+            VariantConfig::FirstOfN(params) => {
+                params
+                    .validate(
+                        function,
+                        models,
+                        embedding_models,
+                        templates,
+                        function_name,
+                        variant_name,
+                    )
+                    .await
+            }
         }
     }
 
@@ -568,6 +614,7 @@ impl Variant for VariantInfo {
             VariantConfig::Dicl(params) => params.get_all_template_paths(),
             VariantConfig::MixtureOfN(params) => params.get_all_template_paths(),
             VariantConfig::ChainOfThought(params) => params.get_all_template_paths(),
+            VariantConfig::FirstOfN(params) => params.get_all_template_paths(),
         }
     }
 
