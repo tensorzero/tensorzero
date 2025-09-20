@@ -3,8 +3,8 @@ use sqlx::postgres::types::PgInterval;
 
 use crate::{
     db::{
-        ConsumeTicketsReciept, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest,
-        ReturnTicketsResult,
+        ConsumeTicketsReciept, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsReciept,
+        ReturnTicketsRequest,
     },
     error::{Error, ErrorDetails},
     rate_limiting::ActiveRateLimitKey,
@@ -81,7 +81,7 @@ impl RateLimitQueries for PostgresConnectionInfo {
     async fn return_tickets(
         &self,
         requests: Vec<ReturnTicketsRequest>,
-    ) -> Result<Vec<ReturnTicketsResult>, Error> {
+    ) -> Result<Vec<ReturnTicketsReciept>, Error> {
         if requests.is_empty() {
             return Ok(vec![]);
         }
@@ -261,7 +261,7 @@ struct ReturnTicketsResponse {
     pub final_balance: Option<i64>,
 }
 
-impl TryFrom<ReturnTicketsResponse> for ReturnTicketsResult {
+impl TryFrom<ReturnTicketsResponse> for ReturnTicketsReciept {
     type Error = Error;
 
     fn try_from(response: ReturnTicketsResponse) -> Result<Self, Self::Error> {
@@ -287,7 +287,7 @@ impl TryFrom<ReturnTicketsResponse> for ReturnTicketsResult {
                 })
             })?;
 
-        Ok(ReturnTicketsResult {
+        Ok(ReturnTicketsReciept {
             key: ActiveRateLimitKey(key_returned),
             balance: final_balance,
         })
