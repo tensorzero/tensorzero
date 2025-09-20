@@ -8,6 +8,8 @@ services:
     ports:
       - "18123:8123" # ClickHouse HTTP port exposed to local machine on 18123
       - "19000:9000" # ClickHouse native port exposed to local machine on 19000
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
     ulimits:
       nofile:
         soft: 262144
@@ -89,3 +91,6 @@ services:
     command: http nginx:80
     ports:
       - "4040:4040" # ngrok port exposed to local machine on 4040
+
+volumes:
+  clickhouse-data:
