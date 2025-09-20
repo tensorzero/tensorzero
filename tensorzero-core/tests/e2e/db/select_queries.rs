@@ -614,3 +614,10 @@ async fn test_clickhouse_model_latency_cumulative() {
         );
     }
 }
+
+#[tokio::test]
+async fn test_clickhouse_count_distinct_models_used() {
+    let clickhouse = get_clickhouse().await;
+    let response = clickhouse.count_distinct_models_used().await.unwrap();
+    assert_eq!(response, 14);
+}
