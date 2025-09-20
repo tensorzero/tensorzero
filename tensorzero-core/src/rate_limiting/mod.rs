@@ -541,6 +541,7 @@ impl TicketBorrow {
             match actual_usage_this_request.cmp(&reciept.tickets_consumed) {
                 std::cmp::Ordering::Greater => {
                     // Actual usage exceeds borrowed, add the difference to requests and log a warning
+                    tracing::warn!("Actual usage exceeds borrowed for {:?}: {} estimated and {actual_usage_this_request} used", active_limit.limit.resource, reciept.tickets_consumed);
                     let difference = actual_usage_this_request - reciept.tickets_consumed;
                     requests.push(active_limit.get_consume_tickets_request_for_return(difference)?);
                 }
