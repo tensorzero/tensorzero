@@ -1,0 +1,14 @@
+[models.gpt_5_nano]
+routing = ["openai"]
+
+[models.gpt_5_nano.providers.openai]
+type = "openai"
+model_name = "gpt-5-nano-2025-08-07"
+
+[functions.extract_email]
+type = "json"
+
+[functions.extract_email.variants.gpt_5_nano_variant]
+type = "chat_completion"
+model = "gpt_5_nano"
+json_mode = "strict"
