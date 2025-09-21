@@ -210,7 +210,9 @@ jobs:
           ./ci/run-provider-proxy.sh ci
 
       - name: Run migrations
-        run: cargo run-e2e --run-migrations-only
+        # we build the migrations in sqlx offline mode since the database migrations haven't been run yet
+        # then the migrations can run and we can use the database
+        run: SQLX_OFFLINE=true cargo run-e2e --run-migrations-only
 
       - name: Launch the gateway for E2E tests
         run: |
