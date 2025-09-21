@@ -22,8 +22,10 @@ use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
  *      This will figure out post-facto bookkeeping for over- or under-consumption.
  *   Important Note: the Postgres database has a string column `key`
  *      that is used to identify a particular active rate limit.
- *      This is
- *
+ *      If two distinct rate limits have the same key, they will be treated as the same rate limit and will trample.
+ *      If the key changes, the rate limit will be treated as a new rate limit.
+ *      For these reasons, developers should be careful not to change the key serialization and be similarly careful
+ *      to not add keys which could trample one another.
  */
 
 #[derive(Debug, Serialize)]
