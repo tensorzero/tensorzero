@@ -81,6 +81,7 @@ impl InferenceProvider for AWSBedrockProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
@@ -229,6 +230,7 @@ impl InferenceProvider for AWSBedrockProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
@@ -845,7 +847,8 @@ fn message_from_request_message(message: &RequestMessage) -> Result<Message, Err
     Ok(message)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 struct ConverseOutputWithMetadata<'a> {
     output: ConverseOutput,
     latency: Latency,

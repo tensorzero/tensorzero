@@ -1109,6 +1109,7 @@ mod tests {
             },
             tags: &Default::default(),
             rate_limiting_config: &Default::default(),
+            otlp_config: &Default::default(),
         };
         let templates = get_test_template_config();
         let system_template = get_system_template();
@@ -2057,6 +2058,7 @@ mod tests {
             },
             tags: &Default::default(),
             rate_limiting_config: &Default::default(),
+            otlp_config: &Default::default(),
         };
         let templates = Box::leak(Box::new(get_test_template_config()));
         let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();

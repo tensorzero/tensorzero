@@ -190,6 +190,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 cache_options: &CacheOptions::default(),
                 tags: &Default::default(),
                 rate_limiting_config: &Default::default(),
+                otlp_config: &Default::default(),
             };
             // We didn't produce a real model, so there's nothing to test
             if use_mock_inference_provider() {

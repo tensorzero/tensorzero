@@ -1360,6 +1360,7 @@ mod tests {
             },
             tags: &Default::default(),
             rate_limiting_config: &Default::default(),
+            otlp_config: &Default::default(),
         };
         let input = LazyResolvedInput {
             system: None,

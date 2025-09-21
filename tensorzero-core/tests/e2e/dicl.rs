@@ -396,6 +396,7 @@ async fn embed_insert_example(
         },
         tags: &Default::default(),
         rate_limiting_config: &Default::default(),
+        otlp_config: &Default::default(),
     };
     let scope_info = ScopeInfo {
         tags: &HashMap::new(),

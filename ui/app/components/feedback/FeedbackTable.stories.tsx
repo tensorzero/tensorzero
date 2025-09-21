@@ -27,6 +27,7 @@ const config: Config = {
       otlp: {
         traces: {
           enabled: false,
+          format: "opentelemetry",
         },
       },
     },

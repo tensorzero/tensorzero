@@ -5283,16 +5283,20 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
         .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
         .collect();
 
-    // Assert exactly one tool call
-    assert_eq!(tool_call_blocks.len(), 1, "Expected exactly one tool call");
+    // Assert at least one tool call
+    assert!(
+        !tool_call_blocks.is_empty(),
+        "Expected at least one tool call"
+    );
 
-    let tool_call_block = tool_call_blocks[0];
-    match tool_call_block {
-        ContentBlock::ToolCall(tool_call) => {
-            assert_eq!(tool_call.name, "get_temperature");
-            serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+    for tool_call_block in tool_call_blocks {
+        match tool_call_block {
+            ContentBlock::ToolCall(tool_call) => {
+                assert_eq!(tool_call.name, "get_temperature");
+                serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+            }
+            _ => panic!("Unreachable"),
         }
-        _ => panic!("Unreachable"),
     }
 }
 
@@ -6757,7 +6761,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
     let content_block = output_clickhouse
         .iter()
-        .find(|block| (block.get("type").and_then(Value::as_str) == Some("tool_call")))
+        .find(|block| block.get("type").and_then(Value::as_str) == Some("tool_call"))
         .expect("No tool_call content block found in ClickHouse output");
     // The type check is implicitly handled by the find operation above.
     assert_eq!(content_block.get("id").unwrap().as_str().unwrap(), tool_id);

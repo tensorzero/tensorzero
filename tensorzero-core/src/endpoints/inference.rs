@@ -21,7 +21,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
-use crate::config::{Config, ErrorContext, SchemaData, UninitializedVariantInfo};
+use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedVariantInfo};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
@@ -327,6 +327,7 @@ pub async fn inference(
         cache_options: &(params.cache_options, dryrun).into(),
         tags: &params.tags,
         rate_limiting_config: &config.rate_limiting,
+        otlp_config: &config.gateway.export.otlp,
     };
 
     let inference_models = InferenceModels {
@@ -1115,6 +1116,7 @@ pub struct InferenceClients<'a> {
     pub cache_options: &'a CacheOptions,
     pub tags: &'a HashMap<String, String>,
     pub rate_limiting_config: &'a RateLimitingConfig,
+    pub otlp_config: &'a OtlpConfig,
 }
 
 // Carryall struct for models used in inference

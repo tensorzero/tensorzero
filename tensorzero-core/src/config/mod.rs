@@ -426,6 +426,22 @@ pub struct OtlpTracesConfig {
     /// Enable OpenTelemetry traces export to the configured OTLP endpoint (configured via OTLP environment variables)
     #[serde(default)]
     pub enabled: bool,
+    #[serde(default)]
+    pub format: OtlpTracesFormat,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export, rename_all = "lowercase"))]
+pub enum OtlpTracesFormat {
+    /// Sets 'gen_ai' attributes based on the OpenTelemetry GenAI semantic conventions:
+    /// https://github.com/open-telemetry/semantic-conventions/blob/main/docs/genai/genai.md
+    #[default]
+    OpenTelemetry,
+    // Sets attributes based on the OpenInference semantic conventions:
+    // https://github.com/Arize-ai/openinference/blob/main/spec/llm_spans.md
+    OpenInference,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]

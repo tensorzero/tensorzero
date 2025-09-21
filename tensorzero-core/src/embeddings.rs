@@ -135,6 +135,7 @@ impl EmbeddingModelConfig {
                     request,
                     model_name,
                     provider_name,
+                    otlp_config: clients.otlp_config,
                 };
                 // TODO: think about how to best handle errors here
                 if clients.cache_options.enabled.read() {
@@ -735,6 +736,7 @@ mod tests {
                     },
                     tags: &Default::default(),
                     rate_limiting_config: &Default::default(),
+                    otlp_config: &Default::default(),
                 },
             )
             .await;

@@ -93,7 +93,7 @@ function EvaluationForm({
       </div>
       <Select
         name="evaluation_name"
-        defaultValue={initialFormState?.evaluation_name ?? undefined}
+        value={selectedEvaluationName ?? undefined}
         onValueChange={(value) => {
           setSelectedEvaluationName(value);
           setSelectedVariantName(null); // Reset variant selection when evaluation changes
@@ -165,7 +165,7 @@ function EvaluationForm({
       </div>
       <Select
         name="variant_name"
-        defaultValue={initialFormState?.variant_name ?? undefined}
+        value={selectedVariantName ?? undefined}
         disabled={!selectedEvaluationName}
         onValueChange={(value) => setSelectedVariantName(value)}
       >

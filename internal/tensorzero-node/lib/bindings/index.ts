@@ -122,6 +122,7 @@ export * from "./OrderByTerm";
 export * from "./OrderDirection";
 export * from "./OtlpConfig";
 export * from "./OtlpTracesConfig";
+export * from "./OtlpTracesFormat";
 export * from "./PathWithContents";
 export * from "./PostgresConfig";
 export * from "./ProviderConfig";

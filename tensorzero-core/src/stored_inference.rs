@@ -432,7 +432,8 @@ pub enum StoredOutput {
 /// and by resolving all network resources (e.g. images).
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 pub struct RenderedSample {
     pub function_name: String,
     pub input: ModelInput,

@@ -220,6 +220,7 @@ pub async fn start_batch_inference(
         cache_options: &cache_options,
         rate_limiting_config: &config.rate_limiting,
         tags: &HashMap::default(), // NOTE: we currently do not rate limit batch inference
+        otlp_config: &config.gateway.export.otlp,
     };
 
     let inference_models = InferenceModels {

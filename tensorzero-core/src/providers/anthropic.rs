@@ -146,6 +146,7 @@ impl InferenceProvider for AnthropicProvider {
             request,
             provider_name: _,
             model_name: tensorzero_model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -241,6 +242,7 @@ impl InferenceProvider for AnthropicProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         api_key: &'a InferenceCredentials,
@@ -958,7 +960,8 @@ impl From<AnthropicStopReason> for FinishReason {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 struct AnthropicResponseWithMetadata<'a> {
     response: AnthropicResponse,
     raw_response: String,

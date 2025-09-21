@@ -78,6 +78,7 @@ pub async fn embeddings(
         // we should fix this once the tags are implemented
         tags: &HashMap::default(),
         rate_limiting_config: &config.rate_limiting,
+        otlp_config: &config.gateway.export.otlp,
     };
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)

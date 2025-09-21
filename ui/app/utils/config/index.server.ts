@@ -1,6 +1,7 @@
 import type { Config, FunctionConfig } from "tensorzero-node";
 import { getConfig as getConfigNative } from "tensorzero-node";
 import { getEnv } from "../env.server";
+import { DEFAULT_FUNCTION } from "../constants";
 
 const CACHE_TTL_MS = 1000 * 60; // 1 minute
 
@@ -106,7 +107,7 @@ export async function getConfig() {
   // Cache is invalid or doesn't exist, reload it
   const freshConfig = await loadConfig();
   // eslint-disable-next-line no-restricted-syntax
-  freshConfig.functions["tensorzero::default"] = defaultFunctionConfig;
+  freshConfig.functions[DEFAULT_FUNCTION] = defaultFunctionConfig;
 
   configCache = { data: freshConfig, timestamp: now };
   return freshConfig;

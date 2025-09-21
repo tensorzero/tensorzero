@@ -11,6 +11,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::error::Elapsed;
 use tracing::{span, Level, Span};
 use tracing_futures::{Instrument, Instrumented};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use url::Url;
 
 use crate::cache::{
@@ -18,7 +19,9 @@ use crate::cache::{
     CacheData, CacheValidationInfo, ModelProviderRequest, NonStreamingCacheData,
     StreamingCacheData,
 };
-use crate::config::{skip_credential_validation, ProviderTypesConfig, TimeoutsConfig};
+use crate::config::{
+    skip_credential_validation, OtlpConfig, OtlpTracesFormat, ProviderTypesConfig, TimeoutsConfig,
+};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::providers::aws_sagemaker::AWSSagemakerProvider;
@@ -396,6 +399,7 @@ impl ModelConfig {
                     request: &request,
                     model_name,
                     provider_name,
+                    otlp_config: clients.otlp_config,
                 };
                 let cache_key = model_provider_request.get_cache_key()?;
 
@@ -497,6 +501,7 @@ impl ModelConfig {
                     request: &request,
                     model_name,
                     provider_name,
+                    otlp_config: clients.otlp_config,
                 };
 
                 // This future includes a call to `peek_first_chunk`, so applying
@@ -1188,17 +1193,81 @@ pub struct StreamResponseAndMessages {
 }
 
 impl ModelProvider {
-    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference",
-        gen_ai.operation.name = "chat",
-        gen_ai.system = self.genai_system_name(),
-        gen_ai.request.model = self.genai_model_name(),
-    stream = false))]
+    fn apply_otlp_span_fields_input(&self, otlp_config: &OtlpConfig, span: &Span) {
+        if otlp_config.traces.enabled {
+            match otlp_config.traces.format {
+                OtlpTracesFormat::OpenTelemetry => {
+                    span.set_attribute("gen_ai.operation.name", "chat");
+                    span.set_attribute("gen_ai.system", self.genai_system_name());
+
+                    if let Some(model_name) = self.genai_model_name() {
+                        span.set_attribute("gen_ai.request.model", model_name.to_string());
+                    }
+                }
+                OtlpTracesFormat::OpenInference => {
+                    span.set_attribute("openinference.span.kind", "LLM");
+                    span.set_attribute("llm.system", self.genai_system_name());
+
+                    if let Some(model_name) = self.genai_model_name() {
+                        span.set_attribute("llm.model_name", model_name.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    #[expect(clippy::unused_self)] // We'll need 'self' for other attributes
+    fn apply_otlp_span_fields_output(
+        &self,
+        otlp_config: &OtlpConfig,
+        span: &Span,
+        resp: &Result<ProviderInferenceResponse, Error>,
+    ) {
+        if let Ok(resp) = resp {
+            if otlp_config.traces.enabled {
+                match otlp_config.traces.format {
+                    OtlpTracesFormat::OpenTelemetry => {
+                        span.set_attribute(
+                            "gen_ai.usage.input_tokens",
+                            resp.usage.input_tokens as i64,
+                        );
+                        span.set_attribute(
+                            "gen_ai.usage.output_tokens",
+                            resp.usage.output_tokens as i64,
+                        );
+                        span.set_attribute(
+                            "gen_ai.usage.total_tokens",
+                            (resp.usage.input_tokens + resp.usage.output_tokens) as i64,
+                        );
+                    }
+                    OtlpTracesFormat::OpenInference => {
+                        span.set_attribute(
+                            "llm.token_count.prompt",
+                            resp.usage.input_tokens as i64,
+                        );
+                        span.set_attribute(
+                            "llm.token_count.completion",
+                            resp.usage.output_tokens as i64,
+                        );
+                        span.set_attribute(
+                            "llm.token_count.total",
+                            (resp.usage.input_tokens + resp.usage.output_tokens) as i64,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference", stream = false))]
     async fn infer(
         &self,
         request: ModelProviderRequest<'_>,
         clients: &InferenceClients<'_>,
         scope_info: &ScopeInfo<'_>,
     ) -> Result<ProviderInferenceResponse, Error> {
+        let span = Span::current();
+        self.apply_otlp_span_fields_input(request.otlp_config, &span);
         let ticket_borrow = clients
             .rate_limiting_config
             .consume_tickets(
@@ -1207,7 +1276,7 @@ impl ModelProvider {
                 request.request,
             )
             .await?;
-        let provider_inference_response = match &self.config {
+        let res = match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider
                     .infer(request, clients.http_client, clients.credentials, self)
@@ -1309,7 +1378,9 @@ impl ModelProvider {
                     .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
-        }?;
+        };
+        self.apply_otlp_span_fields_output(request.otlp_config, &span, &res);
+        let provider_inference_response = res?;
         if let Ok(actual_resource_usage) = provider_inference_response.resource_usage() {
             // TODO: spawn
             ticket_borrow
@@ -1319,18 +1390,14 @@ impl ModelProvider {
         Ok(provider_inference_response)
     }
 
-    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference",
-        gen_ai.operation.name = "chat",
-        gen_ai.system = self.genai_system_name(),
-        gen_ai.request.model = self.genai_model_name(),
-        time_to_first_token,
-    stream = true))]
+    #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference", time_to_first_token, stream = true))]
     async fn infer_stream(
         &self,
         request: ModelProviderRequest<'_>,
         clients: &InferenceClients<'_>,
         scope_info: &ScopeInfo<'_>,
     ) -> Result<StreamAndRawRequest, Error> {
+        self.apply_otlp_span_fields_input(request.otlp_config, &Span::current());
         let ticket_borrow = clients
             .rate_limiting_config
             .consume_tickets(
@@ -2144,6 +2211,7 @@ mod tests {
             },
             tags: &Default::default(),
             rate_limiting_config: &Default::default(),
+            otlp_config: &Default::default(),
         };
 
         // Try inferring the good model only
@@ -2254,6 +2322,7 @@ mod tests {
             },
             tags: &Default::default(),
             rate_limiting_config: &Default::default(),
+            otlp_config: &Default::default(),
         };
         // Try inferring the good model only
         let request = ModelInferenceRequest {
@@ -2404,6 +2473,7 @@ mod tests {
                     },
                     tags: &Default::default(),
                     rate_limiting_config: &Default::default(),
+                    otlp_config: &Default::default(),
                 },
                 "my_model",
             )
@@ -2471,6 +2541,7 @@ mod tests {
                     },
                     tags: &Default::default(),
                     rate_limiting_config: &Default::default(),
+                    otlp_config: &Default::default(),
                 },
                 "my_model",
             )
@@ -2586,6 +2657,7 @@ mod tests {
                     },
                     tags: &Default::default(),
                     rate_limiting_config: &Default::default(),
+                    otlp_config: &Default::default(),
                 },
                 "my_model",
             )
@@ -2666,6 +2738,7 @@ mod tests {
             },
             tags: &Default::default(),
             rate_limiting_config: &Default::default(),
+            otlp_config: &Default::default(),
         };
 
         let request = ModelInferenceRequest {
@@ -2721,6 +2794,7 @@ mod tests {
             },
             tags: &Default::default(),
             rate_limiting_config: &Default::default(),
+            otlp_config: &Default::default(),
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -2782,6 +2856,7 @@ mod tests {
             },
             tags: &Default::default(),
             rate_limiting_config: &Default::default(),
+            otlp_config: &Default::default(),
         };
 
         let request = ModelInferenceRequest {
@@ -2836,6 +2911,7 @@ mod tests {
             },
             tags: &Default::default(),
             rate_limiting_config: &Default::default(),
+            otlp_config: &Default::default(),
         };
         let response = model_config
             .infer(&request, &clients, model_name)
