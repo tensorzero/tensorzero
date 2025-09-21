@@ -432,7 +432,7 @@ pub struct OtlpTracesConfig {
 #[cfg_attr(test, ts(export, rename_all = "lowercase"))]
 pub enum OtlpTracesFormat {
     /// Sets 'gen_ai' attributes based on the OpenTelemetry GenAI semantic conventions:
-    /// https://github.com/open-telemetry/semantic-conventions/blob/main/docs/genai/genai.md
+    /// https://github.com/open-telemetry/semantic-conventions/tree/main/docs/gen-ai
     #[default]
     OpenTelemetry,
     // Sets attributes based on the OpenInference semantic conventions:
