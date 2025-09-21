@@ -1382,10 +1382,15 @@ impl ModelProvider {
         self.apply_otlp_span_fields_output(request.otlp_config, &span, &res);
         let provider_inference_response = res?;
         if let Ok(actual_resource_usage) = provider_inference_response.resource_usage() {
-            // TODO: spawn
-            ticket_borrow
-                .return_tickets(clients.postgres_connection_info, actual_resource_usage)
-                .await?;
+            let postgres_connection_info = clients.postgres_connection_info.clone();
+            tokio::spawn(async move {
+                if let Err(e) = ticket_borrow
+                    .return_tickets(&postgres_connection_info, actual_resource_usage)
+                    .await
+                {
+                    tracing::error!("Failed to return rate limit tickets: {}", e);
+                }
+            });
         }
         Ok(provider_inference_response)
     }
