@@ -146,7 +146,7 @@ export default function CurationMetricSelector<
       control={control}
       name={name}
       render={({ field }) => (
-        <FormItem className="flex flex-col justify-center">
+        <FormItem className="flex grow flex-col justify-center">
           <FormLabel>Metric</FormLabel>
           <div className="items-top grid gap-x-8 md:grid-cols-2">
             <div className="space-y-2">

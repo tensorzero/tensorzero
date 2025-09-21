@@ -16,6 +16,54 @@ import { models } from "./model_options";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
 import { logger } from "~/utils/logger";
 import { useAllFunctionConfigs, useFunctionConfig } from "~/context/config";
+import {
+  ListGroup,
+  ListHeader,
+  ListProvider,
+  type DragEndEvent,
+  type ListItemProps,
+} from "~/components/ui/List";
+import { useDraggable } from "@dnd-kit/core";
+import { cn } from "~/utils/common";
+
+const ListItemWithHandle = ({
+  id,
+  name,
+  index,
+  parent,
+  children,
+  className,
+}: ListItemProps) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id,
+      data: { index, parent },
+    });
+
+  return (
+    <div
+      className={cn(
+        "bg-background flex items-center gap-3 rounded-md border p-2 shadow-sm",
+        className,
+      )}
+      style={{
+        transform: transform
+          ? `translateX(${transform.x}px) translateY(${transform.y}px)`
+          : "none",
+      }}
+      ref={setNodeRef}
+    >
+      <div
+        className={cn("cursor-grab", isDragging && "cursor-grabbing")}
+        {...listeners}
+        {...attributes}
+      >
+        Hi
+      </div>
+      {children ?? <p className="m-0 text-sm font-medium">{name}</p>}
+    </div>
+  );
+};
 
 export function SFTForm({
   config,
@@ -53,6 +101,12 @@ export function SFTForm({
     control: form.control,
     name: ["function", "metric", "threshold"] as const,
   });
+  // const { fields, append, prepend, remove, swap, move, insert } = useFieldArray(
+  //   {
+  //     control: form.control,
+  //     name: "metrics" as const,
+  //   },
+  // );
 
   const [functionName, metricName, threshold] = watchedFields;
   const functionConfig = useFunctionConfig(functionName);
@@ -151,6 +205,13 @@ export function SFTForm({
     }
   }
 
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    console.log(active);
+  };
+
   return (
     <div className="mt-4">
       <Form {...form}>
@@ -177,6 +238,34 @@ export function SFTForm({
             </div>
 
             <div className="flex flex-col">
+              <ListProvider onDragEnd={handleDragEnd}>
+                <ListGroup id="root">
+                  <ListHeader>
+                    <span className="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                      Metrics
+                    </span>
+                  </ListHeader>
+                  {Array.from({ length: 3 }, (_, i) => (
+                    <ListItemWithHandle
+                      name={["name", i].join("-")}
+                      id={i.toString()}
+                      index={i}
+                      parent={"root"}
+                    >
+                      <CurationMetricSelector<SFTFormValues>
+                        control={form.control}
+                        name={"metric"}
+                        functionFieldName="function"
+                        config={config}
+                        addDemonstrations={true}
+                        feedbackCount={counts.feedbackCount}
+                        curatedInferenceCount={counts.curatedInferenceCount}
+                        isLoading={counts.isLoading}
+                      />
+                    </ListItemWithHandle>
+                  ))}
+                </ListGroup>
+              </ListProvider>
               <CurationMetricSelector<SFTFormValues>
                 control={form.control}
                 name="metric"
