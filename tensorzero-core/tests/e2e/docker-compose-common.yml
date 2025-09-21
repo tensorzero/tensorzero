@@ -22,6 +22,7 @@ services:
       start_period: 30s
       start_interval: 1s
       timeout: 1s
+
   minio:
     image: bitnamilegacy/minio:2025.7.23
     ports:
@@ -73,5 +74,5 @@ services:
     ports:
       - "5432:5432"
 
-volume:
+volumes:
   clickhouse-data:
