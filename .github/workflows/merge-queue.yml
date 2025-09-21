@@ -45,6 +45,7 @@ env:
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
   R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
   SGLANG_API_KEY: ${{ secrets.SGLANG_API_KEY }}
+  TENSORZERO_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests
   TGI_API_KEY: ${{ secrets.TGI_API_KEY }}
   TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
   VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
