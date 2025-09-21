@@ -271,10 +271,8 @@ impl RateLimitedRequest for EmbeddingRequest {
     fn estimated_resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
         let EmbeddingRequest {
             input,
-            #[expect(unused_variables)]
-            dimensions,
-            #[expect(unused_variables)]
-            encoding_format,
+            dimensions: _,
+            encoding_format: _,
         } = self;
         Ok(RateLimitResourceUsage {
             model_inferences: 1,

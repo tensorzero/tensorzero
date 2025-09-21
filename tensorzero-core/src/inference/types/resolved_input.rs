@@ -431,10 +431,8 @@ impl RateLimitedInputContent for FileWithPath {
     fn estimated_input_token_usage(&self) -> u64 {
         let FileWithPath {
             // We explicitly list fields here so that this impl is very explicit
-            #[expect(unused_variables)]
-            file,
-            #[expect(unused_variables)]
-            storage_path,
+            file: _,
+            storage_path: _,
         } = self;
         10_000 // Hardcoded value for file size estimation, we will improve later
     }

@@ -564,10 +564,8 @@ impl RateLimitedInputContent for Thought {
         let Thought {
             text,
             // We explicitly ignore these fields but list them so that this implementation is very explicit
-            #[expect(unused_variables)]
-            signature,
-            #[expect(unused_variables)]
-            provider_type,
+            signature: _,
+            provider_type: _,
         } = self;
         text.as_ref().map_or(0, |text| get_estimated_tokens(text))
     }
@@ -870,39 +868,24 @@ impl<'a> ModelInferenceRequest<'a> {
 impl RateLimitedRequest for ModelInferenceRequest<'_> {
     fn estimated_resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
         let ModelInferenceRequest {
-            #[expect(unused_variables)]
-            inference_id,
+            inference_id: _,
             messages,
             system,
-            #[expect(unused_variables)]
-            tool_config, // TODO: should we account for this in advance?
-            #[expect(unused_variables)]
-            temperature,
-            #[expect(unused_variables)]
-            top_p,
+            tool_config: _, // TODO: should we account for this in advance?
+            temperature: _,
+            top_p: _,
             max_tokens,
-            #[expect(unused_variables)]
-            presence_penalty,
-            #[expect(unused_variables)]
-            frequency_penalty,
-            #[expect(unused_variables)]
-            seed,
-            #[expect(unused_variables)]
-            stop_sequences,
-            #[expect(unused_variables)]
-            stream,
-            #[expect(unused_variables)]
-            json_mode,
-            #[expect(unused_variables)]
-            function_type,
-            #[expect(unused_variables)]
-            output_schema,
-            #[expect(unused_variables)]
-            extra_body,
-            #[expect(unused_variables)]
-            extra_headers,
-            #[expect(unused_variables)]
-            extra_cache_key,
+            presence_penalty: _,
+            frequency_penalty: _,
+            seed: _,
+            stop_sequences: _,
+            stream: _,
+            json_mode: _,
+            function_type: _,
+            output_schema: _,
+            extra_body: _,
+            extra_headers: _,
+            extra_cache_key: _,
         } = self;
         let system_tokens = system
             .as_ref()
