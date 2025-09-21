@@ -8,6 +8,7 @@ on:
       - "docs/**"
   schedule:
     - cron: "0 0 * * *" # Runs at 00:00 UTC every day
+  push:
 
 # When triggered from the merge queue, cancel any existing workflow runs for the same PR branch
 # Otherwise, use the unique run id for the concurrency group, to prevent anything from getting cancelled
@@ -25,6 +26,7 @@ env:
   AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
   AZURE_OPENAI_DEPLOYMENT_ID: ${{secrets.AZURE_OPENAI_DEPLOYMENT_ID }}
   DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests
   FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
   FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
   FORCE_COLOR: 1
