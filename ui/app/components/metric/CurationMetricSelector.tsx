@@ -1,25 +1,14 @@
+import clsx from "clsx";
+import { ChevronDown, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
   useFormContext,
-  useWatch,
   type Control,
   type Path,
   type PathValue,
 } from "react-hook-form";
-import type { Config } from "tensorzero-node";
-import {
-  FormField,
-  FormItem,
-  FormLabel,
-  FormControl,
-  FormMessage,
-} from "~/components/ui/form";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "~/components/ui/popover";
+import FeedbackBadges from "~/components/feedback/FeedbackBadges";
 import { Button } from "~/components/ui/button";
-import { ChevronDown, Loader2 } from "lucide-react";
 import {
   Command,
   CommandEmpty,
@@ -28,26 +17,29 @@ import {
   CommandItem,
   CommandList,
 } from "~/components/ui/command";
+import {
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "~/components/ui/form";
 import { Input } from "~/components/ui/input";
-import FeedbackBadges from "~/components/feedback/FeedbackBadges";
-import { useEffect, useMemo, useState } from "react";
-import { useFetcher } from "react-router";
-import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";
-import clsx from "clsx";
-import type { FeedbackConfig } from "~/utils/config/feedback";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "~/components/ui/popover";
 import { Skeleton } from "../ui/skeleton";
+import type { UseFunctionConfigMetricsReturn } from "./useFunctionConfigMetrics";
 
 type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
   control: Control<T>;
   name: Path<T>;
-  functionFieldName: Path<T>;
-  config: Config;
-  addDemonstrations: boolean;
+  functionConfigMetrics: UseFunctionConfigMetricsReturn<T>;
   feedbackCount: number | null;
   curatedInferenceCount: number | null;
   isLoading?: boolean;
-  // Notifies parent when this component's internal fetcher is loading
-  onMetricsLoadingChange?: (loading: boolean) => void;
 };
 
 /**
@@ -65,65 +57,25 @@ export default function CurationMetricSelector<
 >({
   control,
   name,
-  functionFieldName,
-  config,
-  addDemonstrations,
+  functionConfigMetrics,
   feedbackCount,
   curatedInferenceCount,
   isLoading = false,
-  onMetricsLoadingChange,
 }: CurationMetricSelectorProps<T>) {
-  const metricsFetcher = useFetcher<MetricsWithFeedbackData>();
+  const {
+    metricsFetcher,
+    metrics,
+    functionValue,
+    metricsLoading,
+    validMetrics,
+  } = functionConfigMetrics;
   const { getValues, setValue } = useFormContext<T>();
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
-  const metrics = Object.fromEntries(
-    Object.entries(config.metrics).filter(([, v]) => v !== undefined),
-  ) as Record<string, FeedbackConfig>;
-
-  if (addDemonstrations) {
-    metrics["demonstration"] = {
-      type: "demonstration",
-      level: "inference",
-    };
-  }
-
-  const functionValue = useWatch({
-    control,
-    name: functionFieldName,
-  });
-
   const handleInputChange = (input: string) => {
     setInputValue(input);
   };
-
-  useEffect(() => {
-    if (functionValue && typeof functionValue === "string") {
-      metricsFetcher.load(
-        `/api/function/${encodeURIComponent(functionValue)}/feedback_counts`,
-      );
-    }
-    // TODO: Fix and stop ignoring lint rule
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [functionValue]);
-
-  const validMetrics = useMemo(() => {
-    if (!metricsFetcher.data) return new Set<string>();
-    return new Set(
-      metricsFetcher.data.metrics
-        .filter((m) => addDemonstrations || m.metric_name !== "demonstration")
-        .map((m) => m.metric_name),
-    );
-  }, [metricsFetcher.data, addDemonstrations]);
-
-  const metricsLoading = metricsFetcher.state === "loading";
-
-  // Inform parent when the internal metrics fetcher loading state changes
-  useEffect(() => {
-    onMetricsLoadingChange?.(metricsLoading);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [metricsLoading]);
 
   // Reset metric value if the selected function does not have the previously selected metric
   useEffect(() => {

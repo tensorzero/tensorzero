@@ -19,6 +19,7 @@ import { Button } from "~/components/ui/button";
 import OutputSourceSelector from "./OutputSourceSelector";
 import { DatasetCountDisplay } from "./DatasetCountDisplay";
 import { logger } from "~/utils/logger";
+import { useFunctionConfigMetrics } from "~/components/metric/useFunctionConfigMetrics";
 
 export function DatasetBuilderForm() {
   const config = useConfig();
@@ -140,6 +141,14 @@ export function DatasetBuilderForm() {
     }
   }
 
+  const functionConfigMetrics = useFunctionConfigMetrics({
+    control: form.control,
+    functionFieldName: "function",
+    config,
+    addDemonstrations: true,
+    onMetricsLoadingChange: setIsMetricSelectorLoading,
+  });
+
   return (
     <Form {...form}>
       <form
@@ -170,13 +179,10 @@ export function DatasetBuilderForm() {
           <CurationMetricSelector<DatasetBuilderFormValues>
             control={form.control}
             name="metric_name"
-            functionFieldName="function"
-            config={config}
-            addDemonstrations={false}
+            functionConfigMetrics={functionConfigMetrics}
             feedbackCount={counts.feedbackCount}
             curatedInferenceCount={counts.curatedInferenceCount}
             isLoading={counts.isLoading}
-            onMetricsLoadingChange={setIsMetricSelectorLoading}
           />
           <OutputSourceSelector
             control={form.control}

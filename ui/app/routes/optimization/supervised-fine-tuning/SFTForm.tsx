@@ -25,6 +25,7 @@ import {
 } from "~/components/ui/List";
 import { useDraggable } from "@dnd-kit/core";
 import { cn } from "~/utils/common";
+import { useFunctionConfigMetrics } from "~/components/metric/useFunctionConfigMetrics";
 
 const ListItemWithHandle = ({
   id,
@@ -212,6 +213,13 @@ export function SFTForm({
     console.log(active);
   };
 
+  const functionConfigMetrics = useFunctionConfigMetrics({
+    control: form.control,
+    functionFieldName: "function",
+    config,
+    addDemonstrations: true,
+  });
+
   return (
     <div className="mt-4">
       <Form {...form}>
@@ -255,9 +263,7 @@ export function SFTForm({
                       <CurationMetricSelector<SFTFormValues>
                         control={form.control}
                         name={"metric"}
-                        functionFieldName="function"
-                        config={config}
-                        addDemonstrations={true}
+                        functionConfigMetrics={functionConfigMetrics}
                         feedbackCount={counts.feedbackCount}
                         curatedInferenceCount={counts.curatedInferenceCount}
                         isLoading={counts.isLoading}
@@ -269,9 +275,7 @@ export function SFTForm({
               <CurationMetricSelector<SFTFormValues>
                 control={form.control}
                 name="metric"
-                functionFieldName="function"
-                config={config}
-                addDemonstrations={true}
+                functionConfigMetrics={functionConfigMetrics}
                 feedbackCount={counts.feedbackCount}
                 curatedInferenceCount={counts.curatedInferenceCount}
                 isLoading={counts.isLoading}
