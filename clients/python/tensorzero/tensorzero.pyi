@@ -114,7 +114,7 @@ class RenderedSample:
 
 @final
 class OptimizationJobHandle:
-    Dicl: Type["OptimizationJobHandle"]
+    DICL: Type["OptimizationJobHandle"]
     OpenAISFT: Type["OptimizationJobHandle"]
     OpenAIRFT: Type["OptimizationJobHandle"]
     FireworksSFT: Type["OptimizationJobHandle"]
@@ -129,7 +129,7 @@ class OptimizationJobStatus:
 
 @final
 class OptimizationJobInfo:
-    Dicl: Type["OptimizationJobInfo"]
+    DICL: Type["OptimizationJobInfo"]
     OpenAISFT: Type["OptimizationJobInfo"]
     OpenAIRFT: Type["OptimizationJobInfo"]
     FireworksSFT: Type["OptimizationJobInfo"]
