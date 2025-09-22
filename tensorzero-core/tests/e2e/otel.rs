@@ -379,7 +379,13 @@ pub async fn test_capture_simple_inference_spans(
                 total_tokens.into()
             );
             // We currently don't have input/output attributes implemented for streaming inferences
-            if !streaming {
+            if streaming {
+                // When we implement input/output attributes for streaming inferences, remove these checks
+                assert!(!model_provider_attr_map.contains_key("input.mime_type"));
+                assert!(!model_provider_attr_map.contains_key("output.mime_type"));
+                assert!(!model_provider_attr_map.contains_key("input.value"));
+                assert!(!model_provider_attr_map.contains_key("output.value"));
+            } else {
                 assert_eq!(
                     model_provider_attr_map["input.mime_type"],
                     "application/json".into()
@@ -393,12 +399,6 @@ pub async fn test_capture_simple_inference_spans(
                     model_provider_attr_map["output.value"],
                     "{\n  \"id\": \"id\",\n  \"object\": \"text.completion\",\n  \"created\": 1618870400,\n  \"model\": \"text-davinci-002\",\n  \"choices\": [\n    {\n      \"text\": \"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\",\n      \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": null\n    }\n  ]\n}".into()
                 );
-            } else {
-                // When we implement input/output attributes for streaming inferences, remove these checks
-                assert!(!model_provider_attr_map.contains_key("input.mime_type"));
-                assert!(!model_provider_attr_map.contains_key("output.mime_type"));
-                assert!(!model_provider_attr_map.contains_key("input.value"));
-                assert!(!model_provider_attr_map.contains_key("output.value"));
             }
 
             assert!(!model_provider_attr_map.contains_key("gen_ai.usage.input_tokens"));
