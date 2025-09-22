@@ -1,4 +1,4 @@
-import { useForm, useWatch } from "react-hook-form";
+import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { useFetcher } from "react-router";
 import { useEffect } from "react";
 import { v7 as uuid } from "uuid";
@@ -13,7 +13,6 @@ import { Form } from "~/components/ui/form";
 import type { ChatCompletionConfig, VariantInfo } from "tensorzero-node";
 import type { Config } from "tensorzero-node";
 import { models } from "./model_options";
-import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
 import { logger } from "~/utils/logger";
 import { useAllFunctionConfigs, useFunctionConfig } from "~/context/config";
 import {
@@ -26,6 +25,7 @@ import {
 import { useDraggable } from "@dnd-kit/core";
 import { cn } from "~/utils/common";
 import { useFunctionConfigMetrics } from "~/components/metric/useFunctionConfigMetrics";
+import { useCountData } from "~/components/metric/useCountData";
 
 const ListItemWithHandle = ({
   id,
@@ -81,6 +81,7 @@ export function SFTForm({
     defaultValues: {
       function: "",
       metric: "",
+      metrics: [{ metric: "", threshold: 0.5 }],
       validationSplitPercent: 20,
       maxSamples: 100000,
       threshold: 0.5,
@@ -102,25 +103,25 @@ export function SFTForm({
     control: form.control,
     name: ["function", "metric", "threshold"] as const,
   });
-  // const { fields, append, prepend, remove, swap, move, insert } = useFieldArray(
-  //   {
-  //     control: form.control,
-  //     name: "metrics" as const,
-  //   },
-  // );
+  const {
+    fields,
+    //append, prepend, remove, swap, move, insert
+  } = useFieldArray({
+    control: form.control,
+    name: "metrics" as const,
+  });
 
   const [functionName, metricName, threshold] = watchedFields;
   const functionConfig = useFunctionConfig(functionName);
   const parsedThreshold =
     typeof threshold === "string" ? parseFloat(threshold) : threshold;
 
-  const counts = useCountFetcher({
-    functionName: functionName ?? undefined,
-    metricName: metricName ?? undefined,
-    threshold: !isNaN(parsedThreshold) ? parsedThreshold : undefined,
+  console.warn({ metricName });
+  const { counts, isCuratedInferenceCountLow } = useCountData({
+    functionName,
+    metricName,
+    parsedThreshold,
   });
-  const isCuratedInferenceCountLow =
-    counts.curatedInferenceCount !== null && counts.curatedInferenceCount < 10;
 
   // Use formFetcher for submission errors
   const errorsOnSubmit = formFetcher.data?.errors;
@@ -253,7 +254,7 @@ export function SFTForm({
                       Metrics
                     </span>
                   </ListHeader>
-                  {Array.from({ length: 3 }, (_, i) => (
+                  {fields.map((_, i) => (
                     <ListItemWithHandle
                       name={["name", i].join("-")}
                       id={i.toString()}
@@ -262,7 +263,7 @@ export function SFTForm({
                     >
                       <CurationMetricSelector<SFTFormValues>
                         control={form.control}
-                        name={"metric"}
+                        name={`metrics.${i}`}
                         functionConfigMetrics={functionConfigMetrics}
                         feedbackCount={counts.feedbackCount}
                         curatedInferenceCount={counts.curatedInferenceCount}
@@ -272,14 +273,14 @@ export function SFTForm({
                   ))}
                 </ListGroup>
               </ListProvider>
-              <CurationMetricSelector<SFTFormValues>
+              {/* <CurationMetricSelector<SFTFormValues>
                 control={form.control}
                 name="metric"
                 functionConfigMetrics={functionConfigMetrics}
                 feedbackCount={counts.feedbackCount}
                 curatedInferenceCount={counts.curatedInferenceCount}
                 isLoading={counts.isLoading}
-              />
+              /> */}
 
               {errors.metric && (
                 <p className="text-xs text-red-500">{errors.metric.message}</p>

@@ -32,6 +32,7 @@ import {
 } from "~/components/ui/popover";
 import { Skeleton } from "../ui/skeleton";
 import type { UseFunctionConfigMetricsReturn } from "./useFunctionConfigMetrics";
+import { useCountData } from "./useCountData";
 
 type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
   control: Control<T>;
@@ -54,14 +55,7 @@ type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
  */
 export default function CurationMetricSelector<
   T extends Record<string, unknown>,
->({
-  control,
-  name,
-  functionConfigMetrics,
-  feedbackCount,
-  curatedInferenceCount,
-  isLoading = false,
-}: CurationMetricSelectorProps<T>) {
+>({ control, name, functionConfigMetrics }: CurationMetricSelectorProps<T>) {
   const {
     metricsFetcher,
     metrics,
@@ -72,6 +66,28 @@ export default function CurationMetricSelector<
   const { getValues, setValue } = useFormContext<T>();
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
+
+  // TODO(bret): get the threshold properly
+  const threshold = 0.5;
+  const parsedThreshold =
+    typeof threshold === "string" ? parseFloat(threshold) : threshold;
+
+  const metricValue = getValues(name) as string | null;
+  console.log({ name, metricValue });
+  const { counts } = useCountData({
+    functionName: functionValue as string | null,
+    metricName: metricValue,
+    parsedThreshold,
+  });
+
+  console.log({ counts });
+
+  const {
+    // inferenceCount,
+    feedbackCount,
+    curatedInferenceCount,
+    isLoading,
+  } = counts;
 
   const handleInputChange = (input: string) => {
     setInputValue(input);
