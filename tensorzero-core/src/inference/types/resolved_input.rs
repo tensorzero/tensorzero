@@ -468,13 +468,21 @@ impl std::fmt::Display for FileWithPath {
     }
 }
 
-impl RateLimitedInputContent for FileWithPath {
+impl RateLimitedInputContent for LazyFile {
     fn estimated_input_token_usage(&self) -> u64 {
-        let FileWithPath {
-            // We explicitly list fields here so that this impl is very explicit
-            file: _,
-            storage_path: _,
-        } = self;
+        match self {
+            LazyFile::FileWithPath(FileWithPath {
+                file: _,
+                storage_path: _,
+            }) => {}
+            // Forwarding a url is inherently incompatible with input token estimation,
+            // so we'll need to continue using a hardcoded value here, even if we start
+            // estimating tokens LazyFile::FileWithPath
+            LazyFile::Url {
+                file_url: _,
+                future: _,
+            } => {}
+        }
         10_000 // Hardcoded value for file size estimation, we will improve later
     }
 }
