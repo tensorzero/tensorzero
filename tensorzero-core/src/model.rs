@@ -1223,37 +1223,79 @@ impl ModelProvider {
         span: &Span,
         resp: &Result<ProviderInferenceResponse, Error>,
     ) {
-        if let Ok(resp) = resp {
-            if otlp_config.traces.enabled {
-                match otlp_config.traces.format {
-                    OtlpTracesFormat::OpenTelemetry => {
-                        span.set_attribute(
-                            "gen_ai.usage.input_tokens",
-                            resp.usage.input_tokens as i64,
-                        );
-                        span.set_attribute(
-                            "gen_ai.usage.output_tokens",
-                            resp.usage.output_tokens as i64,
-                        );
-                        span.set_attribute(
-                            "gen_ai.usage.total_tokens",
-                            (resp.usage.input_tokens + resp.usage.output_tokens) as i64,
-                        );
+        match resp {
+            Ok(resp) => {
+                if otlp_config.traces.enabled {
+                    match otlp_config.traces.format {
+                        OtlpTracesFormat::OpenTelemetry => {
+                            span.set_attribute(
+                                "gen_ai.usage.input_tokens",
+                                resp.usage.input_tokens as i64,
+                            );
+                            span.set_attribute(
+                                "gen_ai.usage.output_tokens",
+                                resp.usage.output_tokens as i64,
+                            );
+                            span.set_attribute(
+                                "gen_ai.usage.total_tokens",
+                                (resp.usage.input_tokens + resp.usage.output_tokens) as i64,
+                            );
+                        }
+                        OtlpTracesFormat::OpenInference => {
+                            span.set_attribute(
+                                "llm.token_count.prompt",
+                                resp.usage.input_tokens as i64,
+                            );
+                            span.set_attribute(
+                                "llm.token_count.completion",
+                                resp.usage.output_tokens as i64,
+                            );
+                            span.set_attribute(
+                                "llm.token_count.total",
+                                (resp.usage.input_tokens + resp.usage.output_tokens) as i64,
+                            );
+                            // If we ever add providers that don't use JSON, we'll need to update this.
+
+                            span.set_attribute("input.mime_type", "application/json");
+                            span.set_attribute("input.value", resp.raw_request.clone());
+
+                            span.set_attribute("output.mime_type", "application/json");
+                            span.set_attribute("output.value", resp.raw_response.clone());
+                        }
                     }
-                    OtlpTracesFormat::OpenInference => {
-                        span.set_attribute(
-                            "llm.token_count.prompt",
-                            resp.usage.input_tokens as i64,
-                        );
-                        span.set_attribute(
-                            "llm.token_count.completion",
-                            resp.usage.output_tokens as i64,
-                        );
-                        span.set_attribute(
-                            "llm.token_count.total",
-                            (resp.usage.input_tokens + resp.usage.output_tokens) as i64,
-                        );
+                }
+            }
+            // If an error occurs, try to extract the raw request/response to attach to the OpenTelemetry span
+            Err(e) => {
+                match e.get_details() {
+                    ErrorDetails::InferenceClient {
+                        raw_request,
+                        raw_response,
+                        ..
                     }
+                    | ErrorDetails::InferenceServer {
+                        raw_request,
+                        raw_response,
+                        ..
+                    } => {
+                        if otlp_config.traces.enabled {
+                            match otlp_config.traces.format {
+                                OtlpTracesFormat::OpenTelemetry => {}
+                                OtlpTracesFormat::OpenInference => {
+                                    // If we ever add providers that don't use JSON, we'll need to update this.
+                                    if let Some(raw_request) = raw_request {
+                                        span.set_attribute("input.mime_type", "application/json");
+                                        span.set_attribute("input.value", raw_request.clone());
+                                    }
+                                    if let Some(raw_response) = raw_response {
+                                        span.set_attribute("output.mime_type", "application/json");
+                                        span.set_attribute("output.value", raw_response.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
