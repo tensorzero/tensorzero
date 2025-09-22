@@ -25,8 +25,6 @@ use crate::stored_inference::{
 };
 use pyo3::types::PyNone;
 
-use super::ContentBlock;
-
 pub static JSON_LOADS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 pub static JSON_DUMPS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 pub static UUID_UUID: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
