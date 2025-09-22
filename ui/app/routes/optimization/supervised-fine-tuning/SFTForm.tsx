@@ -1,73 +1,26 @@
-import { useFieldArray, useForm, useWatch } from "react-hook-form";
-import { useFetcher } from "react-router";
 import { useEffect } from "react";
+import { useForm, useWatch } from "react-hook-form";
+import { useFetcher } from "react-router";
+import type {
+  ChatCompletionConfig,
+  Config,
+  VariantInfo,
+} from "tensorzero-node";
 import { v7 as uuid } from "uuid";
-import { type SFTFormValues, SFTFormValuesResolver } from "./types";
 import { FunctionFormField } from "~/components/function/FunctionFormField";
-import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
-import { VariantSelector } from "./VariantSelector";
-import { ModelSelector } from "./ModelSelector";
-import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
+import { useCountData } from "~/components/metric/useCountData";
 import { Button } from "~/components/ui/button";
 import { Form } from "~/components/ui/form";
-import type { ChatCompletionConfig, VariantInfo } from "tensorzero-node";
-import type { Config } from "tensorzero-node";
-import { models } from "./model_options";
-import { logger } from "~/utils/logger";
 import { useAllFunctionConfigs, useFunctionConfig } from "~/context/config";
-import {
-  ListGroup,
-  ListHeader,
-  ListProvider,
-  type DragEndEvent,
-  type ListItemProps,
-} from "~/components/ui/List";
-import { useDraggable } from "@dnd-kit/core";
-import { cn } from "~/utils/common";
-import { useFunctionConfigMetrics } from "~/components/metric/useFunctionConfigMetrics";
-import { useCountData } from "~/components/metric/useCountData";
-import { Placeholder } from "~/components/icons/Icons";
+import { logger } from "~/utils/logger";
+import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
+import { FiltersInput } from "./Filters";
+import { models } from "./model_options";
+import { ModelSelector } from "./ModelSelector";
+import { SFTFormValuesResolver, type SFTFormValues } from "./types";
+import { VariantSelector } from "./VariantSelector";
 
-const ListItemWithHandle = ({
-  id,
-  name,
-  index,
-  parent,
-  children,
-  className,
-}: ListItemProps) => {
-  const { attributes, listeners, setNodeRef, transform, isDragging } =
-    useDraggable({
-      id,
-      data: { index, parent },
-    });
-
-  return (
-    <div
-      className={cn(
-        "bg-background flex items-center gap-3 rounded-md border p-2 shadow-sm",
-        className,
-      )}
-      style={{
-        transform: transform
-          ? `translateX(${transform.x}px) translateY(${transform.y}px)`
-          : "none",
-      }}
-      ref={setNodeRef}
-    >
-      <div
-        className={cn("cursor-grab", isDragging && "cursor-grabbing")}
-        {...listeners}
-        {...attributes}
-      >
-        <Placeholder />
-      </div>
-      {children ?? <p className="m-0 text-sm font-medium">{name}</p>}
-    </div>
-  );
-};
-
-const metricTemplate = { metric: "", threshold: 0.5 };
+// const metricTemplate = { metric: "", threshold: 0.5 };
 
 export function SFTForm({
   config,
@@ -82,9 +35,13 @@ export function SFTForm({
 }) {
   const form = useForm<SFTFormValues>({
     defaultValues: {
-      function: "",
+      function: "generate_secret",
       metric: "",
-      filters: [{ ...metricTemplate }],
+      filters: [
+        { metric: "goated", threshold: 0.5 },
+        { metric: "elapsed_ms", threshold: 0.5 },
+        { metric: "num_questions", threshold: 0.5 },
+      ],
       validationSplitPercent: 20,
       maxSamples: 100000,
       threshold: 0.5,
@@ -105,11 +62,6 @@ export function SFTForm({
   const watchedFields = useWatch({
     control: form.control,
     name: ["function", "metric", "threshold"] as const,
-  });
-  // { fields, append, prepend, remove, swap, move, insert }
-  const filters = useFieldArray({
-    control: form.control,
-    name: "filters",
   });
 
   const [functionName, metricName, threshold] = watchedFields;
@@ -207,25 +159,6 @@ export function SFTForm({
     }
   }
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    console.log(active.id, over.id);
-    filters.swap(1, 2);
-
-    console.log(active);
-  };
-
-  console.log(filters.fields);
-
-  const functionConfigMetrics = useFunctionConfigMetrics({
-    control: form.control,
-    functionFieldName: "function",
-    config,
-    addDemonstrations: true,
-  });
-
   return (
     <div className="mt-4">
       <Form {...form}>
@@ -251,58 +184,7 @@ export function SFTForm({
               )}
             </div>
 
-            <div className="flex flex-col">
-              <ListProvider onDragEnd={handleDragEnd}>
-                <ListGroup id="root">
-                  <ListHeader>
-                    <span className="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                      Metrics
-                    </span>
-                  </ListHeader>
-                  {filters.fields.map(({ id }, i) => {
-                    const name = ["name", id].join("-");
-                    return (
-                      <ListItemWithHandle
-                        key={name}
-                        name={name}
-                        id={name}
-                        index={i}
-                        parent={"root"}
-                      >
-                        <CurationMetricSelector<SFTFormValues>
-                          control={form.control}
-                          name={`filters.${i}`}
-                          functionConfigMetrics={functionConfigMetrics}
-                          feedbackCount={counts.feedbackCount}
-                          curatedInferenceCount={counts.curatedInferenceCount}
-                          isLoading={counts.isLoading}
-                        />
-                      </ListItemWithHandle>
-                    );
-                  })}
-                </ListGroup>
-              </ListProvider>
-
-              <Button
-                type="button"
-                onClick={() => filters.append({ ...metricTemplate })}
-              >
-                Append
-              </Button>
-
-              {/* <CurationMetricSelector<SFTFormValues>
-                control={form.control}
-                name="metric"
-                functionConfigMetrics={functionConfigMetrics}
-                feedbackCount={counts.feedbackCount}
-                curatedInferenceCount={counts.curatedInferenceCount}
-                isLoading={counts.isLoading}
-              /> */}
-
-              {errors.metric && (
-                <p className="text-xs text-red-500">{errors.metric.message}</p>
-              )}
-            </div>
+            <FiltersInput config={config} form={form} counts={counts} />
 
             <div className="flex flex-col gap-1">
               <VariantSelector

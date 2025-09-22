@@ -93,6 +93,8 @@ export default function CurationMetricSelector<
 
   // Reset metric value if the selected function does not have the previously selected metric
   useEffect(() => {
+    if (metricsLoading) return;
+
     const metricValue = getValues(name);
     if (
       functionValue &&
@@ -105,12 +107,12 @@ export default function CurationMetricSelector<
     }
     // TODO: Fix and stop ignoring lint rule
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [functionValue, validMetrics, getValues, setValue]);
+  }, [metricsLoading, functionValue, validMetrics, getValues, setValue]);
 
   return (
     <FormField
       control={control}
-      name={name}
+      name={[name, "metric"].join(".") as Path<T>}
       render={({ field }) => (
         <FormItem className="flex grow flex-col justify-center">
           <FormLabel>
@@ -295,7 +297,7 @@ export default function CurationMetricSelector<
               {field.value && metrics[field.value]?.type === "float" && (
                 <FormField
                   control={control}
-                  name={"threshold" as Path<T>}
+                  name={[name, "threshold"].join(".") as Path<T>}
                   render={({ field: thresholdField }) => (
                     <FormItem className="flex flex-col gap-1 border-l pl-4">
                       <FormLabel>Threshold</FormLabel>
