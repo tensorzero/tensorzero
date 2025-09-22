@@ -18,7 +18,7 @@ use crate::inference::types::stored_input::StoredFile;
 use crate::inference::types::stored_input::{
     StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
-use crate::inference::types::TemplateInput;
+use crate::inference::types::{RequestMessage, ResolvedContentBlock, TemplateInput};
 use crate::tool::{ToolCall, ToolResult};
 
 #[cfg(feature = "pyo3")]
@@ -470,6 +470,57 @@ impl std::fmt::Display for FileWithPath {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl FileWithPath {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
+
+/// Like `RequestMessage`, but holds fully-resolved files instead of `LazyFile`s
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+pub struct ResolvedRequestMessage {
+    pub role: Role,
+    pub content: Vec<ResolvedContentBlock>,
+}
+
+impl ResolvedRequestMessage {
+    pub fn into_request_message(self) -> RequestMessage {
+        RequestMessage {
+            role: self.role,
+            content: self
+                .content
+                .into_iter()
+                .map(ResolvedContentBlock::into_content_block)
+                .collect(),
+        }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl ResolvedRequestMessage {
+    #[getter]
+    fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        use pyo3::types::PyList;
+
+        use crate::inference::types::pyo3_helpers::resolved_content_block_to_python;
+
+        let content = self
+            .content
+            .iter()
+            .map(|c| resolved_content_block_to_python(py, c))
+            .collect::<PyResult<Vec<_>>>()?;
+        PyList::new(py, content).map(Bound::into_any)
+    }
+
+    #[getter]
+    fn get_role(&self) -> String {
+        self.role.to_string()
+    }
+
     pub fn __repr__(&self) -> String {
         self.to_string()
     }

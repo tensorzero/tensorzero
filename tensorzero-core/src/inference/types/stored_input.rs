@@ -3,6 +3,7 @@ use crate::endpoints::object_storage::get_object;
 use crate::error::Error;
 use crate::error::ErrorDetails;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::inference::types::StoredContentBlock;
 use crate::inference::types::file::Base64FileMetadata;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::stored_input_message_content_to_python;
@@ -258,4 +259,17 @@ impl StoredInput {
     pub fn get_messages(&self) -> Vec<StoredInputMessage> {
         self.messages.clone()
     }
+}
+
+
+
+/// The message type that we directly store in ClickHouse.
+/// This is almost identical to `RequestMessage`, but without `File` data.
+/// Only the object-storage path is actually stored in clickhouse
+/// The `RequestMessage/StoredRequestMessage` pair is the model-level equivalent
+/// of `ResolvedInput/StoredInput`
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct StoredRequestMessage {
+    pub role: Role,
+    pub content: Vec<StoredContentBlock>,
 }

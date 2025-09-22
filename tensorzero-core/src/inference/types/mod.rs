@@ -112,7 +112,8 @@ pub mod resolved_input;
 pub mod storage;
 pub mod stored_input;
 
-pub use stored_input::{StoredInput, StoredInputMessage, StoredInputMessageContent};
+pub use resolved_input::ResolvedRequestMessage;
+pub use stored_input::{StoredInput, StoredInputMessage, StoredInputMessageContent, StoredRequestMessage};
 
 /*
  * Data flow in TensorZero
@@ -767,33 +768,9 @@ pub enum ContentBlockChatOutput {
 /// A RequestMessage is a message sent to a model
 #[derive(Clone, Debug, Serialize)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
-//#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct RequestMessage {
     pub role: Role,
     pub content: Vec<ContentBlock>,
-}
-
-/// Like `RequestMessage`, but holds fully-resolved files instead of `LazyFile`s
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
-pub struct ResolvedRequestMessage {
-    pub role: Role,
-    pub content: Vec<ResolvedContentBlock>,
-}
-
-impl ResolvedRequestMessage {
-    pub fn into_request_message(self) -> RequestMessage {
-        RequestMessage {
-            role: self.role,
-            content: self
-                .content
-                .into_iter()
-                .map(ResolvedContentBlock::into_content_block)
-                .collect(),
-        }
-    }
 }
 
 impl RequestMessage {
@@ -821,45 +798,10 @@ impl RequestMessage {
         })
     }
 }
-
-/// The message type that we directly store in ClickHouse.
-/// This is almost identical to `RequestMessage`, but without `File` data.
-/// Only the object-storage path is actually stored in clickhouse
-/// The `RequestMessage/StoredRequestMessage` pair is the model-level equivalent
-/// of `ResolvedInput/StoredInput`
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct StoredRequestMessage {
-    pub role: Role,
-    pub content: Vec<StoredContentBlock>,
-}
-
 impl std::fmt::Display for RequestMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl ResolvedRequestMessage {
-    #[getter]
-    fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let content = self
-            .content
-            .iter()
-            .map(|c| resolved_content_block_to_python(py, c))
-            .collect::<PyResult<Vec<_>>>()?;
-        PyList::new(py, content).map(Bound::into_any)
-    }
-
-    #[getter]
-    fn get_role(&self) -> String {
-        self.role.to_string()
-    }
-
-    pub fn __repr__(&self) -> String {
-        self.to_string()
     }
 }
 
