@@ -4,6 +4,7 @@ use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
 use futures::stream::Stream;
+use futures::FutureExt;
 use metrics::counter;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
@@ -823,16 +824,19 @@ async fn write_inference(
     result: InferenceResult,
     metadata: InferenceDatabaseInsertMetadata,
 ) {
+    let model_responses: Vec<serde_json::Value> = result.get_serialized_model_inferences().await;
     let mut futures: Vec<Pin<Box<dyn Future<Output = ()> + Send>>> =
         input.clone().write_all_files(config);
-    let model_responses: Vec<serde_json::Value> = result.get_serialized_model_inferences();
-    futures.push(Box::pin(async {
-        // Write the model responses to the ModelInference table
-        for response in model_responses {
+    // Write the model responses to the ModelInference table
+    futures.push(
+        async {
             let _ = clickhouse_connection_info
-                .write_batched(&[response], TableName::ModelInference)
+                .write_batched(&model_responses, TableName::ModelInference)
                 .await;
         }
+        .boxed(),
+    );
+    futures.push(Box::pin(async {
         // Write the inference to the Inference table
         match result {
             InferenceResult::Chat(result) => {

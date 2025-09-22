@@ -38,8 +38,7 @@ use tensorzero_core::{
     cache::CacheEnabledMode,
     inference::types::{
         storage::{StorageKind, StoragePath},
-        ContentBlock, ContentBlockChatOutput, File, RequestMessage, Role, StoredContentBlock,
-        StoredRequestMessage, Text,
+        ContentBlockChatOutput, File, Role, StoredContentBlock, StoredRequestMessage, Text,
     },
     tool::{ToolCall, ToolResult},
 };
@@ -2677,18 +2676,18 @@ pub async fn check_simple_inference_response(
         "You are a helpful and friendly assistant named Dr. Mehta"
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the name of the capital city of Japan?"
-            .to_string()
-            .into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is the name of the capital city of Japan?".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     // Some providers always produce thought blocks - we don't care about them in this test
-    output.retain(|c| !matches!(c, ContentBlock::Thought(_)));
+    output.retain(|c| !matches!(c, StoredContentBlock::Thought(_)));
     assert_eq!(output.len(), 1);
 
     if !is_batch {
@@ -2883,7 +2882,7 @@ pub async fn check_simple_image_inference_response(
         output.to_lowercase().contains("crab"),
         "Unexpected output: {output}",
     );
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
 
     if !is_batch {
@@ -3272,18 +3271,18 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         format!("You are a helpful and friendly assistant named Dr. Mehta #{seed}")
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the name of the capital city of Japan?"
-            .to_string()
-            .into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is the name of the capital city of Japan?".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     // Some providers always produce thought blocks - we don't care about them in this test
-    output.retain(|c| !matches!(c, ContentBlock::Thought(_)));
+    output.retain(|c| !matches!(c, StoredContentBlock::Thought(_)));
     assert_eq!(output.len(), 1);
 
     // Check the InferenceTag Table
@@ -3525,16 +3524,16 @@ pub async fn check_inference_params_response(
         "You are a helpful and friendly assistant named Dr. Mehta"
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the name of the capital city of Japan?"
-            .to_string()
-            .into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is the name of the capital city of Japan?".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
 }
 
@@ -3794,16 +3793,16 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         "You are a helpful and friendly assistant named Dr. Mehta"
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the name of the capital city of Japan?"
-            .to_string()
-            .into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is the name of the capital city of Japan?".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
 }
 
@@ -4053,8 +4052,8 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![
             "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
@@ -4064,10 +4063,10 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
-        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
         .collect();
 
     // Assert exactly one tool call
@@ -4075,7 +4074,7 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
 
     let tool_call_block = tool_call_blocks[0];
     match tool_call_block {
-        ContentBlock::ToolCall(tool_call) => {
+        StoredContentBlock::ToolCall(tool_call) => {
             assert_eq!(tool_call.name, "get_temperature");
             let arguments =
                 serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
@@ -4414,8 +4413,8 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![
             "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
@@ -4425,10 +4424,10 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
-        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
         .collect();
 
     // Assert exactly one tool call
@@ -4436,7 +4435,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
 
     let tool_call_block = tool_call_blocks[0];
     match tool_call_block {
-        ContentBlock::ToolCall(tool_call) => {
+        StoredContentBlock::ToolCall(tool_call) => {
             assert_eq!(tool_call.name, "get_temperature");
             let arguments =
                 serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
@@ -4685,20 +4684,22 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is your name?".to_string().into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is your name?".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     // We don't care about thoughts in this test
-    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
+    output.retain(|block| !matches!(block, StoredContentBlock::Thought(_)));
 
     let first = output.first().unwrap();
     match first {
-        ContentBlock::Text(_text) => {}
+        StoredContentBlock::Text(_text) => {}
         _ => {
             panic!("Expected a text block, got {first:?}");
         }
@@ -4985,20 +4986,22 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is your name?".to_string().into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is your name?".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     // We don't care about thoughts in this test
-    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
+    output.retain(|block| !matches!(block, StoredContentBlock::Thought(_)));
 
     let first = output.first().unwrap();
     match first {
-        ContentBlock::Text(_text) => {}
+        StoredContentBlock::Text(_text) => {}
         _ => {
             panic!("Expected a text block, got {first:?}");
         }
@@ -5270,17 +5273,19 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is your name?".to_string().into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is your name?".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
-        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
         .collect();
 
     // Assert at least one tool call
@@ -5291,7 +5296,7 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
 
     for tool_call_block in tool_call_blocks {
         match tool_call_block {
-            ContentBlock::ToolCall(tool_call) => {
+            StoredContentBlock::ToolCall(tool_call) => {
                 assert_eq!(tool_call.name, "get_temperature");
                 serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
             }
@@ -5624,17 +5629,19 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is your name?".to_string().into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is your name?".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
-        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
         .collect();
 
     // Assert at least one tool call
@@ -5645,7 +5652,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
 
     for tool_call_block in tool_call_blocks {
         match tool_call_block {
-            ContentBlock::ToolCall(tool_call) => {
+            StoredContentBlock::ToolCall(tool_call) => {
                 assert_eq!(tool_call.name, "get_temperature");
                 serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
             }
@@ -5891,8 +5898,8 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![
             "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
@@ -5902,10 +5909,10 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     let first = output.first().unwrap();
     match first {
-        ContentBlock::Text(_) | ContentBlock::Unknown { .. } => {}
+        StoredContentBlock::Text(_) | StoredContentBlock::Unknown { .. } => {}
         _ => {
             panic!("Expected a text or unknown block, got {first:?}");
         }
@@ -6195,8 +6202,8 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![
             "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
@@ -6206,10 +6213,10 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     let first = output.first().unwrap();
     match first {
-        ContentBlock::Text(_text) => {}
+        StoredContentBlock::Text(_text) => {}
         _ => {
             panic!("Expected a text block, got {first:?}");
         }
@@ -6516,8 +6523,8 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![
             "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."
@@ -6527,10 +6534,10 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
-        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
         .collect();
 
     // Assert at most one tool call (a model could decide to call no tools if to reads the `self_destruct` description).
@@ -6542,7 +6549,7 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
 
     let tool_call_block = tool_call_blocks.first();
     match tool_call_block {
-        Some(ContentBlock::ToolCall(tool_call)) => {
+        Some(StoredContentBlock::ToolCall(tool_call)) => {
             // Don't check which tool was called, as xAI can sometimes call a tool other than `self_destruct`.
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
@@ -6927,17 +6934,17 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![prompt.into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
-        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
         .collect();
 
     // Assert at most one tool call (a model could decide to call no tools if to reads the `self_destruct` description).
@@ -6949,7 +6956,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
 
     let tool_call_block = tool_call_blocks.first();
     match tool_call_block {
-        Some(ContentBlock::ToolCall(tool_call)) => {
+        Some(StoredContentBlock::ToolCall(tool_call)) => {
             // Don't check which tool was called, as xAI can sometimes call a tool other than `self_destruct`.
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
@@ -7190,8 +7197,8 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
         "You are a helpful and friendly assistant named Dr. Mehta"
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![
             "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
@@ -7201,10 +7208,10 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
-        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
         .collect();
 
     // Assert exactly one tool call
@@ -7212,7 +7219,7 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
 
     let tool_call_block = tool_call_blocks[0];
     match tool_call_block {
-        ContentBlock::ToolCall(tool_call) => {
+        StoredContentBlock::ToolCall(tool_call) => {
             assert_eq!(tool_call.name, "get_humidity");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
@@ -7542,8 +7549,8 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
         "You are a helpful and friendly assistant named Dr. Mehta"
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![
             "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
@@ -7553,10 +7560,10 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
-        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
         .collect();
 
     // Assert exactly one tool call
@@ -7564,7 +7571,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
 
     let tool_call_block = tool_call_blocks[0];
     match tool_call_block {
-        ContentBlock::ToolCall(tool_call) => {
+        StoredContentBlock::ToolCall(tool_call) => {
             assert_eq!(tool_call.name, "get_humidity");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
@@ -7797,9 +7804,9 @@ pub async fn check_tool_use_multi_turn_inference_response(
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![
-        RequestMessage {
+        StoredRequestMessage {
             role: Role::User,
             content: vec![
                 "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
@@ -7807,17 +7814,17 @@ pub async fn check_tool_use_multi_turn_inference_response(
                     .into(),
             ],
         },
-        RequestMessage {
+        StoredRequestMessage {
             role: Role::Assistant,
-            content: vec![ContentBlock::ToolCall(ToolCall {
+            content: vec![StoredContentBlock::ToolCall(ToolCall {
                 id: "123456789".to_string(),
                 name: "get_temperature".to_string(),
                 arguments: "{\"location\":\"Tokyo\",\"units\":\"celsius\"}".to_string(),
             })],
         },
-        RequestMessage {
+        StoredRequestMessage {
             role: Role::User,
-            content: vec![ContentBlock::ToolResult(ToolResult {
+            content: vec![StoredContentBlock::ToolResult(ToolResult {
                 id: "123456789".to_string(),
                 name: "get_temperature".to_string(),
                 result: "70".to_string(),
@@ -7826,11 +7833,11 @@ pub async fn check_tool_use_multi_turn_inference_response(
     ];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
     let first = output.first().unwrap();
     match first {
-        ContentBlock::Text(text) => {
+        StoredContentBlock::Text(text) => {
             assert!(text.text.to_lowercase().contains("tokyo"));
         }
         _ => {
@@ -8113,9 +8120,9 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![
-        RequestMessage {
+        StoredRequestMessage {
             role: Role::User,
             content: vec![
                 "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
@@ -8123,17 +8130,17 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                     .into(),
             ],
         },
-        RequestMessage {
+        StoredRequestMessage {
             role: Role::Assistant,
-            content: vec![ContentBlock::ToolCall(ToolCall {
+            content: vec![StoredContentBlock::ToolCall(ToolCall {
                 id: "123456789".to_string(),
                 name: "get_temperature".to_string(),
                 arguments: "{\"location\":\"Tokyo\",\"units\":\"celsius\"}".to_string(),
             })],
         },
-        RequestMessage {
+        StoredRequestMessage {
             role: Role::User,
-            content: vec![ContentBlock::ToolResult(ToolResult {
+            content: vec![StoredContentBlock::ToolResult(ToolResult {
                 id: "123456789".to_string(),
                 name: "get_temperature".to_string(),
                 result: "30".to_string(),
@@ -8142,11 +8149,11 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     ];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
     let first = output.first().unwrap();
     match first {
-        ContentBlock::Text(text) => {
+        StoredContentBlock::Text(text) => {
             assert!(text.text.to_lowercase().contains("tokyo"));
         }
         _ => {
@@ -8554,19 +8561,18 @@ pub async fn check_dynamic_tool_use_inference_response(
         "You are a helpful and friendly assistant named Dr. Mehta"
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
-            .to_string()
-            .into()],
+        content: vec![StoredContentBlock::Text(Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
+            .to_string() })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
-        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
         .collect();
 
     // Assert exactly one tool call
@@ -8574,7 +8580,7 @@ pub async fn check_dynamic_tool_use_inference_response(
 
     let tool_call_block = tool_call_blocks[0];
     match tool_call_block {
-        ContentBlock::ToolCall(tool_call) => {
+        StoredContentBlock::ToolCall(tool_call) => {
             assert_eq!(tool_call.name, "get_temperature");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
@@ -8916,19 +8922,18 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         "You are a helpful and friendly assistant named Dr. Mehta"
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
-            .to_string()
-            .into()],
+        content: vec![StoredContentBlock::Text(Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
+            .to_string() })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
-        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
         .collect();
 
     // Assert exactly one tool call
@@ -8936,7 +8941,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
 
     let tool_call_block = tool_call_blocks[0];
     match tool_call_block {
-        ContentBlock::ToolCall(tool_call) => {
+        StoredContentBlock::ToolCall(tool_call) => {
             assert_eq!(tool_call.name, "get_temperature");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
@@ -9257,16 +9262,15 @@ pub async fn check_parallel_tool_use_inference_response(
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
-            .to_string()
-            .into()],
+        content: vec![StoredContentBlock::Text(Text { text: "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+            .to_string() })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
 
     let is_openrouter = provider.model_provider_name == "openrouter";
     if is_openrouter {
@@ -9274,7 +9278,7 @@ pub async fn check_parallel_tool_use_inference_response(
         // (OpenRouter may include an empty text block)
         let tool_calls = output
             .iter()
-            .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+            .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
             .count();
         assert_eq!(
             tool_calls, 2,
@@ -9293,11 +9297,11 @@ pub async fn check_parallel_tool_use_inference_response(
     let mut tool_call_names = vec![];
     for block in output {
         match block {
-            ContentBlock::ToolCall(tool_call) => {
+            StoredContentBlock::ToolCall(tool_call) => {
                 tool_call_names.push(tool_call.name);
                 serde_json::from_str::<Value>(&tool_call.arguments).unwrap();
             }
-            ContentBlock::Text(text) if text.text.is_empty() && is_openrouter => {
+            StoredContentBlock::Text(text) if text.text.is_empty() && is_openrouter => {
                 // Skip empty text blocks for OpenRouter
                 continue;
             }
@@ -9712,26 +9716,25 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
-            .to_string()
-            .into()],
+        content: vec![StoredContentBlock::Text(Text { text: "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+            .to_string() })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     assert!(output.len() >= 2);
     let mut tool_call_names = vec![];
     for block in output {
         match block {
-            ContentBlock::ToolCall(tool_call) => {
+            StoredContentBlock::ToolCall(tool_call) => {
                 tool_call_names.push(tool_call.name);
                 serde_json::from_str::<Value>(&tool_call.arguments).unwrap();
             }
             // Sometimes vLLM returns a text block alongside the tool calls
-            ContentBlock::Text(_) => {
+            StoredContentBlock::Text(_) => {
                 // Do nothing
             }
             _ => {
@@ -9932,18 +9935,18 @@ pub async fn check_json_mode_inference_response(
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPlease answer the questions in a JSON with key \"answer\".\n\nDo not include any other text than the JSON object. Do not include \"```json\" or \"```\" or anything else.\n\nExample Response:\n\n{\n    \"answer\": \"42\"\n}"
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the name of the capital city of Japan?"
-            .to_string()
-            .into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is the name of the capital city of Japan?".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     // We don't care about thoughts in this test
-    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
+    output.retain(|block| !matches!(block, StoredContentBlock::Thought(_)));
 
     let is_openrouter = provider.model_provider_name == "openrouter";
     // Some providers may return both an empty text block and a tool_call block
@@ -9957,16 +9960,16 @@ pub async fn check_json_mode_inference_response(
     let mut found_valid_content = false;
     for output_block in &output {
         match output_block {
-            ContentBlock::Text(text) if text.text.trim().is_empty() => {
+            StoredContentBlock::Text(text) if text.text.trim().is_empty() => {
                 // Skip empty text blocks
                 continue;
             }
-            ContentBlock::Text(text) => {
+            StoredContentBlock::Text(text) => {
                 let _: Value = serde_json::from_str(&text.text).unwrap();
                 assert!(text.text.to_lowercase().contains("tokyo"));
                 found_valid_content = true;
             }
-            ContentBlock::ToolCall(tool_call) => {
+            StoredContentBlock::ToolCall(tool_call) => {
                 // OpenRouter may use tool_call format
                 assert_eq!(tool_call.name, "respond");
                 let arguments: Value = serde_json::from_str(&tool_call.arguments).unwrap();
@@ -10192,18 +10195,18 @@ pub async fn check_dynamic_json_mode_inference_response(
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nDo not include any other text than the JSON object.  Do not include \"```json\" or \"```\" or anything else.\n\nPlease answer the questions in a JSON with the following schema:\n\n{\"type\":\"object\",\"properties\":{\"response\":{\"type\":\"string\"}},\"required\":[\"response\"],\"additionalProperties\":false}"
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the name of the capital city of Japan?"
-            .to_string()
-            .into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is the name of the capital city of Japan?".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let mut output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let mut output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     // We don't care about thoughts in this test
-    output.retain(|block| !matches!(block, ContentBlock::Thought(_)));
+    output.retain(|block| !matches!(block, StoredContentBlock::Thought(_)));
 
     let is_openrouter = provider.model_provider_name == "openrouter";
     // Some providers return both an empty text block and a tool_call block
@@ -10217,16 +10220,16 @@ pub async fn check_dynamic_json_mode_inference_response(
     let mut found_valid_content = false;
     for output_block in &output {
         match output_block {
-            ContentBlock::Text(text) if text.text.trim().is_empty() => {
+            StoredContentBlock::Text(text) if text.text.trim().is_empty() => {
                 // Skip empty text blocks
                 continue;
             }
-            ContentBlock::Text(text) => {
+            StoredContentBlock::Text(text) => {
                 let _: Value = serde_json::from_str(&text.text).unwrap();
                 assert!(&text.text.to_lowercase().contains("tokyo"));
                 found_valid_content = true;
             }
-            ContentBlock::ToolCall(tool_call) => {
+            StoredContentBlock::ToolCall(tool_call) => {
                 // OpenRouter may use tool_call format
                 assert_eq!(tool_call.name, "respond");
                 let arguments: Value = serde_json::from_str(&tool_call.arguments).unwrap();
@@ -10499,24 +10502,24 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPlease answer the questions in a JSON with key \"answer\".\n\nDo not include any other text than the JSON object. Do not include \"```json\" or \"```\" or anything else.\n\nExample Response:\n\n{\n    \"answer\": \"42\"\n}"
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the name of the capital city of Japan?"
-            .to_string()
-            .into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is the name of the capital city of Japan?".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
     match &output[0] {
-        ContentBlock::Text(text) => {
+        StoredContentBlock::Text(text) => {
             let parsed: Value = serde_json::from_str(&text.text).unwrap();
             let answer = parsed.get("answer").unwrap().as_str().unwrap();
             assert!(answer.to_lowercase().contains("tokyo"));
         }
-        ContentBlock::ToolCall(tool_call) => {
+        StoredContentBlock::ToolCall(tool_call) => {
             // Handles implicit tool calls
             assert_eq!(tool_call.name, "respond");
             let arguments: Value = serde_json::from_str(&tool_call.arguments).unwrap();
@@ -10784,16 +10787,16 @@ async fn check_short_inference_response(
         format!("You are a helpful and friendly assistant named Dr. Mehta: {randomness}")
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the name of the capital city of Japan?"
-            .to_string()
-            .into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is the name of the capital city of Japan?".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
     let finish_reason = result.get("finish_reason").unwrap().as_str().unwrap();
     assert_eq!(finish_reason, "length");
@@ -11103,14 +11106,14 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let last_input_message = input_messages.last().unwrap();
     assert_eq!(last_input_message.role, Role::User);
     let last_input_message_content = &last_input_message.content;
     assert_eq!(last_input_message_content.len(), 2);
     for tool_result in last_input_message_content {
         match tool_result {
-            ContentBlock::ToolResult(tool_result) => {
+            StoredContentBlock::ToolResult(tool_result) => {
                 assert!(
                     tool_result.name == "get_temperature" || tool_result.name == "get_humidity"
                 );
@@ -11121,11 +11124,11 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
         }
     }
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
     let output_content = output.first().unwrap();
     match output_content {
-        ContentBlock::Text(text) => {
+        StoredContentBlock::Text(text) => {
             assert!(text.text.to_lowercase().contains("70"));
             assert!(text.text.to_lowercase().contains("30"));
         }
@@ -11444,14 +11447,14 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let last_input_message = input_messages.last().unwrap();
     assert_eq!(last_input_message.role, Role::User);
     let last_input_message_content = &last_input_message.content;
     assert_eq!(last_input_message_content.len(), 2);
     for tool_result in last_input_message_content {
         match tool_result {
-            ContentBlock::ToolResult(tool_result) => {
+            StoredContentBlock::ToolResult(tool_result) => {
                 assert!(
                     tool_result.name == "get_temperature" || tool_result.name == "get_humidity"
                 );
@@ -11462,11 +11465,11 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
         }
     }
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
     let output_content = output.first().unwrap();
     match output_content {
-        ContentBlock::Text(text) => {
+        StoredContentBlock::Text(text) => {
             assert!(text.text.to_lowercase().contains("70"));
             assert!(text.text.to_lowercase().contains("30"));
         }

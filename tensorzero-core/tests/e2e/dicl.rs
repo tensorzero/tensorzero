@@ -18,8 +18,8 @@ use tensorzero_core::{
     endpoints::inference::{InferenceClients, InferenceCredentials},
     http::TensorzeroHttpClient,
     inference::types::{
-        ContentBlock, ContentBlockChatOutput, JsonInferenceOutput, RequestMessage, ResolvedInput,
-        ResolvedInputMessage, ResolvedInputMessageContent, Role, TemplateInput,
+        ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, ResolvedInputMessage,
+        ResolvedInputMessageContent, Role, StoredContentBlock, StoredRequestMessage, TemplateInput,
     },
     rate_limiting::ScopeInfo,
 };
@@ -688,9 +688,10 @@ pub async fn test_dicl_inference_request_simple() {
             .unwrap()
             .as_str()
             .unwrap();
-        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
         let output = model_inference.get("output").unwrap().as_str().unwrap();
-        let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+        let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
         match model_name {
             "gpt-4o-mini-2024-07-18" => {
                 // The LLM call should generate output tokens
@@ -715,7 +716,7 @@ pub async fn test_dicl_inference_request_simple() {
                 assert_eq!(input_messages.len(), 7);
                 assert_eq!(output.len(), 1);
                 match &output[0] {
-                    ContentBlock::Text(text) => {
+                    StoredContentBlock::Text(text) => {
                         assert!(text.text.to_lowercase().contains("nose"));
                     }
                     _ => {
@@ -930,9 +931,10 @@ pub async fn test_dicl_inference_request_simple() {
             .unwrap()
             .as_str()
             .unwrap();
-        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
         let output = model_inference.get("output").unwrap().as_str().unwrap();
-        let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+        let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
         match model_name {
             "gpt-4o-mini-2024-07-18" => {
                 // The LLM call should generate output tokens
@@ -957,7 +959,7 @@ pub async fn test_dicl_inference_request_simple() {
                 assert_eq!(input_messages.len(), 7);
                 assert_eq!(output.len(), 1);
                 match &output[0] {
-                    ContentBlock::Text(text) => {
+                    StoredContentBlock::Text(text) => {
                         assert!(text.text.to_lowercase().contains("nose"));
                     }
                     _ => {
@@ -1260,9 +1262,10 @@ async fn test_dicl_json_request() {
             .unwrap()
             .as_str()
             .unwrap();
-        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
         let output = model_inference.get("output").unwrap().as_str().unwrap();
-        let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+        let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
         match model_name {
             "gpt-4o-mini-2024-07-18" => {
                 // The LLM call should generate output tokens
@@ -1287,7 +1290,7 @@ async fn test_dicl_json_request() {
                 assert_eq!(input_messages.len(), 7);
                 assert_eq!(output.len(), 1);
                 match &output[0] {
-                    ContentBlock::Text(text) => {
+                    StoredContentBlock::Text(text) => {
                         assert!(!text.text.to_lowercase().contains("brasilia"));
                         assert!(text.text.to_lowercase().contains("nose"));
                     }
