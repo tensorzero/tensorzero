@@ -23,6 +23,7 @@ const ListItemWithHandle = ({
   children,
   className,
 }: ListItemProps) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
       id,
@@ -42,13 +43,13 @@ const ListItemWithHandle = ({
       }}
       ref={setNodeRef}
     >
-      <div
+      {/* <div
         className={cn("cursor-grab", isDragging && "cursor-grabbing")}
         {...listeners}
         {...attributes}
       >
         <Placeholder />
-      </div>
+      </div> */}
       {children ?? <p className="m-0 text-sm font-medium">{name}</p>}
     </div>
   );
@@ -65,9 +66,9 @@ export function FiltersInput({
   form: UseFormReturn<SFTFormValues>;
   counts: ReturnType<typeof useCountFetcher>;
 }) {
-  const {
-    formState: { errors },
-  } = form;
+  // const {
+  //   formState: { errors },
+  // } = form;
 
   // { fields, append, prepend, remove, swap, move, insert }
   const filters = useFieldArray({
@@ -87,6 +88,10 @@ export function FiltersInput({
     if (!over || active.id === over.id) return;
 
     // filters.swap(1, 2);
+  };
+
+  const remove = (index: number) => {
+    filters.remove(index);
   };
 
   return (
@@ -116,6 +121,9 @@ export function FiltersInput({
                   curatedInferenceCount={counts.curatedInferenceCount}
                   isLoading={counts.isLoading}
                 />
+                <Button onClick={() => remove(i)}>
+                  <Placeholder />
+                </Button>
               </ListItemWithHandle>
             );
           })}
@@ -129,18 +137,18 @@ export function FiltersInput({
         Append
       </Button>
 
-      <CurationMetricSelector<SFTFormValues>
+      {/* <CurationMetricSelector<SFTFormValues>
         control={form.control}
         name=""
         functionConfigMetrics={functionConfigMetrics}
         feedbackCount={counts.feedbackCount}
         curatedInferenceCount={counts.curatedInferenceCount}
         isLoading={counts.isLoading}
-      />
+      /> */}
 
-      {errors.metric && (
+      {/* {errors.metric && (
         <p className="text-xs text-red-500">{errors.metric.message}</p>
-      )}
+      )} */}
     </div>
   );
 }

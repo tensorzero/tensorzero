@@ -24,72 +24,100 @@ export async function poll_sft_job(
 export async function launch_sft_job(
   data: SFTFormValues,
 ): Promise<OptimizationJobHandle> {
-  const openAINativeSFTBase = getEnv().OPENAI_BASE_URL;
-  const fireworksNativeSFTBase = getEnv().FIREWORKS_BASE_URL;
   let filters: InferenceFilterTreeNode | null = null;
-  let output_source: InferenceOutputSource = "Inference";
-  if (data.metric === "demonstration") {
-    output_source = "Demonstration";
-  } else if (data.metric) {
-    const threshold =
-      typeof data.threshold === "string"
-        ? parseFloat(data.threshold)
-        : data.threshold;
-    filters = await createFilters(data.metric, threshold);
+  // let output_source: InferenceOutputSource = "Inference";
+  const output_source: InferenceOutputSource = "Inference";
+  // if (data.metric === "demonstration") {
+  //   output_source = "Demonstration";
+  // } else
+  if (data.filters) {
+    // const threshold =
+    //   typeof data.threshold === "string"
+    //     ? parseFloat(data.threshold)
+    //     : data.threshold;
+    // filters = await createFilters([{ metric: data.metric, threshold }]);
+    const filterData = data.filters.map((data) => {
+      const threshold =
+        typeof data.threshold === "string"
+          ? parseFloat(data.threshold)
+          : data.threshold;
+      return { metric: data.metric ?? "", threshold };
+    });
+
+    filters = await createFilters(filterData);
   }
   const client = await getNativeTensorZeroClient();
   let optimizerConfig: UninitializedOptimizerInfo;
-  if (data.model.provider == "openai") {
-    optimizerConfig = {
-      type: "openai_sft",
-      model: data.model.name,
-      batch_size: 1,
-      learning_rate_multiplier: 1,
-      n_epochs: 1,
-      credentials: null,
-      api_base: openAINativeSFTBase,
-      seed: null,
-      suffix: null,
-    };
-  } else if (data.model.provider == "fireworks") {
-    const accountId = getEnv().FIREWORKS_ACCOUNT_ID;
-    if (!accountId) {
-      throw new Error("FIREWORKS_ACCOUNT_ID is not set");
+
+  console.log(filters);
+
+  throw new Error("blah");
+
+  switch (data.model.provider) {
+    case "openai": {
+      const openAINativeSFTBase = getEnv().OPENAI_BASE_URL;
+      if (!openAINativeSFTBase) throw new Error("OPENAI_BASE_URL is not set");
+
+      optimizerConfig = {
+        type: "openai_sft",
+        model: data.model.name,
+        batch_size: 1,
+        learning_rate_multiplier: 1,
+        n_epochs: 1,
+        credentials: null,
+        api_base: openAINativeSFTBase,
+        seed: null,
+        suffix: null,
+      };
+      break;
     }
-    optimizerConfig = {
-      type: "fireworks_sft",
-      model: data.model.name,
-      early_stop: null,
-      epochs: null,
-      learning_rate: null,
-      max_context_length: null,
-      lora_rank: null,
-      batch_size: null,
-      display_name: null,
-      output_model: null,
-      warm_start_from: null,
-      is_turbo: null,
-      eval_auto_carveout: null,
-      nodes: null,
-      mtp_enabled: null,
-      mtp_num_draft_tokens: null,
-      mtp_freeze_base_model: null,
-      credentials: null,
-      api_base: fireworksNativeSFTBase,
-      account_id: accountId,
-    };
-  } else {
-    throw new Error(
-      `Native SFT is not supported for provider ${data.model.provider}`,
-    );
+
+    case "fireworks": {
+      const fireworksNativeSFTBase = getEnv().FIREWORKS_BASE_URL;
+      if (!fireworksNativeSFTBase)
+        throw new Error("FIREWORKS_BASE_URL is not set");
+
+      const accountId = getEnv().FIREWORKS_ACCOUNT_ID;
+      if (!accountId) throw new Error("FIREWORKS_ACCOUNT_ID is not set");
+
+      optimizerConfig = {
+        type: "fireworks_sft",
+        model: data.model.name,
+        early_stop: null,
+        epochs: null,
+        learning_rate: null,
+        max_context_length: null,
+        lora_rank: null,
+        batch_size: null,
+        display_name: null,
+        output_model: null,
+        warm_start_from: null,
+        is_turbo: null,
+        eval_auto_carveout: null,
+        nodes: null,
+        mtp_enabled: null,
+        mtp_num_draft_tokens: null,
+        mtp_freeze_base_model: null,
+        credentials: null,
+        api_base: fireworksNativeSFTBase,
+        account_id: accountId,
+      };
+      break;
+    }
+
+    default: {
+      throw new Error(
+        `Native SFT is not supported for provider ${data.model.provider}`,
+      );
+    }
   }
 
   const job = await client.experimentalLaunchOptimizationWorkflow({
     function_name: data.function,
     template_variant_name: data.variant,
     query_variant_name: null,
-    filters: filters,
-    output_source: output_source,
+    filters,
+    output_source,
     limit: data.maxSamples ? BigInt(data.maxSamples) : BigInt(0),
     offset: BigInt(0),
     val_fraction: data.validationSplitPercent / 100,
@@ -100,7 +128,7 @@ export async function launch_sft_job(
   return job;
 }
 
-export async function createFilters(
+export async function createFilter(
   metric: string,
   threshold: number,
 ): Promise<InferenceFilterTreeNode> {
@@ -127,4 +155,13 @@ export async function createFilters(
   } else {
     throw new Error(`Unsupported metric type: ${metricConfig.type}`);
   }
+}
+
+export async function createFilters(
+  metrics: { metric: string; threshold: number }[],
+): Promise<InferenceFilterTreeNode> {
+  const children = await Promise.all(
+    metrics.map(({ metric, threshold }) => createFilter(metric, threshold)),
+  );
+  return { type: "and", children };
 }

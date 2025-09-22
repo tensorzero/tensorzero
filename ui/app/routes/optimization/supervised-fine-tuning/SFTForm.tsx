@@ -8,7 +8,7 @@ import type {
 } from "tensorzero-node";
 import { v7 as uuid } from "uuid";
 import { FunctionFormField } from "~/components/function/FunctionFormField";
-import { useCountData } from "~/components/metric/useCountData";
+// import { useCountData } from "~/components/metric/useCountData";
 import { Button } from "~/components/ui/button";
 import { Form } from "~/components/ui/form";
 import { useAllFunctionConfigs, useFunctionConfig } from "~/context/config";
@@ -45,12 +45,19 @@ export function SFTForm({
   const form = useForm<SFTFormValues>({
     defaultValues: {
       function: "generate_secret",
-      metric: "",
+      // metric: "",
       filters: startingFilters,
       validationSplitPercent: 20,
       maxSamples: 100000,
-      threshold: 0.5,
+      // threshold: 0.5,
       jobId: uuid(),
+
+      variant: "baseline",
+      model: {
+        displayName: "gpt-4.1-2025-04-14",
+        name: "gpt-4.1-2025-04-14",
+        provider: "openai",
+      },
     },
     resolver: SFTFormValuesResolver,
     mode: "onChange",
@@ -66,19 +73,21 @@ export function SFTForm({
 
   const watchedFields = useWatch({
     control: form.control,
-    name: ["function", "metric", "threshold"] as const,
+    name: ["function"] as const,
+    // name: ["function", "metric", "threshold"] as const,
   });
 
-  const [functionName, metricName, threshold] = watchedFields;
+  const [functionName] = watchedFields;
+  // const [functionName, metricName, threshold] = watchedFields;
   const functionConfig = useFunctionConfig(functionName);
-  const parsedThreshold =
-    typeof threshold === "string" ? parseFloat(threshold) : threshold;
+  // const parsedThreshold =
+  //   typeof threshold === "string" ? parseFloat(threshold) : threshold;
 
-  const { counts, isCuratedInferenceCountLow } = useCountData({
-    functionName,
-    metricName,
-    parsedThreshold,
-  });
+  // const { counts, isCuratedInferenceCountLow } = useCountData({
+  //   functionName,
+  //   metricName,
+  //   parsedThreshold,
+  // });
 
   // Use formFetcher for submission errors
   const errorsOnSubmit = formFetcher.data?.errors;
@@ -90,33 +99,33 @@ export function SFTForm({
 
   // Sets the max samples limit based on the number of curatedInferences (if available) or inferences (if available)
   // This means it will change when the function is selected or the metric is changed to something that actually curates inferences (i.e. not None)
-  useEffect(() => {
-    if (counts.curatedInferenceCount !== null) {
-      form.setValue(
-        "maxSamples",
-        Math.min(100000, counts.curatedInferenceCount),
-      );
-    } else if (counts.inferenceCount !== null) {
-      form.setValue("maxSamples", Math.min(100000, counts.inferenceCount));
-    }
-  }, [counts.curatedInferenceCount, counts.inferenceCount, form]);
+  // useEffect(() => {
+  //   if (counts.curatedInferenceCount !== null) {
+  //     form.setValue(
+  //       "maxSamples",
+  //       Math.min(100000, counts.curatedInferenceCount),
+  //     );
+  //   } else if (counts.inferenceCount !== null) {
+  //     form.setValue("maxSamples", Math.min(100000, counts.inferenceCount));
+  //   }
+  // }, [counts.curatedInferenceCount, counts.inferenceCount, form]);
 
   // Form submission using formFetcher
   const onSubmit = async (data: SFTFormValues) => {
     try {
-      const cleanedThreshold =
-        typeof data.threshold === "string"
-          ? parseFloat(data.threshold)
-          : data.threshold;
+      // const cleanedThreshold =
+      //   typeof data.threshold === "string"
+      //     ? parseFloat(data.threshold)
+      //     : data.threshold;
 
-      if (isNaN(cleanedThreshold)) {
-        logger.error("Threshold is not a valid number:", data.threshold);
-        return;
-      }
+      // if (isNaN(cleanedThreshold)) {
+      //   logger.error("Threshold is not a valid number:", data.threshold);
+      //   return;
+      // }
 
       const cleanedData = {
         ...data,
-        threshold: cleanedThreshold,
+        // threshold: cleanedThreshold,
       };
 
       const submitData = new FormData();
@@ -189,7 +198,8 @@ export function SFTForm({
               )}
             </div>
 
-            <FiltersInput config={config} form={form} counts={counts} />
+            {/* @ts-expect-error -- hacking stuff rn sorry */}
+            <FiltersInput config={config} form={form} counts={{}} />
 
             <div className="flex flex-col gap-1">
               <VariantSelector
@@ -210,13 +220,14 @@ export function SFTForm({
             </div>
             <AdvancedParametersAccordion
               control={form.control}
-              maxSamplesLimit={counts.inferenceCount ?? undefined}
+              // maxSamplesLimit={counts.inferenceCount ?? undefined}
+              maxSamplesLimit={undefined}
             />
           </div>
 
           <Button
             type="submit"
-            disabled={submissionPhase !== "idle" || isCuratedInferenceCountLow}
+            // disabled={submissionPhase !== "idle" || isCuratedInferenceCountLow}
           >
             {getButtonText()}
           </Button>

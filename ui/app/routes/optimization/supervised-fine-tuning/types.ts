@@ -24,14 +24,16 @@ export const SFTFormValuesSchema = z.object({
   variant: z.string().nonempty(),
 
   // filters/metrics
-  filters: z.array(
-    z.object({
-      metric,
-      threshold,
-    }),
-  ),
-  metric,
-  threshold,
+  filters: z
+    .array(
+      z.object({
+        metric,
+        threshold,
+      }),
+    )
+    .min(1),
+  // metric,
+  // threshold,
 
   // advanced parameters
   validationSplitPercent: z
