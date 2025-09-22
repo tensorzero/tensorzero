@@ -563,11 +563,13 @@ impl RateLimitedInputContent for Thought {
     fn estimated_input_token_usage(&self) -> u64 {
         let Thought {
             text,
-            // We explicitly ignore these fields but list them so that this implementation is very explicit
-            signature: _,
+            signature,
             provider_type: _,
         } = self;
         text.as_ref().map_or(0, |text| get_estimated_tokens(text))
+            + signature
+                .as_ref()
+                .map_or(0, |signature| get_estimated_tokens(signature))
     }
 }
 
