@@ -1,5 +1,6 @@
 use futures::TryStreamExt;
-use std::collections::HashSet;
+use tokio::time::timeout;
+use std::{collections::HashSet, time::Duration};
 use async_trait::async_trait;
 
 use sqlx::{migrate, postgres::PgPoolOptions, PgPool, Row};
@@ -62,7 +63,24 @@ impl PostgresConnectionInfo {
 #[async_trait]
 impl HealthCheckable for PostgresConnectionInfo {
     async fn health(&self) -> Result<(), Error> {
-        Ok(())
+        match self {
+            Self::Disabled => Ok(()),
+            Self::Enabled { pool } => {
+                let check = async {
+                    sqlx::query("SELECT 1")
+                    .fetch_one(pool)
+                    .await
+                    .map_err(|_e| Error::new(ErrorDetails::PostgresConnection { message: "Postgres healthcheck query failed.".to_string() }))?;
+
+                    Ok(())
+                };
+                // TODO(shuyang): customize postgres timeout
+                match timeout(Duration::from_millis(500), check).await {
+                    Ok(healthcheck_status) => healthcheck_status,
+                    Err(_) => Result::Err(Error::new(ErrorDetails::PostgresConnection { message: "Postgres healthcheck query timed out.".to_string() }))
+                }
+            }
+        }
     }
 }
 
