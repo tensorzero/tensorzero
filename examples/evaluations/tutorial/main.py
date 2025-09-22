@@ -8,7 +8,7 @@ async def generate_haiku(t0, topic, semaphore):
     async with semaphore:
         response = await t0.inference(
             function_name="write_haiku",
-            variant_name="gpt_4o",
+            variant_name="gpt_4o_mini",
             input={
                 "messages": [
                     {

@@ -11,10 +11,6 @@ type = "chat_completion"
 model = "openai::gpt-4o-mini"
 user_template = "functions/write_haiku/user_template.minijinja"
 
-[functions.write_haiku.variants.gpt_4o]
-type = "chat_completion"
-model = "openai::gpt-4o"
-user_template = "functions/write_haiku/user_template.minijinja"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                   EVALS                                    │
