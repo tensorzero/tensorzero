@@ -85,10 +85,8 @@ This field should be provided as an extra body parameter in the request body.
 - **Required:** no
 
 The ID of an existing episode to associate the inference with.
-
-For the first inference of a new episode, you should not provide an `episode_id`.
 If null, the gateway will generate a new episode ID and return it in the response.
-Only use episode IDs that were returned by the TensorZero gateway.
+See [Episodes](/gateway/guides/episodes) for more information.
 
 This field should be provided as an extra body parameter in the request body.
 
