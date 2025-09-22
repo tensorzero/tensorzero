@@ -4,21 +4,24 @@ use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tensorzero_core::{
+    cache::{CacheEnabledMode, CacheOptions},
     config::ProviderTypesConfig,
-    db::clickhouse::{test_helpers::select_json_inference_clickhouse, ClickHouseConnectionInfo},
-    embeddings::{
-        EmbeddingEncodingFormat, EmbeddingProvider, EmbeddingRequest,
-        UninitializedEmbeddingProviderConfig,
+    db::{
+        clickhouse::{test_helpers::select_json_inference_clickhouse, ClickHouseConnectionInfo},
+        postgres::PostgresConnectionInfo,
     },
-    endpoints::inference::InferenceCredentials,
+    embeddings::{EmbeddingEncodingFormat, EmbeddingRequest, UninitializedEmbeddingProviderConfig},
+    endpoints::inference::{InferenceClients, InferenceCredentials},
     http::TensorzeroHttpClient,
     inference::types::{
         ContentBlock, ContentBlockChatOutput, JsonInferenceOutput, RequestMessage, ResolvedInput,
         ResolvedInputMessage, ResolvedInputMessageContent, Role, TemplateInput,
     },
+    rate_limiting::ScopeInfo,
 };
 use tokio::time::sleep;
 use uuid::Uuid;
@@ -382,8 +385,24 @@ async fn embed_insert_example(
         encoding_format: EmbeddingEncodingFormat::Float,
     };
     let api_keys = InferenceCredentials::default();
+    let clients = InferenceClients {
+        http_client: &client,
+        clickhouse_connection_info: clickhouse,
+        postgres_connection_info: &PostgresConnectionInfo::Disabled,
+        credentials: &api_keys,
+        cache_options: &CacheOptions {
+            max_age_s: None,
+            enabled: CacheEnabledMode::On,
+        },
+        tags: &Default::default(),
+        rate_limiting_config: &Default::default(),
+        otlp_config: &Default::default(),
+    };
+    let scope_info = ScopeInfo {
+        tags: &HashMap::new(),
+    };
     let response = provider_config
-        .embed(&request, &client, &api_keys, &(&provider_config).into())
+        .embed(&request, &clients, &scope_info, &(&provider_config).into())
         .await
         .unwrap();
 
