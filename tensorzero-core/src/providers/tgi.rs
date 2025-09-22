@@ -482,19 +482,6 @@ impl<'a> TGIRequest<'a> {
     }
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct OpenAIRequestToolCall<'a> {
-    id: &'a str,
-    r#type: OpenAIToolType,
-    function: OpenAIRequestFunctionCall<'a>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct OpenAIRequestFunctionCall<'a> {
-    name: &'a str,
-    arguments: &'a str,
-}
-
 struct TGIResponseWithMetadata<'a> {
     response: TGIResponse,
     latency: Latency,
