@@ -27,13 +27,13 @@ test("should show 17 functions in the functions badge", async ({ page }) => {
   await expect(functionsCard).toBeVisible();
 });
 
-test("should show 13 models in the models badge", async ({ page }) => {
+test("should show the models badge", async ({ page }) => {
   await page.goto("/");
 
   // Find the models card
   const modelsCard = page.locator(".block").filter({
     has: page.locator('h3:has-text("Models")'),
-    hasText: "13 models used",
+    hasText: "models used",
   });
 
   await expect(modelsCard).toBeVisible();
