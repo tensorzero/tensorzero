@@ -60,6 +60,7 @@ import { logger } from "~/utils/logger";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
 import { getUsedVariants } from "~/utils/clickhouse/function";
+import { DEFAULT_FUNCTION } from "~/utils/constants";
 
 export const handle: RouteHandle = {
   crumb: (match) => [match.params.inference_id!],
@@ -129,7 +130,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   const usedVariants =
-    inference.function_name === "tensorzero::default"
+    inference.function_name === DEFAULT_FUNCTION
       ? await getUsedVariants(inference.function_name)
       : [];
 
@@ -423,7 +424,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
   const config = useConfig();
 
-  const isDefault = inference.function_name === "tensorzero::default";
+  const isDefault = inference.function_name === DEFAULT_FUNCTION;
 
   const modelsSet = new Set<string>([
     // models successfully used with default function
