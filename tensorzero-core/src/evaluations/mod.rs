@@ -4,7 +4,7 @@ use std::{collections::HashMap, sync::Arc};
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 
-use crate::config::{ErrorContext, UninitializedSchemas};
+use crate::config::{ErrorContext, LoadableConfig, UninitializedSchemas};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::Variant;
 use crate::{
@@ -23,7 +23,7 @@ use crate::{
         },
         chain_of_thought::ChainOfThoughtConfig,
         chat_completion::ChatCompletionConfig,
-        dicl::DiclConfig,
+        dicl::UninitializedDiclConfig,
         mixture_of_n::{FuserConfig, MixtureOfNConfig},
         JsonMode, RetryConfig, VariantConfig, VariantInfo,
     },
@@ -800,26 +800,29 @@ impl UninitializedLLMJudgeVariantInfo {
                             include_str!("llm_judge_system_instructions.txt"),
                             system_instructions = si,
                         )
-                    })
-                    .unwrap_or_else(crate::variant::dicl::default_system_instructions);
-                VariantConfig::Dicl(DiclConfig::new(
-                    get_weight(params.active),
-                    params.embedding_model,
-                    params.k,
-                    params.model,
-                    dicl_system_instructions,
-                    params.temperature,
-                    params.top_p,
-                    params.presence_penalty,
-                    params.frequency_penalty,
-                    params.max_tokens,
-                    params.seed,
-                    params.json_mode,
-                    params.extra_body,
-                    params.extra_headers,
-                    params.retries,
-                    params.stop_sequences,
-                ))
+                    });
+
+                let uninitialized_config = UninitializedDiclConfig {
+                    weight: get_weight(params.active),
+                    embedding_model: params.embedding_model,
+                    k: params.k,
+                    model: params.model,
+                    system_instructions: dicl_system_instructions.map(|s| {
+                        ResolvedTomlPath::new_fake_path("tensorzero::llm_judge".to_string(), s)
+                    }),
+                    temperature: params.temperature,
+                    top_p: params.top_p,
+                    presence_penalty: params.presence_penalty,
+                    frequency_penalty: params.frequency_penalty,
+                    max_tokens: params.max_tokens,
+                    seed: params.seed,
+                    json_mode: params.json_mode,
+                    extra_body: params.extra_body,
+                    extra_headers: params.extra_headers,
+                    retries: params.retries,
+                    stop_sequences: params.stop_sequences,
+                };
+                VariantConfig::Dicl(uninitialized_config.load()?)
             }
             UninitializedLLMJudgeVariantConfig::ChainOfThought(params) => {
                 VariantConfig::ChainOfThought(ChainOfThoughtConfig {

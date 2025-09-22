@@ -70,46 +70,6 @@ pub struct DiclConfig {
 }
 
 impl DiclConfig {
-    /// Create a new DiclConfig - this is the only way to construct one from outside the module
-    #[expect(clippy::too_many_arguments)]
-    pub fn new(
-        weight: Option<f64>,
-        embedding_model: String,
-        k: u32,
-        model: String,
-        system_instructions: String,
-        temperature: Option<f32>,
-        top_p: Option<f32>,
-        presence_penalty: Option<f32>,
-        frequency_penalty: Option<f32>,
-        max_tokens: Option<u32>,
-        seed: Option<u32>,
-        json_mode: Option<JsonMode>,
-        extra_body: Option<ExtraBodyConfig>,
-        extra_headers: Option<ExtraHeadersConfig>,
-        retries: RetryConfig,
-        stop_sequences: Option<Vec<String>>,
-    ) -> Self {
-        Self {
-            weight,
-            embedding_model: Arc::from(embedding_model),
-            k,
-            model: Arc::from(model),
-            system_instructions,
-            temperature,
-            top_p,
-            presence_penalty,
-            frequency_penalty,
-            max_tokens,
-            seed,
-            json_mode,
-            extra_body,
-            extra_headers,
-            retries,
-            stop_sequences,
-        }
-    }
-
     pub fn weight(&self) -> Option<f64> {
         self.weight
     }
