@@ -26,6 +26,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { cn } from "~/utils/common";
 import { useFunctionConfigMetrics } from "~/components/metric/useFunctionConfigMetrics";
 import { useCountData } from "~/components/metric/useCountData";
+import { Placeholder } from "~/components/icons/Icons";
 
 const ListItemWithHandle = ({
   id,
@@ -59,12 +60,14 @@ const ListItemWithHandle = ({
         {...listeners}
         {...attributes}
       >
-        Hi
+        <Placeholder />
       </div>
       {children ?? <p className="m-0 text-sm font-medium">{name}</p>}
     </div>
   );
 };
+
+const metricTemplate = { metric: "", threshold: 0.5 };
 
 export function SFTForm({
   config,
@@ -81,7 +84,11 @@ export function SFTForm({
     defaultValues: {
       function: "",
       metric: "",
-      metrics: [{ metric: "", threshold: 0.5 }],
+      filters: [
+        { ...metricTemplate },
+        { ...metricTemplate },
+        { ...metricTemplate },
+      ],
       validationSplitPercent: 20,
       maxSamples: 100000,
       threshold: 0.5,
@@ -108,7 +115,7 @@ export function SFTForm({
     //append, prepend, remove, swap, move, insert
   } = useFieldArray({
     control: form.control,
-    name: "metrics" as const,
+    name: "filters",
   });
 
   const [functionName, metricName, threshold] = watchedFields;
@@ -116,7 +123,6 @@ export function SFTForm({
   const parsedThreshold =
     typeof threshold === "string" ? parseFloat(threshold) : threshold;
 
-  console.warn({ metricName });
   const { counts, isCuratedInferenceCountLow } = useCountData({
     functionName,
     metricName,
@@ -254,23 +260,27 @@ export function SFTForm({
                       Metrics
                     </span>
                   </ListHeader>
-                  {fields.map((_, i) => (
-                    <ListItemWithHandle
-                      name={["name", i].join("-")}
-                      id={i.toString()}
-                      index={i}
-                      parent={"root"}
-                    >
-                      <CurationMetricSelector<SFTFormValues>
-                        control={form.control}
-                        name={`metrics.${i}`}
-                        functionConfigMetrics={functionConfigMetrics}
-                        feedbackCount={counts.feedbackCount}
-                        curatedInferenceCount={counts.curatedInferenceCount}
-                        isLoading={counts.isLoading}
-                      />
-                    </ListItemWithHandle>
-                  ))}
+                  {fields.map((_, i) => {
+                    const name = ["name", i].join("-");
+                    return (
+                      <ListItemWithHandle
+                        key={name}
+                        name={name}
+                        id={i.toString()}
+                        index={i}
+                        parent={"root"}
+                      >
+                        <CurationMetricSelector<SFTFormValues>
+                          control={form.control}
+                          name={`filters.${i}`}
+                          functionConfigMetrics={functionConfigMetrics}
+                          feedbackCount={counts.feedbackCount}
+                          curatedInferenceCount={counts.curatedInferenceCount}
+                          isLoading={counts.isLoading}
+                        />
+                      </ListItemWithHandle>
+                    );
+                  })}
                 </ListGroup>
               </ListProvider>
               {/* <CurationMetricSelector<SFTFormValues>

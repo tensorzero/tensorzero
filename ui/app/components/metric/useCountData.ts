@@ -9,12 +9,6 @@ export function useCountData({
   metricName: string | null;
   parsedThreshold: number;
 }) {
-  console.warn("useCountData", {
-    functionName,
-    metricName,
-    parsedThreshold,
-  });
-
   const counts = useCountFetcher({
     functionName: functionName ?? undefined,
     metricName: metricName ?? undefined,

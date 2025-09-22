@@ -33,6 +33,7 @@ import {
 import { Skeleton } from "../ui/skeleton";
 import type { UseFunctionConfigMetricsReturn } from "./useFunctionConfigMetrics";
 import { useCountData } from "./useCountData";
+import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
 
 type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
   control: Control<T>;
@@ -67,20 +68,18 @@ export default function CurationMetricSelector<
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
-  // TODO(bret): get the threshold properly
-  const threshold = 0.5;
+  const filter = getValues(name) as SFTFormValues["filters"][number];
+
+  const threshold = filter.threshold;
   const parsedThreshold =
     typeof threshold === "string" ? parseFloat(threshold) : threshold;
 
-  const metricValue = getValues(name) as string | null;
-  console.log({ name, metricValue });
+  console.log({ metricValue: filter });
   const { counts } = useCountData({
     functionName: functionValue as string | null,
-    metricName: metricValue,
+    metricName: filter.metric,
     parsedThreshold,
   });
-
-  console.log({ counts });
 
   const {
     // inferenceCount,

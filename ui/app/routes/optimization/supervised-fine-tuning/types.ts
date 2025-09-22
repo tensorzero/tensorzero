@@ -2,47 +2,36 @@ import { z } from "zod";
 import { ModelOptionSchema } from "./model_options";
 import { zodResolver } from "@hookform/resolvers/zod";
 
+const metric = z
+  .string()
+  .nullable()
+  .refine((val) => val === null || val !== "", {
+    message: "Please select a metric or 'None'",
+  });
+
+const threshold = z.union([
+  z
+    .string()
+    .refine((val) => val === "" || /^-?(?:\d+(?:\.\d*)?|\.\d+)?$/.test(val), {
+      message: "Must be a valid number",
+    }),
+  z.number(),
+]);
+
 export const SFTFormValuesSchema = z.object({
   function: z.string().nonempty("Function is required"),
   model: ModelOptionSchema,
   variant: z.string().nonempty(),
 
-  // metrics
-  metrics: z.array(
+  // filters/metrics
+  filters: z.array(
     z.object({
-      metric: z
-        .string()
-        .nullable()
-        .refine((val) => val === null || val !== "", {
-          message: "Please select a metric or 'None'",
-        }),
-      threshold: z.union([
-        z
-          .string()
-          .refine(
-            (val) => val === "" || /^-?(?:\d+(?:\.\d*)?|\.\d+)?$/.test(val),
-            {
-              message: "Must be a valid number",
-            },
-          ),
-        z.number(),
-      ]),
+      metric,
+      threshold,
     }),
   ),
-  metric: z
-    .string()
-    .nullable()
-    .refine((val) => val === null || val !== "", {
-      message: "Please select a metric or 'None'",
-    }),
-  threshold: z.union([
-    z
-      .string()
-      .refine((val) => val === "" || /^-?(?:\d+(?:\.\d*)?|\.\d+)?$/.test(val), {
-        message: "Must be a valid number",
-      }),
-    z.number(),
-  ]),
+  metric,
+  threshold,
 
   // advanced parameters
   validationSplitPercent: z
