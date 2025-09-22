@@ -1265,7 +1265,7 @@ impl ModelProvider {
                     }
                 }
             }
-            // If an error occurs, try to extract the raw request/response to attach to the OpenTelemtry span
+            // If an error occurs, try to extract the raw request/response to attach to the OpenTelemetry span
             Err(e) => {
                 match e.get_details() {
                     ErrorDetails::InferenceClient {
