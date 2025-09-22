@@ -84,11 +84,7 @@ export function SFTForm({
     defaultValues: {
       function: "",
       metric: "",
-      filters: [
-        { ...metricTemplate },
-        { ...metricTemplate },
-        { ...metricTemplate },
-      ],
+      filters: [{ ...metricTemplate }],
       validationSplitPercent: 20,
       maxSamples: 100000,
       threshold: 0.5,
@@ -110,10 +106,8 @@ export function SFTForm({
     control: form.control,
     name: ["function", "metric", "threshold"] as const,
   });
-  const {
-    fields,
-    //append, prepend, remove, swap, move, insert
-  } = useFieldArray({
+  // { fields, append, prepend, remove, swap, move, insert }
+  const filters = useFieldArray({
     control: form.control,
     name: "filters",
   });
@@ -215,10 +209,15 @@ export function SFTForm({
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    if (!over) return;
+    if (!over || active.id === over.id) return;
+
+    console.log(active.id, over.id);
+    filters.swap(1, 2);
 
     console.log(active);
   };
+
+  console.log(filters.fields);
 
   const functionConfigMetrics = useFunctionConfigMetrics({
     control: form.control,
@@ -260,13 +259,13 @@ export function SFTForm({
                       Metrics
                     </span>
                   </ListHeader>
-                  {fields.map((_, i) => {
-                    const name = ["name", i].join("-");
+                  {filters.fields.map(({ id }, i) => {
+                    const name = ["name", id].join("-");
                     return (
                       <ListItemWithHandle
                         key={name}
                         name={name}
-                        id={i.toString()}
+                        id={name}
                         index={i}
                         parent={"root"}
                       >
@@ -283,6 +282,14 @@ export function SFTForm({
                   })}
                 </ListGroup>
               </ListProvider>
+
+              <Button
+                type="button"
+                onClick={() => filters.append({ ...metricTemplate })}
+              >
+                Append
+              </Button>
+
               {/* <CurationMetricSelector<SFTFormValues>
                 control={form.control}
                 name="metric"

@@ -74,7 +74,6 @@ export default function CurationMetricSelector<
   const parsedThreshold =
     typeof threshold === "string" ? parseFloat(threshold) : threshold;
 
-  console.log({ metricValue: filter });
   const { counts } = useCountData({
     functionName: functionValue as string | null,
     metricName: filter.metric,
@@ -114,7 +113,9 @@ export default function CurationMetricSelector<
       name={name}
       render={({ field }) => (
         <FormItem className="flex grow flex-col justify-center">
-          <FormLabel>Metric</FormLabel>
+          <FormLabel>
+            Metric <span className="text-fg-tertiary">({name})</span>
+          </FormLabel>
           <div className="items-top grid gap-x-8 md:grid-cols-2">
             <div className="space-y-2">
               <Popover open={open} onOpenChange={setOpen}>
