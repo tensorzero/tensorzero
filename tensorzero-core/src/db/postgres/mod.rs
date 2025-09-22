@@ -1,9 +1,12 @@
 use futures::TryStreamExt;
 use std::collections::HashSet;
+use async_trait::async_trait;
 
 use sqlx::{migrate, postgres::PgPoolOptions, PgPool, Row};
 
 use crate::error::{Error, ErrorDetails};
+
+use super::HealthCheckable;
 
 pub mod rate_limiting;
 
@@ -52,6 +55,13 @@ impl PostgresConnectionInfo {
                 ),
             }));
         }
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl HealthCheckable for PostgresConnectionInfo {
+    async fn health(&self) -> Result<(), Error> {
         Ok(())
     }
 }

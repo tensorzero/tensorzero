@@ -6,6 +6,7 @@ use axum::debug_handler;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::Json;
+use futures::join;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -30,19 +31,31 @@ pub struct StatusResponse {
 pub async fn health_handler(
     State(AppStateData {
         clickhouse_connection_info,
+        postgres_connection_info,
         ..
     }): AppState,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if clickhouse_connection_info.health().await.is_err() {
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({
-                "gateway": "ok",
-                "clickhouse": "error"
-            })),
-        ));
+    let (clickhouse_result, postgres_result) = join!(
+        clickhouse_connection_info.health(),
+        postgres_connection_info.health(),
+    );
+
+    if clickhouse_result.is_ok() && postgres_result.is_ok() {
+        return Ok(Json(json!({
+            "gateway": "ok",
+            "clickhouse": "ok",
+            "postgres": "ok",
+        })))
     }
-    Ok(Json(json!({ "gateway": "ok", "clickhouse": "ok" })))
+
+    return Err((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(json!({
+            "gateway": "ok",
+            "clickhouse": if clickhouse_result.is_ok() { "ok" } else { "error" },
+            "postgres": if clickhouse_result.is_ok() { "ok" } else { "error" },
+        })),
+    ));
 }
 
 #[cfg(test)]
@@ -64,7 +77,11 @@ mod tests {
         let response_value = response.unwrap();
         assert_eq!(response_value.get("gateway").unwrap(), "ok");
         assert_eq!(response_value.get("clickhouse").unwrap(), "ok");
+    }
 
+    #[tokio::test]
+    async fn should_report_error_for_unhealthy_clickhouse() {
+        let config = Arc::new(Config::default());
         let gateway_handle = get_unit_test_gateway_handle(config, false);
         let response = health_handler(State(gateway_handle.app_state.clone())).await;
         assert!(response.is_err());
