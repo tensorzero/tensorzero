@@ -19,6 +19,7 @@ use crate::inference::types::stored_input::{
     StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
 use crate::inference::types::{RequestMessage, ResolvedContentBlock, TemplateInput};
+use crate::rate_limiting::RateLimitedInputContent;
 use crate::tool::{ToolCall, ToolResult};
 
 #[cfg(feature = "pyo3")]
@@ -464,6 +465,17 @@ impl std::fmt::Display for FileWithPath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+impl RateLimitedInputContent for FileWithPath {
+    fn estimated_input_token_usage(&self) -> u64 {
+        let FileWithPath {
+            // We explicitly list fields here so that this impl is very explicit
+            file: _,
+            storage_path: _,
+        } = self;
+        10_000 // Hardcoded value for file size estimation, we will improve later
     }
 }
 

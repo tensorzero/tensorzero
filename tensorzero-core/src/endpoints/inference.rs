@@ -24,6 +24,7 @@ use uuid::Uuid;
 use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedVariantInfo};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
+use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -43,6 +44,7 @@ use crate::inference::types::{
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
+use crate::rate_limiting::{RateLimitingConfig, TicketBorrows};
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
@@ -113,7 +115,7 @@ pub struct Params {
     pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct InferenceMetadata {
     pub function_name: String,
     pub variant_name: String,
@@ -137,6 +139,7 @@ struct InferenceMetadata {
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub include_original_response: bool,
+    pub ticket_borrow: TicketBorrows,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -148,12 +151,19 @@ pub async fn inference_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        postgres_connection_info,
         ..
     }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
-    let inference_output =
-        inference(config, &http_client, clickhouse_connection_info, params).await?;
+    let inference_output = inference(
+        config,
+        &http_client,
+        clickhouse_connection_info,
+        postgres_connection_info,
+        params,
+    )
+    .await?;
     match inference_output {
         InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
         InferenceOutput::Streaming(stream) => {
@@ -207,6 +217,7 @@ pub async fn inference(
     config: Arc<Config>,
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
+    postgres_connection_info: PostgresConnectionInfo,
     params: Params,
 ) -> Result<InferenceOutput, Error> {
     let span = tracing::Span::current();
@@ -312,8 +323,11 @@ pub async fn inference(
     let inference_clients = InferenceClients {
         http_client,
         clickhouse_connection_info: &clickhouse_connection_info,
+        postgres_connection_info: &postgres_connection_info,
         credentials: &params.credentials,
         cache_options: &(params.cache_options, dryrun).into(),
+        tags: &params.tags,
+        rate_limiting_config: &config.rate_limiting,
         otlp_config: &config.gateway.export.otlp,
     };
 
@@ -397,6 +411,7 @@ pub async fn inference(
                 extra_body,
                 extra_headers,
                 include_original_response: params.include_original_response,
+                ticket_borrow: model_used_info.ticket_borrow,
             };
 
             let stream = create_stream(
@@ -405,6 +420,7 @@ pub async fn inference(
                 inference_metadata,
                 stream,
                 clickhouse_connection_info,
+                postgres_connection_info,
             );
 
             return Ok(InferenceOutput::Streaming(Box::pin(stream)));
@@ -577,6 +593,7 @@ fn create_stream(
     metadata: InferenceMetadata,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
+    postgres_connection_info: PostgresConnectionInfo,
 ) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
@@ -661,6 +678,7 @@ fn create_stream(
                 extra_body,
                 extra_headers,
                 include_original_response: _,
+                ticket_borrow,
             } = metadata;
 
             let config = config.clone();
@@ -687,6 +705,8 @@ fn create_stream(
                     cached,
                     extra_body: extra_body.clone(),
                     extra_headers: extra_headers.clone(),
+                    ticket_borrow,
+                    postgres_connection_info,
                 };
                 let inference_response: Result<InferenceResult, Error> =
                     collect_chunks(collect_chunks_args).await;
@@ -1095,8 +1115,11 @@ impl InferenceResponseChunk {
 pub struct InferenceClients<'a> {
     pub http_client: &'a TensorzeroHttpClient,
     pub clickhouse_connection_info: &'a ClickHouseConnectionInfo,
+    pub postgres_connection_info: &'a PostgresConnectionInfo,
     pub credentials: &'a InferenceCredentials,
     pub cache_options: &'a CacheOptions,
+    pub tags: &'a HashMap<String, String>,
+    pub rate_limiting_config: &'a RateLimitingConfig,
     pub otlp_config: &'a OtlpConfig,
 }
 
@@ -1302,6 +1325,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             include_original_response: false,
+            ticket_borrow: TicketBorrows::empty(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();
@@ -1355,6 +1379,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             include_original_response: false,
+            ticket_borrow: TicketBorrows::empty(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();

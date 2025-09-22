@@ -120,6 +120,7 @@ pub async fn start_batch_inference(
         config,
         http_client,
         clickhouse_connection_info,
+        postgres_connection_info,
         ..
     }: AppStateData,
     params: StartBatchInferenceParams,
@@ -214,8 +215,11 @@ pub async fn start_batch_inference(
     let inference_clients = InferenceClients {
         http_client: &http_client,
         clickhouse_connection_info: &clickhouse_connection_info,
+        postgres_connection_info: &postgres_connection_info,
         credentials: &params.credentials,
         cache_options: &cache_options,
+        rate_limiting_config: &config.rate_limiting,
+        tags: &HashMap::default(), // NOTE: we currently do not rate limit batch inference
         otlp_config: &config.gateway.export.otlp,
     };
 
