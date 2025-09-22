@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use serde::Deserialize;
 use tracing::instrument;
@@ -6,7 +6,7 @@ use tracing::instrument;
 use crate::{
     cache::CacheParamsOptions,
     config::Config,
-    db::clickhouse::ClickHouseConnectionInfo,
+    db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
     endpoints::inference::InferenceClients,
     error::{Error, ErrorDetails},
@@ -39,6 +39,7 @@ pub async fn embeddings(
     config: Arc<Config>,
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
+    postgres_connection_info: PostgresConnectionInfo,
     params: Params,
 ) -> Result<EmbeddingResponse, Error> {
     let span = tracing::Span::current();
@@ -72,6 +73,11 @@ pub async fn embeddings(
         credentials: &params.credentials,
         cache_options: &(params.cache_options, dryrun).into(),
         clickhouse_connection_info: &clickhouse_connection_info,
+        postgres_connection_info: &postgres_connection_info,
+        // NOTE: we do not support tags for embeddings yet
+        // we should fix this once the tags are implemented
+        tags: &HashMap::default(),
+        rate_limiting_config: &config.rate_limiting,
         otlp_config: &config.gateway.export.otlp,
     };
     let response = embedding_model
@@ -145,7 +151,14 @@ mod tests {
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
 
-        let result = embeddings(config, &http_client, clickhouse_connection_info, params).await;
+        let result = embeddings(
+            config,
+            &http_client,
+            clickhouse_connection_info,
+            PostgresConnectionInfo::Disabled,
+            params,
+        )
+        .await;
 
         // The function should succeed
         assert!(result.is_ok());
@@ -173,7 +186,14 @@ mod tests {
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
 
-        let result = embeddings(config, &http_client, clickhouse_connection_info, params).await;
+        let result = embeddings(
+            config,
+            &http_client,
+            clickhouse_connection_info,
+            PostgresConnectionInfo::Disabled,
+            params,
+        )
+        .await;
 
         // The function should fail with ModelNotFound
         assert!(result.is_err());

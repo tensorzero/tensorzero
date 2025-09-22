@@ -27,6 +27,7 @@ mod otel_export;
 mod prometheus;
 mod providers;
 mod proxy;
+mod rate_limiting;
 mod render_inferences;
 mod retries;
 mod streaming_errors;

@@ -56,6 +56,47 @@ const defaultFunctionConfig: FunctionConfig = {
     "This is the default function for TensorZero. This function is used when you call a model directly without specifying a function name. It has no variants preconfigured because they are generated dynamically at inference time based on the model being called.",
 };
 
+export function getDefaultFunctionConfigWithVariant(
+  model_name: string,
+): FunctionConfig {
+  const functionConfig = defaultFunctionConfig;
+  functionConfig.variants[model_name] = {
+    inner: {
+      type: "chat_completion",
+      model: model_name,
+      weight: null,
+      templates: {},
+      temperature: null,
+      top_p: null,
+      max_tokens: null,
+      presence_penalty: null,
+      frequency_penalty: null,
+      seed: null,
+      stop_sequences: null,
+      json_mode: null,
+      retries: { num_retries: 0, max_delay_s: 0 },
+    },
+    timeouts: {
+      non_streaming: { total_ms: null },
+      streaming: { ttft_ms: null },
+    },
+  };
+  return functionConfig;
+}
+/*
+weight: number | null;
+model: string;
+templates: ChatTemplates;
+temperature: number | null;
+top_p: number | null;
+max_tokens: number | null;
+presence_penalty: number | null;
+frequency_penalty: number | null;
+seed: number | null;
+stop_sequences: Array<string> | null;
+json_mode: JsonMode | null;
+retries: RetryConfig;*/
+
 export async function getConfig() {
   const now = Date.now();
 

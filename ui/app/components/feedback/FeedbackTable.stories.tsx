@@ -68,6 +68,13 @@ const config: Config = {
   },
   tools: {},
   evaluations: {},
+  postgres: {
+    connection_pool_size: 10,
+  },
+  rate_limiting: {
+    rules: [],
+    enabled: true,
+  },
 };
 
 const meta = {

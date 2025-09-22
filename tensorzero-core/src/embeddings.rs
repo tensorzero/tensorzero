@@ -16,6 +16,10 @@ use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
 use crate::model_table::BaseModelTable;
 use crate::model_table::ShorthandModelConfig;
 use crate::providers::azure::AzureProvider;
+use crate::rate_limiting::{
+    get_estimated_tokens, RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
+    RateLimitedResponse, ScopeInfo,
+};
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
@@ -147,13 +151,11 @@ impl EmbeddingModelConfig {
                         return Ok(cache_lookup);
                     }
                 }
+                let scope_info = ScopeInfo {
+                    tags: &HashMap::default(),
+                };
                 let response = provider_config
-                    .embed(
-                        request,
-                        clients.http_client,
-                        clients.credentials,
-                        &provider_config.into(),
-                    )
+                    .embed(request, clients, &scope_info, &provider_config.into())
                     .await;
 
                 match response {
@@ -240,6 +242,18 @@ impl EmbeddingInput {
     }
 }
 
+impl RateLimitedInputContent for EmbeddingInput {
+    fn estimated_input_token_usage(&self) -> u64 {
+        match self {
+            EmbeddingInput::Single(text) => get_estimated_tokens(text),
+            EmbeddingInput::Batch(texts) => texts
+                .iter()
+                .map(|text| get_estimated_tokens(text))
+                .sum::<u64>(),
+        }
+    }
+}
+
 impl From<String> for EmbeddingInput {
     fn from(text: String) -> Self {
         EmbeddingInput::Single(text)
@@ -251,6 +265,20 @@ pub struct EmbeddingRequest {
     pub input: EmbeddingInput,
     pub dimensions: Option<u32>,
     pub encoding_format: EmbeddingEncodingFormat,
+}
+
+impl RateLimitedRequest for EmbeddingRequest {
+    fn estimated_resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
+        let EmbeddingRequest {
+            input,
+            dimensions: _,
+            encoding_format: _,
+        } = self;
+        Ok(RateLimitResourceUsage {
+            model_inferences: 1,
+            tokens: input.estimated_input_token_usage(),
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -278,6 +306,15 @@ pub struct EmbeddingProviderResponse {
     pub raw_response: String,
     pub usage: Usage,
     pub latency: Latency,
+}
+
+impl RateLimitedResponse for EmbeddingProviderResponse {
+    fn resource_usage(&self) -> RateLimitResourceUsage {
+        RateLimitResourceUsage {
+            model_inferences: 1,
+            tokens: self.usage.total_tokens() as u64,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -416,7 +453,6 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
         })
     }
 }
-
 pub trait EmbeddingProvider {
     fn embed(
         &self,
@@ -473,33 +509,42 @@ impl From<&EmbeddingProviderRequestInfo> for ModelProviderRequestInfo {
     }
 }
 
-impl EmbeddingProvider for EmbeddingProviderInfo {
-    async fn embed(
+impl EmbeddingProviderInfo {
+    pub async fn embed(
         &self,
         request: &EmbeddingRequest,
-        client: &TensorzeroHttpClient,
-        dynamic_api_keys: &InferenceCredentials,
+        clients: &InferenceClients<'_>,
+        scope_info: &ScopeInfo<'_>,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
-        let response_fut = self
-            .inner
-            .embed(request, client, dynamic_api_keys, model_provider_data);
-        Ok(
-            if let Some(timeout_ms) = self.timeouts.non_streaming.total_ms {
-                let timeout = Duration::from_millis(timeout_ms);
-                tokio::time::timeout(timeout, response_fut)
-                    .await
-                    .unwrap_or_else(|_: Elapsed| {
-                        Err(Error::new(ErrorDetails::ModelProviderTimeout {
-                            provider_name: self.provider_name.to_string(),
-                            timeout,
-                            streaming: false,
-                        }))
-                    })?
-            } else {
-                response_fut.await?
-            },
-        )
+        let ticket_borrow = clients
+            .rate_limiting_config
+            .consume_tickets(clients.postgres_connection_info, scope_info, request)
+            .await?;
+        let response_fut = self.inner.embed(
+            request,
+            clients.http_client,
+            clients.credentials,
+            model_provider_data,
+        );
+        let response = if let Some(timeout_ms) = self.timeouts.non_streaming.total_ms {
+            let timeout = Duration::from_millis(timeout_ms);
+            tokio::time::timeout(timeout, response_fut)
+                .await
+                .unwrap_or_else(|_: Elapsed| {
+                    Err(Error::new(ErrorDetails::ModelProviderTimeout {
+                        provider_name: self.provider_name.to_string(),
+                        timeout,
+                        streaming: false,
+                    }))
+                })?
+        } else {
+            response_fut.await?
+        };
+        ticket_borrow
+            .return_tickets(clients.postgres_connection_info, response.resource_usage())
+            .await?;
+        Ok(response)
     }
 }
 
@@ -633,7 +678,7 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        db::clickhouse::ClickHouseConnectionInfo,
+        db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     };
 
     use super::*;
@@ -680,12 +725,15 @@ mod tests {
                 "fallback",
                 &InferenceClients {
                     http_client: &TensorzeroHttpClient::new().unwrap(),
+                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
+                    postgres_connection_info: &PostgresConnectionInfo::Disabled,
                     credentials: &InferenceCredentials::default(),
                     cache_options: &CacheOptions {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
-                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
+                    tags: &Default::default(),
+                    rate_limiting_config: &Default::default(),
                     otlp_config: &Default::default(),
                 },
             )

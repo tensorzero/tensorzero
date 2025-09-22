@@ -713,7 +713,7 @@ mod tests {
 
     use crate::cache::{CacheEnabledMode, CacheOptions};
     use crate::config::{SchemaData, UninitializedSchemas};
-    use crate::db::clickhouse::ClickHouseConnectionInfo;
+    use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
     use crate::embeddings::EmbeddingModelTable;
     use crate::endpoints::inference::{
         ChatCompletionInferenceParams, InferenceCredentials, InferenceIds,
@@ -1101,11 +1101,14 @@ mod tests {
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
             otlp_config: &Default::default(),
         };
         let templates = get_test_template_config();
@@ -2047,11 +2050,14 @@ mod tests {
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
             otlp_config: &Default::default(),
         };
         let templates = Box::leak(Box::new(get_test_template_config()));

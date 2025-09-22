@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT bucket_key as key, is_successful as success, tickets_remaining, tickets_consumed\n             FROM consume_multiple_resource_tickets($1, $2, $3, $4, $5)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "success",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "tickets_remaining",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "tickets_consumed",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "Int8Array",
+        "Int8Array",
+        "Int8Array",
+        "IntervalArray"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "a4d2aa2e85389d921b4c1581321838689d73b9496a26b3116bafd0584e500016"
+}

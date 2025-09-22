@@ -77,6 +77,7 @@ pub async fn inference_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        postgres_connection_info,
         ..
     }): AppState,
     headers: HeaderMap,
@@ -125,7 +126,14 @@ pub async fn inference_handler(
         .into()),
     }?;
 
-    let response = inference(config, &http_client, clickhouse_connection_info, params).await?;
+    let response = inference(
+        config,
+        &http_client,
+        clickhouse_connection_info,
+        postgres_connection_info,
+        params,
+    )
+    .await?;
 
     match response {
         InferenceOutput::NonStreaming(response) => {
@@ -234,6 +242,7 @@ pub async fn embeddings_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        postgres_connection_info,
         ..
     }): AppState,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleEmbeddingParams>,
@@ -243,6 +252,7 @@ pub async fn embeddings_handler(
         config,
         &http_client,
         clickhouse_connection_info,
+        postgres_connection_info,
         embedding_params,
     )
     .await?;

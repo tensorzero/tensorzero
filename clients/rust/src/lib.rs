@@ -9,7 +9,7 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
 use tensorzero_core::config::ConfigFileGlob;
-pub use tensorzero_core::db::DatabaseConnection;
+pub use tensorzero_core::db::ClickHouseConnection;
 use tensorzero_core::db::HealthCheckable;
 pub use tensorzero_core::db::{ModelUsageTimePoint, TimeWindow};
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
@@ -601,6 +601,7 @@ impl Client {
                         gateway.handle.app_state.config.clone(),
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.clickhouse_connection_info.clone(),
+                        gateway.handle.app_state.postgres_connection_info.clone(),
                         params.try_into().map_err(err_to_http)?,
                     )
                     .await

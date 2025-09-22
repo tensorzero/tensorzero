@@ -274,3 +274,10 @@ seed = 42
 suffix = "test"
 # credentials = "env:OPENAI_API_KEY"
 # api_base = "http://localhost:1234"
+
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                POSTGRES                                    │
+# └────────────────────────────────────────────────────────────────────────────┘
+[postgres]
+connection_pool_size = 10
