@@ -14,21 +14,16 @@ use tensorzero::{
 use tensorzero_core::{
     config::{Config, ConfigFileGlob, UninitializedVariantConfig},
     db::clickhouse::{
-        test_helpers::{
-            get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
-            select_model_inferences_clickhouse, CLICKHOUSE_URL,
-        },
-        ClickhouseFormat,
+        ClickhouseFormat, test_helpers::{
+            CLICKHOUSE_URL, get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse, select_model_inferences_clickhouse
+        }
     },
     http::TensorzeroHttpClient,
     inference::types::{
-        ContentBlockChatOutput, ContentBlockChunk, JsonInferenceOutput, ModelInput,
-        ResolvedContentBlock, ResolvedRequestMessage, StoredInput, StoredInputMessage,
-        StoredInputMessageContent, Text, TextKind, Usage,
+        ContentBlockChatOutput, ContentBlockChunk, JsonInferenceOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, StoredContentBlock, StoredInput, StoredInputMessage, StoredInputMessageContent, StoredRequestMessage, Text, TextKind, Usage
     },
     optimization::{
-        dicl::UninitializedDiclOptimizationConfig, JobHandle, OptimizationJobInfo, Optimizer,
-        OptimizerOutput, UninitializedOptimizerConfig, UninitializedOptimizerInfo,
+        JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerConfig, UninitializedOptimizerInfo, dicl::UninitializedDiclOptimizationConfig
     },
     stored_inference::StoredOutput,
 };
@@ -873,9 +868,9 @@ async fn validate_model_inference_clickhouse(
             .unwrap()
             .as_str()
             .unwrap();
-        let input_messages: Vec<Value> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
         let output = model_inference.get("output").unwrap().as_str().unwrap();
-        let output: Vec<Value> = serde_json::from_str(output).unwrap();
+        let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
 
         match model_name {
             name if name == expected_model => {
@@ -905,13 +900,13 @@ async fn validate_model_inference_clickhouse(
                 assert_eq!(input_messages.len(), 7);
                 assert_eq!(output.len(), 1);
 
-                // Check that output contains text with "nose"
-                if let Some(text_value) = output[0].get("text") {
-                    if let Some(text_str) = text_value.as_str() {
-                        assert!(text_str.to_lowercase().contains("nose"));
+                match &output[0] {
+                    StoredContentBlock::Text(text) => {
+                        assert!(text.text.to_lowercase().contains("nose"));
                     }
-                } else {
-                    panic!("Expected a text block in output[0], got {:?}", output[0]);
+                    _ => {
+                        panic!("Expected a text block, got {:?}", output[0]);
+                    }
                 }
             }
             name if name == expected_embedding_model => {
