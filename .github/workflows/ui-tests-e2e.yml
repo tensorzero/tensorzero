@@ -20,7 +20,7 @@ on:
 
 jobs:
   ui-tests-no-network:
-    runs-on: namespace-profile-tensorzero-2x8
+    runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
       - name: Set DNS
@@ -178,7 +178,7 @@ jobs:
           retention-days: 7
 
   ui-tests-e2e-credentials:
-    runs-on: namespace-profile-tensorzero-2x8
+    runs-on: ubuntu-latest
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
     # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
     # For now, it just runs in the merge queue and on prs from the main repo
