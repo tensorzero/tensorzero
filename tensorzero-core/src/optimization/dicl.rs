@@ -980,8 +980,8 @@ mod tests {
     fn create_test_rendered_sample() -> RenderedSample {
         use crate::{
             inference::types::{
-                ContentBlock, ContentBlockChatOutput, ModelInput, RequestMessage, Role,
-                StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
+                ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage,
+                Role, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
             },
             stored_inference::StoredOutput,
         };
@@ -993,9 +993,9 @@ mod tests {
             function_name: "test_function".to_string(),
             input: ModelInput {
                 system: Some("Test system".to_string()),
-                messages: vec![RequestMessage {
+                messages: vec![ResolvedRequestMessage {
                     role: Role::User,
-                    content: vec![ContentBlock::Text(Text {
+                    content: vec![ResolvedContentBlock::Text(Text {
                         text: "Test message".to_string(),
                     })],
                 }],

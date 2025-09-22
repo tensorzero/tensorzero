@@ -13,6 +13,7 @@ use crate::inference::types::PeekableProviderInferenceResponseStream;
 use crate::inference::types::ProviderInferenceResponse;
 use crate::inference::types::ProviderInferenceResponseStreamInner;
 use crate::model::ModelProvider;
+use async_trait::async_trait;
 use futures::Future;
 use futures::Stream;
 use reqwest_eventsource::Event;
@@ -67,10 +68,11 @@ pub trait InferenceProvider {
 /// AWS sdk.
 ///
 /// Currently, we only implement `WrappedProvider` for `OpenAI`
+#[async_trait]
 pub trait WrappedProvider: Debug {
     fn thought_block_provider_type_suffix(&self) -> Cow<'static, str>;
 
-    fn make_body<'a>(
+    async fn make_body<'a>(
         &'a self,
         request: ModelProviderRequest<'a>,
     ) -> Result<serde_json::Value, Error>;

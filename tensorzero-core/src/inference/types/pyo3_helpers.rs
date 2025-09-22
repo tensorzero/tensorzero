@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::stored_input::StoredInput;
+use crate::inference::types::ResolvedContentBlock;
 use crate::inference::types::{
     stored_input::StoredInputMessageContent, ContentBlockChatOutput, ResolvedInputMessageContent,
 };
@@ -23,8 +24,6 @@ use crate::stored_inference::{
     RenderedSample, SimpleStoredSampleInfo, StoredInference, StoredSample,
 };
 use pyo3::types::PyNone;
-
-use super::ContentBlock;
 
 pub static JSON_LOADS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 pub static JSON_DUMPS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
@@ -114,23 +113,23 @@ fn import_unknown_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
     })
 }
 
-pub fn content_block_to_python(
+pub fn resolved_content_block_to_python(
     py: Python<'_>,
-    content_block: &ContentBlock,
+    content_block: &ResolvedContentBlock,
 ) -> PyResult<Py<PyAny>> {
     match content_block {
-        ContentBlock::Text(text) => {
+        ResolvedContentBlock::Text(text) => {
             let text_content_block = import_text_content_block(py)?;
             text_content_block.call1(py, (text.text.clone(),))
         }
-        ContentBlock::File(file) => {
+        ResolvedContentBlock::File(file) => {
             let file_content_block = import_file_content_block(py)?;
             file_content_block.call1(
                 py,
                 (file.file.data.clone(), file.file.mime_type.to_string()),
             )
         }
-        ContentBlock::ToolCall(tool_call) => {
+        ResolvedContentBlock::ToolCall(tool_call) => {
             let tool_call_content_block = import_tool_call_content_block(py)?;
             tool_call_content_block.call1(
                 py,
@@ -143,11 +142,11 @@ pub fn content_block_to_python(
                 ),
             )
         }
-        ContentBlock::Thought(thought) => {
+        ResolvedContentBlock::Thought(thought) => {
             let thought_content_block = import_thought_content_block(py)?;
             thought_content_block.call1(py, (thought.text.clone(),))
         }
-        ContentBlock::ToolResult(tool_result) => {
+        ResolvedContentBlock::ToolResult(tool_result) => {
             let tool_result_content_block = import_tool_result_content_block(py)?;
             tool_result_content_block.call1(
                 py,
@@ -158,7 +157,7 @@ pub fn content_block_to_python(
                 ),
             )
         }
-        ContentBlock::Unknown {
+        ResolvedContentBlock::Unknown {
             data,
             model_provider_name,
         } => {

@@ -47,7 +47,7 @@
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::resolved_input::{
-    LazyResolvedInput, LazyResolvedInputMessage, LazyResolvedInputMessageContent,
+    FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage, LazyResolvedInputMessageContent,
 };
 use crate::inference::types::stored_input::StoredFile;
 use crate::rate_limiting::{
@@ -64,6 +64,7 @@ use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::{FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders};
 use file::sanitize_raw_request;
 pub use file::{Base64File, File};
+use futures::future::{join_all, try_join_all};
 use futures::stream::Peekable;
 use futures::{FutureExt, Stream};
 use indexmap::IndexMap;
@@ -71,9 +72,9 @@ use itertools::Itertools;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
-use pyo3::types::{PyAny, PyList};
+use pyo3::types::PyAny;
 #[cfg(feature = "pyo3")]
-use pyo3_helpers::{content_block_to_python, serialize_to_dict};
+use pyo3_helpers::serialize_to_dict;
 use resolved_input::FileWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -116,7 +117,10 @@ pub mod resolved_input;
 pub mod storage;
 pub mod stored_input;
 
-pub use stored_input::{StoredInput, StoredInputMessage, StoredInputMessageContent};
+pub use resolved_input::ResolvedRequestMessage;
+pub use stored_input::{
+    StoredInput, StoredInputMessage, StoredInputMessageContent, StoredRequestMessage,
+};
 
 /*
  * Data flow in TensorZero
@@ -273,7 +277,7 @@ impl InputMessageContent {
                     .kind
                     .clone();
                 match &file {
-                    File::Url { .. } => {
+                    File::Url { url, mime_type } => {
                         // Check that we have an object store *outside* of the future that we're going to store in
                         // `LazyResolvedInputMessageContent::File`. We want to error immediately if the user tries
                         // to use a file input without explicitly configuring an object store (either explicit enabled or disabled)
@@ -295,6 +299,8 @@ impl InputMessageContent {
                         // This ensures that if we never actually need to download the file
                         // (due to model providers forwarding image urls, and object store observability being disabled),
                         // we will skip downloading the file entirely.
+                        let url = url.clone();
+                        let mime_type = mime_type.clone();
                         let delayed_file_future = async move {
                             let file = file.take_or_fetch(&client).await?;
                             let path = storage_kind.file_path(&file)?;
@@ -303,7 +309,10 @@ impl InputMessageContent {
                                 storage_path: path,
                             })
                         };
-                        LazyResolvedInputMessageContent::File(delayed_file_future.boxed().shared())
+                        LazyResolvedInputMessageContent::File(Box::new(LazyFile::Url {
+                            file_url: FileUrl { url, mime_type },
+                            future: delayed_file_future.boxed().shared(),
+                        }))
                     }
                     File::Base64 { mime_type, data } => {
                         let file = Base64File {
@@ -314,15 +323,12 @@ impl InputMessageContent {
 
                         let path = storage_kind.file_path(&file)?;
 
-                        // We have inline file data already, so construct
-                        LazyResolvedInputMessageContent::File(
-                            (futures::future::ready(Ok(FileWithPath {
+                        LazyResolvedInputMessageContent::File(Box::new(LazyFile::FileWithPath(
+                            FileWithPath {
                                 file,
                                 storage_path: path,
-                            })))
-                            .boxed()
-                            .shared(),
-                        )
+                            },
+                        )))
                     }
                 }
             }
@@ -358,9 +364,13 @@ impl LazyResolvedInputMessageContent {
             LazyResolvedInputMessageContent::Thought(thought) => {
                 ResolvedInputMessageContent::Thought(thought)
             }
-            LazyResolvedInputMessageContent::File(file) => {
-                ResolvedInputMessageContent::File(Box::new(file.await?))
-            }
+            LazyResolvedInputMessageContent::File(file) => match *file {
+                LazyFile::Url {
+                    future,
+                    file_url: _,
+                } => ResolvedInputMessageContent::File(Box::new(future.await?)),
+                LazyFile::FileWithPath(file) => ResolvedInputMessageContent::File(Box::new(file)),
+            },
             LazyResolvedInputMessageContent::Unknown {
                 data,
                 model_provider_name,
@@ -574,21 +584,19 @@ impl RateLimitedInputContent for Thought {
 }
 
 /// Core representation of the types of content that could go into a model provider
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
-// Once `ContentBlock::File` comes lazy, it will be questionable to compare two
-// `ContentBlock::File`s, so we will panic if we try to compare a `ContentBlock::File`,
-// The `PartialEq` impl is gated behind tests to prevent production code from
-// performing a potentially-panicking comparison.
+/// The `PartialEq` impl will panic if we try to compare a `LazyFile`, so we make it
+/// test-only to prevent production code from panicking.
+/// This *does not* implement `Deserialize`, since we need object store information
+/// to produce a `LazyFile::Url`
+#[derive(Clone, Debug, Serialize)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
-#[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
     Text(Text),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
     #[serde(alias = "image")]
-    File(Box<FileWithPath>),
+    File(Box<LazyFile>),
     Thought(Thought),
     /// Represents an unknown provider-specific content block.
     /// We pass this along as-is without any validation or transformation.
@@ -609,21 +617,57 @@ pub enum ContentBlock {
 }
 
 impl ContentBlock {
-    pub fn into_stored_content_block(self) -> StoredContentBlock {
+    pub async fn into_stored_content_block(self) -> Result<StoredContentBlock, Error> {
         match self {
-            ContentBlock::Text(text) => StoredContentBlock::Text(text),
-            ContentBlock::ToolCall(tool_call) => StoredContentBlock::ToolCall(tool_call),
-            ContentBlock::ToolResult(tool_result) => StoredContentBlock::ToolResult(tool_result),
-            ContentBlock::File(file) => StoredContentBlock::File(Box::new(file.into_stored_file())),
-            ContentBlock::Thought(thought) => StoredContentBlock::Thought(thought),
+            ContentBlock::Text(text) => Ok(StoredContentBlock::Text(text)),
+            ContentBlock::ToolCall(tool_call) => Ok(StoredContentBlock::ToolCall(tool_call)),
+            ContentBlock::ToolResult(tool_result) => {
+                Ok(StoredContentBlock::ToolResult(tool_result))
+            }
+            ContentBlock::File(file) => Ok(StoredContentBlock::File(Box::new(
+                file.resolve()
+                    .await?
+                    .clone()
+                    .into_owned()
+                    .into_stored_file(),
+            ))),
+            ContentBlock::Thought(thought) => Ok(StoredContentBlock::Thought(thought)),
             ContentBlock::Unknown {
                 data,
                 model_provider_name,
-            } => StoredContentBlock::Unknown {
+            } => Ok(StoredContentBlock::Unknown {
                 data,
                 model_provider_name,
-            },
+            }),
         }
+    }
+
+    pub async fn into_resolved_content_block(self) -> Result<ResolvedContentBlock, Error> {
+        match self {
+            ContentBlock::Text(text) => Ok(ResolvedContentBlock::Text(text)),
+            ContentBlock::ToolCall(tool_call) => Ok(ResolvedContentBlock::ToolCall(tool_call)),
+            ContentBlock::ToolResult(tool_result) => {
+                Ok(ResolvedContentBlock::ToolResult(tool_result))
+            }
+            ContentBlock::File(file) => Ok(ResolvedContentBlock::File(Box::new(
+                file.resolve().await?.clone().into_owned(),
+            ))),
+            ContentBlock::Thought(thought) => Ok(ResolvedContentBlock::Thought(thought)),
+            ContentBlock::Unknown {
+                data,
+                model_provider_name,
+            } => Ok(ResolvedContentBlock::Unknown {
+                data,
+                model_provider_name,
+            }),
+        }
+    }
+}
+
+impl std::fmt::Display for ResolvedRequestMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
     }
 }
 
@@ -669,6 +713,45 @@ pub enum StoredContentBlock {
         /// they only need to produce it with the proper `fully_qualified_name` set.
         model_provider_name: Option<String>,
     },
+}
+
+/// Like `ContentBlock`, but stores an in-memory `FileWithPath` instead of a `LazyFile`
+/// As a result, it can implement both `Serialize` and `Deserialize`
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ResolvedContentBlock {
+    Text(Text),
+    ToolCall(ToolCall),
+    ToolResult(ToolResult),
+    File(Box<FileWithPath>),
+    Thought(Thought),
+    Unknown {
+        data: Value,
+        model_provider_name: Option<String>,
+    },
+}
+
+impl ResolvedContentBlock {
+    pub fn into_content_block(self) -> ContentBlock {
+        match self {
+            ResolvedContentBlock::Text(text) => ContentBlock::Text(text),
+            ResolvedContentBlock::ToolCall(tool_call) => ContentBlock::ToolCall(tool_call),
+            ResolvedContentBlock::ToolResult(tool_result) => ContentBlock::ToolResult(tool_result),
+            ResolvedContentBlock::File(file) => {
+                ContentBlock::File(Box::new(LazyFile::FileWithPath(*file)))
+            }
+            ResolvedContentBlock::Thought(thought) => ContentBlock::Thought(thought),
+            ResolvedContentBlock::Unknown {
+                data,
+                model_provider_name,
+            } => ContentBlock::Unknown {
+                data,
+                model_provider_name,
+            },
+        }
+    }
 }
 
 /// A helper type for dealing with `ContentBlock::Unknown` in model providers.
@@ -724,26 +807,36 @@ pub enum ContentBlockChatOutput {
 }
 
 /// A RequestMessage is a message sent to a model
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
-#[cfg_attr(test, ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct RequestMessage {
     pub role: Role,
     pub content: Vec<ContentBlock>,
 }
 
 impl RequestMessage {
-    pub fn into_stored_message(self) -> StoredRequestMessage {
-        StoredRequestMessage {
+    pub async fn into_stored_message(self) -> Result<StoredRequestMessage, Error> {
+        Ok(StoredRequestMessage {
             role: self.role,
-            content: self
-                .content
-                .into_iter()
-                .map(ContentBlock::into_stored_content_block)
-                .collect(),
-        }
+            content: try_join_all(
+                self.content
+                    .into_iter()
+                    .map(ContentBlock::into_stored_content_block),
+            )
+            .await?,
+        })
+    }
+
+    pub async fn into_resolved_message(self) -> Result<ResolvedRequestMessage, Error> {
+        Ok(ResolvedRequestMessage {
+            role: self.role,
+            content: try_join_all(
+                self.content
+                    .into_iter()
+                    .map(ContentBlock::into_resolved_content_block),
+            )
+            .await?,
+        })
     }
 }
 
@@ -761,44 +854,10 @@ impl RateLimitedInputContent for RequestMessage {
     }
 }
 
-/// The message type that we directly store in ClickHouse.
-/// This is almost identical to `RequestMessage`, but without `File` data.
-/// Only the object-storage path is actually stored in clickhouse
-/// The `RequestMessage/StoredRequestMessage` pair is the model-level equivalent
-/// of `ResolvedInput/StoredInput`
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct StoredRequestMessage {
-    pub role: Role,
-    pub content: Vec<StoredContentBlock>,
-}
-
 impl std::fmt::Display for RequestMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl RequestMessage {
-    #[getter]
-    fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let content = self
-            .content
-            .iter()
-            .map(|c| content_block_to_python(py, c))
-            .collect::<PyResult<Vec<_>>>()?;
-        PyList::new(py, content).map(Bound::into_any)
-    }
-
-    #[getter]
-    fn get_role(&self) -> String {
-        self.role.to_string()
-    }
-
-    pub fn __repr__(&self) -> String {
-        self.to_string()
     }
 }
 
@@ -914,7 +973,7 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct ModelInput {
     pub system: Option<String>,
-    pub messages: Vec<RequestMessage>,
+    pub messages: Vec<ResolvedRequestMessage>,
 }
 
 impl std::fmt::Display for ModelInput {
@@ -1356,6 +1415,12 @@ impl From<String> for ContentBlock {
     }
 }
 
+impl From<String> for StoredContentBlock {
+    fn from(text: String) -> Self {
+        StoredContentBlock::Text(Text { text })
+    }
+}
+
 impl From<String> for ContentBlockOutput {
     fn from(text: String) -> Self {
         ContentBlockOutput::Text(Text { text })
@@ -1434,7 +1499,10 @@ impl ModelInferenceResponseWithMetadata {
 }
 
 impl ModelInferenceDatabaseInsert {
-    pub fn new(result: ModelInferenceResponseWithMetadata, inference_id: Uuid) -> Self {
+    pub async fn new(
+        result: ModelInferenceResponseWithMetadata,
+        inference_id: Uuid,
+    ) -> Result<Self, Error> {
         let (latency_ms, ttft_ms) = match result.latency {
             Latency::Streaming {
                 ttft,
@@ -1465,7 +1533,21 @@ impl ModelInferenceDatabaseInsert {
             None
         };
 
-        Self {
+        let stored_input_messages = match result.input_messages {
+            RequestMessagesOrBatch::Message(input_messages) => {
+                // In the the future, we might want to support writing 'partially broken' input messages to ClickHouse,
+                // so that we write something even if one of the input files fails to resolve.
+                try_join_all(
+                    input_messages
+                        .into_iter()
+                        .map(RequestMessage::into_stored_message),
+                )
+                .await?
+            }
+            RequestMessagesOrBatch::BatchInput(stored) => stored,
+        };
+
+        Ok(Self {
             id: Uuid::now_v7(),
             inference_id,
             raw_request: result.raw_request,
@@ -1480,14 +1562,8 @@ impl ModelInferenceDatabaseInsert {
             model_name: result.model_name.to_string(),
             cached: result.cached,
             finish_reason: result.finish_reason,
-            input_messages: serialize_or_log(&match result.input_messages {
-                RequestMessagesOrBatch::Message(input_messages) => input_messages
-                    .into_iter()
-                    .map(RequestMessage::into_stored_message)
-                    .collect(),
-                RequestMessagesOrBatch::BatchInput(stored) => stored,
-            }),
-        }
+            input_messages: serialize_or_log(&stored_input_messages),
+        })
     }
 }
 
@@ -1528,30 +1604,36 @@ impl InferenceResult {
         }
     }
 
-    pub fn get_serialized_model_inferences(&self) -> Vec<serde_json::Value> {
+    pub async fn get_serialized_model_inferences(&self) -> Vec<serde_json::Value> {
         let model_inference_responses = self.model_inference_results();
         let inference_id = match self {
             InferenceResult::Chat(chat_result) => chat_result.inference_id,
             InferenceResult::Json(json_result) => json_result.inference_id,
         };
-        model_inference_responses
-            .iter()
-            .map(|r| {
-                let model_inference = ModelInferenceDatabaseInsert::new(r.clone(), inference_id);
-                match serde_json::to_value(model_inference) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        ErrorDetails::Serialization {
-                            message: format!(
-                                "Failed to serialize ModelInferenceDatabaseInsert: {e:?}"
-                            ),
-                        }
-                        .log();
-                        Default::default()
+        join_all(model_inference_responses.iter().map(|r| async {
+            let model_inference = ModelInferenceDatabaseInsert::new(r.clone(), inference_id).await;
+            let model_inference = match model_inference {
+                Ok(model_inference) => model_inference,
+                Err(e) => {
+                    ErrorDetails::Serialization {
+                        message: format!("Failed to construct ModelInferenceDatabaseInsert: {e:?}"),
                     }
+                    .log();
+                    return Default::default();
                 }
-            })
-            .collect()
+            };
+            match serde_json::to_value(model_inference) {
+                Ok(v) => v,
+                Err(e) => {
+                    ErrorDetails::Serialization {
+                        message: format!("Failed to serialize ModelInferenceDatabaseInsert: {e:?}"),
+                    }
+                    .log();
+                    Default::default()
+                }
+            }
+        }))
+        .await
     }
 
     pub fn usage_considering_cached(&self) -> Usage {

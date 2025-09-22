@@ -5,7 +5,7 @@ use crate::inference::types::pyo3_helpers::{
     content_block_chat_output_to_python, deserialize_from_pyobj, serialize_to_dict, uuid_to_python,
 };
 use crate::inference::types::stored_input::StoredInput;
-use crate::inference::types::Text;
+use crate::inference::types::{RequestMessage, ResolvedRequestMessage, Text};
 use crate::{
     config::Config,
     error::{Error, ErrorDetails},
@@ -437,6 +437,47 @@ pub enum StoredOutput {
 pub struct RenderedSample {
     pub function_name: String,
     pub input: ModelInput,
+    pub stored_input: StoredInput,
+    pub output: Option<Vec<ContentBlockChatOutput>>,
+    pub stored_output: Option<StoredOutput>,
+    pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
+    pub episode_id: Option<Uuid>,
+    pub inference_id: Option<Uuid>,
+    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    pub output_schema: Option<Value>,
+    pub tags: HashMap<String, String>,
+}
+
+impl RenderedSample {
+    pub fn into_lazy_rendered_sample(self) -> LazyRenderedSample {
+        LazyRenderedSample {
+            function_name: self.function_name,
+            system_input: self.input.system,
+            messages: self
+                .input
+                .messages
+                .into_iter()
+                .map(ResolvedRequestMessage::into_request_message)
+                .collect(),
+            stored_input: self.stored_input,
+            output: self.output,
+            stored_output: self.stored_output,
+            dispreferred_outputs: self.dispreferred_outputs,
+            episode_id: self.episode_id,
+            inference_id: self.inference_id,
+            tool_params: self.tool_params,
+            output_schema: self.output_schema,
+            tags: self.tags,
+        }
+    }
+}
+
+/// Like `RenderedSample`, but holds `RequestMessage`s instead of `ResolvedRequestMessage`s
+pub struct LazyRenderedSample {
+    pub function_name: String,
+    pub system_input: Option<String>,
+    // This is a a `Vec<ResolvedRequestMessage>` in `RenderedSample`
+    pub messages: Vec<RequestMessage>,
     pub stored_input: StoredInput,
     pub output: Option<Vec<ContentBlockChatOutput>>,
     pub stored_output: Option<StoredOutput>,

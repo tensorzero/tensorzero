@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::sync::OnceLock;
 
+use futures::future::try_join_all;
 use futures::{StreamExt, TryStreamExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
@@ -139,7 +140,7 @@ impl InferenceProvider for VLLMProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = serde_json::to_value(VLLMRequest::new(&self.model_name, request)?)
+        let request_body = serde_json::to_value(VLLMRequest::new(&self.model_name, request).await?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
@@ -228,7 +229,7 @@ impl InferenceProvider for VLLMProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(VLLMRequest::new(&self.model_name, request)?)
+        let request_body = serde_json::to_value(VLLMRequest::new(&self.model_name, request).await?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
@@ -324,7 +325,7 @@ struct VLLMRequest<'a> {
 }
 
 impl<'a> VLLMRequest<'a> {
-    pub fn new(
+    pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<VLLMRequest<'a>, Error> {
@@ -342,7 +343,7 @@ impl<'a> VLLMRequest<'a> {
         } else {
             None
         };
-        let messages = prepare_vllm_messages(request)?;
+        let messages = prepare_vllm_messages(request).await?;
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
 
@@ -444,13 +445,19 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
     }
 }
 
-pub(super) fn prepare_vllm_messages<'a>(
+pub(super) async fn prepare_vllm_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
-    let mut messages = Vec::with_capacity(request.messages.len());
-    for message in &request.messages {
-        messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
-    }
+    let mut messages: Vec<_> = try_join_all(
+        request
+            .messages
+            .iter()
+            .map(|msg| tensorzero_to_openai_messages(msg, PROVIDER_TYPE)),
+    )
+    .await?
+    .into_iter()
+    .flatten()
+    .collect();
     if let Some(system_msg) = tensorzero_to_vllm_system_message(request.system.as_deref()) {
         messages.insert(0, system_msg);
     }
@@ -488,8 +495,8 @@ mod tests {
 
     use crate::tool::{ToolCallConfig, ToolChoice};
 
-    #[test]
-    fn test_vllm_request_new() {
+    #[tokio::test]
+    async fn test_vllm_request_new() {
         let model_name = "llama-v3-8b";
         let output_schema = json!({
             "type": "object",
@@ -521,7 +528,9 @@ mod tests {
             ..Default::default()
         };
 
-        let vllm_request = VLLMRequest::new(model_name, &request_with_tools).unwrap();
+        let vllm_request = VLLMRequest::new(model_name, &request_with_tools)
+            .await
+            .unwrap();
 
         assert_eq!(vllm_request.model, model_name);
         assert_eq!(vllm_request.messages.len(), 1);
@@ -561,7 +570,9 @@ mod tests {
             ..Default::default()
         };
 
-        let vllm_request = VLLMRequest::new(model_name, &request_with_tools).unwrap();
+        let vllm_request = VLLMRequest::new(model_name, &request_with_tools)
+            .await
+            .unwrap();
         assert_eq!(vllm_request.model, model_name);
         assert_eq!(vllm_request.messages.len(), 1);
         assert_eq!(vllm_request.temperature, Some(0.5));
@@ -602,8 +613,8 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn test_vllm_response_with_metadata_try_into() {
+    #[tokio::test]
+    async fn test_vllm_response_with_metadata_try_into() {
         let valid_response = OpenAIResponse {
             choices: vec![OpenAIResponseChoice {
                 index: 0,
@@ -648,7 +659,9 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &VLLMRequest::new("test-model", &generic_request).unwrap(),
+                &VLLMRequest::new("test-model", &generic_request)
+                    .await
+                    .unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,
@@ -715,8 +728,8 @@ mod tests {
         assert!(logs_contain(invalid_url_2.as_ref()));
     }
 
-    #[test]
-    fn test_vllm_tools() {
+    #[tokio::test]
+    async fn test_vllm_tools() {
         let model_name = PROVIDER_TYPE.to_string();
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -740,7 +753,9 @@ mod tests {
             ..Default::default()
         };
 
-        let vllm_request = VLLMRequest::new(&model_name, &request_with_tools).unwrap();
+        let vllm_request = VLLMRequest::new(&model_name, &request_with_tools)
+            .await
+            .unwrap();
 
         let tools = vllm_request.tools.unwrap();
         assert_eq!(tools.len(), 2);
@@ -783,7 +798,9 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let vllm_request = VLLMRequest::new(&model_name, &request_without_tools).unwrap();
+        let vllm_request = VLLMRequest::new(&model_name, &request_without_tools)
+            .await
+            .unwrap();
         assert!(vllm_request.tools.is_none());
         assert!(vllm_request.tool_choice.is_none());
         assert!(vllm_request.parallel_tool_calls.is_none());

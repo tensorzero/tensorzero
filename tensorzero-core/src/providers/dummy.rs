@@ -483,7 +483,8 @@ impl InferenceProvider for DummyProvider {
                     .collect();
                 let mut found_pdf = false;
                 for file in &files {
-                    if file.file.mime_type == mime::APPLICATION_PDF {
+                    let resolved_file = file.resolve().await?;
+                    if resolved_file.file.mime_type == mime::APPLICATION_PDF {
                         found_pdf = true;
                     }
                 }

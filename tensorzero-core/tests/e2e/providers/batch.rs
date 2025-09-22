@@ -18,7 +18,7 @@ use tensorzero_core::{
     endpoints::batch_inference::PollPathParams,
     inference::types::{
         batch::{BatchModelInferenceRow, BatchRequestRow},
-        ContentBlock, RequestMessage, Role, Text,
+        Role, Text,
     },
     tool::{ToolCall, ToolResult},
 };
@@ -1108,8 +1108,8 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
     assert_eq!(input, correct_input);
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec!["What is the name of the capital city of Japan?"
             .to_string()
@@ -1503,7 +1503,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         }
     ]);
     let expected_input_messages = [
-        [RequestMessage {
+        [StoredRequestMessage {
             role: Role::User,
             content: vec![
                 "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
@@ -1511,15 +1511,19 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
                     .into(),
             ],
         }],
-        [RequestMessage {
+        [StoredRequestMessage {
             role: Role::User,
-            content: vec!["What is your name?".to_string().into()],
+            content: vec![StoredContentBlock::Text(Text {
+                text: "What is your name?".to_string(),
+            })],
         }],
-        [RequestMessage {
+        [StoredRequestMessage {
             role: Role::User,
-            content: vec!["What is your name?".to_string().into()],
+            content: vec![StoredContentBlock::Text(Text {
+                text: "What is your name?".to_string(),
+            })],
         }],
-        [RequestMessage {
+        [StoredRequestMessage {
             role: Role::User,
             content: vec![
                 "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
@@ -1527,7 +1531,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
                     .into(),
             ],
         }],
-        [RequestMessage {
+        [StoredRequestMessage {
             role: Role::User,
             content: vec![
                 "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."
@@ -1740,7 +1744,8 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         assert_eq!(input, correct_inputs[i]);
 
         let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
         assert_eq!(input_messages, expected_input_messages[i]);
 
         let system = result.get("system").unwrap().as_str().unwrap();
@@ -2151,8 +2156,8 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
     assert_eq!(input, correct_input);
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec!["What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
             .to_string()
@@ -2585,35 +2590,35 @@ pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_prov
     assert_eq!(input, correct_input);
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![
-        RequestMessage {
+        StoredRequestMessage {
             role: Role::User,
             content: vec![
-                "What is the weather like in Tokyo (in Fahrenheit)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
-                    .to_string()
-                    .into(),
+                StoredContentBlock::Text(Text {
+                    text: "What is the weather like in Tokyo (in Fahrenheit)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.".to_string(),
+                }),
             ],
         },
-        RequestMessage {
+        StoredRequestMessage {
             role: Role::Assistant,
-            content: vec![ContentBlock::ToolCall(ToolCall {
+            content: vec![StoredContentBlock::ToolCall(ToolCall {
                 name: "get_temperature".to_string(),
                 arguments: "{\"location\":\"Tokyo\",\"units\":\"fahrenheit\"}".to_string(),
                 id: "1234".to_string(),
-            }), ContentBlock::ToolCall(ToolCall {
+            }), StoredContentBlock::ToolCall(ToolCall {
                 name: "get_humidity".to_string(),
                 arguments: "{\"location\":\"Tokyo\"}".to_string(),
                 id: "5678".to_string(),
             })],
         },
-        RequestMessage {
+        StoredRequestMessage {
             role: Role::User,
-            content: vec![ContentBlock::ToolResult(ToolResult {
+            content: vec![StoredContentBlock::ToolResult(ToolResult {
                 name: "get_temperature".to_string(),
                 result: "70".to_string(),
                 id: "1234".to_string(),
-            }), ContentBlock::ToolResult(ToolResult {
+            }), StoredContentBlock::ToolResult(ToolResult {
                 name: "get_humidity".to_string(),
                 result: "30".to_string(),
                 id: "5678".to_string(),
@@ -2805,9 +2810,9 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
     assert_eq!(input, correct_input);
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![
-        RequestMessage {
+        StoredRequestMessage {
             role: Role::User,
             content: vec![
                 "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
@@ -2815,17 +2820,17 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
                     .into(),
             ],
         },
-        RequestMessage {
+        StoredRequestMessage {
             role: Role::Assistant,
-            content: vec![ContentBlock::ToolCall(ToolCall {
+            content: vec![StoredContentBlock::ToolCall(ToolCall {
                 name: "get_temperature".to_string(),
                 arguments: "{\"location\": \"Tokyo\"}".to_string(),
                 id: "123456789".to_string(),
             })],
         },
-        RequestMessage {
+        StoredRequestMessage {
             role: Role::User,
-            content: vec![ContentBlock::ToolResult(ToolResult {
+            content: vec![StoredContentBlock::ToolResult(ToolResult {
                 name: "get_temperature".to_string(),
                 result: "70".to_string(),
                 id: "123456789".to_string(),
@@ -3353,10 +3358,12 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     assert_eq!(input, correct_input);
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string().into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
 
@@ -3699,10 +3706,12 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
     assert_eq!(input, correct_input);
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.".to_string().into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
 
@@ -4087,8 +4096,8 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     assert_eq!(input, correct_input);
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec!["What is the name of the capital city of Japan?"
             .to_string()
@@ -4434,8 +4443,8 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     assert_eq!(input, correct_input);
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec!["What is the name of the capital city of Japan?"
             .to_string()
