@@ -127,10 +127,10 @@ impl GatewayHandle {
     /// # Panics
     /// Panics if a `TensorzeroHttpClient` cannot be constructed
     #[cfg(test)]
-    pub fn new_unit_test_data(config: Arc<Config>, clickhouse_healthy: bool) -> Self {
+    pub fn new_unit_test_data(config: Arc<Config>, clickhouse_healthy: bool, postgres_healthy: bool) -> Self {
         let http_client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_mock(clickhouse_healthy);
-        let postgres_connection_info = PostgresConnectionInfo::Disabled;
+        let postgres_connection_info = PostgresConnectionInfo::new_mock(postgres_healthy);
         Self::new_with_database_and_http_client(
             config,
             clickhouse_connection_info,

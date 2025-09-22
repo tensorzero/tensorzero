@@ -71,18 +71,19 @@ mod tests {
     #[tokio::test]
     async fn test_health_handler() {
         let config = Arc::new(Config::default());
-        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true);
+        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true, true);
         let response = health_handler(State(gateway_handle.app_state.clone())).await;
         assert!(response.is_ok());
         let response_value = response.unwrap();
         assert_eq!(response_value.get("gateway").unwrap(), "ok");
         assert_eq!(response_value.get("clickhouse").unwrap(), "ok");
+        assert_eq!(response_value.get("postgres").unwrap(), "ok");
     }
 
     #[tokio::test]
     async fn should_report_error_for_unhealthy_clickhouse() {
         let config = Arc::new(Config::default());
-        let gateway_handle = get_unit_test_gateway_handle(config, false);
+        let gateway_handle = get_unit_test_gateway_handle(config, false, true);
         let response = health_handler(State(gateway_handle.app_state.clone())).await;
         assert!(response.is_err());
         let (status_code, error_json) = response.unwrap_err();
@@ -90,6 +91,19 @@ mod tests {
         assert_eq!(error_json.get("gateway").unwrap(), "ok");
         assert_eq!(error_json.get("clickhouse").unwrap(), "error");
     }
+
+    #[tokio::test]
+    async fn should_report_error_for_unhealthy_postgres() {
+        let config = Arc::new(Config::default());
+        let gateway_handle = get_unit_test_gateway_handle(config, true, false);
+        let response = health_handler(State(gateway_handle.app_state.clone())).await;
+        assert!(response.is_err());
+        let (status_code, error_json) = response.unwrap_err();
+        assert_eq!(status_code, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(error_json.get("gateway").unwrap(), "ok");
+        assert_eq!(error_json.get("postgres").unwrap(), "error");
+    }
+
 
     #[tokio::test]
     async fn test_status_handler() {

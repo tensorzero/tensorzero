@@ -1065,7 +1065,7 @@ mod tests {
         let config = Arc::new(Config {
             ..Default::default()
         });
-        let gateway_handle = get_unit_test_gateway_handle(config, true);
+        let gateway_handle = get_unit_test_gateway_handle(config, true, true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
         let value = json!("test comment");
@@ -1098,7 +1098,7 @@ mod tests {
         let config = Arc::new(Config {
             ..Default::default()
         });
-        let gateway_handle = get_unit_test_gateway_handle(config, true);
+        let gateway_handle = get_unit_test_gateway_handle(config, true, true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
         let value = json!("test demonstration");
@@ -1169,7 +1169,7 @@ mod tests {
             metrics,
             ..Default::default()
         });
-        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true);
+        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true, true);
         let value = json!(4.5);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
@@ -1239,7 +1239,7 @@ mod tests {
             metrics,
             ..Default::default()
         });
-        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true);
+        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true, true);
         let value = json!(true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
