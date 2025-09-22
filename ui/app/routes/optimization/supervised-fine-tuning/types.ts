@@ -32,8 +32,6 @@ export const SFTFormValuesSchema = z.object({
       }),
     )
     .min(1),
-  // metric,
-  // threshold,
 
   // advanced parameters
   validationSplitPercent: z

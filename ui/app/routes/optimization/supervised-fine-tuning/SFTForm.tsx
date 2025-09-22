@@ -45,17 +45,15 @@ export function SFTForm({
   const form = useForm<SFTFormValues>({
     defaultValues: {
       function: "generate_secret",
-      // metric: "",
       filters: startingFilters,
       validationSplitPercent: 20,
       maxSamples: 100000,
-      // threshold: 0.5,
       jobId: uuid(),
 
       variant: "baseline",
       model: {
-        displayName: "gpt-4.1-2025-04-14",
-        name: "gpt-4.1-2025-04-14",
+        displayName: "gpt-3.5-turbo-1106",
+        name: "gpt-3.5-turbo-1106",
         provider: "openai",
       },
     },
@@ -74,20 +72,10 @@ export function SFTForm({
   const watchedFields = useWatch({
     control: form.control,
     name: ["function"] as const,
-    // name: ["function", "metric", "threshold"] as const,
   });
 
   const [functionName] = watchedFields;
-  // const [functionName, metricName, threshold] = watchedFields;
   const functionConfig = useFunctionConfig(functionName);
-  // const parsedThreshold =
-  //   typeof threshold === "string" ? parseFloat(threshold) : threshold;
-
-  // const { counts, isCuratedInferenceCountLow } = useCountData({
-  //   functionName,
-  //   metricName,
-  //   parsedThreshold,
-  // });
 
   // Use formFetcher for submission errors
   const errorsOnSubmit = formFetcher.data?.errors;
@@ -113,19 +101,22 @@ export function SFTForm({
   // Form submission using formFetcher
   const onSubmit = async (data: SFTFormValues) => {
     try {
-      // const cleanedThreshold =
-      //   typeof data.threshold === "string"
-      //     ? parseFloat(data.threshold)
-      //     : data.threshold;
+      const filters = data.filters.map((filter) => {
+        const cleanedThreshold =
+          typeof filter.threshold === "string"
+            ? parseFloat(filter.threshold)
+            : filter.threshold;
 
-      // if (isNaN(cleanedThreshold)) {
-      //   logger.error("Threshold is not a valid number:", data.threshold);
-      //   return;
-      // }
+        if (isNaN(cleanedThreshold)) {
+          logger.error("Threshold is not a valid number:", filter.threshold);
+          return;
+        }
+        return { ...filter, threshold: cleanedThreshold };
+      });
 
       const cleanedData = {
         ...data,
-        // threshold: cleanedThreshold,
+        filters,
       };
 
       const submitData = new FormData();

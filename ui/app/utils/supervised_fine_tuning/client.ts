@@ -25,17 +25,12 @@ export async function launch_sft_job(
   data: SFTFormValues,
 ): Promise<OptimizationJobHandle> {
   let filters: InferenceFilterTreeNode | null = null;
-  // let output_source: InferenceOutputSource = "Inference";
-  const output_source: InferenceOutputSource = "Inference";
+  // eslint-disable-next-line prefer-const
+  let output_source: InferenceOutputSource = "Inference";
   // if (data.metric === "demonstration") {
   //   output_source = "Demonstration";
   // } else
   if (data.filters) {
-    // const threshold =
-    //   typeof data.threshold === "string"
-    //     ? parseFloat(data.threshold)
-    //     : data.threshold;
-    // filters = await createFilters([{ metric: data.metric, threshold }]);
     const filterData = data.filters.map((data) => {
       const threshold =
         typeof data.threshold === "string"
@@ -49,14 +44,9 @@ export async function launch_sft_job(
   const client = await getNativeTensorZeroClient();
   let optimizerConfig: UninitializedOptimizerInfo;
 
-  console.log(filters);
-
-  throw new Error("blah");
-
   switch (data.model.provider) {
     case "openai": {
       const openAINativeSFTBase = getEnv().OPENAI_BASE_URL;
-      if (!openAINativeSFTBase) throw new Error("OPENAI_BASE_URL is not set");
 
       optimizerConfig = {
         type: "openai_sft",
