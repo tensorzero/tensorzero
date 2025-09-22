@@ -14,16 +14,21 @@ use tensorzero::{
 use tensorzero_core::{
     config::{Config, ConfigFileGlob, UninitializedVariantConfig},
     db::clickhouse::{
-        ClickhouseFormat, test_helpers::{
-            CLICKHOUSE_URL, get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse, select_model_inferences_clickhouse
-        }
+        test_helpers::{
+            get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
+            select_model_inferences_clickhouse, CLICKHOUSE_URL,
+        },
+        ClickhouseFormat,
     },
     http::TensorzeroHttpClient,
     inference::types::{
-        ContentBlockChatOutput, ContentBlockChunk, JsonInferenceOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, StoredContentBlock, StoredInput, StoredInputMessage, StoredInputMessageContent, StoredRequestMessage, Text, TextKind, Usage
+        ContentBlockChatOutput, ContentBlockChunk, JsonInferenceOutput, ModelInput,
+        ResolvedContentBlock, ResolvedRequestMessage, StoredContentBlock, StoredInput,
+        StoredInputMessage, StoredInputMessageContent, StoredRequestMessage, Text, TextKind, Usage,
     },
     optimization::{
-        JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerConfig, UninitializedOptimizerInfo, dicl::UninitializedDiclOptimizationConfig
+        dicl::UninitializedDiclOptimizationConfig, JobHandle, OptimizationJobInfo, Optimizer,
+        OptimizerOutput, UninitializedOptimizerConfig, UninitializedOptimizerInfo,
     },
     stored_inference::StoredOutput,
 };
@@ -868,7 +873,8 @@ async fn validate_model_inference_clickhouse(
             .unwrap()
             .as_str()
             .unwrap();
-        let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
         let output = model_inference.get("output").unwrap().as_str().unwrap();
         let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
 

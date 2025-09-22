@@ -475,7 +475,6 @@ impl FileWithPath {
     }
 }
 
-
 /// Like `RequestMessage`, but holds fully-resolved files instead of `LazyFile`s
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

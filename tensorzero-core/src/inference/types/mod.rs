@@ -113,7 +113,9 @@ pub mod storage;
 pub mod stored_input;
 
 pub use resolved_input::ResolvedRequestMessage;
-pub use stored_input::{StoredInput, StoredInputMessage, StoredInputMessageContent, StoredRequestMessage};
+pub use stored_input::{
+    StoredInput, StoredInputMessage, StoredInputMessageContent, StoredRequestMessage,
+};
 
 /*
  * Data flow in TensorZero

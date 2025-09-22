@@ -3,7 +3,6 @@ use crate::endpoints::object_storage::get_object;
 use crate::error::Error;
 use crate::error::ErrorDetails;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
-use crate::inference::types::StoredContentBlock;
 use crate::inference::types::file::Base64FileMetadata;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::stored_input_message_content_to_python;
@@ -13,6 +12,7 @@ use crate::inference::types::FileWithPath;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessage;
 use crate::inference::types::ResolvedInputMessageContent;
+use crate::inference::types::StoredContentBlock;
 use crate::inference::types::TemplateInput;
 use crate::inference::types::{Role, Thought, ToolCall, ToolResult};
 use futures::future::try_join_all;
@@ -260,8 +260,6 @@ impl StoredInput {
         self.messages.clone()
     }
 }
-
-
 
 /// The message type that we directly store in ClickHouse.
 /// This is almost identical to `RequestMessage`, but without `File` data.

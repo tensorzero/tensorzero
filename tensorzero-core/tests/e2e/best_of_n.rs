@@ -428,7 +428,8 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
         assert!(result.get("ttft_ms").unwrap().is_null());
         let system = result.get("system").unwrap().as_str().unwrap();
         let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-        let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
         let output = result.get("output").unwrap().as_str().unwrap();
         let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
         if model_name == "json" {
