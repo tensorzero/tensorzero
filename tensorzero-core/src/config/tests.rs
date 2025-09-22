@@ -190,24 +190,30 @@ async fn test_config_from_toml_table_valid() {
             match &json_config.variants["dicl"].inner {
                 VariantConfig::Dicl(dicl_config) => {
                     assert_eq!(
-                        dicl_config.system_instructions,
+                        dicl_config.system_instructions(),
                         crate::variant::dicl::default_system_instructions()
                     );
-                    assert_eq!(dicl_config.embedding_model, "text-embedding-3-small".into());
-                    assert_eq!(dicl_config.k, 3);
-                    assert_eq!(dicl_config.model, "openai::gpt-4o-mini".into());
+                    assert_eq!(
+                        dicl_config.embedding_model().as_ref(),
+                        "text-embedding-3-small"
+                    );
+                    assert_eq!(dicl_config.k(), 3);
+                    assert_eq!(dicl_config.model().as_ref(), "openai::gpt-4o-mini");
                 }
                 _ => panic!("Expected a Dicl variant"),
             }
             match &json_config.variants["dicl_custom_system"].inner {
                 VariantConfig::Dicl(dicl_config) => {
                     assert_eq!(
-                        dicl_config.system_instructions,
+                        dicl_config.system_instructions(),
                         "Return True if there is NSFW content in this generation.\n\n"
                     );
-                    assert_eq!(dicl_config.embedding_model, "text-embedding-3-small".into());
-                    assert_eq!(dicl_config.k, 3);
-                    assert_eq!(dicl_config.model, "openai::gpt-4o-mini".into());
+                    assert_eq!(
+                        dicl_config.embedding_model().as_ref(),
+                        "text-embedding-3-small"
+                    );
+                    assert_eq!(dicl_config.k(), 3);
+                    assert_eq!(dicl_config.model().as_ref(), "openai::gpt-4o-mini");
                 }
                 _ => panic!("Expected a Dicl variant"),
             }

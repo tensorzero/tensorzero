@@ -250,7 +250,7 @@ impl VariantConfig {
         match self {
             VariantConfig::ChatCompletion(params) => params.weight,
             VariantConfig::BestOfNSampling(params) => params.weight,
-            VariantConfig::Dicl(params) => params.weight,
+            VariantConfig::Dicl(params) => params.weight(),
             VariantConfig::MixtureOfN(params) => params.weight,
             VariantConfig::ChainOfThought(params) => params.inner.weight,
         }
@@ -260,7 +260,7 @@ impl VariantConfig {
         match self {
             VariantConfig::ChatCompletion(params) => params.weight = weight,
             VariantConfig::BestOfNSampling(params) => params.weight = weight,
-            VariantConfig::Dicl(params) => params.weight = weight,
+            VariantConfig::Dicl(params) => params.set_weight(weight),
             VariantConfig::MixtureOfN(params) => params.weight = weight,
             VariantConfig::ChainOfThought(params) => params.inner.weight = weight,
         }
