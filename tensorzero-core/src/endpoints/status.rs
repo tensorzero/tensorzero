@@ -53,7 +53,7 @@ pub async fn health_handler(
         Json(json!({
             "gateway": "ok",
             "clickhouse": if clickhouse_result.is_ok() { "ok" } else { "error" },
-            "postgres": if clickhouse_result.is_ok() { "ok" } else { "error" },
+            "postgres": if postgres_result.is_ok() { "ok" } else { "error" },
         })),
     ));
 }
