@@ -129,14 +129,14 @@ export function FiltersInput({
         Append
       </Button>
 
-      {/* <CurationMetricSelector<SFTFormValues>
-                control={form.control}
-                name="metric"
-                functionConfigMetrics={functionConfigMetrics}
-                feedbackCount={counts.feedbackCount}
-                curatedInferenceCount={counts.curatedInferenceCount}
-                isLoading={counts.isLoading}
-              /> */}
+      <CurationMetricSelector<SFTFormValues>
+        control={form.control}
+        name=""
+        functionConfigMetrics={functionConfigMetrics}
+        feedbackCount={counts.feedbackCount}
+        curatedInferenceCount={counts.curatedInferenceCount}
+        isLoading={counts.isLoading}
+      />
 
       {errors.metric && (
         <p className="text-xs text-red-500">{errors.metric.message}</p>

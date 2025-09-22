@@ -20,7 +20,8 @@ import { ModelSelector } from "./ModelSelector";
 import { SFTFormValuesResolver, type SFTFormValues } from "./types";
 import { VariantSelector } from "./VariantSelector";
 
-// const metricTemplate = { metric: "", threshold: 0.5 };
+const dev_useDefaults = true;
+const metricTemplate = { metric: "", threshold: 0.5 };
 
 export function SFTForm({
   config,
@@ -33,15 +34,19 @@ export function SFTForm({
     phase: "idle" | "submitting" | "pending" | "complete",
   ) => void;
 }) {
+  const startingFilters = dev_useDefaults
+    ? [
+        { metric: "goated", threshold: 0.5 },
+        { metric: "elapsed_ms", threshold: 0.5 },
+        { metric: "num_questions", threshold: 0.5 },
+      ]
+    : [{ ...metricTemplate }];
+
   const form = useForm<SFTFormValues>({
     defaultValues: {
       function: "generate_secret",
       metric: "",
-      filters: [
-        { metric: "goated", threshold: 0.5 },
-        { metric: "elapsed_ms", threshold: 0.5 },
-        { metric: "num_questions", threshold: 0.5 },
-      ],
+      filters: startingFilters,
       validationSplitPercent: 20,
       maxSamples: 100000,
       threshold: 0.5,

@@ -68,15 +68,15 @@ export default function CurationMetricSelector<
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
-  const filter = getValues(name) as SFTFormValues["filters"][number];
+  const filter = (getValues(name) as SFTFormValues["filters"][number]) || null;
 
-  const threshold = filter.threshold;
+  const threshold = filter?.threshold;
   const parsedThreshold =
     typeof threshold === "string" ? parseFloat(threshold) : threshold;
 
   const { counts } = useCountData({
     functionName: functionValue as string | null,
-    metricName: filter.metric,
+    metricName: filter?.metric ?? "",
     parsedThreshold,
   });
 
@@ -112,7 +112,7 @@ export default function CurationMetricSelector<
   return (
     <FormField
       control={control}
-      name={[name, "metric"].join(".") as Path<T>}
+      name={[name, "metric"].filter(Boolean).join(".") as Path<T>}
       render={({ field }) => (
         <FormItem className="flex grow flex-col justify-center">
           <FormLabel>
@@ -297,7 +297,9 @@ export default function CurationMetricSelector<
               {field.value && metrics[field.value]?.type === "float" && (
                 <FormField
                   control={control}
-                  name={[name, "threshold"].join(".") as Path<T>}
+                  name={
+                    [name, "threshold"].filter(Boolean).join(".") as Path<T>
+                  }
                   render={({ field: thresholdField }) => (
                     <FormItem className="flex flex-col gap-1 border-l pl-4">
                       <FormLabel>Threshold</FormLabel>
