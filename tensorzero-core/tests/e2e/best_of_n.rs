@@ -635,7 +635,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
         let input_messages: Vec<StoredRequestMessage> =
             serde_json::from_str(input_messages).unwrap();
         let output = result.get("output").unwrap().as_str().unwrap();
-        let output: Vec<Value> = serde_json::from_str(output).unwrap();
+        let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
         if model_name == "json" {
             assert_eq!(
                 system,
@@ -652,14 +652,15 @@ async fn e2e_test_best_of_n_json_real_judge() {
                 }
             );
             assert_eq!(output.len(), 1);
-            if let Some(text_value) = output[0].get("text") {
-                if let Some(text_str) = text_value.as_str() {
-                    let parsed: Value = serde_json::from_str(text_str).unwrap();
+            match &output[0] {
+                StoredContentBlock::Text(text) => {
+                    let parsed: Value = serde_json::from_str(&text.text).unwrap();
                     let answer = parsed.get("answer").unwrap().as_str().unwrap();
                     assert_eq!(answer, "Hello");
                 }
-            } else {
-                panic!("Expected a text block, got {:?}", output[0]);
+                _ => {
+                    panic!("Expected a text block, got {:?}", output[0]);
+                }
             }
         }
         if model_name == "test" {
@@ -673,17 +674,20 @@ async fn e2e_test_best_of_n_json_real_judge() {
                 StoredRequestMessage {
                     role: Role::User,
                     content: vec![
-                        StoredContentBlock::Text(Text { text: "What's the first word in the typical output of one's first program. Answer as a json object with a single field 'answer' containing the string.".to_string() })
+                        "What's the first word in the typical output of one's first program. Answer as a json object with a single field 'answer' containing the string."
+                            .to_string()
+                            .into()
                     ],
                 }
             );
             assert_eq!(output.len(), 1);
-            if let Some(text_value) = output[0].get("text") {
-                if let Some(text_str) = text_value.as_str() {
-                    assert_eq!(text_str, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
+            match &output[0] {
+                StoredContentBlock::Text(text) => {
+                    assert_eq!(text.text, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
                 }
-            } else {
-                panic!("Expected a text block, got {:?}", output[0]);
+                _ => {
+                    panic!("Expected a text block, got {:?}", output[0]);
+                }
             }
         }
         if model_name == "json_goodbye" {
@@ -697,19 +701,22 @@ async fn e2e_test_best_of_n_json_real_judge() {
               StoredRequestMessage {
                   role: Role::User,
                   content: vec![
-                      StoredContentBlock::Text(Text { text: "What's the first word in the typical output of one's first program. Answer as a json object with a single field 'answer' containing the string.".to_string() })
+                      "What's the first word in the typical output of one's first program. Answer as a json object with a single field 'answer' containing the string."
+                          .to_string()
+                          .into()
                   ],
               }
           );
             assert_eq!(output.len(), 1);
-            if let Some(text_value) = output[0].get("text") {
-                if let Some(text_str) = text_value.as_str() {
-                    let parsed: Value = serde_json::from_str(text_str).unwrap();
+            match &output[0] {
+                StoredContentBlock::Text(text) => {
+                    let parsed: Value = serde_json::from_str(&text.text).unwrap();
                     let answer = parsed.get("answer").unwrap().as_str().unwrap();
                     assert_eq!(answer, "Goodbye");
                 }
-            } else {
-                panic!("Expected a text block, got {:?}", output[0]);
+                _ => {
+                    panic!("Expected a text block, got {:?}", output[0]);
+                }
             }
         }
         // For the judge model we want to check that the `raw_request` is correct
@@ -925,14 +932,15 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
                 }
             );
             assert_eq!(output.len(), 1);
-            if let Some(text_value) = output[0].get("text") {
-                if let Some(text_str) = text_value.as_str() {
-                    let parsed: Value = serde_json::from_str(text_str).unwrap();
+            match &output[0] {
+                StoredContentBlock::Text(text) => {
+                    let parsed: Value = serde_json::from_str(&text.text).unwrap();
                     let answer = parsed.get("answer").unwrap().as_str().unwrap();
                     assert_eq!(answer, "Hello");
                 }
-            } else {
-                panic!("Expected a text block, got {:?}", output[0]);
+                _ => {
+                    panic!("Expected a text block, got {:?}", output[0]);
+                }
             }
         }
         if model_name == "test" {
