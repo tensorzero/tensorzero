@@ -67,9 +67,9 @@ use itertools::Itertools;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
-use pyo3::types::{PyAny, PyList};
+use pyo3::types::PyAny;
 #[cfg(feature = "pyo3")]
-use pyo3_helpers::{resolved_content_block_to_python, serialize_to_dict};
+use pyo3_helpers::serialize_to_dict;
 use resolved_input::FileWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
