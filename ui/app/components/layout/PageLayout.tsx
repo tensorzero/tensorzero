@@ -28,7 +28,7 @@ interface PageHeaderProps {
   label?: string;
   heading?: string;
   name?: string;
-  count?: number;
+  count?: number | bigint;
   icon?: ReactNode;
   iconBg?: string;
   children?: ReactNode;

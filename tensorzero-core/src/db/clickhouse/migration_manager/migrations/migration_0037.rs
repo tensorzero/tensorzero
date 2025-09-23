@@ -92,6 +92,7 @@ impl Migration for Migration0037<'_> {
                         minute DateTime,
                         response_time_ms_quantiles AggregateFunction(quantilesTDigest({qs}), Nullable(UInt32)),
                         ttft_ms_quantiles AggregateFunction(quantilesTDigest({qs}), Nullable(UInt32)),
+                        -- NOTE: we should have use `SimpleAggregateFunction` here for better performance
                         total_input_tokens AggregateFunction(sum, Nullable(UInt32)),
                         total_output_tokens AggregateFunction(sum, Nullable(UInt32)),
                         count AggregateFunction(count, UInt32)
