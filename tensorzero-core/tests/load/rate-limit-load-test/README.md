@@ -6,7 +6,7 @@ This directory contains a configurable load testing binary for TensorZero's rate
 
 1. **Start PostgreSQL**: The test uses the same PostgreSQL instance as the e2e tests:
    ```bash
-   docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up postgres --wait
+   docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
    ```
 
 2. **Environment Setup**: Set the database URL (optional, defaults to localhost):
