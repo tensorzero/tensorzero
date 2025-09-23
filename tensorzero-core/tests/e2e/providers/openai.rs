@@ -22,8 +22,7 @@ use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::{
-    make_embedded_gateway_with_config, E2ETestProvider, E2ETestProviders, EmbeddingTestProvider,
-    FERRIS_PNG,
+    E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, FERRIS_PNG,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_batch_model_inference_clickhouse, select_chat_inference_clickhouse,
@@ -1834,7 +1833,7 @@ pub async fn test_start_batch_inference_write_file() {
         temp_dir.path().to_string_lossy()
     );
 
-    let client = make_embedded_gateway_with_config(&config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_config(&config).await;
 
     let episode_id = Uuid::now_v7();
 

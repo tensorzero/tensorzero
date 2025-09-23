@@ -49,7 +49,6 @@ use tensorzero_core::inference::types::{
 use tensorzero_core::inference::types::{RequestMessage, StoredContentBlock, StoredRequestMessage};
 
 use crate::common::get_gateway_endpoint;
-use crate::providers::common::make_embedded_gateway;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
@@ -354,7 +353,7 @@ pub async fn test_dont_cache_invalid_tool_call() {
         // from GatewayHandle
         return;
     }
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let randomness = Uuid::now_v7();
     let params = ClientInferenceParams {
         model_name: Some("dummy::invalid_tool_arguments".to_string()),
@@ -405,7 +404,7 @@ pub async fn test_dont_cache_tool_call_schema_error() {
         // from GatewayHandle
         return;
     }
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let randomness = Uuid::now_v7();
     let params = ClientInferenceParams {
         model_name: Some("dummy::tool".to_string()),

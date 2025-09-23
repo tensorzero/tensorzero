@@ -9,11 +9,9 @@ use tensorzero_core::db::clickhouse::{
     ClickhouseFormat,
 };
 
-use crate::providers::common::make_embedded_gateway;
-
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_simple_query_json_function() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let order_by = vec![OrderBy {
         term: OrderByTerm::Timestamp,
         direction: OrderDirection::Desc,
@@ -59,7 +57,7 @@ pub async fn test_simple_query_json_function() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_simple_query_chat_function() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let order_by = vec![OrderBy {
         term: OrderByTerm::Timestamp,
         direction: OrderDirection::Asc,
@@ -105,7 +103,7 @@ pub async fn test_simple_query_chat_function() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_simple_query_with_float_filter() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let filter_node = InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
         metric_name: "jaccard_similarity".to_string(),
         value: 0.5,
@@ -140,7 +138,7 @@ pub async fn test_simple_query_with_float_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_demonstration_output_source() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let opts = ListInferencesParams {
         function_name: "extract_entities",
         variant_name: None,
@@ -165,7 +163,7 @@ pub async fn test_demonstration_output_source() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_boolean_metric_filter() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let filter_node = InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
         metric_name: "exact_match".to_string(),
         value: true,
@@ -193,7 +191,7 @@ pub async fn test_boolean_metric_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_and_filter_multiple_float_metrics() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let filter_node = InferenceFilterTreeNode::And {
         children: vec![
             InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
@@ -231,7 +229,7 @@ pub async fn test_and_filter_multiple_float_metrics() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_or_filter_mixed_metrics() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let filter_node = InferenceFilterTreeNode::Or {
         children: vec![
             InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
@@ -273,7 +271,7 @@ async fn test_or_filter_mixed_metrics() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_not_filter() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let filter_node = InferenceFilterTreeNode::Not {
         child: Box::new(InferenceFilterTreeNode::Or {
             children: vec![
@@ -304,7 +302,7 @@ async fn test_not_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_simple_time_filter() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let filter_node = InferenceFilterTreeNode::Time(TimeNode {
         time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
         comparison_operator: TimeComparisonOperator::GreaterThan,
@@ -361,7 +359,7 @@ async fn test_simple_time_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_simple_tag_filter() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let filter_node = InferenceFilterTreeNode::Tag(TagNode {
         key: "tensorzero::evaluation_name".to_string(),
         value: "entity_extraction".to_string(),
@@ -393,7 +391,7 @@ async fn test_simple_tag_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_combined_time_and_tag_filter() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let filter_node = InferenceFilterTreeNode::And {
         children: vec![
             InferenceFilterTreeNode::Time(TimeNode {

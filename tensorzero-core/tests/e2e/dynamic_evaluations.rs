@@ -4,7 +4,6 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use crate::providers::common::{make_embedded_gateway, make_http_gateway};
 use serde_json::json;
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
@@ -22,7 +21,7 @@ use uuid::{Timestamp, Uuid};
 
 #[tokio::test]
 async fn test_dynamic_evaluation() {
-    let client = make_http_gateway().await;
+    let client = tensorzero::test_helpers::make_http_gateway().await;
     let params = DynamicEvaluationRunParams {
         internal: false,
         variants: HashMap::from([("basic_test".to_string(), "test2".to_string())]),
@@ -191,7 +190,7 @@ async fn test_dynamic_evaluation() {
 
 #[tokio::test]
 async fn test_dynamic_evaluation_nonexistent_function() {
-    let client = make_http_gateway().await;
+    let client = tensorzero::test_helpers::make_http_gateway().await;
     let params = DynamicEvaluationRunParams {
         variants: HashMap::from([("nonexistent_function".to_string(), "test2".to_string())]),
         tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
@@ -210,7 +209,7 @@ async fn test_dynamic_evaluation_nonexistent_function() {
 /// But the tags are applied
 #[tokio::test(flavor = "multi_thread")]
 async fn test_dynamic_evaluation_other_function() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let params = DynamicEvaluationRunParams {
         variants: HashMap::from([("dynamic_json".to_string(), "gcp-vertex-haiku".to_string())]),
         tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
@@ -283,7 +282,7 @@ async fn test_dynamic_evaluation_other_function() {
 /// This should error
 #[tokio::test(flavor = "multi_thread")]
 async fn test_dynamic_evaluation_variant_error() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let params = DynamicEvaluationRunParams {
         variants: HashMap::from([("basic_test".to_string(), "error".to_string())]),
         tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
@@ -339,7 +338,7 @@ async fn test_dynamic_evaluation_variant_error() {
 /// But the tags are applied
 #[tokio::test(flavor = "multi_thread")]
 async fn test_dynamic_evaluation_override_variant_tags() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let params = DynamicEvaluationRunParams {
         internal: false,
         variants: HashMap::from([("basic_test".to_string(), "error".to_string())]),
@@ -413,7 +412,7 @@ async fn test_dynamic_evaluation_override_variant_tags() {
 
 #[tokio::test]
 async fn test_bad_dynamic_evaluation_run() {
-    let client = make_http_gateway().await;
+    let client = tensorzero::test_helpers::make_http_gateway().await;
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards");
@@ -451,7 +450,7 @@ async fn test_bad_dynamic_evaluation_run() {
 
 #[tokio::test]
 async fn test_dynamic_evaluation_tag_validation() {
-    let client = make_http_gateway().await;
+    let client = tensorzero::test_helpers::make_http_gateway().await;
     let params = DynamicEvaluationRunParams {
         internal: false,
         variants: HashMap::from([("basic_test".to_string(), "test2".to_string())]),

@@ -48,7 +48,7 @@ use uuid::Uuid;
 use crate::common::get_gateway_endpoint;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
-    select_json_inference_clickhouse, select_model_inference_clickhouse, CLICKHOUSE_URL,
+    select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
 
 use super::helpers::get_extra_headers;
@@ -99,102 +99,6 @@ pub struct E2ETestProviders {
 
     pub shorthand_inference: Vec<E2ETestProvider>,
     pub embeddings: Vec<EmbeddingTestProvider>,
-}
-
-pub async fn make_http_gateway() -> tensorzero::Client {
-    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::HTTPGateway {
-        url: get_gateway_endpoint("/"),
-    })
-    .build()
-    .await
-    .unwrap()
-}
-
-pub async fn make_embedded_gateway() -> tensorzero::Client {
-    let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("tests/e2e/tensorzero.toml");
-    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
-        config_file: Some(config_path),
-        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        postgres_url: None,
-        timeout: None,
-        verify_credentials: true,
-        allow_batch_writes: true,
-    })
-    .build()
-    .await
-    .unwrap()
-}
-
-pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
-    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
-        config_file: None,
-        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        postgres_url: None,
-        timeout: None,
-        verify_credentials: true,
-        allow_batch_writes: true,
-    })
-    .build()
-    .await
-    .unwrap()
-}
-
-pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Client {
-    let tmp_config = tempfile::NamedTempFile::new().unwrap();
-    std::fs::write(tmp_config.path(), config).unwrap();
-    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
-        config_file: Some(tmp_config.path().to_owned()),
-        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        postgres_url: None,
-        timeout: None,
-        verify_credentials: true,
-        allow_batch_writes: true,
-    })
-    .build()
-    .await
-    .unwrap()
-}
-
-pub async fn make_embedded_gateway_with_config_and_postgres(config: &str) -> tensorzero::Client {
-    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
-        .expect("TENSORZERO_POSTGRES_URL must be set for rate limiting tests");
-
-    let tmp_config = tempfile::NamedTempFile::new().unwrap();
-    std::fs::write(tmp_config.path(), config).unwrap();
-    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
-        config_file: Some(tmp_config.path().to_owned()),
-        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        postgres_url: Some(postgres_url),
-        timeout: None,
-        verify_credentials: true,
-        allow_batch_writes: true,
-    })
-    .build()
-    .await
-    .unwrap()
-}
-
-// We use a multi-threaded runtime so that the embedded gateway can use 'block_on'.
-// For consistency, we also use a multi-threaded runtime for the http gateway test.
-
-#[macro_export]
-macro_rules! make_gateway_test_functions {
-    ($prefix:ident) => {
-        paste::paste! {
-
-            #[tokio::test(flavor = "multi_thread")]
-            async fn [<$prefix _embedded_gateway>]() {
-                $prefix ($crate::providers::common::make_embedded_gateway().await).await;
-            }
-
-
-            #[tokio::test(flavor = "multi_thread")]
-            async fn [<$prefix _http_gateway>]() {
-                $prefix ($crate::providers::common::make_http_gateway().await).await;
-            }
-        }
-    };
 }
 
 #[macro_export]
@@ -480,7 +384,7 @@ macro_rules! generate_provider_tests {
                 test_dynamic_tool_use_inference_request_with_provider(provider, &client).await;
             }
         }
-        $crate::make_gateway_test_functions!(test_dynamic_tool_use_inference_request);
+        tensorzero::make_gateway_test_functions!(test_dynamic_tool_use_inference_request);
 
         async fn test_stop_sequences_inference_request(client: tensorzero::Client) {
             let providers = $func().await.simple_inference;
@@ -488,7 +392,7 @@ macro_rules! generate_provider_tests {
                 test_stop_sequences_inference_request_with_provider(provider, &client).await;
             }
         }
-        $crate::make_gateway_test_functions!(test_stop_sequences_inference_request);
+        tensorzero::make_gateway_test_functions!(test_stop_sequences_inference_request);
 
         async fn test_dynamic_tool_use_streaming_inference_request(client: tensorzero::Client) {
             let providers = $func().await.dynamic_tool_use_inference;
@@ -496,7 +400,7 @@ macro_rules! generate_provider_tests {
                 test_dynamic_tool_use_streaming_inference_request_with_provider(provider, &client).await;
             }
         }
-        $crate::make_gateway_test_functions!(test_dynamic_tool_use_streaming_inference_request);
+        tensorzero::make_gateway_test_functions!(test_dynamic_tool_use_streaming_inference_request);
 
 
         #[tokio::test]
@@ -1162,7 +1066,7 @@ pub async fn test_url_image_inference_with_provider_and_store(
     let (server_addr, _shutdown_sender) = make_temp_image_server().await;
     let image_url = Url::parse(&format!("http://{server_addr}/ferris.png")).unwrap();
 
-    let client = make_embedded_gateway_with_config(config_toml).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_config(config_toml).await;
 
     for should_be_cached in [false, true] {
         let response = client
@@ -1221,7 +1125,7 @@ pub async fn test_base64_pdf_inference_with_provider_and_store(
 
     let pdf_data = BASE64_STANDARD.encode(DEEPSEEK_PAPER_PDF);
 
-    let client = make_embedded_gateway_with_config(config_toml).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_config(config_toml).await;
     let mut storage_path = None;
 
     for should_be_cached in [false, true] {
@@ -1283,7 +1187,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
 
     let image_data = BASE64_STANDARD.encode(FERRIS_PNG);
 
-    let client = make_embedded_gateway_with_config(config_toml).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_config(config_toml).await;
     let mut storage_path = None;
 
     let mut params = ClientInferenceParams {
@@ -1922,7 +1826,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
         return;
     }
 
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     client
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),

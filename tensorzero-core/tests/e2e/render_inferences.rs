@@ -19,12 +19,10 @@ use tensorzero_core::{
 use tracing_test::traced_test;
 use uuid::Uuid;
 
-use crate::providers::common::make_embedded_gateway;
-
 /// Test that the render_samples function works when given an empty array of stored inferences.
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_render_samples_empty() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     // Test with an empty stored inferences array.
     let stored_inferences: Vec<StoredInference> = vec![];
@@ -40,7 +38,7 @@ pub async fn test_render_samples_empty() {
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 pub async fn test_render_samples_no_function() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
         function_name: "basic_test".to_string(),
@@ -76,7 +74,7 @@ pub async fn test_render_samples_no_function() {
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 pub async fn test_render_samples_no_variant() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
         function_name: "basic_test".to_string(),
@@ -120,7 +118,7 @@ pub async fn test_render_samples_no_variant() {
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 pub async fn test_render_samples_missing_variable() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
         function_name: "basic_test".to_string(),
@@ -158,7 +156,7 @@ pub async fn test_render_samples_missing_variable() {
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 pub async fn test_render_samples_normal() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let stored_inferences = vec![
         StoredInference::Chat(StoredChatInference {
@@ -439,7 +437,7 @@ pub async fn test_render_samples_normal() {
 /// Test that the render_samples function can render a normal chat example, a tool call example, a json example, and an example using images.
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_render_samples_template_no_schema() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
         function_name: "basic_test_template_no_schema".to_string(),
@@ -543,7 +541,7 @@ pub async fn test_render_samples_template_no_schema() {
 /// Test that the render_samples function works when given an empty array of datapoints.
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_render_datapoints_empty() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     // Test with an empty datapoints array.
     let datapoints: Vec<Datapoint> = vec![];
@@ -559,7 +557,7 @@ pub async fn test_render_datapoints_empty() {
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 pub async fn test_render_datapoints_no_function() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
@@ -598,7 +596,7 @@ pub async fn test_render_datapoints_no_function() {
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 pub async fn test_render_datapoints_no_variant() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
@@ -645,7 +643,7 @@ pub async fn test_render_datapoints_no_variant() {
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 pub async fn test_render_datapoints_missing_variable() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
@@ -686,7 +684,7 @@ pub async fn test_render_datapoints_missing_variable() {
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 pub async fn test_render_datapoints_normal() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let datapoints = vec![
         Datapoint::Chat(ChatInferenceDatapoint {
@@ -960,7 +958,7 @@ pub async fn test_render_datapoints_normal() {
 /// Test that the render_samples function can render a datapoint with template but no schema.
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_render_datapoints_template_no_schema() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),

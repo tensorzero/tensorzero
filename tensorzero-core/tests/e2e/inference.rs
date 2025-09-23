@@ -7,7 +7,7 @@ use crate::{
         attrs_to_map, build_span_map, install_capturing_otel_exporter, CapturingOtelExporter,
         SpanMap,
     },
-    providers::common::{make_embedded_gateway_with_config, FERRIS_PNG},
+    providers::common::FERRIS_PNG,
 };
 use axum::http::HeaderValue;
 use base64::prelude::*;
@@ -52,12 +52,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
     select_model_inference_clickhouse,
 };
 
-use crate::{
-    common::get_gateway_endpoint,
-    providers::common::{
-        make_embedded_gateway, make_embedded_gateway_no_config, make_http_gateway,
-    },
-};
+use crate::common::get_gateway_endpoint;
 
 #[tokio::test]
 async fn e2e_test_inference_dryrun() {
@@ -1371,7 +1366,7 @@ async fn e2e_test_variant_failover() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_test_variant_zero_weight_skip_zero() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let error = client
         .inference(ClientInferenceParams {
             function_name: Some("variant_failover_zero_weight".to_string()),
@@ -1413,7 +1408,7 @@ async fn e2e_test_variant_zero_weight_skip_zero() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_test_variant_zero_weight_pin_zero() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let error = client
         .inference(ClientInferenceParams {
             function_name: Some("variant_failover_zero_weight".to_string()),
@@ -1741,7 +1736,7 @@ async fn e2e_test_inference_original_response_non_stream() {
 
 #[tokio::test]
 async fn test_gateway_template_base_path() {
-    let gateway = make_embedded_gateway_with_config(&format!(
+    let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(&format!(
         r#"
 [functions.my_test]
 type = "chat"
@@ -1787,7 +1782,7 @@ base_path = "{root}"
 async fn test_gateway_template_no_fs_access() {
     // We use an embedded client so that we can control the number of
     // requests to the flaky judge.
-    let gateway = make_embedded_gateway_with_config(&format!(
+    let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(&format!(
         r#"
 [functions.my_test]
 type = "chat"
@@ -1834,7 +1829,7 @@ model = "dummy::good"
 async fn test_original_response_best_of_n_flaky_judge() {
     // We use an embedded client so that we can control the number of
     // requests to the flaky judge.
-    let gateway = make_embedded_gateway_with_config(
+    let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(
         r#"
 [functions.best_of_n]
 type = "chat"
@@ -1917,7 +1912,7 @@ async fn test_original_response_mixture_of_n_flaky_fuser() {
     let exporter = install_capturing_otel_exporter();
     // We use an embedded client so that we can control the number of
     // requests to the flaky judge.
-    let gateway = make_embedded_gateway_with_config(
+    let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(
         r#"
 [gateway.export.otlp.traces]
 enabled = true
@@ -2547,12 +2542,12 @@ async fn e2e_test_tool_call_streaming_split_tool_name() {
 
 #[tokio::test]
 async fn test_raw_text_http_gateway() {
-    test_raw_text(make_http_gateway().await).await;
+    test_raw_text(tensorzero::test_helpers::make_http_gateway().await).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_raw_text_embedded_gateway() {
-    test_raw_text(make_embedded_gateway().await).await;
+    test_raw_text(tensorzero::test_helpers::make_embedded_gateway().await).await;
 }
 
 pub async fn test_raw_text(client: tensorzero::Client) {
@@ -2876,7 +2871,7 @@ async fn test_inference_invalid_params() {
 
 #[tokio::test]
 async fn test_dummy_only_embedded_gateway_no_config() {
-    let client = make_embedded_gateway_no_config().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     let response = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::my-model".to_string()),
@@ -2917,7 +2912,7 @@ async fn test_dummy_only_embedded_gateway_no_config() {
 
 #[tokio::test]
 async fn test_dummy_only_replicated_clickhouse() {
-    let client = make_embedded_gateway_no_config().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     let response = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::my-model".to_string()),
@@ -3164,7 +3159,7 @@ async fn test_dummy_only_inference_invalid_default_function_arg() {
 #[tokio::test]
 
 async fn test_image_inference_without_object_store() {
-    let client = make_embedded_gateway_no_config().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     let err_msg = client
         .inference(ClientInferenceParams {
             model_name: Some("openai::gpt-4o-mini".to_string()),
@@ -3334,7 +3329,7 @@ async fn test_inference_input_tokens_output_tokens_zero() {
 #[traced_test]
 
 async fn test_tool_call_input_no_warning() {
-    let client = make_embedded_gateway_no_config().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
@@ -3896,7 +3891,7 @@ async fn test_multiple_text_blocks_in_message() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clickhouse_bulk_insert_off_default() {
     let client = Arc::new(
-        make_embedded_gateway_with_config(
+        tensorzero::test_helpers::make_embedded_gateway_with_config(
             "
     ",
         )
@@ -3922,7 +3917,7 @@ async fn test_clickhouse_bulk_insert_off_default() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clickhouse_bulk_insert() {
     let client = Arc::new(
-        make_embedded_gateway_with_config(
+        tensorzero::test_helpers::make_embedded_gateway_with_config(
             "
     [gateway.observability]
     enabled = true

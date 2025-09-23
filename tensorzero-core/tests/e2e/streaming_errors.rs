@@ -6,20 +6,17 @@ use tensorzero::{
 };
 use tensorzero_core::inference::types::TextKind;
 
-use crate::{
-    common::get_gateway_endpoint,
-    providers::common::{make_embedded_gateway, make_http_gateway},
-};
+use crate::common::get_gateway_endpoint;
 use reqwest_eventsource::{Event, RequestBuilderExt};
 
 #[tokio::test]
 async fn test_client_stream_with_error_http_gateway() {
-    test_client_stream_with_error(make_http_gateway().await).await;
+    test_client_stream_with_error(tensorzero::test_helpers::make_http_gateway().await).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_client_stream_with_error_embedded_gateway() {
-    test_client_stream_with_error(make_embedded_gateway().await).await;
+    test_client_stream_with_error(tensorzero::test_helpers::make_embedded_gateway().await).await;
 }
 
 async fn test_client_stream_with_error(client: Client) {

@@ -6,7 +6,7 @@ use tokio::time::{sleep, Duration};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
-use super::{make_embedded_gateway, make_http_gateway, use_mock_inference_provider};
+use super::use_mock_inference_provider;
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     InferenceOutput, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
@@ -1020,7 +1020,7 @@ async fn validate_model_inference_clickhouse(
 #[allow(clippy::allow_attributes, dead_code)] // False positive
 pub async fn test_dicl_workflow_with_embedded_client() {
     // Create embedded gateway client
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     run_dicl_workflow_with_client(&client).await;
 }
 
@@ -1028,7 +1028,7 @@ pub async fn test_dicl_workflow_with_embedded_client() {
 #[allow(clippy::allow_attributes, dead_code)] // False positive
 pub async fn test_dicl_workflow_with_http_client() {
     // Create HTTP gateway client
-    let client = make_http_gateway().await;
+    let client = tensorzero::test_helpers::make_http_gateway().await;
     run_dicl_workflow_with_client(&client).await;
 }
 

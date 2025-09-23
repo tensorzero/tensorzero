@@ -44,6 +44,8 @@ use uuid::Uuid;
 mod client_inference_params;
 mod client_input;
 mod git;
+#[cfg(feature = "e2e_tests")]
+pub mod test_helpers;
 pub use tensorzero_core::stored_inference::{
     RenderedSample, StoredChatInference, StoredInference, StoredJsonInference,
 };
