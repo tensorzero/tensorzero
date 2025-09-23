@@ -6,8 +6,7 @@ use async_trait::async_trait;
 use std::time::Duration;
 
 /*
- * This migration sets up the EpisodeById table.
- * This should allow consumers to easily query episode data by id.
+ *  TODO
  */
 
 pub struct Migration0039<'a> {
@@ -19,74 +18,43 @@ const MIGRATION_ID: &str = "0039";
 #[async_trait]
 impl Migration for Migration0039<'_> {
     async fn can_apply(&self) -> Result<(), Error> {
-        if !check_table_exists(self.clickhouse, "InferenceById", MIGRATION_ID).await? {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
-                id: MIGRATION_ID.to_string(),
-                message: "InferenceById table does not exist".to_string(),
-            }));
-        }
-        if !check_table_exists(self.clickhouse, "InferenceByEpisodeId", MIGRATION_ID).await? {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
-                id: MIGRATION_ID.to_string(),
-                message: "InferenceByEpisodeId table does not exist".to_string(),
-            }));
-        }
-        if !check_table_exists(self.clickhouse, "FloatMetricFeedback", MIGRATION_ID).await? {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
-                id: MIGRATION_ID.to_string(),
-                message: "FloatMetricFeedback table does not exist".to_string(),
-            }));
-        }
-        if !check_table_exists(self.clickhouse, "BooleanMetricFeedback", MIGRATION_ID).await? {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
-                id: MIGRATION_ID.to_string(),
-                message: "BooleanMetricFeedback table does not exist".to_string(),
-            }));
+        let tables_to_check = [
+            "InferenceById",
+            "InferenceByEpisodeId",
+            "FloatMetricFeedback",
+            "BooleanMetricFeedback",
+        ];
+
+        for table_name in tables_to_check {
+            if !check_table_exists(self.clickhouse, table_name, MIGRATION_ID).await? {
+                return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                    id: MIGRATION_ID.to_string(),
+                    message: format!("{table_name} table does not exist"),
+                }));
+            }
         }
         Ok(())
     }
 
     async fn should_apply(&self) -> Result<bool, Error> {
-        if !check_table_exists(self.clickhouse, "FeedbackByVariantStatistics", MIGRATION_ID).await?
-        {
-            return Ok(true);
+        let tables_to_check = [
+            "FeedbackByVariantStatistics",
+            "FloatMetricFeedbackByVariant",
+            "BooleanMetricFeedbackByVariant",
+            "FloatMetricFeedbackByVariantView",
+            "BooleanMetricFeedbackByVariantView",
+            "FloatMetricFeedbackByVariantStatisticsView",
+            "BooleanMetricFeedbackByVariantStatisticsView",
+        ];
+
+        for table_name in tables_to_check {
+            if !check_table_exists(self.clickhouse, table_name, MIGRATION_ID).await? {
+                // If any table is missing, we should apply the migration.
+                return Ok(true);
+            }
         }
-        if !check_table_exists(self.clickhouse, "FloatFeedbackByVariant", MIGRATION_ID).await? {
-            return Ok(true);
-        }
-        if !check_table_exists(self.clickhouse, "BooleanFeedbackByVariant", MIGRATION_ID).await? {
-            return Ok(true);
-        }
-        if !check_table_exists(self.clickhouse, "FloatFeedbackByVariantView", MIGRATION_ID).await? {
-            return Ok(true);
-        }
-        if !check_table_exists(
-            self.clickhouse,
-            "BooleanFeedbackByVariantView",
-            MIGRATION_ID,
-        )
-        .await?
-        {
-            return Ok(true);
-        }
-        if !check_table_exists(
-            self.clickhouse,
-            "FloatFeedbackByVariantStatisticsView",
-            MIGRATION_ID,
-        )
-        .await?
-        {
-            return Ok(true);
-        }
-        if !check_table_exists(
-            self.clickhouse,
-            "BooleanFeedbackByVariantStatisticsView",
-            MIGRATION_ID,
-        )
-        .await?
-        {
-            return Ok(true);
-        }
+
+        // If all tables exist, no need to apply.
         Ok(false)
     }
 
@@ -106,7 +74,7 @@ impl Migration for Migration0039<'_> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
             GetMaybeReplicatedTableEngineNameArgs {
-                table_name: "FloatFeedbackByVariant",
+                table_name: "FloatMetricFeedbackByVariant",
                 table_engine_name: "MergeTree",
                 engine_args: &[],
             },
@@ -114,7 +82,7 @@ impl Migration for Migration0039<'_> {
 
         self.clickhouse
             .run_query_synchronous_no_params(format!(
-                r"CREATE TABLE IF NOT EXISTS FloatFeedbackByVariant{on_cluster_name} (
+                r"CREATE TABLE IF NOT EXISTS FloatMetricFeedbackByVariant{on_cluster_name} (
                         function_name LowCardinality(String),
                         variant_name LowCardinality(String),
                         metric_name LowCardinality(String),
@@ -130,7 +98,7 @@ impl Migration for Migration0039<'_> {
 
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
             GetMaybeReplicatedTableEngineNameArgs {
-                table_name: "BooleanFeedbackByVariant",
+                table_name: "BooleanMetricFeedbackByVariant",
                 table_engine_name: "MergeTree",
                 engine_args: &[],
             },
@@ -138,7 +106,7 @@ impl Migration for Migration0039<'_> {
 
         self.clickhouse
             .run_query_synchronous_no_params(format!(
-                r"CREATE TABLE IF NOT EXISTS BooleanFeedbackByVariant{on_cluster_name} (
+                r"CREATE TABLE IF NOT EXISTS BooleanMetricFeedbackByVariant{on_cluster_name} (
                         function_name LowCardinality(String),
                         variant_name LowCardinality(String),
                         metric_name LowCardinality(String),
@@ -169,7 +137,7 @@ impl Migration for Migration0039<'_> {
                     minute DateTime,
                     feedback_mean AggregateFunction(avg, Float32),
                     feedback_variance AggregateFunction(varSampStable, Float32),
-                    count SimpleAggregateFunction(count, UInt32)
+                    count SimpleAggregateFunction(sum, UInt64)
                 )
                 Engine = {table_engine_name}
                 ORDER BY (function_name, variant_name, metric_name, minute);
@@ -189,11 +157,11 @@ impl Migration for Migration0039<'_> {
             format!("UUIDv7ToDateTime(uint_to_uuid(id_uint)) >= fromUnixTimestamp64Nano({view_timestamp_nanos})")
         };
 
-        // Build MV for FloatFeedbackByVariant table
+        // Build MV for FloatMetricFeedbackByVariant table
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS FloatFeedbackByVariantView{on_cluster_name}
-            TO FloatFeedbackByVariant
+            CREATE MATERIALIZED VIEW IF NOT EXISTS FloatMetricFeedbackByVariantView{on_cluster_name}
+            TO FloatMetricFeedbackByVariant
             AS
             WITH
                 float_feedback AS (
@@ -217,11 +185,17 @@ impl Migration for Migration0039<'_> {
                     SELECT
                         uint_to_uuid(episode_id_uint) as target_id,
                         function_name,
-                        any(variant_name) as variant_name
-                    FROM InferenceByEpisodeID
-                    WHERE episode_id_uint IN (SELECT target_id_uint FROM float_feedback)
-                    GROUP BY (episode_id_uint, function_name)
-                    HAVING uniqExact(variant_name) > 1
+                        unique_variants[1] as variant_name
+                    FROM (
+                        SELECT
+                            episode_id_uint,
+                            function_name,
+                            groupUniqArray(variant_name) as unique_variants
+                        FROM InferenceByEpisodeId
+                        WHERE episode_id_uint IN (SELECT target_id_uint FROM float_feedback)
+                        GROUP BY (episode_id_uint, function_name)
+                    )
+                    WHERE length(unique_variants) = 1
                 )
 
             SELECT
@@ -239,11 +213,11 @@ impl Migration for Migration0039<'_> {
             .run_query_synchronous_no_params(query)
             .await?;
 
-        // Build MV for BooleanFeedbackByVariant table
+        // Build MV for BooleanMetricFeedbackByVariant table
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanFeedbackByVariantView{on_cluster_name}
-            TO BooleanFeedbackByVariant
+            CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanMetricFeedbackByVariantView{on_cluster_name}
+            TO BooleanMetricFeedbackByVariant
             AS
             WITH
                 boolean_feedback AS (
@@ -267,11 +241,17 @@ impl Migration for Migration0039<'_> {
                     SELECT
                         uint_to_uuid(episode_id_uint) as target_id,
                         function_name,
-                        any(variant_name) as variant_name
-                    FROM InferenceByEpisodeID
-                    WHERE episode_id_uint IN (SELECT target_id_uint FROM boolean_feedback)
-                    GROUP BY (episode_id_uint, function_name)
-                    HAVING uniqExact(variant_name) > 1
+                        unique_variants[1] as variant_name
+                    FROM (
+                        SELECT
+                            episode_id_uint,
+                            function_name,
+                            groupUniqArray(variant_name) as unique_variants
+                        FROM InferenceByEpisodeId
+                        WHERE episode_id_uint IN (SELECT target_id_uint FROM boolean_feedback)
+                        GROUP BY (episode_id_uint, function_name)
+                    )
+                    WHERE length(unique_variants) = 1
                 )
 
             SELECT
@@ -289,10 +269,10 @@ impl Migration for Migration0039<'_> {
             .run_query_synchronous_no_params(query)
             .await?;
 
-        // Build MV for FloatFeedbackByVariantStatistics to FeedbackByVariantStatistics table
+        // Build MV for FloatMetricFeedbackByVariantStatistics to FeedbackByVariantStatistics table
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS FloatFeedbackByVariantStatisticsView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS FloatMetricFeedbackByVariantStatisticsView{on_cluster_name}
             TO FeedbackByVariantStatistics AS
             SELECT
                 function_name,
@@ -302,7 +282,7 @@ impl Migration for Migration0039<'_> {
                 avgState(value) as feedback_mean,
                 varSampStableState(value) as feedback_variance,
                 1 as count
-            FROM FloatFeedbackByVariant
+            FROM FloatMetricFeedbackByVariant
             WHERE {statistics_view_timestamp_where_clause}
             GROUP BY function_name, variant_name, metric_name, minute;
             "
@@ -311,20 +291,20 @@ impl Migration for Migration0039<'_> {
             .run_query_synchronous_no_params(query)
             .await?;
 
-        // Build MV for BooleanFeedbackByVariantStatistics to FeedbackByVariantStatistics table
+        // Build MV for BooleanMetricFeedbackByVariantStatistics to FeedbackByVariantStatistics table
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanFeedbackyVariantStatisticsView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanMetricFeedbackByVariantStatisticsView{on_cluster_name}
             TO FeedbackByVariantStatistics AS
             SELECT
                 function_name,
                 variant_name,
                 metric_name,
                 toStartOfMinute(UUIDv7ToDateTime(uint_to_uuid(id_uint))) as minute,
-                avgState(value) as feedback_mean,
-                varSampStableState(value) as feedback_variance,
+                avgState(toFloat32(value)) as feedback_mean,
+                varSampStableState(toFloat32(value)) as feedback_variance,
                 1 as count
-            FROM FloatFeedbackByVariant
+            FROM BooleanMetricFeedbackByVariant
             WHERE {statistics_view_timestamp_where_clause}
             GROUP BY function_name, variant_name, metric_name, minute;
             "
@@ -340,7 +320,7 @@ impl Migration for Migration0039<'_> {
             let create_float_feedback_by_variant_view = self
                 .clickhouse
                 .run_query_synchronous_no_params(
-                    "SHOW CREATE TABLE EpisodeByIdChatView".to_string(),
+                    "SHOW CREATE TABLE FloatMetricFeedbackByVariantView".to_string(),
                 )
                 .await?
                 .response;
@@ -350,7 +330,7 @@ impl Migration for Migration0039<'_> {
                 // Run backfill for EpisodeByIdChatView if the chat timestamps match
                 let query = format!(
                     r"
-                    INSERT INTO FloatFeedbackByVariant
+                    INSERT INTO FloatMetricFeedbackByVariant
                     WITH
                         float_feedback AS (
                             SELECT
@@ -373,12 +353,19 @@ impl Migration for Migration0039<'_> {
                             SELECT
                                 uint_to_uuid(episode_id_uint) as target_id,
                                 function_name,
-                                any(variant_name) as variant_name
-                            FROM InferenceByEpisodeID
-                            WHERE episode_id_uint IN (SELECT target_id_uint FROM float_feedback)
-                            GROUP BY (episode_id_uint, function_name)
-                            HAVING uniqExact(variant_name) > 1
+                                unique_variants[1] as variant_name
+                            FROM (
+                                SELECT
+                                    episode_id_uint,
+                                    function_name,
+                                    groupUniqArray(variant_name) as unique_variants
+                                FROM InferenceByEpisodeId
+                                WHERE episode_id_uint IN (SELECT target_id_uint FROM float_feedback)
+                                GROUP BY (episode_id_uint, function_name)
+                            )
+                            WHERE length(unique_variants) = 1
                         )
+
 
                     SELECT
                         t.function_name as function_name,
@@ -395,13 +382,13 @@ impl Migration for Migration0039<'_> {
                     .run_query_synchronous_no_params(query)
                     .await?;
             } else {
-                tracing::warn!("Materialized view `FloatFeedbackByVariantView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
+                tracing::warn!("Materialized view `FloatMetricFeedbackByVariantView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
             }
 
             let create_boolean_feedback_by_variant_view = self
                 .clickhouse
                 .run_query_synchronous_no_params(
-                    "SHOW CREATE TABLE BooleanFeedbackByVariantView".to_string(),
+                    "SHOW CREATE TABLE BooleanMetricFeedbackByVariantView".to_string(),
                 )
                 .await?
                 .response;
@@ -410,7 +397,7 @@ impl Migration for Migration0039<'_> {
                 // Run backfill for EpisodeByIdJsonView if the json timestamps match
                 let query = format!(
                     r"
-                    INSERT INTO BooleanFeedbackByVariantView
+                    INSERT INTO BooleanMetricFeedbackByVariant
                     WITH
                         boolean_feedback AS (
                             SELECT
@@ -433,11 +420,17 @@ impl Migration for Migration0039<'_> {
                             SELECT
                                 uint_to_uuid(episode_id_uint) as target_id,
                                 function_name,
-                                any(variant_name) as variant_name
-                            FROM InferenceByEpisodeID
-                            WHERE episode_id_uint IN (SELECT target_id_uint FROM boolean_feedback)
-                            GROUP BY (episode_id_uint, function_name)
-                            HAVING uniqExact(variant_name) > 1
+                                unique_variants[1] as variant_name
+                            FROM (
+                                SELECT
+                                    episode_id_uint,
+                                    function_name,
+                                    groupUniqArray(variant_name) as unique_variants
+                                FROM InferenceByEpisodeId
+                                WHERE episode_id_uint IN (SELECT target_id_uint FROM boolean_feedback)
+                                GROUP BY (episode_id_uint, function_name)
+                            )
+                            WHERE length(unique_variants) = 1
                         )
 
                     SELECT
@@ -455,22 +448,22 @@ impl Migration for Migration0039<'_> {
                     .run_query_synchronous_no_params(query)
                     .await?;
             } else {
-                tracing::warn!("Materialized view `BooleanFeedbackByVariantView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
+                tracing::warn!("Materialized view `BooleanMetricFeedbackByVariantView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
             }
             let create_float_feedback_by_variant_statistics_view = self
                 .clickhouse
                 .run_query_synchronous_no_params(
-                    "SHOW CREATE TABLE FloatFeedbackByVariantStatisticsView".to_string(),
+                    "SHOW CREATE TABLE FloatMetricFeedbackByVariantStatisticsView".to_string(),
                 )
                 .await?
                 .response;
             if create_float_feedback_by_variant_statistics_view
                 .contains(&view_timestamp_nanos_string)
             {
-                // Run backfill for FloatFeedbackByVariantStatisticsView if the json timestamps match
+                // Run backfill for FloatMetricFeedbackByVariantStatisticsView if the json timestamps match
                 let query = format!(
                     r"
-                    INSERT INTO FloatFeedbackByVariantStatisticsView
+                    INSERT INTO FeedbackByVariantStatistics
                     SELECT
                         function_name,
                         variant_name,
@@ -479,7 +472,7 @@ impl Migration for Migration0039<'_> {
                         avgState(value) as feedback_mean,
                         varSampStableState(value) as feedback_variance,
                         1 as count
-                    FROM FloatFeedbackByVariant
+                    FROM FloatMetricFeedbackByVariant
                     WHERE UUIDv7ToDateTime(uint_to_uuid(id_uint)) < fromUnixTimestamp64Nano({view_timestamp_nanos})
                     GROUP BY function_name, variant_name, metric_name, minute;
                     "
@@ -488,31 +481,31 @@ impl Migration for Migration0039<'_> {
                     .run_query_synchronous_no_params(query)
                     .await?;
             } else {
-                tracing::warn!("Materialized view `FloatFeedbackByVariantStatisticsView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
+                tracing::warn!("Materialized view `FloatMetricFeedbackByVariantStatisticsView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
             }
             let create_boolean_feedback_by_variant_statistics_view = self
                 .clickhouse
                 .run_query_synchronous_no_params(
-                    "SHOW CREATE TABLE BooleanFeedbackByVariantStatisticsView".to_string(),
+                    "SHOW CREATE TABLE BooleanMetricFeedbackByVariantStatisticsView".to_string(),
                 )
                 .await?
                 .response;
             if create_boolean_feedback_by_variant_statistics_view
                 .contains(&view_timestamp_nanos_string)
             {
-                // Run backfill for BooleanFeedbackByVariantStatisticsView if the json timestamps match
+                // Run backfill for BooleanMetricFeedbackByVariantStatisticsView if the json timestamps match
                 let query = format!(
                     r"
-                    INSERT INTO BooleanFeedbackByVariantStatisticsView
+                    INSERT INTO FeedbackByVariantStatistics
                     SELECT
                         function_name,
                         variant_name,
                         metric_name,
                         toStartOfMinute(UUIDv7ToDateTime(uint_to_uuid(id_uint))) as minute,
-                        avgState(value) as feedback_mean,
-                        varSampStableState(value) as feedback_variance,
+                        avgState(toFloat32(value)) as feedback_mean,
+                        varSampStableState(toFloat32(value)) as feedback_variance,
                         1 as count
-                    FROM BooleanFeedbackByVariant
+                    FROM BooleanMetricFeedbackByVariant
                     WHERE UUIDv7ToDateTime(uint_to_uuid(id_uint)) < fromUnixTimestamp64Nano({view_timestamp_nanos})
                     GROUP BY function_name, variant_name, metric_name, minute;
                     "
@@ -521,7 +514,7 @@ impl Migration for Migration0039<'_> {
                     .run_query_synchronous_no_params(query)
                     .await?;
             } else {
-                tracing::warn!("Materialized view `BooleanFeedbackByVariantStatisticsView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
+                tracing::warn!("Materialized view `BooleanMetricFeedbackByVariantStatisticsView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
             }
         }
 
@@ -532,13 +525,13 @@ impl Migration for Migration0039<'_> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
             r"
-        DROP TABLE IF EXISTS BooleanFeedbackByVariantStatisticsView{on_cluster_name} SYNC;
-        DROP TABLE IF EXISTS FloatFeedbackByVariantStatisticsView{on_cluster_name} SYNC;
-        DROP TABLE IF EXISTS BooleanFeedbackByVariantView{on_cluster_name} SYNC;
-        DROP TABLE IF EXISTS FloatFeedbackByVariantView{on_cluster_name} SYNC;
+        DROP TABLE IF EXISTS BooleanMetricFeedbackByVariantStatisticsView{on_cluster_name} SYNC;
+        DROP TABLE IF EXISTS FloatMetricFeedbackByVariantStatisticsView{on_cluster_name} SYNC;
+        DROP TABLE IF EXISTS BooleanMetricFeedbackByVariantView{on_cluster_name} SYNC;
+        DROP TABLE IF EXISTS FloatMetricFeedbackByVariantView{on_cluster_name} SYNC;
         DROP TABLE IF EXISTS FeedbackByVariantStatistics{on_cluster_name} SYNC;
-        DROP TABLE IF EXISTS BooleanFeedbackByVariant{on_cluster_name} SYNC;
-        DROP TABLE IF EXISTS FloatFeedbackByVariant{on_cluster_name} SYNC;
+        DROP TABLE IF EXISTS BooleanMetricFeedbackByVariant{on_cluster_name} SYNC;
+        DROP TABLE IF EXISTS FloatMetricFeedbackByVariant{on_cluster_name} SYNC;
         "
         )
     }
