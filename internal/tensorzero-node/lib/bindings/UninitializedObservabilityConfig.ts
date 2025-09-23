@@ -9,5 +9,5 @@ export type UninitializedObservabilityConfig = {
    * If `true`, then we skip checking/applying migrations if the `TensorZeroMigration` table
    * contains exactly the migrations that we expect to have run.
    */
-  skip_completed_migrations: boolean | null;
+  disable_automatic_migrations: boolean | null;
 };

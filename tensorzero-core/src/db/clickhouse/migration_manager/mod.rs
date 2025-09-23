@@ -49,7 +49,7 @@ use serde::{Deserialize, Serialize};
 /// This must match the number of migrations returned by `make_all_migrations` - the tests
 /// will panic if they don't match.
 pub const NUM_MIGRATIONS: usize = 31;
-fn get_run_migrations_command() -> String {
+pub fn get_run_migrations_command() -> String {
     let version = env!("CARGO_PKG_VERSION");
     format!("docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-migrations-only")
 }
@@ -118,6 +118,14 @@ pub fn make_all_migrations<'a>(
     migrations
 }
 
+#[derive(PartialEq, Debug)]
+pub enum MigrationTableState {
+    TooFew,
+    TooMany,
+    JustRight,
+    Failed,
+}
+
 /// Returns `true` if our `TensorZeroMigration` table contains exactly `all_migrations`.
 /// If the database or `TensorZeroMigration` table does not exist, or it contains either more
 /// or fewer distinct migration ids than we expect, than we return `false` to be conservative.
@@ -126,25 +134,25 @@ pub fn make_all_migrations<'a>(
 pub async fn should_skip_migrations(
     clickhouse: &ClickHouseConnectionInfo,
     all_migrations: &[Box<dyn Migration + Send + Sync + '_>],
-) -> bool {
+) -> MigrationTableState {
     let migration_records = match get_all_migration_records(clickhouse).await {
         Ok(records) => records,
         Err(e) => {
             if let ErrorDetails::ClickHouseMigration { message, .. } = e.get_details() {
                 if message.contains("UNKNOWN_DATABASE") {
                     tracing::info!("Database not found, assuming clean start");
-                    return false;
+                    return MigrationTableState::TooFew;
                 }
                 if message.contains("UNKNOWN_TABLE") {
                     tracing::info!(
                         "TensorZeroMigration table not found, we should run migrations."
                     );
-                    return false;
+                    return MigrationTableState::TooFew;
                 }
             }
             // Fall back to running all migrations as normal, and hopefully produce a better error message
             tracing::warn!("Failed to lookup migrations records: {e}");
-            return false;
+            return MigrationTableState::Failed;
         }
     };
     let mut migration_ids = migration_records
@@ -163,7 +171,7 @@ pub async fn should_skip_migrations(
             // If we encounter any parse errors, just run the migrations as normal,
             // and hopefully produce a better error message
             tracing::warn!("Failed to get migration ids: {e}");
-            return false;
+            return MigrationTableState::Failed;
         }
     };
     expected_migration_ids.sort();
@@ -172,36 +180,65 @@ pub async fn should_skip_migrations(
     // (we've run exactly the migrations that we expect to have run)
     tracing::debug!("Actual   migration ids: {migration_ids:?}");
     tracing::debug!("Expected migration ids: {expected_migration_ids:?}");
-    migration_ids == expected_migration_ids
+    // migration_ids == expected_migration_ids
+    match migration_ids.strip_prefix(expected_migration_ids.as_slice()) {
+        Some(suffix) => {
+            if suffix.is_empty() {
+                MigrationTableState::JustRight
+            } else {
+                MigrationTableState::TooMany
+            }
+        }
+        None => MigrationTableState::TooFew,
+    }
 }
 
 pub struct RunMigrationManagerArgs<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
-    pub skip_completed_migrations: bool,
-    pub manual_run: bool,
+    pub is_manual_run: bool,
+    pub disable_automatic_migrations: bool,
 }
 
 pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
     let RunMigrationManagerArgs {
         clickhouse,
-        skip_completed_migrations,
-        manual_run,
+        is_manual_run,
+        disable_automatic_migrations,
     } = args;
     clickhouse.health().await?;
 
     let migrations: Vec<Box<dyn Migration + Send + Sync>> = make_all_migrations(clickhouse);
-    if skip_completed_migrations && should_skip_migrations(clickhouse, &migrations).await {
+    let migration_table_state = should_skip_migrations(clickhouse, &migrations).await;
+
+    // JustRight: good to go
+    if let MigrationTableState::JustRight = migration_table_state {
         tracing::debug!("All migrations have already been applied");
         return Ok(());
     }
+    // Too many: warning and return
+    if let MigrationTableState::TooMany = migration_table_state {
+        tracing::warn!("Extra migrations were detected: this likely means a later version of TensorZero has run migrations against your ClickHouse instance");
+        return Ok(());
+    }
+
+    // TooFew or failed: throw error if (is_manual_run = False, disable = True)
+    if !is_manual_run && disable_automatic_migrations {
+        return Err(Error::new(ErrorDetails::ClickHouseMigrationsDisabled));
+    }
+    // is_manual_run = False, disable = False: if TooFew or Failed, run missing migrations.
+    // is_manual_run = False, disable = True: if TooFew or Failed, throw error.
+    // is_manual_run = True, disable = False: if TooFew or Failed, run missing migrations.
+    // is_manual_run = True, disable = True: if TooFew or Failed, run missing migrations.
+
+    // Otherwise run the missing migrations
     tracing::debug!("All migrations have not yet been applied, running migrations");
     let database_and_migrations_table_exists = clickhouse
         .check_database_and_migrations_table_exists()
         .await?;
     if !database_and_migrations_table_exists {
-        if clickhouse.is_cluster_configured() && !manual_run {
+        if clickhouse.is_cluster_configured() && !is_manual_run {
             let database = clickhouse.database();
-            let run_migrations_command = get_run_migrations_command();
+            let run_migrations_command: String = get_run_migrations_command();
             return Err(ErrorDetails::ClickHouseConfiguration {
                 message: format!("Database {database} does not exist. We do not automatically run migrations to create and set it up when replication is configured. Please run `{run_migrations_command}`."),
             }.into());
@@ -222,7 +259,7 @@ pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
         clickhouse,
         migration: &*migrations[0],
         clean_start: false,
-        manual_run,
+        manual_run: is_manual_run,
         is_replicated,
     })
     .await?;
@@ -231,7 +268,7 @@ pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
             clickhouse,
             migration: &**migration,
             clean_start,
-            manual_run,
+            manual_run: is_manual_run,
             is_replicated,
         })
         .await?;
@@ -411,8 +448,10 @@ pub async fn manual_run_clickhouse_migrations() -> Result<(), Error> {
     run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
         // If we manually run the migrations, we should not skip any.
-        skip_completed_migrations: false,
-        manual_run: true,
+        // TODO: add check for manual running
+        is_manual_run: true,
+        // If we're manually running migrations, the disable_automatic_migrations value is arbitrary
+        disable_automatic_migrations: false,
     })
     .await
 }
