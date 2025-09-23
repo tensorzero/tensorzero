@@ -48,14 +48,14 @@ pub async fn health_handler(
         })));
     }
 
-    return Err((
+    Err((
         StatusCode::SERVICE_UNAVAILABLE,
         Json(json!({
             "gateway": "ok",
             "clickhouse": if clickhouse_result.is_ok() { "ok" } else { "error" },
             "postgres": if postgres_result.is_ok() { "ok" } else { "error" },
         })),
-    ));
+    ))
 }
 
 #[cfg(test)]
