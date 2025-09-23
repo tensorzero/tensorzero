@@ -51,7 +51,7 @@ import {
 } from "~/routes/api/tensorzero/inference.utils";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { TryWithButton } from "~/components/inference/TryWithButton";
-import { AddToDatasetButton } from "./AddToDatasetButton";
+import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";

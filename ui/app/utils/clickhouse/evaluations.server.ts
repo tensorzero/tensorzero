@@ -249,6 +249,7 @@ export async function getEvaluationResults(
     ci.tags['tensorzero::dataset_name'] as dataset_name,
     if(length(feedback.evaluator_inference_id) > 0, feedback.evaluator_inference_id, null) as evaluator_inference_id,
     ci.id as inference_id,
+    ci.episode_id as episode_id,
     feedback.metric_name as metric_name,
     feedback.value as metric_value,
     feedback.feedback_id as feedback_id,
