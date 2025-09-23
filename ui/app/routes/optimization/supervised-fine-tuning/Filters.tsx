@@ -125,16 +125,18 @@ export function FiltersInput({
             </span>
           </ListHeader>
           <div className="group my-1 flex gap-2 border p-2 shadow-sm">
-            <div className="flex flex-col items-center py-3">
-              <div style={borderStyle} />
+            <div className="flex flex-col items-center">
+              {/* <div style={borderStyle} /> */}
               <Button
                 type="button"
-                className="px-10 tracking-tighter [text-orientation:upright] [writing-mode:vertical-rl]"
+                className="flex-1 justify-end px-10 [text-orientation:mixed] [writing-mode:sideways-lr]"
                 onClick={toggleLogicalOperator}
               >
-                {logicalOperator.value.toUpperCase()}
+                <span className="sticky top-2">
+                  {logicalOperator.value.toUpperCase()}
+                </span>
               </Button>
-              <div className="flex-1" style={borderStyle} />
+              {/* <div className="flex-1" style={borderStyle} /> */}
             </div>
 
             <div className="flex-1">
@@ -156,7 +158,7 @@ export function FiltersInput({
                       curatedInferenceCount={counts.curatedInferenceCount}
                       isLoading={counts.isLoading}
                     />
-                    <Button onClick={() => remove(i)}>
+                    <Button onClick={() => remove(i)} variant="destructive">
                       <Placeholder />
                     </Button>
                   </ListItemWithHandle>
@@ -169,6 +171,7 @@ export function FiltersInput({
 
       <Button
         type="button"
+        variant={"outline"}
         onClick={() => filtersArr.append({ ...metricTemplate })}
       >
         Append
