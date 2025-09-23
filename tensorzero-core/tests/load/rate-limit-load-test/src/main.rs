@@ -22,7 +22,8 @@ pub struct Args {
     #[arg(long, default_value_t = 1_000)]
     pub refill_amount: i64,
 
-    /// Number of different rate limit keys (0 = single key for max contention)
+    /// Number of different rate limit keys (0 is a special value that sets up maximum contention)
+    /// If not set to zero this should be at least as large as requests_per_iteration
     #[arg(long, default_value_t = 0)]
     pub contention_keys: usize,
 

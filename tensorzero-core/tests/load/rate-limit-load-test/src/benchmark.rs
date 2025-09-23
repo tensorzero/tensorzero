@@ -14,7 +14,8 @@ use tokio::time::Instant;
 /// If contention is Full, we try to maximally contend for keys by using rate_limit_key_{0, ..., requests_per_iteration - 1}
 /// Otherwise we use the atomic counter to cycle through available keys up to NumKeys
 ///
-/// If requests_per_iteration < NumKeys, this will fail
+/// If requests_per_iteration > NumKeys, this will fail
+/// (this is not a concern in production since the keys are determined by the semantics of rate limiting rather than arbitrarily)
 #[derive(Clone)]
 pub enum Contention {
     Full,
