@@ -9,7 +9,6 @@ services:
       # If the directory doesn't exist locally (i.e. we haven't defined a version-specific config),
       # an empty dir will get mounted in the container
       - ./clickhouse-configs/${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}/users.xml:/etc/clickhouse-server/users.d/users.xml
-      - clickhouse-data:/var/lib/clickhouse
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
@@ -73,6 +72,3 @@ services:
       POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
-
-volumes:
-  clickhouse-data:
