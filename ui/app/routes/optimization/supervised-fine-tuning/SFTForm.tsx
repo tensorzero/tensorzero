@@ -19,7 +19,7 @@ import { ModelSelector } from "./ModelSelector";
 import { SFTFormValuesResolver, type SFTFormValues } from "./types";
 import { VariantSelector } from "./VariantSelector";
 
-const dev_useDefaults = false;
+const dev_useDefaults = true;
 const metricTemplate = { metric: "", threshold: 0.5 };
 
 export function SFTForm({

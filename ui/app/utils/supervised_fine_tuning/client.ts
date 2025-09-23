@@ -39,7 +39,7 @@ export async function launch_sft_job(
       return { metric: data.metric ?? "", threshold };
     });
 
-    filters = await createFilters(filterData);
+    filters = await createFilters(filterData, data.logicalOperator);
   }
   const client = await getNativeTensorZeroClient();
   let optimizerConfig: UninitializedOptimizerInfo;
@@ -149,10 +149,11 @@ export async function createFilter(
 
 export async function createFilters(
   metrics: { metric: string; threshold: number }[],
+  logicalOperand: "and" | "or",
 ): Promise<InferenceFilterTreeNode> {
   const children = await Promise.all(
     metrics.map(({ metric, threshold }) => createFilter(metric, threshold)),
   );
   // NOTE(bret): Temporary
-  return { type: "and", children };
+  return { type: logicalOperand, children };
 }
