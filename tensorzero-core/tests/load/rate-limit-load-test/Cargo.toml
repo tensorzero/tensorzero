@@ -6,7 +6,7 @@ edition = "2021"
 license.workspace = true
 
 [dependencies]
-tensorzero-core = { path = "../../../", features = ["e2e_tests"] }
+tensorzero-core = { path = "../../../" }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
