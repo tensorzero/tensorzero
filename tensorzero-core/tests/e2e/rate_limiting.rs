@@ -176,14 +176,14 @@ scope = [
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_any_tag_value() {
+async fn test_rate_limiting_total_tag_value() {
     let id = Uuid::now_v7();
     let config = generate_rate_limit_config(&[&format!(
         r#"[[rate_limiting.rules]]
 model_inferences_per_minute = {{ capacity = 3, refill_rate = 3 }}
 always = true
 scope = [
-    {{ tag_key = "test2_tenant_id_{id}", tag_value = "tensorzero::any" }}
+    {{ tag_key = "test2_tenant_id_{id}", tag_value = "tensorzero::total" }}
 ]"#
     )]);
 
@@ -212,14 +212,14 @@ scope = [
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_all_tag_value() {
+async fn test_rate_limiting_each_tag_value() {
     let id = Uuid::now_v7();
     let config = generate_rate_limit_config(&[&format!(
         r#"[[rate_limiting.rules]]
 model_inferences_per_minute = {{ capacity = 2, refill_rate = 2 }}
 always = true
 scope = [
-    {{ tag_key = "test3_workspace_id_{id}", tag_value = "tensorzero::all" }}
+    {{ tag_key = "test3_workspace_id_{id}", tag_value = "tensorzero::each" }}
 ]"#
     )]);
 
@@ -544,7 +544,7 @@ async fn test_rate_limiting_concurrent_different_tags() {
 model_inferences_per_minute = {{ capacity = 2, refill_rate = 2 }}
 always = true
 scope = [
-    {{ tag_key = "user_id_{id}", tag_value = "tensorzero::all" }}
+    {{ tag_key = "user_id_{id}", tag_value = "tensorzero::each" }}
 ]"#
     )]);
 
@@ -599,7 +599,7 @@ model_inferences_per_minute = {{ capacity = 3, refill_rate = 3 }}
 always = true
 scope = [
     {{ tag_key = "test6_application_id_{id}", tag_value = "app1" }},
-    {{ tag_key = "test6_user_id_{id}", tag_value = "tensorzero::any" }}
+    {{ tag_key = "test6_user_id_{id}", tag_value = "tensorzero::total" }}
 ]"#
     )]);
 
