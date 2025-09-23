@@ -230,7 +230,7 @@ pub async fn setup_clickhouse(
 }
 
 pub async fn setup_postgres(
-    _config: &Config,
+    config: &Config,
     postgres_url: Option<String>,
 ) -> Result<PostgresConnectionInfo, Error> {
     let Some(postgres_url) = postgres_url else {
@@ -238,8 +238,7 @@ pub async fn setup_postgres(
     };
 
     let pool = PgPoolOptions::new()
-        // TODO: make this configurable
-        .max_connections(20)
+        .max_connections(config.postgres.connection_pool_size)
         .connect(&postgres_url)
         .await
         .map_err(|err| {

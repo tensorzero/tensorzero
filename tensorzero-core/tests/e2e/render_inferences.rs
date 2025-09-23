@@ -11,10 +11,9 @@ use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::stored_input::{
     StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
+use tensorzero_core::inference::types::{ResolvedContentBlock, ResolvedRequestMessage};
 use tensorzero_core::{
-    inference::types::{
-        ContentBlock, ContentBlockChatOutput, JsonInferenceOutput, RequestMessage, Text,
-    },
+    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Text},
     tool::{ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice},
 };
 use tracing_test::traced_test;
@@ -311,7 +310,7 @@ pub async fn test_render_samples_normal() {
     assert_eq!(first_message.role, Role::User);
     assert_eq!(first_message.content.len(), 1);
 
-    let ContentBlock::Text(text) = &first_message.content[0] else {
+    let ResolvedContentBlock::Text(text) = &first_message.content[0] else {
         panic!("Expected text content");
     };
     assert_eq!(text.text, "Hello, world!");
@@ -336,7 +335,7 @@ pub async fn test_render_samples_normal() {
     assert_eq!(second_message.role, Role::User);
     assert_eq!(second_message.content.len(), 1);
 
-    let ContentBlock::Text(text) = &second_message.content[0] else {
+    let ResolvedContentBlock::Text(text) = &second_message.content[0] else {
         panic!("Expected text content");
     };
     assert_eq!(text.text, "What is the name of the capital city of Japan?");
@@ -375,7 +374,7 @@ pub async fn test_render_samples_normal() {
     assert_eq!(third_message.role, Role::User);
     assert_eq!(third_message.content.len(), 1);
 
-    let ContentBlock::Text(text) = &third_message.content[0] else {
+    let ResolvedContentBlock::Text(text) = &third_message.content[0] else {
         panic!("Expected text content");
     };
     assert_eq!(text.text, "Hello, world!");
@@ -417,12 +416,12 @@ pub async fn test_render_samples_normal() {
     assert_eq!(fourth_message.role, Role::User);
     assert_eq!(fourth_message.content.len(), 2);
 
-    let ContentBlock::Text(text) = &fourth_message.content[0] else {
+    let ResolvedContentBlock::Text(text) = &fourth_message.content[0] else {
         panic!("Expected text content");
     };
     assert_eq!(text.text, "What is this a picture of?");
 
-    let ContentBlock::File(file) = &fourth_message.content[1] else {
+    let ResolvedContentBlock::File(file) = &fourth_message.content[1] else {
         panic!("Expected file content");
     };
 
@@ -504,13 +503,13 @@ pub async fn test_render_samples_template_no_schema() {
 
     assert_eq!(
         first_inference.input.messages[0],
-        RequestMessage {
+        ResolvedRequestMessage {
             role: Role::User,
             content: vec![
-                ContentBlock::Text(Text {
+                ResolvedContentBlock::Text(Text {
                     text: "User content: `First user message`".into(),
                 }),
-                ContentBlock::Text(Text {
+                ResolvedContentBlock::Text(Text {
                     text: "User content: `Second user message`".into(),
                 })
             ],
@@ -519,13 +518,13 @@ pub async fn test_render_samples_template_no_schema() {
 
     assert_eq!(
         first_inference.input.messages[1],
-        RequestMessage {
+        ResolvedRequestMessage {
             role: Role::Assistant,
             content: vec![
-                ContentBlock::Text(Text {
+                ResolvedContentBlock::Text(Text {
                     text: "Assistant content: `First assistant message`".into(),
                 }),
-                ContentBlock::Text(Text {
+                ResolvedContentBlock::Text(Text {
                     text: "Assistant content: `Second assistant message`".into(),
                 })
             ],
@@ -846,7 +845,7 @@ pub async fn test_render_datapoints_normal() {
     assert_eq!(first_message.role, Role::User);
     assert_eq!(first_message.content.len(), 1);
 
-    let ContentBlock::Text(text) = &first_message.content[0] else {
+    let ResolvedContentBlock::Text(text) = &first_message.content[0] else {
         panic!("Expected text content");
     };
     assert_eq!(text.text, "Hello, world!");
@@ -871,7 +870,7 @@ pub async fn test_render_datapoints_normal() {
     assert_eq!(second_message.role, Role::User);
     assert_eq!(second_message.content.len(), 1);
 
-    let ContentBlock::Text(text) = &second_message.content[0] else {
+    let ResolvedContentBlock::Text(text) = &second_message.content[0] else {
         panic!("Expected text content");
     };
     assert_eq!(text.text, "What is the name of the capital city of Japan?");
@@ -903,7 +902,7 @@ pub async fn test_render_datapoints_normal() {
     assert_eq!(third_message.role, Role::User);
     assert_eq!(third_message.content.len(), 1);
 
-    let ContentBlock::Text(text) = &third_message.content[0] else {
+    let ResolvedContentBlock::Text(text) = &third_message.content[0] else {
         panic!("Expected text content");
     };
     assert_eq!(text.text, "Hello, world!");
@@ -938,12 +937,12 @@ pub async fn test_render_datapoints_normal() {
     assert_eq!(fourth_message.role, Role::User);
     assert_eq!(fourth_message.content.len(), 2);
 
-    let ContentBlock::Text(text) = &fourth_message.content[0] else {
+    let ResolvedContentBlock::Text(text) = &fourth_message.content[0] else {
         panic!("Expected text content");
     };
     assert_eq!(text.text, "What is this a picture of?");
 
-    let ContentBlock::File(file) = &fourth_message.content[1] else {
+    let ResolvedContentBlock::File(file) = &fourth_message.content[1] else {
         panic!("Expected file content");
     };
 
@@ -1028,13 +1027,13 @@ pub async fn test_render_datapoints_template_no_schema() {
 
     assert_eq!(
         first_sample.input.messages[0],
-        RequestMessage {
+        ResolvedRequestMessage {
             role: Role::User,
             content: vec![
-                ContentBlock::Text(Text {
+                ResolvedContentBlock::Text(Text {
                     text: "User content: `First user message`".into(),
                 }),
-                ContentBlock::Text(Text {
+                ResolvedContentBlock::Text(Text {
                     text: "User content: `Second user message`".into(),
                 })
             ],
@@ -1043,13 +1042,13 @@ pub async fn test_render_datapoints_template_no_schema() {
 
     assert_eq!(
         first_sample.input.messages[1],
-        RequestMessage {
+        ResolvedRequestMessage {
             role: Role::Assistant,
             content: vec![
-                ContentBlock::Text(Text {
+                ResolvedContentBlock::Text(Text {
                     text: "Assistant content: `First assistant message`".into(),
                 }),
-                ContentBlock::Text(Text {
+                ResolvedContentBlock::Text(Text {
                     text: "Assistant content: `Second assistant message`".into(),
                 })
             ],
