@@ -769,7 +769,7 @@ mod tests {
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
         config::UninitializedSchemas,
-        db::clickhouse::ClickHouseConnectionInfo,
+        db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
         http::TensorzeroHttpClient,
         inference::types::{
@@ -1274,11 +1274,14 @@ mod tests {
         let inference_clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
             otlp_config: &Default::default(),
         };
         let input = LazyResolvedInput {

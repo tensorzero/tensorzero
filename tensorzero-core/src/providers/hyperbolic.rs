@@ -135,15 +135,16 @@ impl InferenceProvider for HyperbolicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = serde_json::to_value(HyperbolicRequest::new(&self.model_name, request)?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing Hyperbolic request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+        let request_body =
+            serde_json::to_value(HyperbolicRequest::new(&self.model_name, request).await?)
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing Hyperbolic request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
         let request_url = get_chat_url(&HYPERBOLIC_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -230,15 +231,16 @@ impl InferenceProvider for HyperbolicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(HyperbolicRequest::new(&self.model_name, request)?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing Hyperbolic request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+        let request_body =
+            serde_json::to_value(HyperbolicRequest::new(&self.model_name, request).await?)
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing Hyperbolic request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
         let request_url = get_chat_url(&HYPERBOLIC_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -317,7 +319,7 @@ struct HyperbolicRequest<'a> {
 }
 
 impl<'a> HyperbolicRequest<'a> {
-    pub fn new(
+    pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<HyperbolicRequest<'a>, Error> {
@@ -338,7 +340,8 @@ impl<'a> HyperbolicRequest<'a> {
             &request.messages,
             Some(&request.json_mode),
             PROVIDER_TYPE,
-        )?;
+        )
+        .await?;
         Ok(HyperbolicRequest {
             messages,
             model,
@@ -444,8 +447,8 @@ mod tests {
     };
     use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
 
-    #[test]
-    fn test_hyperbolic_request_new() {
+    #[tokio::test]
+    async fn test_hyperbolic_request_new() {
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -470,6 +473,7 @@ mod tests {
 
         let hyperbolic_request =
             HyperbolicRequest::new("meta-llama/Meta-Llama-3-70B-Instruct", &request_with_tools)
+                .await
                 .expect("failed to create Hyperbolic Request during test");
 
         assert_eq!(hyperbolic_request.messages.len(), 1);
@@ -513,8 +517,8 @@ mod tests {
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }
-    #[test]
-    fn test_hyperbolic_response_with_metadata_try_into() {
+    #[tokio::test]
+    async fn test_hyperbolic_response_with_metadata_try_into() {
         let valid_response = OpenAIResponse {
             choices: vec![OpenAIResponseChoice {
                 index: 0,
@@ -559,7 +563,9 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &HyperbolicRequest::new("test-model", &generic_request).unwrap(),
+                &HyperbolicRequest::new("test-model", &generic_request)
+                    .await
+                    .unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,

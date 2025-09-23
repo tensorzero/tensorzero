@@ -1,3 +1,4 @@
+use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
 ///            IT IS MEANT FOR INTERNAL USE ONLY.
 ///            EXPECT FREQUENT, UNANNOUNCED BREAKING CHANGES.
@@ -48,6 +49,7 @@ use std::error::Error as StdError;
 
 pub mod gateway;
 pub mod path;
+pub mod rate_limiting;
 mod span_map;
 #[cfg(test)]
 mod tests;
@@ -85,6 +87,8 @@ pub struct Config {
     pub object_store_info: Option<ObjectStoreInfo>,
     pub provider_types: ProviderTypesConfig,
     pub optimizers: HashMap<String, OptimizerInfo>,
+    pub postgres: PostgresConfig,
+    pub rate_limiting: RateLimitingConfig,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
@@ -432,7 +436,7 @@ pub struct OtlpTracesConfig {
 #[cfg_attr(test, ts(export, rename_all = "lowercase"))]
 pub enum OtlpTracesFormat {
     /// Sets 'gen_ai' attributes based on the OpenTelemetry GenAI semantic conventions:
-    /// https://github.com/open-telemetry/semantic-conventions/blob/main/docs/genai/genai.md
+    /// https://github.com/open-telemetry/semantic-conventions/tree/main/docs/gen-ai
     #[default]
     OpenTelemetry,
     // Sets attributes based on the OpenInference semantic conventions:
@@ -718,6 +722,8 @@ impl Config {
             object_store_info,
             provider_types: uninitialized_config.provider_types,
             optimizers,
+            postgres: uninitialized_config.postgres,
+            rate_limiting: uninitialized_config.rate_limiting.try_into()?,
         };
 
         // Initialize the templates
@@ -1096,6 +1102,10 @@ pub struct UninitializedConfig {
     pub object_storage: Option<StorageKind>,
     #[serde(default)]
     pub optimizers: HashMap<String, UninitializedOptimizerInfo>, // optimizer name => optimizer config
+    #[serde(default)]
+    pub postgres: PostgresConfig,
+    #[serde(default)]
+    pub rate_limiting: UninitializedRateLimitingConfig,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -1376,7 +1386,7 @@ impl UninitializedFunctionConfig {
                             }
                         }
                         VariantConfig::Dicl(best_of_n_config) => {
-                            if best_of_n_config.json_mode.is_none() {
+                            if best_of_n_config.json_mode().is_none() {
                                 variant_missing_mode = Some(name.clone());
                             }
                         }
@@ -1516,5 +1526,26 @@ impl PathWithContents {
     pub fn from_path(path: ResolvedTomlPath) -> Result<Self, Error> {
         let contents = path.read()?;
         Ok(Self { path, contents })
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(default)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct PostgresConfig {
+    #[serde(default = "default_connection_pool_size")]
+    pub connection_pool_size: u32,
+}
+
+fn default_connection_pool_size() -> u32 {
+    20
+}
+
+impl Default for PostgresConfig {
+    fn default() -> Self {
+        Self {
+            connection_pool_size: 20,
+        }
     }
 }

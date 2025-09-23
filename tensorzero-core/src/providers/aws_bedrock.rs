@@ -11,8 +11,8 @@ use aws_sdk_bedrockruntime::types::{
 };
 use aws_smithy_types::error::display::DisplayErrorContext;
 use aws_types::region::Region;
+use futures::future::try_join_all;
 use futures::StreamExt;
-use itertools::Itertools;
 use reqwest::StatusCode;
 use serde::Serialize;
 use std::time::Duration;
@@ -89,13 +89,12 @@ impl InferenceProvider for AWSBedrockProvider {
     ) -> Result<ProviderInferenceResponse, Error> {
         // TODO (#55): add support for guardrails and additional fields
 
-        let mut messages: Vec<Message> = request
-            .messages
-            .iter()
-            .map(message_from_request_message)
-            .filter_ok(|m| !m.content.is_empty())
-            .collect::<Result<Vec<_>, _>>()?;
-
+        let mut messages: Vec<Message> =
+            try_join_all(request.messages.iter().map(message_from_request_message))
+                .await?
+                .into_iter()
+                .filter(|m| !m.content.is_empty())
+                .collect();
         if self.model_id.contains("claude")
             && request.function_type == FunctionType::Json
             && matches!(
@@ -103,7 +102,7 @@ impl InferenceProvider for AWSBedrockProvider {
                 ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
             )
         {
-            prefill_json_message(&mut messages)?;
+            prefill_json_message(&mut messages).await?;
         }
 
         let mut inference_config = InferenceConfiguration::builder();
@@ -238,11 +237,11 @@ impl InferenceProvider for AWSBedrockProvider {
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         // TODO (#55): add support for guardrails and additional fields
 
-        let mut messages: Vec<Message> = request
-            .messages
-            .iter()
-            .map(message_from_request_message)
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut messages: Vec<Message> =
+            try_join_all(request.messages.iter().map(message_from_request_message))
+                .await?
+                .into_iter()
+                .collect();
 
         if self.model_id.contains("claude")
             && request.function_type == FunctionType::Json
@@ -251,7 +250,7 @@ impl InferenceProvider for AWSBedrockProvider {
                 ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
             )
         {
-            prefill_json_message(&mut messages)?;
+            prefill_json_message(&mut messages).await?;
         }
 
         let mut inference_config = InferenceConfiguration::builder();
@@ -600,18 +599,21 @@ impl From<Role> for ConversationRole {
 }
 
 /// Prefill messages for AWS Bedrock when conditions are met
-fn prefill_json_message(messages: &mut Vec<Message>) -> Result<(), Error> {
+async fn prefill_json_message(messages: &mut Vec<Message>) -> Result<(), Error> {
     // Add a JSON-prefill message for AWS Bedrock's JSON mode
-    messages.push(message_from_request_message(&RequestMessage {
-        role: Role::Assistant,
-        content: vec![ContentBlock::Text(Text {
-            text: "Here is the JSON requested:\n{".to_string(),
-        })],
-    })?);
+    messages.push(
+        message_from_request_message(&RequestMessage {
+            role: Role::Assistant,
+            content: vec![ContentBlock::Text(Text {
+                text: "Here is the JSON requested:\n{".to_string(),
+            })],
+        })
+        .await?,
+    );
     Ok(())
 }
 
-fn bedrock_content_block_from_content_block(
+async fn bedrock_content_block_from_content_block(
     block: &ContentBlock,
 ) -> Result<Option<BedrockContentBlock>, Error> {
     match block {
@@ -679,10 +681,11 @@ fn bedrock_content_block_from_content_block(
             Ok(Some(BedrockContentBlock::ToolResult(tool_result_block)))
         }
         ContentBlock::File(file) => {
+            let resolved_file = file.resolve().await?;
             let FileWithPath {
                 file,
                 storage_path: _,
-            } = &**file;
+            } = &*resolved_file;
             let file_bytes = aws_smithy_types::base64::decode(file.data()?).map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
                     raw_request: None,
@@ -824,16 +827,18 @@ fn bedrock_content_block_to_output(
 }
 
 // `Message` is a foreign type, so we cannot write an `impl` block on it
-fn message_from_request_message(message: &RequestMessage) -> Result<Message, Error> {
+async fn message_from_request_message(message: &RequestMessage) -> Result<Message, Error> {
     let role: ConversationRole = message.role.into();
-    let content: Vec<BedrockContentBlock> = message
-        .content
-        .iter()
-        .map(bedrock_content_block_from_content_block)
-        .collect::<Result<Vec<Option<BedrockContentBlock>>, _>>()?
-        .into_iter()
-        .flatten()
-        .collect();
+    let content: Vec<BedrockContentBlock> = try_join_all(
+        message
+            .content
+            .iter()
+            .map(bedrock_content_block_from_content_block),
+    )
+    .await?
+    .into_iter()
+    .flatten()
+    .collect();
     let mut message_builder = Message::builder().role(role).set_content(Some(vec![]));
     for block in content {
         message_builder = message_builder.content(block);

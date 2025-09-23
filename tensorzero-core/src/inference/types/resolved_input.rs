@@ -1,11 +1,14 @@
+use std::borrow::Cow;
 use std::future::Future;
 use std::pin::Pin;
 
 use futures::future::Shared;
 use futures::FutureExt;
+use mime::MediaType;
 use object_store::{PutMode, PutOptions};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use url::Url;
 
 use super::{storage::StoragePath, Base64File, Role, Thought};
 use crate::config::{Config, ObjectStoreInfo};
@@ -15,7 +18,8 @@ use crate::inference::types::stored_input::StoredFile;
 use crate::inference::types::stored_input::{
     StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
-use crate::inference::types::TemplateInput;
+use crate::inference::types::{RequestMessage, ResolvedContentBlock, TemplateInput};
+use crate::rate_limiting::RateLimitedInputContent;
 use crate::tool::{ToolCall, ToolResult};
 
 #[cfg(feature = "pyo3")]
@@ -35,6 +39,45 @@ pub struct LazyResolvedInput {
 pub struct LazyResolvedInputMessage {
     pub role: Role,
     pub content: Vec<LazyResolvedInputMessageContent>,
+}
+
+// This gets serialized as part of a `ModelInferenceRequest` when we compute a cache key.
+// TODO - decide on the precise caching behavior that we want for file URLs
+#[derive(Clone, Debug, Serialize)]
+pub enum LazyFile {
+    Url {
+        file_url: FileUrl,
+        #[serde(skip)]
+        future: FileFuture,
+    },
+    FileWithPath(FileWithPath),
+}
+
+#[cfg(any(test, feature = "e2e_tests"))]
+impl std::cmp::PartialEq for LazyFile {
+    // This is only used in tests, so it's fine to panic
+    #[expect(clippy::panic)]
+    fn eq(&self, _other: &Self) -> bool {
+        panic!("Tried to check LazyFile equality")
+    }
+}
+
+impl LazyFile {
+    pub async fn resolve(&self) -> Result<Cow<'_, FileWithPath>, Error> {
+        match self {
+            LazyFile::Url {
+                future,
+                file_url: _,
+            } => Ok(Cow::Owned(future.clone().await?)),
+            LazyFile::FileWithPath(file) => Ok(Cow::Borrowed(file)),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct FileUrl {
+    pub url: Url,
+    pub mime_type: Option<MediaType>,
 }
 
 /// Holds a lazily-resolved file from a `LazyResolvedInputMessageContent::File`.
@@ -61,7 +104,7 @@ pub enum LazyResolvedInputMessageContent {
     Thought(Thought),
     // When we add support for forwarding image urls to the model provider,
     // we'll store additional information here
-    File(FileFuture),
+    File(Box<LazyFile>),
     Unknown {
         data: Value,
         model_provider_name: Option<String>,
@@ -376,10 +419,9 @@ impl ResolvedInputMessageContent {
             ResolvedInputMessageContent::Thought(thought) => {
                 LazyResolvedInputMessageContent::Thought(thought)
             }
-            // We already have a resolved file, so construct an immediately-ready future
-            ResolvedInputMessageContent::File(file) => LazyResolvedInputMessageContent::File(
-                futures::future::ready(Ok(*file)).boxed().shared(),
-            ),
+            ResolvedInputMessageContent::File(file) => {
+                LazyResolvedInputMessageContent::File(Box::new(LazyFile::FileWithPath(*file)))
+            }
             ResolvedInputMessageContent::Unknown {
                 data,
                 model_provider_name,
@@ -426,9 +468,78 @@ impl std::fmt::Display for FileWithPath {
     }
 }
 
+impl RateLimitedInputContent for LazyFile {
+    fn estimated_input_token_usage(&self) -> u64 {
+        match self {
+            LazyFile::FileWithPath(FileWithPath {
+                file: _,
+                storage_path: _,
+            }) => {}
+            // Forwarding a url is inherently incompatible with input token estimation,
+            // so we'll need to continue using a hardcoded value here, even if we start
+            // estimating tokens LazyFile::FileWithPath
+            LazyFile::Url {
+                file_url: _,
+                future: _,
+            } => {}
+        }
+        10_000 // Hardcoded value for file size estimation, we will improve later
+    }
+}
+
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl FileWithPath {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
+/// Like `RequestMessage`, but holds fully-resolved files instead of `LazyFile`s
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+pub struct ResolvedRequestMessage {
+    pub role: Role,
+    pub content: Vec<ResolvedContentBlock>,
+}
+
+impl ResolvedRequestMessage {
+    pub fn into_request_message(self) -> RequestMessage {
+        RequestMessage {
+            role: self.role,
+            content: self
+                .content
+                .into_iter()
+                .map(ResolvedContentBlock::into_content_block)
+                .collect(),
+        }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl ResolvedRequestMessage {
+    #[getter]
+    fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        use pyo3::types::PyList;
+
+        use crate::inference::types::pyo3_helpers::resolved_content_block_to_python;
+
+        let content = self
+            .content
+            .iter()
+            .map(|c| resolved_content_block_to_python(py, c))
+            .collect::<PyResult<Vec<_>>>()?;
+        PyList::new(py, content).map(Bound::into_any)
+    }
+
+    #[getter]
+    fn get_role(&self) -> String {
+        self.role.to_string()
+    }
+
     pub fn __repr__(&self) -> String {
         self.to_string()
     }

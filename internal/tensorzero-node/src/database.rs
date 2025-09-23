@@ -1,9 +1,9 @@
 use serde::Deserialize;
-use tensorzero::{setup_clickhouse_without_config, DatabaseConnection, TimeWindow};
+use tensorzero::{setup_clickhouse_without_config, ClickHouseConnection, TimeWindow};
 use uuid::Uuid;
 
 #[napi(js_name = "DatabaseClient")]
-pub struct DatabaseClient(Box<dyn DatabaseConnection>);
+pub struct DatabaseClient(Box<dyn ClickHouseConnection>);
 
 #[napi]
 impl DatabaseClient {

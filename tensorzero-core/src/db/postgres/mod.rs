@@ -5,6 +5,8 @@ use sqlx::{migrate, postgres::PgPoolOptions, PgPool, Row};
 
 use crate::error::{Error, ErrorDetails};
 
+pub mod rate_limiting;
+
 #[derive(Debug, Clone)]
 pub enum PostgresConnectionInfo {
     Enabled { pool: PgPool },
