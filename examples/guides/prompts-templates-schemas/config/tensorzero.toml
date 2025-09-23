@@ -3,6 +3,7 @@
 [functions.generate_haiku_with_topic]
 type = "chat"
 user_schema = "functions/generate_haiku_with_topic/user_schema.json" # relative to tensorzero.toml
+schemas.topic.path = "functions/generate_haiku_with_topic/user_schema.json" # relative to tensorzero.toml
 # system_schema = "..."
 # assistant_schema = "..."
 
@@ -10,5 +11,6 @@ user_schema = "functions/generate_haiku_with_topic/user_schema.json" # relative 
 type = "chat_completion"
 model = "openai::gpt-4o-mini"
 user_template = "functions/generate_haiku_with_topic/gpt_4o_mini/user_template.minijinja" # relative to tensorzero.toml
+templates.topic.path = "functions/generate_haiku_with_topic/gpt_4o_mini/user_template.minijinja" # relative to tensorzero.toml
 # system_template = "..."
 # assistant_template = "..."

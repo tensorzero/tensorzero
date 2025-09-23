@@ -31,7 +31,7 @@ pip install -r requirements.txt
 b. Run the example:
 
 ```bash
-python main.py
+python tensorzero_sdk.py
 ```
 
 </details>
@@ -48,7 +48,7 @@ pip install -r requirements.txt
 b. Run the example:
 
 ```bash
-python main_openai.py
+python openai_sdk.py
 ```
 
 </details>
@@ -70,7 +70,8 @@ curl -X POST http://localhost:3000/inference \
           "role": "user",
           "content": [
             {
-              "type": "text",
+              "type": "template",
+              "name": "topic",
               "arguments": {
                 "topic": "artificial intelligence"
               }

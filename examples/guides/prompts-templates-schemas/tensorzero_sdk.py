@@ -9,7 +9,13 @@ def generate_haiku(topic):
                 "messages": [
                     {
                         "role": "user",
-                        "content": [{"type": "text", "arguments": {"topic": topic}}],
+                        "content": [
+                            {
+                                "type": "template",
+                                "name": "topic",
+                                "arguments": {"topic": topic},
+                            }
+                        ],
                     }
                 ],
             },

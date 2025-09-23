@@ -9,7 +9,11 @@ def generate_haiku(topic):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "tensorzero::arguments": {"topic": topic}}
+                        {
+                            "type": "tensorzero::template",
+                            "name": "topic",
+                            "arguments": {"topic": topic},
+                        }
                     ],
                 },
             ],
