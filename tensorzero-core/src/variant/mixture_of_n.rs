@@ -1,6 +1,7 @@
+use std::collections::HashSet;
 use std::fmt;
 
-use futures::future::join_all;
+use futures::future::{join_all, try_join_all};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -12,15 +13,16 @@ use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
+use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
 };
 use crate::inference::types::{
     ChatInferenceResultChunk, ContentBlockChatOutput, ContentBlockChunk, InferenceResultChunk,
-    JsonInferenceResultChunk, RequestMessagesOrBatch, ResolvedInput, TextChunk, ThoughtChunk,
-    Usage,
+    JsonInferenceResultChunk, RequestMessagesOrBatch, TextChunk, ThoughtChunk, Usage,
 };
 use crate::model::ModelTable;
+use crate::rate_limiting::TicketBorrows;
 use crate::tool::ToolCallChunk;
 use crate::{
     endpoints::inference::InferenceParams,
@@ -108,7 +110,7 @@ impl UninitializedMixtureOfNConfig {
 impl Variant for MixtureOfNConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -141,7 +143,7 @@ impl Variant for MixtureOfNConfig {
 
     async fn infer_stream<'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -230,9 +232,13 @@ impl Variant for MixtureOfNConfig {
         self.fuser.inner.get_all_template_paths()
     }
 
+    fn get_all_explicit_template_names(&self) -> HashSet<String> {
+        self.fuser.inner.get_all_explicit_template_names()
+    }
+
     async fn start_batch_inference<'a>(
         &'a self,
-        _input: &[ResolvedInput],
+        _input: &[LazyResolvedInput],
         _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
         _inference_configs: &'a [InferenceConfig<'a>],
@@ -303,6 +309,7 @@ pub fn stream_inference_from_non_stream(
             }
         },
         cached: model_inference_result.cached,
+        ticket_borrow: TicketBorrows::empty(),
     };
     let stream = make_stream_from_non_stream(inference_result, Some(usage))?;
     Ok((stream, model_used_info))
@@ -389,7 +396,7 @@ impl MixtureOfNConfig {
     /// Infer each candidate variant concurrently and return the results.
     async fn infer_candidates<'a, 'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -481,7 +488,7 @@ impl MixtureOfNConfig {
     #[expect(clippy::too_many_arguments)]
     async fn fuse_candidates<'a, 'request>(
         &'a self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         function: &'a FunctionConfig,
         models: &'a ModelTable,
         inference_config: &'request InferenceConfig<'request>,
@@ -577,7 +584,7 @@ impl MixtureOfNConfig {
 ///  * Return the output of the fuser.
 async fn inner_fuse_candidates<'a, 'request>(
     fuser: &'a FuserConfig,
-    input: &'request ResolvedInput,
+    input: &'request LazyResolvedInput,
     models: &'a ModelTable,
     function: &'a FunctionConfig,
     inference_config: &'request InferenceConfig<'request>,
@@ -585,14 +592,16 @@ async fn inner_fuse_candidates<'a, 'request>(
     candidates: &[InferenceResult],
 ) -> Result<InferenceResult, Error> {
     let mut inference_params = InferenceParams::default();
-    let (inference_request, included_indices) = fuser.prepare_request(
-        input,
-        function,
-        inference_config,
-        candidates,
-        &mut inference_params,
-        false,
-    )?;
+    let (inference_request, included_indices) = fuser
+        .prepare_request(
+            input,
+            function,
+            inference_config,
+            candidates,
+            &mut inference_params,
+            false,
+        )
+        .await?;
     if included_indices.is_empty() {
         return Err(ErrorDetails::Inference {
             message: "No valid candidates available to prepare request.".to_string(),
@@ -628,7 +637,7 @@ async fn inner_fuse_candidates<'a, 'request>(
 ///  * Return the output of the fuser.
 async fn inner_fuse_candidates_stream<'a, 'request>(
     fuser: &'a FuserConfig,
-    input: &'request ResolvedInput,
+    input: &'request LazyResolvedInput,
     models: &'a ModelTable,
     function: &'a FunctionConfig,
     inference_config: &'request InferenceConfig<'request>,
@@ -636,14 +645,16 @@ async fn inner_fuse_candidates_stream<'a, 'request>(
     candidates: &[InferenceResult],
 ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
     let mut params = InferenceParams::default();
-    let (inference_request, included_indices) = fuser.prepare_request(
-        input,
-        function,
-        inference_config,
-        candidates,
-        &mut params,
-        true,
-    )?;
+    let (inference_request, included_indices) = fuser
+        .prepare_request(
+            input,
+            function,
+            inference_config,
+            candidates,
+            &mut params,
+            true,
+        )
+        .await?;
     if included_indices.is_empty() {
         return Err(ErrorDetails::Inference {
             message: "No valid candidates available to prepare request.".to_string(),
@@ -772,9 +783,9 @@ impl FuserConfig {
     /// # Errors
     ///
     /// Returns an `Error` if any of the candidate outputs fail to serialize or if templating fails.
-    fn prepare_request<'a, 'request>(
+    async fn prepare_request<'a, 'request>(
         &'a self,
-        input: &'request ResolvedInput,
+        input: &'request LazyResolvedInput,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         candidates: &[InferenceResult],
@@ -793,15 +804,13 @@ impl FuserConfig {
             input.system.as_ref(),
             max_index,
         )?);
-        let messages = input
-            .messages
-            .iter()
-            .map(|message| {
-                self.inner
-                    .prepare_request_message(inference_config.templates, message)
-            })
-            .chain(std::iter::once(Ok(candidate_message)))
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut messages = try_join_all(input.messages.iter().map(|message| {
+            self.inner
+                .prepare_request_message(inference_config.templates, message)
+        }))
+        .await?;
+
+        messages.push(candidate_message);
         inference_params
             .chat_completion
             .backfill_with_variant_params(
@@ -853,16 +862,16 @@ impl FuserConfig {
 mod tests {
     use std::collections::HashMap;
 
-    use reqwest::Client;
     use tokio_stream::StreamExt;
     use uuid::Uuid;
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
         config::{SchemaData, UninitializedSchemas},
-        db::clickhouse::ClickHouseConnectionInfo,
+        db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
         function::{FunctionConfigChat, FunctionConfigJson},
+        http::TensorzeroHttpClient,
         inference::types::{
             ChatInferenceResult, FinishReason, InternalJsonInferenceOutput, JsonInferenceResult,
             Latency, ModelInferenceResponseWithMetadata, Text, Thought,
@@ -1246,6 +1255,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
             implicit_tool_call_config: ToolCallConfig::default(),
             description: None,
+            all_template_names: HashSet::new(),
         });
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
@@ -1336,19 +1346,23 @@ mod tests {
             },
         )]))
         .expect("Failed to create model table");
-        let client = Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
         let inference_clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
+            otlp_config: &Default::default(),
         };
-        let input = ResolvedInput {
+        let input = LazyResolvedInput {
             system: None,
             messages: vec![],
         };
@@ -1444,7 +1458,7 @@ mod tests {
             );
             ModelTable::try_from(map).expect("Failed to create model table")
         };
-        let input = ResolvedInput {
+        let input = LazyResolvedInput {
             system: None,
             messages: vec![],
         };
@@ -1519,7 +1533,7 @@ mod tests {
             );
             ModelTable::try_from(map).expect("Failed to create model table")
         };
-        let input = ResolvedInput {
+        let input = LazyResolvedInput {
             system: None,
             messages: vec![],
         };
@@ -1530,6 +1544,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             description: None,
+            all_explicit_templates_names: HashSet::new(),
         });
 
         let InferenceOrStreamResult::NonStream(result) = mixture_of_n_variant

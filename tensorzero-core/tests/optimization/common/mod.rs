@@ -14,17 +14,20 @@ use tensorzero::{
 use tensorzero_core::{
     cache::CacheOptions,
     config::{Config, ConfigFileGlob, ProviderTypesConfig},
-    db::clickhouse::test_helpers::CLICKHOUSE_URL,
-    db::clickhouse::{ClickHouseConnectionInfo, ClickhouseFormat},
+    db::{
+        clickhouse::{test_helpers::CLICKHOUSE_URL, ClickHouseConnectionInfo, ClickhouseFormat},
+        postgres::PostgresConnectionInfo,
+    },
     endpoints::inference::InferenceClients,
+    http::TensorzeroHttpClient,
     inference::types::{
         file::Base64FileMetadata,
         resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
         stored_input::StoredFile,
         Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
-        ModelInput, RequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent,
-        Text,
+        ModelInput, RequestMessage, ResolvedContentBlock, ResolvedRequestMessage, StoredInput,
+        StoredInputMessage, StoredInputMessageContent, Text,
     },
     optimization::{
         JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
@@ -73,7 +76,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .await
         .unwrap();
 
-    let client = reqwest::Client::new();
+    let client = TensorzeroHttpClient::new().unwrap();
     let test_examples = get_examples(test_case, 10);
     let val_examples = Some(get_examples(test_case, 10));
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
@@ -86,6 +89,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
             config_file: Some(config_path.clone()),
             clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+            postgres_url: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -181,8 +185,12 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
             let clients = InferenceClients {
                 http_client: &client,
                 clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
+                postgres_connection_info: &PostgresConnectionInfo::Disabled,
                 credentials: &HashMap::new(),
                 cache_options: &CacheOptions::default(),
+                tags: &Default::default(),
+                rate_limiting_config: &Default::default(),
+                otlp_config: &Default::default(),
             };
             // We didn't produce a real model, so there's nothing to test
             if use_mock_inference_provider() {
@@ -271,9 +279,9 @@ fn generate_text_example() -> RenderedSample {
         function_name: "basic_test".to_string(),
         input: ModelInput {
             system: Some(system_prompt.clone()),
-            messages: vec![RequestMessage {
+            messages: vec![ResolvedRequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::Text(Text {
+                content: vec![ResolvedContentBlock::Text(Text {
                     text: "What is the capital of France?".to_string(),
                 })],
             }],
@@ -322,19 +330,19 @@ fn generate_tool_call_example() -> RenderedSample {
         input: ModelInput {
             system: Some(system_prompt.clone()),
             messages: vec![
-                RequestMessage {
+                ResolvedRequestMessage {
                     role: Role::User,
-                    content: vec![ContentBlock::Text(Text {
+                    content: vec![ResolvedContentBlock::Text(Text {
                         text: "What is the weather in Paris?".to_string(),
                     })],
                 },
-                RequestMessage {
+                ResolvedRequestMessage {
                     role: Role::Assistant,
                     content: vec![
-                        ContentBlock::Text(Text {
+                        ResolvedContentBlock::Text(Text {
                             text: "Let me look that up for you.".to_string(),
                         }),
-                        ContentBlock::ToolCall(ToolCall {
+                        ResolvedContentBlock::ToolCall(ToolCall {
                             name: "get_weather".to_string(),
                             arguments: serde_json::json!({
                                 "location": "Paris"
@@ -344,9 +352,9 @@ fn generate_tool_call_example() -> RenderedSample {
                         }),
                     ],
                 },
-                RequestMessage {
+                ResolvedRequestMessage {
                     role: Role::User,
-                    content: vec![ContentBlock::ToolResult(ToolResult {
+                    content: vec![ResolvedContentBlock::ToolResult(ToolResult {
                         name: "get_weather".to_string(),
                         result: serde_json::json!({
                             "weather": "sunny, 25 degrees Celsius",
@@ -355,15 +363,15 @@ fn generate_tool_call_example() -> RenderedSample {
                         id: "call_1".to_string(),
                     })],
                 },
-                RequestMessage {
+                ResolvedRequestMessage {
                     role: Role::Assistant,
-                    content: vec![ContentBlock::Text(Text {
+                    content: vec![ResolvedContentBlock::Text(Text {
                         text: "The weather in Paris is sunny, 25 degrees Celsius.".to_string(),
                     })],
                 },
-                RequestMessage {
+                ResolvedRequestMessage {
                     role: Role::User,
-                    content: vec![ContentBlock::Text(Text {
+                    content: vec![ResolvedContentBlock::Text(Text {
                         text: "What is the weather in London?".to_string(),
                     })],
                 },
@@ -460,13 +468,13 @@ fn generate_image_example() -> RenderedSample {
         function_name: "basic_test".to_string(),
         input: ModelInput {
             system: Some(system_prompt.clone()),
-            messages: vec![RequestMessage {
+            messages: vec![ResolvedRequestMessage {
                 role: Role::User,
                 content: vec![
-                    ContentBlock::Text(Text {
+                    ResolvedContentBlock::Text(Text {
                         text: "What is the main color of this image?".to_string(),
                     }),
-                    ContentBlock::File(Box::new(FileWithPath {
+                    ResolvedContentBlock::File(Box::new(FileWithPath {
                         file: Base64File {
                             url: None,
                             mime_type: mime::IMAGE_PNG,
@@ -525,6 +533,7 @@ pub async fn make_embedded_gateway() -> Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        postgres_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,

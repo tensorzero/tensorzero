@@ -118,8 +118,6 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-      jaeger:
-        condition: service_healthy
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
     healthcheck:
@@ -171,9 +169,11 @@ services:
       # Test environment variables
       TENSORZERO_GATEWAY_URL: http://gateway:3000
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/tensorzero_e2e_tests
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_e2e_tests
       TENSORZERO_MINIO_URL: http://minio:9000
       TENSORZERO_MOCK_INFERENCE_PROVIDER_BASE_URL: http://mock-inference-provider:3030
-      TENSORZERO_JAEGER_URL: http://jaeger:16686
+      TENSORZERO_TEMPO_URL: http://tempo:16686
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
       TENSORZERO_E2E_PROXY: http://provider-proxy:3003
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
@@ -228,13 +228,13 @@ services:
         condition: service_completed_successfully
       clickhouse:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
       mock-inference-provider:
         condition: service_healthy
       provider-proxy:
         condition: service_healthy
       minio:
-        condition: service_healthy
-      jaeger:
         condition: service_healthy
       otel-collector:
         condition: service_started

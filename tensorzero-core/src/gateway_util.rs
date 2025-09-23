@@ -2,11 +2,12 @@ use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use crate::db::postgres::PostgresConnectionInfo;
 use crate::endpoints::openai_compatible::RouterExt;
 use axum::extract::{rejection::JsonRejection, FromRequest, Json, Request};
 use axum::Router;
-use reqwest::{Client, NoProxy, Proxy};
 use serde::de::DeserializeOwned;
+use sqlx::postgres::PgPoolOptions;
 use tokio::runtime::Handle;
 use tokio::sync::oneshot::Sender;
 use tokio_util::sync::CancellationToken;
@@ -18,6 +19,7 @@ use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
+use crate::http::TensorzeroHttpClient;
 
 /// Represents an active gateway (either standalone or embedded)
 /// The contained `app_state` can be freely cloned and dropped.
@@ -83,8 +85,9 @@ impl Drop for GatewayHandle {
 #[expect(clippy::manual_non_exhaustive)]
 pub struct AppStateData {
     pub config: Arc<Config>,
-    pub http_client: Client,
+    pub http_client: TensorzeroHttpClient,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
+    pub postgres_connection_info: PostgresConnectionInfo,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
@@ -101,33 +104,46 @@ impl GatewayHandle {
         {
             return Err(ErrorDetails::ClickHouseConfiguration { message: "`CLICKHOUSE_URL` is deprecated and no longer accepted. Please set `TENSORZERO_CLICKHOUSE_URL`".to_string() }.into());
         }
-        Self::new_with_clickhouse(config, clickhouse_url).await
+        let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
+        Self::new_with_databases(config, clickhouse_url, postgres_url).await
     }
 
-    async fn new_with_clickhouse(
+    async fn new_with_databases(
         config: Arc<Config>,
         clickhouse_url: Option<String>,
+        postgres_url: Option<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
-        let http_client = setup_http_client()?;
-        Ok(Self::new_with_clickhouse_and_http_client(
+        let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
+        let http_client = TensorzeroHttpClient::new()?;
+        Ok(Self::new_with_database_and_http_client(
             config,
             clickhouse_connection_info,
+            postgres_connection_info,
             http_client,
         ))
     }
 
+    /// # Panics
+    /// Panics if a `TensorzeroHttpClient` cannot be constructed
     #[cfg(test)]
     pub fn new_unit_test_data(config: Arc<Config>, clickhouse_healthy: bool) -> Self {
-        let http_client = reqwest::Client::new();
+        let http_client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_mock(clickhouse_healthy);
-        Self::new_with_clickhouse_and_http_client(config, clickhouse_connection_info, http_client)
+        let postgres_connection_info = PostgresConnectionInfo::Disabled;
+        Self::new_with_database_and_http_client(
+            config,
+            clickhouse_connection_info,
+            postgres_connection_info,
+            http_client,
+        )
     }
 
-    pub fn new_with_clickhouse_and_http_client(
+    pub fn new_with_database_and_http_client(
         config: Arc<Config>,
         clickhouse_connection_info: ClickHouseConnectionInfo,
-        http_client: Client,
+        postgres_connection_info: PostgresConnectionInfo,
+        http_client: TensorzeroHttpClient,
     ) -> Self {
         let cancel_token = CancellationToken::new();
         setup_howdy(
@@ -140,6 +156,7 @@ impl GatewayHandle {
                 config,
                 http_client,
                 clickhouse_connection_info,
+                postgres_connection_info,
                 _private: (),
             },
             cancel_token,
@@ -212,6 +229,28 @@ pub async fn setup_clickhouse(
     Ok(clickhouse_connection_info)
 }
 
+pub async fn setup_postgres(
+    config: &Config,
+    postgres_url: Option<String>,
+) -> Result<PostgresConnectionInfo, Error> {
+    let Some(postgres_url) = postgres_url else {
+        return Ok(PostgresConnectionInfo::Disabled);
+    };
+
+    let pool = PgPoolOptions::new()
+        .max_connections(config.postgres.connection_pool_size)
+        .connect(&postgres_url)
+        .await
+        .map_err(|err| {
+            Error::new(ErrorDetails::PostgresConnectionInitialization {
+                message: err.to_string(),
+            })
+        })?;
+    let connection_info = PostgresConnectionInfo::new_with_pool(pool);
+    connection_info.check_migrations().await?;
+    Ok(connection_info)
+}
+
 /// Custom Axum extractor that validates the JSON body and deserializes it into a custom type
 ///
 /// When this extractor is present, we don't check if the `Content-Type` header is `application/json`,
@@ -255,39 +294,6 @@ where
     }
 }
 
-// This is set high enough that it should never be hit for a normal model response.
-// In the future, we may want to allow overriding this at the model provider level.
-const DEFAULT_HTTP_CLIENT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
-
-pub fn setup_http_client() -> Result<Client, Error> {
-    let mut http_client_builder = Client::builder().timeout(DEFAULT_HTTP_CLIENT_TIMEOUT);
-
-    if cfg!(feature = "e2e_tests") {
-        if let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY") {
-            tracing::info!("Using proxy URL from TENSORZERO_E2E_PROXY: {proxy_url}");
-            http_client_builder = http_client_builder
-                .proxy(
-                    Proxy::all(proxy_url)
-                        .map_err(|e| {
-                            Error::new(ErrorDetails::AppState {
-                                message: format!("Invalid proxy URL: {e}"),
-                            })
-                        })?
-                        .no_proxy(NoProxy::from_string("localhost,127.0.0.1,minio")),
-                )
-                // When running e2e tests, we use `provider-proxy` as an MITM proxy
-                // for caching, so we need to accept the invalid (self-signed) cert.
-                .danger_accept_invalid_certs(true);
-        }
-    }
-
-    http_client_builder.build().map_err(|e| {
-        Error::new(ErrorDetails::AppState {
-            message: format!("Failed to build HTTP client: {e}"),
-        })
-    })
-}
-
 // We hold on to these fields so that their Drop impls run when `ShutdownHandle` is dropped
 pub struct ShutdownHandle {
     #[expect(dead_code)]
@@ -305,6 +311,7 @@ pub struct ShutdownHandle {
 pub async fn start_openai_compatible_gateway(
     config_file: Option<String>,
     clickhouse_url: Option<String>,
+    postgres_url: Option<String>,
 ) -> Result<(SocketAddr, ShutdownHandle), Error> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
@@ -324,7 +331,8 @@ pub async fn start_openai_compatible_gateway(
     } else {
         Arc::new(Config::default())
     };
-    let gateway_handle = GatewayHandle::new_with_clickhouse(config, clickhouse_url).await?;
+    let gateway_handle =
+        GatewayHandle::new_with_databases(config, clickhouse_url, postgres_url).await?;
 
     let router = Router::new()
         .register_openai_compatible_routes()

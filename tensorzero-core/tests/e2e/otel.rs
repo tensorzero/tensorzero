@@ -10,14 +10,14 @@ use opentelemetry_sdk::{
 };
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    FeedbackParams, InferenceOutput, Role,
+    FeedbackParams, InferenceOutput, InferenceResponse, Role,
 };
-use tensorzero_core::inference::types::TextKind;
 use tensorzero_core::observability::build_opentelemetry_layer;
+use tensorzero_core::{config::OtlpTracesFormat, inference::types::TextKind};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
-use crate::providers::common::{make_embedded_gateway, make_embedded_gateway_no_config};
+use crate::providers::common::{make_embedded_gateway, make_embedded_gateway_with_config};
 
 type CapturedSpans = Arc<Mutex<Option<Vec<SpanData>>>>;
 
@@ -104,10 +104,27 @@ pub fn attrs_to_map(attrs: &[KeyValue]) -> HashMap<String, Value> {
 }
 
 #[tokio::test]
-pub async fn test_capture_simple_inference_spans() {
+pub async fn test_capture_simple_inference_spans_genai_tags() {
+    test_capture_simple_inference_spans(OtlpTracesFormat::OpenTelemetry, "opentelemetry").await;
+}
+
+#[tokio::test]
+pub async fn test_capture_simple_inference_spans_openinference_tags() {
+    test_capture_simple_inference_spans(OtlpTracesFormat::OpenInference, "openinference").await;
+}
+
+pub async fn test_capture_simple_inference_spans(mode: OtlpTracesFormat, config_mode: &str) {
     let exporter = install_capturing_otel_exporter();
 
-    let client = make_embedded_gateway_no_config().await;
+    let config = format!(
+        "
+    [gateway.export.otlp.traces]
+    enabled = true
+    format = \"{config_mode}\"
+    "
+    );
+
+    let client = make_embedded_gateway_with_config(&config).await;
     let res = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
@@ -132,6 +149,14 @@ pub async fn test_capture_simple_inference_spans() {
         panic!("Expected non-streaming output, got: {res:#?}");
     };
 
+    let InferenceResponse::Chat(response) = output else {
+        panic!("Expected chat response, got: {output:#?}");
+    };
+
+    let input_tokens = response.usage.input_tokens as i64;
+    let output_tokens = response.usage.output_tokens as i64;
+    let total_tokens = (response.usage.input_tokens + response.usage.output_tokens) as i64;
+
     let all_spans = exporter.take_spans();
     let num_spans = all_spans.len();
     let spans = build_span_map(all_spans);
@@ -146,11 +171,11 @@ pub async fn test_capture_simple_inference_spans() {
     assert_eq!(root_attr_map["model_name"], "dummy::good".into());
     assert_eq!(
         root_attr_map["inference_id"],
-        output.inference_id().to_string().into()
+        response.inference_id.to_string().into()
     );
     assert_eq!(
         root_attr_map["episode_id"],
-        output.episode_id().to_string().into()
+        response.episode_id.to_string().into()
     );
     assert_eq!(root_attr_map.get("function_name"), None);
     assert_eq!(root_attr_map.get("variant_name"), None);
@@ -203,15 +228,79 @@ pub async fn test_capture_simple_inference_spans() {
     assert_eq!(model_provider_span.status, Status::Unset);
     let model_provider_attr_map = attrs_to_map(&model_provider_span.attributes);
     assert_eq!(model_provider_attr_map["provider_name"], "dummy".into());
-    assert_eq!(
-        model_provider_attr_map["gen_ai.operation.name"],
-        "chat".into()
-    );
-    assert_eq!(model_provider_attr_map["gen_ai.system"], "dummy".into());
-    assert_eq!(
-        model_provider_attr_map["gen_ai.request.model"],
-        "good".into()
-    );
+
+    match mode {
+        OtlpTracesFormat::OpenTelemetry => {
+            assert_eq!(
+                model_provider_attr_map["gen_ai.operation.name"],
+                "chat".into()
+            );
+            assert_eq!(model_provider_attr_map["gen_ai.system"], "dummy".into());
+            assert_eq!(
+                model_provider_attr_map["gen_ai.request.model"],
+                "good".into()
+            );
+            assert!(!model_provider_attr_map.contains_key("openinference.span.kind"));
+            assert!(!model_provider_attr_map.contains_key("llm.system"));
+            assert!(!model_provider_attr_map.contains_key("llm.model_name"));
+
+            assert_eq!(
+                model_provider_attr_map["gen_ai.usage.input_tokens"],
+                input_tokens.into()
+            );
+            assert_eq!(
+                model_provider_attr_map["gen_ai.usage.output_tokens"],
+                output_tokens.into()
+            );
+            assert_eq!(
+                model_provider_attr_map["gen_ai.usage.total_tokens"],
+                total_tokens.into()
+            );
+            assert!(!model_provider_attr_map.contains_key("llm.token_count.prompt"));
+            assert!(!model_provider_attr_map.contains_key("llm.token_count.completion"));
+            assert!(!model_provider_attr_map.contains_key("llm.token_count.total"));
+        }
+        OtlpTracesFormat::OpenInference => {
+            assert_eq!(
+                model_provider_attr_map["openinference.span.kind"],
+                "LLM".into()
+            );
+            assert_eq!(model_provider_attr_map["llm.system"], "dummy".into());
+            assert_eq!(model_provider_attr_map["llm.model_name"], "good".into());
+            assert!(!model_provider_attr_map.contains_key("gen_ai.operation.name"));
+            assert!(!model_provider_attr_map.contains_key("gen_ai.system"));
+            assert!(!model_provider_attr_map.contains_key("gen_ai.request.model"));
+
+            assert_eq!(
+                model_provider_attr_map["llm.token_count.prompt"],
+                input_tokens.into()
+            );
+            assert_eq!(
+                model_provider_attr_map["llm.token_count.completion"],
+                output_tokens.into()
+            );
+            assert_eq!(
+                model_provider_attr_map["llm.token_count.total"],
+                total_tokens.into()
+            );
+            assert_eq!(
+                model_provider_attr_map["input.mime_type"],
+                "application/json".into()
+            );
+            assert_eq!(
+                model_provider_attr_map["output.mime_type"],
+                "application/json".into()
+            );
+            assert_eq!(model_provider_attr_map["input.value"], "raw request".into());
+            assert_eq!(
+                model_provider_attr_map["output.value"],
+                "{\n  \"id\": \"id\",\n  \"object\": \"text.completion\",\n  \"created\": 1618870400,\n  \"model\": \"text-davinci-002\",\n  \"choices\": [\n    {\n      \"text\": \"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\",\n      \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": null\n    }\n  ]\n}".into()
+            );
+            assert!(!model_provider_attr_map.contains_key("gen_ai.usage.input_tokens"));
+            assert!(!model_provider_attr_map.contains_key("gen_ai.usage.output_tokens"));
+            assert!(!model_provider_attr_map.contains_key("gen_ai.usage.total_tokens"));
+        }
+    }
     assert_eq!(model_attr_map["stream"], false.into());
 
     assert_eq!(
@@ -225,11 +314,28 @@ pub async fn test_capture_simple_inference_spans() {
 }
 
 #[tokio::test]
-pub async fn test_capture_model_error() {
+pub async fn test_capture_model_error_genai_tags() {
+    test_capture_model_error(OtlpTracesFormat::OpenTelemetry, "opentelemetry").await;
+}
+
+#[tokio::test]
+pub async fn test_capture_model_error_openinference_tags() {
+    test_capture_model_error(OtlpTracesFormat::OpenInference, "openinference").await;
+}
+
+pub async fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str) {
     let episode_uuid = Uuid::now_v7();
     let exporter = install_capturing_otel_exporter();
 
-    let client = make_embedded_gateway_no_config().await;
+    let config = format!(
+        "
+    [gateway.export.otlp.traces]
+    enabled = true
+    format = \"{config_mode}\"
+    "
+    );
+
+    let client = make_embedded_gateway_with_config(&config).await;
     let _err = client
         .inference(ClientInferenceParams {
             episode_id: Some(episode_uuid),
@@ -335,15 +441,48 @@ pub async fn test_capture_model_error() {
     );
     let model_provider_attr_map = attrs_to_map(&model_provider_span.attributes);
     assert_eq!(model_provider_attr_map["provider_name"], "openai".into());
-    assert_eq!(
-        model_provider_attr_map["gen_ai.operation.name"],
-        "chat".into()
-    );
-    assert_eq!(model_provider_attr_map["gen_ai.system"], "openai".into());
-    assert_eq!(
-        model_provider_attr_map["gen_ai.request.model"],
-        "missing-model-name".into()
-    );
+
+    match mode {
+        OtlpTracesFormat::OpenTelemetry => {
+            assert_eq!(
+                model_provider_attr_map["gen_ai.operation.name"],
+                "chat".into()
+            );
+            assert_eq!(model_provider_attr_map["gen_ai.system"], "openai".into());
+            assert_eq!(
+                model_provider_attr_map["gen_ai.request.model"],
+                "missing-model-name".into()
+            );
+        }
+        OtlpTracesFormat::OpenInference => {
+            assert_eq!(
+                model_provider_attr_map["openinference.span.kind"],
+                "LLM".into()
+            );
+            assert_eq!(model_provider_attr_map["llm.system"], "openai".into());
+            assert_eq!(
+                model_provider_attr_map["input.mime_type"],
+                "application/json".into()
+            );
+            assert_eq!(
+                model_provider_attr_map["output.mime_type"],
+                "application/json".into()
+            );
+            assert_eq!(
+                model_provider_attr_map["input.value"],
+                "{\"messages\":[{\"role\":\"user\",\"content\":\"What is your name?\"}],\"model\":\"missing-model-name\",\"stream\":false}".into()
+            );
+            // Don't check the exact error message from OpenAI, to prevent this test from breaking whenever OpenAI changes the error details
+            assert!(
+                model_provider_attr_map["output.value"]
+                    .as_str()
+                    .contains("model_not_found"),
+                "Unexpected output value: {:?}",
+                model_provider_attr_map["output.value"]
+            );
+        }
+    }
+
     assert_eq!(model_attr_map["stream"], false.into());
 
     assert_eq!(

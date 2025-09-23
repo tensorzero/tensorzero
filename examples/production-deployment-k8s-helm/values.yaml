@@ -2,6 +2,18 @@
 nameOverride: ""
 fullnameOverride: ""
 
+# Monitoring configurations
+monitoring:
+  # Configurations for metrics scraping via Prometheus
+  metrics:
+    # Enable creation of ServiceMonitor for the TensorZero gateway. Requires
+    # Prometheus Operator to already exist on your cluster.
+    enabled: false
+    # The desired scrape interval for the ServiceMonitor.
+    interval: "30s"
+    # Additional label key-values to attach to the created ServiceMonitor.
+    labels: {}
+
 # Gateway Configuration
 gateway:
   replicaCount: 1
@@ -59,6 +71,10 @@ gateway:
     #    hosts:
     #      - tensorzero-gateway.local
 
+    # Create legacy ingress with old naming pattern for zero-downtime upgrades
+    # Set to false after migrating DNS/load balancers to the new ingress name
+    createLegacyIngress: true
+
 # UI Configuration
 ui:
   deploy: true # TODO: change this to false if you don't want to deploy the UI
@@ -67,6 +83,7 @@ ui:
     repository: tensorzero/ui
     tag: "" # If empty, uses Chart.appVersion
     pullPolicy: IfNotPresent
+    pullSecret: "" # Optional pull secret for private registries
 
   service:
     type: ClusterIP

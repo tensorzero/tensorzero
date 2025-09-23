@@ -44,11 +44,13 @@ export class TensorZeroClient {
   static async buildEmbedded(
     configPath: string,
     clickhouseUrl?: string | undefined | null,
+    postgresUrl?: string | undefined | null,
     timeout?: number | undefined | null,
   ): Promise<TensorZeroClient> {
     const nativeClient = await NativeTensorZeroClient.buildEmbedded(
       configPath,
       clickhouseUrl,
+      postgresUrl,
       timeout,
     );
     return new TensorZeroClient(nativeClient);
@@ -94,7 +96,7 @@ export class TensorZeroClient {
 
 export default TensorZeroClient;
 
-export async function getConfig(configPath: string): Promise<Config> {
+export async function getConfig(configPath: string | null): Promise<Config> {
   const configString = await nativeGetConfig(configPath);
   return JSON.parse(configString) as Config;
 }

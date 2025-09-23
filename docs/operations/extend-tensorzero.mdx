@@ -1,0 +1,73 @@
+---
+title: Extend TensorZero
+description: Learn how to extend or override TensorZero to access provider features we don't support out of the box.
+---
+
+TensorZero aims to provide a great developer experience while giving you full access to the underlying capabilities of each model provider.
+
+We provide advanced features that let you customize requests and access provider-specific functionality that isn't directly supported in TensorZero.
+You shouldn't need these features most of the time, but they're around if necessary.
+
+<Tip title="Help Us Help You!">
+
+Is there something you weren't able to do with TensorZero?
+Please let us know and we'll try to tackle it — not just for the specific case but a general solution for that class of workflow.
+
+</Tip>
+
+## Features
+
+### `extra_body`
+
+You can use the `extra_body` field to override the request body that TensorZero sends to model providers.
+
+You can set `extra_body` on a variant configuration block, a model provider configuration block, or at inference time.
+See [Configuration Reference](/gateway/configuration-reference/) and [Inference API Reference](/gateway/api-reference/inference/) for more details.
+
+### `extra_headers`
+
+You can use the `extra_headers` field to override the request headers that TensorZero sends to model providers.
+
+You can set `extra_headers` on a variant configuration block, a model provider configuration block, or at inference time.
+See [Configuration Reference](/gateway/configuration-reference/) and [Inference API Reference](/gateway/api-reference/inference/) for more details.
+
+### `include_original_response`
+
+If you enable this feature while running inference, the gateway will return the original response from the model provider along with the TensorZero response.
+
+See [Inference API Reference](/gateway/api-reference/inference/) for more details.
+
+### TensorZero Data
+
+TensorZero stores all its data on your own ClickHouse database.
+
+You can query this data directly by running SQL queries against your ClickHouse instance.
+If you're feeling particularly adventurous, you can also write to ClickHouse directly (though you should be careful when upgrading your TensorZero deployment to account for any database migrations).
+
+See [Data model](/gateway/data-model/) for more details.
+
+## Example: Anthropic Computer Use
+
+At the time of writing, TensorZero hadn't integrated with Anthropic's Computer Use features directly &mdash; but they worked out of the box!
+
+Concretely, Anthropic Computer Use requires setting additional fields to the request body as well as a request header.
+Let's define a TensorZero function that includes these additional parameters:
+
+```toml
+[functions.bash_assistant]
+type = "chat"
+
+[functions.bash_assistant.variants.anthropic_claude_3_7_sonnet_20250219]
+type = "chat_completion"
+model = "anthropic::claude-3-7-sonnet-20250219"
+max_tokens = 2048
+extra_body = [
+    { pointer = "/tools", value = [{ type = "bash_20250124", name = "bash" }] },
+    { pointer = "/thinking", value = { type = "enabled", budget_tokens = 1024 } },
+]
+extra_headers = [
+    { name = "anthropic-beta", value = "computer-use-2025-01-24" },
+]
+```
+
+This example illustrates how you should be able to use the vast majority of features supported by the model provider even if TensorZero doesn't have explicit support for them yet.

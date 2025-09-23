@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::time::Duration;
 
+use futures::future::try_join_all;
 use futures::try_join;
 use http::StatusCode;
 #[cfg(feature = "pyo3")]
@@ -26,6 +27,7 @@ use uuid::Uuid;
 
 use crate::config::{Config, TimeoutsConfig};
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::http::TensorzeroHttpClient;
 use crate::model::UninitializedModelConfig;
 use crate::model::UninitializedModelProvider;
 use crate::model::UninitializedProviderConfig;
@@ -37,6 +39,7 @@ use crate::providers::fireworks::prepare_fireworks_messages;
 use crate::providers::fireworks::FIREWORKS_API_BASE;
 use crate::providers::helpers::UrlParseErrExt;
 use crate::providers::openai::tensorzero_to_openai_assistant_message;
+use crate::stored_inference::LazyRenderedSample;
 use crate::stored_inference::RenderedSample;
 use crate::{
     db::clickhouse::ClickHouseConnectionInfo,
@@ -84,9 +87,8 @@ pub struct FireworksSupervisedRow<'a> {
     tools: Vec<FireworksTool<'a>>,
 }
 
-impl<'a> TryFrom<&'a RenderedSample> for FireworksSupervisedRow<'a> {
-    type Error = Error;
-    fn try_from(inference: &'a RenderedSample) -> Result<Self, Self::Error> {
+impl<'a> FireworksSupervisedRow<'a> {
+    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample) -> Result<Self, Error> {
         let tools = match &inference.tool_params {
             Some(tool_params) => {
                 if tool_params.parallel_tool_calls.unwrap_or_default() {
@@ -98,10 +100,9 @@ impl<'a> TryFrom<&'a RenderedSample> for FireworksSupervisedRow<'a> {
             }
             None => vec![],
         };
-        let mut messages = prepare_fireworks_messages(
-            inference.input.system.as_deref(),
-            &inference.input.messages,
-        )?;
+        let mut messages =
+            prepare_fireworks_messages(inference.system_input.as_deref(), &inference.messages)
+                .await?;
 
         let Some(output) = &inference.output else {
             return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
@@ -118,7 +119,8 @@ impl<'a> TryFrom<&'a RenderedSample> for FireworksSupervisedRow<'a> {
         let final_assistant_message = tensorzero_to_openai_assistant_message(
             Cow::Owned(output_content_blocks),
             PROVIDER_TYPE,
-        )?;
+        )
+        .await?;
         messages.push(final_assistant_message);
         Ok(Self { messages, tools })
     }
@@ -339,7 +341,7 @@ impl FireworksSFTConfig {
     /// Returns `true` if the dataset is in the `READY` state.
     async fn poll_dataset_read(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         api_key: &SecretString,
         dataset_id: &str,
     ) -> Result<bool, Error> {
@@ -398,7 +400,7 @@ impl FireworksSFTConfig {
     /// Returns the Fireworks path to the dataset (e.g. `account/{account_id}/datasets/{dataset_id}`)
     async fn create_and_upload_dataset(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         api_key: &SecretString,
         items: &[FireworksSupervisedRow<'_>],
     ) -> Result<String, Error> {
@@ -521,27 +523,42 @@ impl Optimizer for FireworksSFTConfig {
 
     async fn launch(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
         _config: &Config,
     ) -> Result<Self::Handle, Error> {
-        let train_rows: Vec<FireworksSupervisedRow<'_>> = train_examples
-            .iter()
-            .map(FireworksSupervisedRow::try_from)
-            .collect::<Result<Vec<_>, _>>()?;
+        let train_examples = train_examples
+            .into_iter()
+            .map(RenderedSample::into_lazy_rendered_sample)
+            .collect::<Vec<_>>();
+        let val_examples = val_examples.map(|examples| {
+            examples
+                .into_iter()
+                .map(RenderedSample::into_lazy_rendered_sample)
+                .collect::<Vec<_>>()
+        });
+        let train_rows: Vec<FireworksSupervisedRow<'_>> = try_join_all(
+            train_examples
+                .iter()
+                .map(FireworksSupervisedRow::from_rendered_sample),
+        )
+        .await?;
 
-        let val_rows: Option<Vec<FireworksSupervisedRow<'_>>> = val_examples
-            .as_ref()
-            .map(|examples| {
-                examples
-                    .iter()
-                    .map(FireworksSupervisedRow::try_from)
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .transpose()?;
+        let val_rows = if let Some(examples) = val_examples.as_ref() {
+            Some(
+                try_join_all(
+                    examples
+                        .iter()
+                        .map(FireworksSupervisedRow::from_rendered_sample),
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
 
         let api_key = self.credentials.get_api_key(credentials)?;
 
@@ -763,7 +780,7 @@ struct FireworksDeployedModelRef {
 impl FireworksSFTJobHandle {
     async fn get_model(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         api_key: &SecretString,
         model_path: &str,
     ) -> Result<Option<FireworksModelResponse>, Error> {
@@ -813,7 +830,7 @@ impl FireworksSFTJobHandle {
 
     async fn deploy_or_poll_model(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         api_key: &SecretString,
         model_path: &str,
     ) -> Result<FireworksDeploymentState, Error> {
@@ -881,7 +898,7 @@ impl FireworksSFTJobHandle {
     }
     async fn poll_job(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         api_key: &SecretString,
     ) -> Result<FireworksFineTuningJobResponse, Error> {
         let request = client
@@ -934,7 +951,7 @@ impl FireworksSFTJobHandle {
 impl JobHandle for FireworksSFTJobHandle {
     async fn poll(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
         let fireworks_credentials = build_creds_caching_default(

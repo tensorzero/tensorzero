@@ -1,5 +1,7 @@
+use crate::http::TensorzeroHttpClient;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
+use futures::future::try_join_all;
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions::PyValueError, prelude::*};
 use std::borrow::Cow;
@@ -17,14 +19,14 @@ use crate::model::{
     UninitializedModelProvider, UninitializedProviderConfig,
 };
 use crate::optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput};
-use crate::providers::helpers::{TensorZeroRequestBuilderExt, UrlParseErrExt};
+use crate::providers::helpers::UrlParseErrExt;
 use crate::providers::openai::OpenAIRequestMessage;
 use crate::providers::openai::{tensorzero_to_openai_assistant_message, OpenAITool};
 use crate::providers::together::{
     default_api_key_location, prepare_together_messages, TogetherCredentials, DEFAULT_CREDENTIALS,
     PROVIDER_TYPE, TOGETHER_API_BASE,
 };
-use crate::stored_inference::RenderedSample;
+use crate::stored_inference::{LazyRenderedSample, RenderedSample};
 
 use reqwest::multipart::{Form, Part};
 use secrecy::{ExposeSecret, SecretString};
@@ -205,9 +207,8 @@ pub struct TogetherSupervisedRow<'a> {
     tools: Vec<OpenAITool<'a>>,
 }
 
-impl<'a> TryFrom<&'a RenderedSample> for TogetherSupervisedRow<'a> {
-    type Error = Error;
-    fn try_from(inference: &'a RenderedSample) -> Result<Self, Self::Error> {
+impl<'a> TogetherSupervisedRow<'a> {
+    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample) -> Result<Self, Error> {
         let tools = match &inference.tool_params {
             Some(tool_params) => {
                 if tool_params.parallel_tool_calls.unwrap_or_default() {
@@ -219,10 +220,9 @@ impl<'a> TryFrom<&'a RenderedSample> for TogetherSupervisedRow<'a> {
             }
             None => vec![],
         };
-        let mut messages = prepare_together_messages(
-            inference.input.system.as_deref(),
-            &inference.input.messages,
-        )?;
+        let mut messages =
+            prepare_together_messages(inference.system_input.as_deref(), &inference.messages)
+                .await?;
 
         let Some(output) = &inference.output else {
             return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
@@ -239,7 +239,8 @@ impl<'a> TryFrom<&'a RenderedSample> for TogetherSupervisedRow<'a> {
         let final_assistant_message = tensorzero_to_openai_assistant_message(
             Cow::Owned(output_content_blocks),
             PROVIDER_TYPE,
-        )?;
+        )
+        .await?;
         messages.push(final_assistant_message);
         Ok(Self { messages, tools })
     }
@@ -518,7 +519,7 @@ impl TogetherSFTConfig {
     /// Uploads the given rows as a Together file, returning the file ID
     async fn upload_file(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         api_key: &SecretString,
         items: &[TogetherSupervisedRow<'_>],
         purpose: &'static str,
@@ -692,29 +693,43 @@ impl Optimizer for TogetherSFTConfig {
 
     async fn launch(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
         _config: &Config,
     ) -> Result<Self::Handle, Error> {
+        let train_examples = train_examples
+            .into_iter()
+            .map(RenderedSample::into_lazy_rendered_sample)
+            .collect::<Vec<_>>();
+        let val_examples = val_examples.map(|examples| {
+            examples
+                .into_iter()
+                .map(RenderedSample::into_lazy_rendered_sample)
+                .collect::<Vec<_>>()
+        });
         // TODO(#2642): improve error handling here so we know what index of example failed
-        let train_rows: Vec<TogetherSupervisedRow> = train_examples
-            .iter()
-            .map(TogetherSupervisedRow::try_from)
-            .collect::<Result<Vec<_>, _>>()?;
+        let train_rows: Vec<TogetherSupervisedRow> = try_join_all(
+            train_examples
+                .iter()
+                .map(TogetherSupervisedRow::from_rendered_sample),
+        )
+        .await?;
 
-        let val_rows: Option<Vec<TogetherSupervisedRow>> = val_examples
-            .as_ref()
-            .map(|examples| {
-                examples
-                    .iter()
-                    .map(TogetherSupervisedRow::try_from)
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .transpose()?;
-
+        let val_rows = if let Some(examples) = val_examples.as_ref() {
+            Some(
+                try_join_all(
+                    examples
+                        .iter()
+                        .map(TogetherSupervisedRow::from_rendered_sample),
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
         // Upload the training and validation rows to Together files
         let api_key = self.credentials.get_api_key(credentials)?;
         let train_file_fut = self.upload_file(client, &api_key, &train_rows, "fine-tune");
@@ -816,7 +831,7 @@ impl Optimizer for TogetherSFTConfig {
 impl JobHandle for TogetherSFTJobHandle {
     async fn poll(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
         let together_credentials = build_creds_caching_default(

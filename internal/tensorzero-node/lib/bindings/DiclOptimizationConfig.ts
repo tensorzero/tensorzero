@@ -9,5 +9,6 @@ export type DiclOptimizationConfig = {
   max_concurrency: number;
   k: number;
   model: string;
+  append_to_existing_variants: boolean;
   credential_location: string | null;
 };

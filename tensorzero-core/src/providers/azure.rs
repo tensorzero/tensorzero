@@ -15,6 +15,7 @@ use crate::embeddings::{
 };
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
@@ -194,19 +195,21 @@ impl InferenceProvider for AzureProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         api_key: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = serde_json::to_value(AzureRequest::new(request)?).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing Azure request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
+        let request_body =
+            serde_json::to_value(AzureRequest::new(request).await?).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error serializing Azure request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
         let endpoint = self.endpoint.get_endpoint(api_key)?;
         let request_url = get_azure_chat_url(&endpoint, &self.deployment_id)?;
         let start_time = Instant::now();
@@ -287,19 +290,21 @@ impl InferenceProvider for AzureProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(AzureRequest::new(request)?).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing Azure request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
+        let request_body =
+            serde_json::to_value(AzureRequest::new(request).await?).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error serializing Azure request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
         let endpoint = self.endpoint.get_endpoint(dynamic_api_keys)?;
         let request_url = get_azure_chat_url(&endpoint, &self.deployment_id)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
@@ -329,7 +334,7 @@ impl InferenceProvider for AzureProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
+        _client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -341,7 +346,7 @@ impl InferenceProvider for AzureProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -355,7 +360,7 @@ impl EmbeddingProvider for AzureProvider {
     async fn embed(
         &self,
         request: &EmbeddingRequest,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
@@ -598,14 +603,15 @@ struct AzureRequest<'a> {
 }
 
 impl<'a> AzureRequest<'a> {
-    pub fn new(request: &'a ModelInferenceRequest<'_>) -> Result<AzureRequest<'a>, Error> {
+    pub async fn new(request: &'a ModelInferenceRequest<'_>) -> Result<AzureRequest<'a>, Error> {
         let response_format = AzureResponseFormat::new(request.json_mode, request.output_schema);
         let messages = prepare_openai_messages(
             request.system.as_deref().map(SystemOrDeveloper::System),
             &request.messages,
             Some(&request.json_mode),
             PROVIDER_TYPE,
-        )?;
+        )
+        .await?;
         let (tools, tool_choice, _) = prepare_openai_tools(request);
         Ok(AzureRequest {
             messages,
@@ -771,8 +777,8 @@ mod tests {
     };
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
-    #[test]
-    fn test_azure_request_new() {
+    #[tokio::test]
+    async fn test_azure_request_new() {
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -795,7 +801,7 @@ mod tests {
             ..Default::default()
         };
 
-        let azure_request = AzureRequest::new(&request_with_tools).unwrap();
+        let azure_request = AzureRequest::new(&request_with_tools).await.unwrap();
 
         assert_eq!(azure_request.messages.len(), 1);
         assert_eq!(azure_request.temperature, Some(0.5));
@@ -841,7 +847,7 @@ mod tests {
             ..Default::default()
         };
 
-        let azure_request = AzureRequest::new(&request_with_tools).unwrap();
+        let azure_request = AzureRequest::new(&request_with_tools).await.unwrap();
 
         assert_eq!(azure_request.messages.len(), 2);
         assert_eq!(azure_request.temperature, Some(0.5));
@@ -939,13 +945,13 @@ mod tests {
         let result = AzureCredentials::try_from(generic);
         assert!(result.is_err());
         assert!(matches!(
-            result.unwrap_err().get_owned_details(),
+            result.unwrap_err().get_details(),
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }
 
-    #[test]
-    fn test_azure_response_with_metadata_try_into() {
+    #[tokio::test]
+    async fn test_azure_response_with_metadata_try_into() {
         let valid_response = OpenAIResponse {
             choices: vec![OpenAIResponseChoice {
                 index: 0,
@@ -989,7 +995,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            raw_request: serde_json::to_string(&AzureRequest::new(&generic_request).unwrap())
+            raw_request: serde_json::to_string(&AzureRequest::new(&generic_request).await.unwrap())
                 .unwrap(),
             generic_request: &generic_request,
         };

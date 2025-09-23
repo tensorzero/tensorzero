@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use axum::http::StatusCode;
@@ -13,6 +14,7 @@ use uuid::Uuid;
 
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::Thought;
+use crate::rate_limiting::{ActiveRateLimitKey, RateLimitingConfigScopes};
 
 /// Controls whether to include raw request/response details in error output
 ///
@@ -100,28 +102,28 @@ impl<T: Debug + Display> Display for DisplayOrDebugGateway<T> {
     }
 }
 
-#[derive(Debug, Error, Serialize)]
+#[derive(Clone, Debug, Error, Serialize)]
 #[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
 #[error(transparent)]
 // As long as the struct member is private, we force people to use the `new` method and log the error.
-// We box `ErrorDetails` per the `clippy::result_large_err` lint
-pub struct Error(Box<ErrorDetails>);
+// We arc `ErrorDetails` per the `clippy::result_large_err` lint, as well as to make it cloneable
+pub struct Error(Arc<ErrorDetails>);
 
 impl Error {
     pub fn new(details: ErrorDetails) -> Self {
         details.log();
-        Error(Box::new(details))
+        Error(Arc::new(details))
     }
 
     pub fn new_with_err_logging(details: ErrorDetails, err_logging: bool) -> Self {
         if err_logging {
             details.log();
         }
-        Error(Box::new(details))
+        Error(Arc::new(details))
     }
 
     pub fn new_without_logging(details: ErrorDetails) -> Self {
-        Error(Box::new(details))
+        Error(Arc::new(details))
     }
 
     pub fn status_code(&self) -> StatusCode {
@@ -130,10 +132,6 @@ impl Error {
 
     pub fn get_details(&self) -> &ErrorDetails {
         &self.0
-    }
-
-    pub fn get_owned_details(self) -> ErrorDetails {
-        *self.0
     }
 
     pub fn log(&self) {
@@ -242,6 +240,9 @@ pub enum ErrorDetails {
     DiclMissingOutput,
     DuplicateTool {
         name: String,
+    },
+    DuplicateRateLimitingConfigScope {
+        scope: RateLimitingConfigScopes,
     },
     DynamicEndpointNotFound {
         key_name: String,
@@ -447,9 +448,29 @@ pub enum ErrorDetails {
     OutputValidation {
         source: Box<Error>,
     },
+    // TODO once 3496 merges: change both of these to taking sqlx errors rather than string
+    PostgresConnectionInitialization {
+        message: String,
+    },
+    PostgresMigration {
+        message: String,
+    },
+    PostgresQuery {
+        function_name: Option<String>,
+        message: String,
+    },
+    PostgresResult {
+        result_type: &'static str,
+        message: String,
+    },
     ProviderNotFound {
         provider_name: String,
     },
+    RateLimitExceeded {
+        key: ActiveRateLimitKey,
+        tickets_remaining: u64,
+    },
+    RateLimitMissingMaxTokens,
     Serialization {
         message: String,
     },
@@ -550,6 +571,7 @@ impl ErrorDetails {
             ErrorDetails::DatapointNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::DiclMissingOutput => tracing::Level::ERROR,
             ErrorDetails::DuplicateTool { .. } => tracing::Level::WARN,
+            ErrorDetails::DuplicateRateLimitingConfigScope { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicEndpointNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
@@ -610,6 +632,12 @@ impl ErrorDetails {
             ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::OptimizationResponse { .. } => tracing::Level::ERROR,
             ErrorDetails::ProviderNotFound { .. } => tracing::Level::ERROR,
+            ErrorDetails::PostgresConnectionInitialization { .. } => tracing::Level::ERROR,
+            ErrorDetails::PostgresMigration { .. } => tracing::Level::ERROR,
+            ErrorDetails::PostgresResult { .. } => tracing::Level::ERROR,
+            ErrorDetails::PostgresQuery { .. } => tracing::Level::ERROR,
+            ErrorDetails::RateLimitExceeded { .. } => tracing::Level::WARN,
+            ErrorDetails::RateLimitMissingMaxTokens => tracing::Level::WARN,
             ErrorDetails::Serialization { .. } => tracing::Level::ERROR,
             ErrorDetails::StreamError { .. } => tracing::Level::ERROR,
             ErrorDetails::ToolNotFound { .. } => tracing::Level::WARN,
@@ -655,6 +683,7 @@ impl ErrorDetails {
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DiclMissingOutput => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DuplicateTool { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::DuplicateRateLimitingConfigScope { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicEndpointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -721,6 +750,14 @@ impl ErrorDetails {
             ErrorDetails::OutputParsing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OutputValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ProviderNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::PostgresConnectionInitialization { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            ErrorDetails::PostgresQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::PostgresResult { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::PostgresMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::RateLimitExceeded { .. } => StatusCode::TOO_MANY_REQUESTS,
+            ErrorDetails::RateLimitMissingMaxTokens => StatusCode::BAD_REQUEST,
             ErrorDetails::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::StreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ToolNotFound { .. } => StatusCode::BAD_REQUEST,
@@ -910,6 +947,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::DuplicateTool { name } => {
                 write!(f, "Duplicate tool name: {name}. Tool names must be unique.")
+            }
+            ErrorDetails::DuplicateRateLimitingConfigScope { scope } => {
+                write!(f, "Duplicate rate limiting config scope: {scope:?}. Rate limiting config scopes must be unique.")
             }
             ErrorDetails::DynamicJsonSchema { message } => {
                 write!(
@@ -1186,8 +1226,49 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::OutputValidation { source } => {
                 write!(f, "Output validation failed with messages: {source}")
             }
+            ErrorDetails::PostgresConnectionInitialization { message } => {
+                write!(
+                    f,
+                    "Postgres connection initialization failed with message: {message}"
+                )
+            }
+            ErrorDetails::PostgresMigration { message } => {
+                write!(f, "Postgres migration failed with message: {message}")
+            }
+            ErrorDetails::PostgresResult {
+                result_type,
+                message,
+            } => {
+                write!(
+                    f,
+                    "Unexpected Postgres result of type {result_type}: {message}"
+                )
+            }
+            ErrorDetails::PostgresQuery {
+                function_name,
+                message,
+            } => match function_name {
+                Some(function_name) => write!(
+                    f,
+                    "Postgres query failed in function {function_name} with message: {message}"
+                ),
+                None => write!(f, "Postgres query failed: {message}"),
+            },
             ErrorDetails::ProviderNotFound { provider_name } => {
                 write!(f, "Provider not found: {provider_name}")
+            }
+            ErrorDetails::RateLimitExceeded {
+                key,
+                tickets_remaining,
+            } => {
+                // TODO: improve this error
+                write!(
+                    f,
+                    "Rate limit exceeded for key {key} with {tickets_remaining} tickets remaining"
+                )
+            }
+            ErrorDetails::RateLimitMissingMaxTokens => {
+                write!(f, "Missing max tokens for rate limited request.")
             }
             ErrorDetails::StreamError { source } => {
                 write!(f, "Error in streaming response: {source}")

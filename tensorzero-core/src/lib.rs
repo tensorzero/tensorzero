@@ -12,6 +12,7 @@ pub mod evaluations; // evaluation
 pub mod function; // types and methods for working with TensorZero functions
 pub mod gateway_util; // utilities for gateway
 pub mod howdy;
+pub mod http;
 pub mod inference; // model inference
 pub mod jsonschema_util; // utilities for working with JSON schemas
 mod minijinja_util; // utilities for working with MiniJinja templates
@@ -20,6 +21,7 @@ pub mod model_table;
 pub mod observability; // utilities for observability (logs, metrics, etc.)
 pub mod optimization;
 pub mod providers; // providers for the inference and / or optimization services TensorZero integrates
+pub mod rate_limiting; // utilities for rate limiting
 pub mod serde_util; // utilities for working with serde
 pub mod stored_inference; // types and methods for working with stored inferences
 mod testing;

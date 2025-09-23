@@ -3,6 +3,7 @@ pub mod types;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::StartBatchProviderInferenceResponse;
@@ -12,9 +13,9 @@ use crate::inference::types::PeekableProviderInferenceResponseStream;
 use crate::inference::types::ProviderInferenceResponse;
 use crate::inference::types::ProviderInferenceResponseStreamInner;
 use crate::model::ModelProvider;
+use async_trait::async_trait;
 use futures::Future;
 use futures::Stream;
-use reqwest::Client;
 use reqwest_eventsource::Event;
 use std::borrow::Cow;
 use std::fmt::Debug;
@@ -33,7 +34,7 @@ pub trait InferenceProvider {
     fn infer<'a>(
         &'a self,
         request: ModelProviderRequest<'a>,
-        client: &'a Client,
+        client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> impl Future<Output = Result<ProviderInferenceResponse, Error>> + Send + 'a;
@@ -41,7 +42,7 @@ pub trait InferenceProvider {
     fn infer_stream<'a>(
         &'a self,
         request: ModelProviderRequest<'a>,
-        client: &'a Client,
+        client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> impl Future<Output = Result<(PeekableProviderInferenceResponseStream, String), Error>> + Send + 'a;
@@ -49,14 +50,14 @@ pub trait InferenceProvider {
     fn start_batch_inference<'a>(
         &'a self,
         requests: &'a [ModelInferenceRequest],
-        client: &'a Client,
+        client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> impl Future<Output = Result<StartBatchProviderInferenceResponse, Error>> + Send + 'a;
 
     fn poll_batch_inference<'a>(
         &'a self,
         batch_request: &'a BatchRequestRow<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> impl Future<Output = Result<PollBatchInferenceResponse, Error>> + Send + 'a;
 }
@@ -67,10 +68,11 @@ pub trait InferenceProvider {
 /// AWS sdk.
 ///
 /// Currently, we only implement `WrappedProvider` for `OpenAI`
+#[async_trait]
 pub trait WrappedProvider: Debug {
     fn thought_block_provider_type_suffix(&self) -> Cow<'static, str>;
 
-    fn make_body<'a>(
+    async fn make_body<'a>(
         &'a self,
         request: ModelProviderRequest<'a>,
     ) -> Result<serde_json::Value, Error>;
