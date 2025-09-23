@@ -113,8 +113,6 @@ export function FiltersInput({
     filtersArr.remove(index);
   };
 
-  const borderStyle = { width: "2px", minHeight: "20px", background: "black" };
-
   return (
     <div className="flex flex-col">
       <ListProvider onDragEnd={handleDragEnd}>

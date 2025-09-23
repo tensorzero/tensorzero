@@ -76,7 +76,6 @@ export function SFTForm({
   });
 
   const [functionName] = watchedFields;
-  // console.warn({ functionName });
   const functionConfig = useFunctionConfig(functionName);
 
   // Use formFetcher for submission errors
@@ -170,8 +169,6 @@ export function SFTForm({
     control: form.control,
     name: "filters",
   });
-
-  console.table(filtersArr.fields.map((_, i) => `filters.${i}` as const));
 
   return (
     <div className="mt-4">
