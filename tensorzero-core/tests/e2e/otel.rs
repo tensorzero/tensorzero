@@ -10,7 +10,7 @@ use opentelemetry_sdk::{
 };
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    FeedbackParams, InferenceOutput, Role,
+    FeedbackParams, InferenceOutput, InferenceResponse, Role,
 };
 use tensorzero_core::observability::build_opentelemetry_layer;
 use tensorzero_core::{config::OtlpTracesFormat, inference::types::TextKind};
@@ -149,6 +149,14 @@ pub async fn test_capture_simple_inference_spans(mode: OtlpTracesFormat, config_
         panic!("Expected non-streaming output, got: {res:#?}");
     };
 
+    let InferenceResponse::Chat(response) = output else {
+        panic!("Expected chat response, got: {output:#?}");
+    };
+
+    let input_tokens = response.usage.input_tokens as i64;
+    let output_tokens = response.usage.output_tokens as i64;
+    let total_tokens = (response.usage.input_tokens + response.usage.output_tokens) as i64;
+
     let all_spans = exporter.take_spans();
     let num_spans = all_spans.len();
     let spans = build_span_map(all_spans);
@@ -163,11 +171,11 @@ pub async fn test_capture_simple_inference_spans(mode: OtlpTracesFormat, config_
     assert_eq!(root_attr_map["model_name"], "dummy::good".into());
     assert_eq!(
         root_attr_map["inference_id"],
-        output.inference_id().to_string().into()
+        response.inference_id.to_string().into()
     );
     assert_eq!(
         root_attr_map["episode_id"],
-        output.episode_id().to_string().into()
+        response.episode_id.to_string().into()
     );
     assert_eq!(root_attr_map.get("function_name"), None);
     assert_eq!(root_attr_map.get("variant_name"), None);
@@ -235,6 +243,22 @@ pub async fn test_capture_simple_inference_spans(mode: OtlpTracesFormat, config_
             assert!(!model_provider_attr_map.contains_key("openinference.span.kind"));
             assert!(!model_provider_attr_map.contains_key("llm.system"));
             assert!(!model_provider_attr_map.contains_key("llm.model_name"));
+
+            assert_eq!(
+                model_provider_attr_map["gen_ai.usage.input_tokens"],
+                input_tokens.into()
+            );
+            assert_eq!(
+                model_provider_attr_map["gen_ai.usage.output_tokens"],
+                output_tokens.into()
+            );
+            assert_eq!(
+                model_provider_attr_map["gen_ai.usage.total_tokens"],
+                total_tokens.into()
+            );
+            assert!(!model_provider_attr_map.contains_key("llm.token_count.prompt"));
+            assert!(!model_provider_attr_map.contains_key("llm.token_count.completion"));
+            assert!(!model_provider_attr_map.contains_key("llm.token_count.total"));
         }
         OtlpTracesFormat::OpenInference => {
             assert_eq!(
@@ -246,6 +270,22 @@ pub async fn test_capture_simple_inference_spans(mode: OtlpTracesFormat, config_
             assert!(!model_provider_attr_map.contains_key("gen_ai.operation.name"));
             assert!(!model_provider_attr_map.contains_key("gen_ai.system"));
             assert!(!model_provider_attr_map.contains_key("gen_ai.request.model"));
+
+            assert_eq!(
+                model_provider_attr_map["llm.token_count.prompt"],
+                input_tokens.into()
+            );
+            assert_eq!(
+                model_provider_attr_map["llm.token_count.completion"],
+                output_tokens.into()
+            );
+            assert_eq!(
+                model_provider_attr_map["llm.token_count.total"],
+                total_tokens.into()
+            );
+            assert!(!model_provider_attr_map.contains_key("gen_ai.usage.input_tokens"));
+            assert!(!model_provider_attr_map.contains_key("gen_ai.usage.output_tokens"));
+            assert!(!model_provider_attr_map.contains_key("gen_ai.usage.total_tokens"));
         }
     }
     assert_eq!(model_attr_map["stream"], false.into());

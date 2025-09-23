@@ -60,8 +60,28 @@ export const models: ModelOption[] = [
 
   // GCP Vertex AI Gemini
   {
-    displayName: "gemini-2.0-flash-lite-001",
-    name: "gemini-2.0-flash-lite-001",
+    displayName: "gemini-2.5-flash-lite",
+    name: "gemini-2.5-flash-lite",
+    provider: "gcp_vertex_gemini",
+  },
+  {
+    displayName: "gemini-2.5-pro",
+    name: "gemini-2.5-pro",
+    provider: "gcp_vertex_gemini",
+  },
+  {
+    displayName: "gemini-2.5-flash",
+    name: "gemini-2.5-flash",
+    provider: "gcp_vertex_gemini",
+  },
+  {
+    displayName: "gemini-2.0-flash",
+    name: "gemini-2.0-flash",
+    provider: "gcp_vertex_gemini",
+  },
+  {
+    displayName: "gemini-2.0-flash-lite",
+    name: "gemini-2.0-flash-lite",
     provider: "gcp_vertex_gemini",
   },
 
