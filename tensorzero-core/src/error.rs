@@ -448,8 +448,11 @@ pub enum ErrorDetails {
     OutputValidation {
         source: Box<Error>,
     },
-    // TODO once 3496 merges: change both of these to taking sqlx errors rather than string
+    // TODO(shuyang): once 3496 merges: change all of these to taking sqlx errors rather than string. Note also sqlx::Error is not Serialize?
     PostgresConnectionInitialization {
+        message: String,
+    },
+    PostgresConnection {
         message: String,
     },
     PostgresMigration {
@@ -633,6 +636,7 @@ impl ErrorDetails {
             ErrorDetails::OptimizationResponse { .. } => tracing::Level::ERROR,
             ErrorDetails::ProviderNotFound { .. } => tracing::Level::ERROR,
             ErrorDetails::PostgresConnectionInitialization { .. } => tracing::Level::ERROR,
+            ErrorDetails::PostgresConnection { .. } => tracing::Level::ERROR,
             ErrorDetails::PostgresMigration { .. } => tracing::Level::ERROR,
             ErrorDetails::PostgresResult { .. } => tracing::Level::ERROR,
             ErrorDetails::PostgresQuery { .. } => tracing::Level::ERROR,
@@ -753,6 +757,7 @@ impl ErrorDetails {
             ErrorDetails::PostgresConnectionInitialization { .. } => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
+            ErrorDetails::PostgresConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::PostgresQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::PostgresResult { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::PostgresMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -1231,6 +1236,9 @@ impl std::fmt::Display for ErrorDetails {
                     f,
                     "Postgres connection initialization failed with message: {message}"
                 )
+            }
+            ErrorDetails::PostgresConnection { message } => {
+                write!(f, "Error connecting to Postgres: {message}")
             }
             ErrorDetails::PostgresMigration { message } => {
                 write!(f, "Postgres migration failed with message: {message}")
