@@ -153,5 +153,6 @@ export async function createFilters(
   const children = await Promise.all(
     metrics.map(({ metric, threshold }) => createFilter(metric, threshold)),
   );
+  // NOTE(bret): Temporary
   return { type: "and", children };
 }

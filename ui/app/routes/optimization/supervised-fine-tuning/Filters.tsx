@@ -1,5 +1,11 @@
 import { useDraggable, type DragEndEvent } from "@dnd-kit/core";
-import { useFieldArray, type UseFormReturn } from "react-hook-form";
+import { useState } from "react";
+import {
+  useFieldArray,
+  useWatch,
+  type Control,
+  type FieldPath,
+} from "react-hook-form";
 import type { Config } from "tensorzero-node";
 import { Placeholder } from "~/components/icons/Icons";
 import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
@@ -57,27 +63,41 @@ const ListItemWithHandle = ({
 
 const metricTemplate = { metric: "", threshold: 0.5 };
 
+type LogicalOperator = "and" | "or";
+
 export function FiltersInput({
   config,
-  form,
-  counts,
+  control,
+  // @ts-expect-error -- hacking rn sorry
+  counts = {},
+  names,
 }: {
   config: Config;
-  form: UseFormReturn<SFTFormValues>;
-  counts: ReturnType<typeof useCountFetcher>;
+  control: Control<SFTFormValues>;
+  counts?: ReturnType<typeof useCountFetcher>;
+  names: FieldPath<SFTFormValues>[];
 }) {
+  const [logicalOperator, setLogicalOperator] =
+    useState<LogicalOperator>("and");
   // const {
   //   formState: { errors },
   // } = form;
 
-  // { fields, append, prepend, remove, swap, move, insert }
-  const filters = useFieldArray({
-    control: form.control,
+  const toggleLogicalOperator = () =>
+    setLogicalOperator((op) => (op === "and" ? "or" : "and"));
+
+  const filtersArr = useFieldArray({
+    control,
     name: "filters",
   });
 
+  const [filters] = useWatch({
+    control,
+    name: names,
+  }) as [SFTFormValues["filters"][number][]];
+
   const functionConfigMetrics = useFunctionConfigMetrics({
-    control: form.control,
+    control,
     functionFieldName: "function",
     config,
     addDemonstrations: true,
@@ -91,8 +111,10 @@ export function FiltersInput({
   };
 
   const remove = (index: number) => {
-    filters.remove(index);
+    filtersArr.remove(index);
   };
+
+  const borderStyle = { width: "2px", minHeight: "20px", background: "black" };
 
   return (
     <div className="flex flex-col">
@@ -103,42 +125,60 @@ export function FiltersInput({
               Filters
             </span>
           </ListHeader>
-          {filters.fields.map(({ id }, i) => {
-            const name = ["name", id].join("-");
-            return (
-              <ListItemWithHandle
-                key={name}
-                name={name}
-                id={name}
-                index={i}
-                parent={"root"}
+          <div className="group my-1 flex gap-2 border p-2 shadow-sm">
+            <div className="flex flex-col items-center py-3">
+              <div style={borderStyle} />
+              <Button
+                type="button"
+                className="px-10 tracking-tighter [text-orientation:upright] [writing-mode:vertical-rl]"
+                onClick={toggleLogicalOperator}
               >
-                <CurationMetricSelector<SFTFormValues>
-                  control={form.control}
-                  name={`filters.${i}`}
-                  functionConfigMetrics={functionConfigMetrics}
-                  feedbackCount={counts.feedbackCount}
-                  curatedInferenceCount={counts.curatedInferenceCount}
-                  isLoading={counts.isLoading}
-                />
-                <Button onClick={() => remove(i)}>
-                  <Placeholder />
-                </Button>
-              </ListItemWithHandle>
-            );
-          })}
+                {logicalOperator.toUpperCase()}
+              </Button>
+              <div className="flex-1" style={borderStyle} />
+            </div>
+
+            <div className="flex-1">
+              {filters.map((data, i) => {
+                const { id } = data;
+                console.log(data);
+                const name = ["name", id, data.metric].join("-");
+                return (
+                  <ListItemWithHandle
+                    key={name}
+                    name={name}
+                    id={name}
+                    index={i}
+                    parent={"root"}
+                  >
+                    <CurationMetricSelector<SFTFormValues>
+                      control={control}
+                      name={`filters.${i}`}
+                      functionConfigMetrics={functionConfigMetrics}
+                      feedbackCount={counts.feedbackCount}
+                      curatedInferenceCount={counts.curatedInferenceCount}
+                      isLoading={counts.isLoading}
+                    />
+                    <Button onClick={() => remove(i)}>
+                      <Placeholder />
+                    </Button>
+                  </ListItemWithHandle>
+                );
+              })}
+            </div>
+          </div>
         </ListGroup>
       </ListProvider>
 
       <Button
         type="button"
-        onClick={() => filters.append({ ...metricTemplate })}
+        onClick={() => filtersArr.append({ ...metricTemplate })}
       >
         Append
       </Button>
 
       {/* <CurationMetricSelector<SFTFormValues>
-        control={form.control}
+        control={control}
         name=""
         functionConfigMetrics={functionConfigMetrics}
         feedbackCount={counts.feedbackCount}

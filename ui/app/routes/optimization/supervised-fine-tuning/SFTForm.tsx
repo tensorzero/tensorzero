@@ -8,7 +8,6 @@ import type {
 } from "tensorzero-node";
 import { v7 as uuid } from "uuid";
 import { FunctionFormField } from "~/components/function/FunctionFormField";
-// import { useCountData } from "~/components/metric/useCountData";
 import { Button } from "~/components/ui/button";
 import { Form } from "~/components/ui/form";
 import { useAllFunctionConfigs, useFunctionConfig } from "~/context/config";
@@ -20,7 +19,7 @@ import { ModelSelector } from "./ModelSelector";
 import { SFTFormValuesResolver, type SFTFormValues } from "./types";
 import { VariantSelector } from "./VariantSelector";
 
-const dev_useDefaults = true;
+const dev_useDefaults = false;
 const metricTemplate = { metric: "", threshold: 0.5 };
 
 export function SFTForm({
@@ -36,26 +35,27 @@ export function SFTForm({
 }) {
   const startingFilters = dev_useDefaults
     ? [
-        { metric: "goated", threshold: 0.5 },
-        { metric: "elapsed_ms", threshold: 0.5 },
-        { metric: "num_questions", threshold: 0.5 },
+        { metric: "jaccard_similarity", threshold: 0.5 },
+        { metric: "jaccard_similarity_episode", threshold: 0.5 },
       ]
     : [{ ...metricTemplate }];
 
   const form = useForm<SFTFormValues>({
     defaultValues: {
-      function: "generate_secret",
+      function: dev_useDefaults ? "extract_entities" : "",
       filters: startingFilters,
       validationSplitPercent: 20,
       maxSamples: 100000,
       jobId: uuid(),
 
-      variant: "baseline",
-      model: {
-        displayName: "gpt-3.5-turbo-1106",
-        name: "gpt-3.5-turbo-1106",
-        provider: "openai",
-      },
+      variant: dev_useDefaults ? "baseline" : undefined,
+      model: dev_useDefaults
+        ? {
+            displayName: "gpt-3.5-turbo-1106",
+            name: "gpt-3.5-turbo-1106",
+            provider: "openai",
+          }
+        : undefined,
     },
     resolver: SFTFormValuesResolver,
     mode: "onChange",
@@ -75,6 +75,7 @@ export function SFTForm({
   });
 
   const [functionName] = watchedFields;
+  // console.warn({ functionName });
   const functionConfig = useFunctionConfig(functionName);
 
   // Use formFetcher for submission errors
@@ -189,8 +190,12 @@ export function SFTForm({
               )}
             </div>
 
-            {/* @ts-expect-error -- hacking stuff rn sorry */}
-            <FiltersInput config={config} form={form} counts={{}} />
+            <FiltersInput
+              config={config}
+              control={form.control}
+              // TODO(bret): only send a subset (ie the root group)
+              names={["filters"]}
+            />
 
             <div className="flex flex-col gap-1">
               <VariantSelector
