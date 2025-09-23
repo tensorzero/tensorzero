@@ -102,8 +102,8 @@ export const models: ModelOption[] = [
     provider: "together",
   },
   {
-    displayName: "gemma-3-12b-pt	",
-    name: "google/gemma-3-12b-pt	",
+    displayName: "gemma-3-12b-pt",
+    name: "google/gemma-3-12b-pt",
     provider: "together",
   },
   {
