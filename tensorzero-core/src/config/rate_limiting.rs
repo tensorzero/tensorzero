@@ -1098,11 +1098,9 @@ mod tests {
 
         "#;
 
-        // let uninitialized_config: UninitializedRateLimitingConfig =
         let err_message = toml::from_str::<UninitializedRateLimitingConfig>(toml_str)
             .unwrap_err()
             .to_string();
         assert!(err_message.contains("Tag values in rate limiting scopes besides tensorzero::each and tensorzero::total may not start with \"tensorzero::\"."));
-        // TODO: fix this
     }
 }
