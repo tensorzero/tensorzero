@@ -343,7 +343,7 @@ const MetricRow = ({
   }
   const evaluationType = evaluatorConfig.type;
   return (
-    <div className="flex items-center gap-2">
+    <div className="group flex items-center gap-2">
       <TooltipProvider delayDuration={300}>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -390,7 +390,7 @@ const MetricRow = ({
         className="text-sm"
       />
       {inferenceId !== null && evaluationType === "llm_judge" && (
-        <div className="opacity-0 transition-opacity duration-200 hover:opacity-100">
+        <div className="opacity-0 transition-opacity duration-200 group-hover:opacity-100">
           <EvaluationFeedbackEditor
             inferenceId={inferenceId}
             datapointId={datapointId}
