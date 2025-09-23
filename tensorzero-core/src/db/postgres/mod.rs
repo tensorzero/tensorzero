@@ -1,7 +1,7 @@
-use futures::TryStreamExt;
-use tokio::time::timeout;
-use std::{collections::HashSet, time::Duration};
 use async_trait::async_trait;
+use futures::TryStreamExt;
+use std::{collections::HashSet, time::Duration};
+use tokio::time::timeout;
 
 use sqlx::{migrate, postgres::PgPoolOptions, PgPool, Row};
 
@@ -75,22 +75,30 @@ impl HealthCheckable for PostgresConnectionInfo {
                 if *healthy {
                     Ok(())
                 } else {
-                    Err(Error::new(ErrorDetails::PostgresConnection { message: "Unhealthy mock postgres connection".to_string() }))
+                    Err(Error::new(ErrorDetails::PostgresConnection {
+                        message: "Unhealthy mock postgres connection".to_string(),
+                    }))
                 }
-            },
+            }
             Self::Enabled { pool } => {
                 let check = async {
                     let _result = sqlx::query("SELECT 1")
-                    .fetch_one(pool)
-                    .await
-                    .map_err(|_e| Error::new(ErrorDetails::PostgresConnection { message: _e.to_string() }))?;
+                        .fetch_one(pool)
+                        .await
+                        .map_err(|_e| {
+                            Error::new(ErrorDetails::PostgresConnection {
+                                message: _e.to_string(),
+                            })
+                        })?;
 
                     Ok(())
                 };
                 // TODO(shuyang): customize postgres timeout
                 match timeout(Duration::from_millis(500), check).await {
                     Ok(healthcheck_status) => healthcheck_status,
-                    Err(_) => Err(Error::new(ErrorDetails::PostgresConnection { message: "Postgres healthcheck query timed out.".to_string() }))
+                    Err(_) => Err(Error::new(ErrorDetails::PostgresConnection {
+                        message: "Postgres healthcheck query timed out.".to_string(),
+                    })),
                 }
             }
         }

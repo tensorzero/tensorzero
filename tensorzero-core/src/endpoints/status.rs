@@ -45,7 +45,7 @@ pub async fn health_handler(
             "gateway": "ok",
             "clickhouse": "ok",
             "postgres": "ok",
-        })))
+        })));
     }
 
     return Err((
@@ -103,7 +103,6 @@ mod tests {
         assert_eq!(error_json.get("gateway").unwrap(), "ok");
         assert_eq!(error_json.get("postgres").unwrap(), "error");
     }
-
 
     #[tokio::test]
     async fn test_status_handler() {
