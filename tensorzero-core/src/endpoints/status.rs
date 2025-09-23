@@ -64,14 +64,21 @@ mod tests {
     use std::sync::Arc;
 
     use crate::config::Config;
-    use crate::testing::get_unit_test_gateway_handle;
+    use crate::gateway_util::GatewayHandleTestOptions;
+    use crate::testing::get_unit_test_gateway_handle_with_options;
 
     use super::*;
 
     #[tokio::test]
     async fn test_health_handler() {
         let config = Arc::new(Config::default());
-        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true, true);
+        let gateway_handle = get_unit_test_gateway_handle_with_options(
+            config.clone(),
+            GatewayHandleTestOptions {
+                clickhouse_healthy: true,
+                postgres_healthy: true,
+            },
+        );
         let response = health_handler(State(gateway_handle.app_state.clone())).await;
         assert!(response.is_ok());
         let response_value = response.unwrap();
@@ -83,7 +90,13 @@ mod tests {
     #[tokio::test]
     async fn should_report_error_for_unhealthy_clickhouse() {
         let config = Arc::new(Config::default());
-        let gateway_handle = get_unit_test_gateway_handle(config, false, true);
+        let gateway_handle = get_unit_test_gateway_handle_with_options(
+            config,
+            GatewayHandleTestOptions {
+                clickhouse_healthy: false,
+                postgres_healthy: true,
+            },
+        );
         let response = health_handler(State(gateway_handle.app_state.clone())).await;
         assert!(response.is_err());
         let (status_code, error_json) = response.unwrap_err();
@@ -95,7 +108,13 @@ mod tests {
     #[tokio::test]
     async fn should_report_error_for_unhealthy_postgres() {
         let config = Arc::new(Config::default());
-        let gateway_handle = get_unit_test_gateway_handle(config, true, false);
+        let gateway_handle = get_unit_test_gateway_handle_with_options(
+            config,
+            GatewayHandleTestOptions {
+                clickhouse_healthy: true,
+                postgres_healthy: false,
+            },
+        );
         let response = health_handler(State(gateway_handle.app_state.clone())).await;
         assert!(response.is_err());
         let (status_code, error_json) = response.unwrap_err();
