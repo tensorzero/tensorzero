@@ -45,7 +45,6 @@ pub async fn embeddings(
     let span = tracing::Span::current();
     span.record("model", &params.model_name);
     span.record("num_inputs", params.input.num_inputs());
-    println!("params: {:#?}", params);
     let embedding_model = config
         .embedding_models
         .get(&params.model_name)
