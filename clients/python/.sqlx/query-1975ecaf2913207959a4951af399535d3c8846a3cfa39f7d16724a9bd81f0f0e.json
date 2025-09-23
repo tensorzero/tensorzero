@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT bucket_key_returned as key_returned, final_balance\n             FROM return_multiple_resource_tickets($1, $2, $3, $4, $5)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key_returned",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "final_balance",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "Int8Array",
+        "Int8Array",
+        "Int8Array",
+        "IntervalArray"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "1975ecaf2913207959a4951af399535d3c8846a3cfa39f7d16724a9bd81f0f0e"
+}

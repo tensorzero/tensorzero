@@ -12,6 +12,7 @@ use crate::inference::types::FileWithPath;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessage;
 use crate::inference::types::ResolvedInputMessageContent;
+use crate::inference::types::StoredContentBlock;
 use crate::inference::types::TemplateInput;
 use crate::inference::types::{Role, Thought, ToolCall, ToolResult};
 use futures::future::try_join_all;
@@ -258,4 +259,15 @@ impl StoredInput {
     pub fn get_messages(&self) -> Vec<StoredInputMessage> {
         self.messages.clone()
     }
+}
+
+/// The message type that we directly store in ClickHouse.
+/// This is almost identical to `RequestMessage`, but without `File` data.
+/// Only the object-storage path is actually stored in clickhouse
+/// The `RequestMessage/StoredRequestMessage` pair is the model-level equivalent
+/// of `ResolvedInput/StoredInput`
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct StoredRequestMessage {
+    pub role: Role,
+    pub content: Vec<StoredContentBlock>,
 }
