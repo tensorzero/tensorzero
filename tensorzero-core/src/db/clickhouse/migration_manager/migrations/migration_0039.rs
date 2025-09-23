@@ -2,7 +2,6 @@ use super::check_table_exists;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
-use crate::uuid_util::get_dynamic_evaluation_cutoff_uuid;
 use async_trait::async_trait;
 use std::time::Duration;
 
@@ -179,12 +178,16 @@ impl Migration for Migration0039<'_> {
             .await?;
 
         // If not a clean start, restrict MV ingestion to rows >= view timestamp.
-        let view_condition = if clean_start {
+        let view_timestamp_where_clause = if clean_start {
             "1=1".to_string()
         } else {
             format!("UUIDv7ToDateTime(id) >= fromUnixTimestamp64Nano({view_timestamp_nanos})")
         };
-        let cutoff_uuid = get_dynamic_evaluation_cutoff_uuid();
+        let statistics_view_timestamp_where_clause = if clean_start {
+            "1=1".to_string()
+        } else {
+            format!("UUIDv7ToDateTime(uint_to_uuid(id_uint)) >= fromUnixTimestamp64Nano({view_timestamp_nanos})")
+        };
 
         // Build MV for FloatFeedbackByVariant table
         let query = format!(
@@ -201,6 +204,7 @@ impl Migration for Migration0039<'_> {
                         toUInt128(target_id) as target_id_uint,
                         value
                     FROM FloatMetricFeedback
+                    WHERE {view_timestamp_where_clause}
                 ),
                 targets AS (
                     SELECT
@@ -220,38 +224,109 @@ impl Migration for Migration0039<'_> {
                     HAVING uniqExact(variant_name) > 1
                 )
 
-                --- end
-
-                )
             SELECT
-                toUInt128(episode_id) as episode_id_uint,
-                1 as count,
-                groupArrayState()(id) as inference_ids,
-                toUInt128(min(id)) as min_inference_id_uint,
-                toUInt128(max(id)) as max_inference_id_uint
-            FROM ChatInference
-            WHERE {view_condition} AND toUInt128(episode_id) < toUInt128(toUUID('{cutoff_uuid}'))
-            GROUP BY toUInt128(episode_id)
+                t.function_name as function_name,
+                t.variant_name as variant_name,
+                f.metric_name as metric_name,
+                f.id_uint as id_uint,
+                f.target_id_uint as target_id_uint,
+                f.value as value
+            FROM float_feedback f
+            JOIN targets t ON f.target_id = t.target_id
             "
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
             .await?;
-        // Build MV for JsonInference table
+
+        // Build MV for BooleanFeedbackByVariant table
         let query = format!(
             r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS EpisodeByIdJsonView{on_cluster_name}
-            TO EpisodeById
+            CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanFeedbackByVariantView{on_cluster_name}
+            TO BooleanFeedbackByVariant
             AS
+            WITH
+                boolean_feedback AS (
+                    SELECT
+                        toUInt128(id) as id_uint,
+                        metric_name,
+                        target_id,
+                        toUInt128(target_id) as target_id_uint,
+                        value
+                    FROM BooleanMetricFeedback
+                    WHERE {view_timestamp_where_clause}
+                ),
+                targets AS (
+                    SELECT
+                        uint_to_uuid(id_uint) as target_id,
+                        function_name,
+                        variant_name
+                    FROM InferenceById
+                    WHERE id_uint IN (SELECT target_id_uint FROM boolean_feedback)
+                    UNION ALL
+                    SELECT
+                        uint_to_uuid(episode_id_uint) as target_id,
+                        function_name,
+                        any(variant_name) as variant_name
+                    FROM InferenceByEpisodeID
+                    WHERE episode_id_uint IN (SELECT target_id_uint FROM boolean_feedback)
+                    GROUP BY (episode_id_uint, function_name)
+                    HAVING uniqExact(variant_name) > 1
+                )
+
             SELECT
-                toUInt128(episode_id) as episode_id_uint,
-                1 as count,
-                groupArrayState()(id) as inference_ids,
-                toUInt128(min(id)) as min_inference_id_uint,
-                toUInt128(max(id)) as max_inference_id_uint
-            FROM JsonInference
-            WHERE {view_condition} AND toUInt128(episode_id) < toUInt128(toUUID('{cutoff_uuid}'))
-            GROUP BY toUInt128(episode_id)
+                t.function_name as function_name,
+                t.variant_name as variant_name,
+                f.metric_name as metric_name,
+                f.id_uint as id_uint,
+                f.target_id_uint as target_id_uint,
+                f.value as value
+            FROM boolean_feedback f
+            JOIN targets t ON f.target_id = t.target_id
+            "
+        );
+        self.clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
+
+        // Build MV for FloatFeedbackByVariantStatistics to FeedbackByVariantStatistics table
+        let query = format!(
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS FloatFeedbackByVariantStatisticsView
+            TO FeedbackByVariantStatistics AS
+            SELECT
+                function_name,
+                variant_name,
+                metric_name,
+                toStartOfMinute(UUIDv7ToDateTime(uint_to_uuid(id_uint))) as minute,
+                avgState(value) as feedback_mean,
+                varSampStableState(value) as feedback_variance,
+                1 as count
+            FROM FloatFeedbackByVariant
+            WHERE {statistics_view_timestamp_where_clause}
+            GROUP BY function_name, variant_name, metric_name, minute;
+            "
+        );
+        self.clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
+
+        // Build MV for BooleanFeedbackByVariantStatistics to FeedbackByVariantStatistics table
+        let query = format!(
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanFeedbackyVariantStatisticsView
+            TO FeedbackByVariantStatistics AS
+            SELECT
+                function_name,
+                variant_name,
+                metric_name,
+                toStartOfMinute(UUIDv7ToDateTime(uint_to_uuid(id_uint))) as minute,
+                avgState(value) as feedback_mean,
+                varSampStableState(value) as feedback_variance,
+                1 as count
+            FROM FloatFeedbackByVariant
+            WHERE {statistics_view_timestamp_where_clause}
+            GROUP BY function_name, variant_name, metric_name, minute;
             "
         );
         self.clickhouse
@@ -262,7 +337,7 @@ impl Migration for Migration0039<'_> {
         if !clean_start {
             tokio::time::sleep(view_offset).await;
 
-            let create_chat_table = self
+            let create_float_feedback_by_variant_view = self
                 .clickhouse
                 .run_query_synchronous_no_params(
                     "SHOW CREATE TABLE EpisodeByIdChatView".to_string(),
@@ -271,60 +346,182 @@ impl Migration for Migration0039<'_> {
                 .response;
 
             let view_timestamp_nanos_string = view_timestamp_nanos.to_string();
-            if create_chat_table.contains(&view_timestamp_nanos_string) {
+            if create_float_feedback_by_variant_view.contains(&view_timestamp_nanos_string) {
                 // Run backfill for EpisodeByIdChatView if the chat timestamps match
                 let query = format!(
                     r"
-                    INSERT INTO EpisodeById
+                    INSERT INTO FloatFeedbackByVariant
+                    WITH
+                        float_feedback AS (
+                            SELECT
+                                toUInt128(id) as id_uint,
+                                metric_name,
+                                target_id,
+                                toUInt128(target_id) as target_id_uint,
+                                value
+                            FROM FloatMetricFeedback
+                            WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
+                        ),
+                        targets AS (
+                            SELECT
+                                uint_to_uuid(id_uint) as target_id,
+                                function_name,
+                                variant_name
+                            FROM InferenceById
+                            WHERE id_uint IN (SELECT target_id_uint FROM float_feedback)
+                            UNION ALL
+                            SELECT
+                                uint_to_uuid(episode_id_uint) as target_id,
+                                function_name,
+                                any(variant_name) as variant_name
+                            FROM InferenceByEpisodeID
+                            WHERE episode_id_uint IN (SELECT target_id_uint FROM float_feedback)
+                            GROUP BY (episode_id_uint, function_name)
+                            HAVING uniqExact(variant_name) > 1
+                        )
+
                     SELECT
-                        toUInt128(episode_id) as episode_id_uint,
-                        1 as count,
-                        groupArrayState()(id) as inference_ids,
-                        toUInt128(min(id)) as min_inference_id_uint,
-                        toUInt128(max(id)) as max_inference_id_uint
-                    FROM ChatInference
-                    WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
-                        AND toUInt128(episode_id) < toUInt128(toUUID('{cutoff_uuid}'))
-                    GROUP BY toUInt128(episode_id)
+                        t.function_name as function_name,
+                        t.variant_name as variant_name,
+                        f.metric_name as metric_name,
+                        f.id_uint as id_uint,
+                        f.target_id_uint as target_id_uint,
+                        f.value as value
+                    FROM float_feedback f
+                    JOIN targets t ON f.target_id = t.target_id
                     "
                 );
                 self.clickhouse
                     .run_query_synchronous_no_params(query)
                     .await?;
             } else {
-                tracing::warn!("Materialized view `EpisodeByIdChatView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
+                tracing::warn!("Materialized view `FloatFeedbackByVariantView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
             }
 
-            let create_json_table = self
+            let create_boolean_feedback_by_variant_view = self
                 .clickhouse
                 .run_query_synchronous_no_params(
-                    "SHOW CREATE TABLE EpisodeByIdJsonView".to_string(),
+                    "SHOW CREATE TABLE BooleanFeedbackByVariantView".to_string(),
                 )
                 .await?
                 .response;
 
-            if create_json_table.contains(&view_timestamp_nanos_string) {
+            if create_boolean_feedback_by_variant_view.contains(&view_timestamp_nanos_string) {
                 // Run backfill for EpisodeByIdJsonView if the json timestamps match
                 let query = format!(
                     r"
-                    INSERT INTO EpisodeById
+                    INSERT INTO BooleanFeedbackByVariantView
+                    WITH
+                        boolean_feedback AS (
+                            SELECT
+                                toUInt128(id) as id_uint,
+                                metric_name,
+                                target_id,
+                                toUInt128(target_id) as target_id_uint,
+                                value
+                            FROM BooleanMetricFeedback
+                            WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
+                        ),
+                        targets AS (
+                            SELECT
+                                uint_to_uuid(id_uint) as target_id,
+                                function_name,
+                                variant_name
+                            FROM InferenceById
+                            WHERE id_uint IN (SELECT target_id_uint FROM boolean_feedback)
+                            UNION ALL
+                            SELECT
+                                uint_to_uuid(episode_id_uint) as target_id,
+                                function_name,
+                                any(variant_name) as variant_name
+                            FROM InferenceByEpisodeID
+                            WHERE episode_id_uint IN (SELECT target_id_uint FROM boolean_feedback)
+                            GROUP BY (episode_id_uint, function_name)
+                            HAVING uniqExact(variant_name) > 1
+                        )
+
                     SELECT
-                        toUInt128(episode_id) as episode_id_uint,
-                        1 as count,
-                        groupArrayState()(id) as inference_ids,
-                        toUInt128(min(id)) as min_inference_id_uint,
-                        toUInt128(max(id)) as max_inference_id_uint
-                    FROM JsonInference
-                    WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
-                          AND toUInt128(episode_id) < toUInt128(toUUID('{cutoff_uuid}'))
-                    GROUP BY toUInt128(episode_id)
+                        t.function_name as function_name,
+                        t.variant_name as variant_name,
+                        f.metric_name as metric_name,
+                        f.id_uint as id_uint,
+                        f.target_id_uint as target_id_uint,
+                        f.value as value
+                    FROM boolean_feedback f
+                    JOIN targets t ON f.target_id = t.target_id
                     "
                 );
                 self.clickhouse
                     .run_query_synchronous_no_params(query)
                     .await?;
             } else {
-                tracing::warn!("Materialized view `EpisodeByIdJsonView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
+                tracing::warn!("Materialized view `BooleanFeedbackByVariantView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
+            }
+            let create_float_feedback_by_variant_statistics_view = self
+                .clickhouse
+                .run_query_synchronous_no_params(
+                    "SHOW CREATE TABLE FloatFeedbackByVariantStatisticsView".to_string(),
+                )
+                .await?
+                .response;
+            if create_float_feedback_by_variant_statistics_view
+                .contains(&view_timestamp_nanos_string)
+            {
+                // Run backfill for FloatFeedbackByVariantStatisticsView if the json timestamps match
+                let query = format!(
+                    r"
+                    INSERT INTO FloatFeedbackByVariantStatisticsView
+                    SELECT
+                        function_name,
+                        variant_name,
+                        metric_name,
+                        toStartOfMinute(UUIDv7ToDateTime(uint_to_uuid(id_uint))) as minute,
+                        avgState(value) as feedback_mean,
+                        varSampStableState(value) as feedback_variance,
+                        1 as count
+                    FROM FloatFeedbackByVariant
+                    WHERE UUIDv7ToDateTime(uint_to_uuid(id_uint)) < fromUnixTimestamp64Nano({view_timestamp_nanos})
+                    GROUP BY function_name, variant_name, metric_name, minute;
+                    "
+                );
+                self.clickhouse
+                    .run_query_synchronous_no_params(query)
+                    .await?;
+            } else {
+                tracing::warn!("Materialized view `FloatFeedbackByVariantStatisticsView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
+            }
+            let create_boolean_feedback_by_variant_statistics_view = self
+                .clickhouse
+                .run_query_synchronous_no_params(
+                    "SHOW CREATE TABLE BooleanFeedbackByVariantStatisticsView".to_string(),
+                )
+                .await?
+                .response;
+            if create_boolean_feedback_by_variant_statistics_view
+                .contains(&view_timestamp_nanos_string)
+            {
+                // Run backfill for BooleanFeedbackByVariantStatisticsView if the json timestamps match
+                let query = format!(
+                    r"
+                    INSERT INTO BooleanFeedbackByVariantStatisticsView
+                    SELECT
+                        function_name,
+                        variant_name,
+                        metric_name,
+                        toStartOfMinute(UUIDv7ToDateTime(uint_to_uuid(id_uint))) as minute,
+                        avgState(value) as feedback_mean,
+                        varSampStableState(value) as feedback_variance,
+                        1 as count
+                    FROM BooleanFeedbackByVariant
+                    WHERE UUIDv7ToDateTime(uint_to_uuid(id_uint)) < fromUnixTimestamp64Nano({view_timestamp_nanos})
+                    GROUP BY function_name, variant_name, metric_name, minute;
+                    "
+                );
+                self.clickhouse
+                    .run_query_synchronous_no_params(query)
+                    .await?;
+            } else {
+                tracing::warn!("Materialized view `BooleanFeedbackByVariantStatisticsView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required.");
             }
         }
 
@@ -335,9 +532,14 @@ impl Migration for Migration0039<'_> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
             r"
-        DROP TABLE IF EXISTS EpisodeByIdJsonView{on_cluster_name} SYNC;
-        DROP TABLE IF EXISTS EpisodeByIdChatView{on_cluster_name} SYNC;
-        DROP TABLE IF EXISTS EpisodeById{on_cluster_name} SYNC;"
+        DROP TABLE IF EXISTS BooleanFeedbackByVariantStatisticsView{on_cluster_name} SYNC;
+        DROP TABLE IF EXISTS FloatFeedbackByVariantStatisticsView{on_cluster_name} SYNC;
+        DROP TABLE IF EXISTS BooleanFeedbackByVariantView{on_cluster_name} SYNC;
+        DROP TABLE IF EXISTS FloatFeedbackByVariantView{on_cluster_name} SYNC;
+        DROP TABLE IF EXISTS FeedbackByVariantStatistics{on_cluster_name} SYNC;
+        DROP TABLE IF EXISTS BooleanFeedbackByVariant{on_cluster_name} SYNC;
+        DROP TABLE IF EXISTS FloatFeedbackByVariant{on_cluster_name} SYNC;
+        "
         )
     }
 
