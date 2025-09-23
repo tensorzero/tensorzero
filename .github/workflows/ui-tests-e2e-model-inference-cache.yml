@@ -95,6 +95,7 @@ jobs:
           # to pass to 'experimentalLaunchOptimizationWorkflow'
           echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> fixtures/.env
           echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/" >> fixtures/.env
+          echo "TOGETHER_BASE_URL=http://mock-inference-provider:3030/together/" >> fixtures/.env
           echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env
           echo "VITE_TENSORZERO_FORCE_CACHE_ON=1" >> fixtures/.env
 

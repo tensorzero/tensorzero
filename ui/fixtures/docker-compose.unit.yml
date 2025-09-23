@@ -114,6 +114,7 @@ services:
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       # For mock server during SFT jobs
       OPENAI_BASE_URL: http://mock-inference-provider:3030/openai
+      TOGETHER_BASE_URL: http://mock-inference-provider:3030/together
     volumes:
       # Mount config if tests need to read it at runtime
       - ./config:/app/ui/fixtures/config:ro
