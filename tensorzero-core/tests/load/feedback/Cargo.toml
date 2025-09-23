@@ -1,5 +1,5 @@
 [package]
-name = "rate-limit-load-test"
+name = "feedback-load-test"
 version.workspace = true
 rust-version.workspace = true
 edition = "2021"
@@ -7,13 +7,12 @@ license.workspace = true
 
 [dependencies]
 tensorzero-core = { path = "../../../" }
+tensorzero = { path = "../../../../clients/rust" }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
-rand = { workspace = true }
 rlt = { workspace = true }
-sqlx = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

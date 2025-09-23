@@ -1782,6 +1782,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "feedback-load-test"
+version = "2025.9.4"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "clap",
+ "rlt",
+ "tensorzero",
+ "tensorzero-core",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
