@@ -39,6 +39,12 @@ test-e2e-no-creds = [
     "--profile",
     "clickhouse",
 ]
+test-rate-limit-load = [
+    "run",
+    "--package",
+    "rate-limit-load-test",
+    "--",
+]
 
 
 build-e2e = "build --bin gateway --features e2e_tests"
