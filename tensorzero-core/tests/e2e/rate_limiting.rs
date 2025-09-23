@@ -11,8 +11,6 @@ use tensorzero_core::endpoints::inference::{ChatCompletionInferenceParams, Infer
 use tensorzero_core::inference::types::TextKind;
 use uuid::Uuid;
 
-use crate::providers::common::make_embedded_gateway_with_config_and_postgres;
-
 // ===== HELPER FUNCTIONS =====
 
 fn generate_rate_limit_config(rules: &[&str]) -> String {
@@ -130,7 +128,8 @@ scope = [
 ]"#
     )]);
 
-    let client = make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client =
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
     let tags_match = HashMap::from([(
         format!("test1_customer_id_{id}"),
         "customer_alpha".to_string(),
@@ -187,7 +186,8 @@ scope = [
 ]"#
     )]);
 
-    let client = make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client =
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
     let tags1 = HashMap::from([(format!("test2_tenant_id_{id}"), "tenant_gamma".to_string())]);
     let tags2 = HashMap::from([(format!("test2_tenant_id_{id}"), "tenant_delta".to_string())]);
     let no_tags = HashMap::new();
@@ -223,7 +223,8 @@ scope = [
 ]"#
     )]);
 
-    let client = make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client =
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
     let tags_workspace1 = HashMap::from([(
         format!("test3_workspace_id_{id}"),
         "workspace_epsilon".to_string(),
@@ -279,7 +280,8 @@ scope = [
         ),
     ]);
 
-    let client = make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client =
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
     // Tags that match BOTH rules - should apply both rules (always + priority)
     let tags_both = HashMap::from([
         (format!("test4_account_id_{id}"), "account_eta".to_string()),
@@ -357,7 +359,8 @@ scope = [
         ),
     ]);
 
-    let client = make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client =
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
 
     // Test 1: Request that matches only the highest priority rule (priority=3)
     let tags_highest_only = HashMap::from([(
@@ -410,7 +413,8 @@ scope = [
 ]"#
     )]);
 
-    let client = make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client =
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
     let tags = HashMap::from([(format!("test_tokens_user_id_{id}"), "123".to_string())]);
 
     // Make several requests - should succeed until token limit is reached
@@ -445,7 +449,8 @@ scope = [
 ]"#
     )]);
 
-    let client = make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client =
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
     let tags = HashMap::from([(format!("test_multi_user_id_{id}"), "123".to_string())]);
 
     // Should be limited by model_inferences_per_minute (3) rather than tokens (100)
@@ -477,7 +482,9 @@ scope = [
 ]"#
     )]);
 
-    let client = Arc::new(make_embedded_gateway_with_config_and_postgres(&config).await);
+    let client = Arc::new(
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await,
+    );
     let tags = HashMap::from([(format!("user_id_{id}"), "123".to_string())]);
 
     // Launch 10 concurrent requests
@@ -548,7 +555,9 @@ scope = [
 ]"#
     )]);
 
-    let client = Arc::new(make_embedded_gateway_with_config_and_postgres(&config).await);
+    let client = Arc::new(
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await,
+    );
 
     // Launch concurrent requests for different users
     let handles: Vec<_> = (0..6)
@@ -603,7 +612,8 @@ scope = [
 ]"#
     )]);
 
-    let client = make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client =
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
 
     let tags_match = HashMap::from([
         (format!("test6_application_id_{id}"), "app1".to_string()),
@@ -649,7 +659,8 @@ scope = [
 ]"#
     )]);
 
-    let client = make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client =
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
 
     let tags_with_required =
         HashMap::from([(format!("test7_required_tag_{id}"), "value".to_string())]);
@@ -691,7 +702,8 @@ scope = [
 ]"#
     )]);
 
-    let client = make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client =
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
     let tags = HashMap::from([(format!("test8_user_id_{id}"), "123".to_string())]);
 
     // First request should fail immediately due to zero limit
@@ -734,7 +746,8 @@ model = "dummy"
 "#
     );
 
-    let client = make_embedded_gateway_with_config_and_postgres(config).await;
+    let client =
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(config).await;
     let tags = HashMap::from([(format!("test9_user_id_{id}"), "123".to_string())]);
 
     // All requests should succeed when rate limiting is disabled
@@ -759,7 +772,8 @@ scope = [
 ]"#
     )]);
 
-    let client = make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client =
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
     let tags = HashMap::from([(format!("test10_user_id_{id}"), "123".to_string())]);
 
     // Should be able to make requests up to the capacity (10)
@@ -792,7 +806,8 @@ scope = [
 ]"#
     )]);
 
-    let client = make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client =
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
     let tags = HashMap::from([(format!("test11_user_id_{id}"), "123".to_string())]);
 
     // Should be able to make many requests without hitting the limit
@@ -815,7 +830,8 @@ scope = [
 ]"#
     )]);
 
-    let client = make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client =
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
     let tags = HashMap::from([(format!("test12_user_id_{id}"), "123".to_string())]);
 
     // Should be able to make 2 requests per second
@@ -855,7 +871,8 @@ type = "chat_completion"
 model = "dummy"
 "#;
 
-    let client = make_embedded_gateway_with_config_and_postgres(config).await;
+    let client =
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(config).await;
     let id = Uuid::now_v7();
     let tags = HashMap::from([(format!("test13_user_id_{id}"), "123".to_string())]);
 
