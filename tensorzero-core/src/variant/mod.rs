@@ -248,21 +248,21 @@ pub trait Variant {
 impl VariantConfig {
     pub fn weight(&self) -> Option<f64> {
         match self {
-            VariantConfig::ChatCompletion(params) => params.weight,
-            VariantConfig::BestOfNSampling(params) => params.weight,
+            VariantConfig::ChatCompletion(params) => params.weight(),
+            VariantConfig::BestOfNSampling(params) => params.weight(),
             VariantConfig::Dicl(params) => params.weight(),
-            VariantConfig::MixtureOfN(params) => params.weight,
-            VariantConfig::ChainOfThought(params) => params.inner.weight,
+            VariantConfig::MixtureOfN(params) => params.weight(),
+            VariantConfig::ChainOfThought(params) => params.inner.weight(),
         }
     }
 
     pub fn set_weight(&mut self, weight: Option<f64>) {
         match self {
-            VariantConfig::ChatCompletion(params) => params.weight = weight,
-            VariantConfig::BestOfNSampling(params) => params.weight = weight,
+            VariantConfig::ChatCompletion(params) => params.set_weight(weight),
+            VariantConfig::BestOfNSampling(params) => params.set_weight(weight),
             VariantConfig::Dicl(params) => params.set_weight(weight),
-            VariantConfig::MixtureOfN(params) => params.weight = weight,
-            VariantConfig::ChainOfThought(params) => params.inner.weight = weight,
+            VariantConfig::MixtureOfN(params) => params.set_weight(weight),
+            VariantConfig::ChainOfThought(params) => params.inner.set_weight(weight),
         }
     }
 }
@@ -841,7 +841,7 @@ impl ChatCompletionConfigPyClass {
     fn get_system_template(&self) -> PyResult<Option<String>> {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
-            .templates
+            .templates()
             .get_implicit_system_template()
             .as_ref()
             .map(|t| t.template.contents.clone()))
@@ -851,7 +851,7 @@ impl ChatCompletionConfigPyClass {
     fn get_user_template(&self) -> PyResult<Option<String>> {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
-            .templates
+            .templates()
             .get_implicit_template(crate::inference::types::Role::User)
             .as_ref()
             .map(|t| t.template.contents.clone()))
@@ -861,7 +861,7 @@ impl ChatCompletionConfigPyClass {
     fn get_assistant_template(&self) -> PyResult<Option<String>> {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
-            .templates
+            .templates()
             .get_implicit_template(crate::inference::types::Role::Assistant)
             .as_ref()
             .map(|t| t.template.contents.clone()))
@@ -870,7 +870,7 @@ impl ChatCompletionConfigPyClass {
     #[getter]
     fn get_model(&self) -> PyResult<String> {
         let config = Self::extract_chat_completion_config(&self.inner)?;
-        Ok(config.model.to_string())
+        Ok(config.model().to_string())
     }
 }
 
