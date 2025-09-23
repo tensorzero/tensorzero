@@ -51,6 +51,7 @@ import type {
   JsonInferenceOutput,
 } from "tensorzero-node";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
+import { InferenceButton } from "~/components/utils/InferenceButton";
 import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
@@ -390,7 +391,7 @@ const MetricRow = ({
         className="text-sm"
       />
       {inferenceId !== null && evaluationType === "llm_judge" && (
-        <div className="opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+        <div className="flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
           <EvaluationFeedbackEditor
             inferenceId={inferenceId}
             datapointId={datapointId}
@@ -400,6 +401,12 @@ const MetricRow = ({
             evaluatorInferenceId={evaluatorInferenceId}
             variantName={variantName}
           />
+          {evaluatorInferenceId && (
+            <InferenceButton
+              inferenceId={evaluatorInferenceId}
+              tooltipText="View LLM judge inference"
+            />
+          )}
         </div>
       )}
     </div>
