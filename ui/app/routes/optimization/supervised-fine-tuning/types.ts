@@ -18,12 +18,15 @@ const threshold = z.union([
   z.number(),
 ]);
 
+const logicalOperator = z.enum(["and", "or"]);
+
 export const SFTFormValuesSchema = z.object({
   function: z.string().nonempty("Function is required"),
   model: ModelOptionSchema,
   variant: z.string().nonempty(),
 
   // filters/metrics
+  logicalOperator,
   filters: z
     .array(
       z.object({

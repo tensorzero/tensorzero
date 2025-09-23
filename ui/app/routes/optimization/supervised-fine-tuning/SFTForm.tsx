@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useForm, useWatch } from "react-hook-form";
+import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { useFetcher } from "react-router";
 import type {
   ChatCompletionConfig,
@@ -44,6 +44,7 @@ export function SFTForm({
     defaultValues: {
       function: dev_useDefaults ? "extract_entities" : "",
       filters: startingFilters,
+      logicalOperator: "and",
       validationSplitPercent: 20,
       maxSamples: 100000,
       jobId: uuid(),
@@ -165,6 +166,13 @@ export function SFTForm({
     }
   }
 
+  const filtersArr = useFieldArray({
+    control: form.control,
+    name: "filters",
+  });
+
+  console.table(filtersArr.fields.map((_, i) => `filters.${i}` as const));
+
   return (
     <div className="mt-4">
       <Form {...form}>
@@ -193,8 +201,9 @@ export function SFTForm({
             <FiltersInput
               config={config}
               control={form.control}
+              filtersArr={filtersArr}
               // TODO(bret): only send a subset (ie the root group)
-              names={["filters"]}
+              names={filtersArr.fields.map((_, i) => `filters.${i}` as const)}
             />
 
             <div className="flex flex-col gap-1">

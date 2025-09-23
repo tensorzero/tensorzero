@@ -1,10 +1,10 @@
 import { useDraggable, type DragEndEvent } from "@dnd-kit/core";
-import { useState } from "react";
 import {
-  useFieldArray,
+  useController,
   useWatch,
   type Control,
   type FieldPath,
+  type UseFieldArrayReturn,
 } from "react-hook-form";
 import type { Config } from "tensorzero-node";
 import { Placeholder } from "~/components/icons/Icons";
@@ -63,38 +63,37 @@ const ListItemWithHandle = ({
 
 const metricTemplate = { metric: "", threshold: 0.5 };
 
-type LogicalOperator = "and" | "or";
-
 export function FiltersInput({
   config,
   control,
+  filtersArr,
   // @ts-expect-error -- hacking rn sorry
   counts = {},
   names,
 }: {
   config: Config;
   control: Control<SFTFormValues>;
+  filtersArr: UseFieldArrayReturn<SFTFormValues>;
   counts?: ReturnType<typeof useCountFetcher>;
   names: FieldPath<SFTFormValues>[];
 }) {
-  const [logicalOperator, setLogicalOperator] =
-    useState<LogicalOperator>("and");
   // const {
   //   formState: { errors },
   // } = form;
 
-  const toggleLogicalOperator = () =>
-    setLogicalOperator((op) => (op === "and" ? "or" : "and"));
-
-  const filtersArr = useFieldArray({
+  const { field: logicalOperator } = useController({
+    name: "logicalOperator",
     control,
-    name: "filters",
   });
 
-  const [filters] = useWatch({
+  const filters = useWatch({
     control,
-    name: names,
-  }) as [SFTFormValues["filters"][number][]];
+    name: [...names] as const,
+  }) as SFTFormValues["filters"][number][];
+
+  const toggleLogicalOperator = () => {
+    logicalOperator.onChange(logicalOperator.value === "and" ? "or" : "and");
+  };
 
   const functionConfigMetrics = useFunctionConfigMetrics({
     control,
@@ -107,7 +106,7 @@ export function FiltersInput({
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    // filters.swap(1, 2);
+    // filtersArr.swap(1, 2);
   };
 
   const remove = (index: number) => {
@@ -133,16 +132,14 @@ export function FiltersInput({
                 className="px-10 tracking-tighter [text-orientation:upright] [writing-mode:vertical-rl]"
                 onClick={toggleLogicalOperator}
               >
-                {logicalOperator.toUpperCase()}
+                {logicalOperator.value.toUpperCase()}
               </Button>
               <div className="flex-1" style={borderStyle} />
             </div>
 
             <div className="flex-1">
-              {filters.map((data, i) => {
-                const { id } = data;
-                console.log(data);
-                const name = ["name", id, data.metric].join("-");
+              {filters.map((_, i) => {
+                const name = ["name", i].join("-");
                 return (
                   <ListItemWithHandle
                     key={name}
