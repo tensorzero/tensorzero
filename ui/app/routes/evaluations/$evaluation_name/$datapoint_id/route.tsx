@@ -207,10 +207,12 @@ export default function EvaluationDatapointPage({
       metrics: [],
       variant_name: "Reference",
       inferenceId: null,
+      episodeId: null,
     },
     ...consolidatedEvaluationResults.map((result) => ({
       id: result.evaluation_run_id,
       inferenceId: result.inference_id,
+      episodeId: result.episode_id,
       variant_name: result.variant_name,
       output: result.generated_output,
       metrics: result.metrics,
@@ -441,6 +443,7 @@ type OutputsSectionProps = {
     output: ContentBlockChatOutput[] | JsonInferenceOutput;
     metrics: ConsolidatedMetric[];
     inferenceId: string | null;
+    episodeId: string | null;
   }>;
   evaluation_name: string;
   evaluation_config: EvaluationConfig; // Use the specific config type
@@ -480,7 +483,6 @@ function OutputsSection({
                     // Use the getColor obtained from the correct context
                     getColor={getColor}
                   />
-
                   {result.inferenceId && (
                     <div className="text-xs text-gray-500">
                       Inference:{" "}
@@ -492,6 +494,8 @@ function OutputsSection({
                       </Link>
                     </div>
                   )}
+                  {/* This is temporary but ready... */}
+                  {result.episodeId ? result.episodeId : "no episode here"}
                 </>
               )}
             </div>

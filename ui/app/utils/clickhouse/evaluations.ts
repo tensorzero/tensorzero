@@ -46,6 +46,7 @@ export type EvaluationResultWithVariant = z.infer<
 
 export const JsonEvaluationResultSchema = z.object({
   inference_id: z.string().uuid(),
+  episode_id: z.string().uuid(),
   datapoint_id: z.string().uuid(),
   evaluation_run_id: z.string().uuid(),
   evaluator_inference_id: z.string().uuid().nullable(),
@@ -63,6 +64,7 @@ export type JsonEvaluationResult = z.infer<typeof JsonEvaluationResultSchema>;
 
 export const ChatEvaluationResultSchema = z.object({
   inference_id: z.string().uuid(),
+  episode_id: z.string().uuid(),
   datapoint_id: z.string().uuid(),
   evaluation_run_id: z.string().uuid(),
   evaluator_inference_id: z.string().uuid().nullable(),

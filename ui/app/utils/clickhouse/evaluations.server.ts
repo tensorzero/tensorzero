@@ -259,7 +259,6 @@ export async function getEvaluationResults(
   LEFT JOIN filtered_feedback feedback
     ON feedback.target_id = ci.id
   ORDER BY toUInt128(datapoint_id) DESC
-
   `;
 
   const result = await getClickhouseClient().query({
@@ -564,6 +563,7 @@ export async function getEvaluationsForDatapoint(
       filtered_inference.tags['tensorzero::datapoint_id'] as datapoint_id,
       filtered_datapoint.output as reference_output,
       filtered_inference.id as inference_id,
+      filtered_inference.episode_id as episode_id,
       filtered_inference.output as generated_output,
       filtered_inference.tags['tensorzero::evaluation_run_id'] as evaluation_run_id,
       filtered_inference.variant_name as variant_name,
@@ -578,7 +578,6 @@ export async function getEvaluationsForDatapoint(
       ON filtered_datapoint.id = toUUIDOrNull(filtered_inference.tags['tensorzero::datapoint_id'])
     LEFT JOIN filtered_feedback
       ON filtered_feedback.target_id = filtered_inference.id
-
   `;
 
   const result = await getClickhouseClient().query({
