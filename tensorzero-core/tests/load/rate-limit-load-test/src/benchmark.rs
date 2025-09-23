@@ -10,8 +10,11 @@ use tensorzero_core::{
     rate_limiting::ActiveRateLimitKey,
 };
 use tokio::time::Instant;
-use tracing;
 
+/// If contention is Full, we try to maximally contend for keys by using rate_limit_key_{0, ..., requests_per_iteration - 1}
+/// Otherwise we use the atomic counter to cycle through available keys up to NumKeys
+///
+/// If requests_per_iteration < NumKeys, this will fail
 #[derive(Clone)]
 pub enum Contention {
     Full,
@@ -31,12 +34,12 @@ impl Contention {
         match self {
             Contention::Full => {
                 // For full contention, use batch index to avoid duplicates within a batch
-                format!("rate_limit_key_{}", batch_index)
+                format!("rate_limit_key_{batch_index}")
             }
             Contention::NumKeys(num) => {
                 // For limited keys, use global counter to cycle through available keys
                 let key_index = global_counter % (*num as u64);
-                format!("rate_limit_key_{}", key_index)
+                format!("rate_limit_key_{key_index}")
             }
         }
     }
@@ -54,7 +57,7 @@ pub struct RateLimitBenchmark {
     pub client: PostgresConnectionInfo,
     pub bucket_settings: Arc<BucketSettings>,
     pub contention: Contention,
-    pub tokens_per_request: u64,
+    pub tickets_per_request: u64,
     pub requests_per_iteration: usize,
     pub request_counter: Arc<AtomicU64>,
 }
@@ -89,7 +92,7 @@ impl BenchSuite for RateLimitBenchmark {
                 let key = self.contention.get_key(i, global_counter);
                 ConsumeTicketsRequest {
                     key: ActiveRateLimitKey(key),
-                    requested: self.tokens_per_request,
+                    requested: self.tickets_per_request,
                     capacity: state.bucket_settings.capacity as u64,
                     refill_amount: state.bucket_settings.refill_amount as u64,
                     refill_interval: state.bucket_settings.interval,

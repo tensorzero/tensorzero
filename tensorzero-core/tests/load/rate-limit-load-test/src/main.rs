@@ -14,11 +14,11 @@ pub struct Args {
     #[command(flatten)]
     pub bench_opts: rlt::cli::BenchCli,
 
-    /// Rate limit capacity (number of tokens in bucket)
+    /// Rate limit capacity (number of tickets in bucket)
     #[arg(long, default_value_t = 1_000_000)]
     pub capacity: i64,
 
-    /// Refill amount (tokens added per interval)
+    /// Refill amount (tickets added per interval)
     #[arg(long, default_value_t = 1_000)]
     pub refill_amount: i64,
 
@@ -26,9 +26,9 @@ pub struct Args {
     #[arg(long, default_value_t = 0)]
     pub contention_keys: usize,
 
-    /// Tokens consumed per request
+    /// Tickets consumed per request
     #[arg(long, default_value_t = 10)]
-    pub tokens_per_request: u64,
+    pub tickets_per_request: u64,
 
     /// Connection pool size
     #[arg(long)]
@@ -71,14 +71,14 @@ async fn main() -> Result<()> {
         client,
         bucket_settings,
         contention: Contention::new(args.contention_keys),
-        tokens_per_request: args.tokens_per_request,
+        tickets_per_request: args.tickets_per_request,
         requests_per_iteration: args.requests_per_iteration,
         request_counter: Arc::new(AtomicU64::new(0)),
     };
 
     println!("Starting rate limiting load test with configuration:");
-    println!("  Capacity: {} tokens", args.capacity);
-    println!("  Refill: {} tokens/second", args.refill_amount);
+    println!("  Capacity: {} tickets", args.capacity);
+    println!("  Refill: {} tickets/second", args.refill_amount);
     println!(
         "  Contention: {} keys",
         if args.contention_keys == 0 {
@@ -87,8 +87,8 @@ async fn main() -> Result<()> {
             args.contention_keys
         }
     );
-    println!("  Tokens per request: {}", args.tokens_per_request);
-    println!("  Pool size: {}", pool_size);
+    println!("  Tickets per request: {}", args.tickets_per_request);
+    println!("  Pool size: {pool_size}");
     println!("  Requests per iteration: {}", args.requests_per_iteration);
     println!();
 
