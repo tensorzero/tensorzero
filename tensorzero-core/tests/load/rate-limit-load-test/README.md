@@ -12,7 +12,7 @@ Run all commands below from the root of the repository.
 
 2. **Environment Setup**: Set the database URL (optional, defaults to localhost):
    ```bash
-   export TENSORZERO_POSTGRES_URL="postgres://postgres:postgres@localhost:5432/tensorzero_e2e_tests"
+   export TENSORZERO_POSTGRES_URL="postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests"
    ```
 
 ## Running the Load Test
