@@ -145,7 +145,7 @@ impl BenchSuite for RateLimitBenchmark {
 }
 
 pub async fn create_postgres_pool(pool_size: u32) -> Result<PgPool> {
-    let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+    let database_url = std::env::var("TENSORZERO_POSTGRES_URL").unwrap_or_else(|_| {
         "postgres://postgres:postgres@localhost:5432/tensorzero_e2e_tests".to_string()
     });
 
