@@ -10490,6 +10490,11 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
         return;
     }
 
+    if provider.variant_name.contains("openrouter") {
+        // OpenRouter claims gpt4.1-mini needs a minimum of 16 output tokens
+        return;
+    }
+
     let response = Client::new()
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
