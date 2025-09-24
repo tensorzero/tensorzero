@@ -19,7 +19,6 @@ import {
   isRouteErrorResponse,
   Link,
   redirect,
-  useFetcher,
   type RouteHandle,
 } from "react-router";
 import { Output } from "~/components/inference/Output";
@@ -53,9 +52,9 @@ import type {
 } from "tensorzero-node";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
+import { handleAddToDatasetAction } from "~/utils/dataset.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
-import { ToastAction } from "~/components/ui/toast";
 import { useEffect } from "react";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { logger } from "~/utils/logger";
@@ -150,57 +149,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
-type ActionData =
-  | { redirectTo: string; error?: never }
-  | { error: string; redirectTo?: never };
-
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const _action = formData.get("_action");
   switch (_action) {
     case "addToDataset": {
-      const { getTensorZeroClient } = await import("~/utils/tensorzero.server");
-      const dataset = formData.get("dataset");
-      const output = formData.get("output");
-      const inferenceId = formData.get("inference_id");
-      const functionName = formData.get("function_name");
-      const variantName = formData.get("variant_name");
-      const episodeId = formData.get("episode_id");
-      if (
-        !dataset ||
-        !output ||
-        !inferenceId ||
-        !functionName ||
-        !variantName ||
-        !episodeId
-      ) {
-        return data<ActionData>(
-          { error: "Missing required fields" },
-          { status: 400 },
-        );
-      }
-      try {
-        const datapoint = await getTensorZeroClient().createDatapoint(
-          dataset.toString(),
-          inferenceId.toString(),
-          output.toString() as "inherit" | "demonstration" | "none",
-          functionName.toString(),
-          variantName.toString(),
-          episodeId.toString(),
-        );
-        return data<ActionData>({
-          redirectTo: `/datasets/${dataset.toString()}/datapoint/${datapoint.id}`,
-        });
-      } catch (error) {
-        logger.error(error);
-        return data<ActionData>(
-          {
-            error:
-              "Failed to create datapoint as a datapoint exists with the same `source_inference_id`",
-          },
-          { status: 400 },
-        );
-      }
+      return handleAddToDatasetAction(formData);
     }
     case "addFeedback": {
       const response = await addEvaluationHumanFeedback(formData);
@@ -270,7 +224,6 @@ export default function EvaluationDatapointPage({
     })),
   ];
   const { toast } = useToast();
-  const addToDatasetFetcher = useFetcher<typeof action>();
   useEffect(() => {
     if (newFeedbackId) {
       toast({
@@ -278,28 +231,6 @@ export default function EvaluationDatapointPage({
       });
     }
   }, [newFeedbackId, newJudgeDemonstrationId, toast]);
-
-  useEffect(() => {
-    if (addToDatasetFetcher.state === "idle" && addToDatasetFetcher.data) {
-      if (addToDatasetFetcher.data.error) {
-        toast({
-          title: "Failed to add to dataset",
-          description: addToDatasetFetcher.data.error,
-          variant: "destructive",
-        });
-      } else if (addToDatasetFetcher.data.redirectTo) {
-        toast({
-          title: "New Datapoint",
-          description: "A datapoint was created successfully.",
-          action: (
-            <ToastAction altText="View Datapoint" asChild>
-              <Link to={addToDatasetFetcher.data.redirectTo}>View</Link>
-            </ToastAction>
-          ),
-        });
-      }
-    }
-  }, [addToDatasetFetcher.state, addToDatasetFetcher.data, toast]);
 
   return (
     // Provider remains here
@@ -329,7 +260,6 @@ export default function EvaluationDatapointPage({
             evaluation_name={evaluation_name}
             evaluation_config={evaluation_config}
             datapointId={datapoint_id}
-            addToDatasetFetcher={addToDatasetFetcher}
           />
         </SectionsGroup>
         <Toaster />
@@ -524,7 +454,6 @@ type OutputsSectionProps = {
   evaluation_name: string;
   evaluation_config: EvaluationConfig; // Use the specific config type
   datapointId: string;
-  addToDatasetFetcher: ReturnType<typeof useFetcher<typeof action>>;
 };
 
 function OutputsSection({
@@ -532,7 +461,6 @@ function OutputsSection({
   evaluation_name,
   evaluation_config,
   datapointId,
-  addToDatasetFetcher,
 }: OutputsSectionProps) {
   const { getColor } = useColorAssigner();
 
@@ -572,31 +500,12 @@ function OutputsSection({
                           {result.inferenceId}
                         </Link>
                       </span>
-                      {result.episodeId && (
+                      {result.inferenceId && result.episodeId && (
                         <AddToDatasetButton
-                          onDatasetSelect={(dataset, output) => {
-                            if (!result.inferenceId || !result.episodeId) {
-                              return;
-                            }
-                            const formData = new FormData();
-                            formData.append("dataset", dataset);
-                            formData.append("output", output);
-                            formData.append("inference_id", result.inferenceId);
-                            formData.append(
-                              "function_name",
-                              evaluation_config.function_name,
-                            );
-                            formData.append(
-                              "variant_name",
-                              result.variant_name,
-                            );
-                            formData.append("episode_id", result.episodeId);
-                            formData.append("_action", "addToDataset");
-                            addToDatasetFetcher.submit(formData, {
-                              method: "post",
-                              action: ".",
-                            });
-                          }}
+                          inferenceId={result.inferenceId}
+                          functionName={evaluation_config.function_name}
+                          variantName={result.variant_name}
+                          episodeId={result.episodeId}
                           hasDemonstration={false}
                           alwaysUseInherit={true}
                         />
