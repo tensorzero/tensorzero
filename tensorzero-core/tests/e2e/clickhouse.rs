@@ -1069,8 +1069,8 @@ async fn test_concurrent_clickhouse_migrations() {
 
     let migrations = migration_manager::make_all_migrations(&clickhouse);
     assert_eq!(
-        migration_manager::should_skip_migrations(&clickhouse, &migrations).await,
-        MigrationTableState::JustRight
+        migration_manager::check_migrations_state(&clickhouse, &migrations).await,
+        Ok(MigrationTableState::JustRight)
     );
 }
 
@@ -1329,8 +1329,8 @@ async fn test_run_migrations_fake_row() {
 
     let migrations = migration_manager::make_all_migrations(&clickhouse);
     assert_eq!(
-        migration_manager::should_skip_migrations(&clickhouse, &migrations).await,
-        MigrationTableState::Failed
+        migration_manager::check_migrations_state(&clickhouse, &migrations).await,
+        Ok(MigrationTableState::UnableToParse)
     );
 
     let migration_manager_result = migration_manager::run(RunMigrationManagerArgs {

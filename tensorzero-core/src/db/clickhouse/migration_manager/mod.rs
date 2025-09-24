@@ -123,73 +123,80 @@ pub enum MigrationTableState {
     TooFew,
     TooMany,
     JustRight,
-    Failed,
+    UnableToParse,
 }
 
-/// Returns `true` if our `TensorZeroMigration` table contains exactly `all_migrations`.
-/// If the database or `TensorZeroMigration` table does not exist, or it contains either more
-/// or fewer distinct migration ids than we expect, than we return `false` to be conservative.
-/// Note that we allow multiple rows to exist per migration id (since the migrations
-/// might have been run concurrently).
-pub async fn should_skip_migrations(
+/// Returns a Result<MigrationTableState,Err> value that describes which migrations have been run vis-a-vis the required migrations.
+/// There are five possible results:
+///   1. Ok(JustRight): Exactly the set of required migrations have been run. Downstream should proceed as normal.
+///   2. Ok(TooMany): Extra migrations have been run, possibly due to use of an older vresion. Downstream should proceed as normal.
+///   3. Ok(TooFew): Not all the required migrations have been run. Downstream should proceed to run the missing migrations.
+///   4. Ok(UnableToParse): Attempted to check whether the required migrations have been run but failed to parse the message return by ClickHouse.
+///      Downstream should proceed to run the required migrations.
+///   5. Err: Occurs when some but not all required migrations have been run, and some extra migrations have been run. Downstream should stop and throw an error.
+///      Note that we allow multiple rows to exist per migration id (since the migrations might have been run concurrently).
+pub async fn check_migrations_state(
     clickhouse: &ClickHouseConnectionInfo,
     all_migrations: &[Box<dyn Migration + Send + Sync + '_>],
-) -> MigrationTableState {
+) -> Result<MigrationTableState, Error> {
     let migration_records = match get_all_migration_records(clickhouse).await {
         Ok(records) => records,
         Err(e) => {
             if let ErrorDetails::ClickHouseMigration { message, .. } = e.get_details() {
                 if message.contains("UNKNOWN_DATABASE") {
                     tracing::info!("Database not found, assuming clean start");
-                    return MigrationTableState::TooFew;
+                    return Ok(MigrationTableState::TooFew);
                 }
                 if message.contains("UNKNOWN_TABLE") {
                     tracing::info!(
                         "TensorZeroMigration table not found, we should run migrations."
                     );
-                    return MigrationTableState::TooFew;
+                    return Ok(MigrationTableState::TooFew);
                 }
             }
             // Fall back to running all migrations as normal, and hopefully produce a better error message
-            tracing::warn!("Failed to lookup migrations records: {e}");
-            return MigrationTableState::Failed;
+            tracing::warn!("Attempted to check whether required migraitons have been run but was unable to parse the message from ClickHouse.
+            We should proceed to run migrations: {e}");
+            return Ok(MigrationTableState::UnableToParse);
         }
     };
-    let mut migration_ids = migration_records
+    let migration_ids = migration_records
         .iter()
         .map(|r| r.migration_id)
         .collect::<Vec<_>>();
-    migration_ids.sort();
-
     let expected_migration_ids = all_migrations
         .iter()
         .map(|m| m.migration_num())
-        .collect::<Result<Vec<_>, Error>>();
-    let mut expected_migration_ids = match expected_migration_ids {
-        Ok(ids) => ids,
-        Err(e) => {
-            // If we encounter any parse errors, just run the migrations as normal,
-            // and hopefully produce a better error message
-            tracing::warn!("Failed to get migration ids: {e}");
-            return MigrationTableState::Failed;
-        }
-    };
-    expected_migration_ids.sort();
+        .collect::<Result<Vec<_>, Error>>()?;
+    compare_migration_tables(expected_migration_ids, migration_ids)
+}
 
-    // We only want to skip running migrations if the database is in a known state
-    // (we've run exactly the migrations that we expect to have run)
-    tracing::debug!("Actual   migration ids: {migration_ids:?}");
+fn compare_migration_tables(
+    mut expected_migration_ids: Vec<u32>,
+    mut actual_migration_ids: Vec<u32>,
+) -> Result<MigrationTableState, Error> {
+    expected_migration_ids.sort();
+    actual_migration_ids.sort();
+
+    tracing::debug!("Actual   migration ids: {actual_migration_ids:?}");
     tracing::debug!("Expected migration ids: {expected_migration_ids:?}");
     // migration_ids == expected_migration_ids
-    match migration_ids.strip_prefix(expected_migration_ids.as_slice()) {
+    match actual_migration_ids.strip_prefix(expected_migration_ids.as_slice()) {
         Some(suffix) => {
             if suffix.is_empty() {
-                MigrationTableState::JustRight
+                Ok(MigrationTableState::JustRight)
             } else {
-                MigrationTableState::TooMany
+                Ok(MigrationTableState::TooMany)
             }
         }
-        None => MigrationTableState::TooFew,
+        None => match expected_migration_ids.strip_prefix(actual_migration_ids.as_slice()) {
+            Some(_) => Ok(MigrationTableState::TooFew),
+            None => Err(ErrorDetails::ClickHouseMigrationsInconsistent {
+                expected_migrations: expected_migration_ids,
+                actual_migrations: actual_migration_ids,
+            }
+            .into()),
+        },
     }
 }
 
@@ -208,72 +215,72 @@ pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
     clickhouse.health().await?;
 
     let migrations: Vec<Box<dyn Migration + Send + Sync>> = make_all_migrations(clickhouse);
-    let migration_table_state = should_skip_migrations(clickhouse, &migrations).await;
+    let migration_table_state = check_migrations_state(clickhouse, &migrations).await?;
 
-    // JustRight: good to go
-    if let MigrationTableState::JustRight = migration_table_state {
-        tracing::debug!("All migrations have already been applied");
-        return Ok(());
-    }
-    // Too many: warning and return
-    if let MigrationTableState::TooMany = migration_table_state {
-        tracing::warn!("Extra migrations were detected: this likely means a later version of TensorZero has run migrations against your ClickHouse instance");
-        return Ok(());
-    }
-
-    // TooFew or failed: throw error if (is_manual_run = False, disable = True)
-    if !is_manual_run && disable_automatic_migrations {
-        return Err(Error::new(ErrorDetails::ClickHouseMigrationsDisabled));
-    }
-    // is_manual_run = False, disable = False: if TooFew or Failed, run missing migrations.
-    // is_manual_run = False, disable = True: if TooFew or Failed, throw error.
-    // is_manual_run = True, disable = False: if TooFew or Failed, run missing migrations.
-    // is_manual_run = True, disable = True: if TooFew or Failed, run missing migrations.
-
-    // Otherwise run the missing migrations
-    tracing::debug!("All migrations have not yet been applied, running migrations");
-    let database_and_migrations_table_exists = clickhouse
-        .check_database_and_migrations_table_exists()
-        .await?;
-    if !database_and_migrations_table_exists {
-        if clickhouse.is_cluster_configured() && !is_manual_run {
-            let database = clickhouse.database();
-            let run_migrations_command: String = get_run_migrations_command();
-            return Err(ErrorDetails::ClickHouseConfiguration {
+    match migration_table_state {
+        MigrationTableState::JustRight => {
+            tracing::debug!("All migrations have already been applied");
+            Ok(())
+        }
+        MigrationTableState::TooMany => {
+            tracing::warn!("Extra migrations were detected: this likely means a later version of TensorZero has run migrations against your ClickHouse instance");
+            Ok(())
+        }
+        // If there are fewer migrations than expected, or if we couldn't parse the migrations that were run, proceed
+        // to run the migrations unless the user has disabled this.
+        MigrationTableState::TooFew | MigrationTableState::UnableToParse => {
+            // is_manual_run = False, disable = True, throw error. Otherwise, run the (possibly missing) migrations.
+            if !is_manual_run && disable_automatic_migrations {
+                Err(Error::new(ErrorDetails::ClickHouseMigrationsDisabled))
+            } else {
+                // Run the migrations
+                // Otherwise run the missing migrations
+                tracing::debug!("All migrations have not yet been applied, running migrations");
+                let database_and_migrations_table_exists = clickhouse
+                    .check_database_and_migrations_table_exists()
+                    .await?;
+                if !database_and_migrations_table_exists {
+                    if clickhouse.is_cluster_configured() && !is_manual_run {
+                        let database = clickhouse.database();
+                        let run_migrations_command: String = get_run_migrations_command();
+                        return Err(ErrorDetails::ClickHouseConfiguration {
                 message: format!("Database {database} does not exist. We do not automatically run migrations to create and set it up when replication is configured. Please run `{run_migrations_command}`."),
             }.into());
-        } else {
-            // This is a no-op if the database already exists
-            clickhouse.create_database_and_migrations_table().await?;
+                    } else {
+                        // This is a no-op if the database already exists
+                        clickhouse.create_database_and_migrations_table().await?;
+                    }
+                }
+
+                // Check if the ClickHouse instance is configured correctly for replication.
+                check_replication_settings(clickhouse).await?;
+
+                let is_replicated = clickhouse.is_cluster_configured();
+
+                // If the first migration needs to run, we are starting from scratch and don't need to wait for data to migrate
+                // The value we pass in for 'clean_start' is ignored for the first migration
+                let clean_start = run_migration(RunMigrationArgs {
+                    clickhouse,
+                    migration: &*migrations[0],
+                    clean_start: false,
+                    manual_run: is_manual_run,
+                    is_replicated,
+                })
+                .await?;
+                for migration in &migrations[1..] {
+                    run_migration(RunMigrationArgs {
+                        clickhouse,
+                        migration: &**migration,
+                        clean_start,
+                        manual_run: is_manual_run,
+                        is_replicated,
+                    })
+                    .await?;
+                }
+                Ok(())
+            }
         }
     }
-
-    // Check if the ClickHouse instance is configured correctly for replication.
-    check_replication_settings(clickhouse).await?;
-
-    let is_replicated = clickhouse.is_cluster_configured();
-
-    // If the first migration needs to run, we are starting from scratch and don't need to wait for data to migrate
-    // The value we pass in for 'clean_start' is ignored for the first migration
-    let clean_start = run_migration(RunMigrationArgs {
-        clickhouse,
-        migration: &*migrations[0],
-        clean_start: false,
-        manual_run: is_manual_run,
-        is_replicated,
-    })
-    .await?;
-    for migration in &migrations[1..] {
-        run_migration(RunMigrationArgs {
-            clickhouse,
-            migration: &**migration,
-            clean_start,
-            manual_run: is_manual_run,
-            is_replicated,
-        })
-        .await?;
-    }
-    Ok(())
 }
 
 /// Make sure that the ClickHouse instance is configured correctly for replication.

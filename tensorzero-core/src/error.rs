@@ -225,6 +225,10 @@ pub enum ErrorDetails {
         message: String,
     },
     ClickHouseMigrationsDisabled,
+    ClickHouseMigrationsInconsistent {
+        expected_migrations: Vec<u32>,
+        actual_migrations: Vec<u32>,
+    },
     ClickHouseQuery {
         message: String,
     },
@@ -551,6 +555,7 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigrationsDisabled => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseMigrationsInconsistent { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
@@ -659,6 +664,9 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseDeserialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigrationsDisabled => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseMigrationsInconsistent { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
             ErrorDetails::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DatapointNotFound { .. } => StatusCode::NOT_FOUND,
@@ -907,6 +915,14 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::ClickHouseMigrationsDisabled => {
                 let run_migrations_command: String = get_run_migrations_command();
                 write!(f, "Automatic ClickHouse migrations were disabled, but not all migrations were run. Please run `{run_migrations_command}`")
+            }
+            ErrorDetails::ClickHouseMigrationsInconsistent {
+                expected_migrations,
+                actual_migrations,
+            } => {
+                write!(f, "The state of the migrations table is inconsistent with the expected state. Please contact the TensorZero team.
+                The reguired migrations and the migrations that were actually run are as follows:
+                \nRequired Migrations\n===================\n{actual_migrations:?}\n\nMigrations that were run\n========================\n{expected_migrations:?}")
             }
             ErrorDetails::ClickHouseQuery { message } => {
                 write!(f, "Failed to run ClickHouse query: {message}")
