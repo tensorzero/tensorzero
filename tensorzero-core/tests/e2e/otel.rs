@@ -544,7 +544,7 @@ pub async fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str)
         .unwrap();
     // The model provider errored, so we shouldn't try to return tickets
     let [consume_ticket_span] = rate_limit_spans.as_slice() else {
-        panic!("Expected two rate limit spans: {rate_limit_spans:#?}");
+        panic!("Expected one rate limit span: {rate_limit_spans:#?}");
     };
     assert_eq!(consume_ticket_span.name, "rate_limiting_consume_tickets");
     let mut consume_ticket_attr_map = attrs_to_map(&consume_ticket_span.attributes);
