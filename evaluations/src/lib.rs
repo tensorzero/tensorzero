@@ -82,7 +82,7 @@ pub struct Clients {
     pub clickhouse_client: ClickHouseConnectionInfo,
 }
 
-#[instrument(skip(writer), fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
+#[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
 pub async fn run_evaluation(
     args: Args,
     evaluation_run_id: Uuid,
@@ -369,7 +369,7 @@ struct InferDatapointParams<'a> {
     inference_cache: CacheEnabledMode,
 }
 
-#[instrument(skip(params), fields(datapoint_id = %params.datapoint.id(), function_name = %params.function_name, variant_name = %params.variant_name))]
+#[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), function_name = %params.function_name, variant_name = %params.variant_name))]
 async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceResponse> {
     let InferDatapointParams {
         clients,
