@@ -67,15 +67,16 @@ export function AddToDatasetButton({
     }
   }, [fetcher.state, fetcher.data, toast]);
 
-  // Handle the output selection from the alert dialog
-  const handleOutputSelect = (output: "inherit" | "demonstration" | "none") => {
+  // Helper function to handle dataset selection
+  const handleDatasetAction = (
+    dataset: string,
+    output: "inherit" | "demonstration" | "none",
+  ) => {
     if (onDatasetSelect) {
-      // Use custom callback if provided
-      onDatasetSelect(selectedDataset, output);
+      onDatasetSelect(dataset, output);
     } else {
-      // Handle form submission internally
       const formData = new FormData();
-      formData.append("dataset", selectedDataset);
+      formData.append("dataset", dataset);
       formData.append("output", output);
       formData.append("inference_id", inferenceId);
       formData.append("function_name", functionName);
@@ -84,6 +85,11 @@ export function AddToDatasetButton({
       formData.append("_action", "addToDataset");
       fetcher.submit(formData, { method: "post" });
     }
+  };
+
+  // Handle the output selection from the alert dialog
+  const handleOutputSelect = (output: "inherit" | "demonstration" | "none") => {
+    handleDatasetAction(selectedDataset, output);
     setOutputDialogOpen(false);
   };
 
@@ -94,20 +100,7 @@ export function AddToDatasetButton({
         onSelect={(dataset) => {
           setSelectedDataset(dataset);
           if (alwaysUseInherit) {
-            // Handle immediately for alwaysUseInherit case
-            if (onDatasetSelect) {
-              onDatasetSelect(dataset, "inherit");
-            } else {
-              const formData = new FormData();
-              formData.append("dataset", dataset);
-              formData.append("output", "inherit");
-              formData.append("inference_id", inferenceId);
-              formData.append("function_name", functionName);
-              formData.append("variant_name", variantName);
-              formData.append("episode_id", episodeId);
-              formData.append("_action", "addToDataset");
-              fetcher.submit(formData, { method: "post" });
-            }
+            handleDatasetAction(dataset, "inherit");
           } else {
             setOutputDialogOpen(true);
           }
