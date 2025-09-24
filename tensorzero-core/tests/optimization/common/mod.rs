@@ -8,9 +8,7 @@ use uuid::Uuid;
 
 use tracing_subscriber::{self, EnvFilter};
 
-use tensorzero::{
-    Client, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
-};
+use tensorzero::{InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role};
 use tensorzero_core::{
     cache::CacheOptions,
     config::{Config, ConfigFileGlob, ProviderTypesConfig},
@@ -26,8 +24,8 @@ use tensorzero_core::{
         storage::{StorageKind, StoragePath},
         stored_input::StoredFile,
         Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
-        ModelInput, RequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent,
-        Text,
+        ModelInput, RequestMessage, ResolvedContentBlock, ResolvedRequestMessage, StoredInput,
+        StoredInputMessage, StoredInputMessageContent, Text,
     },
     optimization::{
         JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
@@ -279,9 +277,9 @@ fn generate_text_example() -> RenderedSample {
         function_name: "basic_test".to_string(),
         input: ModelInput {
             system: Some(system_prompt.clone()),
-            messages: vec![RequestMessage {
+            messages: vec![ResolvedRequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::Text(Text {
+                content: vec![ResolvedContentBlock::Text(Text {
                     text: "What is the capital of France?".to_string(),
                 })],
             }],
@@ -330,19 +328,19 @@ fn generate_tool_call_example() -> RenderedSample {
         input: ModelInput {
             system: Some(system_prompt.clone()),
             messages: vec![
-                RequestMessage {
+                ResolvedRequestMessage {
                     role: Role::User,
-                    content: vec![ContentBlock::Text(Text {
+                    content: vec![ResolvedContentBlock::Text(Text {
                         text: "What is the weather in Paris?".to_string(),
                     })],
                 },
-                RequestMessage {
+                ResolvedRequestMessage {
                     role: Role::Assistant,
                     content: vec![
-                        ContentBlock::Text(Text {
+                        ResolvedContentBlock::Text(Text {
                             text: "Let me look that up for you.".to_string(),
                         }),
-                        ContentBlock::ToolCall(ToolCall {
+                        ResolvedContentBlock::ToolCall(ToolCall {
                             name: "get_weather".to_string(),
                             arguments: serde_json::json!({
                                 "location": "Paris"
@@ -352,9 +350,9 @@ fn generate_tool_call_example() -> RenderedSample {
                         }),
                     ],
                 },
-                RequestMessage {
+                ResolvedRequestMessage {
                     role: Role::User,
-                    content: vec![ContentBlock::ToolResult(ToolResult {
+                    content: vec![ResolvedContentBlock::ToolResult(ToolResult {
                         name: "get_weather".to_string(),
                         result: serde_json::json!({
                             "weather": "sunny, 25 degrees Celsius",
@@ -363,15 +361,15 @@ fn generate_tool_call_example() -> RenderedSample {
                         id: "call_1".to_string(),
                     })],
                 },
-                RequestMessage {
+                ResolvedRequestMessage {
                     role: Role::Assistant,
-                    content: vec![ContentBlock::Text(Text {
+                    content: vec![ResolvedContentBlock::Text(Text {
                         text: "The weather in Paris is sunny, 25 degrees Celsius.".to_string(),
                     })],
                 },
-                RequestMessage {
+                ResolvedRequestMessage {
                     role: Role::User,
-                    content: vec![ContentBlock::Text(Text {
+                    content: vec![ResolvedContentBlock::Text(Text {
                         text: "What is the weather in London?".to_string(),
                     })],
                 },
@@ -468,13 +466,13 @@ fn generate_image_example() -> RenderedSample {
         function_name: "basic_test".to_string(),
         input: ModelInput {
             system: Some(system_prompt.clone()),
-            messages: vec![RequestMessage {
+            messages: vec![ResolvedRequestMessage {
                 role: Role::User,
                 content: vec![
-                    ContentBlock::Text(Text {
+                    ResolvedContentBlock::Text(Text {
                         text: "What is the main color of this image?".to_string(),
                     }),
-                    ContentBlock::File(Box::new(FileWithPath {
+                    ResolvedContentBlock::File(Box::new(FileWithPath {
                         file: Base64File {
                             url: None,
                             mime_type: mime::IMAGE_PNG,
@@ -526,37 +524,6 @@ fn generate_image_example() -> RenderedSample {
     }
 }
 
-#[allow(clippy::allow_attributes, dead_code)]
-pub async fn make_embedded_gateway() -> Client {
-    let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("tests/e2e/tensorzero.toml");
-    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
-        config_file: Some(config_path),
-        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        postgres_url: None,
-        timeout: None,
-        verify_credentials: true,
-        allow_batch_writes: true,
-    })
-    .with_verbose_errors(true)
-    .build()
-    .await
-    .unwrap()
-}
-
-#[allow(clippy::allow_attributes, dead_code)]
-pub async fn make_http_gateway() -> Client {
-    let gateway_url = std::env::var("TENSORZERO_GATEWAY_URL")
-        .unwrap_or_else(|_| "http://localhost:3000".to_string());
-    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::HTTPGateway {
-        url: gateway_url.parse().unwrap(),
-    })
-    .with_verbose_errors(true)
-    .build()
-    .await
-    .unwrap()
-}
-
 /// Generates a `#[tokio::test] async fn $fn_name() { run_test_case(&$constructor).await; }`
 #[macro_export]
 macro_rules! optimization_test_case {
@@ -581,7 +548,7 @@ macro_rules! embedded_workflow_test_case {
         ::paste::paste! {
             #[tokio::test(flavor = "multi_thread")]
             async fn [<test_embedded_slow_optimization_ $fn_name>]() {
-                let client = $crate::common::make_embedded_gateway().await;
+                let client = tensorzero::test_helpers::make_embedded_gateway().await;
                 $crate::common::run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await;
             }
         }
@@ -597,7 +564,7 @@ macro_rules! http_workflow_test_case {
         ::paste::paste! {
             #[tokio::test]
             async fn [<test_http_slow_optimization_ $fn_name>]() {
-                let client = $crate::common::make_http_gateway().await;
+                let client = tensorzero::test_helpers::make_http_gateway().await;
                 $crate::common::run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await;
             }
         }

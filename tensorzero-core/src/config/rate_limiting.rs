@@ -3,7 +3,8 @@ use std::sync::Arc;
 
 use crate::rate_limiting::{
     RateLimit, RateLimitInterval, RateLimitResource, RateLimitingConfigPriority,
-    RateLimitingConfigRule, RateLimitingConfigScope, RateLimitingConfigScopes, TagValueScope,
+    RateLimitingConfigRule, RateLimitingConfigScope, RateLimitingConfigScopes,
+    TagRateLimitingConfigScope, TagValueScope,
 };
 
 /*
@@ -169,13 +170,46 @@ impl<'de> Deserialize<'de> for TagValueScope {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        if s == "tensorzero::any" {
-            Ok(TagValueScope::Any)
-        } else if s == "tensorzero::all" {
-            Ok(TagValueScope::All)
+        if s == "tensorzero::each" {
+            Ok(TagValueScope::Each)
+        } else if s == "tensorzero::total" {
+            Ok(TagValueScope::Total)
+        } else if s.starts_with("tensorzero::") {
+            Err(serde::de::Error::custom(
+                r#"Tag values in rate limiting scopes besides tensorzero::each and tensorzero::total may not start with "tensorzero::"."#,
+            ))
         } else {
             Ok(TagValueScope::Concrete(s))
         }
+    }
+}
+
+// We use a custom deserializer for RateLimitingConfigScope
+// so that we can handle the error messages gracefully for TagValueScope
+impl<'de> Deserialize<'de> for RateLimitingConfigScope {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // First, deserialize into a generic Value to inspect it
+        let value = toml::Value::deserialize(deserializer)?;
+
+        if let Some(table) = value.as_table() {
+            if table.contains_key("tag_key") {
+                // If it looks like a Tag variant, try to deserialize it as such.
+                // If this fails, the specific error will be propagated.
+                return TagRateLimitingConfigScope::deserialize(value)
+                    .map(RateLimitingConfigScope::Tag)
+                    .map_err(serde::de::Error::custom);
+            }
+            // As we add other variants, we will add impls here
+            // if table.contains_key("model_name") { ... }
+        }
+
+        // If no variant matches, return a clear error
+        Err(serde::de::Error::custom(
+            "data did not match any known scope structure",
+        ))
     }
 }
 
@@ -315,7 +349,7 @@ mod tests {
             model_inferences_per_second = 10
             priority = 1
             scope = [
-                { tag_key = "user_id", tag_value = "tensorzero::all" }
+                { tag_key = "user_id", tag_value = "tensorzero::total" }
             ]
         "#;
 
@@ -328,7 +362,7 @@ mod tests {
         // Check scope filter with All value
         let RateLimitingConfigScope::Tag(tag_scope) = &config.rules()[0].scope[0];
         assert_eq!(tag_scope.tag_key(), "user_id");
-        assert_eq!(tag_scope.tag_value(), &TagValueScope::All);
+        assert_eq!(tag_scope.tag_value(), &TagValueScope::Total);
     }
 
     #[test]
@@ -339,7 +373,7 @@ mod tests {
             priority = 1
             scope = [
                 { tag_key = "user_id", tag_value = "123" },
-                { tag_key = "application_id", tag_value = "tensorzero::any" }
+                { tag_key = "application_id", tag_value = "tensorzero::each" }
             ]
         "#;
 
@@ -354,7 +388,7 @@ mod tests {
             // Check first scope filter
             let RateLimitingConfigScope::Tag(tag_scope) = &config.rules()[0].scope[0];
             assert_eq!(tag_scope.tag_key(), "application_id");
-            assert_eq!(tag_scope.tag_value(), &TagValueScope::Any);
+            assert_eq!(tag_scope.tag_value(), &TagValueScope::Each);
 
             // Check second scope filter with special value
             let RateLimitingConfigScope::Tag(tag_scope) = &config.rules()[0].scope[1];
@@ -373,7 +407,7 @@ mod tests {
             model_inferences_per_second = 10
             priority = 1
             scope = [
-                { tag_key = "application_id", tag_value = "tensorzero::any" },
+                { tag_key = "application_id", tag_value = "tensorzero::each" },
                 { tag_key = "user_id", tag_value = "123" }
             ]
         "#;
@@ -406,7 +440,7 @@ mod tests {
             model_inferences_per_day = 100
             priority = 1
             scope = [
-                { tag_key = "user_id", tag_value = "tensorzero::any" }
+                { tag_key = "user_id", tag_value = "tensorzero::each" }
             ]
 
             # Application 2, for each user
@@ -415,7 +449,7 @@ mod tests {
             priority = 2
             scope = [
                 { tag_key = "application_id", tag_value = "2" },
-                { tag_key = "user_id", tag_value = "tensorzero::any" }
+                { tag_key = "user_id", tag_value = "tensorzero::each" }
             ]
         "#;
 
@@ -525,7 +559,7 @@ mod tests {
         // Check Users rule scope details
         let RateLimitingConfigScope::Tag(users_scope) = &config.rules()[2].scope[0];
         assert_eq!(users_scope.tag_key(), "user_id");
-        assert_eq!(users_scope.tag_value(), &TagValueScope::Any);
+        assert_eq!(users_scope.tag_value(), &TagValueScope::Each);
 
         // Check Application 2 scope details (first scope: application_id = "2")
         let RateLimitingConfigScope::Tag(app2_scope_0) = &app2_rule.scope[0];
@@ -538,7 +572,7 @@ mod tests {
         // Check Application 2 scope details (second scope: user_id = wildcard)
         let RateLimitingConfigScope::Tag(app2_scope_1) = &app2_rule.scope[1];
         assert_eq!(app2_scope_1.tag_key(), "user_id");
-        assert_eq!(app2_scope_1.tag_value(), &TagValueScope::Any);
+        assert_eq!(app2_scope_1.tag_value(), &TagValueScope::Each);
     }
 
     #[test]
@@ -1050,5 +1084,23 @@ mod tests {
                 error.get_details()
             ),
         }
+    }
+
+    #[test]
+    fn test_tensorzero_protected() {
+        let toml_str = r#"
+            [[rules]]
+            model_inferences_per_second = 10
+            priority = 5
+            scope = [
+                { tag_key = "user_id", tag_value = "tensorzero::foo" }
+            ]
+
+        "#;
+
+        let err_message = toml::from_str::<UninitializedRateLimitingConfig>(toml_str)
+            .unwrap_err()
+            .to_string();
+        assert!(err_message.contains("Tag values in rate limiting scopes besides tensorzero::each and tensorzero::total may not start with \"tensorzero::\"."));
     }
 }

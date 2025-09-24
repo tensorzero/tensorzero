@@ -1,4 +1,4 @@
-use futures::try_join;
+use futures::{future::try_join_all, try_join};
 #[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyValueError;
 #[cfg(feature = "pyo3")]
@@ -239,21 +239,36 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
         _config: &Config,
     ) -> Result<Self::Handle, Error> {
+        let train_examples = train_examples
+            .into_iter()
+            .map(RenderedSample::into_lazy_rendered_sample)
+            .collect::<Vec<_>>();
+        let val_examples = val_examples.map(|examples| {
+            examples
+                .into_iter()
+                .map(RenderedSample::into_lazy_rendered_sample)
+                .collect::<Vec<_>>()
+        });
         // TODO(#2642): improve error handling here so we know what index of example failed
-        let train_rows: Vec<GCPVertexGeminiSupervisedRow> = train_examples
-            .iter()
-            .map(GCPVertexGeminiSupervisedRow::try_from)
-            .collect::<Result<Vec<_>, _>>()?;
+        let train_rows: Vec<GCPVertexGeminiSupervisedRow> = try_join_all(
+            train_examples
+                .iter()
+                .map(GCPVertexGeminiSupervisedRow::from_rendered_sample),
+        )
+        .await?;
 
-        let val_rows: Option<Vec<GCPVertexGeminiSupervisedRow>> = val_examples
-            .as_ref()
-            .map(|examples| {
-                examples
-                    .iter()
-                    .map(GCPVertexGeminiSupervisedRow::try_from)
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .transpose()?;
+        let val_rows = if let Some(examples) = val_examples.as_ref() {
+            Some(
+                try_join_all(
+                    examples
+                        .iter()
+                        .map(GCPVertexGeminiSupervisedRow::from_rendered_sample),
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
 
         let train_filename = format!("train_{}.jsonl", Uuid::now_v7()); // or use job ID
         let train_gs_url = match &self.bucket_path_prefix {

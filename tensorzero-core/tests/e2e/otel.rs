@@ -8,6 +8,7 @@ use opentelemetry_sdk::{
     error::OTelSdkResult,
     trace::{SpanData, SpanExporter},
 };
+use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
     Client, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     FeedbackParams, InferenceOutput, InferenceResponse, InferenceResponseChunk, Role,
@@ -17,8 +18,6 @@ use tensorzero_core::{config::OtlpTracesFormat, inference::types::TextKind};
 use tokio_stream::StreamExt;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
-
-use crate::providers::common::{make_embedded_gateway, make_embedded_gateway_with_config};
 
 type CapturedSpans = Arc<Mutex<Option<Vec<SpanData>>>>;
 
@@ -440,7 +439,7 @@ pub async fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str)
     "
     );
 
-    let client = make_embedded_gateway_with_config(&config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_config(&config).await;
     let _err = client
         .inference(ClientInferenceParams {
             episode_id: Some(episode_uuid),
@@ -604,7 +603,7 @@ pub async fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str)
 pub async fn test_capture_feedback_spans() {
     let exporter = install_capturing_otel_exporter();
 
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let res = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),

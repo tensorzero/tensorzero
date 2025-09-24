@@ -1416,7 +1416,7 @@ impl UninitializedFunctionConfig {
                             }
                         }
                         VariantConfig::Dicl(best_of_n_config) => {
-                            if best_of_n_config.json_mode.is_none() {
+                            if best_of_n_config.json_mode().is_none() {
                                 variant_missing_mode = Some(name.clone());
                             }
                         }
