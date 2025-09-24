@@ -159,8 +159,9 @@ pub trait BanditQueries {
 pub struct FeedbackByVariant {
     pub period_start: DateTime<Utc>,
     pub variant_name: String,
-    pub mean: f64,
-    pub // todo
+    pub mean: f32,
+    pub variance: f32,
+    count: u64,
 }
 
 impl<T: RateLimitQueries + HealthCheckable + Send + Sync> PostgresConnection for T {}
