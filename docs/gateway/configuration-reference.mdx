@@ -1432,6 +1432,36 @@ routing = ["openai", "alternative-provider"]
 # ...
 ```
 
+### `extra_body`
+
+- **Type:** array of objects (see below)
+- **Required:** no
+
+The `extra_body` field allows you to modify the request body that TensorZero sends to the embedding model provider.
+This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
+
+Each object in the array must have two fields:
+
+- `pointer`: A [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) string specifying where to modify the request body
+- One of the following:
+  - `value`: The value to insert at that location; it can be of any type including nested types
+  - `delete = true`: Deletes the field at the specified location, if present.
+
+<Tip>
+
+You can also set `extra_body` at inference-time.
+The values provided at inference-time take priority over the values in the configuration file.
+
+</Tip>
+
+```toml title="tensorzero.toml"
+[embedding_models.openai-text-embedding-3-small.providers.openai]
+type = "openai"
+extra_body = [
+  { pointer = "/dimensions", value = 1536 }
+]
+```
+
 ### `type`
 
 - **Type:** string
