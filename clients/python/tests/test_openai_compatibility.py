@@ -1736,3 +1736,32 @@ async def test_async_inference_tensorzero_raw_text(async_openai_client):
         response.model
         == "tensorzero::function_name::openai_with_assistant_schema::variant_name::openai"
     )
+
+
+@pytest.mark.asyncio
+async def test_async_inference_tensorzero_template(async_openai_client):
+    """
+    Test that chat inference with a tensorzero::template block works correctly
+    """
+    messages = [
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tensorzero::template",
+                    "name": "assistant",
+                    "arguments": {"assistant_name": "Megumin"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "What is the capital of Japan?"}],
+        },
+    ]
+    response = await async_openai_client.chat.completions.create(
+        messages=messages,
+        model="tensorzero::function_name::openai_with_assistant_schema",
+    )
+
+    assert "tokyo" in response.choices[0].message.content.lower()

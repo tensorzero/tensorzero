@@ -41,7 +41,7 @@ use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::file::filename_to_mime_type;
 use crate::inference::types::{
     current_timestamp, ContentBlockChatOutput, ContentBlockChunk, File, FinishReason, Input,
-    InputMessage, InputMessageContent, Role, TextKind, Usage,
+    InputMessage, InputMessageContent, Role, TemplateInput, TextKind, Usage,
 };
 use crate::tool::{DynamicToolParams, Tool, ToolCallInput, ToolCallOutput, ToolChoice, ToolResult};
 use crate::variant::JsonMode;
@@ -961,6 +961,11 @@ enum OpenAICompatibleContentBlock {
     RawText {
         value: String,
     },
+    #[serde(rename = "tensorzero::template")]
+    Template {
+        name: String,
+        arguments: Map<String, Value>,
+    },
 }
 
 #[derive(Deserialize, Debug)]
@@ -1048,6 +1053,7 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
                 let block = serde_json::from_value::<OpenAICompatibleContentBlock>(val.clone());
                 let output = match block {
                     Ok(OpenAICompatibleContentBlock::RawText{ value }) => InputMessageContent::RawText { value },
+                    Ok(OpenAICompatibleContentBlock::Template { name, arguments }) => InputMessageContent::Template(TemplateInput { name, arguments }),
                     Ok(OpenAICompatibleContentBlock::Text(TextContent::Text { text })) => InputMessageContent::Text(TextKind::Text {text }),
                     Ok(OpenAICompatibleContentBlock::Text(TextContent::TensorZeroArguments { tensorzero_arguments })) => InputMessageContent::Text(TextKind::Arguments { arguments: tensorzero_arguments }),
                     Ok(OpenAICompatibleContentBlock::ImageUrl { image_url }) => {
@@ -1779,6 +1785,25 @@ mod tests {
                 .as_object()
                 .unwrap()
                 .clone(),
+            })]
+        );
+
+        let template_block = json!([{
+            "type": "tensorzero::template",
+            "name": "my_template",
+            "arguments": {
+                "custom_key": "custom_val",
+            }
+        }]);
+        let value = convert_openai_message_content(template_block).unwrap();
+        assert_eq!(
+            value,
+            vec![InputMessageContent::Template(TemplateInput {
+                name: "my_template".to_string(),
+                arguments: json!({ "custom_key": "custom_val" })
+                    .as_object()
+                    .unwrap()
+                    .clone()
             })]
         );
     }
