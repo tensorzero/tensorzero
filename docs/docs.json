@@ -43,6 +43,7 @@
             "pages": [
               "gateway/index",
               "gateway/call-any-llm",
+              "gateway/create-a-prompt-template",
               "gateway/tutorial",
               "gateway/guides/batch-inference",
               "gateway/guides/episodes",
@@ -50,7 +51,6 @@
               "gateway/guides/inference-time-optimizations",
               "gateway/guides/metrics-feedback",
               "gateway/guides/multimodal-inference",
-              "gateway/guides/prompt-templates-schemas",
               "gateway/guides/retries-fallbacks",
               "gateway/guides/streaming-inference",
               "gateway/guides/tool-use",
@@ -326,6 +326,14 @@
     {
       "source": "/gateway/guides/providers/:provider*/",
       "destination": "/integrations/model-providers/:provider*"
+    },
+    {
+      "source": "/gateway/guides/prompt-templates-schemas",
+      "destination": "/guides/set-up-a-prompt-template"
+    },
+    {
+      "source": "/gateway/guides/prompt-templates-schemas/",
+      "destination": "/guides/set-up-a-prompt-template"
     }
   ]
 }

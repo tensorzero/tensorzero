@@ -1,6 +1,6 @@
-# Guide: Prompt Templates & Schemas
+# Code Example: How to create a prompt template
 
-This directory contains the code for the **[Prompt Templates & Schemas](https://www.tensorzero.com/docs/gateway/guides/prompt-templates-schemas)** guide.
+This folder contains the code for the [Guides » Gateway » Create a prompt template](https://www.tensorzero.com/docs/gateway/create-a-prompt-template) page in the documentation.
 
 ## Running the Example
 

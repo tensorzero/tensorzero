@@ -18,5 +18,4 @@ result = client.chat.completions.create(
     ],
 )
 
-
 print(result)
