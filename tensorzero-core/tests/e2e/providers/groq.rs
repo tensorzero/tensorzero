@@ -15,7 +15,7 @@ async fn get_providers() -> E2ETestProviders {
     let standard_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "groq".to_string(),
-        model_name: "mixtral-groq".into(),
+        model_name: "groq-qwen".into(),
         model_provider_name: "groq".into(),
         credentials: HashMap::new(),
     }];
@@ -23,7 +23,7 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "groq-extra-body".to_string(),
-        model_name: "mixtral-groq".into(),
+        model_name: "groq-qwen".into(),
         model_provider_name: "groq".into(),
         credentials: HashMap::new(),
     }];
@@ -31,7 +31,7 @@ async fn get_providers() -> E2ETestProviders {
     let bad_auth_extra_headers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "groq-extra-headers".to_string(),
-        model_name: "mixtral-groq".into(),
+        model_name: "groq-qwen".into(),
         model_provider_name: "groq".into(),
         credentials: HashMap::new(),
     }];
@@ -39,7 +39,7 @@ async fn get_providers() -> E2ETestProviders {
     let inference_params_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "groq".to_string(),
-        model_name: "mixtral-groq".into(),
+        model_name: "groq-qwen".into(),
         model_provider_name: "groq".into(),
         credentials: credentials.clone(),
     }];
@@ -47,7 +47,7 @@ async fn get_providers() -> E2ETestProviders {
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "groq-dynamic".to_string(),
-        model_name: "mixtral-groq-dynamic".into(),
+        model_name: "groq-qwen-dynamic".into(),
         model_provider_name: "groq".into(),
         credentials,
     }];
@@ -64,7 +64,7 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "groq".to_string(),
-            model_name: "mixtral-groq".into(),
+            model_name: "groq-qwen".into(),
             model_provider_name: "groq".into(),
             credentials: HashMap::new(),
         },
@@ -74,7 +74,7 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "groq-strict".to_string(),
-            model_name: "mixtral-groq".into(),
+            model_name: "groq-qwen".into(),
             model_provider_name: "groq".into(),
             credentials: HashMap::new(),
         },
