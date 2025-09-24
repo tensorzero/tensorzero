@@ -101,19 +101,29 @@ pub fn attrs_to_map(attrs: &[KeyValue]) -> HashMap<String, Value> {
     map
 }
 
-#[tokio::test]
-pub async fn test_capture_simple_inference_spans_genai_tags() {
-    test_capture_simple_inference_spans(OtlpTracesFormat::OpenTelemetry, "opentelemetry").await;
+#[test]
+pub fn test_capture_simple_inference_spans_genai_tags() {
+    test_capture_simple_inference_spans(OtlpTracesFormat::OpenTelemetry, "opentelemetry");
 }
 
-#[tokio::test]
-pub async fn test_capture_simple_inference_spans_openinference_tags() {
-    test_capture_simple_inference_spans(OtlpTracesFormat::OpenInference, "openinference").await;
+#[test]
+pub fn test_capture_simple_inference_spans_openinference_tags() {
+    test_capture_simple_inference_spans(OtlpTracesFormat::OpenInference, "openinference");
 }
 
-pub async fn test_capture_simple_inference_spans(mode: OtlpTracesFormat, config_mode: &str) {
-    let exporter = install_capturing_otel_exporter();
+fn remove_unstable_attrs(attrs: &mut HashMap<String, Value>) {
+    // These values are either random or can easily change between commits,
+    // so remove them (and assert that they exist)
+    attrs.remove("code.namespace").unwrap();
+    attrs.remove("thread.id").unwrap();
+    attrs.remove("thread.name").unwrap();
+    attrs.remove("code.filepath").unwrap();
+    attrs.remove("code.lineno").unwrap();
+    attrs.remove("busy_ns").unwrap();
+    attrs.remove("idle_ns").unwrap();
+}
 
+pub fn test_capture_simple_inference_spans(mode: OtlpTracesFormat, config_mode: &str) {
     let config = format!(
         "
     [gateway.export.otlp.traces]
@@ -122,27 +132,39 @@ pub async fn test_capture_simple_inference_spans(mode: OtlpTracesFormat, config_
     "
     );
 
-    let client = tensorzero::test_helpers::make_embedded_gateway_with_config(&config).await;
-    let res = client
-        .inference(ClientInferenceParams {
-            model_name: Some("dummy::good".to_string()),
-            input: ClientInput {
-                system: None,
-                messages: vec![ClientInputMessage {
-                    role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
-                        text: "What is your name?".to_string(),
-                    })],
-                }],
-            },
-            tags: HashMap::from([
-                ("first_tag".to_string(), "first_value".to_string()),
-                ("second_tag".to_string(), "second_value".to_string()),
-            ]),
-            ..Default::default()
-        })
-        .await
-        .unwrap();
+    // The 'consume_ticket' call happens in the background (via 'tokio::spawn).
+    // To make this test deterministic, we shut down the runtime to ensure that the spawned
+    // task completes (and exports its span to our OTEL exporter) before we check our captured spans.
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let (res, exporter) = runtime.block_on(async {
+        let exporter = install_capturing_otel_exporter();
+        let client = tensorzero::test_helpers::make_embedded_gateway_with_config(&config).await;
+        (
+            client
+                .inference(ClientInferenceParams {
+                    model_name: Some("dummy::good".to_string()),
+                    input: ClientInput {
+                        system: None,
+                        messages: vec![ClientInputMessage {
+                            role: Role::User,
+                            content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                                text: "What is your name?".to_string(),
+                            })],
+                        }],
+                    },
+                    tags: HashMap::from([
+                        ("first_tag".to_string(), "first_value".to_string()),
+                        ("second_tag".to_string(), "second_value".to_string()),
+                    ]),
+                    ..Default::default()
+                })
+                .await
+                .unwrap(),
+            exporter,
+        )
+    });
+    drop(runtime);
+
     let InferenceOutput::NonStreaming(output) = res else {
         panic!("Expected non-streaming output, got: {res:#?}");
     };
@@ -301,14 +323,47 @@ pub async fn test_capture_simple_inference_spans(mode: OtlpTracesFormat, config_
     }
     assert_eq!(model_attr_map["stream"], false.into());
 
+    let rate_limit_spans = spans
+        .span_children
+        .get(&model_provider_span.span_context.span_id())
+        .unwrap();
+    let [consume_ticket_span, return_ticket_span] = rate_limit_spans.as_slice() else {
+        panic!("Expected two rate limit spans: {rate_limit_spans:#?}");
+    };
+
+    assert_eq!(consume_ticket_span.name, "rate_limiting_consume_tickets");
+    let mut consume_ticket_attr_map = attrs_to_map(&consume_ticket_span.attributes);
+    remove_unstable_attrs(&mut consume_ticket_attr_map);
     assert_eq!(
-        spans
-            .span_children
-            .get(&model_provider_span.span_context.span_id()),
-        None
+        consume_ticket_attr_map,
+        HashMap::from([
+            (
+                "scope_info.tags.first_tag".to_string(),
+                "first_value".into()
+            ),
+            (
+                "scope_info.tags.second_tag".to_string(),
+                "second_value".into()
+            ),
+            ("success".to_string(), true.into()),
+            ("level".to_string(), "INFO".into()),
+        ])
     );
 
-    assert_eq!(num_spans, 4);
+    assert_eq!(return_ticket_span.name, "rate_limiting_return_tickets");
+    let mut return_ticket_attr_map = attrs_to_map(&return_ticket_span.attributes);
+    remove_unstable_attrs(&mut return_ticket_attr_map);
+    assert_eq!(
+        return_ticket_attr_map,
+        HashMap::from([
+            ("actual_usage.tokens".to_string(), 11.into()),
+            ("actual_usage.model_inferences".to_string(), 1.into()),
+            ("success".to_string(), true.into()),
+            ("level".to_string(), "INFO".into()),
+        ])
+    );
+
+    assert_eq!(num_spans, 6);
 }
 
 #[tokio::test]
@@ -483,14 +538,26 @@ pub async fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str)
 
     assert_eq!(model_attr_map["stream"], false.into());
 
+    let rate_limit_spans = spans
+        .span_children
+        .get(&model_provider_span.span_context.span_id())
+        .unwrap();
+    // The model provider errored, so we shouldn't try to return tickets
+    let [consume_ticket_span] = rate_limit_spans.as_slice() else {
+        panic!("Expected two rate limit spans: {rate_limit_spans:#?}");
+    };
+    assert_eq!(consume_ticket_span.name, "rate_limiting_consume_tickets");
+    let mut consume_ticket_attr_map = attrs_to_map(&consume_ticket_span.attributes);
+    remove_unstable_attrs(&mut consume_ticket_attr_map);
     assert_eq!(
-        spans
-            .span_children
-            .get(&model_provider_span.span_context.span_id()),
-        None
+        consume_ticket_attr_map,
+        HashMap::from([
+            ("success".to_string(), true.into()),
+            ("level".to_string(), "INFO".into()),
+        ])
     );
 
-    assert_eq!(num_spans, 4);
+    assert_eq!(num_spans, 5);
 }
 
 #[tokio::test(flavor = "multi_thread")]
