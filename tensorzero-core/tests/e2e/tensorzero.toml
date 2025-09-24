@@ -352,7 +352,7 @@ routing = ["fireworks"]
 
 [models."deepseek-r1".providers.fireworks]
 type = "fireworks"
-model_name = "accounts/fireworks/models/deepseek-r1"
+model_name = "accounts/fireworks/models/deepseek-r1-0528"
 
 [models.qwen2p5-72b-instruct.providers.fireworks]
 type = "fireworks"
