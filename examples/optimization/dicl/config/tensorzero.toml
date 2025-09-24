@@ -1,0 +1,19 @@
+[functions.classify_spam]
+type = "json"
+output_schema = "functions/classify_spam/output_schema.json"
+
+[functions.classify_spam.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4.1-nano-2025-04-14"
+json_mode = "strict"
+system_template = "functions/classify_spam/baseline/system_template.txt"
+retries = { num_retries = 2 }
+
+[functions.classify_spam.variants.dicl]
+type = "experimental_dynamic_in_context_learning"
+model = "openai::gpt-4o-mini-2024-07-18"
+embedding_model = "openai::text-embedding-3-small"
+k = 10
+json_mode = "strict"
+system_instructions = "functions/classify_spam/baseline/system_template.txt"
+retries = { num_retries = 2 }
