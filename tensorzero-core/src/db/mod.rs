@@ -4,6 +4,7 @@ use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 use async_trait::async_trait;
 use chrono::{DateTime, TimeDelta, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 pub mod clickhouse;
 pub mod postgres;
@@ -33,6 +34,15 @@ pub trait SelectQueries {
     ) -> Result<Vec<ModelLatencyDatapoint>, Error>;
 
     async fn count_distinct_models_used(&self) -> Result<u32, Error>;
+
+    async fn query_episode_table(
+        &self,
+        page_size: u32,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+    ) -> Result<Vec<EpisodeByIdRow>, Error>;
+
+    async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -66,6 +76,26 @@ pub struct ModelLatencyDatapoint {
     // should be an array of quantiles_len u64
     pub response_time_ms_quantiles: Vec<Option<f32>>,
     pub ttft_ms_quantiles: Vec<Option<f32>>,
+    #[serde(deserialize_with = "deserialize_u64")]
+    pub count: u64,
+}
+
+#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
+#[ts(export)]
+pub struct EpisodeByIdRow {
+    pub episode_id: Uuid,
+    #[serde(deserialize_with = "deserialize_u64")]
+    pub count: u64,
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
+    pub last_inference_id: Uuid,
+}
+
+#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
+#[ts(export)]
+pub struct TableBoundsWithCount {
+    pub first_id: Option<Uuid>,
+    pub last_id: Option<Uuid>,
     #[serde(deserialize_with = "deserialize_u64")]
     pub count: u64,
 }

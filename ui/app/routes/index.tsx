@@ -19,10 +19,7 @@ import {
   Playground,
   Model,
 } from "~/components/icons/Icons";
-import {
-  countInferencesByFunction,
-  countEpisodes,
-} from "~/utils/clickhouse/inference.server";
+import { countInferencesByFunction } from "~/utils/clickhouse/inference.server";
 import { getConfig, getAllFunctionConfigs } from "~/utils/config/index.server";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
@@ -107,9 +104,11 @@ function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
 }
 
 export async function loader() {
+  const nativeDatabaseClient = await getNativeDatabaseClient();
+
   // Create the promises
   const countsInfoPromise = countInferencesByFunction();
-  const numEpisodesPromise = countEpisodes();
+  const episodesPromise = nativeDatabaseClient.queryEpisodeTableBounds();
   const datasetCountsPromise = getDatasetCounts({});
   const numEvaluationRunsPromise = countTotalEvaluationRuns();
   const numDynamicEvaluationRunsPromise = countDynamicEvaluationRuns();
@@ -143,8 +142,8 @@ export async function loader() {
     return `${numVariants} variants`;
   });
 
-  const numEpisodesDesc = numEpisodesPromise.then(
-    (numEpisodes) => `${numEpisodes.toLocaleString()} episodes`,
+  const numEpisodesDesc = episodesPromise.then(
+    (result) => `${result.count.toLocaleString()} episodes`,
   );
 
   const numDatasetsDesc = datasetCountsPromise.then(
