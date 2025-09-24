@@ -23,20 +23,17 @@ export function InferenceButton({
     <TooltipProvider>
       <Tooltip delayDuration={100}>
         <TooltipTrigger asChild>
-          <Button
-            variant="outline"
-            size="iconSm"
-            className={className}
-            aria-label={tooltipText}
-            title={tooltipText}
-          >
-            <Link
-              to={`/observability/inferences/${inferenceId}`}
-              target="_blank"
+          <Link to={`/observability/inferences/${inferenceId}`} target="_blank">
+            <Button
+              variant="outline"
+              size="iconSm"
+              className={className}
+              aria-label={tooltipText}
+              title={tooltipText}
             >
               <Inferences className="h-4 w-4" />
-            </Link>
-          </Button>
+            </Button>
+          </Link>
         </TooltipTrigger>
         <TooltipContent>
           <p>{tooltipText}</p>
