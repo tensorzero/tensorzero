@@ -1,23 +1,22 @@
 import openai
 
+client = openai.OpenAI(base_url="http://localhost:3000/openai/v1")
 
-def generate_haiku(topic):
-    with openai.OpenAI(base_url="http://localhost:3000/openai/v1") as client:
-        return client.chat.completions.create(
-            model="tensorzero::function_name::generate_haiku_with_topic",
-            messages=[
+result = client.chat.completions.create(
+    model="tensorzero::function_name::fun_fact",
+    messages=[
+        {
+            "role": "user",
+            "content": [
                 {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tensorzero::template",
-                            "name": "topic",
-                            "arguments": {"topic": topic},
-                        }
-                    ],
-                },
+                    "type": "tensorzero::template",  # type: ignore
+                    "name": "fun_fact_topic",
+                    "arguments": {"topic": "artificial intelligence"},
+                }
             ],
-        )
+        },
+    ],
+)
 
 
-print(generate_haiku("artificial intelligence"))
+print(result)

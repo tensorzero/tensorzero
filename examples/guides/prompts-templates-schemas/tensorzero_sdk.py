@@ -1,25 +1,23 @@
 from tensorzero import TensorZeroGateway
 
+t0 = TensorZeroGateway.build_http(gateway_url="http://localhost:3000")
 
-def generate_haiku(topic):
-    with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
-        return client.inference(
-            function_name="generate_haiku_with_topic",
-            input={
-                "messages": [
+result = t0.inference(
+    function_name="fun_fact",
+    input={
+        "messages": [
+            {
+                "role": "user",
+                "content": [
                     {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "template",
-                                "name": "topic",
-                                "arguments": {"topic": topic},
-                            }
-                        ],
+                        "type": "template",
+                        "name": "fun_fact_topic",
+                        "arguments": {"topic": "artificial intelligence"},
                     }
                 ],
-            },
-        )
+            }
+        ],
+    },
+)
 
-
-print(generate_haiku("artificial intelligence"))
+print(result)

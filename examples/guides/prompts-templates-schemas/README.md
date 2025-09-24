@@ -56,14 +56,13 @@ python openai_sdk.py
 <details>
 <summary><b>HTTP</b></summary>
 
-Run the following commands to make a multimodal inference request to the TensorZero Gateway.
-The first image is a remote image of Ferris the crab, and the second image is a one-pixel orange image encoded as a base64 string.
+Run the following command to make an inference request to the TensorZero Gateway.
 
 ```bash
 curl -X POST http://localhost:3000/inference \
   -H "Content-Type: application/json" \
   -d '{
-    "function_name": "generate_haiku_with_topic",
+    "function_name": "fun_fact",
     "input": {
       "messages": [
         {
@@ -71,7 +70,7 @@ curl -X POST http://localhost:3000/inference \
           "content": [
             {
               "type": "template",
-              "name": "topic",
+              "name": "fun_fact_topic",
               "arguments": {
                 "topic": "artificial intelligence"
               }

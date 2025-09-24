@@ -1,16 +1,8 @@
-# We define a function and a variant, just like in our Quick Start...
-# ... but this time we include a schema and a template.
-[functions.generate_haiku_with_topic]
+[functions.fun_fact]
 type = "chat"
-user_schema = "functions/generate_haiku_with_topic/user_schema.json" # relative to tensorzero.toml
-schemas.topic.path = "functions/generate_haiku_with_topic/user_schema.json" # relative to tensorzero.toml
-# system_schema = "..."
-# assistant_schema = "..."
+schemas.fun_fact_topic.path = "functions/fun_fact/fun_fact_topic_schema.json" # relative to this file
 
-[functions.generate_haiku_with_topic.variants.gpt_4o_mini]
+[functions.fun_fact.variants.gpt_5_mini]
 type = "chat_completion"
-model = "openai::gpt-4o-mini"
-user_template = "functions/generate_haiku_with_topic/gpt_4o_mini/user_template.minijinja" # relative to tensorzero.toml
-templates.topic.path = "functions/generate_haiku_with_topic/gpt_4o_mini/user_template.minijinja" # relative to tensorzero.toml
-# system_template = "..."
-# assistant_template = "..."
+model = "openai::gpt-5-mini"
+templates.fun_fact_topic.path = "functions/fun_fact/gpt_5_mini/fun_fact_topic_template.minijinja" # relative to this file
