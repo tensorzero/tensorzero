@@ -209,7 +209,7 @@ json_mode = "strict"
 
 [evaluations.evaluation1.evaluators.llm_judge_bool.variants.llama_promptA]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/mixtral-8x22b-instruct"
+model = "fireworks::accounts/fireworks/models/gpt-oss-120b"
 system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
 json_mode = "strict"
 
