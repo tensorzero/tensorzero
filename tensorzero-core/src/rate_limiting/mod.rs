@@ -33,7 +33,7 @@ use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 #[cfg_attr(test, ts(export))]
 pub struct RateLimitingConfig {
     rules: Vec<RateLimitingConfigRule>,
-    enabled: bool, // TODO: default true, Postgres required if rules is nonempty.
+    enabled: bool, // TODO (#3643): default true, Postgres required if rules is nonempty.
 }
 
 #[derive(Debug, Deserialize)]
@@ -41,7 +41,7 @@ pub struct UninitializedRateLimitingConfig {
     #[serde(default)]
     rules: Vec<RateLimitingConfigRule>,
     #[serde(default = "default_enabled")]
-    enabled: bool, // TODO: default true, Postgres required if rules is nonempty.
+    enabled: bool, // TODO (#3643): default true, Postgres required if rules is nonempty.
 }
 
 impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
@@ -393,7 +393,7 @@ trait Scope {
 // and add a test each time that ensures the sort order is maintained as further changes are made.
 //
 // Note to reviewer:  what else could we do to ensure the sort order is maintained across future changes?
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(untagged)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -444,12 +444,12 @@ impl TagRateLimitingConfigScope {
                     None
                 }
             }
-            TagValueScope::Any => Some(RateLimitingScopeKey::TagAny {
-                key: self.tag_key.clone(),
-            }),
-            TagValueScope::All => Some(RateLimitingScopeKey::TagEach {
+            TagValueScope::Each => Some(RateLimitingScopeKey::TagEach {
                 key: self.tag_key.clone(),
                 value: value.clone(),
+            }),
+            TagValueScope::Total => Some(RateLimitingScopeKey::TagTotal {
+                key: self.tag_key.clone(),
             }),
         }
     }
@@ -460,8 +460,8 @@ impl TagRateLimitingConfigScope {
 #[cfg_attr(test, ts(export))]
 pub enum TagValueScope {
     Concrete(String),
-    Any,
-    All,
+    Each,
+    Total,
 }
 
 impl Serialize for TagValueScope {
@@ -471,8 +471,8 @@ impl Serialize for TagValueScope {
     {
         match self {
             TagValueScope::Concrete(s) => serializer.serialize_str(s),
-            TagValueScope::Any => serializer.serialize_str("tensorzero::any"),
-            TagValueScope::All => serializer.serialize_str("tensorzero::all"),
+            TagValueScope::Each => serializer.serialize_str("tensorzero::each"),
+            TagValueScope::Total => serializer.serialize_str("tensorzero::total"),
         }
     }
 }
@@ -484,7 +484,7 @@ impl Serialize for TagValueScope {
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type")]
 pub enum RateLimitingScopeKey {
-    TagAny { key: String },
+    TagTotal { key: String },
     TagEach { key: String, value: String },
     TagConcrete { key: String, value: String },
 }
@@ -601,6 +601,7 @@ pub fn get_estimated_tokens(text: &str) -> u64 {
 mod tests {
     use super::*;
     use std::collections::HashMap;
+    use std::ops::Deref;
 
     #[test]
     fn test_rate_limiting_config_scope_get_key_if_matches_tag_concrete_match() {
@@ -641,10 +642,10 @@ mod tests {
     }
 
     #[test]
-    fn test_rate_limiting_config_scope_get_key_if_matches_tag_any() {
+    fn test_rate_limiting_config_scope_get_key_if_matches_tag_each() {
         let scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
             tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Any,
+            tag_value: TagValueScope::Each,
         });
 
         let mut tags = HashMap::new();
@@ -654,18 +655,19 @@ mod tests {
 
         let key = scope.get_key_if_matches(&info).unwrap();
         match key {
-            RateLimitingScopeKey::TagAny { key } => {
+            RateLimitingScopeKey::TagEach { key, value } => {
                 assert_eq!(key, "user_id");
+                assert_eq!(value, "any_value");
             }
-            _ => panic!("Expected TagAny variant"),
+            _ => panic!("Expected TagEach variant"),
         }
     }
 
     #[test]
-    fn test_rate_limiting_config_scope_get_key_if_matches_tag_all() {
+    fn test_rate_limiting_config_scope_get_key_if_matches_tag_total() {
         let scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
             tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::All,
+            tag_value: TagValueScope::Total,
         });
 
         let mut tags = HashMap::new();
@@ -675,11 +677,10 @@ mod tests {
 
         let key = scope.get_key_if_matches(&info).unwrap();
         match key {
-            RateLimitingScopeKey::TagEach { key, value } => {
+            RateLimitingScopeKey::TagTotal { key } => {
                 assert_eq!(key, "user_id");
-                assert_eq!(value, "specific_value");
             }
-            _ => panic!("Expected TagEach variant"),
+            _ => panic!("Expected TagTotal variant"),
         }
     }
 
@@ -687,7 +688,7 @@ mod tests {
     fn test_rate_limiting_config_scope_get_key_if_matches_missing_tag() {
         let scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
             tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Any,
+            tag_value: TagValueScope::Each,
         });
 
         let tags = HashMap::new(); // Empty tags
@@ -759,7 +760,7 @@ mod tests {
         });
         let scope2 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
             tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Any,
+            tag_value: TagValueScope::Total,
         });
         let scopes = RateLimitingConfigScopes::new(vec![scope1, scope2]).unwrap();
 
@@ -779,7 +780,7 @@ mod tests {
                     key: key1,
                     value: value1,
                 },
-                RateLimitingScopeKey::TagAny { key: key2 },
+                RateLimitingScopeKey::TagTotal { key: key2 },
             ) => {
                 assert_eq!(*key1, "application_id");
                 assert_eq!(*value1, "app123");
@@ -817,11 +818,11 @@ mod tests {
         // Test that the same scopes + different but equivalent ScopeInfo produce the same key structure
         let scope1 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
             tag_key: "application_id".to_string(),
-            tag_value: TagValueScope::Any,
+            tag_value: TagValueScope::Total,
         });
         let scope2 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
             tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::All,
+            tag_value: TagValueScope::Each,
         });
         let scopes = RateLimitingConfigScopes::new(vec![scope1, scope2]).unwrap();
 
@@ -846,16 +847,16 @@ mod tests {
         assert_eq!(keys1.len(), keys2.len());
         assert_eq!(keys1.len(), 2);
 
-        // First key should be TagAny (same for both)
+        // First key should be TagTotal (same for both)
         match (&keys1[0], &keys2[0]) {
             (
-                RateLimitingScopeKey::TagAny { key: key1 },
-                RateLimitingScopeKey::TagAny { key: key2 },
+                RateLimitingScopeKey::TagTotal { key: key1 },
+                RateLimitingScopeKey::TagTotal { key: key2 },
             ) => {
                 assert_eq!(key1, key2);
                 assert_eq!(*key1, "application_id");
             }
-            _ => panic!("Expected TagAny variants"),
+            _ => panic!("Expected TagTotal variants"),
         }
 
         // Second key should be TagEach (different values)
@@ -909,7 +910,7 @@ mod tests {
         // Test that scopes are sorted consistently regardless of input order
         let scope1 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
             tag_key: "application_id".to_string(),
-            tag_value: TagValueScope::Any,
+            tag_value: TagValueScope::Each,
         });
         let scope2 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
             tag_key: "user_id".to_string(),
@@ -917,7 +918,7 @@ mod tests {
         });
         let scope3 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
             tag_key: "organization_id".to_string(),
-            tag_value: TagValueScope::All,
+            tag_value: TagValueScope::Total,
         });
 
         // Create scopes in different orders
@@ -941,9 +942,9 @@ mod tests {
                 RateLimitingConfigScope::Tag(tag3),
             ) => {
                 assert_eq!(tag1.tag_key, "application_id");
-                assert_eq!(tag1.tag_value, TagValueScope::Any);
+                assert_eq!(tag1.tag_value, TagValueScope::Each);
                 assert_eq!(tag2.tag_key, "organization_id");
-                assert_eq!(tag2.tag_value, TagValueScope::All);
+                assert_eq!(tag2.tag_value, TagValueScope::Total);
                 assert_eq!(tag3.tag_key, "user_id");
                 assert_eq!(tag3.tag_value, TagValueScope::Concrete("123".to_string()));
             }
@@ -958,25 +959,25 @@ mod tests {
             tag_key: "user_id".to_string(),
             tag_value: TagValueScope::Concrete("123".to_string()),
         });
-        let scope_any = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
+        let scope_each = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
             tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Any,
+            tag_value: TagValueScope::Each,
         });
-        let scope_all = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
+        let scope_total = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
             tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::All,
+            tag_value: TagValueScope::Total,
         });
 
-        // Test sorting order - TagValueScope variants should sort: Concrete < Any < All
+        // Test sorting order - TagValueScope variants should sort: Concrete < Each < Total
         let scopes_order1 = RateLimitingConfigScopes::new(vec![
             scope_concrete.clone(),
-            scope_any.clone(),
-            scope_all.clone(),
+            scope_each.clone(),
+            scope_total.clone(),
         ])
         .unwrap();
         let scopes_order2 = RateLimitingConfigScopes::new(vec![
-            scope_any.clone(),
-            scope_all.clone(),
+            scope_each.clone(),
+            scope_total.clone(),
             scope_concrete.clone(),
         ])
         .unwrap();
@@ -997,10 +998,10 @@ mod tests {
                 assert_eq!(tag3.tag_key, "user_id");
 
                 // Test the actual derived sort order for TagValueScope
-                // Based on Rust's enum ordering: Concrete(String) < Any < All
+                // Based on Rust's enum ordering: Concrete(String) < Each < Total
                 assert_eq!(tag1.tag_value, TagValueScope::Concrete("123".to_string()));
-                assert_eq!(tag2.tag_value, TagValueScope::Any);
-                assert_eq!(tag3.tag_value, TagValueScope::All);
+                assert_eq!(tag2.tag_value, TagValueScope::Each);
+                assert_eq!(tag3.tag_value, TagValueScope::Total);
             }
         }
 
@@ -1012,8 +1013,8 @@ mod tests {
 
         // Test each scope individually to verify different key types
         let key_concrete = scope_concrete.get_key_if_matches(&info).unwrap();
-        let key_any = scope_any.get_key_if_matches(&info).unwrap();
-        let key_all = scope_all.get_key_if_matches(&info).unwrap();
+        let key_each = scope_each.get_key_if_matches(&info).unwrap();
+        let key_total = scope_total.get_key_if_matches(&info).unwrap();
 
         // Verify each produces the correct key variant
         match key_concrete {
@@ -1024,14 +1025,7 @@ mod tests {
             _ => panic!("Expected TagConcrete variant"),
         }
 
-        match key_any {
-            RateLimitingScopeKey::TagAny { ref key } => {
-                assert_eq!(key, "user_id");
-            }
-            _ => panic!("Expected TagAny variant"),
-        }
-
-        match key_all {
+        match key_each {
             RateLimitingScopeKey::TagEach { ref key, ref value } => {
                 assert_eq!(key, "user_id");
                 assert_eq!(value, "123");
@@ -1039,20 +1033,27 @@ mod tests {
             _ => panic!("Expected TagEach variant"),
         }
 
+        match key_total {
+            RateLimitingScopeKey::TagTotal { ref key } => {
+                assert_eq!(key, "user_id");
+            }
+            _ => panic!("Expected TagTotal variant"),
+        }
+
         // Test serialization shows they produce different JSON structures
         use serde_json;
         let json_concrete = serde_json::to_string(&key_concrete).unwrap();
-        let json_any = serde_json::to_string(&key_any).unwrap();
-        let json_all = serde_json::to_string(&key_all).unwrap();
+        let json_each = serde_json::to_string(&key_each).unwrap();
+        let json_total = serde_json::to_string(&key_total).unwrap();
 
         assert!(json_concrete.contains("\"type\":\"TagConcrete\""));
-        assert!(json_any.contains("\"type\":\"TagAny\""));
-        assert!(json_all.contains("\"type\":\"TagEach\""));
+        assert!(json_each.contains("\"type\":\"TagEach\""));
+        assert!(json_total.contains("\"type\":\"TagTotal\""));
 
         // Ensure they're all different
-        assert_ne!(json_concrete, json_any);
-        assert_ne!(json_any, json_all);
-        assert_ne!(json_concrete, json_all);
+        assert_ne!(json_concrete, json_each);
+        assert_ne!(json_each, json_total);
+        assert_ne!(json_concrete, json_total);
     }
 
     #[test]
@@ -1063,20 +1064,18 @@ mod tests {
             tag_key: "user_id".to_string(),
             tag_value: TagValueScope::Concrete("123".to_string()),
         });
-        let scope_any = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
+        let scope_total = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
             tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Any,
+            tag_value: TagValueScope::Total,
         });
 
         // These should be allowed together since they have different TagValueScope
-        let result = RateLimitingConfigScopes::new(vec![scope_concrete, scope_any]);
+        let result = RateLimitingConfigScopes::new(vec![scope_concrete, scope_total]);
         assert!(result.is_ok());
 
         let scopes = result.unwrap();
         assert_eq!(scopes.len(), 2);
     }
-
-    use std::ops::Deref;
 
     impl Deref for RateLimitingConfigScopes {
         type Target = Vec<RateLimitingConfigScope>;
@@ -1123,7 +1122,7 @@ mod tests {
     }
 
     #[test]
-    fn test_rate_limiting_config_priority_logic() {
+    fn test_rate_limiting_config_rejects_duplicate_scopes() {
         // Create test limits
         let token_limit = Arc::new(RateLimit {
             resource: RateLimitResource::Token,
@@ -1139,25 +1138,12 @@ mod tests {
             refill_rate: 5,
         });
 
-        let _scope = RateLimitingConfigScopes::new(vec![RateLimitingConfigScope::Tag(
-            TagRateLimitingConfigScope {
-                tag_key: "user_id".to_string(),
-                tag_value: TagValueScope::Any,
-            },
-        )])
-        .unwrap();
-
-        let mut tags = HashMap::new();
-        tags.insert("user_id".to_string(), "test".to_string());
-        let scope_info = ScopeInfo { tags: &tags };
-
-        // Test 1: Always priority beats numeric priority
         let rule_priority_5 = RateLimitingConfigRule {
             limits: vec![token_limit.clone()],
             scope: RateLimitingConfigScopes::new(vec![RateLimitingConfigScope::Tag(
                 TagRateLimitingConfigScope {
                     tag_key: "user_id".to_string(),
-                    tag_value: TagValueScope::Any,
+                    tag_value: TagValueScope::Total,
                 },
             )])
             .unwrap(),
@@ -1169,35 +1155,50 @@ mod tests {
             scope: RateLimitingConfigScopes::new(vec![RateLimitingConfigScope::Tag(
                 TagRateLimitingConfigScope {
                     tag_key: "user_id".to_string(),
-                    tag_value: TagValueScope::Any,
+                    tag_value: TagValueScope::Total,
                 },
             )])
             .unwrap(),
             priority: RateLimitingConfigPriority::Always,
         };
 
-        let config_always_vs_numeric = RateLimitingConfig {
+        let uninitialized = UninitializedRateLimitingConfig {
             rules: vec![rule_priority_5, rule_always],
             enabled: true,
         };
+        let err_message = RateLimitingConfig::try_from(uninitialized)
+            .unwrap_err()
+            .to_string();
+        assert!(err_message.contains("Rate limiting config scopes must be unique"));
+        assert!(err_message.contains(r#"RateLimitingConfigScopes([Tag(TagRateLimitingConfigScope { tag_key: "user_id", tag_value: Total })])"#));
+    }
 
-        let active_limits = config_always_vs_numeric.get_active_limits(&scope_info);
-        // Should have both limits: the Always rule and the highest priority rule
-        assert_eq!(active_limits.len(), 2);
-        let resources: Vec<RateLimitResource> = active_limits
-            .iter()
-            .map(|limit| limit.limit.resource)
-            .collect();
-        assert!(resources.contains(&RateLimitResource::Token));
-        assert!(resources.contains(&RateLimitResource::ModelInference));
+    #[test]
+    fn test_rate_limiting_config_priority_logic() {
+        let mut tags = HashMap::new();
+        tags.insert("user_id".to_string(), "test".to_string());
+        let scope_info = ScopeInfo { tags: &tags };
 
-        // Test 2: Highest numeric priority wins among numeric priorities
+        let token_limit = Arc::new(RateLimit {
+            resource: RateLimitResource::Token,
+            interval: RateLimitInterval::Minute,
+            capacity: 100,
+            refill_rate: 10,
+        });
+
+        let inference_limit = Arc::new(RateLimit {
+            resource: RateLimitResource::ModelInference,
+            interval: RateLimitInterval::Hour,
+            capacity: 50,
+            refill_rate: 5,
+        });
+        // Test 1: Highest numeric priority wins among numeric priorities
         let rule_priority_3 = RateLimitingConfigRule {
             limits: vec![token_limit.clone()],
             scope: RateLimitingConfigScopes::new(vec![RateLimitingConfigScope::Tag(
                 TagRateLimitingConfigScope {
                     tag_key: "user_id".to_string(),
-                    tag_value: TagValueScope::Any,
+                    tag_value: TagValueScope::Total,
                 },
             )])
             .unwrap(),
@@ -1209,7 +1210,7 @@ mod tests {
             scope: RateLimitingConfigScopes::new(vec![RateLimitingConfigScope::Tag(
                 TagRateLimitingConfigScope {
                     tag_key: "user_id".to_string(),
-                    tag_value: TagValueScope::Any,
+                    tag_value: TagValueScope::Each,
                 },
             )])
             .unwrap(),
@@ -1229,13 +1230,13 @@ mod tests {
             RateLimitResource::ModelInference
         );
 
-        // Test 3: Multiple limits in same rule
+        // Test 2: Multiple limits in same rule
         let rule_multiple_limits = RateLimitingConfigRule {
             limits: vec![token_limit.clone(), inference_limit.clone()],
             scope: RateLimitingConfigScopes::new(vec![RateLimitingConfigScope::Tag(
                 TagRateLimitingConfigScope {
                     tag_key: "user_id".to_string(),
-                    tag_value: TagValueScope::Any,
+                    tag_value: TagValueScope::Total,
                 },
             )])
             .unwrap(),
@@ -1307,7 +1308,7 @@ mod tests {
             value: "123".to_string(),
         }];
 
-        let any_scope_key = vec![RateLimitingScopeKey::TagAny {
+        let total_scope_key = vec![RateLimitingScopeKey::TagTotal {
             key: "app_id".to_string(),
         }];
 
@@ -1346,7 +1347,7 @@ mod tests {
         // Test different scopes produce different keys
         let active_limit_different_scope = ActiveRateLimit {
             limit: token_limit,
-            scope_key: any_scope_key,
+            scope_key: total_scope_key,
         };
 
         let key_different_scope = active_limit_different_scope.get_key().unwrap();
@@ -1397,7 +1398,7 @@ mod tests {
 
         let inference_active_limit = ActiveRateLimit {
             limit: inference_limit.clone(),
-            scope_key: vec![RateLimitingScopeKey::TagAny {
+            scope_key: vec![RateLimitingScopeKey::TagTotal {
                 key: "app_id".to_string(),
             }],
         };
@@ -1485,7 +1486,7 @@ mod tests {
 
         let active_limit2 = ActiveRateLimit {
             limit: limit2,
-            scope_key: vec![RateLimitingScopeKey::TagAny {
+            scope_key: vec![RateLimitingScopeKey::TagTotal {
                 key: "app_id".to_string(),
             }],
         };

@@ -29,7 +29,7 @@ export function TimeGranularitySelector({
           <SelectItem value="week">Week</SelectItem>
           <SelectItem value="month">Month</SelectItem>
           {includeCumulative && (
-            <SelectItem value="cumulative">Cumulative</SelectItem>
+            <SelectItem value="cumulative">All Time</SelectItem>
           )}
         </SelectContent>
       </Select>

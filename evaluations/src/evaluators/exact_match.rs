@@ -4,7 +4,7 @@ use tensorzero::InferenceResponse;
 use tensorzero_core::endpoints::datasets::Datapoint;
 use tracing::{debug, instrument, warn};
 
-#[instrument(skip(inference_response, datapoint), fields(datapoint_id = %datapoint.id()))]
+#[instrument(skip_all, fields(datapoint_id = %datapoint.id()))]
 pub(super) fn run_exact_match_evaluator(
     inference_response: &InferenceResponse,
     datapoint: &Datapoint,

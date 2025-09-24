@@ -30,11 +30,7 @@ pub struct Params {
     pub cache_options: CacheParamsOptions,
 }
 
-#[instrument(
-    name = "embeddings",
-    skip(config, http_client, params),
-    fields(model, num_inputs)
-)]
+#[instrument(name = "embeddings", skip_all, fields(model, num_inputs))]
 pub async fn embeddings(
     config: Arc<Config>,
     http_client: &TensorzeroHttpClient,
