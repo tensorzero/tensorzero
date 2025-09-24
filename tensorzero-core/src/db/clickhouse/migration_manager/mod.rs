@@ -128,15 +128,15 @@ pub enum MigrationTableState {
 }
 
 /// Returns a Result<MigrationTableState,Err> value that describes which migrations have been run vis-a-vis the required migrations.
-/// There are five possible results. Note that we allow multiple rows to exist per migration id (since the migrations might have been run concurrently).
+/// There are six possible results. Note that we allow multiple rows to exist per migration id (since the migrations might have been run concurrently).
 ///   1. Ok(JustRight): Exactly the set of required migrations have been run. Downstream should proceed as normal.
 ///   2. Ok(TooMany): Extra migrations have been run, possibly due to use of an older vresion. Downstream should proceed as normal.
 ///   3. Ok(TooFew): Not all the required migrations have been run. Downstream should proceed to run the missing migrations.
 ///   4. Ok(Inconsistent): Some but not all required migrations have been run, and some extra migrations have been run. Downstream
 ///      should proceed to run the missing required migrations.
-///   4. Ok(UnableToParse): Attempted to check whether the required migrations have been run but failed to parse the message return by ClickHouse.
+///   5. Ok(UnableToParse): Attempted to check whether the required migrations have been run but failed to parse the message return by ClickHouse.
 ///      Downstream should proceed to run the required migrations.
-///   5. Err(Error): Occurs if unable to construct the vector of expected migrations for some reason (shouldn't happen).
+///   6. Err(Error): Occurs if unable to construct the vector of expected migrations for some reason (shouldn't happen).
 pub async fn check_migrations_state(
     clickhouse: &ClickHouseConnectionInfo,
     all_migrations: &[Box<dyn Migration + Send + Sync + '_>],
