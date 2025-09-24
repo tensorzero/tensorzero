@@ -6,7 +6,7 @@ use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::{db::clickhouse::ClickHouseConnectionInfo, function::FunctionConfig};
 use tracing::{debug, info, instrument};
 
-#[instrument(skip(clickhouse_client), fields(dataset_name = %dataset_name, function_name = %function_name))]
+#[instrument(skip_all, fields(dataset_name = %dataset_name, function_name = %function_name))]
 pub async fn query_dataset(
     clickhouse_client: &ClickHouseConnectionInfo,
     dataset_name: &str,

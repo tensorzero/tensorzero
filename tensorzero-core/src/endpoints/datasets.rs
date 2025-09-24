@@ -304,7 +304,7 @@ struct WithFunctionName {
 ///
 /// The inference is mostly copied as-is, except for the 'output' field.
 /// Based on the 'output' parameter, the output is copied, ignored, or fetched from a demonstration.
-#[instrument(name = "insert_datapoint", skip(app_state))]
+#[instrument(name = "insert_datapoint", skip_all)]
 pub async fn insert_from_existing_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<InsertPathParams>,
@@ -327,7 +327,7 @@ pub async fn insert_from_existing_datapoint_handler(
 ///
 /// The input and output are validated against the function schema
 /// (retrieved from the `function_name` argument in the body).
-#[instrument(name = "update_datapoint", skip(app_state))]
+#[instrument(name = "update_datapoint", skip_all)]
 pub async fn update_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<UpdatePathParams>,

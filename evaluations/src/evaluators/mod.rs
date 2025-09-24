@@ -37,7 +37,7 @@ pub struct EvaluateInferenceParams {
 /// - Ok(Some(value)): The evaluator was run successfully and the result was a valid value.
 /// - Ok(None): The evaluator was run successfully but the result was None (if for example the evaluator requires a reference output but none is present).
 /// - Err(e): The evaluator failed to run due to some error (like the LLM Judge failed to infer).
-#[instrument(skip(params), fields(datapoint_id = %params.datapoint.id(), evaluation_name = %params.evaluation_name))]
+#[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), evaluation_name = %params.evaluation_name))]
 pub(crate) async fn evaluate_inference(
     params: EvaluateInferenceParams,
 ) -> Result<EvaluationResult> {
@@ -184,7 +184,7 @@ struct RunEvaluatorParams<'a> {
 /// - Err(e): The evaluator failed to run due to some error (like the LLM Judge failed to infer).
 ///
 /// NOTE: Each evaluator we implement in the match statement below should follow this contract.
-#[instrument(skip(params), fields(evaluator_name = %params.evaluator_name, datapoint_id = %params.datapoint.id()))]
+#[instrument(skip_all, fields(evaluator_name = %params.evaluator_name, datapoint_id = %params.datapoint.id()))]
 async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult> {
     let RunEvaluatorParams {
         evaluation_config,
