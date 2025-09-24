@@ -39,6 +39,7 @@ use crate::providers::fireworks::prepare_fireworks_messages;
 use crate::providers::fireworks::FIREWORKS_API_BASE;
 use crate::providers::helpers::UrlParseErrExt;
 use crate::providers::openai::tensorzero_to_openai_assistant_message;
+use crate::providers::openai::OpenAIMessagesConfig;
 use crate::stored_inference::LazyRenderedSample;
 use crate::stored_inference::RenderedSample;
 use crate::{
@@ -100,9 +101,17 @@ impl<'a> FireworksSupervisedRow<'a> {
             }
             None => vec![],
         };
-        let mut messages =
-            prepare_fireworks_messages(inference.system_input.as_deref(), &inference.messages)
-                .await?;
+        let mut messages = prepare_fireworks_messages(
+            inference.system_input.as_deref(),
+            &inference.messages,
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
+                fetch_and_encode_input_files_before_inference: true,
+            },
+        )
+        .await?;
 
         let Some(output) = &inference.output else {
             return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {

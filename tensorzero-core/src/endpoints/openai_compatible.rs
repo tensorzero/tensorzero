@@ -972,6 +972,8 @@ enum OpenAICompatibleContentBlock {
 #[serde(tag = "type", deny_unknown_fields, rename_all = "snake_case")]
 struct OpenAICompatibleImageUrl {
     url: Url,
+    #[serde(rename = "tensorzero::mime_type")]
+    mime_type: Option<MediaType>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -1062,7 +1064,7 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
                             let (mime_type, data) = parse_base64_image_data_url(&url_str)?;
                             InputMessageContent::File(File::Base64 { mime_type, data: data.to_string() })
                         } else {
-                            InputMessageContent::File(File::Url { url: image_url.url, mime_type: None })
+                            InputMessageContent::File(File::Url { url: image_url.url, mime_type: image_url.mime_type })
                         }
                     }
                     Ok(OpenAICompatibleContentBlock::File { file }) => {
