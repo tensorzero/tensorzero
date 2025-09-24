@@ -17,6 +17,7 @@ import {
   GridCheck,
   SequenceChecks,
   Playground,
+  Model,
 } from "~/components/icons/Icons";
 import { countInferencesByFunction } from "~/utils/clickhouse/inference.server";
 import { getConfig, getAllFunctionConfigs } from "~/utils/config/index.server";
@@ -115,6 +116,7 @@ export async function loader() {
     countDynamicEvaluationProjects();
   const configPromise = getConfig();
   const functionConfigsPromise = getAllFunctionConfigs();
+  const numModelsUsedPromise = nativeDatabaseClient.countDistinctModelsUsed();
 
   // Create derived promises - these will be stable references
   const totalInferencesDesc = countsInfoPromise.then((countsInfo) => {
@@ -165,6 +167,10 @@ export async function loader() {
     numDynamicEvaluationRunsPromise,
   ]).then(([projects, runs]) => `${projects} projects, ${runs} runs`);
 
+  const numModelsUsedDesc = numModelsUsedPromise.then(
+    (numModelsUsed) => `${numModelsUsed} models used`,
+  );
+
   return {
     totalInferencesDesc,
     numFunctionsDesc,
@@ -174,6 +180,7 @@ export async function loader() {
     numEvaluationRunsDesc,
     staticEvaluationsDesc,
     dynamicEvaluationsDesc,
+    numModelsUsedDesc,
   };
 }
 
@@ -186,6 +193,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     numDatasetsDesc,
     staticEvaluationsDesc,
     dynamicEvaluationsDesc,
+    numModelsUsedDesc,
   } = loaderData;
 
   return (
@@ -215,6 +223,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 icon={Functions}
                 title="Functions"
                 description={numFunctionsDesc}
+              />
+              <DirectoryCard
+                source="/observability/models"
+                icon={Model}
+                title="Models"
+                description={numModelsUsedDesc}
               />
             </div>
           </div>

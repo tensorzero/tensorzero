@@ -260,8 +260,7 @@ export function ModelLatency({
         <div>
           <CardTitle>Model Latency Distribution</CardTitle>
           <CardDescription>
-            Empirical cumulative distribution function (eCDF) of latency metrics
-            by model
+            Quantiles of latency metrics by model
           </CardDescription>
         </div>
         <div className="flex flex-col justify-center gap-2">

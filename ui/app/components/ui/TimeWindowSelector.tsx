@@ -26,7 +26,7 @@ export function TimeWindowSelector({
         <SelectItem value="day">Day</SelectItem>
         <SelectItem value="week">Week</SelectItem>
         <SelectItem value="month">Month</SelectItem>
-        <SelectItem value="cumulative">Cumulative</SelectItem>
+        <SelectItem value="cumulative">All Time</SelectItem>
       </SelectContent>
     </Select>
   );

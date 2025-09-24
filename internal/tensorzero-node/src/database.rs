@@ -45,6 +45,16 @@ impl DatabaseClient {
     }
 
     #[napi]
+    pub async fn count_distinct_models_used(&self) -> Result<u32, napi::Error> {
+        let result = self
+            .0
+            .count_distinct_models_used()
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        Ok(result)
+    }
+
+    #[napi]
     pub async fn query_episode_table(&self, params: String) -> Result<String, napi::Error> {
         let QueryEpisodeTableParams {
             page_size,
