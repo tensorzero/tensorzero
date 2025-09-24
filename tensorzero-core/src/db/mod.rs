@@ -152,4 +152,15 @@ pub struct ReturnTicketsReceipt {
     pub balance: u64,
 }
 
+pub trait BanditQueries {
+    async fn get_feedback_by_variant(&self, metric_name: &str, function_name: String, variant_names: Option<&Vec<String>>, time_window: TimeWindow)
+}
+
+pub struct FeedbackByVariant {
+    pub period_start: DateTime<Utc>,
+    pub variant_name: String,
+    pub mean: f64,
+    pub // todo
+}
+
 impl<T: RateLimitQueries + HealthCheckable + Send + Sync> PostgresConnection for T {}
