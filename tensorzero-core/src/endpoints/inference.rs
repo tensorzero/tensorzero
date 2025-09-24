@@ -203,7 +203,7 @@ pub struct InferenceIds {
 
 #[instrument(
     name="inference",
-    skip(config, http_client, clickhouse_connection_info, params),
+    skip_all
     fields(
         function_name,
         model_name,
