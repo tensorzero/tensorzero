@@ -128,14 +128,15 @@ pub enum MigrationTableState {
 }
 
 /// Returns a Result<MigrationTableState,Err> value that describes which migrations have been run vis-a-vis the required migrations.
-/// There are five possible results:
+/// There are five possible results. Note that we allow multiple rows to exist per migration id (since the migrations might have been run concurrently).
 ///   1. Ok(JustRight): Exactly the set of required migrations have been run. Downstream should proceed as normal.
 ///   2. Ok(TooMany): Extra migrations have been run, possibly due to use of an older vresion. Downstream should proceed as normal.
 ///   3. Ok(TooFew): Not all the required migrations have been run. Downstream should proceed to run the missing migrations.
+///   4. Ok(Inconsistent): Some but not all required migrations have been run, and some extra migrations have been run. Downstream
+///      should proceed to run the missing required migrations.
 ///   4. Ok(UnableToParse): Attempted to check whether the required migrations have been run but failed to parse the message return by ClickHouse.
 ///      Downstream should proceed to run the required migrations.
-///   5. Err: Occurs when some but not all required migrations have been run, and some extra migrations have been run. Downstream should stop and throw an error.
-///      Note that we allow multiple rows to exist per migration id (since the migrations might have been run concurrently).
+///   5. Err(Error): Occurs if unable to construct the vector of expected migrations for some reason (shouldn't happen).
 pub async fn check_migrations_state(
     clickhouse: &ClickHouseConnectionInfo,
     all_migrations: &[Box<dyn Migration + Send + Sync + '_>],
@@ -156,7 +157,7 @@ pub async fn check_migrations_state(
                 }
             }
             // Fall back to running all migrations as normal, and hopefully produce a better error message
-            tracing::warn!("Attempted to check whether required migraitons have been run but was unable to parse the message from ClickHouse.
+            tracing::warn!("Attempted to check whether required migrations have been run but was unable to parse the message from ClickHouse.
             We should proceed to run migrations: {e}");
             return Ok(MigrationTableState::UnableToParse);
         }
@@ -187,10 +188,6 @@ fn compare_migration_tables(
     tracing::debug!("Actual   migration ids: {actual:?}");
     tracing::debug!("Expected migration ids: {expected:?}");
 
-    // JustRight: log and proceed without running migrations
-    // TooMany: log and proceed without running migrations
-    // TooFew: log, then run migrations
-    // Inconsistent: log, then run migration
     if actual == expected {
         tracing::info!("All required migrations present, no extra migrations present.");
         MigrationTableState::JustRight
@@ -200,11 +197,12 @@ fn compare_migration_tables(
         tracing::warn!("Expected migration ids: {expected:?}");
         MigrationTableState::TooMany
     } else if expected.is_superset(&actual) {
-        tracing::info!("Some required migrations missing; these will be run unless `disable_automatic_migrations` is set to true.");
+        tracing::info!("Some required migrations missing; these will be run unless `is_manual_run` is False and
+        `disable_automatic_migrations` is set to true.");
         MigrationTableState::TooFew
     } else {
         tracing::warn!("Some required migrations are missing and some extra migrations were run. The missing migrations
-        will be run unless `diable_automatic_migrations` is set to true.");
+        will be run unless `is_manual_run` is False and `diable_automatic_migrations` is set to true.");
         tracing::warn!("Actual   migration ids: {actual:?}");
         tracing::warn!("Expected migration ids: {expected:?}");
         MigrationTableState::Inconsistent
@@ -242,7 +240,7 @@ pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
         MigrationTableState::TooFew
         | MigrationTableState::Inconsistent
         | MigrationTableState::UnableToParse => {
-            // is_manual_run = False and disable = True, throw error. Otherwise, run the (possibly missing) migrations.
+            // if is_manual_run = False and disable = True, throw error. Otherwise, run the (possibly missing) migrations.
             if !is_manual_run && disable_automatic_migrations {
                 Err(Error::new(ErrorDetails::ClickHouseMigrationsDisabled))
             } else {
