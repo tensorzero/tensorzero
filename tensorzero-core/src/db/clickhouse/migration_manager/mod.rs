@@ -1,6 +1,7 @@
 pub mod migration_trait;
 pub mod migrations;
 
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::env;
 use std::time::{Duration, Instant};
@@ -11,7 +12,6 @@ use crate::db::HealthCheckable;
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::{Error, ErrorDetails};
 use crate::serde_util::deserialize_u64;
-use async_trait::async_trait;
 use migration_trait::Migration;
 use migrations::migration_0000::Migration0000;
 use migrations::migration_0002::Migration0002;
@@ -123,6 +123,7 @@ pub enum MigrationTableState {
     TooFew,
     TooMany,
     JustRight,
+    Inconsistent,
     UnableToParse,
 }
 
@@ -168,35 +169,45 @@ pub async fn check_migrations_state(
         .iter()
         .map(|m| m.migration_num())
         .collect::<Result<Vec<_>, Error>>()?;
-    compare_migration_tables(expected_migration_ids, migration_ids)
+    Ok(compare_migration_tables(
+        expected_migration_ids,
+        migration_ids,
+    ))
 }
 
 fn compare_migration_tables(
     mut expected_migration_ids: Vec<u32>,
     mut actual_migration_ids: Vec<u32>,
-) -> Result<MigrationTableState, Error> {
+) -> MigrationTableState {
     expected_migration_ids.sort();
     actual_migration_ids.sort();
 
-    tracing::debug!("Actual   migration ids: {actual_migration_ids:?}");
-    tracing::debug!("Expected migration ids: {expected_migration_ids:?}");
-    // migration_ids == expected_migration_ids
-    match actual_migration_ids.strip_prefix(expected_migration_ids.as_slice()) {
-        Some(suffix) => {
-            if suffix.is_empty() {
-                Ok(MigrationTableState::JustRight)
-            } else {
-                Ok(MigrationTableState::TooMany)
-            }
-        }
-        None => match expected_migration_ids.strip_prefix(actual_migration_ids.as_slice()) {
-            Some(_) => Ok(MigrationTableState::TooFew),
-            None => Err(ErrorDetails::ClickHouseMigrationsInconsistent {
-                expected_migrations: expected_migration_ids,
-                actual_migrations: actual_migration_ids,
-            }
-            .into()),
-        },
+    let expected: BTreeSet<_> = expected_migration_ids.into_iter().collect();
+    let actual: BTreeSet<_> = actual_migration_ids.into_iter().collect();
+    tracing::debug!("Actual   migration ids: {actual:?}");
+    tracing::debug!("Expected migration ids: {expected:?}");
+
+    // JustRight: log and proceed without running migrations
+    // TooMany: log and proceed without running migrations
+    // TooFew: log, then run migrations
+    // Inconsistent: log, then run migration
+    if actual == expected {
+        tracing::info!("All required migrations present, no extra migrations present.");
+        MigrationTableState::JustRight
+    } else if actual.is_superset(&expected) {
+        tracing::warn!("Extra migrations were run");
+        tracing::warn!("Actual   migration ids: {actual:?}");
+        tracing::warn!("Expected migration ids: {expected:?}");
+        MigrationTableState::TooMany
+    } else if expected.is_superset(&actual) {
+        tracing::info!("Some required migrations missing; these will be run unless `disable_automatic_migrations` is set to true.");
+        MigrationTableState::TooFew
+    } else {
+        tracing::warn!("Some required migrations are missing and some extra migrations were run. The missing migrations
+        will be run unless `diable_automatic_migrations` is set to true.");
+        tracing::warn!("Actual   migration ids: {actual:?}");
+        tracing::warn!("Expected migration ids: {expected:?}");
+        MigrationTableState::Inconsistent
     }
 }
 
@@ -228,8 +239,10 @@ pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
         }
         // If there are fewer migrations than expected, or if we couldn't parse the migrations that were run, proceed
         // to run the migrations unless the user has disabled this.
-        MigrationTableState::TooFew | MigrationTableState::UnableToParse => {
-            // is_manual_run = False, disable = True, throw error. Otherwise, run the (possibly missing) migrations.
+        MigrationTableState::TooFew
+        | MigrationTableState::Inconsistent
+        | MigrationTableState::UnableToParse => {
+            // is_manual_run = False and disable = True, throw error. Otherwise, run the (possibly missing) migrations.
             if !is_manual_run && disable_automatic_migrations {
                 Err(Error::new(ErrorDetails::ClickHouseMigrationsDisabled))
             } else {
@@ -530,8 +543,10 @@ pub async fn run_migration(
     Ok(false)
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
 
     #[allow(clippy::allow_attributes, dead_code)] // False positive
     struct MockMigration {
@@ -609,6 +624,41 @@ mod tests {
         fn rollback_instructions(&self) -> String {
             String::new()
         }
+    }
+
+    #[tokio::test]
+    async fn test_table_comparison_results() {
+        // Both sets of migrations are the same
+        let expected_migration_ids: Vec<u32> = vec![58, 17, 5];
+        let actual_migration_ids: Vec<u32> = vec![58, 17, 5];
+        assert_eq!(
+            MigrationTableState::JustRight,
+            compare_migration_tables(expected_migration_ids, actual_migration_ids)
+        );
+
+        // Not all expected migrations present
+        let expected_migration_ids: Vec<u32> = vec![58, 17, 5];
+        let actual_migration_ids: Vec<u32> = vec![58, 5];
+        assert_eq!(
+            MigrationTableState::TooFew,
+            compare_migration_tables(expected_migration_ids, actual_migration_ids)
+        );
+
+        // Extra migrations present
+        let expected_migration_ids: Vec<u32> = vec![58, 17, 5];
+        let actual_migration_ids: Vec<u32> = vec![17, 58, 5, 12];
+        assert_eq!(
+            MigrationTableState::TooMany,
+            compare_migration_tables(expected_migration_ids, actual_migration_ids)
+        );
+
+        // Neither set of migrations is a subset of the other
+        let expected_migration_ids: Vec<u32> = vec![58, 17, 5];
+        let actual_migration_ids: Vec<u32> = vec![17, 5, 64];
+        assert_eq!(
+            MigrationTableState::Inconsistent,
+            compare_migration_tables(expected_migration_ids, actual_migration_ids)
+        );
     }
 
     #[tokio::test]
