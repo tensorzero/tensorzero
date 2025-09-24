@@ -77,7 +77,7 @@ system](/gateway/guides/opentelemetry-otlp).
 - **Type:** either "opentelemetry" or "openinference"
 - **Required:** no (default: `"opentelemetry"`)
 
-If set to `"opentelemetry"`, TensorZero will set `gen_ai` attributes based on the [OpenTelemetry GenAI semantic conventions](https://github.com/open-telemetry/semantic-conventions/blob/main/docs/genai/genai.md).
+If set to `"opentelemetry"`, TensorZero will set `gen_ai` attributes based on the [OpenTelemetry GenAI semantic conventions](https://github.com/open-telemetry/semantic-conventions/tree/main/docs/gen-ai).
 If set to `"openinference"`, TensorZero will set attributes based on the [OpenInference semantic conventions](https://github.com/Arize-ai/openinference/blob/main/spec/llm_spans.md).
 
 ### `observability.async_writes`
@@ -600,7 +600,7 @@ region = "us-east-2"
 
 <Accordion title='type: "azure"'>
 
-The TensorZero Gateway handles the API version under the hood (currently `2024-06-01`).
+The TensorZero Gateway handles the API version under the hood (currently `2025-04-01-preview`).
 You only need to set the `deployment_id` and `endpoint` fields.
 
 ##### `deployment_id`
@@ -1430,6 +1430,36 @@ routing = ["openai", "alternative-provider"]
 
 [embedding_models.model-name.providers.alternative-provider]
 # ...
+```
+
+### `extra_body`
+
+- **Type:** array of objects (see below)
+- **Required:** no
+
+The `extra_body` field allows you to modify the request body that TensorZero sends to the embedding model provider.
+This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
+
+Each object in the array must have two fields:
+
+- `pointer`: A [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) string specifying where to modify the request body
+- One of the following:
+  - `value`: The value to insert at that location; it can be of any type including nested types
+  - `delete = true`: Deletes the field at the specified location, if present.
+
+<Tip>
+
+You can also set `extra_body` at inference-time.
+The values provided at inference-time take priority over the values in the configuration file.
+
+</Tip>
+
+```toml title="tensorzero.toml"
+[embedding_models.openai-text-embedding-3-small.providers.openai]
+type = "openai"
+extra_body = [
+  { pointer = "/dimensions", value = 1536 }
+]
 ```
 
 ### `type`

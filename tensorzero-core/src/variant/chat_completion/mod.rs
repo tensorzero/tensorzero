@@ -16,6 +16,7 @@ use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeader
 use crate::inference::types::resolved_input::{
     LazyResolvedInput, LazyResolvedInputMessage, LazyResolvedInputMessageContent,
 };
+
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultStream,
     ModelInferenceRequest, RequestMessage, Role,
@@ -278,7 +279,12 @@ pub async fn prepare_model_input(
     }
     Ok(ModelInput {
         system,
-        messages: templated_messages,
+        messages: try_join_all(
+            templated_messages
+                .into_iter()
+                .map(RequestMessage::into_resolved_message),
+        )
+        .await?,
     })
 }
 
@@ -382,11 +388,8 @@ async fn prepare_request_message(
             LazyResolvedInputMessageContent::ToolResult(tool_result) => {
                 content.push(ContentBlock::ToolResult(tool_result.clone()));
             }
-            LazyResolvedInputMessageContent::File(image) => {
-                // NOTE - since `RequestMessage` currently requires files to be fully resolved,
-                // we need to await the future here. In an upcoming PR, we will introduce a `LazyRequestMessage` type,
-                // which will allow us to just pass along the future without awaiting it.
-                content.push(ContentBlock::File(Box::new(image.clone().await?)));
+            LazyResolvedInputMessageContent::File(file) => {
+                content.push(ContentBlock::File(file.clone()));
             }
             LazyResolvedInputMessageContent::Thought(thought) => {
                 content.push(ContentBlock::Thought(thought.clone()));
@@ -713,7 +716,7 @@ mod tests {
 
     use crate::cache::{CacheEnabledMode, CacheOptions};
     use crate::config::{SchemaData, UninitializedSchemas};
-    use crate::db::clickhouse::ClickHouseConnectionInfo;
+    use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
     use crate::embeddings::EmbeddingModelTable;
     use crate::endpoints::inference::{
         ChatCompletionInferenceParams, InferenceCredentials, InferenceIds,
@@ -1101,11 +1104,14 @@ mod tests {
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
             otlp_config: &Default::default(),
         };
         let templates = get_test_template_config();
@@ -2047,11 +2053,14 @@ mod tests {
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
             otlp_config: &Default::default(),
         };
         let templates = Box::leak(Box::new(get_test_template_config()));

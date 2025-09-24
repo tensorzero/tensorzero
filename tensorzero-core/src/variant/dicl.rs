@@ -45,28 +45,98 @@ use super::{
 /// We need a helper to deserialize the config because it relies on
 /// a path to a file for system instructions and we need to use the
 /// load() step to get the fully qualified path.
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct DiclConfig {
-    pub weight: Option<f64>,
-    pub embedding_model: Arc<str>,
-    pub k: u32, // k as in k-nearest neighbors
-    pub model: Arc<str>,
-    pub system_instructions: String,
-    pub temperature: Option<f32>,
-    pub top_p: Option<f32>,
-    pub stop_sequences: Option<Vec<String>>,
-    pub presence_penalty: Option<f32>,
-    pub frequency_penalty: Option<f32>,
-    pub max_tokens: Option<u32>,
-    pub seed: Option<u32>,
-    pub json_mode: Option<JsonMode>,
+    weight: Option<f64>,
+    embedding_model: Arc<str>,
+    k: u32, // k as in k-nearest neighbors
+    model: Arc<str>,
+    system_instructions: String,
+    temperature: Option<f32>,
+    top_p: Option<f32>,
+    stop_sequences: Option<Vec<String>>,
+    presence_penalty: Option<f32>,
+    frequency_penalty: Option<f32>,
+    max_tokens: Option<u32>,
+    seed: Option<u32>,
+    json_mode: Option<JsonMode>,
     #[cfg_attr(test, ts(skip))]
-    pub extra_body: Option<ExtraBodyConfig>,
+    extra_body: Option<ExtraBodyConfig>,
     #[cfg_attr(test, ts(skip))]
-    pub extra_headers: Option<ExtraHeadersConfig>,
-    pub retries: RetryConfig,
+    extra_headers: Option<ExtraHeadersConfig>,
+    retries: RetryConfig,
+}
+
+impl DiclConfig {
+    pub fn weight(&self) -> Option<f64> {
+        self.weight
+    }
+
+    pub fn set_weight(&mut self, weight: Option<f64>) {
+        self.weight = weight;
+    }
+
+    pub fn embedding_model(&self) -> &Arc<str> {
+        &self.embedding_model
+    }
+
+    pub fn k(&self) -> u32 {
+        self.k
+    }
+
+    pub fn model(&self) -> &Arc<str> {
+        &self.model
+    }
+
+    pub fn system_instructions(&self) -> &str {
+        &self.system_instructions
+    }
+
+    pub fn temperature(&self) -> Option<f32> {
+        self.temperature
+    }
+
+    pub fn top_p(&self) -> Option<f32> {
+        self.top_p
+    }
+
+    pub fn stop_sequences(&self) -> Option<&Vec<String>> {
+        self.stop_sequences.as_ref()
+    }
+
+    pub fn presence_penalty(&self) -> Option<f32> {
+        self.presence_penalty
+    }
+
+    pub fn frequency_penalty(&self) -> Option<f32> {
+        self.frequency_penalty
+    }
+
+    pub fn max_tokens(&self) -> Option<u32> {
+        self.max_tokens
+    }
+
+    pub fn seed(&self) -> Option<u32> {
+        self.seed
+    }
+
+    pub fn json_mode(&self) -> Option<&JsonMode> {
+        self.json_mode.as_ref()
+    }
+
+    pub fn extra_body(&self) -> Option<&ExtraBodyConfig> {
+        self.extra_body.as_ref()
+    }
+
+    pub fn extra_headers(&self) -> Option<&ExtraHeadersConfig> {
+        self.extra_headers.as_ref()
+    }
+
+    pub fn retries(&self) -> &RetryConfig {
+        &self.retries
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
@@ -132,22 +202,22 @@ impl Variant for DiclConfig {
             &mut inference_params,
         )?;
 
-        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
+        let model_config = models.models.get(self.model()).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
-                name: self.model.to_string(),
+                name: self.model().to_string(),
             })
         })?;
 
         // Instantiate the InferModelRequestArgs struct
         let args = InferModelRequestArgs {
             request: model_inference_request,
-            model_name: self.model.clone(),
+            model_name: self.model().clone(),
             model_config: &model_config,
             function,
             inference_config,
             clients,
             inference_params,
-            retry_config: &self.retries,
+            retry_config: self.retries(),
         };
 
         // Refactored function call using the struct
@@ -195,21 +265,21 @@ impl Variant for DiclConfig {
             &mut inference_params,
         )?;
 
-        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
+        let model_config = models.models.get(self.model()).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
-                name: self.model.to_string(),
+                name: self.model().to_string(),
             })
         })?;
 
         // Actually run the inference
         let (inference_result_stream, mut model_used_info) = infer_model_request_stream(
             request,
-            self.model.clone(),
+            self.model().clone(),
             &model_config,
             function,
             clients,
             inference_params,
-            self.retries,
+            *self.retries(),
         )
         .await?;
 
@@ -235,7 +305,7 @@ impl Variant for DiclConfig {
         // Make sure that the count is positive
 
         // Validate that weight is non-negative
-        if self.weight.is_some_and(|w| w < 0.0) {
+        if self.weight().is_some_and(|w| w < 0.0) {
             return Err(ErrorDetails::Config {
                 message: format!(
                 "`functions.{function_name}.variants.{variant_name}`: `weight` must be non-negative"
@@ -244,9 +314,9 @@ impl Variant for DiclConfig {
             .into());
         }
         // Validate that the generation model and embedding model are valid
-        models.validate(&self.model)?;
+        models.validate(self.model())?;
         let embedding_model = embedding_models
-            .get(&self.embedding_model).await?
+            .get(self.embedding_model()).await?
             .ok_or_else(|| Error::new(ErrorDetails::Config {
                 message: format!(
                     "`functions.{function_name}.variants.{variant_name}`: `embedding_model` must be a valid embedding model name"
@@ -254,12 +324,12 @@ impl Variant for DiclConfig {
             }))?;
 
         embedding_model
-            .validate(&self.embedding_model)
+            .validate(self.embedding_model())
             .map_err(|e| {
                 Error::new(ErrorDetails::Config {
                     message: format!(
                 "`functions.{function_name}.variants.{variant_name}` and embedding model `{}`: {e}",
-                self.embedding_model
+                self.embedding_model()
                 ),
                 })
             })?;
@@ -397,11 +467,11 @@ impl DiclConfig {
         })?;
 
         let embedding_model = embedding_models
-            .get(&self.embedding_model)
+            .get(self.embedding_model())
             .await?
             .ok_or_else(|| {
                 Error::new(ErrorDetails::Inference {
-                    message: format!("Embedding model {} not found", self.embedding_model),
+                    message: format!("Embedding model {} not found", self.embedding_model()),
                 })
             })?;
 
@@ -413,12 +483,12 @@ impl DiclConfig {
 
         // Embed the input via an API request
         let embedding_response = embedding_model
-            .embed(&embedding_request, &self.embedding_model, clients)
+            .embed(&embedding_request, self.embedding_model(), clients)
             .await?;
 
         // Wrap the embedding in a response with metadata
         let embedding_response_with_metadata =
-            EmbeddingResponseWithMetadata::new(embedding_response, self.embedding_model.clone());
+            EmbeddingResponseWithMetadata::new(embedding_response, self.embedding_model().clone());
         let [embedding_vector] = embedding_response_with_metadata.embeddings.as_slice() else {
             return Err(ErrorDetails::InternalError {
                 message: format!(
@@ -448,7 +518,10 @@ impl DiclConfig {
                    ORDER BY distance ASC
                    LIMIT {}
                    FORMAT JSONEachRow",
-            formatted_embedding, function_name, variant_name, self.k
+            formatted_embedding,
+            function_name,
+            variant_name,
+            self.k()
         );
 
         // Run the query on the ClickHouse database to find nearest neighbors
@@ -472,11 +545,11 @@ impl DiclConfig {
         // Convert RawExamples into Examples (parses those serialized JSON strings)
         let examples = parse_raw_examples(raw_examples, function)?;
 
-        if examples.len() != self.k as usize {
+        if examples.len() != self.k() as usize {
             tracing::warn!(
                 "Dynamic in-context learning retrieved {} examples, expected {}",
                 examples.len(),
-                self.k
+                self.k()
             );
         }
 
@@ -568,18 +641,18 @@ impl DiclConfig {
             .chain(std::iter::once(Self::prepare_input_message(&input)?))
             .collect::<Vec<_>>();
 
-        let system = Some(self.system_instructions.clone());
+        let system = Some(self.system_instructions().to_string());
 
         inference_params
             .chat_completion
             .backfill_with_variant_params(
-                self.temperature,
-                self.max_tokens,
-                self.seed,
-                self.top_p,
-                self.presence_penalty,
-                self.frequency_penalty,
-                self.stop_sequences.clone(),
+                self.temperature(),
+                self.max_tokens(),
+                self.seed(),
+                self.top_p(),
+                self.presence_penalty(),
+                self.frequency_penalty(),
+                self.stop_sequences().cloned(),
             );
         if !inference_config.extra_body.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
@@ -589,11 +662,11 @@ impl DiclConfig {
             .into());
         }
         let extra_body = FullExtraBodyConfig {
-            extra_body: self.extra_body.clone(),
+            extra_body: self.extra_body().cloned(),
             inference_extra_body: Default::default(),
         };
         let extra_headers = FullExtraHeadersConfig {
-            variant_extra_headers: self.extra_headers.clone(),
+            variant_extra_headers: self.extra_headers().cloned(),
             inference_extra_headers: inference_config
                 .extra_headers
                 .clone()
@@ -607,7 +680,7 @@ impl DiclConfig {
             inference_config,
             stream,
             inference_params,
-            self.json_mode,
+            self.json_mode().cloned(),
             extra_body,
             extra_headers,
         )

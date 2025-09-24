@@ -22,7 +22,7 @@ crate-type = ["cdylib"]
 tensorzero-core = { path = "../../tensorzero-core" }
 futures = { workspace = true }
 pyo3 = { workspace = true }
-pyo3-async-runtimes = { version = "0.24.0", features = ["tokio-runtime"] }
+pyo3-async-runtimes = { version = "0.26", features = ["tokio-runtime"] }
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

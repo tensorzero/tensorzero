@@ -64,4 +64,4 @@ dev = [
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-include = [".cargo/*"]
+include = [".cargo/*", ".sqlx/*"]

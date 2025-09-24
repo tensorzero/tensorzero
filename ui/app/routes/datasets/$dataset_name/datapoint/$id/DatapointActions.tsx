@@ -1,5 +1,5 @@
 import { ActionBar } from "~/components/layout/ActionBar";
-import { TryWithVariantButton } from "~/components/inference/TryWithVariantButton";
+import { TryWithButton } from "~/components/inference/TryWithButton";
 import { EditButton } from "~/components/utils/EditButton";
 import { DeleteButton } from "~/components/utils/DeleteButton";
 import { SaveButton } from "~/components/utils/SaveButton";
@@ -16,7 +16,7 @@ interface DatapointActionsProps {
   canSave: boolean;
   isEditing: boolean;
   onReset: () => void;
-  showTryWithVariant: boolean;
+  showTryWithButton: boolean;
 }
 
 export function DatapointActions({
@@ -30,7 +30,7 @@ export function DatapointActions({
   canSave,
   isEditing,
   onReset,
-  showTryWithVariant,
+  showTryWithButton,
 }: DatapointActionsProps) {
   const handleCancel = () => {
     onReset();
@@ -38,10 +38,10 @@ export function DatapointActions({
   };
   return (
     <ActionBar>
-      {showTryWithVariant && (
-        <TryWithVariantButton
-          variants={variants}
-          onVariantSelect={onVariantSelect}
+      {showTryWithButton && (
+        <TryWithButton
+          options={variants}
+          onOptionSelect={onVariantSelect}
           isLoading={variantInferenceIsLoading}
         />
       )}
