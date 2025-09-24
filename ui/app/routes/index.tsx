@@ -116,7 +116,6 @@ export async function loader() {
     countDynamicEvaluationProjects();
   const configPromise = getConfig();
   const functionConfigsPromise = getAllFunctionConfigs();
-  const nativeDatabaseClient = await getNativeDatabaseClient();
   const numModelsUsedPromise = nativeDatabaseClient.countDistinctModelsUsed();
 
   // Create derived promises - these will be stable references
