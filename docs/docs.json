@@ -329,11 +329,11 @@
     },
     {
       "source": "/gateway/guides/prompt-templates-schemas",
-      "destination": "/guides/set-up-a-prompt-template"
+      "destination": "/gateway/create-a-prompt-template"
     },
     {
       "source": "/gateway/guides/prompt-templates-schemas/",
-      "destination": "/guides/set-up-a-prompt-template"
+      "destination": "/gateway/create-a-prompt-template"
     }
   ]
 }
