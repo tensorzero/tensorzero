@@ -80,7 +80,6 @@ pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessa
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 use serde_untagged::UntaggedEnumVisitor;
-use tracing_futures::Instrument;
 use std::borrow::Borrow;
 use std::ops::Add;
 use std::{
@@ -91,6 +90,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tracing::Span;
+use tracing_futures::Instrument;
 use uuid::Uuid;
 
 use crate::cache::NonStreamingCacheData;
