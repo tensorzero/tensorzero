@@ -8,8 +8,6 @@ services:
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
-    volumes:
-      - clickhouse-data:/var/lib/clickhouse
     ulimits:
       nofile:
         soft: 262144
@@ -95,6 +93,3 @@ services:
       retries: 48 # Retry for up to 4 minutes
       start_interval: 1s
       start_period: 300s # Give the script time to start
-
-volumes:
-  clickhouse-data:
