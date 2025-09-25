@@ -26,6 +26,7 @@ interface InputSnippetProps {
   isEditing?: boolean;
   onSystemChange?: (system: string | object) => void;
   onMessagesChange?: (messages: DisplayInputMessage[]) => void;
+  maxHeight?: number | "Content";
 }
 
 function renderContentBlock(
@@ -196,6 +197,7 @@ export default function InputSnippet({
   isEditing,
   onSystemChange,
   onMessagesChange,
+  maxHeight,
 }: InputSnippetProps) {
   const onContentBlockChange = (
     messageIndex: number,
@@ -214,13 +216,13 @@ export default function InputSnippet({
   return (
     <SnippetLayout>
       {!system && messages.length === 0 && (
-        <SnippetContent>
+        <SnippetContent maxHeight={maxHeight}>
           <EmptyMessage message="Empty input" />
         </SnippetContent>
       )}
 
       {system && (
-        <SnippetContent>
+        <SnippetContent maxHeight={maxHeight}>
           <SnippetMessage role="system">
             {typeof system === "object" ? (
               <ParameterizedMessage
@@ -240,7 +242,7 @@ export default function InputSnippet({
       )}
 
       {messages.length > 0 && (
-        <SnippetContent>
+        <SnippetContent maxHeight={maxHeight}>
           {messages.map((message, messageIndex) => (
             <SnippetMessage role={message.role} key={messageIndex}>
               {message.content.map((block, contentBlockIndex) =>
