@@ -609,6 +609,23 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: A `Datapoint` instance.
         """
 
+    def experimental_run_evaluation(
+        self,
+        *,
+        evaluation_name: str,
+        dataset_name: str,
+        variant_name: str,
+        concurrency: int,
+    ) -> Any:
+        """
+        Run a tensorzero Evaluation
+
+        :param evaluation_name: User chosen name of the evaluation
+        :param dataset_name: The name of the stored dataset to use for variant evaluation
+        :param variant_name: The name of the variant to evaluate
+        :concurrency: The maximum number of examples to process in parallel
+        """
+
     def experimental_list_inferences(
         self,
         *,
@@ -949,6 +966,23 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param dataset_name: The name of the dataset to get the datapoint from.
         :param datapoint_id: The ID of the datapoint to get.
         :return: A `Datapoint` instance.
+        """
+
+    async def experimental_run_evaluation(
+        self,
+        *,
+        evaluation_name: str,
+        dataset_name: str,
+        variant_name: str,
+        concurrency: int,
+    ) -> Any:
+        """
+        Run a tensorzero Evaluation
+
+        :param evaluation_name: User chosen name of the evaluation
+        :param dataset_name: The name of the stored dataset to use for variant evaluation
+        :param variant_name: The name of the variant to evaluate
+        :concurrency: The maximum number of examples to process in parallel
         """
 
     async def experimental_list_inferences(

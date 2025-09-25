@@ -10,6 +10,7 @@
 /// and defines methods on them.
 use std::{collections::HashMap, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
+use evaluations::{run_evaluation, Args, OutputFormat};
 use futures::StreamExt;
 use pyo3::{
     exceptions::{PyStopAsyncIteration, PyStopIteration, PyValueError},
@@ -975,6 +976,95 @@ impl TensorZeroGateway {
             }
             Err(e) => Err(convert_error(this.py(), e)),
         }
+    }
+
+    /// Run a tensorzero Evaluation
+    ///
+    /// This function is only available in EmbeddedGateway mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `evaluation_name` - User chosen name of the evaluation.
+    /// * `dataset_name` - The name of the stored dataset to use for variant evaluation
+    /// * `variant_name` - The name of the variant to evaluate
+    /// * `concurrency` - The maximum number of examples to process in parallel
+    #[pyo3(signature = (*,
+                        evaluation_name,
+                        dataset_name,
+                        variant_name,
+                        concurrency
+    ),
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name, concurrency)"
+    )]
+    // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
+    // is written as an ellipsis object.
+    fn experimental_run_evaluation(
+        this: PyRef<'_, Self>,
+        evaluation_name: String,
+        dataset_name: String,
+        variant_name: String,
+        concurrency: usize,
+    ) -> PyResult<()> {
+        // Generate evaluation run ID
+        let evaluation_run_id = uuid::Uuid::now_v7();
+
+        // Build Args struct from parameters
+        let args = Args {
+            config_file: std::path::PathBuf::from("./config/tensorzero.toml"), // Default path
+            gateway_url: None, // Using embedded gateway
+            evaluation_name,
+            dataset_name,
+            variant_name,
+            concurrency,
+            format: OutputFormat::Pretty,
+            inference_cache: tensorzero_core::cache::CacheEnabledMode::On,
+        };
+
+        // Create a writer for output
+        let mut writer = std::io::stdout();
+
+        // Log the start of evaluation
+        tracing::info!(
+            evaluation_run_id = %evaluation_run_id,
+            evaluation_name = %args.evaluation_name,
+            dataset_name = %args.dataset_name,
+            variant_name = %args.variant_name,
+            concurrency = %args.concurrency,
+            "Starting evaluation run"
+        );
+
+        // Run the evaluation
+        let fut = async move {
+            let result = run_evaluation(args, evaluation_run_id, &mut writer).await;
+
+            match &result {
+                Ok(()) => {
+                    tracing::info!(evaluation_run_id = %evaluation_run_id, "Evaluation completed successfully");
+                }
+                Err(e) => {
+                    tracing::error!(evaluation_run_id = %evaluation_run_id, error = %e, "Evaluation failed");
+                }
+            }
+
+            result
+        };
+
+        tokio_block_on_without_gil(this.py(), fut).map_err(|e| {
+            let internal_error = tensorzero_core::error::Error::new(
+                tensorzero_core::error::ErrorDetails::InternalError {
+                    message: e.to_string(),
+                },
+            );
+            let tensorzero_internal_error =
+                tensorzero_rust::TensorZeroInternalError::from(internal_error);
+            convert_error(
+                this.py(),
+                TensorZeroError::Other {
+                    source: tensorzero_internal_error,
+                },
+            )
+        })?;
+        Ok(())
     }
 
     /// Query the Clickhouse database for inferences.

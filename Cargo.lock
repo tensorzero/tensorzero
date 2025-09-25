@@ -4673,6 +4673,7 @@ dependencies = [
 name = "tensorzero-python"
 version = "2025.9.3"
 dependencies = [
+ "evaluations",
  "futures",
  "pyo3",
  "pyo3-async-runtimes",
