@@ -1775,7 +1775,7 @@ dependencies = [
 
 [[package]]
 name = "feedback-load-test"
-version = "2025.9.4"
+version = "2025.9.5"
 dependencies = [
  "anyhow",
  "async-trait",
