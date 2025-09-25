@@ -14,7 +14,7 @@ use crate::{
     endpoints::validate_tags,
     error::{Error, ErrorDetails},
     gateway_util::{AppState, AppStateData, StructuredJson},
-    uuid_util::{
+    utils::uuid::{
         compare_timestamps, generate_dynamic_evaluation_run_episode_id, validate_tensorzero_uuid,
         DYNAMIC_EVALUATION_THRESHOLD,
     },

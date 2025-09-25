@@ -2,7 +2,7 @@ use super::check_table_exists;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
-use crate::uuid_util::get_dynamic_evaluation_cutoff_uuid;
+use crate::utils::uuid::get_dynamic_evaluation_cutoff_uuid;
 use async_trait::async_trait;
 use std::time::Duration;
 

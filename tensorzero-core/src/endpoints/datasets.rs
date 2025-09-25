@@ -34,7 +34,7 @@ use crate::{
     },
     serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
     tool::{DynamicToolParams, ToolCallConfigDatabaseInsert},
-    uuid_util::validate_tensorzero_uuid,
+    utils::uuid::validate_tensorzero_uuid,
 };
 
 #[cfg(debug_assertions)]

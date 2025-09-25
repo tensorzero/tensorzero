@@ -24,7 +24,7 @@ use crate::inference::types::{
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::serde_util::deserialize_optional_json_string;
 use crate::tool::{ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
-use crate::uuid_util::uuid_elapsed;
+use crate::utils::uuid::uuid_elapsed;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::validate_tags;
