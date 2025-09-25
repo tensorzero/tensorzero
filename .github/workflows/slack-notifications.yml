@@ -115,7 +115,7 @@ jobs:
               ]
             }
 
-      - name: Send Slack notification for pull request comment
+      - name: Send Slack notification for pull request review comment
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review_comment'
         uses: slackapi/slack-github-action@v2.1.1
         with:
@@ -124,13 +124,34 @@ jobs:
           payload: |
             {
               "channel": "C09HC3Q2XV2",
-              "text": "💬 New comment on pull request by ${{ github.actor }}",
+              "text": "💬 New review comment on pull request by ${{ github.actor }}",
               "blocks": [
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "💬 *New comment on pull request*\n\n*PR:* <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>\n*Comment by:* ${{ github.actor }}\n*Repository:* ${{ github.repository }}"
+                    "text": "💬 *New review comment on pull request*\n\n*PR:* <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>\n*Comment by:* ${{ github.actor }}\n*Repository:* ${{ github.repository }}"
+                  }
+                }
+              ]
+            }
+
+      - name: Send Slack notification for pull request review
+        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review'
+        uses: slackapi/slack-github-action@v2.1.1
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          payload: |
+            {
+              "channel": "C09HC3Q2XV2",
+              "text": "👀 Pull request review submitted by ${{ github.actor }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "👀 *Pull request review submitted*\n\n*PR:* <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>\n*Review by:* ${{ github.actor }}\n*State:* ${{ github.event.review.state }}\n*Repository:* ${{ github.repository }}"
                   }
                 }
               ]
