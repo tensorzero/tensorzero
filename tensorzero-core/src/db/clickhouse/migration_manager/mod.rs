@@ -202,7 +202,7 @@ fn compare_migration_tables(
         MigrationTableState::TooFew
     } else {
         tracing::warn!("Some required migrations are missing and some extra migrations were run. The missing migrations
-        will be run unless `is_manual_run` is False and `diable_automatic_migrations` is set to true.");
+        will be run unless `is_manual_run` is False and `disable_automatic_migrations` is set to true.");
         tracing::warn!("Actual   migration ids: {actual:?}");
         tracing::warn!("Expected migration ids: {expected:?}");
         MigrationTableState::Inconsistent
@@ -240,7 +240,7 @@ pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
         MigrationTableState::TooFew
         | MigrationTableState::Inconsistent
         | MigrationTableState::UnableToParse => {
-            // if is_manual_run = False and disable = True, throw error. Otherwise, run the (possibly missing) migrations.
+            // if is_manual_run = False and disable_automatic_migrations = True, throw error. Otherwise, run the (possibly missing) migrations.
             if !is_manual_run && disable_automatic_migrations {
                 Err(Error::new(ErrorDetails::ClickHouseMigrationsDisabled))
             } else {
@@ -466,9 +466,8 @@ pub async fn manual_run_clickhouse_migrations() -> Result<(), Error> {
     run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
         // If we manually run the migrations, we should not skip any.
-        // TODO: add check for manual running
         is_manual_run: true,
-        // If we're manually running migrations, the disable_automatic_migrations value is arbitrary
+        // If we're manually running migrations, the disable_automatic_migrations value is arbitrary.
         disable_automatic_migrations: false,
     })
     .await
@@ -624,8 +623,8 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn test_table_comparison_results() {
+    #[test]
+    fn test_table_comparison_results() {
         // Both sets of migrations are the same
         let expected_migration_ids: Vec<u32> = vec![58, 17, 5];
         let actual_migration_ids: Vec<u32> = vec![58, 17, 5];
