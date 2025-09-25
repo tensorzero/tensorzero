@@ -6,7 +6,24 @@ use async_trait::async_trait;
 use std::time::Duration;
 
 /*
- *  TODO
+ * Introduces a table FeedbackByVariantStatistics which stores aggregated summary statistics
+ * about feedback by function, variant, and time.
+ * These pre-aggregated statistics will be useful for planned experimentation features.
+ *
+ * The views flow as follows:
+ * When feedback is sent to either of FloatMetricFeedback or BooleanMetricFeedback,
+ * the associated view writes FloatMetricFeedbackByVariant or BooleanMetricFeedbackByVariant if
+ * there is an associated inference in InferenceById or InferenceByEpisodeId.
+ * This view also checks if the feedback is episode-level and if so that a single variant was used for that
+ * episode-function pair.
+ * NOTE: This migration does not handle the case where an episode uses only one variant for a function and  episode, feedback is
+ * sent, and then a new inference is made in the episode for the same function with a different variant.
+ * NOTE: This migration does not support "overwriting" feedback so there could be multiple entries for the
+ * same function / variant / metric triple.
+ *
+ * After this process a second materialized view is triggered to send the joined / denormalized data to
+ * the FeedbackByVariantStatistics table, which aggregates the data by function, variant, and time and
+ * computes running means and variances.
  */
 
 pub struct Migration0039<'a> {
