@@ -44,6 +44,7 @@
               "gateway/index",
               "gateway/call-any-llm",
               "gateway/create-a-prompt-template",
+              "gateway/generate-embeddings",
               "gateway/tutorial",
               "gateway/guides/batch-inference",
               "gateway/guides/episodes",
