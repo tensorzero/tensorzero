@@ -37,7 +37,7 @@ async fn test_config_from_toml_table_valid() {
         .unwrap()
         .inner
     {
-        VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode.unwrap(),
+        VariantConfig::ChatCompletion(chat_config) => chat_config.json_mode().unwrap(),
         _ => panic!("Expected a chat completion variant"),
     };
     assert_eq!(prompt_a_json_mode, &JsonMode::ImplicitTool);
@@ -51,10 +51,10 @@ async fn test_config_from_toml_table_valid() {
         .unwrap()
         .inner
     {
-        VariantConfig::ChatCompletion(chat_config) => chat_config.json_mode,
+        VariantConfig::ChatCompletion(chat_config) => chat_config.json_mode(),
         _ => panic!("Expected a chat completion variant"),
     };
-    assert_eq!(prompt_b_json_mode, Some(JsonMode::Strict));
+    assert_eq!(prompt_b_json_mode, Some(&JsonMode::Strict));
     // Check that the tool choice for get_weather is set to "specific" and the correct tool
     let function = config.functions.get("weather_helper").unwrap();
     match &**function {
@@ -77,7 +77,7 @@ async fn test_config_from_toml_table_valid() {
                 match &variant.inner {
                     VariantConfig::BestOfNSampling(best_of_n_config) => {
                         assert!(
-                            best_of_n_config.candidates.len() > 1,
+                            best_of_n_config.candidates().len() > 1,
                             "Best of n variant should have multiple candidates"
                         );
                     }
@@ -104,7 +104,7 @@ async fn test_config_from_toml_table_valid() {
             let variant = json_config.variants.get("variant_with_variables").unwrap();
             match &variant.inner {
                 VariantConfig::ChatCompletion(chat_config) => {
-                    assert_eq!(chat_config.weight, None); // Default weight should be None
+                    assert_eq!(chat_config.weight(), None); // Default weight should be None
                 }
                 _ => panic!("Expected a chat completion variant"),
             }
@@ -135,10 +135,10 @@ async fn test_config_from_toml_table_valid() {
             assert_eq!(json_config.variants.len(), 7);
             match &json_config.variants["anthropic_promptA"].inner {
                 VariantConfig::ChatCompletion(chat_config) => {
-                    assert_eq!(chat_config.model, "anthropic::claude-3.5-sonnet".into());
-                    assert_eq!(chat_config.weight, Some(1.0));
+                    assert_eq!(chat_config.model(), &"anthropic::claude-3.5-sonnet".into());
+                    assert_eq!(chat_config.weight(), Some(1.0));
                     assert_eq!(
-                            chat_config.templates.get_implicit_system_template().unwrap().template,
+                            chat_config.templates().get_implicit_system_template().unwrap().template,
                             PathWithContents {
                                 // We don't use a real path for programmatically generated templates
                                 // Instead we use this handle and then the same in minijinja
@@ -153,37 +153,37 @@ async fn test_config_from_toml_table_valid() {
                                         .to_string(),
                             }
                         );
-                    assert_eq!(chat_config.json_mode, Some(JsonMode::ImplicitTool));
+                    assert_eq!(chat_config.json_mode(), Some(&JsonMode::ImplicitTool));
                 }
                 _ => panic!("Expected a chat completion variant"),
             }
             match &json_config.variants["best_of_3"].inner {
                 VariantConfig::BestOfNSampling(best_of_n_config) => {
-                    assert_eq!(best_of_n_config.candidates.len(), 3);
+                    assert_eq!(best_of_n_config.candidates().len(), 3);
                     assert_eq!(
-                        best_of_n_config.evaluator.inner.model,
-                        "openai::gpt-4o-mini".into()
+                        best_of_n_config.evaluator().inner.model().as_ref(),
+                        "openai::gpt-4o-mini"
                     );
                     assert_eq!(
-                        best_of_n_config.evaluator.inner.json_mode,
-                        Some(JsonMode::Strict)
+                        best_of_n_config.evaluator().inner.json_mode(),
+                        Some(&JsonMode::Strict)
                     );
-                    assert_eq!(best_of_n_config.evaluator.inner.temperature, Some(0.3));
+                    assert_eq!(best_of_n_config.evaluator().inner.temperature(), Some(0.3));
                 }
                 _ => panic!("Expected a best of n sampling variant"),
             }
             match &json_config.variants["mixture_of_3"].inner {
                 VariantConfig::MixtureOfN(mixture_of_n_config) => {
-                    assert_eq!(mixture_of_n_config.candidates.len(), 3);
+                    assert_eq!(mixture_of_n_config.candidates().len(), 3);
                     assert_eq!(
-                        mixture_of_n_config.fuser.inner.model,
-                        "openai::gpt-4o-mini".into()
+                        mixture_of_n_config.fuser().inner.model().as_ref(),
+                        "openai::gpt-4o-mini"
                     );
                     assert_eq!(
-                        mixture_of_n_config.fuser.inner.json_mode,
-                        Some(JsonMode::Strict)
+                        mixture_of_n_config.fuser().inner.json_mode(),
+                        Some(&JsonMode::Strict)
                     );
-                    assert_eq!(mixture_of_n_config.fuser.inner.temperature, Some(0.3));
+                    assert_eq!(mixture_of_n_config.fuser().inner.temperature(), Some(0.3));
                 }
                 _ => panic!("Expected a mixture of n sampling variant"),
             }
@@ -2576,7 +2576,7 @@ async fn test_glob_relative_path() {
     };
     assert_eq!(
         variant
-            .templates
+            .templates()
             .get_implicit_template(Role::User)
             .unwrap()
             .template
@@ -2589,7 +2589,7 @@ async fn test_glob_relative_path() {
     );
     assert_eq!(
         variant
-            .templates
+            .templates()
             .get_implicit_system_template()
             .unwrap()
             .template
@@ -2599,7 +2599,7 @@ async fn test_glob_relative_path() {
 
     assert_eq!(
         variant
-            .templates
+            .templates()
             .get_implicit_system_template()
             .unwrap()
             .template
@@ -2613,7 +2613,7 @@ async fn test_glob_relative_path() {
 
     assert_eq!(
         variant
-            .templates
+            .templates()
             .get_implicit_template(Role::User)
             .unwrap()
             .template

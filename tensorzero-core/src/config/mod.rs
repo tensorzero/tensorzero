@@ -1305,7 +1305,7 @@ impl UninitializedFunctionConfig {
                 for (name, variant) in &variants {
                     all_template_names.extend(variant.get_all_explicit_template_names());
                     if let VariantConfig::ChatCompletion(chat_config) = &variant.inner {
-                        if chat_config.json_mode.is_some() {
+                        if chat_config.json_mode().is_some() {
                             return Err(ErrorDetails::Config {
                                 message: format!(
                                     "JSON mode is not supported for variant `{name}` (parent function is a chat function)",
@@ -1371,17 +1371,17 @@ impl UninitializedFunctionConfig {
                     all_template_names.extend(variant.get_all_explicit_template_names());
                     match &variant.inner {
                         VariantConfig::ChatCompletion(chat_config) => {
-                            if chat_config.json_mode.is_none() {
+                            if chat_config.json_mode().is_none() {
                                 variant_missing_mode = Some(name.clone());
                             }
                         }
                         VariantConfig::BestOfNSampling(best_of_n_config) => {
-                            if best_of_n_config.evaluator.inner.json_mode.is_none() {
+                            if best_of_n_config.evaluator().inner.json_mode().is_none() {
                                 variant_missing_mode = Some(format!("{name}.evaluator"));
                             }
                         }
                         VariantConfig::MixtureOfN(mixture_of_n_config) => {
-                            if mixture_of_n_config.fuser.inner.json_mode.is_none() {
+                            if mixture_of_n_config.fuser().inner.json_mode().is_none() {
                                 variant_missing_mode = Some(format!("{name}.fuser"));
                             }
                         }
@@ -1391,7 +1391,7 @@ impl UninitializedFunctionConfig {
                             }
                         }
                         VariantConfig::ChainOfThought(chain_of_thought_config) => {
-                            if chain_of_thought_config.inner.json_mode.is_none() {
+                            if chain_of_thought_config.inner.json_mode().is_none() {
                                 variant_missing_mode = Some(name.clone());
                             }
                         }
