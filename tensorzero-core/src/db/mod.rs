@@ -165,6 +165,7 @@ pub trait BanditQueries {
     ) -> Result<Vec<FeedbackByVariant>, Error>;
 }
 
+#[derive(Deserialize)]
 pub struct FeedbackByVariant {
     pub variant_name: String,
     pub mean: f32,
