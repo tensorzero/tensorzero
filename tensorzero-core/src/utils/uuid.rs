@@ -106,6 +106,7 @@ pub fn get_dynamic_evaluation_cutoff_uuid() -> Uuid {
     Uuid::new_v7(DYNAMIC_EVALUATION_THRESHOLD)
 }
 
+#[expect(clippy::missing_panics_doc)]
 pub fn generate_dynamic_evaluation_run_episode_id() -> Uuid {
     #[expect(clippy::expect_used)]
     let now = SystemTime::now()

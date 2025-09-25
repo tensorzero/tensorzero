@@ -10,7 +10,6 @@ pub mod endpoints; // API endpoints
 pub mod error; // error handling
 pub mod evaluations; // evaluation
 pub mod function; // types and methods for working with TensorZero functions
-pub mod gateway_util; // utilities for gateway
 pub mod howdy;
 pub mod http;
 pub mod inference; // model inference
@@ -26,7 +25,7 @@ pub mod serde_util; // utilities for working with serde
 pub mod stored_inference; // types and methods for working with stored inferences
 mod testing;
 pub mod tool; // types and methods for working with TensorZero tools
-mod uuid_util; // utilities for working with UUIDs
+pub mod utils;
 pub mod variant; // types and methods for working with TensorZero variants
 
 pub mod built_info {

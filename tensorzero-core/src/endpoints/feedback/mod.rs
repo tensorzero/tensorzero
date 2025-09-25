@@ -17,14 +17,14 @@ use crate::config::{Config, MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
-use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, FunctionType, Text,
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::serde_util::deserialize_optional_json_string;
 use crate::tool::{ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
-use crate::uuid_util::uuid_elapsed;
+use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
+use crate::utils::uuid::uuid_elapsed;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::validate_tags;

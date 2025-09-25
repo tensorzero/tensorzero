@@ -7,9 +7,9 @@ use tensorzero_core::{
         postgres::PostgresConnectionInfo,
     },
     endpoints::feedback::{feedback, Params},
-    gateway_util::GatewayHandle,
     http::TensorzeroHttpClient,
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text, TextKind},
+    utils::gateway::GatewayHandle,
 };
 use tokio::time::{sleep, Duration};
 use tracing_test::traced_test;
