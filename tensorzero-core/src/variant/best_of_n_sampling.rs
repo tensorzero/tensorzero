@@ -41,10 +41,32 @@ use super::{InferenceConfig, JsonMode, ModelUsedInfo, Variant};
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct BestOfNSamplingConfig {
-    pub weight: Option<f64>,
-    pub timeout_s: f64,
-    pub candidates: Vec<String>,
-    pub evaluator: BestOfNEvaluatorConfig,
+    weight: Option<f64>,
+    timeout_s: f64,
+    candidates: Vec<String>,
+    evaluator: BestOfNEvaluatorConfig,
+}
+
+impl BestOfNSamplingConfig {
+    pub fn weight(&self) -> Option<f64> {
+        self.weight
+    }
+
+    pub fn set_weight(&mut self, weight: Option<f64>) {
+        self.weight = weight;
+    }
+
+    pub fn timeout_s(&self) -> f64 {
+        self.timeout_s
+    }
+
+    pub fn candidates(&self) -> &Vec<String> {
+        &self.candidates
+    }
+
+    pub fn evaluator(&self) -> &BestOfNEvaluatorConfig {
+        &self.evaluator
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
@@ -462,21 +484,21 @@ async fn inner_select_best_candidate<'a, 'request>(
         // Return the selected index and None for the model inference result
         return Ok((Some(selected_index), None));
     }
-    let model_config = models.get(&evaluator.inner.model).await?.ok_or_else(|| {
+    let model_config = models.get(evaluator.inner.model()).await?.ok_or_else(|| {
         Error::new(ErrorDetails::UnknownModel {
-            name: evaluator.inner.model.to_string(),
+            name: evaluator.inner.model().to_string(),
         })
     })?;
     let model_inference_response = (|| async {
         model_config
-            .infer(&inference_request, clients, &evaluator.inner.model)
+            .infer(&inference_request, clients, evaluator.inner.model())
             .await
     })
-    .retry(evaluator.inner.retries.get_backoff())
+    .retry(evaluator.inner.retries().get_backoff())
     .await?;
     let model_inference_result = ModelInferenceResponseWithMetadata::new(
         model_inference_response,
-        evaluator.inner.model.clone(),
+        evaluator.inner.model().clone(),
     );
     let raw = match model_inference_result
         .output
@@ -680,18 +702,18 @@ impl BestOfNEvaluatorConfig {
         inference_params
             .chat_completion
             .backfill_with_variant_params(
-                self.inner.temperature,
-                self.inner.max_tokens,
-                self.inner.seed,
-                self.inner.top_p,
-                self.inner.presence_penalty,
-                self.inner.frequency_penalty,
-                self.inner.stop_sequences.clone(),
+                self.inner.temperature(),
+                self.inner.max_tokens(),
+                self.inner.seed(),
+                self.inner.top_p(),
+                self.inner.presence_penalty(),
+                self.inner.frequency_penalty(),
+                self.inner.stop_sequences().cloned(),
             );
         let json_mode = inference_params
             .chat_completion
             .json_mode
-            .or(self.inner.json_mode)
+            .or_else(|| self.inner.json_mode().cloned())
             .unwrap_or(JsonMode::Strict);
         let tool_config = match json_mode {
             JsonMode::ImplicitTool => Some(Cow::Borrowed(&*IMPLICIT_TOOL_CALL_CONFIG)),
@@ -705,11 +727,11 @@ impl BestOfNEvaluatorConfig {
             .into());
         }
         let extra_body = FullExtraBodyConfig {
-            extra_body: self.inner.extra_body.clone(),
+            extra_body: self.inner.extra_body().cloned(),
             inference_extra_body: Default::default(),
         };
         let extra_headers = FullExtraHeadersConfig {
-            variant_extra_headers: self.inner.extra_headers.clone(),
+            variant_extra_headers: self.inner.extra_headers().cloned(),
             inference_extra_headers: Default::default(),
         };
         Ok((
