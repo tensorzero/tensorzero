@@ -10,7 +10,10 @@ pub mod clickhouse;
 pub mod postgres;
 
 #[async_trait]
-pub trait ClickHouseConnection: SelectQueries + HealthCheckable + Send + Sync {}
+pub trait ClickHouseConnection:
+    SelectQueries + HealthCheckable + BanditQueries + Send + Sync
+{
+}
 
 #[async_trait]
 pub trait PostgresConnection: RateLimitQueries + HealthCheckable + Send + Sync {}
@@ -98,7 +101,7 @@ pub struct TableBoundsWithCount {
     pub count: u64,
 }
 
-impl<T: SelectQueries + HealthCheckable + Send + Sync> ClickHouseConnection for T {}
+impl<T: SelectQueries + BanditQueries + HealthCheckable + Send + Sync> ClickHouseConnection for T {}
 
 pub trait RateLimitQueries {
     /// This function will fail if any of the requests individually fail.
@@ -152,16 +155,21 @@ pub struct ReturnTicketsReceipt {
     pub balance: u64,
 }
 
+#[async_trait]
 pub trait BanditQueries {
-    async fn get_feedback_by_variant(&self, metric_name: &str, function_name: String, variant_names: Option<&Vec<String>>, time_window: TimeWindow)
+    async fn get_feedback_by_variant(
+        &self,
+        metric_name: &str,
+        function_name: String,
+        variant_names: Option<&Vec<String>>,
+    ) -> Result<Vec<FeedbackByVariant>, Error>;
 }
 
 pub struct FeedbackByVariant {
-    pub period_start: DateTime<Utc>,
     pub variant_name: String,
     pub mean: f32,
     pub variance: f32,
-    count: u64,
+    pub count: u64,
 }
 
 impl<T: RateLimitQueries + HealthCheckable + Send + Sync> PostgresConnection for T {}
