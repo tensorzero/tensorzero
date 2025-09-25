@@ -1269,14 +1269,19 @@ impl std::fmt::Display for ErrorDetails {
                 key,
                 tickets_remaining,
             } => {
-                // TODO: improve this error
+                // TODO: improve this error:
+                // - `{key}` should more closely match the definition of the rule in TOML
+                // - Display the number of requested tickets (units) if possible.
                 write!(
                     f,
-                    "Rate limit exceeded for key {key} with {tickets_remaining} tickets remaining"
+                    "TensorZero rate limit exceeded for rule {key}. {tickets_remaining} units currently available."
                 )
             }
             ErrorDetails::RateLimitMissingMaxTokens => {
-                write!(f, "Missing max tokens for rate limited request.")
+                write!(
+                    f,
+                    "Missing `max_tokens` for request subject to rate limiting rules."
+                )
             }
             ErrorDetails::StreamError { source } => {
                 write!(f, "Error in streaming response: {source}")
