@@ -67,7 +67,7 @@ impl InferenceProvider for AWSSagemakerProvider {
         _dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = self.hosted_provider.make_body(request)?;
+        let request_body = self.hosted_provider.make_body(request).await?;
         let InterceptorAndRawBody {
             interceptor,
             get_raw_request,
@@ -152,7 +152,7 @@ impl InferenceProvider for AWSSagemakerProvider {
         _dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = self.hosted_provider.make_body(request)?;
+        let request_body = self.hosted_provider.make_body(request).await?;
 
         let InterceptorAndRawBody {
             interceptor,

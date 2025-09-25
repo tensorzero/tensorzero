@@ -16,6 +16,7 @@ use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeader
 use crate::inference::types::resolved_input::{
     LazyResolvedInput, LazyResolvedInputMessage, LazyResolvedInputMessageContent,
 };
+
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultStream,
     ModelInferenceRequest, RequestMessage, Role,
@@ -56,26 +57,87 @@ pub struct TemplateWithSchema {
 #[derive(Debug, Default, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-#[expect(clippy::manual_non_exhaustive)]
 pub struct ChatCompletionConfig {
-    pub weight: Option<f64>,
-    pub model: Arc<str>,
-    pub templates: ChatTemplates,
-    pub temperature: Option<f32>,
-    pub top_p: Option<f32>,
-    pub max_tokens: Option<u32>,
-    pub presence_penalty: Option<f32>,
-    pub frequency_penalty: Option<f32>,
-    pub seed: Option<u32>,
-    pub stop_sequences: Option<Vec<String>>,
-    pub json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
-    pub retries: RetryConfig,
+    weight: Option<f64>,
+    model: Arc<str>,
+    templates: ChatTemplates,
+    temperature: Option<f32>,
+    top_p: Option<f32>,
+    max_tokens: Option<u32>,
+    presence_penalty: Option<f32>,
+    frequency_penalty: Option<f32>,
+    seed: Option<u32>,
+    stop_sequences: Option<Vec<String>>,
+    json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
+    retries: RetryConfig,
     #[cfg_attr(test, ts(skip))]
-    pub extra_body: Option<ExtraBodyConfig>,
+    extra_body: Option<ExtraBodyConfig>,
     #[cfg_attr(test, ts(skip))]
-    pub extra_headers: Option<ExtraHeadersConfig>,
+    extra_headers: Option<ExtraHeadersConfig>,
     #[serde(skip)]
     _private: (),
+}
+
+impl ChatCompletionConfig {
+    pub fn weight(&self) -> Option<f64> {
+        self.weight
+    }
+
+    pub fn set_weight(&mut self, weight: Option<f64>) {
+        self.weight = weight;
+    }
+
+    pub fn model(&self) -> &Arc<str> {
+        &self.model
+    }
+
+    pub fn templates(&self) -> &ChatTemplates {
+        &self.templates
+    }
+
+    pub fn temperature(&self) -> Option<f32> {
+        self.temperature
+    }
+
+    pub fn top_p(&self) -> Option<f32> {
+        self.top_p
+    }
+
+    pub fn max_tokens(&self) -> Option<u32> {
+        self.max_tokens
+    }
+
+    pub fn presence_penalty(&self) -> Option<f32> {
+        self.presence_penalty
+    }
+
+    pub fn frequency_penalty(&self) -> Option<f32> {
+        self.frequency_penalty
+    }
+
+    pub fn seed(&self) -> Option<u32> {
+        self.seed
+    }
+
+    pub fn stop_sequences(&self) -> Option<&Vec<String>> {
+        self.stop_sequences.as_ref()
+    }
+
+    pub fn json_mode(&self) -> Option<&JsonMode> {
+        self.json_mode.as_ref()
+    }
+
+    pub fn retries(&self) -> &RetryConfig {
+        &self.retries
+    }
+
+    pub fn extra_body(&self) -> Option<&ExtraBodyConfig> {
+        self.extra_body.as_ref()
+    }
+
+    pub fn extra_headers(&self) -> Option<&ExtraHeadersConfig> {
+        self.extra_headers.as_ref()
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
@@ -278,7 +340,12 @@ pub async fn prepare_model_input(
     }
     Ok(ModelInput {
         system,
-        messages: templated_messages,
+        messages: try_join_all(
+            templated_messages
+                .into_iter()
+                .map(RequestMessage::into_resolved_message),
+        )
+        .await?,
     })
 }
 
@@ -382,11 +449,8 @@ async fn prepare_request_message(
             LazyResolvedInputMessageContent::ToolResult(tool_result) => {
                 content.push(ContentBlock::ToolResult(tool_result.clone()));
             }
-            LazyResolvedInputMessageContent::File(image) => {
-                // NOTE - since `RequestMessage` currently requires files to be fully resolved,
-                // we need to await the future here. In an upcoming PR, we will introduce a `LazyRequestMessage` type,
-                // which will allow us to just pass along the future without awaiting it.
-                content.push(ContentBlock::File(Box::new(image.clone().await?)));
+            LazyResolvedInputMessageContent::File(file) => {
+                content.push(ContentBlock::File(file.clone()));
             }
             LazyResolvedInputMessageContent::Thought(thought) => {
                 content.push(ContentBlock::Thought(thought.clone()));
@@ -713,7 +777,7 @@ mod tests {
 
     use crate::cache::{CacheEnabledMode, CacheOptions};
     use crate::config::{SchemaData, UninitializedSchemas};
-    use crate::db::clickhouse::ClickHouseConnectionInfo;
+    use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
     use crate::embeddings::EmbeddingModelTable;
     use crate::endpoints::inference::{
         ChatCompletionInferenceParams, InferenceCredentials, InferenceIds,
@@ -1101,11 +1165,14 @@ mod tests {
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
             otlp_config: &Default::default(),
         };
         let templates = get_test_template_config();
@@ -2047,11 +2114,14 @@ mod tests {
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
             otlp_config: &Default::default(),
         };
         let templates = Box::leak(Box::new(get_test_template_config()));

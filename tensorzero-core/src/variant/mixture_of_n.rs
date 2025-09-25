@@ -22,6 +22,7 @@ use crate::inference::types::{
     JsonInferenceResultChunk, RequestMessagesOrBatch, TextChunk, ThoughtChunk, Usage,
 };
 use crate::model::ModelTable;
+use crate::rate_limiting::TicketBorrows;
 use crate::tool::ToolCallChunk;
 use crate::{
     endpoints::inference::InferenceParams,
@@ -43,10 +44,32 @@ use super::{
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct MixtureOfNConfig {
-    pub weight: Option<f64>,
-    pub timeout_s: f64,
-    pub candidates: Vec<String>,
-    pub fuser: FuserConfig,
+    weight: Option<f64>,
+    timeout_s: f64,
+    candidates: Vec<String>,
+    fuser: FuserConfig,
+}
+
+impl MixtureOfNConfig {
+    pub fn weight(&self) -> Option<f64> {
+        self.weight
+    }
+
+    pub fn set_weight(&mut self, weight: Option<f64>) {
+        self.weight = weight;
+    }
+
+    pub fn timeout_s(&self) -> f64 {
+        self.timeout_s
+    }
+
+    pub fn candidates(&self) -> &Vec<String> {
+        &self.candidates
+    }
+
+    pub fn fuser(&self) -> &FuserConfig {
+        &self.fuser
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
@@ -308,6 +331,7 @@ pub fn stream_inference_from_non_stream(
             }
         },
         cached: model_inference_result.cached,
+        ticket_borrow: TicketBorrows::empty(),
     };
     let stream = make_stream_from_non_stream(inference_result, Some(usage))?;
     Ok((stream, model_used_info))
@@ -606,18 +630,18 @@ async fn inner_fuse_candidates<'a, 'request>(
         }
         .into());
     }
-    let model_config = models.get(&fuser.inner.model).await?.ok_or_else(|| {
+    let model_config = models.get(fuser.inner.model()).await?.ok_or_else(|| {
         Error::new(ErrorDetails::UnknownModel {
-            name: fuser.inner.model.to_string(),
+            name: fuser.inner.model().to_string(),
         })
     })?;
     let infer_model_request_args = InferModelRequestArgs {
         request: inference_request,
-        model_name: fuser.inner.model.clone(),
+        model_name: fuser.inner.model().clone(),
         model_config: &model_config,
         function,
         inference_config,
-        retry_config: &fuser.inner.retries,
+        retry_config: fuser.inner.retries(),
         clients,
         inference_params: InferenceParams::default(),
     };
@@ -659,19 +683,19 @@ async fn inner_fuse_candidates_stream<'a, 'request>(
         }
         .into());
     }
-    let model_config = models.get(&fuser.inner.model).await?.ok_or_else(|| {
+    let model_config = models.get(fuser.inner.model()).await?.ok_or_else(|| {
         Error::new(ErrorDetails::UnknownModel {
-            name: fuser.inner.model.to_string(),
+            name: fuser.inner.model().to_string(),
         })
     })?;
     infer_model_request_stream(
         inference_request,
-        fuser.inner.model.clone(),
+        fuser.inner.model().clone(),
         &model_config,
         function,
         clients,
         params,
-        fuser.inner.retries,
+        *fuser.inner.retries(),
     )
     .await
 }
@@ -812,13 +836,13 @@ impl FuserConfig {
         inference_params
             .chat_completion
             .backfill_with_variant_params(
-                self.inner.temperature,
-                self.inner.max_tokens,
-                self.inner.seed,
-                self.inner.top_p,
-                self.inner.presence_penalty,
-                self.inner.frequency_penalty,
-                self.inner.stop_sequences.clone(),
+                self.inner.temperature(),
+                self.inner.max_tokens(),
+                self.inner.seed(),
+                self.inner.top_p(),
+                self.inner.presence_penalty(),
+                self.inner.frequency_penalty(),
+                self.inner.stop_sequences().cloned(),
             );
 
         if !inference_config.extra_body.is_empty() {
@@ -830,11 +854,11 @@ impl FuserConfig {
             .into());
         }
         let extra_body = FullExtraBodyConfig {
-            extra_body: self.inner.extra_body.clone(),
+            extra_body: self.inner.extra_body().cloned(),
             inference_extra_body: Default::default(),
         };
         let extra_headers = FullExtraHeadersConfig {
-            variant_extra_headers: self.inner.extra_headers.clone(),
+            variant_extra_headers: self.inner.extra_headers().cloned(),
             inference_extra_headers: inference_config
                 .extra_headers
                 .clone()
@@ -848,7 +872,7 @@ impl FuserConfig {
             inference_config,
             stream,
             inference_params,
-            self.inner.json_mode,
+            self.inner.json_mode().cloned(),
             extra_body,
             extra_headers,
         )?;
@@ -866,7 +890,7 @@ mod tests {
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
         config::{SchemaData, UninitializedSchemas},
-        db::clickhouse::ClickHouseConnectionInfo,
+        db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
         function::{FunctionConfigChat, FunctionConfigJson},
         http::TensorzeroHttpClient,
@@ -1350,11 +1374,14 @@ mod tests {
         let inference_clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
             otlp_config: &Default::default(),
         };
         let input = LazyResolvedInput {

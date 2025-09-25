@@ -127,10 +127,12 @@ impl GatewayHandle {
     /// # Panics
     /// Panics if a `TensorzeroHttpClient` cannot be constructed
     #[cfg(test)]
-    pub fn new_unit_test_data(config: Arc<Config>, clickhouse_healthy: bool) -> Self {
+    pub fn new_unit_test_data(config: Arc<Config>, test_options: GatewayHandleTestOptions) -> Self {
         let http_client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::new_mock(clickhouse_healthy);
-        let postgres_connection_info = PostgresConnectionInfo::Disabled;
+        let clickhouse_connection_info =
+            ClickHouseConnectionInfo::new_mock(test_options.clickhouse_healthy);
+        let postgres_connection_info =
+            PostgresConnectionInfo::new_mock(test_options.postgres_healthy);
         Self::new_with_database_and_http_client(
             config,
             clickhouse_connection_info,
@@ -230,7 +232,7 @@ pub async fn setup_clickhouse(
 }
 
 pub async fn setup_postgres(
-    _config: &Config,
+    config: &Config,
     postgres_url: Option<String>,
 ) -> Result<PostgresConnectionInfo, Error> {
     let Some(postgres_url) = postgres_url else {
@@ -238,8 +240,7 @@ pub async fn setup_postgres(
     };
 
     let pool = PgPoolOptions::new()
-        // TODO: make this configurable
-        .max_connections(20)
+        .max_connections(config.postgres.connection_pool_size)
         .connect(&postgres_url)
         .await
         .map_err(|err| {
@@ -357,6 +358,12 @@ pub async fn start_openai_compatible_gateway(
             gateway_handle,
         },
     ))
+}
+
+#[cfg(test)]
+pub struct GatewayHandleTestOptions {
+    pub clickhouse_healthy: bool,
+    pub postgres_healthy: bool,
 }
 
 #[cfg(test)]

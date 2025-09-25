@@ -6,7 +6,7 @@ use tokio::time::{sleep, Duration};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
-use super::{make_embedded_gateway, make_http_gateway, use_mock_inference_provider};
+use super::use_mock_inference_provider;
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     InferenceOutput, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
@@ -22,9 +22,9 @@ use tensorzero_core::{
     },
     http::TensorzeroHttpClient,
     inference::types::{
-        ContentBlock, ContentBlockChatOutput, ContentBlockChunk, JsonInferenceOutput, ModelInput,
-        RequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent, Text, TextKind,
-        Usage,
+        ContentBlockChatOutput, ContentBlockChunk, JsonInferenceOutput, ModelInput,
+        ResolvedContentBlock, ResolvedRequestMessage, StoredContentBlock, StoredInput,
+        StoredInputMessage, StoredInputMessageContent, StoredRequestMessage, Text, TextKind, Usage,
     },
     optimization::{
         dicl::UninitializedDiclOptimizationConfig, JobHandle, OptimizationJobInfo, Optimizer,
@@ -873,9 +873,10 @@ async fn validate_model_inference_clickhouse(
             .unwrap()
             .as_str()
             .unwrap();
-        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
         let output = model_inference.get("output").unwrap().as_str().unwrap();
-        let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+        let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
 
         match model_name {
             name if name == expected_model => {
@@ -906,7 +907,7 @@ async fn validate_model_inference_clickhouse(
                 assert_eq!(output.len(), 1);
 
                 match &output[0] {
-                    ContentBlock::Text(text) => {
+                    StoredContentBlock::Text(text) => {
                         assert!(text.text.to_lowercase().contains("nose"));
                     }
                     _ => {
@@ -1019,7 +1020,7 @@ async fn validate_model_inference_clickhouse(
 #[allow(clippy::allow_attributes, dead_code)] // False positive
 pub async fn test_dicl_workflow_with_embedded_client() {
     // Create embedded gateway client
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     run_dicl_workflow_with_client(&client).await;
 }
 
@@ -1027,7 +1028,7 @@ pub async fn test_dicl_workflow_with_embedded_client() {
 #[allow(clippy::allow_attributes, dead_code)] // False positive
 pub async fn test_dicl_workflow_with_http_client() {
     // Create HTTP gateway client
-    let client = make_http_gateway().await;
+    let client = tensorzero::test_helpers::make_http_gateway().await;
     run_dicl_workflow_with_client(&client).await;
 }
 
@@ -1155,9 +1156,9 @@ fn create_pinocchio_example(
         function_name: "basic_test".to_string(),
         input: ModelInput {
             system: system.as_ref().map(std::string::ToString::to_string),
-            messages: vec![RequestMessage {
+            messages: vec![ResolvedRequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::Text(Text {
+                content: vec![ResolvedContentBlock::Text(Text {
                     text: question.to_string(),
                 })],
             }],

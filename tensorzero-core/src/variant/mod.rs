@@ -41,6 +41,7 @@ use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::model::StreamResponse;
 use crate::model::StreamResponseAndMessages;
+use crate::rate_limiting::TicketBorrows;
 use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 
@@ -194,6 +195,7 @@ pub struct ModelUsedInfo {
     pub input_messages: Vec<RequestMessage>,
     pub inference_params: InferenceParams,
     pub cached: bool,
+    pub ticket_borrow: TicketBorrows,
     // These responses will get added into the final inference result (after `collect_chunks` finishes)
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
 }
@@ -246,21 +248,21 @@ pub trait Variant {
 impl VariantConfig {
     pub fn weight(&self) -> Option<f64> {
         match self {
-            VariantConfig::ChatCompletion(params) => params.weight,
-            VariantConfig::BestOfNSampling(params) => params.weight,
-            VariantConfig::Dicl(params) => params.weight,
-            VariantConfig::MixtureOfN(params) => params.weight,
-            VariantConfig::ChainOfThought(params) => params.inner.weight,
+            VariantConfig::ChatCompletion(params) => params.weight(),
+            VariantConfig::BestOfNSampling(params) => params.weight(),
+            VariantConfig::Dicl(params) => params.weight(),
+            VariantConfig::MixtureOfN(params) => params.weight(),
+            VariantConfig::ChainOfThought(params) => params.inner.weight(),
         }
     }
 
     pub fn set_weight(&mut self, weight: Option<f64>) {
         match self {
-            VariantConfig::ChatCompletion(params) => params.weight = weight,
-            VariantConfig::BestOfNSampling(params) => params.weight = weight,
-            VariantConfig::Dicl(params) => params.weight = weight,
-            VariantConfig::MixtureOfN(params) => params.weight = weight,
-            VariantConfig::ChainOfThought(params) => params.inner.weight = weight,
+            VariantConfig::ChatCompletion(params) => params.set_weight(weight),
+            VariantConfig::BestOfNSampling(params) => params.set_weight(weight),
+            VariantConfig::Dicl(params) => params.set_weight(weight),
+            VariantConfig::MixtureOfN(params) => params.set_weight(weight),
+            VariantConfig::ChainOfThought(params) => params.inner.set_weight(weight),
         }
     }
 }
@@ -738,6 +740,7 @@ async fn infer_model_request_stream<'request>(
                 cached,
             },
         messages: input_messages,
+        ticket_borrow,
     } = (|| async {
         model_config
             .infer_stream(&request, clients, &model_name)
@@ -756,6 +759,7 @@ async fn infer_model_request_stream<'request>(
         system,
         input_messages,
         cached,
+        ticket_borrow,
     };
     let config_type = function.config_type();
     let stream =
@@ -837,7 +841,7 @@ impl ChatCompletionConfigPyClass {
     fn get_system_template(&self) -> PyResult<Option<String>> {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
-            .templates
+            .templates()
             .get_implicit_system_template()
             .as_ref()
             .map(|t| t.template.contents.clone()))
@@ -847,7 +851,7 @@ impl ChatCompletionConfigPyClass {
     fn get_user_template(&self) -> PyResult<Option<String>> {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
-            .templates
+            .templates()
             .get_implicit_template(crate::inference::types::Role::User)
             .as_ref()
             .map(|t| t.template.contents.clone()))
@@ -857,7 +861,7 @@ impl ChatCompletionConfigPyClass {
     fn get_assistant_template(&self) -> PyResult<Option<String>> {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
-            .templates
+            .templates()
             .get_implicit_template(crate::inference::types::Role::Assistant)
             .as_ref()
             .map(|t| t.template.contents.clone()))
@@ -866,7 +870,7 @@ impl ChatCompletionConfigPyClass {
     #[getter]
     fn get_model(&self) -> PyResult<String> {
         let config = Self::extract_chat_completion_config(&self.inner)?;
-        Ok(config.model.to_string())
+        Ok(config.model().to_string())
     }
 }
 
@@ -875,7 +879,7 @@ mod tests {
     use super::*;
     use crate::cache::{CacheEnabledMode, CacheOptions};
     use crate::config::SchemaData;
-    use crate::db::clickhouse::ClickHouseConnectionInfo;
+    use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::error::ErrorDetails;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
@@ -1133,11 +1137,14 @@ mod tests {
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
             otlp_config: &Default::default(),
         };
         let templates = get_test_template_config();
@@ -1431,11 +1438,14 @@ mod tests {
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
             otlp_config: &Default::default(),
         };
         let templates = get_test_template_config();
@@ -1591,11 +1601,14 @@ mod tests {
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
             otlp_config: &Default::default(),
         };
         let retry_config = RetryConfig::default();
@@ -1737,11 +1750,14 @@ mod tests {
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
             otlp_config: &Default::default(),
         };
         let inference_params = InferenceParams::default();
