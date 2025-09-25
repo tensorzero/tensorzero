@@ -1,4 +1,3 @@
-use backon::ExponentialBuilder;
 use backon::Retryable;
 use futures::StreamExt;
 use itertools::izip;
@@ -43,6 +42,7 @@ use crate::model::StreamResponse;
 use crate::model::StreamResponseAndMessages;
 use crate::rate_limiting::TicketBorrows;
 use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
+use crate::utils::retries::RetryConfig;
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 
 pub mod best_of_n_sampling;
