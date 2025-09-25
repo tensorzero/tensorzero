@@ -21,6 +21,7 @@ services:
       start_period: 30s
       start_interval: 1s
       timeout: 1s
+
   minio:
     image: bitnamilegacy/minio:2025.7.23
     ports:
