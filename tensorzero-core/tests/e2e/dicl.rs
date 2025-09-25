@@ -4,21 +4,24 @@ use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tensorzero_core::{
+    cache::{CacheEnabledMode, CacheOptions},
     config::ProviderTypesConfig,
-    db::clickhouse::{test_helpers::select_json_inference_clickhouse, ClickHouseConnectionInfo},
-    embeddings::{
-        EmbeddingEncodingFormat, EmbeddingProvider, EmbeddingRequest,
-        UninitializedEmbeddingProviderConfig,
+    db::{
+        clickhouse::{test_helpers::select_json_inference_clickhouse, ClickHouseConnectionInfo},
+        postgres::PostgresConnectionInfo,
     },
-    endpoints::inference::InferenceCredentials,
+    embeddings::{EmbeddingEncodingFormat, EmbeddingRequest, UninitializedEmbeddingProviderConfig},
+    endpoints::inference::{InferenceClients, InferenceCredentials},
     http::TensorzeroHttpClient,
     inference::types::{
-        ContentBlock, ContentBlockChatOutput, JsonInferenceOutput, RequestMessage, ResolvedInput,
-        ResolvedInputMessage, ResolvedInputMessageContent, Role,
+        ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, ResolvedInputMessage,
+        ResolvedInputMessageContent, Role, StoredContentBlock, StoredRequestMessage, TemplateInput,
     },
+    rate_limiting::ScopeInfo,
 };
 use tokio::time::sleep;
 use uuid::Uuid;
@@ -382,8 +385,24 @@ async fn embed_insert_example(
         encoding_format: EmbeddingEncodingFormat::Float,
     };
     let api_keys = InferenceCredentials::default();
+    let clients = InferenceClients {
+        http_client: &client,
+        clickhouse_connection_info: clickhouse,
+        postgres_connection_info: &PostgresConnectionInfo::Disabled,
+        credentials: &api_keys,
+        cache_options: &CacheOptions {
+            max_age_s: None,
+            enabled: CacheEnabledMode::On,
+        },
+        tags: &Default::default(),
+        rate_limiting_config: &Default::default(),
+        otlp_config: &Default::default(),
+    };
+    let scope_info = ScopeInfo {
+        tags: &HashMap::new(),
+    };
     let response = provider_config
-        .embed(&request, &client, &api_keys, &(&provider_config).into())
+        .embed(&request, &clients, &scope_info, &(&provider_config).into())
         .await
         .unwrap();
 
@@ -439,7 +458,7 @@ pub async fn test_dicl_inference_request_simple() {
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text {
-                value: json!("What is the boiling point of water?"),
+                text: "What is the boiling point of water?".to_string(),
             }],
         }],
     };
@@ -459,7 +478,7 @@ pub async fn test_dicl_inference_request_simple() {
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text {
-                value: json!("What the capital city of India?"),
+                text: "What the capital city of India?".to_string(),
             }],
         }],
     };
@@ -480,7 +499,7 @@ pub async fn test_dicl_inference_request_simple() {
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text {
-                value: json!("What is an example of a computationally hard problem?"),
+                text: "What is an example of a computationally hard problem?".to_string(),
             }],
         }],
     };
@@ -503,7 +522,7 @@ pub async fn test_dicl_inference_request_simple() {
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text {
-                value: json!("Who wrote Lord of the Rings?"),
+                text: "Who wrote Lord of the Rings?".to_string(),
             }],
         }],
     };
@@ -669,9 +688,10 @@ pub async fn test_dicl_inference_request_simple() {
             .unwrap()
             .as_str()
             .unwrap();
-        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
         let output = model_inference.get("output").unwrap().as_str().unwrap();
-        let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+        let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
         match model_name {
             "gpt-4o-mini-2024-07-18" => {
                 // The LLM call should generate output tokens
@@ -696,7 +716,7 @@ pub async fn test_dicl_inference_request_simple() {
                 assert_eq!(input_messages.len(), 7);
                 assert_eq!(output.len(), 1);
                 match &output[0] {
-                    ContentBlock::Text(text) => {
+                    StoredContentBlock::Text(text) => {
                         assert!(text.text.to_lowercase().contains("nose"));
                     }
                     _ => {
@@ -911,9 +931,10 @@ pub async fn test_dicl_inference_request_simple() {
             .unwrap()
             .as_str()
             .unwrap();
-        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
         let output = model_inference.get("output").unwrap().as_str().unwrap();
-        let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+        let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
         match model_name {
             "gpt-4o-mini-2024-07-18" => {
                 // The LLM call should generate output tokens
@@ -938,7 +959,7 @@ pub async fn test_dicl_inference_request_simple() {
                 assert_eq!(input_messages.len(), 7);
                 assert_eq!(output.len(), 1);
                 match &output[0] {
-                    ContentBlock::Text(text) => {
+                    StoredContentBlock::Text(text) => {
                         assert!(text.text.to_lowercase().contains("nose"));
                     }
                     _ => {
@@ -1018,9 +1039,10 @@ async fn test_dicl_json_request() {
         system: Some(json!({"assistant_name": "Dr. Mehta"})),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
-                value: json!({"country": "Canada"}),
-            }],
+            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+                name: "user".to_string(),
+                arguments: json!({"country": "Canada"}).as_object().unwrap().clone(),
+            })],
         }],
     };
     let output = JsonInferenceOutput {
@@ -1041,9 +1063,10 @@ async fn test_dicl_json_request() {
         system: Some(json!({"assistant_name": "Pinocchio"})),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
-                value: json!({"country": "India"}),
-            }],
+            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+                name: "user".to_string(),
+                arguments: json!({"country": "India"}).as_object().unwrap().clone(),
+            })],
         }],
     };
     let output = JsonInferenceOutput {
@@ -1064,9 +1087,10 @@ async fn test_dicl_json_request() {
         system: Some(json!({"assistant_name": "Pinocchio"})),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
-                value: json!({"country": "USA"}),
-            }],
+            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+                name: "user".to_string(),
+                arguments: json!({"country": "USA"}).as_object().unwrap().clone(),
+            })],
         }],
     };
     let output = JsonInferenceOutput {
@@ -1086,9 +1110,10 @@ async fn test_dicl_json_request() {
         system: Some(json!({"assistant_name": "Pinocchio"})),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
-                value: json!({"country": "England"}),
-            }],
+            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+                name: "user".to_string(),
+                arguments: json!({"country": "England"}).as_object().unwrap().clone(),
+            })],
         }],
     };
     let output = JsonInferenceOutput {
@@ -1193,7 +1218,7 @@ async fn test_dicl_json_request() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": {"country": "Brazil"}}]
+                "content": [{"type": "template", "name" : "user", "arguments": {"country": "Brazil"}}]
             }
         ]
     });
@@ -1237,9 +1262,10 @@ async fn test_dicl_json_request() {
             .unwrap()
             .as_str()
             .unwrap();
-        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
         let output = model_inference.get("output").unwrap().as_str().unwrap();
-        let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+        let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
         match model_name {
             "gpt-4o-mini-2024-07-18" => {
                 // The LLM call should generate output tokens
@@ -1264,7 +1290,7 @@ async fn test_dicl_json_request() {
                 assert_eq!(input_messages.len(), 7);
                 assert_eq!(output.len(), 1);
                 match &output[0] {
-                    ContentBlock::Text(text) => {
+                    StoredContentBlock::Text(text) => {
                         assert!(!text.text.to_lowercase().contains("brasilia"));
                         assert!(text.text.to_lowercase().contains("nose"));
                     }

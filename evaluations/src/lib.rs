@@ -35,6 +35,14 @@ pub mod evaluators;
 pub mod helpers;
 pub mod stats;
 
+#[derive(clap::ValueEnum, Clone, Debug, Default, PartialEq)]
+#[clap(rename_all = "snake_case")]
+pub enum OutputFormat {
+    Jsonl,
+    #[default]
+    Pretty,
+}
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct Args {
@@ -74,15 +82,7 @@ pub struct Clients {
     pub clickhouse_client: ClickHouseConnectionInfo,
 }
 
-#[derive(clap::ValueEnum, Clone, Debug, Default, PartialEq)]
-#[clap(rename_all = "snake_case")]
-pub enum OutputFormat {
-    Jsonl,
-    #[default]
-    Pretty,
-}
-
-#[instrument(skip(writer), fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
+#[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
 pub async fn run_evaluation(
     args: Args,
     evaluation_run_id: Uuid,
@@ -93,6 +93,12 @@ pub async fn run_evaluation(
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
         .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
     debug!(clickhouse_url = %clickhouse_url, "ClickHouse URL resolved");
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
+    if let Some(postgres_url) = postgres_url.as_ref() {
+        debug!(postgres_url = %postgres_url, "PostgreSQL URL resolved");
+    } else {
+        debug!("PostgreSQL URL not provided");
+    }
 
     // We do not validate credentials here since we just want the evaluator config
     // If we are using an embedded gateway, credentials are validated when that is initialized
@@ -111,6 +117,7 @@ pub async fn run_evaluation(
         }
         None => ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(args.config_file),
+            postgres_url,
             clickhouse_url: Some(clickhouse_url.clone()),
             timeout: None,
             verify_credentials: true,
@@ -223,7 +230,7 @@ pub async fn run_evaluation_core<W: Write>(
         let datapoint = Arc::new(datapoint);
         let datapoint_id = datapoint.id();
         let abort_handle = join_set.spawn(async move {
-            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&clients_clone.tensorzero_client).await?)?);
+            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&clients_clone.tensorzero_client).await?));
             let inference_response = Arc::new(
                 infer_datapoint(InferDatapointParams {
                     clients: &clients_clone,
@@ -401,7 +408,7 @@ struct InferDatapointParams<'a> {
     inference_cache: CacheEnabledMode,
 }
 
-#[instrument(skip(params), fields(datapoint_id = %params.datapoint.id(), function_name = %params.function_name, variant_name = %params.variant_name))]
+#[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), function_name = %params.function_name, variant_name = %params.variant_name))]
 async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceResponse> {
     let InferDatapointParams {
         clients,

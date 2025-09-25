@@ -137,20 +137,23 @@ impl InferenceProvider for SGLangProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = serde_json::to_value(SGLangRequest::new(&self.model_name, request)?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing SGLang request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+        let request_body = serde_json::to_value(
+            SGLangRequest::new(&self.model_name, request).await?,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing SGLang request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let request_url = get_chat_url(&self.api_base)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -230,20 +233,23 @@ impl InferenceProvider for SGLangProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(SGLangRequest::new(&self.model_name, request)?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing SGLang request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+        let request_body = serde_json::to_value(
+            SGLangRequest::new(&self.model_name, request).await?,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing SGLang request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
 
         let request_url = get_chat_url(&self.api_base)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
@@ -550,7 +556,7 @@ struct SGLangRequest<'a> {
 }
 
 impl<'a> SGLangRequest<'a> {
-    pub fn new(
+    pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<SGLangRequest<'a>, Error> {
@@ -567,7 +573,8 @@ impl<'a> SGLangRequest<'a> {
             &request.messages,
             Some(&request.json_mode),
             PROVIDER_TYPE,
-        )?;
+        )
+        .await?;
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
         Ok(SGLangRequest {
@@ -683,8 +690,8 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn test_sglang_request_new() {
+    #[tokio::test]
+    async fn test_sglang_request_new() {
         let model_name = PROVIDER_TYPE.to_string();
         let basic_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -713,7 +720,9 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let sglang_request = SGLangRequest::new(&model_name, &basic_request).unwrap();
+        let sglang_request = SGLangRequest::new(&model_name, &basic_request)
+            .await
+            .unwrap();
 
         assert_eq!(sglang_request.model, &model_name);
         assert_eq!(sglang_request.messages.len(), 2);
@@ -750,7 +759,9 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        SGLangRequest::new(&model_name, &request_with_tools).expect_err("requires a schema");
+        SGLangRequest::new(&model_name, &request_with_tools)
+            .await
+            .expect_err("requires a schema");
 
         // Test request with in strict JSON mode requires an no output schema
         let request_with_tools = ModelInferenceRequest {
@@ -774,7 +785,9 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        SGLangRequest::new(&model_name, &request_with_tools).expect_err("requires a schema");
+        SGLangRequest::new(&model_name, &request_with_tools)
+            .await
+            .expect_err("requires a schema");
 
         // Test request with strict JSON mode with an output schema
         let output_schema = json!({});
@@ -800,7 +813,9 @@ mod tests {
             ..Default::default()
         };
 
-        let sglang_request = SGLangRequest::new(&model_name, &request_with_tools).unwrap();
+        let sglang_request = SGLangRequest::new(&model_name, &request_with_tools)
+            .await
+            .unwrap();
 
         assert_eq!(sglang_request.model, &model_name);
         assert_eq!(sglang_request.messages.len(), 1);
@@ -813,8 +828,8 @@ mod tests {
         assert_eq!(sglang_request.frequency_penalty, None);
     }
 
-    #[test]
-    fn test_sglang_response_with_metadata_try_into() {
+    #[tokio::test]
+    async fn test_sglang_response_with_metadata_try_into() {
         let valid_response = OpenAIResponse {
             choices: vec![OpenAIResponseChoice {
                 index: 0,
@@ -859,7 +874,9 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &SGLangRequest::new("test-model", &generic_request).unwrap(),
+                &SGLangRequest::new("test-model", &generic_request)
+                    .await
+                    .unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,
@@ -927,8 +944,8 @@ mod tests {
         assert!(logs_contain(invalid_url_2.as_ref()));
     }
 
-    #[test]
-    fn test_sglang_tools() {
+    #[tokio::test]
+    async fn test_sglang_tools() {
         let model_name = PROVIDER_TYPE.to_string();
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -952,7 +969,9 @@ mod tests {
             ..Default::default()
         };
 
-        let sglang_request = SGLangRequest::new(&model_name, &request_with_tools).unwrap();
+        let sglang_request = SGLangRequest::new(&model_name, &request_with_tools)
+            .await
+            .unwrap();
 
         let tools = sglang_request.tools.unwrap();
         assert_eq!(tools.len(), 2);
@@ -995,7 +1014,9 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let sglang_request = SGLangRequest::new(&model_name, &request_without_tools).unwrap();
+        let sglang_request = SGLangRequest::new(&model_name, &request_without_tools)
+            .await
+            .unwrap();
         assert!(sglang_request.tools.is_none());
         assert!(sglang_request.tool_choice.is_none());
         assert!(sglang_request.parallel_tool_calls.is_none());

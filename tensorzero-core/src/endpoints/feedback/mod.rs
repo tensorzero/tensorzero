@@ -879,7 +879,7 @@ fn validate_feedback_specific_tags(tags: &HashMap<String, String>) -> Result<(),
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
     use std::sync::Arc;
 
     use crate::config::{Config, MetricConfig, MetricConfigOptimize, SchemaData};
@@ -1065,7 +1065,7 @@ mod tests {
         let config = Arc::new(Config {
             ..Default::default()
         });
-        let gateway_handle = get_unit_test_gateway_handle(config, true);
+        let gateway_handle = get_unit_test_gateway_handle(config);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
         let value = json!("test comment");
@@ -1098,7 +1098,7 @@ mod tests {
         let config = Arc::new(Config {
             ..Default::default()
         });
-        let gateway_handle = get_unit_test_gateway_handle(config, true);
+        let gateway_handle = get_unit_test_gateway_handle(config);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
         let value = json!("test demonstration");
@@ -1169,7 +1169,7 @@ mod tests {
             metrics,
             ..Default::default()
         });
-        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true);
+        let gateway_handle = get_unit_test_gateway_handle(config);
         let value = json!(4.5);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
@@ -1239,7 +1239,7 @@ mod tests {
             metrics,
             ..Default::default()
         });
-        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true);
+        let gateway_handle = get_unit_test_gateway_handle(config.clone());
         let value = json!(true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
@@ -1295,6 +1295,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
                 description: None,
+                all_explicit_templates_names: HashSet::new(),
             })));
 
         // Case 1: a string passed to a chat function
@@ -1421,6 +1422,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(output_schema.clone()).unwrap(),
             implicit_tool_call_config,
             description: None,
+            all_template_names: HashSet::new(),
         })));
 
         // Case 5: a JSON function with correct output

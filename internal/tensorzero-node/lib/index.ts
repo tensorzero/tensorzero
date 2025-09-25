@@ -7,6 +7,8 @@ import {
   Config,
   ClientInferenceParams,
   InferenceResponse,
+  EpisodeByIdRow,
+  TableBoundsWithCount,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
@@ -44,11 +46,13 @@ export class TensorZeroClient {
   static async buildEmbedded(
     configPath: string,
     clickhouseUrl?: string | undefined | null,
+    postgresUrl?: string | undefined | null,
     timeout?: number | undefined | null,
   ): Promise<TensorZeroClient> {
     const nativeClient = await NativeTensorZeroClient.buildEmbedded(
       configPath,
       clickhouseUrl,
+      postgresUrl,
       timeout,
     );
     return new TensorZeroClient(nativeClient);
@@ -149,5 +153,30 @@ export class DatabaseClient {
     const modelLatencyQuantilesString =
       await this.nativeDatabaseClient.getModelLatencyQuantiles(params);
     return JSON.parse(modelLatencyQuantilesString) as ModelLatencyDatapoint[];
+  }
+
+  async countDistinctModelsUsed(): Promise<number> {
+    const response = await this.nativeDatabaseClient.countDistinctModelsUsed();
+    return response;
+  }
+
+  async queryEpisodeTable(
+    pageSize: number,
+    before?: string,
+    after?: string,
+  ): Promise<EpisodeByIdRow[]> {
+    const params = safeStringify({
+      page_size: pageSize,
+      before: before,
+      after: after,
+    });
+    const episodeTableString =
+      await this.nativeDatabaseClient.queryEpisodeTable(params);
+    return JSON.parse(episodeTableString) as EpisodeByIdRow[];
+  }
+
+  async queryEpisodeTableBounds(): Promise<TableBoundsWithCount> {
+    const bounds = await this.nativeDatabaseClient.queryEpisodeTableBounds();
+    return JSON.parse(bounds) as TableBoundsWithCount;
   }
 }

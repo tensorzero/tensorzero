@@ -247,6 +247,7 @@ impl InferenceProvider for DummyProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
         _http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -482,7 +483,8 @@ impl InferenceProvider for DummyProvider {
                     .collect();
                 let mut found_pdf = false;
                 for file in &files {
-                    if file.file.mime_type == mime::APPLICATION_PDF {
+                    let resolved_file = file.resolve().await?;
+                    if resolved_file.file.mime_type == mime::APPLICATION_PDF {
                         found_pdf = true;
                     }
                 }
@@ -566,6 +568,7 @@ impl InferenceProvider for DummyProvider {
             request: _,
             provider_name: _,
             model_name: _,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
         _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,

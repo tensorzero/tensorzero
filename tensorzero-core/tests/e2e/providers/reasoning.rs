@@ -15,7 +15,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
     select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
 use tensorzero_core::inference::types::ContentBlockOutput;
-use tensorzero_core::inference::types::{ContentBlock, RequestMessage};
+use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage, Text};
 use uuid::Uuid;
 
 pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2ETestProvider) {
@@ -225,14 +225,16 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
         "You are a helpful and friendly assistant named Dr. Mehta"
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is the capital city of Japan?".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 2);
 
     // Check the InferenceTag Table
@@ -505,14 +507,16 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
         "You are a helpful and friendly assistant named Dr. Mehta"
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is the capital city of Japan?".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 2);
     // Check the InferenceTag Table
     let result = select_inference_tags_clickhouse(
@@ -625,7 +629,7 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": {"country": "Japan"}}]
+                "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
             }
         ]
     });
@@ -720,16 +724,16 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPlease answer the questions in a JSON with key \"answer\".\n\nDo not include any other text than the JSON object. Do not include \"```json\" or \"```\" or anything else.\n\nExample Response:\n\n{\n    \"answer\": \"42\"\n}"
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the name of the capital city of Japan?"
-            .to_string()
-            .into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is the name of the capital city of Japan?".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 2);
 }
 
@@ -865,7 +869,7 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": {"country": "Japan"}}]
+                "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
             }
         ]
     });
@@ -984,23 +988,23 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPlease answer the questions in a JSON with key \"answer\".\n\nDo not include any other text than the JSON object. Do not include \"```json\" or \"```\" or anything else.\n\nExample Response:\n\n{\n    \"answer\": \"42\"\n}"
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the name of the capital city of Japan?"
-            .to_string()
-            .into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is the name of the capital city of Japan?".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 2);
     let thought = output
         .iter()
-        .find(|block| matches!(block, ContentBlock::Thought(_)))
+        .find(|block| matches!(block, StoredContentBlock::Thought(_)))
         .unwrap();
     let thought = match thought {
-        ContentBlock::Thought(thought) => thought,
+        StoredContentBlock::Thought(thought) => thought,
         _ => panic!("Expected a thought block"),
     };
     assert!(thought

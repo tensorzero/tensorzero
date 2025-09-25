@@ -1,8 +1,7 @@
 import { describe, expect, test } from "vitest";
+import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
   countInferencesForEpisode,
-  queryEpisodeTable,
-  queryEpisodeTableBounds,
   queryInferenceById,
   queryInferenceTable,
   queryInferenceTableBounds,
@@ -334,12 +333,6 @@ test("queryInferenceTableBounds", async () => {
   expect(bounds.last_id).toBe("019926fd-1a06-7fe2-b7f4-2318de2f2046");
 });
 
-test("queryEpisodeTableBounds", async () => {
-  const bounds = await queryEpisodeTableBounds();
-  expect(bounds.first_id).toBe("0192ced0-947e-74b3-a3d7-02fd2c54d637");
-  expect(bounds.last_id).toBe("019926fd-1a06-7fe2-b7f4-23220893d62c");
-});
-
 test("queryInferenceTableBounds with episode_id", async () => {
   const bounds = await queryInferenceTableBoundsByEpisodeId({
     episode_id: "01942e26-6497-7910-89d6-d9d1c735d3df",
@@ -434,59 +427,6 @@ test("queryInferenceTableBoundsByVariantName", async () => {
   expect(bounds.last_id).toBe("0196368e-5505-7721-88d2-654cd26483b4");
 });
 
-test(
-  "queryEpisodeTable",
-  // https://tensorzero.slack.com/archives/C06FDMR1YKF/p1747844085031149?thread_ts=1747793217.140669&cid=C06FDMR1YKF
-  { timeout: 10_000 },
-  async () => {
-    const episodes = await queryEpisodeTable({
-      page_size: 10,
-    });
-    expect(episodes.length).toBe(10);
-
-    // Verify episodes are in descending order
-    for (let i = 1; i < episodes.length; i++) {
-      expect(episodes[i - 1].episode_id > episodes[i].episode_id).toBe(true);
-    }
-
-    // Test pagination with before
-    const episodes2 = await queryEpisodeTable({
-      before: episodes[episodes.length - 1].episode_id,
-      page_size: 10,
-    });
-    expect(episodes2.length).toBe(10);
-
-    // Test pagination with after on the last inference id
-    const episodes3 = await queryEpisodeTable({
-      after: episodes[0].episode_id,
-      page_size: 10,
-    });
-    expect(episodes3.length).toBe(0);
-
-    // Test that before and after together throws error
-    await expect(
-      queryEpisodeTable({
-        before: episodes[0].episode_id,
-        after: episodes[0].episode_id,
-        page_size: 10,
-      }),
-    ).rejects.toThrow("Cannot specify both `before` and `after` parameters");
-
-    // Verify each episode has valid data
-    for (const episode of episodes) {
-      expect(typeof episode.episode_id).toBe("string");
-      expect(episode.count).toBeGreaterThan(0);
-      expect(episode.start_time).toBeDefined();
-      expect(episode.end_time).toBeDefined();
-      expect(typeof episode.last_inference_id).toBe("string");
-      // Start time should be before or equal to end time
-      expect(new Date(episode.start_time) <= new Date(episode.end_time)).toBe(
-        true,
-      );
-    }
-  },
-);
-
 test("countInferencesForEpisode", async () => {
   const count = await countInferencesForEpisode(
     "01942e26-549f-7153-ac56-dd1d23d30f8c",
@@ -555,7 +495,7 @@ test("countInferencesByFunction", async () => {
       },
       {
         count: 3,
-        function_name: "tensorzero::default",
+        function_name: DEFAULT_FUNCTION,
         max_timestamp: "2025-09-08T01:42:25Z",
       },
       {

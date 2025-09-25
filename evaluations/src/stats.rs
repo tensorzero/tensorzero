@@ -64,7 +64,7 @@ impl EvaluationStats {
     }
 
     /// Computes the mean and stderr for each of the evaluations observed
-    #[instrument(skip(self, evaluators), fields(evaluation_infos_count = self.evaluation_infos.len(), evaluation_errors_count = self.evaluation_errors.len()))]
+    #[instrument(skip_all, fields(evaluation_infos_count = self.evaluation_infos.len(), evaluation_errors_count = self.evaluation_errors.len()))]
     pub(crate) fn compute_stats(
         &self,
         evaluators: &HashMap<String, EvaluatorConfig>,

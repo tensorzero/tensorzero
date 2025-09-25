@@ -1,9 +1,15 @@
-name: Daily Optimization Tests
+name: Scheduled Optimization Tests
+run-name: "${{ github.event.schedule == '0 2 * * 0' && 'Weekly' || 'Daily' }} scheduled Optimization Tests"
 
 on:
+  # We create two different (overlapping) schedules - a daily schedule and a weekly schedule
+  # We detect the schedule in the job definition, and run different tests depending on the schedule
+  # If you change any of the 'cron' strings below, make sure to also update them in the 'optimizations-tests' definition below
   schedule:
     # Run daily at 2 AM UTC
     - cron: "0 2 * * *"
+    # Run weekly at 2 AM UTC
+    - cron: "0 2 * * 0"
   workflow_dispatch: # Allow manual triggering
 
 env:
@@ -12,6 +18,7 @@ env:
   FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
   TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
   GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcp_jwt_key.json
+  WEEKLY_TESTS: "test_slow_optimization_openai_rft"
 
 jobs:
   optimization-tests:
@@ -55,8 +62,14 @@ jobs:
       - name: Launch ClickHouse container for optimization tests
         run: docker compose -f tensorzero-core/tests/optimization/docker-compose.yml up --wait
 
-      - name: Run optimization tests
-        run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests cargo test-optimization --nocapture --no-fail-fast
+      - name: Run daily optimization tests
+        if: github.event.schedule == '0 2 * * *' || github.event_name == 'workflow_dispatch'
+        run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests cargo test-optimization --nocapture --no-fail-fast -- --skip ${{ env.WEEKLY_TESTS }}
+
+      - name: Run weekly optimization tests
+        if: github.event.schedule == '0 2 * * 0'
+        run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests cargo test-optimization --nocapture --no-fail-fast ${{ env.WEEKLY_TESTS }}
+
 
       - name: Print ClickHouse container logs
         if: always()

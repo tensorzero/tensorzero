@@ -885,6 +885,7 @@ model = "dummy::echo_request_messages"
 input_wrappers.system = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/system_template.minijinja"
 assistant_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/assistant_template.minijinja"
 user_template = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/user_template.minijinja"
+templates.my_custom_template.path = "../../fixtures/config/functions/basic_test_template_no_schema/prompt/my_custom_template.minijinja"
 
 [functions.basic_test_template_no_schema.variants.mixture_of_n]
 type = "experimental_mixture_of_n"

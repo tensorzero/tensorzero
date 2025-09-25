@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_core::{
@@ -14,24 +12,9 @@ use tracing_test::traced_test;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
-use tensorzero_core::db::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 
 // TODO: make these write human feedback and make sure this is writing correctly.
-
-async fn make_embedded_gateway() -> tensorzero::Client {
-    let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("tests/e2e/tensorzero.toml");
-    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
-        config_file: Some(config_path),
-        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        timeout: None,
-        verify_credentials: true,
-        allow_batch_writes: true,
-    })
-    .build()
-    .await
-    .unwrap()
-}
 
 #[tokio::test]
 async fn e2e_test_comment_human_feedback() {
@@ -1219,7 +1202,7 @@ async fn test_fast_inference_then_feedback() {
     use std::collections::HashMap;
     use std::sync::Arc;
     // Create the client and wrap it in an Arc for shared ownership.
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let client = Arc::new(client);
 
     // Create a collection of tasks, each making an inference then a feedback call.

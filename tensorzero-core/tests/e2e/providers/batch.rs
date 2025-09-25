@@ -18,7 +18,7 @@ use tensorzero_core::{
     endpoints::batch_inference::PollPathParams,
     inference::types::{
         batch::{BatchModelInferenceRow, BatchRequestRow},
-        ContentBlock, RequestMessage, Role, Text,
+        Role, Text,
     },
     tool::{ToolCall, ToolResult},
 };
@@ -578,7 +578,7 @@ async fn get_all_batch_inferences(
     rows
 }
 
-struct InsertedFakeDataIds {
+pub struct InsertedFakeDataIds {
     batch_id: Uuid,
     inference_id: Uuid,
 }
@@ -928,7 +928,15 @@ pub async fn test_poll_completed_simple_image_batch_inference_request_with_provi
         Some(batch_inference) => batch_inference,
     };
     sleep(Duration::from_millis(200)).await;
+    test_poll_completed_simple_image_batch_inference_request_with_provider_and_ids(provider, ids)
+        .await;
+}
 
+pub async fn test_poll_completed_simple_image_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -1100,8 +1108,8 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
     assert_eq!(input, correct_input);
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec!["What is the name of the capital city of Japan?"
             .to_string()
@@ -1271,7 +1279,17 @@ pub async fn test_poll_completed_inference_params_batch_inference_request_with_p
         Some(batch_inference) => batch_inference,
     };
     sleep(Duration::from_millis(200)).await;
+    test_poll_completed_inference_params_batch_inference_request_with_provider_and_ids(
+        provider, ids,
+    )
+    .await;
+}
 
+pub async fn test_poll_completed_inference_params_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -1485,7 +1503,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         }
     ]);
     let expected_input_messages = [
-        [RequestMessage {
+        [StoredRequestMessage {
             role: Role::User,
             content: vec![
                 "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
@@ -1493,15 +1511,19 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
                     .into(),
             ],
         }],
-        [RequestMessage {
+        [StoredRequestMessage {
             role: Role::User,
-            content: vec!["What is your name?".to_string().into()],
+            content: vec![StoredContentBlock::Text(Text {
+                text: "What is your name?".to_string(),
+            })],
         }],
-        [RequestMessage {
+        [StoredRequestMessage {
             role: Role::User,
-            content: vec!["What is your name?".to_string().into()],
+            content: vec![StoredContentBlock::Text(Text {
+                text: "What is your name?".to_string(),
+            })],
         }],
-        [RequestMessage {
+        [StoredRequestMessage {
             role: Role::User,
             content: vec![
                 "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
@@ -1509,7 +1531,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
                     .into(),
             ],
         }],
-        [RequestMessage {
+        [StoredRequestMessage {
             role: Role::User,
             content: vec![
                 "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."
@@ -1722,7 +1744,8 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         assert_eq!(input, correct_inputs[i]);
 
         let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
         assert_eq!(input_messages, expected_input_messages[i]);
 
         let system = result.get("system").unwrap().as_str().unwrap();
@@ -1929,12 +1952,19 @@ pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider(
         None => return, // No completed batch inference found, so we can't test polling
         Some(batch_inference) => batch_inference,
     };
+    sleep(Duration::from_millis(200)).await;
+    test_poll_completed_tool_use_batch_inference_request_with_provider_and_ids(provider, ids).await;
+}
+
+pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     let batch_id = ids.batch_id;
     let inference_tags = get_tags_for_batch_inferences(&clickhouse, batch_id)
         .await
         .unwrap();
-    sleep(Duration::from_millis(200)).await;
-
     // Poll by `batch_id`
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id,
@@ -2126,8 +2156,8 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
     assert_eq!(input, correct_input);
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec!["What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
             .to_string()
@@ -2316,7 +2346,15 @@ pub async fn test_poll_completed_allowed_tools_batch_inference_request_with_prov
         Some(batch_inference) => batch_inference,
     };
     sleep(Duration::from_millis(200)).await;
+    test_poll_completed_allowed_tools_batch_inference_request_with_provider_and_ids(provider, ids)
+        .await;
+}
 
+pub async fn test_poll_completed_allowed_tools_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -2552,35 +2590,35 @@ pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_prov
     assert_eq!(input, correct_input);
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![
-        RequestMessage {
+        StoredRequestMessage {
             role: Role::User,
             content: vec![
-                "What is the weather like in Tokyo (in Fahrenheit)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
-                    .to_string()
-                    .into(),
+                StoredContentBlock::Text(Text {
+                    text: "What is the weather like in Tokyo (in Fahrenheit)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.".to_string(),
+                }),
             ],
         },
-        RequestMessage {
+        StoredRequestMessage {
             role: Role::Assistant,
-            content: vec![ContentBlock::ToolCall(ToolCall {
+            content: vec![StoredContentBlock::ToolCall(ToolCall {
                 name: "get_temperature".to_string(),
                 arguments: "{\"location\":\"Tokyo\",\"units\":\"fahrenheit\"}".to_string(),
                 id: "1234".to_string(),
-            }), ContentBlock::ToolCall(ToolCall {
+            }), StoredContentBlock::ToolCall(ToolCall {
                 name: "get_humidity".to_string(),
                 arguments: "{\"location\":\"Tokyo\"}".to_string(),
                 id: "5678".to_string(),
             })],
         },
-        RequestMessage {
+        StoredRequestMessage {
             role: Role::User,
-            content: vec![ContentBlock::ToolResult(ToolResult {
+            content: vec![StoredContentBlock::ToolResult(ToolResult {
                 name: "get_temperature".to_string(),
                 result: "70".to_string(),
                 id: "1234".to_string(),
-            }), ContentBlock::ToolResult(ToolResult {
+            }), StoredContentBlock::ToolResult(ToolResult {
                 name: "get_humidity".to_string(),
                 result: "30".to_string(),
                 id: "5678".to_string(),
@@ -2772,9 +2810,9 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
     assert_eq!(input, correct_input);
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![
-        RequestMessage {
+        StoredRequestMessage {
             role: Role::User,
             content: vec![
                 "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
@@ -2782,17 +2820,17 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
                     .into(),
             ],
         },
-        RequestMessage {
+        StoredRequestMessage {
             role: Role::Assistant,
-            content: vec![ContentBlock::ToolCall(ToolCall {
+            content: vec![StoredContentBlock::ToolCall(ToolCall {
                 name: "get_temperature".to_string(),
                 arguments: "{\"location\": \"Tokyo\"}".to_string(),
                 id: "123456789".to_string(),
             })],
         },
-        RequestMessage {
+        StoredRequestMessage {
             role: Role::User,
-            content: vec![ContentBlock::ToolResult(ToolResult {
+            content: vec![StoredContentBlock::ToolResult(ToolResult {
                 name: "get_temperature".to_string(),
                 result: "70".to_string(),
                 id: "123456789".to_string(),
@@ -3032,7 +3070,17 @@ pub async fn test_poll_completed_multi_turn_parallel_batch_inference_request_wit
         Some(batch_inference) => batch_inference,
     };
     sleep(Duration::from_millis(200)).await;
+    test_poll_completed_multi_turn_parallel_batch_inference_request_with_provider_and_ids(
+        provider, ids,
+    )
+    .await;
+}
 
+pub async fn test_poll_completed_multi_turn_parallel_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -3126,7 +3174,15 @@ pub async fn test_poll_completed_multi_turn_batch_inference_request_with_provide
         Some(batch_inference) => batch_inference,
     };
     sleep(Duration::from_millis(200)).await;
+    test_poll_completed_multi_turn_batch_inference_request_with_provider_and_ids(provider, ids)
+        .await;
+}
 
+pub async fn test_poll_completed_multi_turn_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -3302,10 +3358,12 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     assert_eq!(input, correct_input);
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string().into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
 
@@ -3484,7 +3542,17 @@ pub async fn test_poll_completed_dynamic_tool_use_batch_inference_request_with_p
         Some(batch_inference) => batch_inference,
     };
     sleep(Duration::from_millis(200)).await;
+    test_poll_completed_dynamic_tool_use_batch_inference_request_with_provider_and_ids(
+        provider, ids,
+    )
+    .await;
+}
 
+pub async fn test_poll_completed_dynamic_tool_use_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -3638,10 +3706,12 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
     assert_eq!(input, correct_input);
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.".to_string().into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
 
@@ -3847,7 +3917,17 @@ pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_
         Some(batch_inference) => batch_inference,
     };
     sleep(Duration::from_millis(200)).await;
+    test_poll_completed_parallel_tool_use_batch_inference_request_with_provider_and_ids(
+        provider, ids,
+    )
+    .await;
+}
 
+pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -3935,7 +4015,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
                     "content": [{"type": "text", "arguments": {"country": "Japan"}}]
                 }
             ]}],
-        "tags": [{"test_type": "json_mode"}]
+        "tags": [{"test_type": "json_mode_v2"}]
     });
 
     let response = Client::new()
@@ -4009,15 +4089,15 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": {"country": "Japan"}}]
+                "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
             }
         ]
     });
     assert_eq!(input, correct_input);
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec!["What is the name of the capital city of Japan?"
             .to_string()
@@ -4095,7 +4175,7 @@ pub async fn test_poll_existing_json_mode_batch_inference_request_with_provider(
         "pending",
         Some(HashMap::from([(
             "test_type".to_string(),
-            "json_mode".to_string(),
+            "json_mode_v2".to_string(),
         )])),
     )
     .await;
@@ -4179,7 +4259,7 @@ pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider
         &provider.variant_name,
         Some(HashMap::from([(
             "test_type".to_string(),
-            "json_mode".to_string(),
+            "json_mode_v2".to_string(),
         )])),
     )
     .await;
@@ -4188,7 +4268,15 @@ pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider
         Some(batch_inference) => batch_inference,
     };
     sleep(Duration::from_millis(200)).await;
+    test_poll_completed_json_mode_batch_inference_request_with_provider_and_ids(provider, ids)
+        .await;
+}
 
+pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -4348,15 +4436,15 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": {"country": "Japan"}}]
+                "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
             }
         ]
     });
     assert_eq!(input, correct_input);
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec!["What is the name of the capital city of Japan?"
             .to_string()
@@ -4541,7 +4629,17 @@ pub async fn test_poll_completed_dynamic_json_mode_batch_inference_request_with_
         Some(batch_inference) => batch_inference,
     };
     sleep(Duration::from_millis(200)).await;
+    test_poll_completed_dynamic_json_mode_batch_inference_request_with_provider_and_ids(
+        provider, ids,
+    )
+    .await;
+}
 
+pub async fn test_poll_completed_dynamic_json_mode_batch_inference_request_with_provider_and_ids(
+    provider: E2ETestProvider,
+    ids: InsertedFakeDataIds,
+) {
+    let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,

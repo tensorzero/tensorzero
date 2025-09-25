@@ -1,0 +1,142 @@
+---
+title: Getting Started with OpenAI
+sidebarTitle: OpenAI
+description: "Learn how to use TensorZero with OpenAI LLMs: open-source gateway, observability, optimization, evaluations, and experimentation."
+---
+
+This guide shows how to set up a minimal deployment to use the TensorZero Gateway with the OpenAI API.
+
+## Simple Setup
+
+You can use the short-hand `openai::model_name` to use an OpenAI model with TensorZero, unless you need advanced features like fallbacks or custom credentials.
+
+You can use OpenAI models in your TensorZero variants by setting the `model` field to `openai::model_name`.
+For example:
+
+```toml {3}
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+```
+
+Additionally, you can set `model_name` in the inference request to use a specific OpenAI model, without having to configure a function and variant in TensorZero.
+
+```bash {4}
+curl -X POST http://localhost:3000/inference \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_name": "openai::gpt-4o-mini-2024-07-18",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "What is the capital of Japan?"
+        }
+      ]
+    }
+  }'
+```
+
+## Advanced Setup
+
+For more complex scenarios (e.g. fallbacks, custom credentials), you can configure your own model and OpenAI provider in TensorZero.
+
+For this minimal setup, you'll need just two files in your project directory:
+
+```
+- config/
+  - tensorzero.toml
+- docker-compose.yml
+```
+
+<Tip>
+
+You can also find the complete code for this example on [GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/guides/providers/openai).
+
+</Tip>
+
+For production deployments, see our [Deployment Guide](/deployment/tensorzero-gateway/).
+
+### Configuration
+
+Create a minimal configuration file that defines a model and a simple chat function:
+
+```toml title="config/tensorzero.toml"
+[models.gpt_4o_mini_2024_07_18]
+routing = ["openai"]
+
+[models.gpt_4o_mini_2024_07_18.providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+
+[functions.my_function_name]
+type = "chat"
+
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "gpt_4o_mini_2024_07_18"
+```
+
+See the [list of models available on OpenAI](https://platform.openai.com/docs/models/).
+
+See the [Configuration Reference](/gateway/configuration-reference/) for optional fields (e.g. overwriting `api_base`).
+
+### Credentials
+
+You must set the `OPENAI_API_KEY` environment variable before running the gateway.
+
+You can customize the credential location by setting the `api_key_location` to `env::YOUR_ENVIRONMENT_VARIABLE` or `dynamic::ARGUMENT_NAME`.
+See the [Credential Management](/gateway/guides/credential-management/) guide and [Configuration Reference](/gateway/configuration-reference/) for more information.
+
+Additionally, see the [OpenAI-Compatible](/integrations/model-providers/openai-compatible/) guide for more information on how to use other OpenAI-Compatible providers.
+
+### Deployment (Docker Compose)
+
+Create a minimal Docker Compose configuration:
+
+```yaml title="docker-compose.yml"
+# This is a simplified example for learning purposes. Do not use this in production.
+# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
+
+services:
+  gateway:
+    image: tensorzero/gateway
+    volumes:
+      - ./config:/app/config:ro
+    command: --config-file /app/config/tensorzero.toml
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+```
+
+You can start the gateway with `docker compose up`.
+
+## Inference
+
+Make an inference request to the gateway:
+
+```bash
+curl -X POST http://localhost:3000/inference \
+  -H "Content-Type: application/json" \
+  -d '{
+    "function_name": "my_function_name",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "What is the capital of Japan?"
+        }
+      ]
+    }
+  }'
+```
+
+## Other Features
+
+### Generate embeddings
+
+The OpenAI model provider supports generating embeddings.
+You can find a [complete code example on GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/guides/embeddings/providers/openai).

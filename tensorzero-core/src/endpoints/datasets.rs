@@ -304,7 +304,7 @@ struct WithFunctionName {
 ///
 /// The inference is mostly copied as-is, except for the 'output' field.
 /// Based on the 'output' parameter, the output is copied, ignored, or fetched from a demonstration.
-#[instrument(name = "insert_datapoint", skip(app_state))]
+#[instrument(name = "insert_datapoint", skip_all)]
 pub async fn insert_from_existing_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<InsertPathParams>,
@@ -327,7 +327,7 @@ pub async fn insert_from_existing_datapoint_handler(
 ///
 /// The input and output are validated against the function schema
 /// (retrieved from the `function_name` argument in the body).
-#[instrument(name = "update_datapoint", skip(app_state))]
+#[instrument(name = "update_datapoint", skip_all)]
 pub async fn update_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<UpdatePathParams>,
@@ -359,7 +359,12 @@ pub async fn update_datapoint_handler(
                     })
                 })?;
 
-            let resolved_input = chat.input.clone().resolve(&fetch_context).await?;
+            let resolved_input = chat
+                .input
+                .clone()
+                .into_lazy_resolved_input(fetch_context)?
+                .resolve()
+                .await?;
             function_config.validate_input(&chat.input)?;
             // If there are no tool params in the SyntheticChatInferenceDatapoint, we use the default tool params (empty tools).
             // This is consistent with how they are serialized at inference time.
@@ -421,7 +426,12 @@ pub async fn update_datapoint_handler(
                         message: format!("Failed to deserialize JSON datapoint: {e}"),
                     })
                 })?;
-            let resolved_input = json.input.clone().resolve(&fetch_context).await?;
+            let resolved_input = json
+                .input
+                .clone()
+                .into_lazy_resolved_input(fetch_context)?
+                .resolve()
+                .await?;
             function_config.validate_input(&json.input)?;
             let dynamic_demonstration_info =
                 DynamicDemonstrationInfo::Json(json.output_schema.clone());
@@ -563,11 +573,23 @@ pub async fn insert_datapoint(
                         message: format!("Failed to validate chat input for datapoint {i}: {e}"),
                     })
                 })?;
-                let resolved_input = chat.input.resolve(&fetch_context).await.map_err(|e| {
-                    Error::new(ErrorDetails::InternalError {
-                        message: format!("Failed to resolve chat input for datapoint {i}: {e}"),
-                    })
-                })?;
+                let resolved_input = chat
+                    .input
+                    .into_lazy_resolved_input(fetch_context)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InternalError {
+                            message: format!(
+                                "Failed to lazily resolve chat input for datapoint {i}: {e}"
+                            ),
+                        })
+                    })?
+                    .resolve()
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InternalError {
+                            message: format!("Failed to resolve chat input for datapoint {i}: {e}"),
+                        })
+                    })?;
                 // Prepare the tool config
                 let tool_config =
                     function_config.prepare_tool_config(chat.dynamic_tool_params, &config.tools)?;
@@ -634,11 +656,16 @@ pub async fn insert_datapoint(
                         message: format!("Failed to validate input for datapoint {i}: {e}"),
                     })
                 })?;
-                let resolved_input = json.input.resolve(&fetch_context).await.map_err(|e| {
-                    Error::new(ErrorDetails::InternalError {
-                        message: format!("Failed to resolve input for datapoint {i}: {e}"),
-                    })
-                })?;
+                let resolved_input = json
+                    .input
+                    .into_lazy_resolved_input(fetch_context)?
+                    .resolve()
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InternalError {
+                            message: format!("Failed to resolve input for datapoint {i}: {e}"),
+                        })
+                    })?;
                 // Validate the outputs against the output schema
                 let output_schema = json
                     .output_schema

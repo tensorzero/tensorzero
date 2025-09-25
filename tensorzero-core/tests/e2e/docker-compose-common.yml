@@ -35,19 +35,26 @@ services:
       start_period: 30s
       start_interval: 1s
       timeout: 1s
-  jaeger:
-    image: jaegertracing/jaeger:2.9.0
-    volumes:
-      - ./jaeger-config.yaml:/jaeger/config.yaml
-    #command: --set=extensions.jaeger_storage.backends.some_store.memory.max_traces=1
-    command: --config /jaeger/config.yaml
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:14269/health"]
-      interval: 1s
-      timeout: 3s
-      retries: 60    
+
+  memcached:
+    image: memcached:1.6.38
+    container_name: memcached
     ports:
-      - "16686:16686" # Browser UI
+      - "11211:11211"
+    environment:
+      - MEMCACHED_MAX_MEMORY=64m # Set the maximum memory usage
+      - MEMCACHED_THREADS=4 # Number of threads to use
+
+  tempo:
+    image: grafana/tempo:2.8.2
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml
+    ports:
+      - "3200:3200" # tempo
+    depends_on:
+      - memcached
+
   otel-collector:
     image: otel/opentelemetry-collector-contrib
     volumes:
@@ -55,6 +62,13 @@ services:
     ports:
       - 4317:4317 # OTLP gRPC receiver
       - 4318:4318 # OTLP http receiver
-    depends_on:
-      jaeger:
-        condition: service_healthy
+      - 55679:55679 # ZPages
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: tensorzero-e2e-tests
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"

@@ -14,6 +14,7 @@ This example shows how to deploy the TensorZero (including the TensorZero Gatewa
 - Ingress controller installed in your cluster (e.g. `traefik-ingress-controller-v3`)
 - StorageClass configured for persistent volumes (e.g. `ebs-gp3-retain`)
 - Sufficient resources for running ClickHouse and TensorZero services (recommend at least 4GB memory for minikube)
+- If `monitoring.metrics.enabled` is set, [Prometheus Operator](https://prometheus-operator.dev/) needs to be installed in your cluster
 
 ## Installing the Chart
 
@@ -105,6 +106,14 @@ The following table lists the configurable parameters of the chart and their def
 | `persistence.accessModes`    | Access modes               | `["ReadWriteOnce"]`             |
 | `persistence.storageClass`   | Storage class name         | `""`                            |
 | `persistence.mountPath`      | Mount path in containers   | `/app/storage`                  |
+
+### Monitoring Configuration
+
+| Parameter                     | Description                                   | Default |
+|-------------------------------|-----------------------------------------------|---------|
+| `monitoring.metrics.enabled`  | Enable ServiceMonitor creation                | `false` |
+| `monitoring.metrics.interval` | Scrape interval                               | `"30s"` |
+| `monitoring.metrics.labels`   | Additional labels to attach to ServiceMonitor | `{}`    |
 
 ### ClickHouse Configuration
 
