@@ -15,7 +15,7 @@ use tensorzero_core::db::clickhouse::migration_manager::{
     RunMigrationArgs, RunMigrationManagerArgs,
 };
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
-use tensorzero_core::error::Error;
+use tensorzero_core::error::{Error, ErrorDetails};
 use tokio::runtime::Handle;
 use tokio::time::sleep;
 use tracing_test::traced_test;
@@ -1365,4 +1365,55 @@ async fn test_run_migrations_fake_row() {
     } else {
         assert_eq!(actual_migration_ids, expected_migration_ids);
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+/// Test the is_manual_run and disable_automatic_migrations flags
+async fn test_migration_logic_with_flags() {
+    // Test case 1: is_manual_run = false, disable_automatic_migrations = false
+    let (clickhouse, _cleanup) = get_clean_clickhouse(true).await;
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        is_manual_run: false,
+        disable_automatic_migrations: false,
+    })
+    .await
+    .unwrap();
+
+    // Test case 2: false, true
+    let (clickhouse, _cleanup) = get_clean_clickhouse(true).await;
+    let err = migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        is_manual_run: false,
+        disable_automatic_migrations: true,
+    })
+    .await
+    .unwrap_err();
+    assert_eq!(err, Error::new(ErrorDetails::ClickHouseMigrationsDisabled));
+    // Create database to avoid panicking when the database is dropped via DeleteDbOnDrop.drop(),
+    // because it won't be created otherwise when migration_manager::run() throws an error.
+    clickhouse
+        .create_database_and_migrations_table()
+        .await
+        .unwrap();
+
+    // Test case 3: true, false
+    let (clickhouse, _cleanup) = get_clean_clickhouse(true).await;
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        is_manual_run: true,
+        disable_automatic_migrations: false,
+    })
+    .await
+    .unwrap();
+
+    // Test case 4: true, true
+    let (clickhouse, _cleanup) = get_clean_clickhouse(true).await;
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        is_manual_run: true,
+        disable_automatic_migrations: true,
+    })
+    .await
+    .unwrap();
 }
