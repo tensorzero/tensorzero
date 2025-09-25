@@ -71,7 +71,7 @@ async fn test_clickhouse_metrics_by_variant_many_results() {
 }
 
 #[tokio::test]
-async fn test_clickhouse_metrics_by_variant_episode() {
+async fn test_clickhouse_metrics_by_variant_episode_boolean() {
     let clickhouse = get_clickhouse().await;
     let metrics_by_variant = clickhouse
         .get_feedback_by_variant("solved", "ask_question", None)
@@ -99,4 +99,35 @@ async fn test_clickhouse_metrics_by_variant_episode() {
     assert_eq!(metric.count, 3);
     assert_float_eq(metric.mean, 1.0, None);
     assert_float_eq(metric.variance, 0.0, None);
+}
+
+#[tokio::test]
+async fn test_clickhouse_metrics_by_variant_episode_float() {
+    let clickhouse = get_clickhouse().await;
+    let metrics_by_variant = clickhouse
+        .get_feedback_by_variant("elapsed_ms", "ask_question", None)
+        .await
+        .unwrap();
+    // Sort by count in descending order for deterministic results
+    let mut metrics_by_variant = metrics_by_variant;
+    metrics_by_variant.sort_by(|a, b| b.count.cmp(&a.count));
+    println!("metrics_by_variant: {metrics_by_variant:?}");
+    assert_eq!(metrics_by_variant.len(), 3);
+    let metric = metrics_by_variant.first().unwrap();
+    assert_eq!(metric.variant_name, "gpt-4.1-nano");
+    assert_eq!(metric.count, 49);
+    assert_float_eq(metric.mean, 91678.72, None);
+    assert_float_eq(metric.variance, 443305500.0, None);
+
+    let metric = metrics_by_variant.get(1).unwrap();
+    assert_eq!(metric.variant_name, "baseline");
+    assert_eq!(metric.count, 48);
+    assert_float_eq(metric.mean, 118620.79, None);
+    assert_float_eq(metric.variance, 885428200.0, None);
+
+    let metric = metrics_by_variant.get(2).unwrap();
+    assert_eq!(metric.variant_name, "gpt-4.1-mini");
+    assert_eq!(metric.count, 3);
+    assert_float_eq(metric.mean, 65755.3, None);
+    assert_float_eq(metric.variance, 22337140.0, None);
 }
