@@ -8,12 +8,14 @@ use opentelemetry_sdk::{
     error::OTelSdkResult,
     trace::{SpanData, SpanExporter},
 };
+use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
-    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    FeedbackParams, InferenceOutput, InferenceResponse, Role,
+    Client, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    FeedbackParams, InferenceOutput, InferenceResponse, InferenceResponseChunk, Role,
 };
 use tensorzero_core::observability::build_opentelemetry_layer;
 use tensorzero_core::{config::OtlpTracesFormat, inference::types::TextKind};
+use tokio_stream::StreamExt;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
@@ -102,28 +104,38 @@ pub fn attrs_to_map(attrs: &[KeyValue]) -> HashMap<String, Value> {
 }
 
 #[tokio::test]
-pub async fn test_capture_simple_inference_spans_genai_tags() {
-    test_capture_simple_inference_spans(OtlpTracesFormat::OpenTelemetry, "opentelemetry").await;
+pub async fn test_capture_simple_inference_spans_genai_tags_non_streaming() {
+    test_capture_simple_inference_spans(OtlpTracesFormat::OpenTelemetry, "opentelemetry", false)
+        .await;
+}
+#[tokio::test]
+pub async fn test_capture_simple_inference_spans_genai_tags_streaming() {
+    test_capture_simple_inference_spans(OtlpTracesFormat::OpenTelemetry, "opentelemetry", true)
+        .await;
 }
 
 #[tokio::test]
-pub async fn test_capture_simple_inference_spans_openinference_tags() {
-    test_capture_simple_inference_spans(OtlpTracesFormat::OpenInference, "openinference").await;
+pub async fn test_capture_simple_inference_spans_openinference_tags_non_streaming() {
+    test_capture_simple_inference_spans(OtlpTracesFormat::OpenInference, "openinference", false)
+        .await;
 }
 
-pub async fn test_capture_simple_inference_spans(mode: OtlpTracesFormat, config_mode: &str) {
-    let exporter = install_capturing_otel_exporter();
+#[tokio::test]
+pub async fn test_capture_simple_inference_spans_openinference_tags_streaming() {
+    test_capture_simple_inference_spans(OtlpTracesFormat::OpenInference, "openinference", true)
+        .await;
+}
 
-    let config = format!(
-        "
-    [gateway.export.otlp.traces]
-    enabled = true
-    format = \"{config_mode}\"
-    "
-    );
+struct ResponseData {
+    inference_id: Uuid,
+    episode_id: Uuid,
+    input_tokens: i64,
+    output_tokens: i64,
+    total_tokens: i64,
+}
 
-    let client = tensorzero::test_helpers::make_embedded_gateway_with_config(&config).await;
-    let res = client
+async fn make_non_streaming_inference(client: &Client) -> ResponseData {
+    let res: InferenceOutput = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
             input: ClientInput {
@@ -151,9 +163,96 @@ pub async fn test_capture_simple_inference_spans(mode: OtlpTracesFormat, config_
         panic!("Expected chat response, got: {output:#?}");
     };
 
-    let input_tokens = response.usage.input_tokens as i64;
-    let output_tokens = response.usage.output_tokens as i64;
-    let total_tokens = (response.usage.input_tokens + response.usage.output_tokens) as i64;
+    ResponseData {
+        inference_id: response.inference_id,
+        episode_id: response.episode_id,
+        input_tokens: response.usage.input_tokens as i64,
+        output_tokens: response.usage.output_tokens as i64,
+        total_tokens: (response.usage.input_tokens + response.usage.output_tokens) as i64,
+    }
+}
+
+async fn make_streaming_inference(client: &Client) -> ResponseData {
+    let res: InferenceOutput = client
+        .inference(ClientInferenceParams {
+            model_name: Some("dummy::good".to_string()),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "What is your name?".to_string(),
+                    })],
+                }],
+            },
+            tags: HashMap::from([
+                ("first_tag".to_string(), "first_value".to_string()),
+                ("second_tag".to_string(), "second_value".to_string()),
+            ]),
+            stream: Some(true),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    let InferenceOutput::Streaming(mut stream) = res else {
+        panic!("Expected streaming output, got: {res:#?}");
+    };
+
+    let mut inference_id = None;
+    let mut episode_id = None;
+    let mut input_tokens = 0;
+    let mut output_tokens = 0;
+    let mut total_tokens = 0;
+    while let Some(chunk) = stream.next().await {
+        let InferenceResponseChunk::Chat(response) = chunk.clone().unwrap() else {
+            panic!("Expected chat response, got: {chunk:#?}");
+        };
+        inference_id = Some(response.inference_id);
+        episode_id = Some(response.episode_id);
+        if let Some(usage) = response.usage {
+            input_tokens += usage.input_tokens as i64;
+            output_tokens += usage.output_tokens as i64;
+            total_tokens += (usage.input_tokens + usage.output_tokens) as i64;
+        }
+    }
+
+    ResponseData {
+        inference_id: inference_id.unwrap(),
+        episode_id: episode_id.unwrap(),
+        input_tokens,
+        output_tokens,
+        total_tokens,
+    }
+}
+
+pub async fn test_capture_simple_inference_spans(
+    mode: OtlpTracesFormat,
+    config_mode: &str,
+    streaming: bool,
+) {
+    let exporter = install_capturing_otel_exporter();
+
+    let config = format!(
+        "
+    [gateway.export.otlp.traces]
+    enabled = true
+    format = \"{config_mode}\"
+    "
+    );
+
+    let client = make_embedded_gateway_with_config(&config).await;
+    let response_data = if streaming {
+        make_streaming_inference(&client).await
+    } else {
+        make_non_streaming_inference(&client).await
+    };
+    let ResponseData {
+        inference_id,
+        episode_id,
+        input_tokens,
+        output_tokens,
+        total_tokens,
+    } = response_data;
 
     let all_spans = exporter.take_spans();
     let num_spans = all_spans.len();
@@ -169,12 +268,9 @@ pub async fn test_capture_simple_inference_spans(mode: OtlpTracesFormat, config_
     assert_eq!(root_attr_map["model_name"], "dummy::good".into());
     assert_eq!(
         root_attr_map["inference_id"],
-        response.inference_id.to_string().into()
+        inference_id.to_string().into()
     );
-    assert_eq!(
-        root_attr_map["episode_id"],
-        response.episode_id.to_string().into()
-    );
+    assert_eq!(root_attr_map["episode_id"], episode_id.to_string().into());
     assert_eq!(root_attr_map.get("function_name"), None);
     assert_eq!(root_attr_map.get("variant_name"), None);
     assert_eq!(
@@ -205,7 +301,7 @@ pub async fn test_capture_simple_inference_spans(mode: OtlpTracesFormat, config_
         "tensorzero::default".into()
     );
     assert_eq!(variant_attr_map["variant_name"], "dummy::good".into());
-    assert_eq!(variant_attr_map["stream"], false.into());
+    assert_eq!(variant_attr_map["stream"], streaming.into());
 
     let variant_children = &spans.span_children[&variant_span.span_context.span_id()];
     let [model_span] = variant_children.as_slice() else {
@@ -216,7 +312,7 @@ pub async fn test_capture_simple_inference_spans(mode: OtlpTracesFormat, config_
     assert_eq!(model_span.status, Status::Unset);
     let model_attr_map = attrs_to_map(&model_span.attributes);
     assert_eq!(model_attr_map["model_name"], "dummy::good".into());
-    assert_eq!(model_attr_map["stream"], false.into());
+    assert_eq!(model_attr_map["stream"], streaming.into());
 
     let model_children = &spans.span_children[&model_span.span_context.span_id()];
     let [model_provider_span] = model_children.as_slice() else {
@@ -281,25 +377,35 @@ pub async fn test_capture_simple_inference_spans(mode: OtlpTracesFormat, config_
                 model_provider_attr_map["llm.token_count.total"],
                 total_tokens.into()
             );
-            assert_eq!(
-                model_provider_attr_map["input.mime_type"],
-                "application/json".into()
-            );
-            assert_eq!(
-                model_provider_attr_map["output.mime_type"],
-                "application/json".into()
-            );
-            assert_eq!(model_provider_attr_map["input.value"], "raw request".into());
-            assert_eq!(
-                model_provider_attr_map["output.value"],
-                "{\n  \"id\": \"id\",\n  \"object\": \"text.completion\",\n  \"created\": 1618870400,\n  \"model\": \"text-davinci-002\",\n  \"choices\": [\n    {\n      \"text\": \"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\",\n      \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": null\n    }\n  ]\n}".into()
-            );
+            // We currently don't have input/output attributes implemented for streaming inferences
+            if streaming {
+                // When we implement input/output attributes for streaming inferences, remove these checks
+                assert!(!model_provider_attr_map.contains_key("input.mime_type"));
+                assert!(!model_provider_attr_map.contains_key("output.mime_type"));
+                assert!(!model_provider_attr_map.contains_key("input.value"));
+                assert!(!model_provider_attr_map.contains_key("output.value"));
+            } else {
+                assert_eq!(
+                    model_provider_attr_map["input.mime_type"],
+                    "application/json".into()
+                );
+                assert_eq!(
+                    model_provider_attr_map["output.mime_type"],
+                    "application/json".into()
+                );
+                assert_eq!(model_provider_attr_map["input.value"], "raw request".into());
+                assert_eq!(
+                    model_provider_attr_map["output.value"],
+                    "{\n  \"id\": \"id\",\n  \"object\": \"text.completion\",\n  \"created\": 1618870400,\n  \"model\": \"text-davinci-002\",\n  \"choices\": [\n    {\n      \"text\": \"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\",\n      \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": null\n    }\n  ]\n}".into()
+                );
+            }
+
             assert!(!model_provider_attr_map.contains_key("gen_ai.usage.input_tokens"));
             assert!(!model_provider_attr_map.contains_key("gen_ai.usage.output_tokens"));
             assert!(!model_provider_attr_map.contains_key("gen_ai.usage.total_tokens"));
         }
     }
-    assert_eq!(model_attr_map["stream"], false.into());
+    assert_eq!(model_attr_map["stream"], streaming.into());
 
     assert_eq!(
         spans

@@ -342,23 +342,17 @@ impl ModelConfig {
         // Note - we cache the chunks here so that we store the raw model provider input and response chunks
         // in the cache. We don't want this logic in `collect_chunks`, which would cause us to cache the result
         // of higher-level transformations (e.g. dicl)
-        let mut stream = if clients.cache_options.enabled.write() {
-            let span = stream.span().clone();
-            // Note - it's fine to call `stream_with_cache_write` inside of `streaming_provider_request`,
-            // as it doesn't immediately kick off a clickhouse cache write. The cache write only occurs
-            // when the stream finished, so the model provider TTFT timeout will (correctly) not include
-            // the time taken to write to clickhouse.
-            stream_with_cache_write(
-                raw_request.clone(),
-                model_provider_request,
-                clients,
-                stream.into_inner(),
-            )
-            .await?
-            .instrument(span)
-        } else {
-            stream
-        };
+        let write_to_cache = clients.cache_options.enabled.write();
+        let span = stream.span().clone();
+        let mut stream = wrap_provider_stream(
+            raw_request.clone(),
+            model_provider_request,
+            clients,
+            stream,
+            write_to_cache,
+        )
+        .await?
+        .instrument(span);
         // Get a single chunk from the stream and make sure it is OK then send to client.
         // We want to do this here so that we can tell that the request is working.
         peek_first_chunk(
@@ -592,12 +586,23 @@ impl ModelConfig {
     }
 }
 
-async fn stream_with_cache_write(
+/// Wraps a low-level model provider stream, adding in common functionality:
+/// * Model inference cache writes
+/// * OpenTelemetry usage attributes
+///
+/// This is used for functionality that needs access to individual chunks, which requires
+/// us to wrap the underlying stream.
+async fn wrap_provider_stream(
     raw_request: String,
     model_request: ModelProviderRequest<'_>,
     clients: &InferenceClients<'_>,
-    mut stream: PeekableProviderInferenceResponseStream,
+    stream: Instrumented<PeekableProviderInferenceResponseStream>,
+    write_to_cache: bool,
 ) -> Result<PeekableProviderInferenceResponseStream, Error> {
+    // Detach the span from the stream, and re-attach it to the 'async_stream::stream!' wrapper
+    // This ensures that the span duration include the entire provider-specific processing time
+    let span = stream.span().clone();
+    let mut stream = stream.into_inner();
     let cache_key = model_request.get_cache_key()?;
     let clickhouse_info = clients.clickhouse_connection_info.clone();
     let tool_config = model_request
@@ -605,11 +610,22 @@ async fn stream_with_cache_write(
         .tool_config
         .clone()
         .map(std::borrow::Cow::into_owned);
+    let otlp_config = clients.otlp_config.clone();
     Ok((Box::pin(async_stream::stream! {
         let mut buffer = vec![];
         let mut errored = false;
+        let mut total_usage = Usage {
+            input_tokens: 0,
+            output_tokens: 0,
+        };
         while let Some(chunk) = stream.next().await {
-            if !errored {
+            if let Ok(chunk) = chunk.as_ref() {
+                if let Some(chunk_usage) = &chunk.usage {
+                    total_usage = total_usage + *chunk_usage;
+                }
+            }
+            // We can skip cloning the chunk if we know we're not going to write to the cache
+            if write_to_cache && !errored {
                 match chunk.as_ref() {
                     Ok(chunk) => {
                         buffer.push(chunk.clone());
@@ -622,33 +638,19 @@ async fn stream_with_cache_write(
             }
             yield chunk;
         }
-        if !errored {
-            let usage = consolidate_usage(&buffer);
+        otlp_config.apply_usage_to_model_provider_span(&span, &total_usage);
+
+        if write_to_cache && !errored {
             let _ = start_cache_write_streaming(
                 &clickhouse_info,
                 cache_key,
                 buffer,
                 &raw_request,
-                &usage,
+                &total_usage,
                 tool_config
             );
         }
     }) as ProviderInferenceResponseStreamInner).peekable())
-}
-
-fn consolidate_usage(chunks: &[ProviderInferenceResponseChunk]) -> Usage {
-    let mut input_tokens = 0;
-    let mut output_tokens = 0;
-    for chunk in chunks {
-        if let Some(usage) = &chunk.usage {
-            input_tokens += usage.input_tokens;
-            output_tokens += usage.output_tokens;
-        }
-    }
-    Usage {
-        input_tokens,
-        output_tokens,
-    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1224,49 +1226,21 @@ impl ModelProvider {
         resp: &Result<ProviderInferenceResponse, Error>,
     ) {
         match resp {
-            Ok(resp) => {
-                if otlp_config.traces.enabled {
-                    match otlp_config.traces.format {
-                        OtlpTracesFormat::OpenTelemetry => {
-                            span.set_attribute(
-                                "gen_ai.usage.input_tokens",
-                                resp.usage.input_tokens as i64,
-                            );
-                            span.set_attribute(
-                                "gen_ai.usage.output_tokens",
-                                resp.usage.output_tokens as i64,
-                            );
-                            span.set_attribute(
-                                "gen_ai.usage.total_tokens",
-                                (resp.usage.input_tokens + resp.usage.output_tokens) as i64,
-                            );
-                        }
-                        OtlpTracesFormat::OpenInference => {
-                            span.set_attribute(
-                                "llm.token_count.prompt",
-                                resp.usage.input_tokens as i64,
-                            );
-                            span.set_attribute(
-                                "llm.token_count.completion",
-                                resp.usage.output_tokens as i64,
-                            );
-                            span.set_attribute(
-                                "llm.token_count.total",
-                                (resp.usage.input_tokens + resp.usage.output_tokens) as i64,
-                            );
-                            // If we ever add providers that don't use JSON, we'll need to update this.
-
-                            span.set_attribute("input.mime_type", "application/json");
-                            span.set_attribute("input.value", resp.raw_request.clone());
-
-                            span.set_attribute("output.mime_type", "application/json");
-                            span.set_attribute("output.value", resp.raw_response.clone());
-                        }
+            Ok(response) => {
+                otlp_config.apply_usage_to_model_provider_span(span, &response.usage);
+                match otlp_config.traces.format {
+                    OtlpTracesFormat::OpenTelemetry => {}
+                    OtlpTracesFormat::OpenInference => {
+                        // If we ever add providers that don't use JSON, we'll need to update this.
+                        span.set_attribute("input.mime_type", "application/json");
+                        span.set_attribute("input.value", response.raw_request.clone());
+                        span.set_attribute("output.mime_type", "application/json");
+                        span.set_attribute("output.value", response.raw_response.clone());
                     }
                 }
             }
-            // If an error occurs, try to extract the raw request/response to attach to the OpenTelemetry span
             Err(e) => {
+                // If an error occurs, try to extract the raw request/response to attach to the OpenTelemetry span
                 match e.get_details() {
                     ErrorDetails::InferenceClient {
                         raw_request,
@@ -1278,19 +1252,17 @@ impl ModelProvider {
                         raw_response,
                         ..
                     } => {
-                        if otlp_config.traces.enabled {
-                            match otlp_config.traces.format {
-                                OtlpTracesFormat::OpenTelemetry => {}
-                                OtlpTracesFormat::OpenInference => {
-                                    // If we ever add providers that don't use JSON, we'll need to update this.
-                                    if let Some(raw_request) = raw_request {
-                                        span.set_attribute("input.mime_type", "application/json");
-                                        span.set_attribute("input.value", raw_request.clone());
-                                    }
-                                    if let Some(raw_response) = raw_response {
-                                        span.set_attribute("output.mime_type", "application/json");
-                                        span.set_attribute("output.value", raw_response.clone());
-                                    }
+                        match otlp_config.traces.format {
+                            OtlpTracesFormat::OpenTelemetry => {}
+                            OtlpTracesFormat::OpenInference => {
+                                // If we ever add providers that don't use JSON, we'll need to update this.
+                                if let Some(raw_request) = raw_request {
+                                    span.set_attribute("input.mime_type", "application/json");
+                                    span.set_attribute("input.value", raw_request.clone());
+                                }
+                                if let Some(raw_response) = raw_response {
+                                    span.set_attribute("output.mime_type", "application/json");
+                                    span.set_attribute("output.value", raw_response.clone());
                                 }
                             }
                         }
