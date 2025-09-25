@@ -1,2 +1,2 @@
-pub mod retries;
+pub mod gateway;
 pub mod uuid;

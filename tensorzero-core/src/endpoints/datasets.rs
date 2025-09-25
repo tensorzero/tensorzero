@@ -27,18 +27,18 @@ use crate::{
     db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
     error::{Error, ErrorDetails},
     function::FunctionConfig,
-    gateway_util::{AppState, StructuredJson},
     inference::types::{
         ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
         JsonInferenceDatabaseInsert, JsonInferenceOutput,
     },
     serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
     tool::{DynamicToolParams, ToolCallConfigDatabaseInsert},
+    utils::gateway::{AppState, StructuredJson},
     utils::uuid::validate_tensorzero_uuid,
 };
 
 #[cfg(debug_assertions)]
-use crate::gateway_util::AppStateData;
+use crate::utils::gateway::AppStateData;
 
 use super::feedback::{
     validate_parse_demonstration, DemonstrationOutput, DynamicDemonstrationInfo,
