@@ -107,7 +107,7 @@ pub fn get_dynamic_evaluation_cutoff_uuid() -> Uuid {
 }
 
 pub fn generate_dynamic_evaluation_run_episode_id() -> Uuid {
-    #[expect(clippy::expect_used)]
+    #[expect(clippy::expect_used, clippy::missing_panics_doc)]
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards");
