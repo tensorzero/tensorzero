@@ -86,6 +86,22 @@ For inference requests, these traces additionally contain spans that represent t
 
 ## Customize
 
+### Change trace semantics
+
+TensorZero supports the following tracing semantics:
+
+- [OpenTelemetry semantic conventions for Generative AI](https://opentelemetry.io/docs/specs/semconv/gen-ai/);
+- [OpenInference](https://github.com/Arize-ai/openinference).
+
+You can configure which one you would like the TensorZero gateway to export
+using `export.otlp.traces.format` in `tensorzero.toml`. See [Configuration
+Reference](/gateway/configuration-reference/#object_storage) for more details.
+
+<Tip>
+Both semantics use OpenTelemetry as the tracing mechanism. Your choice here only
+impacts tag names attached to your traces and the logic around how they are applied.
+</Tip>
+
 ### Send custom HTTP headers
 
 You can attach custom HTTP headers to the outgoing requests made to `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`.
