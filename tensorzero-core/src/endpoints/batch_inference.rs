@@ -23,7 +23,6 @@ use crate::config::Config;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
 use crate::function::{sample_variant, FunctionConfig};
-use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{
     BatchEpisodeIds, BatchEpisodeIdsWithSize, BatchInferenceDatabaseInsertMetadata,
@@ -46,6 +45,7 @@ use crate::tool::{
     BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams, ToolCallConfig,
     ToolCallConfigDatabaseInsert,
 };
+use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::{BatchInferenceConfig, InferenceConfig, Variant, VariantInfo};
 
 /// The expected payload to the `/start_batch_inference` endpoint.

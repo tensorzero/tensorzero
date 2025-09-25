@@ -53,10 +53,10 @@ use tensorzero_core::{
     endpoints::{
         datasets::InsertDatapointParams, dynamic_evaluation_run::DynamicEvaluationRunEpisodeParams,
     },
-    gateway_util::ShutdownHandle,
     inference::types::{
         extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
     },
+    utils::gateway::ShutdownHandle,
 };
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
@@ -163,7 +163,7 @@ fn _start_http_gateway(
 ) -> PyResult<Bound<'_, PyAny>> {
     warn_no_config(py, config_file.as_deref())?;
     let gateway_fut = async move {
-        let (addr, handle) = tensorzero_core::gateway_util::start_openai_compatible_gateway(
+        let (addr, handle) = tensorzero_core::utils::gateway::start_openai_compatible_gateway(
             config_file,
             clickhouse_url,
             postgres_url,

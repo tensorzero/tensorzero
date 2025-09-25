@@ -30,10 +30,10 @@ use tracing_test::traced_test;
 
 use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
 
-use tensorzero_core::gateway_util::AppStateData;
 use tensorzero_core::inference::types::file::Base64FileMetadata;
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::{FinishReason, TextKind, Thought};
+use tensorzero_core::utils::gateway::AppStateData;
 use tensorzero_core::{
     cache::CacheEnabledMode,
     inference::types::{

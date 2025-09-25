@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::config::Config;
-use crate::gateway_util::{GatewayHandle, GatewayHandleTestOptions};
+use crate::utils::gateway::{GatewayHandle, GatewayHandleTestOptions};
 
 pub fn get_unit_test_gateway_handle(config: Arc<Config>) -> GatewayHandle {
     get_unit_test_gateway_handle_with_options(
