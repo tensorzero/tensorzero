@@ -225,9 +225,9 @@ pub async fn run_evaluation_core<W: Write>(args: EvaluationCoreArgs, writer: &mu
     )
     .await?;
     info!(dataset_size = dataset.len(), "Dataset loaded successfully");
-    let dataset_name = Arc::new(args.dataset_name.clone());
-    let variant_name = Arc::new(args.variant_name.clone());
-    let evaluation_name = Arc::new(args.evaluation_name.clone());
+    let dataset_name = Arc::new(args.dataset_name);
+    let variant_name = Arc::new(args.variant_name);
+    let evaluation_name = Arc::new(args.evaluation_name);
     let dataset_len = dataset.len();
     let mut task_id_to_datapoint_id = HashMap::new();
 
