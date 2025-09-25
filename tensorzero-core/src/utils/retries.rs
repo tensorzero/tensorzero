@@ -1,3 +1,4 @@
+#[expect(clippy::disallowed_types)]
 use backon::{ExponentialBuilder, Retryable};
 use serde::{Deserialize, Serialize};
 use std::{future::Future, time::Duration};
