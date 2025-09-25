@@ -67,7 +67,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "🐛 *New issue opened*\n\n*Title:* <${{ github.event.issue.html_url }}|${{ github.event.issue.title }}>\n*Author:* ${{ github.actor }}\n*Repository:* ${{ github.repository }}"
+                    "text": "🐛 *New issue opened*\n\n*Title:* <${{ github.event.issue.html_url }}|${{ github.event.issue.title }}>\n*Author:* <https://github.com/${{ github.actor }}|${{ github.actor }}>\n"
                   }
                 }
               ]
@@ -88,7 +88,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "💬 *New comment on issue*\n\n*Issue:* <${{ github.event.issue.html_url }}|${{ github.event.issue.title }}>\n*Comment by:* ${{ github.actor }}\n*Repository:* ${{ github.repository }}"
+                    "text": "💬 *New comment on issue*\n\n*Issue:* <${{ github.event.issue.html_url }}|${{ github.event.issue.title }}>\n*Comment by:* <https://github.com/${{ github.actor }}|${{ github.actor }}>\n"
                   }
                 }
               ]
@@ -109,7 +109,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "🔀 *New pull request opened*\n\n*Title:* <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>\n*Author:* ${{ github.actor }}\n*Repository:* ${{ github.repository }}"
+                    "text": "🔀 *New pull request opened*\n\n*Title:* <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>\n*Author:* <https://github.com/${{ github.actor }}|${{ github.actor }}>\n"
                   }
                 }
               ]
@@ -130,7 +130,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "💬 *New review comment on pull request*\n\n*PR:* <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>\n*Comment by:* ${{ github.actor }}\n*Repository:* ${{ github.repository }}"
+                    "text": "💬 *New review comment on pull request*\n\n*PR:* <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>\n*Comment by:* <https://github.com/${{ github.actor }}|${{ github.actor }}>\n"
                   }
                 }
               ]
@@ -151,7 +151,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "👀 *Pull request review submitted*\n\n*PR:* <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>\n*Review by:* ${{ github.actor }}\n*State:* ${{ github.event.review.state }}\n*Repository:* ${{ github.repository }}"
+                    "text": "👀 *Pull request review submitted*\n\n*PR:* <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>\n*Review by:* <https://github.com/${{ github.actor }}|${{ github.actor }}>\n*State:* ${{ github.event.review.state }}\n"
                   }
                 }
               ]
@@ -172,7 +172,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "💭 *New discussion created*\n\n*Title:* <${{ github.event.discussion.html_url }}|${{ github.event.discussion.title }}>\n*Author:* ${{ github.actor }}\n*Repository:* ${{ github.repository }}"
+                    "text": "💭 *New discussion created*\n\n*Title:* <${{ github.event.discussion.html_url }}|${{ github.event.discussion.title }}>\n*Author:* <https://github.com/${{ github.actor }}|${{ github.actor }}>\n"
                   }
                 }
               ]
@@ -193,7 +193,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "💬 *New comment on discussion*\n\n*Discussion:* <${{ github.event.discussion.html_url }}|${{ github.event.discussion.title }}>\n*Comment by:* ${{ github.actor }}\n*Repository:* ${{ github.repository }}"
+                    "text": "💬 *New comment on discussion*\n\n*Discussion:* <${{ github.event.discussion.html_url }}|${{ github.event.discussion.title }}>\n*Comment by:* <https://github.com/${{ github.actor }}|${{ github.actor }}>\n"
                   }
                 }
               ]
