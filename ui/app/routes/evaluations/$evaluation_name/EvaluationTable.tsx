@@ -43,6 +43,7 @@ import {
 } from "~/hooks/evaluations/ColorAssigner";
 import MetricValue, { isCutoffFailed } from "~/components/metric/MetricValue";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
+import { InferenceButton } from "~/components/utils/InferenceButton";
 import InputSnippet from "~/components/inference/InputSnippet";
 import { logger } from "~/utils/logger";
 
@@ -511,7 +512,7 @@ export function EvaluationTable({
                                         {evaluatorConfig.type ===
                                           "llm_judge" && (
                                           <div
-                                            className="ml-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                                            className="ml-2 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
                                             // Stop click event propagation so the row navigation is not triggered
                                             onClick={(e) => e.stopPropagation()}
                                           >
@@ -531,6 +532,14 @@ export function EvaluationTable({
                                                 "Unknown"
                                               }
                                             />
+                                            {metricValue.evaluator_inference_id && (
+                                              <InferenceButton
+                                                inferenceId={
+                                                  metricValue.evaluator_inference_id
+                                                }
+                                                tooltipText="View LLM judge inference"
+                                              />
+                                            )}
                                           </div>
                                         )}
                                       </>
