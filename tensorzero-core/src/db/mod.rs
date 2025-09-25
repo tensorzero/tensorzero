@@ -36,6 +36,8 @@ pub trait SelectQueries {
         time_window: TimeWindow,
     ) -> Result<Vec<ModelLatencyDatapoint>, Error>;
 
+    async fn count_distinct_models_used(&self) -> Result<u32, Error>;
+
     async fn query_episode_table(
         &self,
         page_size: u32,

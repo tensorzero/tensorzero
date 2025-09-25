@@ -310,7 +310,10 @@ pub async fn test_basic_embedding_timeout() {
 }
 
 pub async fn test_embedding_cache_with_provider(provider: EmbeddingTestProvider) {
-    let input_text = "This is a cache test for embeddings (test_embedding_cache_with_provider).";
+    let input_text = format!(
+        "This is a cache test for embeddings (test_embedding_cache_with_provider) - {}",
+        rand::random::<u32>()
+    );
 
     // First request with cache enabled to populate cache
     let payload = json!({
@@ -380,8 +383,10 @@ pub async fn test_embedding_cache_with_provider(provider: EmbeddingTestProvider)
 }
 
 pub async fn test_embedding_cache_options_with_provider(provider: EmbeddingTestProvider) {
-    let input_text =
-        "This is a cache options test for embeddings (test_embedding_cache_options_with_provider).";
+    let input_text = format!(
+        "This is a cache options test for embeddings (test_embedding_cache_options_with_provider) - {}",
+        rand::random::<u32>()
+    );
 
     // First, make a request that will be cached
     let payload_initial = json!({

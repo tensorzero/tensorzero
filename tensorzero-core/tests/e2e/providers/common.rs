@@ -30,10 +30,10 @@ use tracing_test::traced_test;
 
 use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
 
-use tensorzero_core::gateway_util::AppStateData;
 use tensorzero_core::inference::types::file::Base64FileMetadata;
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::{FinishReason, TextKind, Thought};
+use tensorzero_core::utils::gateway::AppStateData;
 use tensorzero_core::{
     cache::CacheEnabledMode,
     inference::types::{
@@ -10487,6 +10487,11 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
     });
     if provider.variant_name.contains("openai") && provider.variant_name.contains("o1") {
         // Can't pin a single token for o1
+        return;
+    }
+
+    if provider.variant_name.contains("openrouter") {
+        // OpenRouter claims gpt4.1-mini needs a minimum of 16 output tokens
         return;
     }
 

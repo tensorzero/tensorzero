@@ -27,18 +27,18 @@ use crate::{
     db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
     error::{Error, ErrorDetails},
     function::FunctionConfig,
-    gateway_util::{AppState, StructuredJson},
     inference::types::{
         ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
         JsonInferenceDatabaseInsert, JsonInferenceOutput,
     },
     serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
     tool::{DynamicToolParams, ToolCallConfigDatabaseInsert},
-    uuid_util::validate_tensorzero_uuid,
+    utils::gateway::{AppState, StructuredJson},
+    utils::uuid::validate_tensorzero_uuid,
 };
 
 #[cfg(debug_assertions)]
-use crate::gateway_util::AppStateData;
+use crate::utils::gateway::AppStateData;
 
 use super::feedback::{
     validate_parse_demonstration, DemonstrationOutput, DynamicDemonstrationInfo,
@@ -304,7 +304,7 @@ struct WithFunctionName {
 ///
 /// The inference is mostly copied as-is, except for the 'output' field.
 /// Based on the 'output' parameter, the output is copied, ignored, or fetched from a demonstration.
-#[instrument(name = "insert_datapoint", skip(app_state))]
+#[instrument(name = "insert_datapoint", skip_all)]
 pub async fn insert_from_existing_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<InsertPathParams>,
@@ -327,7 +327,7 @@ pub async fn insert_from_existing_datapoint_handler(
 ///
 /// The input and output are validated against the function schema
 /// (retrieved from the `function_name` argument in the body).
-#[instrument(name = "update_datapoint", skip(app_state))]
+#[instrument(name = "update_datapoint", skip_all)]
 pub async fn update_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<UpdatePathParams>,
