@@ -32,7 +32,8 @@ use crate::{
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
 use tokio::time::error::Elapsed;
-use tracing::instrument;
+use tracing::{instrument, Span};
+use tracing_futures::Instrument;
 use uuid::Uuid;
 
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -541,9 +542,19 @@ impl EmbeddingProviderInfo {
         } else {
             response_fut.await?
         };
-        ticket_borrow
-            .return_tickets(clients.postgres_connection_info, response.resource_usage())
-            .await?;
+        let postgres_connection_info = clients.postgres_connection_info.clone();
+        let resource_usage = response.resource_usage();
+        tokio::spawn(
+            async move {
+                if let Err(e) = ticket_borrow
+                    .return_tickets(&postgres_connection_info, resource_usage)
+                    .await
+                {
+                    tracing::error!("Failed to return rate limit tickets: {}", e);
+                }
+            }
+            .instrument(Span::current()),
+        );
         Ok(response)
     }
 }
