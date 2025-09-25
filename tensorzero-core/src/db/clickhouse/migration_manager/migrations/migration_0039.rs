@@ -88,7 +88,8 @@ impl Migration for Migration0039<'_> {
                         metric_name LowCardinality(String),
                         id_uint UInt128,
                         target_id_uint UInt128,
-                        value Float32
+                        value Float32,
+                        feedback_tags Map(String, String)
                     )
                     ENGINE = {table_engine_name}
                     ORDER BY (function_name, variant_name, metric_name, id_uint);
@@ -113,6 +114,7 @@ impl Migration for Migration0039<'_> {
                         id_uint UInt128,
                         target_id_uint UInt128,
                         value Bool,
+                        feedback_tags Map(String, String)
                     )
                     ENGINE = {table_engine_name}
                     ORDER BY (function_name, variant_name, metric_name, id_uint);
@@ -170,7 +172,8 @@ impl Migration for Migration0039<'_> {
                         metric_name,
                         target_id,
                         toUInt128(target_id) as target_id_uint,
-                        value
+                        value,
+                        tags
                     FROM FloatMetricFeedback
                     WHERE {view_timestamp_where_clause}
                 ),
@@ -204,7 +207,8 @@ impl Migration for Migration0039<'_> {
                 f.metric_name as metric_name,
                 f.id_uint as id_uint,
                 f.target_id_uint as target_id_uint,
-                f.value as value
+                f.value as value,
+                f.tags as feedback_tags
             FROM float_feedback f
             JOIN targets t ON f.target_id = t.target_id
             "
@@ -226,7 +230,8 @@ impl Migration for Migration0039<'_> {
                         metric_name,
                         target_id,
                         toUInt128(target_id) as target_id_uint,
-                        value
+                        value,
+                        tags
                     FROM BooleanMetricFeedback
                     WHERE {view_timestamp_where_clause}
                 ),
@@ -260,7 +265,8 @@ impl Migration for Migration0039<'_> {
                 f.metric_name as metric_name,
                 f.id_uint as id_uint,
                 f.target_id_uint as target_id_uint,
-                f.value as value
+                f.value as value,
+                f.tags as feedback_tags
             FROM boolean_feedback f
             JOIN targets t ON f.target_id = t.target_id
             "
@@ -281,7 +287,7 @@ impl Migration for Migration0039<'_> {
                 toStartOfMinute(UUIDv7ToDateTime(uint_to_uuid(id_uint))) as minute,
                 avgState(value) as feedback_mean,
                 varSampStableState(value) as feedback_variance,
-                1 as count
+                count() as count
             FROM FloatMetricFeedbackByVariant
             WHERE {statistics_view_timestamp_where_clause}
             GROUP BY function_name, variant_name, metric_name, minute;
@@ -303,7 +309,7 @@ impl Migration for Migration0039<'_> {
                 toStartOfMinute(UUIDv7ToDateTime(uint_to_uuid(id_uint))) as minute,
                 avgState(toFloat32(value)) as feedback_mean,
                 varSampStableState(toFloat32(value)) as feedback_variance,
-                1 as count
+                count() as count
             FROM BooleanMetricFeedbackByVariant
             WHERE {statistics_view_timestamp_where_clause}
             GROUP BY function_name, variant_name, metric_name, minute;
@@ -338,7 +344,8 @@ impl Migration for Migration0039<'_> {
                                 metric_name,
                                 target_id,
                                 toUInt128(target_id) as target_id_uint,
-                                value
+                                value,
+                                tags
                             FROM FloatMetricFeedback
                             WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
                         ),
@@ -373,7 +380,8 @@ impl Migration for Migration0039<'_> {
                         f.metric_name as metric_name,
                         f.id_uint as id_uint,
                         f.target_id_uint as target_id_uint,
-                        f.value as value
+                        f.value as value,
+                        f.tags as feedback_tags
                     FROM float_feedback f
                     JOIN targets t ON f.target_id = t.target_id
                     "
@@ -405,7 +413,8 @@ impl Migration for Migration0039<'_> {
                                 metric_name,
                                 target_id,
                                 toUInt128(target_id) as target_id_uint,
-                                value
+                                value,
+                                tags
                             FROM BooleanMetricFeedback
                             WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
                         ),
@@ -439,7 +448,8 @@ impl Migration for Migration0039<'_> {
                         f.metric_name as metric_name,
                         f.id_uint as id_uint,
                         f.target_id_uint as target_id_uint,
-                        f.value as value
+                        f.value as value,
+                        f.tags as feedback_tags
                     FROM boolean_feedback f
                     JOIN targets t ON f.target_id = t.target_id
                     "
@@ -471,7 +481,7 @@ impl Migration for Migration0039<'_> {
                         toStartOfMinute(UUIDv7ToDateTime(uint_to_uuid(id_uint))) as minute,
                         avgState(value) as feedback_mean,
                         varSampStableState(value) as feedback_variance,
-                        1 as count
+                        count() as count
                     FROM FloatMetricFeedbackByVariant
                     WHERE UUIDv7ToDateTime(uint_to_uuid(id_uint)) < fromUnixTimestamp64Nano({view_timestamp_nanos})
                     GROUP BY function_name, variant_name, metric_name, minute;
@@ -504,7 +514,7 @@ impl Migration for Migration0039<'_> {
                         toStartOfMinute(UUIDv7ToDateTime(uint_to_uuid(id_uint))) as minute,
                         avgState(toFloat32(value)) as feedback_mean,
                         varSampStableState(toFloat32(value)) as feedback_variance,
-                        1 as count
+                        count() as count
                     FROM BooleanMetricFeedbackByVariant
                     WHERE UUIDv7ToDateTime(uint_to_uuid(id_uint)) < fromUnixTimestamp64Nano({view_timestamp_nanos})
                     GROUP BY function_name, variant_name, metric_name, minute;

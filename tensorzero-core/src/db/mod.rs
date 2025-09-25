@@ -162,16 +162,17 @@ pub trait BanditQueries {
     async fn get_feedback_by_variant(
         &self,
         metric_name: &str,
-        function_name: String,
+        function_name: &str,
         variant_names: Option<&Vec<String>>,
     ) -> Result<Vec<FeedbackByVariant>, Error>;
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct FeedbackByVariant {
     pub variant_name: String,
     pub mean: f32,
     pub variance: f32,
+    #[serde(deserialize_with = "deserialize_u64")]
     pub count: u64,
 }
 
