@@ -35,14 +35,6 @@ pub mod evaluators;
 pub mod helpers;
 pub mod stats;
 
-#[derive(clap::ValueEnum, Clone, Debug, Default, PartialEq)]
-#[clap(rename_all = "snake_case")]
-pub enum OutputFormat {
-    Jsonl,
-    #[default]
-    Pretty,
-}
-
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct Args {
@@ -82,6 +74,14 @@ pub struct Clients {
     pub clickhouse_client: ClickHouseConnectionInfo,
 }
 
+#[derive(clap::ValueEnum, Clone, Debug, Default, PartialEq)]
+#[clap(rename_all = "snake_case")]
+pub enum OutputFormat {
+    Jsonl,
+    #[default]
+    Pretty,
+}
+
 #[instrument(skip(writer), fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
 pub async fn run_evaluation(
     args: Args,
@@ -105,22 +105,6 @@ pub async fn run_evaluation(
         .await?,
     );
     debug!("Configuration loaded successfully");
-    let evaluation_config = config
-        .evaluations
-        .get(&args.evaluation_name)
-        .ok_or_else(|| anyhow!("evaluation not found"))?
-        .clone();
-    debug!(evaluation_name = %args.evaluation_name, "Evaluation config found");
-
-    let EvaluationConfig::Static(static_evaluation_config) = &*evaluation_config;
-    let function_config = config
-        .get_function(&static_evaluation_config.function_name)?
-        .into_owned();
-    info!(
-        function_name = %static_evaluation_config.function_name,
-        evaluators = ?static_evaluation_config.evaluators.keys().collect::<Vec<_>>(),
-        "Function and evaluators configured"
-    );
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {
             ClientBuilder::new(ClientBuilderMode::HTTPGateway { url: gateway_url })
@@ -145,30 +129,85 @@ pub async fn run_evaluation(
         .await?,
     });
 
+    run_evaluation_core(
+        clients,
+        config,
+        &args.dataset_name,
+        &args.variant_name,
+        &args.evaluation_name,
+        evaluation_run_id,
+        args.inference_cache,
+        args.format,
+        &mut writer,
+    )
+    .await
+}
+
+/// Core evaluation execution logic extracted from run_evaluation
+/// This function contains the main evaluation loop that:
+/// 1. Resolves evaluation and function configs from the provided config
+/// 2. Queries the dataset
+/// 3. Spawns concurrent tasks to evaluate each datapoint
+/// 4. Collects and processes results
+/// 5. Handles progress reporting and statistics
+/// 6. Waits for batch writers to finish
+#[expect(clippy::too_many_arguments)]
+#[instrument(skip(writer, clients, config), fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %evaluation_name, dataset_name = %dataset_name, variant_name = %variant_name))]
+pub async fn run_evaluation_core<W: Write>(
+    clients: Arc<Clients>,
+    config: Arc<Config>,
+    dataset_name: &str,
+    variant_name: &str,
+    evaluation_name: &str,
+    evaluation_run_id: Uuid,
+    inference_cache: CacheEnabledMode,
+    output_format: OutputFormat,
+    writer: &mut W,
+) -> Result<()> {
+    // Get evaluation configuration
+    let evaluation_config = config
+        .evaluations
+        .get(evaluation_name)
+        .ok_or_else(|| anyhow!("evaluation '{}' not found", evaluation_name))?
+        .clone();
+
+    debug!(evaluation_name = %evaluation_name, "Evaluation config found");
+
+    let EvaluationConfig::Static(static_evaluation_config) = &*evaluation_config;
+    let function_config = config
+        .get_function(&static_evaluation_config.function_name)?
+        .into_owned();
+
+    info!(
+        function_name = %static_evaluation_config.function_name,
+        evaluators = ?static_evaluation_config.evaluators.keys().collect::<Vec<_>>(),
+        "Function and evaluators configured"
+    );
+
     let mut join_set = JoinSet::new();
 
     info!("Querying dataset");
     let dataset = query_dataset(
         &clients.clickhouse_client,
-        &args.dataset_name,
+        dataset_name,
         &static_evaluation_config.function_name,
         &function_config,
     )
     .await?;
     info!(dataset_size = dataset.len(), "Dataset loaded successfully");
-    let dataset_name = Arc::new(args.dataset_name);
-    let variant_name = Arc::new(args.variant_name);
-    let evaluation_name = Arc::new(args.evaluation_name);
+    let dataset_name = Arc::new(dataset_name.to_string());
+    let variant_name = Arc::new(variant_name.to_string());
+    let evaluation_name = Arc::new(evaluation_name.to_string());
     let dataset_len = dataset.len();
     let mut task_id_to_datapoint_id = HashMap::new();
 
     write_run_info(
-        &mut writer,
+        writer,
         &RunInfo {
             evaluation_run_id,
             num_datapoints: dataset_len,
         },
-        &args.format,
+        &output_format,
     )?;
 
     // Spawn concurrent tasks for each datapoint
@@ -196,7 +235,7 @@ pub async fn run_evaluation(
                     evaluation_name: &evaluation_name,
                     function_config: &function_config,
                     input: &input,
-                    inference_cache: args.inference_cache,
+                    inference_cache,
                 })
                 .await?,
             );
@@ -210,7 +249,7 @@ pub async fn run_evaluation(
                     evaluation_name,
                     clients: clients_clone.clone(),
                     evaluation_run_id: evaluation_run_id_clone,
-                    inference_cache: args.inference_cache,
+                    inference_cache,
                 })
                 .await?;
             debug!(datapoint_id = %datapoint.id(), evaluations_count = evaluation_result.len(), "Evaluations completed");
@@ -225,7 +264,7 @@ pub async fn run_evaluation(
     }
 
     // Collect results
-    let mut evaluation_stats = EvaluationStats::new(args.format, dataset_len);
+    let mut evaluation_stats = EvaluationStats::new(output_format, dataset_len);
 
     while let Some(result) = join_set.join_next_with_id().await {
         match result {
@@ -236,7 +275,7 @@ pub async fn run_evaluation(
                         inference_response,
                         evaluation_result,
                     )),
-                    &mut writer,
+                    writer,
                 )?;
             }
             Ok((task_id, Err(e))) => {
@@ -246,7 +285,7 @@ pub async fn run_evaluation(
                         datapoint_id: task_id_to_datapoint_id[&task_id],
                         message: e.to_string(),
                     }),
-                    &mut writer,
+                    writer,
                 )?;
             }
             Err(e) => evaluation_stats.push(
@@ -254,7 +293,7 @@ pub async fn run_evaluation(
                     datapoint_id: task_id_to_datapoint_id[&e.id()],
                     message: e.to_string(),
                 }),
-                &mut writer,
+                writer,
             )?,
         }
     }
