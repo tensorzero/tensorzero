@@ -14,8 +14,6 @@ on:
     types: [opened]
   pull_request_review:
     types: [submitted]
-  pull_request_review_comment:
-    types: [created]
   discussion:
     types: [created]
   discussion_comment:
@@ -115,26 +113,6 @@ jobs:
               ]
             }
 
-      - name: Send Slack notification for pull request review comment
-        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review_comment'
-        uses: slackapi/slack-github-action@v2.1.1
-        with:
-          method: chat.postMessage
-          token: ${{ secrets.SLACK_BOT_TOKEN }}
-          payload: |
-            {
-              "channel": "C09HC3Q2XV2",
-              "text": "💬 New review comment on pull request by ${{ github.actor }}",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "💬 *New review comment on pull request*\n\n*PR:* <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>\n*Comment by:* <https://github.com/${{ github.actor }}|${{ github.actor }}>"
-                  }
-                }
-              ]
-            }
 
       - name: Send Slack notification for pull request review
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review'
