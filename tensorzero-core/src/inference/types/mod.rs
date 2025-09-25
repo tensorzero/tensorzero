@@ -89,6 +89,8 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+use tracing::Span;
+use tracing_futures::Instrument;
 use uuid::Uuid;
 
 use crate::cache::NonStreamingCacheData;
@@ -2281,14 +2283,17 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         finish_reason,
     });
     if let Ok(actual_resource_usage) = model_response.resource_usage() {
-        tokio::spawn(async move {
-            if let Err(e) = ticket_borrow
-                .return_tickets(&postgres_connection_info, actual_resource_usage)
-                .await
-            {
-                tracing::error!("Failed to return rate limit tickets: {}", e);
+        tokio::spawn(
+            async move {
+                if let Err(e) = ticket_borrow
+                    .return_tickets(&postgres_connection_info, actual_resource_usage)
+                    .await
+                {
+                    tracing::error!("Failed to return rate limit tickets: {}", e);
+                }
             }
-        });
+            .instrument(Span::current()),
+        );
     }
     let model_inference_response =
         ModelInferenceResponse::new(model_response, model_provider_name, cached);

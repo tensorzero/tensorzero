@@ -1425,14 +1425,17 @@ impl ModelProvider {
         let provider_inference_response = res?;
         if let Ok(actual_resource_usage) = provider_inference_response.resource_usage() {
             let postgres_connection_info = clients.postgres_connection_info.clone();
-            tokio::spawn(async move {
-                if let Err(e) = ticket_borrow
-                    .return_tickets(&postgres_connection_info, actual_resource_usage)
-                    .await
-                {
-                    tracing::error!("Failed to return rate limit tickets: {}", e);
+            tokio::spawn(
+                async move {
+                    if let Err(e) = ticket_borrow
+                        .return_tickets(&postgres_connection_info, actual_resource_usage)
+                        .await
+                    {
+                        tracing::error!("Failed to return rate limit tickets: {}", e);
+                    }
                 }
-            });
+                .instrument(Span::current()),
+            );
         }
         Ok(provider_inference_response)
     }

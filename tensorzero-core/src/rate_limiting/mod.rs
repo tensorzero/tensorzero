@@ -2,6 +2,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize, Serializer};
+use tracing_futures::Instrument;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::db::{
     ConsumeTicketsReceipt, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest,
@@ -109,19 +111,35 @@ impl RateLimitingConfig {
         scope_info: &'a ScopeInfo<'a>,
         rate_limited_request: &impl RateLimitedRequest,
     ) -> Result<TicketBorrows, Error> {
-        let limits = self.get_active_limits(scope_info);
-        if limits.is_empty() {
-            return Ok(TicketBorrows::empty());
+        // The actual logic of `consume_tickets` is in this nested async block,
+        // so that we can inspect any errors that it produces.
+        let inner = async move {
+            let limits = self.get_active_limits(scope_info);
+            if limits.is_empty() {
+                return Ok(TicketBorrows::empty());
+            }
+            let rate_limit_resource_requests = rate_limited_request.estimated_resource_usage()?;
+            let ticket_requests: Result<Vec<ConsumeTicketsRequest>, Error> = limits
+                .iter()
+                .map(|limit| limit.get_consume_tickets_request(&rate_limit_resource_requests))
+                .collect();
+            let ticket_requests = ticket_requests?;
+            let results = client.consume_tickets(ticket_requests).await?;
+            check_borrowed_rate_limits(&limits, &results)?;
+            TicketBorrows::new(results, limits)
+        };
+        // TODO - decide  how to include the `Vec<ConsumeTicketsRequest>` in the span
+        let span = tracing::info_span!(
+            "consume_tickets",
+            otel.name = "rate_limiting_consume_tickets",
+            success = tracing::field::Empty,
+        );
+        for (key, value) in scope_info.tags {
+            span.set_attribute(format!("scope_info.tags.{key}"), value.clone());
         }
-        let rate_limit_resource_requests = rate_limited_request.estimated_resource_usage()?;
-        let ticket_requests: Result<Vec<ConsumeTicketsRequest>, Error> = limits
-            .iter()
-            .map(|limit| limit.get_consume_tickets_request(&rate_limit_resource_requests))
-            .collect();
-        let ticket_requests = ticket_requests?;
-        let results = client.consume_tickets(ticket_requests).await?;
-        check_borrowed_rate_limits(&limits, &results)?;
-        TicketBorrows::new(results, limits)
+        let res = inner.instrument(span.clone()).await;
+        span.record("success", res.is_ok());
+        res
     }
 
     /// Given a particular scope, finds the RateLimits that are active for that scope.
@@ -168,10 +186,14 @@ fn check_borrowed_rate_limits(
     for (limit, result) in limits.iter().zip(results.iter()) {
         if !result.success {
             // TODO: improve the error information here
-            return Err(Error::new(ErrorDetails::RateLimitExceeded {
-                key: limit.get_key()?,
-                tickets_remaining: result.tickets_remaining,
-            }));
+            // We don't log the error here, since we don't want it to be included in the OpenTelemetry
+            // 'rate_limiting_consume_tickets' span
+            return Err(Error::new_without_logging(
+                ErrorDetails::RateLimitExceeded {
+                    key: limit.get_key()?,
+                    tickets_remaining: result.tickets_remaining,
+                },
+            ));
         }
     }
     Ok(())
@@ -303,7 +325,7 @@ pub enum RateLimitResource {
     // Cent, // or something more granular?
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct RateLimitResourceUsage {
     pub model_inferences: u64,
     pub tokens: u64,
@@ -541,39 +563,54 @@ impl TicketBorrows {
         client: &impl RateLimitQueries,
         actual_usage: RateLimitResourceUsage,
     ) -> Result<(), Error> {
-        let mut requests = Vec::new();
-        let mut returns = Vec::new();
-        for borrow in &self.borrows {
-            let TicketBorrow {
-                receipt,
-                active_limit,
-            } = borrow;
-            let actual_usage_this_request = actual_usage.get_usage(active_limit.limit.resource);
-            match actual_usage_this_request.cmp(&receipt.tickets_consumed) {
-                std::cmp::Ordering::Greater => {
-                    // Actual usage exceeds borrowed, add the difference to requests and log a warning
-                    tracing::warn!("Actual usage exceeds borrowed for {:?}: {} estimated and {actual_usage_this_request} used", active_limit.limit.resource, receipt.tickets_consumed);
-                    let difference = actual_usage_this_request - receipt.tickets_consumed;
-                    requests.push(active_limit.get_consume_tickets_request_for_return(difference)?);
-                }
-                std::cmp::Ordering::Less => {
-                    // Borrowed exceeds actual usage, add the difference to returns
-                    let difference = receipt.tickets_consumed - actual_usage_this_request;
-                    returns.push(active_limit.get_return_tickets_request(difference)?);
-                }
-                std::cmp::Ordering::Equal => (),
-            };
-        }
+        // The actual logic of `return_tickets` is in this nested async block,
+        // so that we can inspect any errors that it produces.
+        let inner = async move {
+            let mut requests = Vec::new();
+            let mut returns = Vec::new();
+            for borrow in &self.borrows {
+                let TicketBorrow {
+                    receipt,
+                    active_limit,
+                } = borrow;
+                let actual_usage_this_request = actual_usage.get_usage(active_limit.limit.resource);
+                match actual_usage_this_request.cmp(&receipt.tickets_consumed) {
+                    std::cmp::Ordering::Greater => {
+                        // Actual usage exceeds borrowed, add the difference to requests and log a warning
+                        tracing::warn!("Actual usage exceeds borrowed for {:?}: {} estimated and {actual_usage_this_request} used", active_limit.limit.resource, receipt.tickets_consumed);
+                        let difference = actual_usage_this_request - receipt.tickets_consumed;
+                        requests
+                            .push(active_limit.get_consume_tickets_request_for_return(difference)?);
+                    }
+                    std::cmp::Ordering::Less => {
+                        // Borrowed exceeds actual usage, add the difference to returns
+                        let difference = receipt.tickets_consumed - actual_usage_this_request;
+                        returns.push(active_limit.get_return_tickets_request(difference)?);
+                    }
+                    std::cmp::Ordering::Equal => (),
+                };
+            }
 
-        let (consume_result, return_result) = tokio::join!(
-            client.consume_tickets(requests),
-            client.return_tickets(returns)
+            let (consume_result, return_result) = tokio::join!(
+                client.consume_tickets(requests),
+                client.return_tickets(returns)
+            );
+
+            consume_result?;
+            return_result?;
+            Ok(())
+        };
+        let span = tracing::info_span!(
+            "return_tickets",
+            otel.name = "rate_limiting_return_tickets",
+            // We cast these to i64 so that they are reported as integers in OpenTelemetry (rather than strings)
+            actual_usage.tokens = actual_usage.tokens as i64,
+            actual_usage.model_inferences = actual_usage.model_inferences as i64,
+            success = tracing::field::Empty
         );
-
-        consume_result?;
-        return_result?;
-
-        Ok(())
+        let res = inner.instrument(span.clone()).await;
+        span.record("success", res.is_ok());
+        res
     }
 }
 
