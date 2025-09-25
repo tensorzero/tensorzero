@@ -137,6 +137,10 @@ impl Error {
     pub fn log(&self) {
         self.0.log();
     }
+
+    pub fn nonretryable(&self) -> bool {
+        self.0.nonretryable()
+    }
 }
 
 // Expect for derive Serialize
@@ -799,6 +803,16 @@ impl ErrorDetails {
             tracing::Level::INFO => tracing::info!("{self}"),
             tracing::Level::DEBUG => tracing::debug!("{self}"),
             tracing::Level::TRACE => tracing::trace!("{self}"),
+        }
+    }
+
+    pub fn nonretryable(&self) -> bool {
+        match &self {
+            ErrorDetails::RateLimitExceeded { .. } => true,
+            ErrorDetails::ModelProvidersExhausted { provider_errors } => provider_errors
+                .iter()
+                .all(|(_, error)| error.nonretryable()),
+            _ => false,
         }
     }
 }
