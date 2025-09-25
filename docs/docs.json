@@ -43,6 +43,7 @@
             "pages": [
               "gateway/index",
               "gateway/call-any-llm",
+              "gateway/generate-embeddings",
               "gateway/tutorial",
               "gateway/guides/batch-inference",
               "gateway/guides/episodes",

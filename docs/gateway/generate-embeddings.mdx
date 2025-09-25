@@ -1,0 +1,219 @@
+---
+title: How to generate embeddings
+sidebarTitle: Generate embeddings
+description: Learn how to generate embeddings from many model providers using the TensorZero Gateway with a unified API.
+---
+
+This page shows how to:
+
+- **Generate embeddings with a unified API.** TensorZero unifies many LLM APIs (e.g. OpenAI) and inference servers (e.g. Ollama).
+- **Use any programming language.** You can use any OpenAI SDK (Python, Node, Go, etc.) or the OpenAI-compatible HTTP API.
+
+<Tip>
+
+We provide [complete code examples](https://github.com/tensorzero/tensorzero/tree/main/examples/guides/embeddings) on GitHub.
+
+</Tip>
+
+## Generate embeddings from OpenAI
+
+<Tip>
+
+Our example uses the OpenAI Python SDK, but you can use any OpenAI SDK or call the OpenAI-compatible HTTP API.
+See [Call any LLM](/gateway/call-any-llm) for an example using the OpenAI Node SDK.
+
+The TensorZero Python SDK doesn't have an independent embedding endpoint at the moment.
+
+</Tip>
+
+<Tabs>
+
+<Tab title="Python (OpenAI SDK)">
+
+The TensorZero Python SDK integrates with the OpenAI Python SDK to provide a unified API for calling any LLM.
+
+<Steps>
+
+<Step title="Set up the credentials for your LLM provider">
+
+For example, if you're using OpenAI, you can set the `OPENAI_API_KEY` environment variable with your API key.
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+<Tip>
+
+See the [Integrations](/integrations/model-providers) page to learn how to set up credentials for other LLM providers.
+
+</Tip>
+
+</Step>
+
+<Step title="Install the OpenAI and TensorZero Python SDKs">
+
+You can install the OpenAI and TensorZero SDKs with a Python package manager like `pip`.
+
+```bash
+pip install openai tensorzero
+```
+
+</Step>
+
+<Step title="Initialize the OpenAI client">
+
+Let's initialize the TensorZero Gateway and patch the OpenAI client to use it.
+For simplicity, we'll use an embedded gateway without observability or custom configuration.
+
+```python
+from openai import OpenAI
+from tensorzero import patch_openai_client
+
+client = OpenAI()
+patch_openai_client(client, async_setup=False)
+```
+
+<Tip>
+
+The TensorZero Python SDK supports both the synchronous `OpenAI` client and the asynchronous `AsyncOpenAI` client.
+Both options support running the gateway embedded in your application with `patch_openai_client` or connecting to a standalone gateway with `base_url`.
+The embedded gateway supports synchronous initialization with `async_setup=False` or asynchronous initialization with `async_setup=True`.
+See [Clients](/gateway/clients/) for more details.
+
+</Tip>
+
+</Step>
+
+<Step title="Call the LLM">
+
+```python
+result = client.embeddings.create(
+    input="Hello, world!",
+    model="tensorzero::embedding_model_name::openai::text-embedding-3-small",
+    # or: Azure, any OpenAI-compatible endpoint (e.g. Ollama, Voyager)
+)
+```
+
+<Accordion title="Sample Response">
+
+```python
+CreateEmbeddingResponse(
+    data=[
+        Embedding(
+            embedding=[
+                -0.019143931567668915,
+                # ...
+            ],
+            index=0,
+            object='embedding'
+        )
+    ],
+    model='tensorzero::embedding_model_name::openai::text-embedding-3-small',
+    object='list',
+    usage=Usage(prompt_tokens=4, total_tokens=4)
+)
+```
+
+</Accordion>
+
+</Step>
+
+</Steps>
+
+</Tab>
+
+</Tabs>
+
+## Define a custom embedding model
+
+You can define a custom embedding model in your TensorZero configuration file.
+
+For example, let's define a custom embedding model for `nomic-embed-text` served locally by Ollama.
+
+<Steps>
+
+<Step title="Deploy the Ollama embedding model">
+
+Download the embedding model and launch the Ollama server:
+
+```bash
+ollama pull nomic-embed-text
+ollama serve
+```
+
+We assume that Ollama is available on `http://localhost:11434`.
+
+</Step>
+
+<Step title="Define your custom embedding model">
+
+Add your custom model and model provider to your configuration file:
+
+```toml title="tensorzero.toml"
+[embedding_models.nomic-embed-text]
+routing = ["ollama"]
+
+[embedding_models.nomic-embed-text.providers.ollama]
+type = "openai"
+api_base = "http://localhost:11434/v1"
+model_name = "nomic-embed-text"
+api_key_location = "none"
+```
+
+<Tip>
+
+See the [Configuration Reference](/gateway/configuration-reference#%5Bembedding-models-model-name%5D) for details on configuring your embedding models.
+
+</Tip>
+
+</Step>
+
+<Step title="Call your custom embedding model">
+
+Use your custom model by referencing it with `tensorzero::embedding_model_name::nomic-embed-text`.
+
+For example, using the OpenAI Python SDK:
+
+```python
+from openai import OpenAI
+from tensorzero import patch_openai_client
+
+client = OpenAI()
+
+patch_openai_client(
+    client,
+    config_file="config/tensorzero.toml",
+    async_setup=False,
+)
+
+result = client.embeddings.create(
+    input="Hello, world!",
+    model="tensorzero::embedding_model_name::nomic-embed-text",
+)
+```
+
+<Accordion title="Sample Response">
+
+```python
+CreateEmbeddingResponse(
+    data=[
+        Embedding(
+            embedding=[
+                -0.019143931567668915,
+                # ...
+            ],
+            index=0,
+            object='embedding'
+        )
+    ],
+    model='tensorzero::embedding_model_name::nomic-embed-text',
+    object='list',
+    usage=Usage(prompt_tokens=4, total_tokens=4)
+)
+```
+
+</Accordion>
+
+</Step>
+
+</Steps>
