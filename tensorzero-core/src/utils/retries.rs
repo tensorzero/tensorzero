@@ -1,0 +1,38 @@
+use backon::ExponentialBuilder;
+use serde::{Deserialize, Serialize};
+use std::time::Duration;
+
+#[derive(Debug, Deserialize, Copy, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct RetryConfig {
+    #[serde(default = "default_num_retries")]
+    pub num_retries: usize,
+    #[serde(default = "default_max_delay_s")]
+    pub max_delay_s: f32,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        RetryConfig {
+            num_retries: default_num_retries(),
+            max_delay_s: default_max_delay_s(),
+        }
+    }
+}
+
+fn default_num_retries() -> usize {
+    0
+}
+
+fn default_max_delay_s() -> f32 {
+    10.0
+}
+
+impl RetryConfig {
+    pub fn get_backoff(&self) -> backon::ExponentialBuilder {
+        ExponentialBuilder::default()
+            .with_jitter()
+            .with_max_delay(Duration::from_secs_f32(self.max_delay_s))
+            .with_max_times(self.num_retries)
+    }
+}
