@@ -5,6 +5,16 @@ use std::{future::Future, time::Duration};
 
 use crate::error::Error;
 
+/*
+ * This file implements TensorZero's custom retry logic.
+ * We allow retries to be configured via the RetryConfig struct in the TOML.
+ * We also handle the fact that certain errors are non-retryable.
+ *
+ * The implementation is based on the backon crate.
+ * We ban use of the backon crate anywhere but in this file so callers must use
+ * this code.
+ */
+
 #[derive(Debug, Deserialize, Copy, Clone, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct RetryConfig {
