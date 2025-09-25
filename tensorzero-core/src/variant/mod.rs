@@ -1,4 +1,3 @@
-use backon::Retryable;
 use futures::StreamExt;
 use itertools::izip;
 #[cfg(feature = "pyo3")]
@@ -695,13 +694,14 @@ struct InferModelRequestArgs<'a, 'request> {
 async fn infer_model_request(
     args: InferModelRequestArgs<'_, '_>,
 ) -> Result<InferenceResult, Error> {
-    let model_inference_response = (|| async {
-        args.model_config
-            .infer(&args.request, args.clients, &args.model_name)
-            .await
-    })
-    .retry(args.retry_config.get_backoff())
-    .await?;
+    let model_inference_response = args
+        .retry_config
+        .retry(|| async {
+            args.model_config
+                .infer(&args.request, args.clients, &args.model_name)
+                .await
+        })
+        .await?;
 
     let original_response = model_inference_response.raw_response.clone();
     let model_inference_result =
@@ -741,13 +741,13 @@ async fn infer_model_request_stream<'request>(
             },
         messages: input_messages,
         ticket_borrow,
-    } = (|| async {
-        model_config
-            .infer_stream(&request, clients, &model_name)
-            .await
-    })
-    .retry(retry_config.get_backoff())
-    .await?;
+    } = retry_config
+        .retry(|| async {
+            model_config
+                .infer_stream(&request, clients, &model_name)
+                .await
+        })
+        .await?;
     let system = request.system.clone();
     let model_used_info = ModelUsedInfo {
         model_name,

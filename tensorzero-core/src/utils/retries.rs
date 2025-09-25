@@ -1,6 +1,8 @@
-use backon::ExponentialBuilder;
+use backon::{ExponentialBuilder, Retryable};
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use std::{future::Future, time::Duration};
+
+use crate::error::Error;
 
 #[derive(Debug, Deserialize, Copy, Clone, Serialize, ts_rs::TS)]
 #[ts(export)]
@@ -29,7 +31,15 @@ fn default_max_delay_s() -> f32 {
 }
 
 impl RetryConfig {
-    pub fn get_backoff(&self) -> backon::ExponentialBuilder {
+    pub fn retry<R, F: Future<Output = Result<R, Error>>>(
+        &self,
+        func: impl FnMut() -> F,
+    ) -> impl Future<Output = Result<R, Error>> {
+        let backoff = self.get_backoff();
+        func.retry(backoff).when(|e| !e.nonretryable())
+    }
+
+    fn get_backoff(&self) -> backon::ExponentialBuilder {
         ExponentialBuilder::default()
             .with_jitter()
             .with_max_delay(Duration::from_secs_f32(self.max_delay_s))
