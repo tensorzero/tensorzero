@@ -137,7 +137,7 @@ jobs:
             }
 
       - name: Send Slack notification for pull request review
-        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review'
+        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review' && github.event.review.state != 'commented'
         uses: slackapi/slack-github-action@v2.1.1
         with:
           method: chat.postMessage
