@@ -62,25 +62,26 @@ impl Migration for Migration0004<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
         // Add a column `system` to the `ModelInference` table
-        let query = r"
-            ALTER TABLE ModelInference
+        let query = format!(r"
+            ALTER TABLE ModelInference{on_cluster_name}
             ADD COLUMN IF NOT EXISTS system Nullable(String),
             ADD COLUMN IF NOT EXISTS input_messages String,
             ADD COLUMN IF NOT EXISTS output String
-        ";
+        ");
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the columns */\
-            ALTER TABLE ModelInference DROP COLUMN system, DROP COLUMN input_messages, DROP COLUMN output;"
-        .to_string()
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!("/* Drop the columns */\
+            ALTER TABLE ModelInference{on_cluster_name} DROP COLUMN system, DROP COLUMN input_messages, DROP COLUMN output;")
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)

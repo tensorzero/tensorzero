@@ -49,27 +49,27 @@ impl Migration for Migration0017<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
         // Add the `input_tokens` and `output_tokens` columns to the `ModelInferenceCache` table
-        let query = r"
-            ALTER TABLE ModelInferenceCache
+        let query = format!(r"
+            ALTER TABLE ModelInferenceCache{on_cluster_name}
             ADD COLUMN IF NOT EXISTS input_tokens UInt32,
             ADD COLUMN IF NOT EXISTS output_tokens UInt32
-        ";
+        ");
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the columns */\
-            ALTER TABLE ModelInferenceCache \
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!("/* Drop the columns */\
+            ALTER TABLE ModelInferenceCache{on_cluster_name} \
             DROP COLUMN IF EXISTS input_tokens,\
-            DROP COLUMN IF EXISTS output_tokens;\
-            "
-        .to_string()
+            DROP COLUMN IF EXISTS output_tokens;")
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)

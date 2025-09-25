@@ -52,15 +52,16 @@ impl Migration for Migration0018<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
         self.clickhouse
             .run_query_synchronous_no_params(
-                "ALTER TABLE ModelInference ADD COLUMN IF NOT EXISTS finish_reason Nullable(Enum8('stop', 'length', 'tool_call', 'content_filter', 'unknown'))".to_string(),
+                format!("ALTER TABLE ModelInference{on_cluster_name} ADD COLUMN IF NOT EXISTS finish_reason Nullable(Enum8('stop', 'length', 'tool_call', 'content_filter', 'unknown'))"),
             )
             .await?;
 
         self.clickhouse
             .run_query_synchronous_no_params(
-                "ALTER TABLE ModelInferenceCache ADD COLUMN IF NOT EXISTS finish_reason Nullable(Enum8('stop', 'length', 'tool_call', 'content_filter', 'unknown'))".to_string(),
+                format!("ALTER TABLE ModelInferenceCache{on_cluster_name} ADD COLUMN IF NOT EXISTS finish_reason Nullable(Enum8('stop', 'length', 'tool_call', 'content_filter', 'unknown'))"),
             )
             .await?;
 
@@ -68,7 +69,8 @@ impl Migration for Migration0018<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "ALTER TABLE ModelInference DROP COLUMN finish_reason".to_string()
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!("ALTER TABLE ModelInference{on_cluster_name} DROP COLUMN finish_reason")
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

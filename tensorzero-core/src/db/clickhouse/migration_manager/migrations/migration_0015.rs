@@ -36,35 +36,35 @@ impl Migration for Migration0015<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
         // Alter the `input_tokens` column of `ModelInference` to be a nullable column
-        let query = r"
-            ALTER TABLE ModelInference
+        let query = format!(r"
+            ALTER TABLE ModelInference{on_cluster_name}
             MODIFY COLUMN input_tokens Nullable(UInt32)
-        ";
+        ");
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Alter the `output_tokens` column of `ModelInference` to be a nullable column
-        let query = r"
-            ALTER TABLE ModelInference
+        let query = format!(r"
+            ALTER TABLE ModelInference{on_cluster_name}
             MODIFY COLUMN output_tokens Nullable(UInt32)
-        ";
+        ");
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Change the columns back to non-nullable types */\
-            ALTER TABLE ModelInference MODIFY COLUMN input_tokens UInt32;
-            ALTER TABLE ModelInference MODIFY COLUMN output_tokens UInt32;
-            "
-        .to_string()
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!("/* Change the columns back to non-nullable types */\
+            ALTER TABLE ModelInference{on_cluster_name} MODIFY COLUMN input_tokens UInt32;
+            ALTER TABLE ModelInference{on_cluster_name} MODIFY COLUMN output_tokens UInt32;")
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)

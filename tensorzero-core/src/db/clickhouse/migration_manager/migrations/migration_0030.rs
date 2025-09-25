@@ -46,17 +46,18 @@ impl Migration for Migration0030<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
         self.clickhouse
             .run_query_synchronous_no_params(
-                r"ALTER TABLE ModelInference
-                MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5, 'stop_sequence' = 6));".to_string(),
+                format!(r"ALTER TABLE ModelInference{on_cluster_name}
+                MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5, 'stop_sequence' = 6));"),
             )
             .await?;
 
         self.clickhouse
             .run_query_synchronous_no_params(
-                r"ALTER TABLE ModelInferenceCache
-                MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5, 'stop_sequence' = 6));".to_string(),
+                format!(r"ALTER TABLE ModelInferenceCache{on_cluster_name}
+                MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5, 'stop_sequence' = 6));"),
             )
             .await?;
 
@@ -64,8 +65,9 @@ impl Migration for Migration0030<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r"ALTER TABLE ModelInference MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5));
-           ALTER TABLE ModelInferenceCache MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5));".to_string()
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(r"ALTER TABLE ModelInference{on_cluster_name} MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5));
+           ALTER TABLE ModelInferenceCache{on_cluster_name} MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5));")
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

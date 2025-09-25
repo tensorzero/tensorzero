@@ -68,12 +68,12 @@ impl Migration for Migration0011<'_> {
             .await?;
 
         // Add the `cached` column to ModelInference
-        let query = r"
-            ALTER TABLE ModelInference ADD COLUMN IF NOT EXISTS cached Bool DEFAULT false;
-        ";
+        let query = format!(r"
+            ALTER TABLE ModelInference{on_cluster_name} ADD COLUMN IF NOT EXISTS cached Bool DEFAULT false;
+        ");
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         Ok(())
@@ -85,8 +85,7 @@ impl Migration for Migration0011<'_> {
             "/* Drop the table */\
                 DROP TABLE IF EXISTS ModelInferenceCache{on_cluster_name} SYNC;
             /* Drop the `cached` column from ModelInference */\
-            ALTER TABLE ModelInference DROP COLUMN cached;
-            "
+            ALTER TABLE ModelInference{on_cluster_name} DROP COLUMN cached;"
         )
     }
 

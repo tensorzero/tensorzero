@@ -43,10 +43,10 @@ impl Migration for Migration0024<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
         self.clickhouse
             .run_query_synchronous_no_params(
-                "ALTER TABLE JsonInference ADD COLUMN IF NOT EXISTS auxiliary_content String"
-                    .to_string(),
+                format!("ALTER TABLE JsonInference{on_cluster_name} ADD COLUMN IF NOT EXISTS auxiliary_content String"),
             )
             .await?;
 
@@ -54,7 +54,8 @@ impl Migration for Migration0024<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "ALTER TABLE JsonInference DROP COLUMN auxiliary_content".to_string()
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!("ALTER TABLE JsonInference{on_cluster_name} DROP COLUMN auxiliary_content")
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {
