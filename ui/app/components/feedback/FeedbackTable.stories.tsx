@@ -22,6 +22,7 @@ const config: Config = {
         flush_interval_ms: 100n,
         max_rows: 1000,
       },
+      disable_automatic_migrations: false,
     },
     export: {
       otlp: {
@@ -68,6 +69,13 @@ const config: Config = {
   },
   tools: {},
   evaluations: {},
+  postgres: {
+    connection_pool_size: 10,
+  },
+  rate_limiting: {
+    rules: [],
+    enabled: true,
+  },
 };
 
 const meta = {

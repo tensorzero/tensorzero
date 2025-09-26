@@ -2,8 +2,8 @@ use serde_json::json;
 use std::collections::HashMap;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::inference::types::{
-    ContentBlock, ContentBlockChatOutput, ModelInput, RequestMessage, Role, StoredInput,
-    StoredInputMessage, StoredInputMessageContent, Text,
+    ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
+    StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
 };
 use tensorzero_core::optimization::dicl::{
     dicl_examples_exist, insert_dicl_examples_with_batching,
@@ -19,9 +19,9 @@ fn create_test_rendered_sample(input: &str, output: &str) -> RenderedSample {
         function_name: "test_function".to_string(),
         input: ModelInput {
             system: None,
-            messages: vec![RequestMessage {
+            messages: vec![ResolvedRequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::Text(Text {
+                content: vec![ResolvedContentBlock::Text(Text {
                     text: input.to_string(),
                 })],
             }],

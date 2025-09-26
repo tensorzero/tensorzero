@@ -139,7 +139,7 @@ impl InferenceProvider for XAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = serde_json::to_value(XAIRequest::new(&self.model_name, request)?)
+        let request_body = serde_json::to_value(XAIRequest::new(&self.model_name, request).await?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
@@ -237,7 +237,7 @@ impl InferenceProvider for XAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(XAIRequest::new(&self.model_name, request)?)
+        let request_body = serde_json::to_value(XAIRequest::new(&self.model_name, request).await?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
@@ -336,7 +336,7 @@ struct XAIRequest<'a> {
 }
 
 impl<'a> XAIRequest<'a> {
-    pub fn new(
+    pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<XAIRequest<'a>, Error> {
@@ -366,7 +366,8 @@ impl<'a> XAIRequest<'a> {
             &request.messages,
             Some(&request.json_mode),
             PROVIDER_TYPE,
-        )?;
+        )
+        .await?;
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);
         Ok(XAIRequest {
@@ -511,8 +512,8 @@ mod tests {
     };
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
-    #[test]
-    fn test_xai_request_new() {
+    #[tokio::test]
+    async fn test_xai_request_new() {
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -536,6 +537,7 @@ mod tests {
         };
 
         let xai_request = XAIRequest::new("grok-beta", &request_with_tools)
+            .await
             .expect("failed to create xAI Request during test");
 
         assert_eq!(xai_request.messages.len(), 1);
@@ -582,6 +584,7 @@ mod tests {
         };
 
         let xai_request = XAIRequest::new("grok-beta", &request_with_tools)
+            .await
             .expect("failed to create xAI Request");
 
         assert_eq!(xai_request.messages.len(), 2);
@@ -641,8 +644,8 @@ mod tests {
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }
-    #[test]
-    fn test_xai_response_with_metadata_try_into() {
+    #[tokio::test]
+    async fn test_xai_response_with_metadata_try_into() {
         let valid_response = OpenAIResponse {
             choices: vec![OpenAIResponseChoice {
                 index: 0,
@@ -687,7 +690,9 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &XAIRequest::new("grok-beta", &generic_request).unwrap(),
+                &XAIRequest::new("grok-beta", &generic_request)
+                    .await
+                    .unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,

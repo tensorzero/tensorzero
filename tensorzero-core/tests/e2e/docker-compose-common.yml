@@ -63,6 +63,7 @@ services:
       - 4317:4317 # OTLP gRPC receiver
       - 4318:4318 # OTLP http receiver
       - 55679:55679 # ZPages
+
   postgres:
     image: postgres:17-alpine
     environment:

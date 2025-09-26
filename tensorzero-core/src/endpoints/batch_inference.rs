@@ -2,7 +2,7 @@ use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
-use futures::future::join_all;
+use futures::future::{join_all, try_join_all};
 use itertools::{izip, Itertools};
 use metrics::counter;
 use serde::{Deserialize, Serialize};
@@ -23,7 +23,6 @@ use crate::config::Config;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
 use crate::function::{sample_variant, FunctionConfig};
-use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{
     BatchEpisodeIds, BatchEpisodeIdsWithSize, BatchInferenceDatabaseInsertMetadata,
@@ -46,6 +45,7 @@ use crate::tool::{
     BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams, ToolCallConfig,
     ToolCallConfigDatabaseInsert,
 };
+use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::{BatchInferenceConfig, InferenceConfig, Variant, VariantInfo};
 
 /// The expected payload to the `/start_batch_inference` endpoint.
@@ -120,6 +120,7 @@ pub async fn start_batch_inference(
         config,
         http_client,
         clickhouse_connection_info,
+        postgres_connection_info,
         ..
     }: AppStateData,
     params: StartBatchInferenceParams,
@@ -214,8 +215,11 @@ pub async fn start_batch_inference(
     let inference_clients = InferenceClients {
         http_client: &http_client,
         clickhouse_connection_info: &clickhouse_connection_info,
+        postgres_connection_info: &postgres_connection_info,
         credentials: &params.credentials,
         cache_options: &cache_options,
+        rate_limiting_config: &config.rate_limiting,
+        tags: &HashMap::default(), // NOTE: we currently do not rate limit batch inference
         otlp_config: &config.gateway.export.otlp,
     };
 
@@ -629,11 +633,12 @@ async fn write_start_batch_inference<'a>(
             variant_name: metadata.variant_name.into(),
             episode_id: metadata.episode_ids[i],
             input: resolved_input.into_stored_input(),
-            input_messages: row
-                .input_messages
-                .into_iter()
-                .map(RequestMessage::into_stored_message)
-                .collect(),
+            input_messages: try_join_all(
+                row.input_messages
+                    .into_iter()
+                    .map(RequestMessage::into_stored_message),
+            )
+            .await?,
             system: row.system.map(Cow::Borrowed),
             tool_params,
             inference_params: Cow::Borrowed(row.inference_params),
@@ -929,7 +934,8 @@ pub async fn write_completed_batch_inference<'a>(
             extra_body: Default::default(),
             extra_headers: Default::default(),
         };
-        model_inference_rows_to_write.extend(inference_result.get_serialized_model_inferences());
+        model_inference_rows_to_write
+            .extend(inference_result.get_serialized_model_inferences().await);
         match inference_result {
             InferenceResult::Chat(chat_result) => {
                 let chat_inference = ChatInferenceDatabaseInsert::new(chat_result, input, metadata);

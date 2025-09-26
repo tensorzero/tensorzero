@@ -1,0 +1,265 @@
+---
+title: How to create a prompt template
+sidebarTitle: Create a prompt template
+description: Learn how to use prompt templates and schemas to manage complexity in your prompts.
+---
+
+## Why create a prompt template?
+
+Prompt templates and schemas simplify engineering iteration, experimentation, and optimization, especially as application complexity and team size grow.
+Notably, they enable you to:
+
+1. **Decouple prompts from application code.**
+   As you iterate on your prompts over time (or [A/B test different prompts](/gateway/tutorial/#experimentation)), you'll be able to manage them in a centralized way without making changes to the application code.
+2. **Collect a structured inference dataset.**
+   Imagine down the road you want to [fine-tune a model](/recipes/) using your historical data.
+   If you had only stored prompts as strings, you'd be stuck with the outdated prompts that were actually used at inference time.
+   However, if you had access to the input variables in a structured dataset, you'd easily be able to counterfactually swap new prompts into your training data before fine-tuning.
+   This is particularly important when experimenting with new models, because prompts don't always translate well between them.
+3. **Implement model-specific prompts.**
+   We often find that the best prompt for one model is different from the best prompt for another.
+   As you try out different models, you'll need to be able to independently vary the prompt and the model and try different combinations thereof.
+   This is commonly challenging to implement in application code, but trivial in TensorZero.
+
+<Tip>
+
+You can also find a complete runnable example for this guide on [GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/gateway/create-a-prompt-template).
+
+</Tip>
+
+## Set up a prompt template
+
+<Steps>
+
+<Step title="Create your template">
+
+Create a file with your MiniJinja template:
+
+```minijinja title="config/functions/fun_fact/gpt_5_mini/fun_fact_topic_template.minijinja"
+Share a fun fact about: {{ topic }}
+```
+
+<Note>
+
+TensorZero uses the [MiniJinja templating language](https://docs.rs/minijinja/latest/minijinja/syntax/index.html).
+MiniJinja is [mostly compatible with Jinja2](https://github.com/mitsuhiko/minijinja/blob/main/COMPATIBILITY.md), which is used by many popular projects like Flask and Django.
+
+</Note>
+
+<Tip>
+
+MiniJinja provides a [browser playground](https://mitsuhiko.github.io/minijinja-playground/) where you can test your templates.
+
+</Tip>
+
+</Step>
+
+<Step title="Configure a template">
+
+Next, you must declare the template in the variant configuration.
+You can do this by adding the field `templates.your_template_name.path` to your variant with a path to your template file.
+
+For example, let's configure a template called `fun_fact_topic` for our variant:
+
+```toml title="config/tensorzero.toml"
+[functions.fun_fact]
+type = "chat"
+
+[functions.fun_fact.variants.gpt_5_mini]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+templates.fun_fact_topic.path = "functions/fun_fact/gpt_5_mini/fun_fact_topic_template.minijinja" # relative to this file
+```
+
+<Tip>
+
+You can configure multiple templates for a variant.
+
+</Tip>
+
+</Step>
+
+<Step title="Use your template during inference">
+
+<Tabs>
+
+<Tab title="Python">
+
+Use your template during inference by sending a content block with the template name and arguments.
+
+```python
+result = t0.inference(
+    function_name="fun_fact",
+    input={
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "template",
+                        "name": "fun_fact_topic",
+                        "arguments": {"topic": "artificial intelligence"},
+                    }
+                ],
+            }
+        ],
+    },
+)
+```
+
+</Tab>
+
+<Tab title="Python (OpenAI SDK)">
+
+Use your template during inference by sending a `tensorzero::template` content block with the template name and arguments.
+
+```python
+result = client.chat.completions.create(
+    model="tensorzero::function_name::fun_fact",
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tensorzero::template",  # type: ignore
+                    "name": "fun_fact_topic",
+                    "arguments": {"topic": "artificial intelligence"},
+                }
+            ],
+        },
+    ],
+)
+```
+
+</Tab>
+
+<Tab title="HTTP">
+
+Use your template during inference by sending a `template` content block with the template name and arguments.
+
+```bash
+curl -X POST http://localhost:3000/inference \
+  -H "Content-Type: application/json" \
+  -d '{
+    "function_name": "fun_fact",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "template",
+              "name": "fun_fact_topic",
+              "arguments": {
+                "topic": "artificial intelligence"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }'
+```
+
+</Tab>
+
+</Tabs>
+
+</Step>
+
+</Steps>
+
+## Set up a template schema
+
+When you have multiple variants for a function, it becomes challenging to ensure all templates use consistent variable names and types.
+Schemas solve this by defining a contract that validates template variables and catches configuration errors before they reach production.
+Defining a schema is optional but recommended.
+
+<Steps>
+
+<Step title="Create a schema">
+
+Create a [JSON Schema](https://json-schema.org/) for the variables used by your templates.
+
+Let's define a schema for our previous example, which includes only a single variable `topic`:
+
+```json title="config/functions/fun_fact/fun_fact_topic_schema.json"
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "topic": {
+      "type": "string"
+    }
+  },
+  "required": ["topic"],
+  "additionalProperties": false
+}
+```
+
+<Tip>
+
+LLMs are great at generating JSON Schemas.
+For example, the schema above was generated with the following request:
+
+```txt
+Generate a JSON schema with a single field: `topic`.
+The `topic` field is required. No additional fields are allowed.
+```
+
+You can also export JSON Schemas from [Pydantic models](https://docs.pydantic.dev/latest/concepts/json_schema/) and [Zod schemas](https://www.npmjs.com/package/zod-to-json-schema).
+
+</Tip>
+
+</Step>
+
+<Step title="Configure a schema">
+
+Then, declare your schema in your function definition using `schemas.your_schema_name.path`.
+This will ensure that every variant for the function has a template named `your_schema_name`.
+
+In our example above, this would mean updating the function definition to:
+
+```toml
+[functions.fun_fact]
+type = "chat"
+schemas.fun_fact_topic.path = "functions/fun_fact/fun_fact_topic_schema.json" # relative to this file // [!code ++]
+
+[functions.fun_fact.variants.gpt_5_mini]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+templates.fun_fact_topic.path = "functions/fun_fact/gpt_5_mini/fun_fact_topic_template.minijinja" # relative to this file
+```
+
+</Step>
+
+</Steps>
+
+## Re-use prompt snippets
+
+You can enable template file system access to reuse shared snippets in your prompts.
+
+To use the MiniJinja directives `{% include %}` and `{% import %}`, you need to enable template file system access with `gateway.template_filesystem_access`.
+See [Organize your configuration](/operations/organize-your-configuration#enable-template-file-system-access-to-reuse-shared-snippets) for details.
+
+## Migrate from legacy prompt templates
+
+In earlier versions of TensorZero, prompt templates were defined as `system_template`, `user_template`, and `assistant_template`.
+Similarly, template schemas were defined as `system_schema`, `user_schema`, and `assistant_schema`.
+This legacy approach limited the flexibility of prompt templates restricting the ability to define multiple templates per role.
+
+As you create new functions and templates, you should use the new `templates.your_template_name.path` format.
+
+Historical observability data stored in your ClickHouse database still uses the legacy format.
+If you want to keep this data forward-compatible (e.g. for fine-tuning), you can update your configuration as follows:
+
+| Legacy Configuration | Updated Configuration      |
+| -------------------- | -------------------------- |
+| `system_template`    | `templates.system.path`    |
+| `system_schema`      | `schemas.system.path`      |
+| `user_template`      | `templates.user.path`      |
+| `user_schema`        | `schemas.user.path`        |
+| `assistant_template` | `templates.assistant.path` |
+| `assistant_schema`   | `schemas.assistant.path`   |
+
+As we deprecate the legacy format, TensorZero will automatically look for templates and schemas in the new format for your historical data.
