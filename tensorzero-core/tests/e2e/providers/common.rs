@@ -5214,10 +5214,12 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
 ) {
     // Azure, Together, and SGLang don't support `tool_choice: "required"`
     // Groq says they support it, but it doesn't return the required tool as expected
+    // Fireworks returns trash.
     if provider.model_provider_name == "azure"
         || provider.model_provider_name == "together"
         || provider.model_provider_name == "sglang"
         || provider.model_provider_name == "groq"
+        || provider.model_provider_name == "fireworks"
     {
         return;
     }
