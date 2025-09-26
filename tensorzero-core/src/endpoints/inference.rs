@@ -1199,6 +1199,12 @@ impl ChatCompletionInferenceParams {
     }
 }
 
+/// Prepares the candidate variants map using inference parameters prior to sampling
+/// This function handles 2 major cases:
+/// 1. If a variant is pinned, only that variant should be attempted
+/// 2. If a dynamic variant is configured, only that variant should be attempted
+///
+/// It also errors if both are configured or there is a failure to initialize the dynamic variant
 fn prepare_candidate_variants(
     candidate_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     tags: &mut HashMap<String, String>,
@@ -1255,11 +1261,13 @@ fn prepare_candidate_variants(
             );
         }
         (None, None) => {
+
+            // TODO: move to sampler
             // Remove all zero-weight variants - these can only be used if explicitly pinned above
-            candidate_variants.retain(|_, variant| {
-                // Retain 'None' and positive-weight variants, discarding zero-weight variants
-                variant.inner.weight().is_none_or(|w| w > 0.0)
-            });
+            // candidate_variants.retain(|_, variant| {
+            //     // Retain 'None' and positive-weight variants, discarding zero-weight variants
+            //     variant.inner.weight().is_none_or(|w| w > 0.0)
+            // });
         }
         _ => {
             return Err(ErrorDetails::InvalidRequest {
