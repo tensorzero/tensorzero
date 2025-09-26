@@ -13,6 +13,7 @@ use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use crate::{
     error::{Error, ErrorDetails},
     jsonschema_util::{DynamicJSONSchema, StaticJSONSchema},
+    rate_limiting::{get_estimated_tokens, RateLimitedInputContent},
 };
 
 /* A Tool is a function that can be called by an LLM
@@ -296,8 +297,7 @@ pub struct DynamicToolParams {
     pub parallel_tool_calls: Option<bool>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, derive(Default))]
+#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct BatchDynamicToolParams {
     pub allowed_tools: Option<Vec<Option<Vec<String>>>>,
     pub additional_tools: Option<Vec<Option<Vec<Tool>>>>,
@@ -323,6 +323,18 @@ impl std::fmt::Display for ToolCall {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+impl RateLimitedInputContent for ToolCall {
+    fn estimated_input_token_usage(&self) -> u64 {
+        let ToolCall {
+            name,
+            arguments,
+            #[expect(unused_variables)]
+            id,
+        } = self;
+        get_estimated_tokens(name) + get_estimated_tokens(arguments)
     }
 }
 
@@ -482,6 +494,18 @@ impl std::fmt::Display for ToolResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+impl RateLimitedInputContent for ToolResult {
+    fn estimated_input_token_usage(&self) -> u64 {
+        let ToolResult {
+            name,
+            result,
+            #[expect(unused_variables)]
+            id,
+        } = self;
+        get_estimated_tokens(name) + get_estimated_tokens(result)
     }
 }
 

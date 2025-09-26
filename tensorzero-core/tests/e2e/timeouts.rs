@@ -20,7 +20,7 @@ use tokio_stream::StreamExt;
 use tracing_test::traced_test;
 use uuid::Uuid;
 
-use crate::{common::get_gateway_endpoint, providers::common::make_embedded_gateway_with_config};
+use crate::common::get_gateway_endpoint;
 
 // Variant timeout tests
 
@@ -627,7 +627,7 @@ model_name = "slow"
 timeouts = { non_streaming = { total_ms = 500 }, streaming = { ttft_ms = 500 } }
     "#;
 
-    let client = make_embedded_gateway_with_config(config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_config(config).await;
     let response = client
         .inference(ClientInferenceParams {
             function_name: Some("double_timeout".to_string()),

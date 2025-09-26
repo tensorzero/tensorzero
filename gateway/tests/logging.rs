@@ -10,7 +10,7 @@ use std::time::Duration;
 async fn test_logging_no_rust_log_default_debug() {
     let mut child_data = start_gateway_on_random_port("", None).await;
     let health_response = child_data.call_health_endpoint().await;
-    assert_eq!(health_response, r#"{"gateway":"ok","clickhouse":"ok"}"#);
+    assert!(health_response.status().is_success());
     let _err: tokio::time::error::Elapsed =
         tokio::time::timeout(Duration::from_secs(1), child_data.stdout.next_line())
             .await
@@ -22,7 +22,7 @@ async fn test_logging_no_rust_log_default_debug() {
 async fn test_logging_no_rust_log_debug_on() {
     let mut child_data = start_gateway_on_random_port(r"debug = true", None).await;
     let health_response = child_data.call_health_endpoint().await;
-    assert_eq!(health_response, r#"{"gateway":"ok","clickhouse":"ok"}"#);
+    assert!(health_response.status().is_success());
 
     let gateway_log_line =
         tokio::time::timeout(Duration::from_secs(1), child_data.stdout.next_line())
@@ -46,7 +46,7 @@ async fn test_logging_no_rust_log_debug_on() {
 async fn test_logging_rust_log_debug_on() {
     let mut child_data = start_gateway_on_random_port(r"debug = true", Some("gateway=debug")).await;
     let health_response = child_data.call_health_endpoint().await;
-    assert_eq!(health_response, r#"{"gateway":"ok","clickhouse":"ok"}"#);
+    assert!(health_response.status().is_success());
 
     let _err: tokio::time::error::Elapsed =
         tokio::time::timeout(Duration::from_secs(1), child_data.stdout.next_line())

@@ -5,6 +5,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use axum::http;
+use futures::future::try_join_all;
 use futures::StreamExt;
 use google_cloud_auth::credentials::{CacheableResource, Credentials};
 use http::{HeaderMap, HeaderValue};
@@ -13,7 +14,7 @@ use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use object_store::gcp::{GcpCredential, GoogleCloudStorageBuilder};
 use object_store::{ObjectStore, StaticCredentialProvider};
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource};
+use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
@@ -37,6 +38,7 @@ use crate::error::{
     warn_discarded_thought_block, warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error,
     ErrorDetails,
 };
+use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::{
     BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
     ProviderBatchInferenceResponse,
@@ -1004,15 +1006,18 @@ impl InferenceProvider for GCPVertexGeminiProvider {
     async fn infer<'a>(
         &'a self,
         provider_request: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = serde_json::to_value(GCPVertexGeminiRequest::new(
-            provider_request.request,
-            self.model_or_endpoint_id(),
-            false,
-        )?)
+        let request_body = serde_json::to_value(
+            GCPVertexGeminiRequest::new(
+                provider_request.request,
+                self.model_or_endpoint_id(),
+                false,
+            )
+            .await?,
+        )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
@@ -1108,16 +1113,15 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(GCPVertexGeminiRequest::new(
-            request,
-            self.model_or_endpoint_id(),
-            false,
-        )?)
+        let request_body = serde_json::to_value(
+            GCPVertexGeminiRequest::new(request, self.model_or_endpoint_id(), false).await?,
+        )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
@@ -1152,7 +1156,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         requests: &'a [ModelInferenceRequest<'_>],
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         let Some(model_id) = self.model_id.as_ref() else {
@@ -1178,7 +1182,8 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         let mut raw_requests = Vec::with_capacity(requests.len());
         let mut jsonl_data = Vec::new();
         for request in requests {
-            let body = GCPVertexGeminiRequest::new(request, self.model_or_endpoint_id(), true)?;
+            let body =
+                GCPVertexGeminiRequest::new(request, self.model_or_endpoint_id(), true).await?;
             let line =
                 serde_json::to_string(&GCPVertexBatchLine { request: body }).map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
@@ -1337,7 +1342,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         batch_request: &'a BatchRequestRow<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         let auth_headers = self
@@ -1472,7 +1477,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
 }
 
 fn stream_gcp_vertex_gemini(
-    mut event_source: EventSource,
+    mut event_source: TensorZeroEventSource,
     start_time: Instant,
     model_provider: &ModelProvider,
 ) -> ProviderInferenceResponseStreamInner {
@@ -1582,15 +1587,14 @@ pub struct GCPVertexGeminiContent<'a> {
     parts: Vec<FlattenUnknown<'a, GCPVertexGeminiContentPart<'a>>>,
 }
 
-impl<'a> TryFrom<&'a RequestMessage> for GCPVertexGeminiContent<'a> {
-    type Error = Error;
-
-    fn try_from(message: &'a RequestMessage) -> Result<Self, Error> {
+impl<'a> GCPVertexGeminiContent<'a> {
+    async fn from_request_message(message: &'a RequestMessage) -> Result<Self, Error> {
         tensorzero_to_gcp_vertex_gemini_content(
             message.role.into(),
             Cow::Borrowed(&message.content),
             PROVIDER_TYPE,
         )
+        .await
     }
 }
 
@@ -1803,7 +1807,7 @@ struct GCPVertexGeminiRequest<'a> {
 }
 
 impl<'a> GCPVertexGeminiRequest<'a> {
-    pub fn new(
+    pub async fn new(
         request: &'a ModelInferenceRequest<'a>,
         model_name: &'a str,
         attach_label: bool,
@@ -1821,12 +1825,16 @@ impl<'a> GCPVertexGeminiRequest<'a> {
                 .map(|system_instruction| GCPVertexGeminiContentPart::Text {
                     text: Cow::Borrowed(system_instruction),
                 });
-        let contents: Vec<GCPVertexGeminiContent> = request
-            .messages
-            .iter()
-            .map(GCPVertexGeminiContent::try_from)
-            .filter_ok(|m| !m.parts.is_empty())
-            .collect::<Result<_, _>>()?;
+        let contents: Vec<GCPVertexGeminiContent> = try_join_all(
+            request
+                .messages
+                .iter()
+                .map(GCPVertexGeminiContent::from_request_message),
+        )
+        .await?
+        .into_iter()
+        .filter(|m| !m.parts.is_empty())
+        .collect();
         let (tools, tool_config) = prepare_tools(request, model_name);
         let (response_mime_type, response_schema) = match request.json_mode {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
@@ -1877,18 +1885,17 @@ impl<'a> GCPVertexGeminiRequest<'a> {
     }
 }
 
-pub fn prepare_gcp_vertex_gemini_messages<'a>(
+// Clippy gives a false positive on Rust 1.86
+#[allow(clippy::needless_lifetimes, clippy::allow_attributes)]
+pub async fn prepare_gcp_vertex_gemini_messages<'a>(
     messages: &'a [RequestMessage],
-    provider_type: &str,
 ) -> Result<Vec<GCPVertexGeminiContent<'a>>, Error> {
-    let mut gcp_vertex_gemini_messages = Vec::with_capacity(messages.len());
-    for message in messages {
-        gcp_vertex_gemini_messages.push(tensorzero_to_gcp_vertex_gemini_content(
-            message.role.into(),
-            Cow::Borrowed(&message.content),
-            provider_type,
-        )?);
-    }
+    let gcp_vertex_gemini_messages = try_join_all(
+        messages
+            .iter()
+            .map(GCPVertexGeminiContent::from_request_message),
+    )
+    .await?;
     Ok(gcp_vertex_gemini_messages)
 }
 
@@ -1912,7 +1919,7 @@ fn prepare_tools<'a>(
     }
 }
 
-pub fn tensorzero_to_gcp_vertex_gemini_content<'a>(
+pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
     role: GCPVertexGeminiRole,
     content_blocks: Cow<'a, [ContentBlock]>,
     provider_type: &str,
@@ -2041,25 +2048,27 @@ pub fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                 ));
             }
             Cow::Borrowed(ContentBlock::File(file)) => {
+                let resolved_file = file.resolve().await?;
                 let FileWithPath {
                     file,
                     storage_path: _,
-                } = &**file;
+                } = &*resolved_file;
 
                 model_content_blocks.push(FlattenUnknown::Normal(
                     GCPVertexGeminiContentPart::InlineData {
                         inline_data: GCPVertexInlineData {
                             mime_type: file.mime_type.to_string(),
-                            data: Cow::Borrowed(file.data()?),
+                            data: Cow::Owned(file.data()?.to_string()),
                         },
                     },
                 ));
             }
             Cow::Owned(ContentBlock::File(file)) => {
+                let resolved_file = file.resolve().await?;
                 let FileWithPath {
                     file,
                     storage_path: _,
-                } = &*file;
+                } = &*resolved_file;
 
                 model_content_blocks.push(FlattenUnknown::Normal(
                     GCPVertexGeminiContentPart::InlineData {
@@ -2585,13 +2594,15 @@ mod tests {
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::tool::{ToolCallConfig, ToolResult};
 
-    #[test]
-    fn test_gcp_vertex_content_try_from() {
+    #[tokio::test]
+    async fn test_gcp_vertex_content_try_from() {
         let message = RequestMessage {
             role: Role::User,
             content: vec!["Hello, world!".to_string().into()],
         };
-        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
+        let content = GCPVertexGeminiContent::from_request_message(&message)
+            .await
+            .unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::User);
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
@@ -2605,7 +2616,9 @@ mod tests {
             role: Role::Assistant,
             content: vec!["Hello, world!".to_string().into()],
         };
-        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
+        let content = GCPVertexGeminiContent::from_request_message(&message)
+            .await
+            .unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::Model);
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
@@ -2625,7 +2638,10 @@ mod tests {
                 }),
             ],
         };
-        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
+        let content = GCPVertexGeminiContent::from_request_message(&message)
+            .await
+            .unwrap();
+
         assert_eq!(content.role, GCPVertexGeminiRole::Model);
         assert_eq!(content.parts.len(), 2);
         assert_eq!(
@@ -2652,7 +2668,9 @@ mod tests {
                 result: r#"{"temperature": 25, "conditions": "sunny"}"#.to_string(),
             })],
         };
-        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
+        let content = GCPVertexGeminiContent::from_request_message(&message)
+            .await
+            .unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::User);
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
@@ -2743,8 +2761,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_gcp_vertex_request_try_from() {
+    #[tokio::test]
+    async fn test_gcp_vertex_request_try_from() {
         // Test Case 1: Empty message list
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -2769,10 +2787,11 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro", false);
-        let details = result.unwrap_err().get_owned_details();
+        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro", false).await;
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "GCP Vertex Gemini requires at least one message".to_string()
             }
@@ -2807,7 +2826,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro", false);
+        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro", false).await;
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 2);
         assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
@@ -2862,7 +2881,8 @@ mod tests {
         };
         // JSON schema should be supported for Gemini Pro models
         let result =
-            GCPVertexGeminiRequest::new(&inference_request, "gemini-2.5-pro-preview-06-05", false);
+            GCPVertexGeminiRequest::new(&inference_request, "gemini-2.5-pro-preview-06-05", false)
+                .await;
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 3);
         assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
@@ -2934,7 +2954,7 @@ mod tests {
             ..Default::default()
         };
         // JSON mode should be supported for Gemini Flash models but without a schema
-        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-flash", false);
+        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-flash", false).await;
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 3);
         assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
@@ -3415,8 +3435,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_tensorzero_to_gcp_vertex_gemini_content() {
+    #[tokio::test]
+    async fn test_tensorzero_to_gcp_vertex_gemini_content() {
         // Test user message with text
         let content_blocks = vec!["Hello".to_string().into()];
         let gcp_content = tensorzero_to_gcp_vertex_gemini_content(
@@ -3424,6 +3444,7 @@ mod tests {
             Cow::Borrowed(&content_blocks),
             PROVIDER_TYPE,
         )
+        .await
         .unwrap();
         assert_eq!(gcp_content.role, GCPVertexGeminiRole::User);
         assert_eq!(gcp_content.parts.len(), 1);
@@ -3444,6 +3465,7 @@ mod tests {
             Cow::Borrowed(&content_blocks),
             PROVIDER_TYPE,
         )
+        .await
         .unwrap();
         assert_eq!(gcp_content.role, GCPVertexGeminiRole::User);
         assert_eq!(gcp_content.parts.len(), 2);
@@ -3472,6 +3494,7 @@ mod tests {
             Cow::Borrowed(&content_blocks),
             PROVIDER_TYPE,
         )
+        .await
         .unwrap();
         assert_eq!(gcp_content.role, GCPVertexGeminiRole::Model);
         assert_eq!(gcp_content.parts.len(), 2);
@@ -3501,6 +3524,7 @@ mod tests {
             Cow::Borrowed(&content_blocks),
             PROVIDER_TYPE,
         )
+        .await
         .unwrap();
         assert_eq!(gcp_content.role, GCPVertexGeminiRole::User);
         assert_eq!(gcp_content.parts.len(), 1);
@@ -3532,6 +3556,7 @@ mod tests {
             Cow::Borrowed(&content_blocks),
             PROVIDER_TYPE,
         )
+        .await
         .unwrap();
         assert_eq!(gcp_content.role, GCPVertexGeminiRole::Model);
         assert_eq!(gcp_content.parts.len(), 1);
@@ -3554,10 +3579,11 @@ mod tests {
             GCPVertexGeminiRole::Model,
             Cow::Borrowed(&content_blocks),
             PROVIDER_TYPE,
-        );
+        )
+        .await;
         assert!(result.is_err());
         let err = result.unwrap_err();
-        let details = err.get_owned_details();
+        let details = err.get_details();
         match details {
             ErrorDetails::InferenceClient { message, .. } => {
                 assert!(message.contains("Error parsing tool call arguments as JSON Value"));
@@ -3576,10 +3602,11 @@ mod tests {
             GCPVertexGeminiRole::Model,
             Cow::Borrowed(&content_blocks),
             PROVIDER_TYPE,
-        );
+        )
+        .await;
         assert!(result.is_err());
         let err = result.unwrap_err();
-        let details = err.get_owned_details();
+        let details = err.get_details();
         match details {
             ErrorDetails::InferenceClient { message, .. } => {
                 assert_eq!(message, "Tool call arguments must be a JSON object");
@@ -3594,6 +3621,7 @@ mod tests {
             Cow::Owned(content_blocks),
             PROVIDER_TYPE,
         )
+        .await
         .unwrap();
         assert_eq!(gcp_content.role, GCPVertexGeminiRole::User);
         assert_eq!(gcp_content.parts.len(), 1);
@@ -3778,7 +3806,8 @@ mod tests {
         let generic = Credential::FileContents(SecretString::from(invalid_json));
         let result = build_non_sdk_credentials(generic, "GCPVertexGemini");
         assert!(result.is_err());
-        let err = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let err = error.get_details();
         assert!(
             matches!(err, ErrorDetails::GCPCredentials { message } if message.contains("Failed to load GCP credentials"))
         );
@@ -3787,14 +3816,15 @@ mod tests {
         let generic = Credential::Static(SecretString::from("test"));
         let result = build_non_sdk_credentials(generic, "GCPVertexGemini");
         assert!(result.is_err());
-        let err = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let err = error.get_details();
         assert!(
             matches!(err, ErrorDetails::GCPCredentials { message } if message.contains("Invalid credential_location"))
         );
     }
 
-    #[test]
-    fn test_shorthand_url_parse() {
+    #[tokio::test]
+    async fn test_shorthand_url_parse() {
         use super::parse_shorthand_url;
 
         let err1 = parse_shorthand_url("bad-shorthand-url", "google")
@@ -3874,7 +3904,7 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(
-            err.get_owned_details(),
+            *err.get_details(),
             ErrorDetails::InferenceServer {
                 message: "Unknown content part in GCP Vertex Gemini response".to_string(),
                 provider_type: "gcp_vertex_gemini".to_string(),
@@ -4214,7 +4244,7 @@ mod tests {
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        let details = error.get_owned_details();
+        let details = error.get_details();
         match details {
             ErrorDetails::InferenceServer { message, .. } => {
                 assert_eq!(message, "GCP Vertex Gemini response has no candidates");
@@ -4462,7 +4492,7 @@ mod tests {
         );
         assert!(result.is_err());
         let error = result.unwrap_err();
-        let details = error.get_owned_details();
+        let details = error.get_details();
         match details {
             ErrorDetails::InferenceServer { message, .. } => {
                 assert!(message.contains("executableCode is not supported in streaming response"));
@@ -4493,7 +4523,7 @@ mod tests {
         );
         assert!(result.is_err());
         let error = result.unwrap_err();
-        let details = error.get_owned_details();
+        let details = error.get_details();
         match details {
             ErrorDetails::InferenceServer { message, .. } => {
                 assert_eq!(
@@ -4521,7 +4551,7 @@ mod tests {
         );
         assert!(result.is_err());
         let error = result.unwrap_err();
-        let details = error.get_owned_details();
+        let details = error.get_details();
         match details {
             ErrorDetails::InferenceServer { message, .. } => {
                 assert_eq!(

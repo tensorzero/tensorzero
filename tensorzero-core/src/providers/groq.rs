@@ -1,3 +1,4 @@
+use futures::future::try_join_all;
 use futures::{Stream, StreamExt, TryStreamExt};
 use reqwest::StatusCode;
 use reqwest_eventsource::Event;
@@ -13,6 +14,7 @@ use tokio::time::Instant;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
@@ -121,7 +123,7 @@ impl InferenceProvider for GroqProvider {
     async fn infer<'a>(
         &'a self,
         request: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -130,16 +132,15 @@ impl InferenceProvider for GroqProvider {
         let start_time = Instant::now();
 
         let request_body =
-            serde_json::to_value(GroqRequest::new(&self.model_name, request.request)?).map_err(
-                |e| {
+            serde_json::to_value(GroqRequest::new(&self.model_name, request.request).await?)
+                .map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
                         message: format!(
                             "Error serializing Groq request: {}",
                             DisplayOrDebugGateway::new(e)
                         ),
                     })
-                },
-            )?;
+                })?;
 
         let mut request_builder = http_client.post(request_url);
 
@@ -219,12 +220,13 @@ impl InferenceProvider for GroqProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(GroqRequest::new(&self.model_name, request)?)
+        let request_body = serde_json::to_value(GroqRequest::new(&self.model_name, request).await?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
@@ -263,7 +265,7 @@ impl InferenceProvider for GroqProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
+        _client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -275,7 +277,7 @@ impl InferenceProvider for GroqProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -528,13 +530,15 @@ impl GroqRequestMessage<'_> {
     }
 }
 
-pub(super) fn prepare_groq_messages<'a>(
+pub(super) async fn prepare_groq_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
 ) -> Result<Vec<GroqRequestMessage<'a>>, Error> {
-    let mut messages = Vec::with_capacity(request.messages.len());
-    for message in &request.messages {
-        messages.extend(tensorzero_to_groq_messages(message)?);
-    }
+    let mut messages: Vec<_> =
+        try_join_all(request.messages.iter().map(tensorzero_to_groq_messages))
+            .await?
+            .into_iter()
+            .flatten()
+            .collect();
     if let Some(system_msg) =
         tensorzero_to_groq_system_message(request.system.as_deref(), request.json_mode, &messages)
     {
@@ -613,16 +617,16 @@ pub(super) fn tensorzero_to_groq_system_message<'a>(
     }
 }
 
-pub(super) fn tensorzero_to_groq_messages(
+pub(super) async fn tensorzero_to_groq_messages(
     message: &RequestMessage,
 ) -> Result<Vec<GroqRequestMessage<'_>>, Error> {
     match message.role {
-        Role::User => tensorzero_to_groq_user_messages(&message.content),
-        Role::Assistant => tensorzero_to_groq_assistant_messages(&message.content),
+        Role::User => tensorzero_to_groq_user_messages(&message.content).await,
+        Role::Assistant => tensorzero_to_groq_assistant_messages(&message.content).await,
     }
 }
 
-fn tensorzero_to_groq_user_messages(
+async fn tensorzero_to_groq_user_messages(
     content_blocks: &[ContentBlock],
 ) -> Result<Vec<GroqRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the user content blocks.
@@ -649,10 +653,11 @@ fn tensorzero_to_groq_user_messages(
                 }));
             }
             ContentBlock::File(file) => {
+                let file = file.resolve().await?;
                 let FileWithPath {
                     file,
                     storage_path: _,
-                } = &**file;
+                } = &*file;
                 user_content_blocks.push(GroqContentBlock::ImageUrl {
                     image_url: GroqImageUrl {
                         // This will only produce an error if we pass in a bad
@@ -685,7 +690,7 @@ fn tensorzero_to_groq_user_messages(
     Ok(messages)
 }
 
-fn tensorzero_to_groq_assistant_messages(
+async fn tensorzero_to_groq_assistant_messages(
     content_blocks: &[ContentBlock],
 ) -> Result<Vec<GroqRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the assistant content blocks.
@@ -717,10 +722,11 @@ fn tensorzero_to_groq_assistant_messages(
                 }));
             }
             ContentBlock::File(file) => {
+                let resolved_file = file.resolve().await?;
                 let FileWithPath {
                     file,
                     storage_path: _,
-                } = &**file;
+                } = &*resolved_file;
                 assistant_content_blocks.push(GroqContentBlock::ImageUrl {
                     image_url: GroqImageUrl {
                         // This will only produce an error if we pass in a bad
@@ -910,7 +916,7 @@ struct GroqRequest<'a> {
 }
 
 impl<'a> GroqRequest<'a> {
-    pub fn new(
+    pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<GroqRequest<'a>, Error> {
@@ -925,7 +931,7 @@ impl<'a> GroqRequest<'a> {
         } else {
             None
         };
-        let mut messages = prepare_groq_messages(request)?;
+        let mut messages = prepare_groq_messages(request).await?;
 
         let (tools, tool_choice, mut parallel_tool_calls) = prepare_groq_tools(request);
         if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
@@ -1372,8 +1378,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_groq_request_new() {
+    #[tokio::test]
+    async fn test_groq_request_new() {
         // Test basic request
         let basic_request = ModelInferenceRequest {
             inference_id: uuid::Uuid::now_v7(),
@@ -1404,7 +1410,9 @@ mod tests {
         };
 
         let groq_request =
-            GroqRequest::new("meta-llama/llama-4-scout-17b-16e-instruct", &basic_request).unwrap();
+            GroqRequest::new("meta-llama/llama-4-scout-17b-16e-instruct", &basic_request)
+                .await
+                .unwrap();
 
         assert_eq!(
             groq_request.model,
@@ -1450,6 +1458,7 @@ mod tests {
             "meta-llama/llama-4-scout-17b-16e-instruct",
             &request_with_tools,
         )
+        .await
         .unwrap();
 
         assert_eq!(
@@ -1509,6 +1518,7 @@ mod tests {
             "meta-llama/llama-4-scout-17b-16e-instruct",
             &request_with_tools,
         )
+        .await
         .unwrap();
 
         assert_eq!(
@@ -1557,6 +1567,7 @@ mod tests {
             "meta-llama/llama-4-scout-17b-16e-instruct",
             &request_with_tools,
         )
+        .await
         .unwrap();
 
         assert_eq!(
@@ -1947,10 +1958,12 @@ mod tests {
         assert!(parallel_tool_calls.is_none());
     }
 
-    #[test]
-    fn test_tensorzero_to_groq_messages() {
+    #[tokio::test]
+    async fn test_tensorzero_to_groq_messages() {
         let content_blocks = vec!["Hello".to_string().into()];
-        let groq_messages = tensorzero_to_groq_user_messages(&content_blocks).unwrap();
+        let groq_messages = tensorzero_to_groq_user_messages(&content_blocks)
+            .await
+            .unwrap();
         assert_eq!(groq_messages.len(), 1);
         match &groq_messages[0] {
             GroqRequestMessage::User(content) => {
@@ -1969,7 +1982,9 @@ mod tests {
             "Hello".to_string().into(),
             "How are you?".to_string().into(),
         ];
-        let groq_messages = tensorzero_to_groq_user_messages(&content_blocks).unwrap();
+        let groq_messages = tensorzero_to_groq_user_messages(&content_blocks)
+            .await
+            .unwrap();
         assert_eq!(groq_messages.len(), 1);
         match &groq_messages[0] {
             GroqRequestMessage::User(content) => {
@@ -1997,7 +2012,9 @@ mod tests {
             arguments: "{}".to_string(),
         });
         let content_blocks = vec!["Hello".to_string().into(), tool_block];
-        let groq_messages = tensorzero_to_groq_assistant_messages(&content_blocks).unwrap();
+        let groq_messages = tensorzero_to_groq_assistant_messages(&content_blocks)
+            .await
+            .unwrap();
         assert_eq!(groq_messages.len(), 1);
         match &groq_messages[0] {
             GroqRequestMessage::Assistant(content) => {
@@ -2398,7 +2415,7 @@ mod tests {
         let result = GroqCredentials::try_from(generic);
         assert!(result.is_err());
         assert!(matches!(
-            result.unwrap_err().get_owned_details(),
+            result.unwrap_err().get_details(),
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }

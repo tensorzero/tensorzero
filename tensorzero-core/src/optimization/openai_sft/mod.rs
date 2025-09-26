@@ -1,4 +1,5 @@
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::{error::IMPOSSIBLE_ERROR_MESSAGE, http::TensorzeroHttpClient};
+use futures::future::try_join_all;
 #[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyValueError;
 #[cfg(feature = "pyo3")]
@@ -121,7 +122,7 @@ impl UninitializedOpenAISFTConfig {
     /// :param batch_size: The batch size to use for the fine-tuning job.
     /// :param learning_rate_multiplier: The learning rate multiplier to use for the fine-tuning job.
     /// :param n_epochs: The number of epochs to use for the fine-tuning job.
-    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::OPENAI_API_KEY". See docs for more details.
+    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like `env::OPENAI_API_KEY`. See docs for more details.
     /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
     /// :param seed: The seed to use for the fine-tuning job.
     /// :param suffix: The suffix to use for the fine-tuning job (this is for naming in OpenAI).
@@ -188,28 +189,43 @@ impl Optimizer for OpenAISFTConfig {
 
     async fn launch(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
         _config: &Config,
     ) -> Result<Self::Handle, Error> {
+        let train_examples = train_examples
+            .into_iter()
+            .map(RenderedSample::into_lazy_rendered_sample)
+            .collect::<Vec<_>>();
+        let val_examples = val_examples.map(|examples| {
+            examples
+                .into_iter()
+                .map(RenderedSample::into_lazy_rendered_sample)
+                .collect::<Vec<_>>()
+        });
         // TODO(#2642): improve error handling here so we know what index of example failed
-        let train_rows: Vec<OpenAISupervisedRow> = train_examples
-            .iter()
-            .map(OpenAISupervisedRow::try_from)
-            .collect::<Result<Vec<_>, _>>()?;
+        let train_rows: Vec<OpenAISupervisedRow> = try_join_all(
+            train_examples
+                .iter()
+                .map(OpenAISupervisedRow::from_rendered_sample),
+        )
+        .await?;
 
-        let val_rows: Option<Vec<OpenAISupervisedRow>> = val_examples
-            .as_ref()
-            .map(|examples| {
-                examples
-                    .iter()
-                    .map(OpenAISupervisedRow::try_from)
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .transpose()?;
+        let val_rows = if let Some(examples) = val_examples.as_ref() {
+            Some(
+                try_join_all(
+                    examples
+                        .iter()
+                        .map(OpenAISupervisedRow::from_rendered_sample),
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
 
         let api_key = self.credentials.get_api_key(credentials)?;
 
@@ -328,7 +344,7 @@ impl Optimizer for OpenAISFTConfig {
 impl JobHandle for OpenAISFTJobHandle {
     async fn poll(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
         let openai_credentials = build_creds_caching_default(

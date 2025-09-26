@@ -12,6 +12,8 @@ use axum::{
 use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
 
+use crate::apply_delay;
+
 // Mirror the TogetherBatchSize enum from tensorzero-core
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -110,6 +112,7 @@ pub struct TogetherJobResponse {
 
 /// Handler for uploading files to Together
 pub async fn upload_file(mut multipart: Multipart) -> Result<Json<TogetherFileResponse>> {
+    apply_delay().await;
     // Process the multipart form data
     // Together sends three fields: file, purpose, and file_name
     let mut file_content = None;
@@ -150,6 +153,7 @@ pub async fn upload_file(mut multipart: Multipart) -> Result<Json<TogetherFileRe
 pub async fn create_fine_tuning_job(
     Json(_request): Json<TogetherCreateJobRequest>,
 ) -> Result<Json<TogetherCreateJobResponse>> {
+    apply_delay().await;
     // Generate a random job ID
     let job_id = format!("ft-{}", Alphanumeric.sample_string(&mut rand::rng(), 16));
 
@@ -164,6 +168,7 @@ pub async fn create_fine_tuning_job(
 
 /// Handler for getting the status of a fine-tuning job
 pub async fn get_fine_tuning_job(Path(job_id): Path<String>) -> Result<Json<TogetherJobResponse>> {
+    apply_delay().await;
     let mut jobs = TOGETHER_FINE_TUNING_JOBS
         .get_or_init(Default::default)
         .lock()

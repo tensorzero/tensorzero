@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use crate::config::BatchWritesConfig;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
-use crate::db::DatabaseConnection;
+use crate::db::HealthCheckable;
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::{Error, ErrorDetails};
 use crate::serde_util::deserialize_u64;
@@ -43,11 +43,13 @@ use migrations::migration_0033::Migration0033;
 use migrations::migration_0034::Migration0034;
 use migrations::migration_0035::Migration0035;
 use migrations::migration_0036::Migration0036;
+use migrations::migration_0037::Migration0037;
+use migrations::migration_0038::Migration0038;
 use serde::{Deserialize, Serialize};
 
 /// This must match the number of migrations returned by `make_all_migrations` - the tests
 /// will panic if they don't match.
-pub const NUM_MIGRATIONS: usize = 30;
+pub const NUM_MIGRATIONS: usize = 32;
 fn get_run_migrations_command() -> String {
     let version = env!("CARGO_PKG_VERSION");
     format!("docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-migrations-only")
@@ -107,6 +109,8 @@ pub fn make_all_migrations<'a>(
         Box::new(Migration0034 { clickhouse }),
         Box::new(Migration0035 { clickhouse }),
         Box::new(Migration0036 { clickhouse }),
+        Box::new(Migration0037 { clickhouse }),
+        Box::new(Migration0038 { clickhouse }),
     ];
     assert_eq!(
         migrations.len(),
@@ -393,7 +397,7 @@ pub struct RunMigrationArgs<'a, T: Migration + ?Sized> {
     pub is_replicated: bool,
 }
 
-pub async fn manual_run_migrations() -> Result<(), Error> {
+pub async fn manual_run_clickhouse_migrations() -> Result<(), Error> {
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
     if clickhouse_url.as_ref().is_none() && std::env::var("CLICKHOUSE_URL").is_ok() {
         return Err(ErrorDetails::ClickHouseConfiguration { message: "`CLICKHOUSE_URL` is deprecated and no longer accepted. Please set `TENSORZERO_CLICKHOUSE_URL`".to_string() }.into());

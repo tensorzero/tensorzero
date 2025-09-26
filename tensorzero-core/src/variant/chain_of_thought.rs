@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -7,9 +9,10 @@ use crate::endpoints::inference::{InferenceClients, InferenceModels, InferencePa
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
+use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
     ContentBlockOutput, InferenceResult, InferenceResultStream, InternalJsonInferenceOutput,
-    JsonInferenceResult, ResolvedInput, Thought,
+    JsonInferenceResult, Thought,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -49,7 +52,7 @@ impl UninitializedChainOfThoughtConfig {
 impl Variant for ChainOfThoughtConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -115,7 +118,7 @@ impl Variant for ChainOfThoughtConfig {
 
     async fn infer_stream<'request>(
         &self,
-        _input: &ResolvedInput,
+        _input: &LazyResolvedInput,
         _models: &'request InferenceModels<'_>,
         _function: &FunctionConfig,
         _inference_config: &'request InferenceConfig<'request>,
@@ -163,9 +166,13 @@ impl Variant for ChainOfThoughtConfig {
         self.inner.get_all_template_paths()
     }
 
+    fn get_all_explicit_template_names(&self) -> HashSet<String> {
+        self.inner.get_all_explicit_template_names()
+    }
+
     async fn start_batch_inference<'a>(
         &'a self,
-        _input: &[ResolvedInput],
+        _input: &[LazyResolvedInput],
         _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
         _inference_configs: &'a [InferenceConfig<'a>],

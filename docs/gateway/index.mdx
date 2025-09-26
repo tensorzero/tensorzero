@@ -8,30 +8,30 @@ The TensorZero Gateway is a high-performance model gateway that provides a unifi
 - **One API for All LLMs.**
   The gateway provides a unified interface for all major LLM providers, allowing for seamless cross-platform integration and fallbacks.
   TensorZero natively supports
-  [Anthropic](/gateway/guides/providers/anthropic/),
-  [AWS Bedrock](/gateway/guides/providers/aws-bedrock/),
-  [AWS SageMaker](/gateway/guides/providers/aws-sagemaker/),
-  [Azure OpenAI Service](/gateway/guides/providers/azure/),
-  [Fireworks](/gateway/guides/providers/fireworks/),
-  [GCP Vertex AI Anthropic](/gateway/guides/providers/gcp-vertex-ai-anthropic/),
-  [GCP Vertex AI Gemini](/gateway/guides/providers/gcp-vertex-ai-gemini/),
-  [Google AI Studio (Gemini API)](/gateway/guides/providers/google-ai-studio-gemini/),
-  [Groq](/gateway/guides/providers/groq/),
-  [Hyperbolic](/gateway/guides/providers/hyperbolic/),
-  [Mistral](/gateway/guides/providers/mistral/),
-  [OpenAI](/gateway/guides/providers/openai/),
-  [OpenRouter](/gateway/guides/providers/openrouter/),
-  [Together](/gateway/guides/providers/together/),
-  [vLLM](/gateway/guides/providers/vllm/), and
-  [xAI](/gateway/guides/providers/xai/).
+  [Anthropic](/integrations/model-providers/anthropic/),
+  [AWS Bedrock](/integrations/model-providers/aws-bedrock/),
+  [AWS SageMaker](/integrations/model-providers/aws-sagemaker/),
+  [Azure OpenAI Service](/integrations/model-providers/azure/),
+  [Fireworks](/integrations/model-providers/fireworks/),
+  [GCP Vertex AI Anthropic](/integrations/model-providers/gcp-vertex-ai-anthropic/),
+  [GCP Vertex AI Gemini](/integrations/model-providers/gcp-vertex-ai-gemini/),
+  [Google AI Studio (Gemini API)](/integrations/model-providers/google-ai-studio-gemini/),
+  [Groq](/integrations/model-providers/groq/),
+  [Hyperbolic](/integrations/model-providers/hyperbolic/),
+  [Mistral](/integrations/model-providers/mistral/),
+  [OpenAI](/integrations/model-providers/openai/),
+  [OpenRouter](/integrations/model-providers/openrouter/),
+  [Together](/integrations/model-providers/together/),
+  [vLLM](/integrations/model-providers/vllm/), and
+  [xAI](/integrations/model-providers/xai/).
   Need something else?
-  Your provider is most likely supported because TensorZero integrates with [any OpenAI-compatible API (e.g. Ollama)](/gateway/guides/providers/openai-compatible/).
+  Your provider is most likely supported because TensorZero integrates with [any OpenAI-compatible API (e.g. Ollama)](/integrations/model-providers/openai-compatible/).
   Still not supported?
   Open an issue on [GitHub](https://github.com/tensorzero/tensorzero/issues) and we'll integrate it!
 
   <Tip>
 
-  Learn more in our [How to call any LLM](./call-any-llm) guide.
+  Learn more in our [How to call any LLM](/gateway/call-any-llm) guide.
 
   </Tip>
 
@@ -42,7 +42,7 @@ The TensorZero Gateway is a high-performance model gateway that provides a unifi
 - **Structured Inferences.**
   The gateway enforces schemas for inputs and outputs, ensuring robustness for your application.
   Structured inference data is later used for powerful optimization recipes (e.g. swapping historical prompts before fine-tuning).
-  Learn more about [prompt templates & schemas](/gateway/guides/prompt-templates-schemas/).
+  Learn more about [creating prompt templates](/gateway/create-a-prompt-template).
 
 - **Multi-Step LLM Workflows.**
   The gateway provides first-class support for complex multi-step LLM workflows by associating multiple inferences with an episode.
@@ -82,7 +82,7 @@ The TensorZero Gateway is a high-performance model gateway that provides a unifi
     Quickly deploy locally, or set up high-availability services for production
     environments.
   </Card>
-  <Card title="Integrations" href="/gateway/integrations/">
+  <Card title="Integrations" href="/integrations/model-providers/">
     The TensorZero Gateway integrates with the major LLM providers.
   </Card>
   <Card title="Benchmarks" href="/gateway/benchmarks/">

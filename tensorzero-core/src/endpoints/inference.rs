@@ -4,13 +4,13 @@ use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
 use futures::stream::Stream;
+use futures::FutureExt;
 use metrics::counter;
-use object_store::{ObjectStore, PutMode, PutOptions};
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -22,29 +22,30 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
-use crate::config::{Config, ErrorContext, ObjectStoreInfo, SchemaData, UninitializedVariantInfo};
+use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedVariantInfo};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
+use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::function::{sample_variant, FunctionConfigChat};
-use crate::gateway_util::{AppState, AppStateData, StructuredJson};
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
-use crate::inference::types::resolved_input::FileWithPath;
-use crate::inference::types::storage::StoragePath;
+use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
-    collect_chunks, Base64File, ChatInferenceDatabaseInsert, ChatInferenceResultChunk,
-    CollectChunksArgs, ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason,
-    InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
-    InternalJsonInferenceOutput, JsonInferenceDatabaseInsert, JsonInferenceOutput,
-    JsonInferenceResultChunk, ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput,
-    ResolvedInputMessageContent, Usage,
+    collect_chunks, ChatInferenceDatabaseInsert, ChatInferenceResultChunk, CollectChunksArgs,
+    ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
+    InferenceResultChunk, InferenceResultStream, Input, InternalJsonInferenceOutput,
+    JsonInferenceDatabaseInsert, JsonInferenceOutput, JsonInferenceResultChunk,
+    ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
+use crate::rate_limiting::{RateLimitingConfig, TicketBorrows};
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
+use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
@@ -114,13 +115,13 @@ pub struct Params {
     pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct InferenceMetadata {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
-    pub input: ResolvedInput,
+    pub input: LazyResolvedInput,
     pub dryrun: bool,
     pub start_time: Instant,
     pub inference_params: InferenceParams,
@@ -138,6 +139,7 @@ struct InferenceMetadata {
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub include_original_response: bool,
+    pub ticket_borrow: TicketBorrows,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -149,12 +151,19 @@ pub async fn inference_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        postgres_connection_info,
         ..
     }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
-    let inference_output =
-        inference(config, &http_client, clickhouse_connection_info, params, ()).await?;
+    let inference_output = inference(
+        config,
+        &http_client,
+        clickhouse_connection_info,
+        postgres_connection_info,
+        params,
+    )
+    .await?;
     match inference_output {
         InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
         InferenceOutput::Streaming(stream) => {
@@ -194,7 +203,7 @@ pub struct InferenceIds {
 
 #[instrument(
     name="inference",
-    skip(config, http_client, clickhouse_connection_info, params, extra_handle),
+    skip_all
     fields(
         function_name,
         model_name,
@@ -204,13 +213,12 @@ pub struct InferenceIds {
         otel.name = "function_inference"
     )
 )]
-pub async fn inference<T: Send + 'static>(
+pub async fn inference(
     config: Arc<Config>,
-    http_client: &reqwest::Client,
+    http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
+    postgres_connection_info: PostgresConnectionInfo,
     params: Params,
-    // See 'create_stream' for more details about this parameter
-    extra_handle: T,
 ) -> Result<InferenceOutput, Error> {
     let span = tracing::Span::current();
     if let Some(function_name) = &params.function_name {
@@ -315,21 +323,22 @@ pub async fn inference<T: Send + 'static>(
     let inference_clients = InferenceClients {
         http_client,
         clickhouse_connection_info: &clickhouse_connection_info,
+        postgres_connection_info: &postgres_connection_info,
         credentials: &params.credentials,
         cache_options: &(params.cache_options, dryrun).into(),
+        tags: &params.tags,
+        rate_limiting_config: &config.rate_limiting,
+        otlp_config: &config.gateway.export.otlp,
     };
 
     let inference_models = InferenceModels {
         models: &config.models,
         embedding_models: &config.embedding_models,
     };
-    let resolved_input = params
-        .input
-        .resolve(&FetchContext {
-            client: http_client,
-            object_store_info: &config.object_store_info,
-        })
-        .await?;
+    let resolved_input = params.input.into_lazy_resolved_input(FetchContext {
+        client: http_client,
+        object_store_info: &config.object_store_info,
+    })?;
     // Keep sampling variants until one succeeds
     while !candidate_variants.is_empty() {
         let (variant_name, variant) =
@@ -402,6 +411,7 @@ pub async fn inference<T: Send + 'static>(
                 extra_body,
                 extra_headers,
                 include_original_response: params.include_original_response,
+                ticket_borrow: model_used_info.ticket_borrow,
             };
 
             let stream = create_stream(
@@ -410,7 +420,7 @@ pub async fn inference<T: Send + 'static>(
                 inference_metadata,
                 stream,
                 clickhouse_connection_info,
-                extra_handle,
+                postgres_connection_info,
             );
 
             return Ok(InferenceOutput::Streaming(Box::pin(stream)));
@@ -462,21 +472,22 @@ pub async fn inference<T: Send + 'static>(
                 // is cancelled. This reduces the chances that we only write to some tables and not others
                 // (but this is inherently best-effort due to ClickHouse's lack of transactions).
                 let write_future = tokio::spawn(async move {
-                    write_inference(
+                    let _: () = write_inference(
                         &clickhouse_connection_info,
                         &config,
-                        resolved_input,
+                        resolved_input.clone().resolve().await?,
                         result_to_write,
                         write_metadata,
                     )
                     .await;
+                    Ok::<_, Error>(())
                 });
                 if !async_writes {
                     write_future.await.map_err(|e| {
                         Error::new(ErrorDetails::InternalError {
                             message: format!("Failed to await ClickHouse inference write: {e:?}"),
                         })
-                    })?;
+                    })??;
                 }
             }
 
@@ -555,6 +566,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                     tool_choice: ToolChoice::Auto,
                     parallel_tool_calls: None,
                     description: None,
+                    all_explicit_templates_names: HashSet::new(),
                 })),
                 DEFAULT_FUNCTION_NAME.to_string(),
             ))
@@ -575,18 +587,13 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
     }
 }
 
-fn create_stream<T: Send + 'static>(
+fn create_stream(
     function: Arc<FunctionConfig>,
     config: Arc<Config>,
     metadata: InferenceMetadata,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
-    // An arbitrary 'handle' parameter, which is guaranteed to be dropped after `clickhouse_connection_info`
-    // This is used by the embedded Rust client to ensure that we only drop the last reference to the client
-    // after all outstanding streams have finished (so that we can block in `Drop` from Python without risking
-    // a deadlock due to a `ClickHouseConnectionInfo` being kept alive by a stream in Python
-    // See `GatewayHandle` for more details
-    extra_handle: T,
+    postgres_connection_info: PostgresConnectionInfo,
 ) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
@@ -671,6 +678,7 @@ fn create_stream<T: Send + 'static>(
                 extra_body,
                 extra_headers,
                 include_original_response: _,
+                ticket_borrow,
             } = metadata;
 
             let config = config.clone();
@@ -697,6 +705,8 @@ fn create_stream<T: Send + 'static>(
                     cached,
                     extra_body: extra_body.clone(),
                     extra_headers: extra_headers.clone(),
+                    ticket_borrow,
+                    postgres_connection_info,
                 };
                 let inference_response: Result<InferenceResult, Error> =
                     collect_chunks(collect_chunks_args).await;
@@ -718,19 +728,26 @@ fn create_stream<T: Send + 'static>(
                         extra_headers,
                     };
                     let config = config.clone();
+                        match input.resolve().await {
+                            Ok(input) => {
+                                let clickhouse_connection_info = clickhouse_connection_info.clone();
+                                write_inference(
+                                    &clickhouse_connection_info,
+                                    &config,
+                                    input,
+                                    inference_response,
+                                    write_metadata,
+                                ).await;
+                            },
+                            Err(e) => {
+                                tracing::error!("Failed to resolve input: {e:?}");
 
-                        let clickhouse_connection_info = clickhouse_connection_info.clone();
-                        write_inference(
-                            &clickhouse_connection_info,
-                            &config,
-                            input,
-                            inference_response,
-                            write_metadata,
-                        ).await;
+                            }
+                        };
+
 
                 }
                 drop(clickhouse_connection_info);
-                drop(extra_handle);
             };
             if async_write {
                 tokio::spawn(write_future);
@@ -800,51 +817,6 @@ pub struct InferenceDatabaseInsertMetadata {
     pub extra_headers: UnfilteredInferenceExtraHeaders,
 }
 
-async fn write_file(
-    object_store: &Option<ObjectStoreInfo>,
-    raw: &Base64File,
-    storage_path: &StoragePath,
-) -> Result<(), Error> {
-    if let Some(object_store) = object_store {
-        // The store might be explicitly disabled
-        if let Some(store) = object_store.object_store.as_ref() {
-            let data = raw.data()?;
-            let bytes = aws_smithy_types::base64::decode(data).map_err(|e| {
-                Error::new(ErrorDetails::ObjectStoreWrite {
-                    message: format!("Failed to decode file as base64: {e:?}"),
-                    path: storage_path.clone(),
-                })
-            })?;
-            let res = store
-                .put_opts(
-                    &storage_path.path,
-                    bytes.into(),
-                    PutOptions {
-                        mode: PutMode::Create,
-                        ..Default::default()
-                    },
-                )
-                .await;
-            match res {
-                Ok(_) | Err(object_store::Error::AlreadyExists { .. }) => {}
-                Err(e) => {
-                    return Err(ErrorDetails::ObjectStoreWrite {
-                        message: format!("Failed to write file to object store: {e:?}"),
-                        path: storage_path.clone(),
-                    }
-                    .into());
-                }
-            }
-        }
-    } else {
-        return Err(ErrorDetails::InternalError {
-            message: "Called `write_file` with no object store configured".to_string(),
-        }
-        .into());
-    }
-    Ok(())
-}
-
 async fn write_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     config: &Config,
@@ -852,35 +824,19 @@ async fn write_inference(
     result: InferenceResult,
     metadata: InferenceDatabaseInsertMetadata,
 ) {
-    let mut futures: Vec<Pin<Box<dyn Future<Output = ()> + Send>>> = Vec::new();
-    if config.gateway.observability.enabled.unwrap_or(true) {
-        for message in &input.messages {
-            for content_block in &message.content {
-                if let ResolvedInputMessageContent::File(file) = content_block {
-                    let FileWithPath {
-                        file: raw,
-                        storage_path,
-                    } = &**file;
-
-                    futures.push(Box::pin(async {
-                        if let Err(e) =
-                            write_file(&config.object_store_info, raw, storage_path).await
-                        {
-                            tracing::error!("Failed to write image to object store: {e:?}");
-                        }
-                    }));
-                }
-            }
-        }
-    }
-    let model_responses: Vec<serde_json::Value> = result.get_serialized_model_inferences();
-    futures.push(Box::pin(async {
-        // Write the model responses to the ModelInference table
-        for response in model_responses {
+    let model_responses: Vec<serde_json::Value> = result.get_serialized_model_inferences().await;
+    let mut futures: Vec<Pin<Box<dyn Future<Output = ()> + Send>>> =
+        input.clone().write_all_files(config);
+    // Write the model responses to the ModelInference table
+    futures.push(
+        async {
             let _ = clickhouse_connection_info
-                .write_batched(&[response], TableName::ModelInference)
+                .write_batched(&model_responses, TableName::ModelInference)
                 .await;
         }
+        .boxed(),
+    );
+    futures.push(Box::pin(async {
         // Write the inference to the Inference table
         match result {
             InferenceResult::Chat(result) => {
@@ -1157,10 +1113,14 @@ impl InferenceResponseChunk {
 
 // Carryall struct for clients used in inference
 pub struct InferenceClients<'a> {
-    pub http_client: &'a reqwest::Client,
+    pub http_client: &'a TensorzeroHttpClient,
     pub clickhouse_connection_info: &'a ClickHouseConnectionInfo,
+    pub postgres_connection_info: &'a PostgresConnectionInfo,
     pub credentials: &'a InferenceCredentials,
     pub cache_options: &'a CacheOptions,
+    pub tags: &'a HashMap<String, String>,
+    pub rate_limiting_config: &'a RateLimitingConfig,
+    pub otlp_config: &'a OtlpConfig,
 }
 
 // Carryall struct for models used in inference
@@ -1344,7 +1304,7 @@ mod tests {
             variant_name: "test_variant".to_string(),
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            input: ResolvedInput {
+            input: LazyResolvedInput {
                 messages: vec![],
                 system: None,
             },
@@ -1365,6 +1325,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             include_original_response: false,
+            ticket_borrow: TicketBorrows::empty(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();
@@ -1397,7 +1358,7 @@ mod tests {
             variant_name: "test_variant".to_string(),
             inference_id: Uuid::now_v7(),
             episode_id: Uuid::now_v7(),
-            input: ResolvedInput {
+            input: LazyResolvedInput {
                 messages: vec![],
                 system: None,
             },
@@ -1418,6 +1379,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             include_original_response: false,
+            ticket_borrow: TicketBorrows::empty(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();

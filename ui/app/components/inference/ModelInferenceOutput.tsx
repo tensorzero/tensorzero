@@ -30,6 +30,25 @@ export default function ModelInferenceOutput({
                   toolCallId={block.id}
                 />
               );
+            case "thought":
+              return (
+                <TextMessage
+                  key={index}
+                  label="Thought"
+                  content={block.text || ""}
+                  isEditing={false}
+                  onChange={() => {}}
+                />
+              );
+            case "unknown":
+              // TODO: code editor should format as JSON by default
+              return (
+                <TextMessage
+                  key={index}
+                  label="Unknown Content"
+                  content={JSON.stringify(block.data)}
+                />
+              );
           }
         })
       )}

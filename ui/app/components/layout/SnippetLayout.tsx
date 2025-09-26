@@ -3,6 +3,7 @@ import React, { type ReactNode, useState, useRef, useEffect } from "react";
 import { Button } from "~/components/ui/button";
 import { clsx } from "clsx";
 import { cva } from "class-variance-authority";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 export function SnippetLayout({ children }: React.PropsWithChildren) {
   return (
@@ -76,8 +77,28 @@ export function SnippetContent({
 
       {needsExpansion && !expanded && maxHeight !== "Content" && (
         <div className="from-bg-primary absolute right-0 bottom-0 left-0 flex justify-center bg-gradient-to-t to-transparent pt-8 pb-4">
-          <Button variant="outline" size="sm" onClick={() => setExpanded(true)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setExpanded(true)}
+            className="flex items-center gap-1"
+          >
             Show more
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
+      {needsExpansion && expanded && maxHeight !== "Content" && (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setExpanded(false)}
+            className="flex items-center gap-1"
+          >
+            Show less
+            <ChevronUp className="h-4 w-4" />
           </Button>
         </div>
       )}

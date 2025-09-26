@@ -49,6 +49,7 @@ async fn main() {
         (None, Some(config_file)) => ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(config_file),
             clickhouse_url: std::env::var("TENSORZERO_CLICKHOUSE_URL").ok(),
+            postgres_url: std::env::var("TENSORZERO_POSTGRES_URL").ok(),
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: false,

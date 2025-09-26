@@ -51,7 +51,7 @@ pub struct RunLLMJudgeEvaluatorParams<'a> {
     pub inference_cache: CacheEnabledMode,
 }
 
-#[instrument(skip(params), fields(datapoint_id = %params.datapoint.id(), evaluator_name = %params.evaluator_name))]
+#[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), evaluator_name = %params.evaluator_name))]
 pub async fn run_llm_judge_evaluator(
     params: RunLLMJudgeEvaluatorParams<'_>,
 ) -> Result<Option<LLMJudgeEvaluationResult>> {
@@ -269,6 +269,7 @@ fn prepare_serialized_input(input: &ClientInput) -> Result<String> {
                     bail!("Unknown content not supported for LLM judge evaluations")
                 }
                 ClientInputMessageContent::Text { .. }
+                | ClientInputMessageContent::Template { .. }
                 | ClientInputMessageContent::ToolCall { .. }
                 | ClientInputMessageContent::ToolResult { .. }
                 | ClientInputMessageContent::RawText { .. }
@@ -336,6 +337,14 @@ fn serialize_content_for_messages_input(
             | ClientInputMessageContent::RawText { .. }
             | ClientInputMessageContent::Thought(_) => {
                 serialized_content.push(content_block.clone());
+            }
+            ClientInputMessageContent::Template(input) => {
+                // Since the LLM Judge does not have the template of the original function,
+                // we instead serialize the arguments and send them as a TextKind::Text block.
+                let arguments_string = serde_json::to_string(input)?;
+                serialized_content.push(ClientInputMessageContent::Text(TextKind::Text {
+                    text: arguments_string,
+                }));
             }
             ClientInputMessageContent::Text(text) => match text {
                 TextKind::Text { text } => {

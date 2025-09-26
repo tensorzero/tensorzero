@@ -2,8 +2,6 @@ import { z } from "zod";
 import type {
   FunctionConfig,
   JsonInferenceOutput,
-  ContentBlockChatOutput,
-  Thought,
   JsonValue,
 } from "tensorzero-node";
 
@@ -30,6 +28,13 @@ export const textInputSchema = z.object({
   value: z.any(), // Value type from Rust maps to any in TS
 });
 export type TextInput = z.infer<typeof textInputSchema>;
+
+export const templateInputSchema = z.object({
+  type: z.literal("template"),
+  name: z.string(),
+  arguments: z.record(JsonValueSchema.optional()),
+});
+export type TemplateInput = z.infer<typeof templateInputSchema>;
 
 // The three display text types below handle the scenario
 // where the function 1) does not use schemas
@@ -59,6 +64,13 @@ export type DisplayMissingFunctionTextInput = z.infer<
   typeof displayMissingFunctionTextInputSchema
 >;
 
+export const displayTemplateSchema = z.object({
+  type: z.literal("template"),
+  name: z.string(),
+  arguments: z.record(JsonValueSchema.optional()),
+});
+export type DisplayTemplate = z.infer<typeof displayTemplateSchema>;
+
 export const modelInferenceTextInputSchema = z.object({
   type: z.literal("text"),
   text: z.string(),
@@ -73,12 +85,21 @@ export const rawTextInputSchema = z.object({
 });
 export type RawTextInput = z.infer<typeof rawTextInputSchema>;
 
-export const thoughtSchema = z.object({
+export const thoughtContentSchema = z.object({
   type: z.literal("thought"),
-  text: z.string().nullable(),
-  signature: z.string().nullable(),
-  _internal_provider_type: z.string().nullable(),
-}) satisfies z.ZodType<Thought>;
+  text: z
+    .string()
+    .nullish()
+    .transform((val) => val ?? null),
+  signature: z
+    .string()
+    .nullish()
+    .transform((val) => val ?? null),
+  _internal_provider_type: z
+    .string()
+    .nullish()
+    .transform((val) => val ?? null),
+});
 
 export const unknownSchema = z.object({
   type: z.literal("unknown"),
@@ -204,12 +225,13 @@ export type ResolvedImageContentError = z.infer<
 // Types for input to TensorZero
 export const inputMessageContentSchema = z.discriminatedUnion("type", [
   textInputSchema,
+  templateInputSchema,
   toolCallContentSchema,
   toolResultContentSchema,
   imageContentSchema,
   fileContentSchema,
   rawTextInputSchema,
-  thoughtSchema,
+  thoughtContentSchema,
   unknownSchema,
 ]);
 export type InputMessageContent = z.infer<typeof inputMessageContentSchema>;
@@ -223,7 +245,7 @@ export const modelInferenceInputMessageContentSchema = z.discriminatedUnion(
     imageContentSchema,
     fileContentSchema,
     rawTextInputSchema,
-    thoughtSchema,
+    thoughtContentSchema,
     unknownSchema,
   ],
 );
@@ -234,13 +256,14 @@ export type ModelInferenceInputMessageContent = z.infer<
 export const displayInputMessageContentSchema = z.discriminatedUnion("type", [
   displayUnstructuredTextInputSchema,
   displayStructuredTextInputSchema,
+  displayTemplateSchema,
   displayMissingFunctionTextInputSchema,
   toolCallContentSchema,
   toolResultContentSchema,
   resolvedFileContentSchema,
   resolvedFileContentErrorSchema,
   rawTextInputSchema,
-  thoughtSchema,
+  thoughtContentSchema,
   unknownSchema,
 ]);
 
@@ -322,21 +345,12 @@ export const textContentSchema = z.object({
 });
 export type TextContent = z.infer<typeof textContentSchema>;
 
-export const contentBlockSchema = z.discriminatedUnion("type", [
+export const contentBlockOutputSchema = z.discriminatedUnion("type", [
   textContentSchema,
   toolCallContentSchema,
-  toolResultContentSchema,
-  imageContentSchema,
-  fileContentSchema,
-  rawTextInputSchema,
+  thoughtContentSchema,
+  unknownSchema,
 ]);
-export type ContentBlock = z.infer<typeof contentBlockSchema>;
-
-export const requestMessageSchema = z.object({
-  role: roleSchema,
-  content: z.array(contentBlockSchema),
-});
-export type RequestMessage = z.infer<typeof requestMessageSchema>;
 
 export const jsonInferenceOutputSchema = z.object({
   raw: z.string().nullable(),
@@ -359,13 +373,18 @@ export type ToolCallOutput = z.infer<typeof toolCallOutputSchema>;
 export const contentBlockChatOutputSchema = z.discriminatedUnion("type", [
   textContentSchema,
   toolCallOutputSchema,
-  thoughtSchema,
+  thoughtContentSchema,
   unknownSchema,
-]) satisfies z.ZodType<ContentBlockChatOutput>;
+]);
 
 export const modelInferenceOutputContentBlockSchema = z.discriminatedUnion(
   "type",
-  [textContentSchema, toolCallContentSchema],
+  [
+    textContentSchema,
+    toolCallContentSchema,
+    thoughtContentSchema,
+    unknownSchema,
+  ],
 );
 
 export type ModelInferenceOutputContentBlock = z.infer<
@@ -462,6 +481,8 @@ function displayInputMessageContentToInputMessageContent(
     case "thought":
       return content;
     case "unknown":
+      return content;
+    case "template":
       return content;
   }
 }

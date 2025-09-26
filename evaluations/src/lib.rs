@@ -82,7 +82,7 @@ pub struct Clients {
     pub clickhouse_client: ClickHouseConnectionInfo,
 }
 
-#[instrument(skip(writer), fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
+#[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
 pub async fn run_evaluation(
     args: Args,
     evaluation_run_id: Uuid,
@@ -93,6 +93,12 @@ pub async fn run_evaluation(
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
         .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
     debug!(clickhouse_url = %clickhouse_url, "ClickHouse URL resolved");
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
+    if let Some(postgres_url) = postgres_url.as_ref() {
+        debug!(postgres_url = %postgres_url, "PostgreSQL URL resolved");
+    } else {
+        debug!("PostgreSQL URL not provided");
+    }
 
     // We do not validate credentials here since we just want the evaluator config
     // If we are using an embedded gateway, credentials are validated when that is initialized
@@ -127,6 +133,7 @@ pub async fn run_evaluation(
         }
         None => ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(args.config_file),
+            postgres_url,
             clickhouse_url: Some(clickhouse_url.clone()),
             timeout: None,
             verify_credentials: true,
@@ -184,7 +191,7 @@ pub async fn run_evaluation(
         let datapoint = Arc::new(datapoint);
         let datapoint_id = datapoint.id();
         let abort_handle = join_set.spawn(async move {
-            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&clients_clone.tensorzero_client).await?)?);
+            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&clients_clone.tensorzero_client).await?));
             let inference_response = Arc::new(
                 infer_datapoint(InferDatapointParams {
                     clients: &clients_clone,
@@ -198,9 +205,10 @@ pub async fn run_evaluation(
                     input: &input,
                     inference_cache: args.inference_cache,
                 })
-                .await?,
+                .await.map_err(|e| anyhow!("Error inferring for datapoint {datapoint_id}: {e}"))?,
             );
 
+            let inference_id = inference_response.inference_id();
             let evaluation_result = evaluate_inference(
                 EvaluateInferenceParams {
                     inference_response: inference_response.clone(),
@@ -212,7 +220,7 @@ pub async fn run_evaluation(
                     evaluation_run_id: evaluation_run_id_clone,
                     inference_cache: args.inference_cache,
                 })
-                .await?;
+                .await.map_err(|e| anyhow!("Error evaluating inference {inference_id} for datapoint {datapoint_id}: {e}"))?;
             debug!(datapoint_id = %datapoint.id(), evaluations_count = evaluation_result.len(), "Evaluations completed");
 
             Ok::<(Datapoint, InferenceResponse, evaluators::EvaluationResult), anyhow::Error>((
@@ -362,7 +370,7 @@ struct InferDatapointParams<'a> {
     inference_cache: CacheEnabledMode,
 }
 
-#[instrument(skip(params), fields(datapoint_id = %params.datapoint.id(), function_name = %params.function_name, variant_name = %params.variant_name))]
+#[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), function_name = %params.function_name, variant_name = %params.variant_name))]
 async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceResponse> {
     let InferDatapointParams {
         clients,

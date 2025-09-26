@@ -13,8 +13,8 @@ use crate::{
     db::clickhouse::{escape_string_for_clickhouse_literal, ClickHouseConnectionInfo},
     endpoints::validate_tags,
     error::{Error, ErrorDetails},
-    gateway_util::{AppState, AppStateData, StructuredJson},
-    uuid_util::{
+    utils::gateway::{AppState, AppStateData, StructuredJson},
+    utils::uuid::{
         compare_timestamps, generate_dynamic_evaluation_run_episode_id, validate_tensorzero_uuid,
         DYNAMIC_EVALUATION_THRESHOLD,
     },
@@ -272,7 +272,7 @@ async fn write_dynamic_evaluation_run_episode(
 
 /// For dynamic evaluation runs, we generate episode IDs that are DYNAMIC_EVALUATION_OFFSET in the future.
 /// If we come across an episode ID that is at least DYNAMIC_EVALUATION_THRESHOLD, we need to look up the
-/// appropriate DynamicEvaluationRun and then apply the variant_name if unset and the tags if unset.
+/// appropriate DynamicEvaluationRun and then apply the `variant_name` if unset and the tags if unset.
 /// We'll warn if the variant name is set in two places and then take the inference-level one.
 pub async fn validate_inference_episode_id_and_apply_dynamic_evaluation_run(
     episode_id: Uuid,
@@ -305,9 +305,9 @@ pub async fn validate_inference_episode_id_and_apply_dynamic_evaluation_run(
             (Some(_), Some(_)) => {
                 tracing::warn!("Variant name set in both inference and dynamic evaluation run");
             }
-            // If the inference pinned the variant_name and the dynamic run did not, leave as is
+            // If the inference pinned the `variant_name` and the dynamic run did not, leave as is
             (Some(_), None) => {}
-            // If the dynamic run pinned the variant_name and the inference did not, use the dynamic run variant_name
+            // If the dynamic run pinned the `variant_name` and the inference did not, use the dynamic run `variant_name`
             (None, Some(dynamic_run_variant_name)) => {
                 *variant_name = Some(dynamic_run_variant_name.clone());
             }

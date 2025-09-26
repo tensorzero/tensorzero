@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config::{Config, ObjectStoreInfo},
     error::{Error, ErrorDetails},
-    gateway_util::{AppState, AppStateData},
     inference::types::storage::StoragePath,
+    utils::gateway::{AppState, AppStateData},
 };
 use aws_smithy_types::base64;
 

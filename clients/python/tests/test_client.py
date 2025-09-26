@@ -35,6 +35,7 @@ import pytest
 import tensorzero
 from clickhouse_connect import get_client  # type: ignore
 from openai import AsyncOpenAI, OpenAI
+from pytest import CaptureFixture
 from tensorzero import (
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
@@ -61,6 +62,7 @@ from tensorzero.types import (
     ChatChunk,
     JsonChunk,
     ProviderExtraBody,
+    Template,
     Thought,
     ToolCallChunk,
     VariantExtraBody,
@@ -1316,11 +1318,13 @@ def test_image_inference_base64(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "file": {"url": None, "mime_type": "image/png", "data": ferris_png},
-            "storage_path": {
-                "kind": {"type": "disabled"},
-                "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
-            },
+            "FileWithPath": {
+                "file": {"url": None, "mime_type": "image/png", "data": ferris_png},
+                "storage_path": {
+                    "kind": {"type": "disabled"},
+                    "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+                },
+            }
         }
     ]
 
@@ -1358,11 +1362,13 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "file": {"url": None, "mime_type": "image/png", "data": ferris_png},
-            "storage_path": {
-                "kind": {"type": "disabled"},
-                "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
-            },
+            "FileWithPath": {
+                "file": {"url": None, "mime_type": "image/png", "data": ferris_png},
+                "storage_path": {
+                    "kind": {"type": "disabled"},
+                    "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+                },
+            }
         }
     ]
     # Test pdf with File block
@@ -1405,15 +1411,17 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "file": {
-                "url": None,
-                "mime_type": "application/pdf",
-                "data": deepseek_paper_pdf,
-            },
-            "storage_path": {
-                "kind": {"type": "disabled"},
-                "path": "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf",
-            },
+            "FileWithPath": {
+                "file": {
+                    "url": None,
+                    "mime_type": "application/pdf",
+                    "data": deepseek_paper_pdf,
+                },
+                "storage_path": {
+                    "kind": {"type": "disabled"},
+                    "path": "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf",
+                },
+            }
         }
     ]
 
@@ -1452,15 +1460,12 @@ def test_image_inference_url_wrong_mime_type(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "file": {
-                "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
-                "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                "data": ferris_png,
-            },
-            "storage_path": {
-                "kind": {"type": "disabled"},
-                "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.docx",
-            },
+            "Url": {
+                "file_url": {
+                    "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                    "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                }
+            }
         }
     ]
 
@@ -1498,14 +1503,11 @@ def test_image_inference_url(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "file": {
-                "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
-                "mime_type": "image/png",
-                "data": ferris_png,
-            },
-            "storage_path": {
-                "kind": {"type": "disabled"},
-                "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+            "Url": {
+                "file_url": {
+                    "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                    "mime_type": None,
+                }
             },
         }
     ]
@@ -1544,15 +1546,12 @@ def test_file_inference_url(sync_client: TensorZeroGateway):
     print(json_content)
     assert json_content == [
         {
-            "file": {
-                "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
-                "mime_type": "image/png",
-                "data": ferris_png,
-            },
-            "storage_path": {
-                "kind": {"type": "disabled"},
-                "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
-            },
+            "Url": {
+                "file_url": {
+                    "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                    "mime_type": None,
+                }
+            }
         }
     ]
 
@@ -3394,3 +3393,102 @@ async def test_async_cannot_enable_batch_writes():
             str(exc_info.value)
             == """Failed to construct TensorZero client: Clickhouse(Other { source: TensorZeroInternalError(Error(Config { message: "[gateway.observability.batch_writes] is not yet supported in embedded gateway mode" })) })"""
         )
+
+
+def test_sync_chat_function_named_template(sync_client: TensorZeroGateway):
+    """
+    Test that an chat inference with null response (i.e. no generated content blocks) works as expected.
+    """
+    result = sync_client.inference(
+        function_name="basic_test_template_no_schema",
+        variant_name="test",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        Template(
+                            name="my_custom_template",
+                            arguments={
+                                "first_variable": "first_from_python",
+                                "second_variable": "second_from_python",
+                            },
+                        ),
+                        {
+                            "type": "template",
+                            "name": "my_custom_template",
+                            "arguments": {
+                                "first_variable": "first_from_dict",
+                                "second_variable": "second_from_dict",
+                            },
+                        },
+                    ],
+                }
+            ],
+        },
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert len(result.content) == 1
+    assert isinstance(result.content[0], Text)
+    assert (
+        result.content[0].text
+        == """{"system":"The system text was `none`","messages":[{"role":"user","content":[{"type":"text","text":"New template: first_variable=first_from_python second_variable=second_from_python"},{"type":"text","text":"New template: first_variable=first_from_dict second_variable=second_from_dict"}]}]}"""
+    )
+
+
+def test_http_client_no_spurious_log(capfd: CaptureFixture[str]):
+    client = TensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000",
+        verbose_errors=True,
+    )
+    assert client is not None
+    captured = capfd.readouterr()
+    assert captured.err == ""
+    assert captured.out == ""
+
+
+@pytest.mark.asyncio
+async def test_async_http_client_no_spurious_log(capfd: CaptureFixture[str]):
+    client_fut = AsyncTensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000",
+        verbose_errors=True,
+    )
+    assert inspect.isawaitable(client_fut)
+    client = await client_fut
+    assert client is not None
+    captured = capfd.readouterr()
+    assert captured.err == ""
+    assert captured.out == ""
+
+
+def test_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
+    client = TensorZeroGateway.build_embedded(
+        config_file=TEST_CONFIG_FILE,
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+    )
+    assert client is not None
+    captured = capfd.readouterr()
+    assert captured.err == ""
+    assert captured.out == ""
+
+
+@pytest.mark.asyncio
+async def test_async_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
+    client_fut = AsyncTensorZeroGateway.build_embedded(
+        config_file=TEST_CONFIG_FILE,
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+    )
+    assert inspect.isawaitable(client_fut)
+    client = await client_fut
+    assert client is not None
+    captured = capfd.readouterr()
+    assert captured.err == ""
+    assert captured.out == ""
+
+
+def test_capfd_captured_warnings(capfd: CaptureFixture[str]):
+    client = TensorZeroGateway.build_embedded()
+    assert client is not None
+    captured = capfd.readouterr()
+    assert captured.err == ""
+    assert "Disabling observability:" in captured.out

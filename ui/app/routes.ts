@@ -117,6 +117,8 @@ export default [
         "routes/observability/episodes/$episode_id/route.tsx",
       ),
     ]),
+
+    route("models", "routes/observability/models/route.tsx"),
   ]),
 
   // Optimization
@@ -124,4 +126,7 @@ export default [
     "optimization/supervised-fine-tuning/:job_id?",
     "routes/optimization/supervised-fine-tuning/route.tsx",
   ),
+
+  // Health
+  route("health", "routes/health/route.tsx"),
 ] satisfies RouteConfig;
