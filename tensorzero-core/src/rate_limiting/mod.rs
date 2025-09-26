@@ -103,6 +103,19 @@ impl RateLimitingConfig {
         self.enabled
     }
 
+    pub fn get_rate_limited_resources(&self, scope_info: &ScopeInfo) -> Vec<RateLimitResource> {
+        if !self.enabled {
+            return vec![];
+        }
+        let limits = self.get_active_limits(scope_info);
+        limits
+            .iter()
+            .map(|limit| limit.limit.resource)
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
     pub async fn consume_tickets<'a>(
         &'a self,
         client: &impl RateLimitQueries,
@@ -113,6 +126,7 @@ impl RateLimitingConfig {
         if limits.is_empty() {
             return Ok(TicketBorrows::empty());
         }
+
         let rate_limit_resource_requests = rate_limited_request.estimated_resource_usage()?;
         let ticket_requests: Result<Vec<ConsumeTicketsRequest>, Error> = limits
             .iter()
@@ -293,7 +307,7 @@ pub struct RateLimit {
     pub refill_rate: u64,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -1523,6 +1537,64 @@ mod tests {
 
         let long_text = "a".repeat(1000);
         assert_eq!(get_estimated_tokens(&long_text), 500);
+    }
+
+    #[test]
+    fn test_max_tokens_validation_with_rate_limits() {
+        let tags = HashMap::new();
+        let scope_info = ScopeInfo { tags: &tags };
+
+        // Token rate limits active - should include Token resource
+        let token_limit = Arc::new(RateLimit {
+            resource: RateLimitResource::Token,
+            interval: RateLimitInterval::Minute,
+            capacity: 1000,
+            refill_rate: 100,
+        });
+        let config_with_token = RateLimitingConfig {
+            rules: vec![RateLimitingConfigRule {
+                limits: vec![token_limit.clone()],
+                scope: RateLimitingConfigScopes(vec![]),
+                priority: RateLimitingConfigPriority::Priority(1),
+            }],
+            enabled: true,
+        };
+        let resources = config_with_token.get_rate_limited_resources(&scope_info);
+        assert_eq!(resources.len(), 1);
+        assert!(resources.contains(&RateLimitResource::Token));
+
+        // Only ModelInference limits - should NOT include Token resource
+        let model_limit = Arc::new(RateLimit {
+            resource: RateLimitResource::ModelInference,
+            interval: RateLimitInterval::Minute,
+            capacity: 100,
+            refill_rate: 10,
+        });
+        let config_model_only = RateLimitingConfig {
+            rules: vec![RateLimitingConfigRule {
+                limits: vec![model_limit.clone()],
+                scope: RateLimitingConfigScopes(vec![]),
+                priority: RateLimitingConfigPriority::Priority(1),
+            }],
+            enabled: true,
+        };
+        let resources = config_model_only.get_rate_limited_resources(&scope_info);
+        assert_eq!(resources.len(), 1);
+        assert!(resources.contains(&RateLimitResource::ModelInference));
+        assert!(!resources.contains(&RateLimitResource::Token));
+
+        // Disabled config - should return empty even with token limits
+        let config_disabled = RateLimitingConfig {
+            enabled: false,
+            rules: vec![RateLimitingConfigRule {
+                limits: vec![token_limit.clone()],
+                scope: RateLimitingConfigScopes(vec![]),
+                priority: RateLimitingConfigPriority::Priority(1),
+            }],
+        };
+        assert!(config_disabled
+            .get_rate_limited_resources(&scope_info)
+            .is_empty());
     }
 
     #[test]
