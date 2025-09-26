@@ -16,6 +16,7 @@ async fn test_clickhouse_metrics_by_variant_singleton() {
         .run_query_synchronous_no_params(
             r"SELECT
         variant_name,
+        metric_name,
         avgMerge(feedback_mean) as mean,
         varSampStableMerge(feedback_variance) as variance,
         sum(count) as count
