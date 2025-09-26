@@ -78,6 +78,13 @@ impl FunctionConfig {
             FunctionConfig::Json(_) => "JsonInference",
         }
     }
+
+    pub fn experimentation(&self) -> &ExperimentationConfig {
+        match self {
+            FunctionConfig::Chat(config) => &config.experimentation,
+            FunctionConfig::Json(config) => &config.experimentation,
+        }
+    }
 }
 
 #[cfg(feature = "pyo3")]
