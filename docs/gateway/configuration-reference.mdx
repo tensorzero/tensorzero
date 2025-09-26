@@ -149,6 +149,16 @@ observability.enabled = true
 # ...
 ```
 
+### `observability.disable_automatic_migrations`
+
+- **Type:** boolean
+- **Required:** no (default `false`)
+
+Disable automatic running of the TensorZero migrations when the TensorZero Gateway launches.
+If `true`, then the migrations are not run upon launch and must instead be run manually,
+either by running `gateway --run_migrations_only` or via the user's own code.
+If `false`, then the migrations are run automatically upon launch.
+
 ### `template_filesystem_access`
 
 - **Type:** object
