@@ -1314,7 +1314,7 @@ async fn test_run_migrations_fake_row() {
     let migration_manager_result = migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
         is_manual_run: false,
-        disable_automatic_migrations: true,
+        disable_automatic_migrations: false,
     })
     .await;
     assert!(
@@ -1338,7 +1338,7 @@ async fn test_run_migrations_fake_row() {
     let migrations = migration_manager::make_all_migrations(&clickhouse);
     assert_eq!(
         migration_manager::check_migrations_state(&clickhouse, &migrations).await,
-        Ok(MigrationTableState::UnableToParse)
+        Ok(MigrationTableState::TooMany)
     );
 
     let migration_manager_result = migration_manager::run(RunMigrationManagerArgs {
