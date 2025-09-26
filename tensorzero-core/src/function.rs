@@ -247,7 +247,7 @@ pub struct FunctionConfigJson {
     pub output_schema: StaticJSONSchema, // schema is mandatory for JSON functions
     pub implicit_tool_call_config: ToolCallConfig,
     pub description: Option<String>,
-    // See `FunctionConfigChat.all_explicit_templates_names`.
+    // See `FunctionConfigChat.all_explicit_template_names`.
     #[serde(skip)]
     pub all_explicit_template_names: HashSet<String>,
 }
