@@ -47,7 +47,7 @@ impl RetryConfig {
         func: impl FnMut() -> F,
     ) -> impl Future<Output = Result<R, Error>> {
         let backoff = self.get_backoff();
-        func.retry(backoff).when(|e| !e.nonretryable())
+        func.retry(backoff).when(Error::is_retryable)
     }
 
     fn get_backoff(&self) -> backon::ExponentialBuilder {

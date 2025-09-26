@@ -138,8 +138,8 @@ impl Error {
         self.0.log();
     }
 
-    pub fn nonretryable(&self) -> bool {
-        self.0.nonretryable()
+    pub fn is_retryable(&self) -> bool {
+        self.0.is_retryable()
     }
 }
 
@@ -806,13 +806,14 @@ impl ErrorDetails {
         }
     }
 
-    pub fn nonretryable(&self) -> bool {
+    pub fn is_retryable(&self) -> bool {
         match &self {
-            ErrorDetails::RateLimitExceeded { .. } => true,
+            ErrorDetails::RateLimitExceeded { .. } => false,
+            // For ModelProvidersExhausted we will retry if any provider error is retryable
             ErrorDetails::ModelProvidersExhausted { provider_errors } => provider_errors
                 .iter()
-                .all(|(_, error)| error.nonretryable()),
-            _ => false,
+                .any(|(_, error)| error.is_retryable()),
+            _ => true,
         }
     }
 }
