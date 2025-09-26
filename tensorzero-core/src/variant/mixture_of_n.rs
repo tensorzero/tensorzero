@@ -892,6 +892,7 @@ mod tests {
         config::{SchemaData, UninitializedSchemas},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
+        experimentation::ExperimentationConfig,
         function::{FunctionConfigChat, FunctionConfigJson},
         http::TensorzeroHttpClient,
         inference::types::{
@@ -1278,6 +1279,7 @@ mod tests {
             implicit_tool_call_config: ToolCallConfig::default(),
             description: None,
             all_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
@@ -1567,6 +1569,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
 
         let InferenceOrStreamResult::NonStream(result) = mixture_of_n_variant

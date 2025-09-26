@@ -1275,6 +1275,7 @@ mod tests {
             implicit_tool_call_config,
             description: None,
             all_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1354,6 +1355,7 @@ mod tests {
             implicit_tool_call_config,
             description: None,
             all_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1423,6 +1425,7 @@ mod tests {
             implicit_tool_call_config,
             description: None,
             all_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1493,6 +1496,7 @@ mod tests {
             implicit_tool_call_config,
             description: None,
             all_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1567,6 +1571,7 @@ mod tests {
             implicit_tool_call_config,
             description: None,
             all_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1760,6 +1765,7 @@ mod tests {
             parallel_tool_calls: None,
             description: Some("A chat function description".to_string()),
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         };
         let function_config = FunctionConfig::Chat(chat_config);
         assert_eq!(
@@ -1777,6 +1783,7 @@ mod tests {
             implicit_tool_call_config,
             description: Some("A JSON function description".to_string()),
             all_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         };
         let function_config = FunctionConfig::Json(json_config);
         assert_eq!(
@@ -1793,6 +1800,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         };
         let function_config = FunctionConfig::Chat(chat_config);
         assert_eq!(function_config.description(), None);
@@ -1827,6 +1835,7 @@ mod tests {
             implicit_tool_call_config,
             description: None,
             all_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         let raw_request = "raw_request".to_string();
 
@@ -2392,6 +2401,7 @@ mod tests {
             implicit_tool_call_config,
             description: None,
             all_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"answer": "42"}"#.to_string().into()];
