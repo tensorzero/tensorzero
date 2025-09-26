@@ -55,6 +55,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{middleware, Router};
 use clap::ValueEnum;
 use http::HeaderMap;
+use metrics::{describe_counter, Unit};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use moka::sync::Cache;
 use opentelemetry::trace::{Tracer, TracerProvider as _};
@@ -731,4 +732,31 @@ pub fn setup_metrics() -> Result<PrometheusHandle, Error> {
             message: format!("Failed to install Prometheus exporter: {e}"),
         })
     })
+}
+
+/// Register the expected metrics along with their types and docstrings
+pub fn register_metrics() -> () {
+    describe_counter!(
+        "request_count",
+        Unit::Count,
+        "Requests handled by TensorZero",
+    );
+
+    describe_counter!(
+        "tensorzero_request_count",
+        Unit::Count,
+        "Requests handled by TensorZero",
+    );
+
+    describe_counter!(
+        "inference_count",
+        Unit::Count,
+        "Inferences performed by TensorZero",
+    );
+
+    describe_counter!(
+        "tensorzero_inference_count",
+        Unit::Count,
+        "Inferences performed by TensorZero",
+    );
 }

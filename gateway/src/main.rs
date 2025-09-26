@@ -115,6 +115,8 @@ async fn main() {
 
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
+    observability::register_metrics();
+
     if args.warn_default_cmd {
         tracing::warn!("Deprecation Warning: Running gateway from Docker container without overriding default CMD. Please override the command to either `--config-file` to specify a custom configuration file (e.g. `--config-file /path/to/tensorzero.toml`) or `--default-config` to use default settings (i.e. no custom functions, metrics, etc.).");
     }
