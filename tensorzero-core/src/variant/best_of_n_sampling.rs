@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
 
-use backon::Retryable;
 use futures::future::{join_all, try_join_all};
 use lazy_static::lazy_static;
 use rand::Rng;
@@ -489,13 +488,15 @@ async fn inner_select_best_candidate<'a, 'request>(
             name: evaluator.inner.model().to_string(),
         })
     })?;
-    let model_inference_response = (|| async {
-        model_config
-            .infer(&inference_request, clients, evaluator.inner.model())
-            .await
-    })
-    .retry(evaluator.inner.retries().get_backoff())
-    .await?;
+    let model_inference_response = evaluator
+        .inner
+        .retries()
+        .retry(|| async {
+            model_config
+                .infer(&inference_request, clients, evaluator.inner.model())
+                .await
+        })
+        .await?;
     let model_inference_result = ModelInferenceResponseWithMetadata::new(
         model_inference_response,
         evaluator.inner.model().clone(),
