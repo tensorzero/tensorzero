@@ -35,8 +35,9 @@ pub mod evaluators;
 pub mod helpers;
 pub mod stats;
 
-#[derive(clap::ValueEnum, Clone, Debug, Default, PartialEq)]
+#[derive(clap::ValueEnum, Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 #[clap(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum OutputFormat {
     Jsonl,
     #[default]

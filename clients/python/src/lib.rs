@@ -10,6 +10,7 @@
 /// and defines methods on them.
 use std::{collections::HashMap, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
+use evaluations::{run_evaluation_core, EvaluationCoreArgs, OutputFormat};
 use futures::StreamExt;
 use pyo3::{
     exceptions::{PyStopAsyncIteration, PyStopIteration, PyValueError},
@@ -981,6 +982,82 @@ impl TensorZeroGateway {
         }
     }
 
+    /// Run a tensorzero Evaluation
+    ///
+    /// This function is only available in EmbeddedGateway mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `evaluation_name` - User chosen name of the evaluation.
+    /// * `dataset_name` - The name of the stored dataset to use for variant evaluation
+    /// * `variant_name` - The name of the variant to evaluate
+    /// * `concurrency` - The maximum number of examples to process in parallel
+    /// * `output_format` - Output format for results ("jsonl" or "pretty")
+    /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
+    #[pyo3(signature = (*,
+                        evaluation_name,
+                        dataset_name,
+                        variant_name,
+                        concurrency=1,
+                        output_format="pretty".to_string(),
+                        inference_cache="on".to_string()
+    ),
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name, concurrency=1, output_format='pretty', inference_cache='on')"
+    )]
+    fn experimental_run_evaluation(
+        this: PyRef<'_, Self>,
+        evaluation_name: String,
+        dataset_name: String,
+        variant_name: String,
+        concurrency: usize,
+        output_format: String,
+        inference_cache: String,
+    ) -> PyResult<()> {
+        let client = this.as_super().client.clone();
+
+        // Get app state data
+        let app_state = client.get_app_state_data().ok_or_else(|| {
+            pyo3::exceptions::PyRuntimeError::new_err("Client is not in EmbeddedGateway mode")
+        })?;
+
+        let evaluation_run_id = uuid::Uuid::now_v7();
+
+        let output_format_enum: OutputFormat =
+            serde_json::from_str(&format!("\"{output_format}\"")).map_err(|_| {
+                pyo3::exceptions::PyValueError::new_err(
+                    "Invalid output_format. Must be 'jsonl' or 'pretty'",
+                )
+            })?;
+        let inference_cache_enum: tensorzero_core::cache::CacheEnabledMode =
+            serde_json::from_str(&format!("\"{inference_cache}\"")).map_err(|_| {
+                pyo3::exceptions::PyValueError::new_err(
+                    "Invalid inference_cache. Must be 'on', 'off', 'read_only', or 'write_only'",
+                )
+            })?;
+
+        let core_args = EvaluationCoreArgs {
+            tensorzero_client: (*client).clone(),
+            clickhouse_client: app_state.clickhouse_connection_info.clone(),
+            config: app_state.config.clone(),
+            evaluation_name,
+            evaluation_run_id,
+            dataset_name,
+            variant_name,
+            concurrency,
+            output_format: output_format_enum,
+            inference_cache: inference_cache_enum,
+        };
+
+        let mut writer = std::io::stdout();
+
+        tokio_block_on_without_gil(this.py(), run_evaluation_core(core_args, &mut writer))
+            .map_err(|e| {
+                pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
+            })?;
+
+        Ok(())
+    }
+
     /// Query the Clickhouse database for inferences.
     ///
     /// This function is only available in EmbeddedGateway mode.
@@ -1664,6 +1741,85 @@ impl AsyncTensorZeroGateway {
                 Ok(datapoints) => Ok(PyList::new(py, datapoints)?.unbind()),
                 Err(e) => Err(convert_error(py, e)),
             })
+        })
+    }
+
+    /// Run a tensorzero Evaluation
+    ///
+    /// This function is only available in EmbeddedGateway mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `evaluation_name` - User chosen name of the evaluation.
+    /// * `dataset_name` - The name of the stored dataset to use for variant evaluation
+    /// * `variant_name` - The name of the variant to evaluate
+    /// * `concurrency` - The maximum number of examples to process in parallel
+    /// * `output_format` - Output format for results ("jsonl" or "pretty")
+    /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
+    #[pyo3(signature = (*,
+                        evaluation_name,
+                        dataset_name,
+                        variant_name,
+                        concurrency=1,
+                        output_format="pretty".to_string(),
+                        inference_cache="on".to_string()
+    ),
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name, concurrency=1, output_format='pretty', inference_cache='on')"
+    )]
+    fn experimental_run_evaluation<'a>(
+        this: PyRef<'a, Self>,
+        evaluation_name: String,
+        dataset_name: String,
+        variant_name: String,
+        concurrency: usize,
+        output_format: String,
+        inference_cache: String,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+
+        let output_format_enum: OutputFormat =
+            serde_json::from_str(&format!("\"{output_format}\"")).map_err(|_| {
+                pyo3::exceptions::PyValueError::new_err(
+                    "Invalid output_format. Must be 'jsonl' or 'pretty'",
+                )
+            })?;
+        let inference_cache_enum: tensorzero_core::cache::CacheEnabledMode =
+            serde_json::from_str(&format!("\"{inference_cache}\"")).map_err(|_| {
+                pyo3::exceptions::PyValueError::new_err(
+                    "Invalid inference_cache. Must be 'on', 'off', 'read_only', or 'write_only'",
+                )
+            })?;
+
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            // Get app state data
+            let app_state = client.get_app_state_data().ok_or_else(|| {
+                pyo3::exceptions::PyRuntimeError::new_err("Client is not in EmbeddedGateway mode")
+            })?;
+
+            let evaluation_run_id = uuid::Uuid::now_v7();
+
+            let core_args = EvaluationCoreArgs {
+                tensorzero_client: (*client).clone(),
+                clickhouse_client: app_state.clickhouse_connection_info.clone(),
+                config: app_state.config.clone(),
+                evaluation_name,
+                evaluation_run_id,
+                dataset_name,
+                variant_name,
+                concurrency,
+                output_format: output_format_enum,
+                inference_cache: inference_cache_enum,
+            };
+
+            let mut writer = std::io::stdout();
+
+            run_evaluation_core(core_args, &mut writer)
+                .await
+                .map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
+                })?;
+
+            Python::attach(|py| Ok(py.None()))
         })
     }
 
