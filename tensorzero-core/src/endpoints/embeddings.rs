@@ -11,11 +11,9 @@ use crate::{
     endpoints::inference::InferenceClients,
     error::{Error, ErrorDetails},
     inference::types::Usage,
-    variant::RetryConfig,
 };
 
 use super::inference::InferenceCredentials;
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct Params {
     pub input: EmbeddingInput,
@@ -97,6 +95,7 @@ mod tests {
     use crate::config::TimeoutsConfig;
     use crate::embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo};
     use crate::providers::dummy::DummyProvider;
+    use crate::variant::RetryConfig;
     use std::collections::HashMap;
     use tracing_test::traced_test;
 
@@ -118,7 +117,7 @@ mod tests {
             routing: vec!["dummy".to_string().into()],
             providers: HashMap::from([("dummy".to_string().into(), provider_info)]),
             timeouts: TimeoutsConfig::default(),
-            retries: RetryConfig { num_retries: 5, max_delay_s: 0.1 }
+            retries: RetryConfig::default(),
         };
 
         // Create a minimal config with just the embedding model

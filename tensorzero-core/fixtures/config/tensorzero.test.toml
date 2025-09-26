@@ -34,7 +34,6 @@ model_name = "claude-3-haiku-20240307"
 
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]
-retries = { num_retries = 5, max_delay_s = 0.1}
 
 [embedding_models.text-embedding-3-small.providers.openai]
 type = "openai"

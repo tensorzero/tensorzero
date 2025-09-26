@@ -121,7 +121,7 @@ api_key_location = "dynamic::azure_openai_api_key"
 #type = "azure"
 #deployment_id = "Phi-4-mini-instruct"
 #endpoint = "https://t0-gha-resource.services.ai.azure.com"
-#api_key_location = "dynamic::azure_ai_foundry_api_key"
+api_key_location = "dynamic::azure_ai_foundry_api_key"
 
 ## Groq
 
@@ -748,7 +748,6 @@ model_name = "reasoner"
 
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]
-retries = { num_retries = 5, max_delay_s = 0.1}
 
 [embedding_models.text-embedding-3-small.providers.openai]
 type = "openai"
@@ -756,7 +755,6 @@ model_name = "text-embedding-3-small"
 
 [embedding_models.azure-text-embedding-3-small]
 routing = ["azure"]
-retries = { num_retries = 5, max_delay_s = 0.1}
 
 [embedding_models.azure-text-embedding-3-small.providers.azure]
 type = "azure"
@@ -765,7 +763,6 @@ deployment_id = "text-embedding-3-small"
 
 [embedding_models.voyage_3_5_lite_256]
 routing = ["voyage"]
-retries = { num_retries = 5, max_delay_s = 0.1}
 
 [embedding_models.voyage_3_5_lite_256.providers.voyage]
 type = "openai"
@@ -780,7 +777,6 @@ extra_body = [
 
 [embedding_models.fallback]
 routing = ["slow", "openai"]
-retries = { num_retries = 5, max_delay_s = 0.1}
 
 [embedding_models.fallback.providers.slow]
 type = "dummy"
@@ -795,7 +791,6 @@ model_name = "text-embedding-3-small"
 
 [embedding_models.timeout]
 routing = ["slow"]
-retries = { num_retries = 5, max_delay_s = 0.1}
 
 [embedding_models.timeout.timeouts]
 non_streaming = { total_ms = 1000 }
@@ -806,7 +801,6 @@ model_name = "slow"
 
 [embedding_models.dummy-embedding-model]
 routing = ["dummy"]
-retries = { num_retries = 5, max_delay_s = 0.1}
 
 [embedding_models.dummy-embedding-model.providers.dummy]
 type = "dummy"
@@ -1658,7 +1652,6 @@ type = "chat_completion"
 model = "flaky_basic_test"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
-retries = { num_retries = 5, max_delay_s = 0.1 }
 
 [functions.basic_test.variants.err_in_stream]
 type = "chat_completion"
@@ -3234,7 +3227,6 @@ candidates = ["variant0", "variant1"]
 [functions.best_of_n.variants.flaky_best_of_n_variant.evaluator]
 model = "flaky_best_of_n_judge"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-retries = { num_retries = 5, max_delay_s = 0.1 }
 
 [functions.best_of_n_json]
 type = "json"

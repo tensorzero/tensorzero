@@ -58,6 +58,7 @@ pub struct DiclOptimizationConfig {
     pub credentials: OpenAICredentials,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credential_location: Option<CredentialLocation>,
+    pub retries: RetryConfig,
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -79,6 +80,7 @@ pub struct UninitializedDiclOptimizationConfig {
     pub model: String,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credentials: Option<CredentialLocation>,
+    pub retries: RetryConfig,   
 }
 
 impl Default for UninitializedDiclOptimizationConfig {
@@ -93,6 +95,7 @@ impl Default for UninitializedDiclOptimizationConfig {
             k: default_k(),
             model: default_model(),
             credentials: None,
+            retries: RetryConfig::default(),    
         }
     }
 }
@@ -189,6 +192,7 @@ impl UninitializedDiclOptimizationConfig {
                 &DEFAULT_CREDENTIALS,
             )?,
             credential_location: self.credentials,
+            retries: self.retries,  
         })
     }
 }
@@ -781,7 +785,7 @@ mod tests {
                 routing: vec![Arc::from("dummy")],
                 providers,
                 timeouts: TimeoutsConfig::default(),
-                retries: RetryConfig { num_retries: 5, max_delay_s: 0.1 },
+                retries: RetryConfig::default(),
             }
         }
         #[cfg(not(any(test, feature = "e2e_tests")))]
