@@ -12,6 +12,27 @@ fn assert_float_eq(actual: f32, expected: f32, epsilon: Option<f32>) {
 #[tokio::test]
 async fn test_clickhouse_metrics_by_variant_singleton() {
     let clickhouse = get_clickhouse().await;
+    let all_feedback_data = clickhouse
+        .run_query_synchronous_no_params(
+            r"SELECT
+        variant_name,
+        avgMerge(feedback_mean) as mean,
+        varSampStableMerge(feedback_variance) as variance,
+        sum(count) as count
+    FROM FeedbackByVariantStatistics
+    GROUP BY function_name, variant_name, metric_name
+    FORMAT JSONEachRow"
+                .to_string(),
+        )
+        .await
+        .unwrap();
+    for line in all_feedback_data.response.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let parsed_line: serde_json::Value = serde_json::from_str(line).unwrap();
+        println!("{}", serde_json::to_string_pretty(&parsed_line).unwrap());
+    }
     let metrics_by_variant = clickhouse
         .get_feedback_by_variant("haiku_score_episode", "write_haiku", None)
         .await
