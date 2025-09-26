@@ -142,7 +142,7 @@ pub async fn run_evaluation(
     }
     .build()
     .await
-    .map_err(|e| anyhow!("Failed to build client: {}", e))?;
+    .map_err(|e| anyhow!("Failed to build client: {e}"))?;
     let clients = Arc::new(Clients {
         tensorzero_client: ThrottledTensorZeroClient::new(tensorzero_client, semaphore),
         clickhouse_client: ClickHouseConnectionInfo::new(
@@ -292,7 +292,7 @@ pub async fn run_evaluation(
         // If there are failures, return an error with all failures listed
         if !failures.is_empty() {
             let failure_messages = format_cutoff_failures(&failures);
-            bail!("Failed cutoffs for evaluators: {}", failure_messages);
+            bail!("Failed cutoffs for evaluators: {failure_messages}");
         }
     }
 
