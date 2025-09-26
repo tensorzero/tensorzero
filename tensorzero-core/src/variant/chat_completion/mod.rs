@@ -16,6 +16,7 @@ use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeader
 use crate::inference::types::resolved_input::{
     LazyResolvedInput, LazyResolvedInputMessage, LazyResolvedInputMessageContent,
 };
+use crate::utils::retries::RetryConfig;
 
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultStream,
@@ -32,7 +33,7 @@ pub use templates::ChatTemplates;
 
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
-    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, RetryConfig, Variant,
+    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, Variant,
 };
 
 /// If we have a schema, then we forward the 'arguments' object as-is to the template.
@@ -57,26 +58,87 @@ pub struct TemplateWithSchema {
 #[derive(Debug, Default, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-#[expect(clippy::manual_non_exhaustive)]
 pub struct ChatCompletionConfig {
-    pub weight: Option<f64>,
-    pub model: Arc<str>,
-    pub templates: ChatTemplates,
-    pub temperature: Option<f32>,
-    pub top_p: Option<f32>,
-    pub max_tokens: Option<u32>,
-    pub presence_penalty: Option<f32>,
-    pub frequency_penalty: Option<f32>,
-    pub seed: Option<u32>,
-    pub stop_sequences: Option<Vec<String>>,
-    pub json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
-    pub retries: RetryConfig,
+    weight: Option<f64>,
+    model: Arc<str>,
+    templates: ChatTemplates,
+    temperature: Option<f32>,
+    top_p: Option<f32>,
+    max_tokens: Option<u32>,
+    presence_penalty: Option<f32>,
+    frequency_penalty: Option<f32>,
+    seed: Option<u32>,
+    stop_sequences: Option<Vec<String>>,
+    json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
+    retries: RetryConfig,
     #[cfg_attr(test, ts(skip))]
-    pub extra_body: Option<ExtraBodyConfig>,
+    extra_body: Option<ExtraBodyConfig>,
     #[cfg_attr(test, ts(skip))]
-    pub extra_headers: Option<ExtraHeadersConfig>,
+    extra_headers: Option<ExtraHeadersConfig>,
     #[serde(skip)]
     _private: (),
+}
+
+impl ChatCompletionConfig {
+    pub fn weight(&self) -> Option<f64> {
+        self.weight
+    }
+
+    pub fn set_weight(&mut self, weight: Option<f64>) {
+        self.weight = weight;
+    }
+
+    pub fn model(&self) -> &Arc<str> {
+        &self.model
+    }
+
+    pub fn templates(&self) -> &ChatTemplates {
+        &self.templates
+    }
+
+    pub fn temperature(&self) -> Option<f32> {
+        self.temperature
+    }
+
+    pub fn top_p(&self) -> Option<f32> {
+        self.top_p
+    }
+
+    pub fn max_tokens(&self) -> Option<u32> {
+        self.max_tokens
+    }
+
+    pub fn presence_penalty(&self) -> Option<f32> {
+        self.presence_penalty
+    }
+
+    pub fn frequency_penalty(&self) -> Option<f32> {
+        self.frequency_penalty
+    }
+
+    pub fn seed(&self) -> Option<u32> {
+        self.seed
+    }
+
+    pub fn stop_sequences(&self) -> Option<&Vec<String>> {
+        self.stop_sequences.as_ref()
+    }
+
+    pub fn json_mode(&self) -> Option<&JsonMode> {
+        self.json_mode.as_ref()
+    }
+
+    pub fn retries(&self) -> &RetryConfig {
+        &self.retries
+    }
+
+    pub fn extra_body(&self) -> Option<&ExtraBodyConfig> {
+        self.extra_body.as_ref()
+    }
+
+    pub fn extra_headers(&self) -> Option<&ExtraHeadersConfig> {
+        self.extra_headers.as_ref()
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]

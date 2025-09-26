@@ -1,5 +1,3 @@
-use backon::ExponentialBuilder;
-use backon::Retryable;
 use futures::StreamExt;
 use itertools::izip;
 #[cfg(feature = "pyo3")]
@@ -43,6 +41,7 @@ use crate::model::StreamResponse;
 use crate::model::StreamResponseAndMessages;
 use crate::rate_limiting::TicketBorrows;
 use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
+use crate::utils::retries::RetryConfig;
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 
 pub mod best_of_n_sampling;
@@ -252,21 +251,21 @@ pub trait Variant {
 impl VariantConfig {
     pub fn weight(&self) -> Option<f64> {
         match self {
-            VariantConfig::ChatCompletion(params) => params.weight,
-            VariantConfig::BestOfNSampling(params) => params.weight,
+            VariantConfig::ChatCompletion(params) => params.weight(),
+            VariantConfig::BestOfNSampling(params) => params.weight(),
             VariantConfig::Dicl(params) => params.weight(),
-            VariantConfig::MixtureOfN(params) => params.weight,
-            VariantConfig::ChainOfThought(params) => params.inner.weight,
+            VariantConfig::MixtureOfN(params) => params.weight(),
+            VariantConfig::ChainOfThought(params) => params.inner.weight(),
         }
     }
 
     pub fn set_weight(&mut self, weight: Option<f64>) {
         match self {
-            VariantConfig::ChatCompletion(params) => params.weight = weight,
-            VariantConfig::BestOfNSampling(params) => params.weight = weight,
+            VariantConfig::ChatCompletion(params) => params.set_weight(weight),
+            VariantConfig::BestOfNSampling(params) => params.set_weight(weight),
             VariantConfig::Dicl(params) => params.set_weight(weight),
-            VariantConfig::MixtureOfN(params) => params.weight = weight,
-            VariantConfig::ChainOfThought(params) => params.inner.weight = weight,
+            VariantConfig::MixtureOfN(params) => params.set_weight(weight),
+            VariantConfig::ChainOfThought(params) => params.inner.set_weight(weight),
         }
     }
 }
@@ -703,13 +702,14 @@ struct InferModelRequestArgs<'a, 'request> {
 async fn infer_model_request(
     args: InferModelRequestArgs<'_, '_>,
 ) -> Result<InferenceResult, Error> {
-    let model_inference_response = (|| async {
-        args.model_config
-            .infer(&args.request, args.clients, &args.model_name)
-            .await
-    })
-    .retry(args.retry_config.get_backoff())
-    .await?;
+    let model_inference_response = args
+        .retry_config
+        .retry(|| async {
+            args.model_config
+                .infer(&args.request, args.clients, &args.model_name)
+                .await
+        })
+        .await?;
 
     let original_response = model_inference_response.raw_response.clone();
     let model_inference_result =
@@ -749,13 +749,13 @@ async fn infer_model_request_stream<'request>(
             },
         messages: input_messages,
         ticket_borrow,
-    } = (|| async {
-        model_config
-            .infer_stream(&request, clients, &model_name)
-            .await
-    })
-    .retry(retry_config.get_backoff())
-    .await?;
+    } = retry_config
+        .retry(|| async {
+            model_config
+                .infer_stream(&request, clients, &model_name)
+                .await
+        })
+        .await?;
     let system = request.system.clone();
     let model_used_info = ModelUsedInfo {
         model_name,
@@ -773,41 +773,6 @@ async fn infer_model_request_stream<'request>(
     let stream =
         stream.map(move |chunk| chunk.map(|chunk| InferenceResultChunk::new(chunk, config_type)));
     Ok((Box::pin(stream), model_used_info))
-}
-
-#[derive(Debug, Deserialize, Copy, Clone, Serialize, ts_rs::TS)]
-#[ts(export)]
-pub struct RetryConfig {
-    #[serde(default = "default_num_retries")]
-    pub num_retries: usize,
-    #[serde(default = "default_max_delay_s")]
-    pub max_delay_s: f32,
-}
-
-impl Default for RetryConfig {
-    fn default() -> Self {
-        RetryConfig {
-            num_retries: default_num_retries(),
-            max_delay_s: default_max_delay_s(),
-        }
-    }
-}
-
-fn default_num_retries() -> usize {
-    0
-}
-
-fn default_max_delay_s() -> f32 {
-    10.0
-}
-
-impl RetryConfig {
-    pub fn get_backoff(&self) -> backon::ExponentialBuilder {
-        ExponentialBuilder::default()
-            .with_jitter()
-            .with_max_delay(Duration::from_secs_f32(self.max_delay_s))
-            .with_max_times(self.num_retries)
-    }
 }
 
 impl<'a> BatchInferenceConfig<'a> {
@@ -851,7 +816,7 @@ impl ChatCompletionConfigPyClass {
     fn get_system_template(&self) -> PyResult<Option<String>> {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
-            .templates
+            .templates()
             .get_implicit_system_template()
             .as_ref()
             .map(|t| t.template.contents.clone()))
@@ -861,7 +826,7 @@ impl ChatCompletionConfigPyClass {
     fn get_user_template(&self) -> PyResult<Option<String>> {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
-            .templates
+            .templates()
             .get_implicit_template(crate::inference::types::Role::User)
             .as_ref()
             .map(|t| t.template.contents.clone()))
@@ -871,7 +836,7 @@ impl ChatCompletionConfigPyClass {
     fn get_assistant_template(&self) -> PyResult<Option<String>> {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
-            .templates
+            .templates()
             .get_implicit_template(crate::inference::types::Role::Assistant)
             .as_ref()
             .map(|t| t.template.contents.clone()))
@@ -880,7 +845,7 @@ impl ChatCompletionConfigPyClass {
     #[getter]
     fn get_model(&self) -> PyResult<String> {
         let config = Self::extract_chat_completion_config(&self.inner)?;
-        Ok(config.model.to_string())
+        Ok(config.model().to_string())
     }
 }
 

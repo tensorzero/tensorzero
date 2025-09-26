@@ -16,7 +16,7 @@ use tensorzero_core::{
         get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
         select_model_inference_clickhouse,
     },
-    gateway_util::StructuredJson,
+    utils::gateway::StructuredJson,
 };
 
 #[tokio::test(flavor = "multi_thread")]

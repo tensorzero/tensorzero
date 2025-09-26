@@ -630,7 +630,7 @@ async fn render_model_input(
         resolved_input.system.as_ref(),
         &resolved_input.messages,
         &config.templates,
-        &chat_completion_config.templates,
+        chat_completion_config.templates(),
     )
     .await
 }

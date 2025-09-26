@@ -20,6 +20,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
+use tracing::Span;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
 use crate::config::path::ResolvedTomlPath;
@@ -33,6 +35,7 @@ use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 #[cfg(feature = "pyo3")]
 use crate::function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass};
 use crate::inference::types::storage::StorageKind;
+use crate::inference::types::Usage;
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
@@ -409,7 +412,7 @@ pub struct ExportConfig {
     pub otlp: OtlpConfig,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -418,7 +421,34 @@ pub struct OtlpConfig {
     pub traces: OtlpTracesConfig,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+impl OtlpConfig {
+    /// Attaches usage inference to the model provider span (if traces are enabled).
+    /// This is used for both streaming and non-streaming requests.
+    pub fn apply_usage_to_model_provider_span(&self, span: &Span, usage: &Usage) {
+        if self.traces.enabled {
+            match self.traces.format {
+                OtlpTracesFormat::OpenTelemetry => {
+                    span.set_attribute("gen_ai.usage.input_tokens", usage.input_tokens as i64);
+                    span.set_attribute("gen_ai.usage.output_tokens", usage.output_tokens as i64);
+                    span.set_attribute(
+                        "gen_ai.usage.total_tokens",
+                        (usage.input_tokens + usage.output_tokens) as i64,
+                    );
+                }
+                OtlpTracesFormat::OpenInference => {
+                    span.set_attribute("llm.token_count.prompt", usage.input_tokens as i64);
+                    span.set_attribute("llm.token_count.completion", usage.output_tokens as i64);
+                    span.set_attribute(
+                        "llm.token_count.total",
+                        (usage.input_tokens + usage.output_tokens) as i64,
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -430,7 +460,7 @@ pub struct OtlpTracesConfig {
     pub format: OtlpTracesFormat,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "lowercase")]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, rename_all = "lowercase"))]
@@ -1305,7 +1335,7 @@ impl UninitializedFunctionConfig {
                 for (name, variant) in &variants {
                     all_template_names.extend(variant.get_all_explicit_template_names());
                     if let VariantConfig::ChatCompletion(chat_config) = &variant.inner {
-                        if chat_config.json_mode.is_some() {
+                        if chat_config.json_mode().is_some() {
                             return Err(ErrorDetails::Config {
                                 message: format!(
                                     "JSON mode is not supported for variant `{name}` (parent function is a chat function)",
@@ -1371,17 +1401,17 @@ impl UninitializedFunctionConfig {
                     all_template_names.extend(variant.get_all_explicit_template_names());
                     match &variant.inner {
                         VariantConfig::ChatCompletion(chat_config) => {
-                            if chat_config.json_mode.is_none() {
+                            if chat_config.json_mode().is_none() {
                                 variant_missing_mode = Some(name.clone());
                             }
                         }
                         VariantConfig::BestOfNSampling(best_of_n_config) => {
-                            if best_of_n_config.evaluator.inner.json_mode.is_none() {
+                            if best_of_n_config.evaluator().inner.json_mode().is_none() {
                                 variant_missing_mode = Some(format!("{name}.evaluator"));
                             }
                         }
                         VariantConfig::MixtureOfN(mixture_of_n_config) => {
-                            if mixture_of_n_config.fuser.inner.json_mode.is_none() {
+                            if mixture_of_n_config.fuser().inner.json_mode().is_none() {
                                 variant_missing_mode = Some(format!("{name}.fuser"));
                             }
                         }
@@ -1391,7 +1421,7 @@ impl UninitializedFunctionConfig {
                             }
                         }
                         VariantConfig::ChainOfThought(chain_of_thought_config) => {
-                            if chain_of_thought_config.inner.json_mode.is_none() {
+                            if chain_of_thought_config.inner.json_mode().is_none() {
                                 variant_missing_mode = Some(name.clone());
                             }
                         }

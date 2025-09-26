@@ -15,7 +15,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.9.4"
+version = "2025.9.5"
 rust-version = "1.86.0"
 license = "Apache-2.0"
 
@@ -76,6 +76,7 @@ unsafe_code = "forbid"
 [workspace.lints.clippy]
 allow_attributes = "deny"
 dbg_macro = "deny"
+disallowed-types = "deny"
 # NB: Slowly making progress towards:
 # doc_markdown = "deny"
 expect_used = "deny"
@@ -109,6 +110,9 @@ default_trait_access = "allow"
 match_same_arms = "allow"
 must_use_candidate = "allow"
 single_match_else = "allow"
+
+# This lint cannot be fixed with 'cargo fmt', and we don't currently generate docs
+doc_lazy_continuation = "allow"
 
 [profile.performance]
 inherits = "release"

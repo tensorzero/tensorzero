@@ -137,6 +137,10 @@ impl Error {
     pub fn log(&self) {
         self.0.log();
     }
+
+    pub fn is_retryable(&self) -> bool {
+        self.0.is_retryable()
+    }
 }
 
 // Expect for derive Serialize
@@ -801,6 +805,17 @@ impl ErrorDetails {
             tracing::Level::TRACE => tracing::trace!("{self}"),
         }
     }
+
+    pub fn is_retryable(&self) -> bool {
+        match &self {
+            ErrorDetails::RateLimitExceeded { .. } => false,
+            // For ModelProvidersExhausted we will retry if any provider error is retryable
+            ErrorDetails::ModelProvidersExhausted { provider_errors } => provider_errors
+                .iter()
+                .any(|(_, error)| error.is_retryable()),
+            _ => true,
+        }
+    }
 }
 
 impl std::fmt::Display for ErrorDetails {
@@ -1269,14 +1284,19 @@ impl std::fmt::Display for ErrorDetails {
                 key,
                 tickets_remaining,
             } => {
-                // TODO: improve this error
+                // TODO: improve this error:
+                // - `{key}` should more closely match the definition of the rule in TOML
+                // - Display the number of requested tickets (units) if possible.
                 write!(
                     f,
-                    "Rate limit exceeded for key {key} with {tickets_remaining} tickets remaining"
+                    "TensorZero rate limit exceeded for rule {key}. {tickets_remaining} units currently available."
                 )
             }
             ErrorDetails::RateLimitMissingMaxTokens => {
-                write!(f, "Missing max tokens for rate limited request.")
+                write!(
+                    f,
+                    "Missing `max_tokens` for request subject to rate limiting rules."
+                )
             }
             ErrorDetails::StreamError { source } => {
                 write!(f, "Error in streaming response: {source}")

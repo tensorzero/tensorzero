@@ -1,6 +1,6 @@
-# Guide: Prompt Templates & Schemas
+# Code Example: How to create a prompt template
 
-This directory contains the code for the **[Prompt Templates & Schemas](https://www.tensorzero.com/docs/gateway/guides/prompt-templates-schemas)** guide.
+This folder contains the code for the [Guides » Gateway » Create a prompt template](https://www.tensorzero.com/docs/gateway/create-a-prompt-template) page in the documentation.
 
 ## Running the Example
 
@@ -31,7 +31,7 @@ pip install -r requirements.txt
 b. Run the example:
 
 ```bash
-python main.py
+python tensorzero_sdk.py
 ```
 
 </details>
@@ -48,7 +48,7 @@ pip install -r requirements.txt
 b. Run the example:
 
 ```bash
-python main_openai.py
+python openai_sdk.py
 ```
 
 </details>
@@ -56,21 +56,21 @@ python main_openai.py
 <details>
 <summary><b>HTTP</b></summary>
 
-Run the following commands to make a multimodal inference request to the TensorZero Gateway.
-The first image is a remote image of Ferris the crab, and the second image is a one-pixel orange image encoded as a base64 string.
+Run the following command to make an inference request to the TensorZero Gateway.
 
 ```bash
 curl -X POST http://localhost:3000/inference \
   -H "Content-Type: application/json" \
   -d '{
-    "function_name": "generate_haiku_with_topic",
+    "function_name": "fun_fact",
     "input": {
       "messages": [
         {
           "role": "user",
           "content": [
             {
-              "type": "text",
+              "type": "template",
+              "name": "fun_fact_topic",
               "arguments": {
                 "topic": "artificial intelligence"
               }
