@@ -1691,7 +1691,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         });
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -1867,7 +1867,7 @@ mod tests {
             output_schema: hardcoded_output_schema,
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         });
         let inference_params = InferenceParams {
             chat_completion: ChatCompletionInferenceParams {
@@ -1997,7 +1997,7 @@ mod tests {
             output_schema: hardcoded_output_schema,
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         });
         let inference_params = InferenceParams::default();
         // Will dynamically set "response" instead of "answer"
@@ -2524,7 +2524,7 @@ mod tests {
                 parallel_tool_calls: None,
             },
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         });
         let inference_config = InferenceConfig {
             ids: InferenceIds {
