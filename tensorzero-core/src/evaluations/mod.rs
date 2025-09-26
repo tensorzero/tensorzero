@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 
 use crate::config::{ErrorContext, LoadableConfig, UninitializedSchemas};
+use crate::utils::retries::RetryConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::Variant;
 use crate::{
@@ -25,7 +26,7 @@ use crate::{
         chat_completion::ChatCompletionConfig,
         dicl::UninitializedDiclConfig,
         mixture_of_n::{UninitializedFuserConfig, UninitializedMixtureOfNConfig},
-        JsonMode, RetryConfig, VariantConfig, VariantInfo,
+        JsonMode, VariantConfig, VariantInfo,
     },
 };
 

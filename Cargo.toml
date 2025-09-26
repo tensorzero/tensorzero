@@ -15,7 +15,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.9.5"
+version = "2025.9.6"
 rust-version = "1.86.0"
 license = "Apache-2.0"
 
@@ -76,6 +76,7 @@ unsafe_code = "forbid"
 [workspace.lints.clippy]
 allow_attributes = "deny"
 dbg_macro = "deny"
+disallowed-types = "deny"
 # NB: Slowly making progress towards:
 # doc_markdown = "deny"
 expect_used = "deny"
