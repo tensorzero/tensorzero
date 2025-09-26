@@ -142,6 +142,7 @@ impl UninitializedDiclOptimizationConfig {
             k: k.unwrap_or_else(default_k),
             model: model.unwrap_or_else(default_model),
             credentials,
+            retries: RetryConfig::default(),
         })
     }
 
