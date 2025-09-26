@@ -1,5 +1,6 @@
 use crate::config::SchemaData;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::experimentation::ExperimentationConfig;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 #[cfg(feature = "pyo3")]
@@ -221,6 +222,7 @@ pub struct FunctionConfigChat {
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
     pub description: Option<String>,
+    pub experimentation: ExperimentationConfig,
     // Holds all template names (e.g. 'user', 'my_custom_template'
     // which can be invoked through a `{"type": "template", "name": "..."}` input block)
     // This is used to perform early rejection of a template invocation,
@@ -247,6 +249,7 @@ pub struct FunctionConfigJson {
     pub output_schema: StaticJSONSchema, // schema is mandatory for JSON functions
     pub implicit_tool_call_config: ToolCallConfig,
     pub description: Option<String>,
+    pub experimentation: ExperimentationConfig,
     #[serde(skip)]
     pub all_template_names: HashSet<String>,
 }
