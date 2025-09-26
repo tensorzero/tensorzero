@@ -1766,15 +1766,15 @@ impl AsyncTensorZeroGateway {
     ),
     text_signature = "(self, *, evaluation_name, dataset_name, variant_name, concurrency=1, output_format='pretty', inference_cache='on')"
     )]
-    fn experimental_run_evaluation<'a>(
-        this: PyRef<'a, Self>,
+    fn experimental_run_evaluation(
+        this: PyRef<'_, Self>,
         evaluation_name: String,
         dataset_name: String,
         variant_name: String,
         concurrency: usize,
         output_format: String,
         inference_cache: String,
-    ) -> PyResult<Bound<'a, PyAny>> {
+    ) -> PyResult<Bound<'_, PyAny>> {
         let client = this.as_super().client.clone();
 
         let output_format_enum: OutputFormat =
