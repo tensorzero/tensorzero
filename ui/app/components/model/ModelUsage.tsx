@@ -203,7 +203,7 @@ export function ModelUsage({
 
                             return (
                               <div className="flex flex-1 items-center justify-between leading-none">
-                                <span className="text-muted-foreground mr-2">
+                                <span className="text-muted-foreground mr-2 font-mono text-xs">
                                   {name}
                                 </span>
                                 <div className="grid text-right">
@@ -229,7 +229,11 @@ export function ModelUsage({
                         />
                       }
                     />
-                    <ChartLegend content={<ChartLegendContent />} />
+                    <ChartLegend
+                      content={
+                        <ChartLegendContent className="font-mono text-xs" />
+                      }
+                    />
                     {modelNames.map((modelName, index) => (
                       <Bar
                         key={modelName}
