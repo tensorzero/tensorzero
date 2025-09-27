@@ -948,6 +948,7 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
             extra_headers: _,
             extra_cache_key: _,
         } = self;
+
         let system_tokens = system
             .as_ref()
             .map(|s| get_estimated_tokens(s))
@@ -956,8 +957,9 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
             .iter()
             .map(RateLimitedInputContent::estimated_input_token_usage)
             .sum();
-        let output_tokens =
-            max_tokens.ok_or_else(|| Error::new(ErrorDetails::RateLimitMissingMaxTokens))? as u64;
+
+        let output_tokens = max_tokens.unwrap_or(0) as u64;
+
         Ok(RateLimitResourceUsage {
             tokens: system_tokens + messages_tokens + output_tokens,
             model_inferences: 1,
