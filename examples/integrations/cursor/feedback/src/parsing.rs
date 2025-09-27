@@ -78,15 +78,14 @@ fn get_language_for_extension(ext: &str) -> Result<Language> {
         "ts" => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
         "tsx" => tree_sitter_typescript::LANGUAGE_TSX.into(),
         "md" => tree_sitter_md::LANGUAGE.into(),
-        _ => return Err(anyhow::anyhow!("Unsupported file extension: {}", ext)),
+        _ => return Err(anyhow::anyhow!("Unsupported file extension: {ext}")),
     };
     w.insert(ext.to_string(), lang);
     if let Some(lang) = w.get(ext) {
         Ok(lang.clone())
     } else {
         Err(anyhow::anyhow!(
-            "Failed to insert language for extension: {}",
-            ext
+            "Failed to insert language for extension: {ext}"
         ))
     }
 }
@@ -97,7 +96,7 @@ pub fn parse_hunk(hunk: &str, hunk_file_extension: &str) -> Result<Tree> {
     parser.set_language(&language)?;
     let tree = parser
         .parse(hunk, None)
-        .ok_or_else(|| anyhow::anyhow!("Failed to parse hunk: {}", hunk))?;
+        .ok_or_else(|| anyhow::anyhow!("Failed to parse hunk: {hunk}"))?;
     Ok(tree)
 }
 

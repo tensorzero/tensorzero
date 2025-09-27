@@ -54,8 +54,7 @@ pub fn parse_cursor_output(
     Produce nothing else other than the command to run, on a single line. Surround the insertion with the tags <cmd> and</cmd>. For example, if you want to run ls -la, you would write <cmd>ls -la</cmd>.
      */
     Err(anyhow::anyhow!(
-        "System message doesn't fit our expected format: {}",
-        system
+        "System message doesn't fit our expected format: {system}",
     ))
 }
 

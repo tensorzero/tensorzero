@@ -205,7 +205,7 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
         }
         None => {
             error!("Evaluator config not found");
-            return Err(anyhow::anyhow!("Evaluator config not found for {}. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports.", evaluator_name));
+            return Err(anyhow::anyhow!("Evaluator config not found for {evaluator_name}. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports." ));
         }
     };
     Ok(match evaluator_config {
