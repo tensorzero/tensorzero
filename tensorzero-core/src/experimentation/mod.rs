@@ -13,7 +13,7 @@ mod static_weights;
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-#[serde(tag = "type")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExperimentationConfig {
     StaticWeights(static_weights::StaticWeightsConfig),
     #[default]
