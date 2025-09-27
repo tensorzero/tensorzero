@@ -16,7 +16,7 @@ use crate::{
     inference::types::{ContentBlock, ContentBlockChatOutput},
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     optimization::{OptimizationJobInfo, OptimizerOutput},
-    providers::openai::{OpenAIRequestToolCall, PROVIDER_TYPE},
+    providers::openai::{OpenAIMessagesConfig, OpenAIRequestToolCall, PROVIDER_TYPE},
     stored_inference::LazyRenderedSample,
     tool::ToolCall,
 };
@@ -350,8 +350,12 @@ impl<'a> OpenAISupervisedRow<'a> {
                 .as_deref()
                 .map(super::SystemOrDeveloper::System),
             &inference.messages,
-            None,
-            PROVIDER_TYPE,
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
+                fetch_and_encode_input_files_before_inference: true,
+            },
         )
         .await?;
         let Some(output) = &inference.output else {
@@ -415,8 +419,12 @@ impl<'a> OpenAIReinforcementRow<'a> {
                 .as_deref()
                 .map(super::SystemOrDeveloper::Developer),
             &inference.messages,
-            None,
-            PROVIDER_TYPE,
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                // For now, this isn't configurable in RFT (we should never need to resolve a file URL here)
+                fetch_and_encode_input_files_before_inference: true,
+            },
         )
         .await?;
         let Some(output) = &inference.output else {

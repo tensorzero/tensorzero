@@ -20,8 +20,8 @@ use crate::model::{
 };
 use crate::optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput};
 use crate::providers::helpers::UrlParseErrExt;
-use crate::providers::openai::OpenAIRequestMessage;
 use crate::providers::openai::{tensorzero_to_openai_assistant_message, OpenAITool};
+use crate::providers::openai::{OpenAIMessagesConfig, OpenAIRequestMessage};
 use crate::providers::together::{
     default_api_key_location, prepare_together_messages, TogetherCredentials, DEFAULT_CREDENTIALS,
     PROVIDER_TYPE, TOGETHER_API_BASE,
@@ -220,9 +220,17 @@ impl<'a> TogetherSupervisedRow<'a> {
             }
             None => vec![],
         };
-        let mut messages =
-            prepare_together_messages(inference.system_input.as_deref(), &inference.messages)
-                .await?;
+        let mut messages = prepare_together_messages(
+            inference.system_input.as_deref(),
+            &inference.messages,
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
+                fetch_and_encode_input_files_before_inference: true,
+            },
+        )
+        .await?;
 
         let Some(output) = &inference.output else {
             return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
