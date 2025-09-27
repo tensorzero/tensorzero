@@ -1452,7 +1452,7 @@ impl UninitializedFunctionConfig {
                     output_schema,
                     implicit_tool_call_config,
                     description: params.description,
-                    all_template_names: HashSet::new(),
+                    all_explicit_template_names: all_template_names,
                     experimentation,
                 }))
             }

@@ -1278,7 +1278,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
             implicit_tool_call_config: ToolCallConfig::default(),
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
         });
         // Prepare some candidate InferenceResults

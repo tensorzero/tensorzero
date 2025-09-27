@@ -25,6 +25,7 @@ use crate::inference::types::{
 };
 use crate::model::ModelTable;
 use crate::model_table::ShorthandModelConfig;
+use crate::utils::retries::RetryConfig;
 use crate::{
     embeddings::EmbeddingRequest,
     endpoints::inference::{InferenceClients, InferenceParams},
@@ -38,7 +39,7 @@ use crate::{
 
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
-    InferModelRequestArgs, InferenceConfig, JsonMode, ModelUsedInfo, RetryConfig, Variant,
+    InferModelRequestArgs, InferenceConfig, JsonMode, ModelUsedInfo, Variant,
 };
 
 /// The primary configuration for the Dicl variant

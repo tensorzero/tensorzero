@@ -3254,7 +3254,7 @@ mod tests {
             implicit_tool_call_config,
             output_schema,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
         }));
         let usage1 = Usage {
@@ -3542,7 +3542,7 @@ mod tests {
             implicit_tool_call_config,
             output_schema,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
         }));
         let usage1 = Usage {
@@ -3644,7 +3644,7 @@ mod tests {
             implicit_tool_call_config,
             output_schema,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
         }));
         let usage1 = Usage {
