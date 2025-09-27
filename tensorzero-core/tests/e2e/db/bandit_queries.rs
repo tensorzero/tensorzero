@@ -12,6 +12,36 @@ fn assert_float_eq(actual: f32, expected: f32, epsilon: Option<f32>) {
 #[tokio::test]
 async fn test_clickhouse_metrics_by_variant_singleton() {
     let clickhouse = get_clickhouse().await;
+    let all_feedback_by_variant_metrics = clickhouse
+        .run_query_synchronous_no_params(
+            r"
+        SELECT
+            variant_name,
+            metric_name
+        FROM (
+        SELECT
+            variant_name,
+            metric_name
+        FROM FloatMetricFeedbackByVariant
+        UNION ALL
+        SELECT
+            variant_name,
+            metric_name
+        FROM BooleanMetricFeedbackByVariant
+        )
+        GROUP BY variant_name, metric_name
+        FORMAT JSONEachRow"
+                .to_string(),
+        )
+        .await
+        .unwrap();
+    for line in all_feedback_by_variant_metrics.response.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let parsed_line: serde_json::Value = serde_json::from_str(line).unwrap();
+        println!("{}", serde_json::to_string_pretty(&parsed_line).unwrap());
+    }
     let all_feedback_data = clickhouse
         .run_query_synchronous_no_params(
             r"SELECT
@@ -44,6 +74,7 @@ async fn test_clickhouse_metrics_by_variant_singleton() {
     assert_float_eq(metric.mean, 0.12, None);
     assert_float_eq(metric.variance, 0.10703, None);
     assert_eq!(metric.count, 75);
+    assert!(false);
 }
 
 #[tokio::test]
