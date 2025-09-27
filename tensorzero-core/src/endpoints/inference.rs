@@ -1203,7 +1203,7 @@ impl ChatCompletionInferenceParams {
 }
 
 /// Prepares the candidate variants map using inference parameters prior to sampling
-/// This function handles 2 major cases:
+/// This function handles 2 cases:
 /// 1. If a variant is pinned, only that variant should be attempted
 /// 2. If a dynamic variant is configured, only that variant should be attempted
 ///
@@ -1263,16 +1263,9 @@ fn prepare_candidate_variants(
                 Arc::new(candidate_variant_info),
             );
         }
-        (None, None) => {
-
-            // TODO: move to sampler
-            // Remove all zero-weight variants - these can only be used if explicitly pinned above
-            // candidate_variants.retain(|_, variant| {
-            //     // Retain 'None' and positive-weight variants, discarding zero-weight variants
-            //     variant.inner.weight().is_none_or(|w| w > 0.0)
-            // });
-        }
-        _ => {
+        // If neither variant_name nor internal_dynamic_variant_config is set, we don't need to do anything
+        (None, None) => {}
+        (Some(_), Some(_)) => {
             return Err(ErrorDetails::InvalidRequest {
                 message: "`variant_name` and `internal_dynamic_variant_config` cannot both be set."
                     .to_string(),
