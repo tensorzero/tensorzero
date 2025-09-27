@@ -252,14 +252,24 @@ pub async fn start_batch_inference(
 
     while !candidate_variants.is_empty() {
         // We sample the same variant for the whole batch
-        let (variant_name, variant) = function
+        let result = function
             .experimentation()
             .sample(
                 &params.function_name,
                 *first_episode_id,
                 &mut candidate_variants,
             )
-            .await?;
+            .await;
+        let (variant_name, variant) = match result {
+            Ok((variant_name, variant)) => (variant_name, variant),
+            Err(e) => {
+                if variant_errors.is_empty() {
+                    return Err(e);
+                }
+                // If the sampling fails we break out of the loop and return the AllVariantsExhausted error
+                break;
+            }
+        };
 
         let inference_config = BatchInferenceConfig::new(
             &config.templates,

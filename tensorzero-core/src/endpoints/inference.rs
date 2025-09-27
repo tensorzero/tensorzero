@@ -342,10 +342,20 @@ pub async fn inference(
     })?;
     // Keep sampling variants until one succeeds
     while !candidate_variants.is_empty() {
-        let (variant_name, variant) = function
+        let result = function
             .experimentation()
             .sample(&function_name, episode_id, &mut candidate_variants)
-            .await?;
+            .await;
+        let (variant_name, variant) = match result {
+            Ok((variant_name, variant)) => (variant_name, variant),
+            Err(e) => {
+                if variant_errors.is_empty() {
+                    return Err(e);
+                }
+                // If the sampling fails we break out of the loop and return the AllVariantsExhausted error
+                break;
+            }
+        };
 
         // Will be edited by the variant as part of making the request so we must clone here
         let variant_inference_params = params.params.clone();
