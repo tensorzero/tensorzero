@@ -270,15 +270,7 @@ impl Migration for Migration0013<'_> {
                     function_name,
                     variant_name,
                     episode_id,
-                    'chat' as function_type,
-                    input,
-                    output,
-                    tool_calls,
-                    tool_call_results,
-                    processing_time_ms,
-                    raw_request,
-                    raw_response,
-                    usage",
+                    'chat' as function_type",
                 if view_where_clause.is_empty() { None } else { Some(view_where_clause.as_str()) },
             )
             .await?;
@@ -293,15 +285,7 @@ impl Migration for Migration0013<'_> {
                     function_name,
                     variant_name,
                     episode_id,
-                    'json' AS function_type,
-                    input,
-                    output,
-                    '' as tool_calls,
-                    '' as tool_call_results,
-                    processing_time_ms,
-                    raw_request,
-                    raw_response,
-                    usage",
+                    'json' AS function_type",
                 if view_where_clause.is_empty() { None } else { Some(view_where_clause.as_str()) },
             )
             .await?;
