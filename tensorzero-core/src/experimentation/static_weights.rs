@@ -1,4 +1,3 @@
-use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
@@ -80,11 +79,11 @@ impl VariantSampler for StaticWeightsConfig {
             if intersection.is_empty() {
                 Err(ErrorDetails::NoFallbackVariantsRemaining.into())
             } else {
-                // Randomly select a variant from the intersection
-                // (we don't need to use the hashing trick since this is a fallback)
-                // we should use the rand crate instead and pop it from active variants
-                let mut rng = rand::rng();
-                let selected_variant = intersection.iter().choose(&mut rng).ok_or_else(|| Error::new(ErrorDetails::Inference {
+                // Use deterministic selection based on episode_id for consistent behavior
+                let random_index = (get_uniform_value(function_name, &episode_id)
+                    * intersection.len() as f64)
+                    .floor() as usize;
+                let selected_variant = intersection.get(random_index).ok_or_else(|| Error::new(ErrorDetails::Inference {
                     message: format!("Failed to sample variant from nonempty intersection. {IMPOSSIBLE_ERROR_MESSAGE}")
                 }))?.to_string();
                 let variant_data = active_variants.remove(&selected_variant).ok_or_else(|| Error::new(ErrorDetails::Inference {
@@ -129,5 +128,145 @@ impl VariantSampler for StaticWeightsConfig {
                 })
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{ErrorContext, SchemaData};
+    use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
+    use tokio;
+    use uuid::Uuid;
+
+    fn create_variants(
+        variant_weights: &[(&str, Option<f64>)],
+    ) -> BTreeMap<String, Arc<VariantInfo>> {
+        variant_weights
+            .iter()
+            .map(|&(name, weight)| {
+                (
+                    name.to_string(),
+                    Arc::new(VariantInfo {
+                        inner: VariantConfig::ChatCompletion(
+                            UninitializedChatCompletionConfig {
+                                weight,
+                                model: "model-name".into(),
+                                ..Default::default()
+                            }
+                            .load(&SchemaData::default(), &ErrorContext::new_test())
+                            .unwrap(),
+                        ),
+                        timeouts: Default::default(),
+                    }),
+                )
+            })
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn test_weighted_sampling() {
+        let variants_map = create_variants(&[("A", Some(1.0)), ("B", Some(2.0)), ("C", Some(3.0))]);
+        let config = StaticWeightsConfig::legacy_from_variants_map(
+            &variants_map
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+        );
+        let mut active_variants = variants_map;
+        let episode_id = Uuid::now_v7();
+
+        let (variant_name, _) = config
+            .inner_sample("test_function", episode_id, &mut active_variants)
+            .await
+            .unwrap();
+        assert!(["A", "B", "C"].contains(&variant_name.as_str()));
+        assert_eq!(active_variants.len(), 2); // One variant should be removed
+    }
+
+    #[tokio::test]
+    async fn test_fallback_variants() {
+        let variants_map = create_variants(&[("A", Some(0.0)), ("B", None), ("C", None)]);
+        let config = StaticWeightsConfig::legacy_from_variants_map(
+            &variants_map
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+        );
+        let mut active_variants = variants_map;
+        let episode_id = Uuid::now_v7();
+
+        let (variant_name, _) = config
+            .inner_sample("test_function", episode_id, &mut active_variants)
+            .await
+            .unwrap();
+        assert!(["B", "C"].contains(&variant_name.as_str())); // Should pick from fallback variants
+    }
+
+    #[tokio::test]
+    async fn test_empty_variants_error() {
+        let config = StaticWeightsConfig {
+            candidate_variants: BTreeMap::new(),
+            fallback_variants: Vec::new(),
+        };
+        let mut active_variants = BTreeMap::new();
+        let episode_id = Uuid::now_v7();
+
+        let result = config
+            .inner_sample("test_function", episode_id, &mut active_variants)
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_weighted_distribution() {
+        // Test that the weighted sampling produces the expected distribution
+        let variants_map = create_variants(&[("A", Some(1.0)), ("B", Some(2.0)), ("C", Some(3.0))]);
+        let config = StaticWeightsConfig::legacy_from_variants_map(
+            &variants_map
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+        );
+
+        let sample_size = 10_000;
+        let mut counts = std::collections::HashMap::new();
+
+        // Sample many times to build distribution
+        for i in 0..sample_size {
+            let mut active_variants = variants_map.clone();
+            // Use different episode IDs to get different samples
+            let episode_id = Uuid::from_u128(i as u128);
+            let (variant_name, _) = config
+                .inner_sample("test_function", episode_id, &mut active_variants)
+                .await
+                .unwrap();
+            *counts.entry(variant_name).or_insert(0) += 1;
+        }
+
+        // Check that the distribution roughly matches expected weights
+        let total_weight = 1.0 + 2.0 + 3.0;
+        let expected_a = 1.0 / total_weight;
+        let expected_b = 2.0 / total_weight;
+        let expected_c = 3.0 / total_weight;
+
+        let actual_a = *counts.get("A").unwrap_or(&0) as f64 / sample_size as f64;
+        let actual_b = *counts.get("B").unwrap_or(&0) as f64 / sample_size as f64;
+        let actual_c = *counts.get("C").unwrap_or(&0) as f64 / sample_size as f64;
+
+        // Allow 2% tolerance for statistical variation
+        let tolerance = 0.02;
+        assert!(
+            (actual_a - expected_a).abs() < tolerance,
+            "Variant A: expected {expected_a:.3}, got {actual_a:.3}"
+        );
+        assert!(
+            (actual_b - expected_b).abs() < tolerance,
+            "Variant B: expected {expected_b:.3}, got {actual_b:.3}"
+        );
+        assert!(
+            (actual_c - expected_c).abs() < tolerance,
+            "Variant C: expected {expected_c:.3}, got {actual_c:.3}"
+        );
     }
 }

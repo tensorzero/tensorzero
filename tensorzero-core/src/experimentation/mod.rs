@@ -123,7 +123,7 @@ fn sample_uniform(
 
 /// Implements a uniform distribution over the interval [0, 1) using a hash function.
 /// This function is deterministic but should have good statistical properties.
-fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
+pub(crate) fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
     let mut hasher = Sha256::new();
     hasher.update(function_name.as_bytes());
     hasher.update(episode_id.as_bytes());
@@ -131,4 +131,87 @@ fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
     let truncated_hash =
         u32::from_be_bytes([hash_value[0], hash_value[1], hash_value[2], hash_value[3]]);
     truncated_hash as f64 / u32::MAX as f64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    #[test]
+    fn test_get_uniform_value() {
+        // Test with function name and episode ID
+        let episode_id = Uuid::now_v7();
+        let value1 = get_uniform_value("test_function", &episode_id);
+        let value2 = get_uniform_value("test_function", &episode_id);
+
+        // Values should be the same due to deterministic input
+        assert_eq!(value1, value2);
+        assert!((0.0..1.0).contains(&value1));
+        assert!((0.0..1.0).contains(&value2));
+
+        // Test with different function names
+        let value3 = get_uniform_value("another_function", &episode_id);
+        assert_ne!(value1, value3);
+        assert!((0.0..1.0).contains(&value3));
+
+        // Test with different episode IDs
+        let value4 = get_uniform_value("test_function", &Uuid::now_v7());
+        assert_ne!(value1, value4);
+        assert_ne!(value3, value4);
+        assert!((0.0..1.0).contains(&value4));
+    }
+
+    #[test]
+    fn test_uniform_sampling_distribution() {
+        use crate::config::{ErrorContext, SchemaData};
+        use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
+        use std::collections::HashMap;
+
+        // Create variants with no weights (should trigger uniform sampling)
+        let variant_weights = [("A", None), ("B", None), ("C", None)];
+        let mut variants_map = BTreeMap::new();
+
+        for &(name, weight) in &variant_weights {
+            variants_map.insert(
+                name.to_string(),
+                Arc::new(VariantInfo {
+                    inner: VariantConfig::ChatCompletion(
+                        UninitializedChatCompletionConfig {
+                            weight,
+                            model: "model-name".into(),
+                            ..Default::default()
+                        }
+                        .load(&SchemaData::default(), &ErrorContext::new_test())
+                        .unwrap(),
+                    ),
+                    timeouts: Default::default(),
+                }),
+            );
+        }
+
+        let sample_size = 10_000;
+        let mut counts = HashMap::new();
+
+        // Sample many times using uniform sampling
+        for i in 0..sample_size {
+            let mut active_variants = variants_map.clone();
+            let episode_id = Uuid::from_u128(i as u128);
+            let result = sample_uniform("test_function", &episode_id, &mut active_variants);
+            let (variant_name, _) = result.unwrap();
+            *counts.entry(variant_name).or_insert(0) += 1;
+        }
+
+        // Check that each variant was sampled roughly equally (uniform distribution)
+        let expected_prob = 1.0 / 3.0; // Equal probability for 3 variants
+        let tolerance = 0.02; // 2% tolerance
+
+        for variant_name in ["A", "B", "C"] {
+            let actual_prob = *counts.get(variant_name).unwrap_or(&0) as f64 / sample_size as f64;
+            assert!(
+                (actual_prob - expected_prob).abs() < tolerance,
+                "Variant {variant_name}: expected {expected_prob:.3}, got {actual_prob:.3}"
+            );
+        }
+    }
 }

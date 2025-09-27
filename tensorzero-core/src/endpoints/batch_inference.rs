@@ -256,7 +256,7 @@ pub async fn start_batch_inference(
             .experimentation()
             .sample(
                 &params.function_name,
-                first_episode_id.clone(),
+                *first_episode_id,
                 &mut candidate_variants,
             )
             .await?;

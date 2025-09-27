@@ -642,7 +642,6 @@ fn validate_single_message(
 
 #[cfg(test)]
 mod tests {
-    use crate::config::ErrorContext;
     use crate::endpoints::inference::InferenceIds;
     use crate::inference::types::FinishReason;
     use crate::inference::types::InputMessage;
@@ -654,9 +653,6 @@ mod tests {
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolCall;
-
-    use crate::variant::chat_completion::UninitializedChatCompletionConfig;
-    use crate::variant::VariantConfig;
 
     use super::*;
     use crate::config::path::ResolvedTomlPath;
@@ -1547,128 +1543,6 @@ mod tests {
     ///
     /// NOTE: If this test fails, it might be due to sampling. Please run it again to check if the
     ///       issue persists.
-    #[test]
-    fn test_sample_variant() {
-        // Helper function to create a HashMap of variant names to their weights
-        fn create_variants(variant_weights: &[(&str, f64)]) -> BTreeMap<String, Arc<VariantInfo>> {
-            variant_weights
-                .iter()
-                .map(|&(name, weight)| {
-                    (
-                        name.to_string(),
-                        Arc::new(VariantInfo {
-                            inner: VariantConfig::ChatCompletion(
-                                UninitializedChatCompletionConfig {
-                                    weight: Some(weight),
-                                    model: "model-name".into(),
-                                    ..Default::default()
-                                }
-                                .load(&SchemaData::default(), &ErrorContext::new_test())
-                                .unwrap(),
-                            ),
-                            timeouts: Default::default(),
-                        }),
-                    )
-                })
-                .collect()
-        }
-
-        // Helper function to test the distribution of variant weights by sampling them many times
-        // and checking if the observed distribution is close to the expected distribution
-        fn test_variant_distribution(
-            variants: &BTreeMap<String, Arc<VariantInfo>>,
-            sample_size: usize,
-            tolerance: f64,
-        ) {
-            let total_weight: f64 = variants
-                .values()
-                .map(|v| v.inner.weight().unwrap_or(0.0))
-                .sum();
-            let mut counts: HashMap<String, usize> = HashMap::new();
-
-            for _ in 0..sample_size {
-                let mut variants = variants.clone();
-                let (variant_name, _) =
-                    sample_variant(&mut variants, "test_function", &Uuid::now_v7()).unwrap();
-                *counts.entry(variant_name.to_string()).or_insert(0) += 1;
-            }
-
-            for (variant_name, variant) in variants {
-                let expected_prob = variant.inner.weight().unwrap_or(0.0) / total_weight;
-                let actual_prob =
-                    *counts.get(variant_name).unwrap_or(&0) as f64 / sample_size as f64;
-                let diff = (expected_prob - actual_prob).abs();
-
-                assert!(
-                    diff <= tolerance,
-                    "Probability for variant {variant_name} is outside the acceptable range"
-                );
-            }
-        }
-
-        // Test case 1: Equal weights
-        let variants = create_variants(&[("A", 1.0), ("B", 1.0), ("C", 1.0)]);
-        test_variant_distribution(&variants, 10_000, 0.02);
-
-        // Test case 2: Unequal weights
-        let variants = create_variants(&[("X", 1.0), ("Y", 2.0), ("Z", 3.0)]);
-        test_variant_distribution(&variants, 10_000, 0.02);
-
-        // Test case 3: Extreme weights
-        let variants = create_variants(&[("Rare", 0.01), ("Common", 0.99)]);
-        test_variant_distribution(&variants, 10_000, 0.005);
-
-        // Test case 4: Single weights
-        let variants = create_variants(&[("Solo", 1.0)]);
-        test_variant_distribution(&variants, 10_000, 0.0);
-
-        // Test case 5: All zero weights
-        let variants = create_variants(&[("A", 0.0), ("B", 0.0), ("C", 0.0)]);
-        let sample_size = 10_000;
-        let mut counts: HashMap<String, usize> = HashMap::new();
-
-        for _ in 0..sample_size {
-            let mut variants = variants.clone();
-            let (variant_name, _) =
-                sample_variant(&mut variants, "test_function", &Uuid::now_v7()).unwrap();
-            *counts.entry(variant_name.to_string()).or_insert(0) += 1;
-        }
-
-        // Check if all variants are sampled approximately equally
-        let expected_count = sample_size / variants.len();
-        let tolerance = (expected_count as f64 * 0.1) as usize; // 10% tolerance
-
-        for (variant_name, count) in counts {
-            assert!(
-                (count as i32 - expected_count as i32).abs() <= tolerance as i32,
-                "Variant {variant_name} was not sampled uniformly. Expected {expected_count} +/- {tolerance}, got {count}"
-            );
-        }
-    }
-
-    #[test]
-    fn test_get_uniform_value() {
-        // Test with function name and episode ID
-        let episode_id = Uuid::now_v7();
-        let value1 = get_uniform_value("test_function", &episode_id);
-        let value2 = get_uniform_value("test_function", &episode_id);
-
-        // Values should be the same due to deterministic input
-        assert_eq!(value1, value2);
-        assert!((0.0..1.0).contains(&value1));
-        assert!((0.0..1.0).contains(&value2));
-
-        // Test with different function names
-        let value3 = get_uniform_value("another_function", &episode_id);
-        assert_ne!(value1, value3);
-        assert!((0.0..1.0).contains(&value3));
-
-        // Test with different episode IDs
-        let value4 = get_uniform_value("test_function", &Uuid::now_v7());
-        assert_ne!(value1, value4);
-        assert_ne!(value3, value4);
-        assert!((0.0..1.0).contains(&value4));
-    }
 
     #[test]
     fn test_description_getter() {
