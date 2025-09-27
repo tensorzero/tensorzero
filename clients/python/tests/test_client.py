@@ -34,6 +34,7 @@ from uuid import UUID
 import pytest
 import tensorzero
 from clickhouse_connect import get_client  # type: ignore
+from conftest import get_clickhouse_url, get_gateway_url
 from openai import AsyncOpenAI, OpenAI
 from pytest import CaptureFixture
 from tensorzero import (
@@ -233,7 +234,7 @@ async def test_async_basic_inference(async_client: AsyncTensorZeroGateway):
 @pytest.mark.asyncio
 async def test_async_client_build_http_sync():
     client_ = AsyncTensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=get_gateway_url(),
         async_setup=False,
     )
     assert isinstance(client_, AsyncTensorZeroGateway)
@@ -273,7 +274,7 @@ async def test_async_client_build_http_sync():
 async def test_async_client_build_embedded_sync():
     client_ = AsyncTensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+        clickhouse_url=get_clickhouse_url(),
         async_setup=False,
     )
     assert isinstance(client_, AsyncTensorZeroGateway)
@@ -1043,7 +1044,7 @@ async def test_async_feedback_invalid_input(async_client: AsyncTensorZeroGateway
 @pytest.mark.asyncio
 async def test_async_tensorzero_error_http():
     async_client = AsyncTensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=get_gateway_url(),
         verbose_errors=True,
         async_setup=False,
     )
@@ -1063,7 +1064,7 @@ async def test_async_tensorzero_error_http():
 async def test_async_tensorzero_error_embedded():
     async_client = AsyncTensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+        clickhouse_url=get_clickhouse_url(),
         async_setup=False,
     )
     assert isinstance(async_client, AsyncTensorZeroGateway)
@@ -1107,7 +1108,7 @@ async def test_async_dynamic_credentials(async_client: AsyncTensorZeroGateway):
 
 def test_sync_error():
     with pytest.raises(Exception) as exc_info:
-        with TensorZeroGateway.build_http(gateway_url="http://localhost:3000"):
+        with TensorZeroGateway.build_http(gateway_url=get_gateway_url()):
             raise Exception("My error")
     assert str(exc_info.value) == "My error"
 
@@ -1115,9 +1116,7 @@ def test_sync_error():
 @pytest.mark.asyncio
 async def test_async_error():
     with pytest.raises(Exception) as exc_info:
-        client_fut = AsyncTensorZeroGateway.build_http(
-            gateway_url="http://localhost:3000"
-        )
+        client_fut = AsyncTensorZeroGateway.build_http(gateway_url=get_gateway_url())
         assert isinstance(client_fut, t.Awaitable)
         async with await client_fut:
             raise Exception("My error")
@@ -2102,7 +2101,7 @@ def test_sync_feedback_invalid_input(sync_client: TensorZeroGateway):
 
 def test_sync_tensorzero_error_http():
     sync_client = TensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=get_gateway_url(),
         verbose_errors=True,
     )
     with pytest.raises(TensorZeroError) as excinfo:
@@ -2117,7 +2116,7 @@ def test_sync_tensorzero_error_http():
 def test_sync_tensorzero_error_embedded():
     sync_client = TensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+        clickhouse_url=get_clickhouse_url(),
     )
     with pytest.raises(TensorZeroError) as excinfo:
         sync_client.inference(function_name="not_a_function", input={"messages": []})
@@ -2507,7 +2506,7 @@ async def test_async_err_in_stream(async_client: AsyncTensorZeroGateway):
 @pytest.mark.asyncio
 async def test_async_timeout_int_http():
     client_fut = AsyncTensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=get_gateway_url(),
         timeout=1,
     )
     assert isinstance(client_fut, t.Awaitable)
@@ -2528,7 +2527,7 @@ async def test_async_timeout_int_http():
 async def test_async_timeout_int_embedded():
     client_fut = AsyncTensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+        clickhouse_url=get_clickhouse_url(),
         timeout=1,
     )
     assert inspect.isawaitable(client_fut)
@@ -2548,7 +2547,7 @@ async def test_async_timeout_int_embedded():
 @pytest.mark.asyncio
 async def test_async_timeout_float_http():
     client_fut = AsyncTensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=get_gateway_url(),
         timeout=0.1,
     )
     assert inspect.isawaitable(client_fut)
@@ -2569,7 +2568,7 @@ async def test_async_timeout_float_http():
 async def test_async_timeout_float_embedded():
     client_fut = AsyncTensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+        clickhouse_url=get_clickhouse_url(),
         timeout=0.1,
     )
     assert inspect.isawaitable(client_fut)
@@ -2588,7 +2587,7 @@ async def test_async_timeout_float_embedded():
 
 def test_sync_timeout_invalid():
     with pytest.raises(ValueError) as exc_info:
-        TensorZeroGateway.build_http(gateway_url="http://localhost:3000", timeout=-1)
+        TensorZeroGateway.build_http(gateway_url=get_gateway_url(), timeout=-1)
     assert (
         "Invalid timeout: cannot convert float seconds to Duration: value is negative"
         == str(exc_info.value)
@@ -3055,7 +3054,8 @@ def test_text_arguments_deprecation_1170_warning(sync_client: TensorZeroGateway)
                     {
                         "role": "user",
                         # Intentionally ignore the type error to check the deprecation warning
-                        "content": [Text(type="text", text={"country": "Japan"})],  # type: ignore
+                        # type: ignore
+                        "content": [Text(type="text", text={"country": "Japan"})],
                     }
                 ],
             },
@@ -3271,7 +3271,7 @@ def test_sync_clickhouse_batch_writes():
             b"gateway.observability.batch_writes.__force_allow_embedded_batch_writes = true\n"
         )
         temp_file.flush()
-        clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
+        clickhouse_url = get_clickhouse_url()
         client = TensorZeroGateway.build_embedded(
             config_file=temp_file.name,
             clickhouse_url=clickhouse_url,
@@ -3317,7 +3317,7 @@ async def test_async_clickhouse_batch_writes():
             b"gateway.observability.batch_writes.__force_allow_embedded_batch_writes = true\n"
         )
         temp_file.flush()
-        clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
+        clickhouse_url = get_clickhouse_url()
         client_fut = AsyncTensorZeroGateway.build_embedded(
             config_file=temp_file.name,
             clickhouse_url=clickhouse_url,
@@ -3362,7 +3362,7 @@ def test_sync_cannot_enable_batch_writes():
         temp_file.write(b"gateway.observability.enabled = true\n")
         temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
         temp_file.flush()
-        clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
+        clickhouse_url = get_clickhouse_url()
         with pytest.raises(TensorZeroInternalError) as exc_info:
             TensorZeroGateway.build_embedded(
                 config_file=temp_file.name,
@@ -3381,7 +3381,7 @@ async def test_async_cannot_enable_batch_writes():
         temp_file.write(b"gateway.observability.enabled = true\n")
         temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
         temp_file.flush()
-        clickhouse_url = "http://chuser:chpassword@127.0.0.1:8123/tensorzero_e2e_tests"
+        clickhouse_url = get_clickhouse_url()
         client_fut = AsyncTensorZeroGateway.build_embedded(
             config_file=temp_file.name,
             clickhouse_url=clickhouse_url,
@@ -3438,7 +3438,7 @@ def test_sync_chat_function_named_template(sync_client: TensorZeroGateway):
 
 def test_http_client_no_spurious_log(capfd: CaptureFixture[str]):
     client = TensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=get_gateway_url(),
         verbose_errors=True,
     )
     assert client is not None
@@ -3450,7 +3450,7 @@ def test_http_client_no_spurious_log(capfd: CaptureFixture[str]):
 @pytest.mark.asyncio
 async def test_async_http_client_no_spurious_log(capfd: CaptureFixture[str]):
     client_fut = AsyncTensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=get_gateway_url(),
         verbose_errors=True,
     )
     assert inspect.isawaitable(client_fut)
@@ -3464,7 +3464,7 @@ async def test_async_http_client_no_spurious_log(capfd: CaptureFixture[str]):
 def test_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
     client = TensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+        clickhouse_url=get_clickhouse_url(),
     )
     assert client is not None
     captured = capfd.readouterr()
@@ -3476,7 +3476,7 @@ def test_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
 async def test_async_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
     client_fut = AsyncTensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+        clickhouse_url=get_clickhouse_url(),
     )
     assert inspect.isawaitable(client_fut)
     client = await client_fut
