@@ -1275,7 +1275,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: None,
-    all_explicit_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
         })
     }
@@ -1312,12 +1312,8 @@ mod tests {
             output_schema,
             implicit_tool_call_config: invalid_tool_call_config,
             description: None,
-<<<<<<< HEAD
-            all_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
-=======
             all_explicit_template_names: HashSet::new(),
->>>>>>> a453fb60d88e1e682cdd60450260bdb3b29b0b69
+            experimentation: ExperimentationConfig::default(),
         })
     }
 
