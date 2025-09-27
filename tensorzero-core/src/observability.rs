@@ -743,7 +743,7 @@ pub fn register_metrics() -> () {
     );
 
     describe_counter!(
-        "tensorzero_request_count",
+        "tensorzero_requests_total",
         Unit::Count,
         "Requests handled by TensorZero",
     );
@@ -755,7 +755,7 @@ pub fn register_metrics() -> () {
     );
 
     describe_counter!(
-        "tensorzero_inference_count",
+        "tensorzero_inferences_total",
         Unit::Count,
         "Inferences performed by TensorZero",
     );
