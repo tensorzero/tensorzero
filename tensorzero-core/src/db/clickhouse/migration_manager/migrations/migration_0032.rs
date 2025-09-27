@@ -42,16 +42,20 @@ impl Migration for Migration0032<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        // Add is_custom column to both ChatInferenceDatapoint and JsonInferenceDatapoint using sharding-aware ALTER
         self.clickhouse
-            .run_query_synchronous_no_params(
-                r"ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS is_custom Bool DEFAULT false;"
-                    .to_string(),
+            .get_alter_table_statements(
+                "ChatInferenceDatapoint",
+                "ADD COLUMN IF NOT EXISTS is_custom Bool DEFAULT false",
+                false,
             )
             .await?;
+
         self.clickhouse
-            .run_query_synchronous_no_params(
-                r"ALTER TABLE JsonInferenceDatapoint ADD COLUMN IF NOT EXISTS is_custom Bool DEFAULT false;"
-                    .to_string(),
+            .get_alter_table_statements(
+                "JsonInferenceDatapoint",
+                "ADD COLUMN IF NOT EXISTS is_custom Bool DEFAULT false",
+                false,
             )
             .await?;
 
@@ -59,9 +63,12 @@ impl Migration for Migration0032<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r"ALTER TABLE ChatInferenceDatapoint DROP COLUMN is_custom;
-        ALTER TABLE JsonInferenceDatapoint DROP COLUMN is_custom;"
-            .to_string()
+        format!(
+            "{}\
+            {}",
+            self.clickhouse.get_alter_table_rollback_statements("ChatInferenceDatapoint", "DROP COLUMN is_custom", false),
+            self.clickhouse.get_alter_table_rollback_statements("JsonInferenceDatapoint", "DROP COLUMN is_custom", false)
+        )
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

@@ -2,7 +2,7 @@ use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 
-use super::check_table_exists;
+use super::{check_column_exists, check_table_exists};
 use async_trait::async_trait;
 
 /// This migration adds additional columns to the `ModelInference` table
@@ -36,25 +36,14 @@ impl Migration for Migration0004<'_> {
 
     /// Check if the migration has already been applied by checking if the new columns exist
     async fn should_apply(&self) -> Result<bool, Error> {
-        let database = self.clickhouse.database();
-        let query = format!(
-            "SELECT name FROM system.columns WHERE database = '{database}' AND table = 'ModelInference'"
-        );
-        let response = self
-            .clickhouse
-            .run_query_synchronous_no_params(query)
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseMigration {
-                    id: "0004".to_string(),
-                    message: format!("Failed to fetch columns for ModelInference: {e}"),
-                })
-            })?;
-        let present_columns: Vec<&str> = response.response.lines().map(str::trim).collect();
-        if present_columns.contains(&"system")
-            && present_columns.contains(&"input_messages")
-            && present_columns.contains(&"output")
-        {
+        let system_column_exists =
+            check_column_exists(self.clickhouse, "ModelInference", "system", "0004").await?;
+        let input_messages_column_exists =
+            check_column_exists(self.clickhouse, "ModelInference", "input_messages", "0004").await?;
+        let output_column_exists =
+            check_column_exists(self.clickhouse, "ModelInference", "output", "0004").await?;
+            
+        if system_column_exists && input_messages_column_exists && output_column_exists {
             Ok(false)
         } else {
             Ok(true)
@@ -62,25 +51,28 @@ impl Migration for Migration0004<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
-        // Add a column `system` to the `ModelInference` table
-        let query = r"
-            ALTER TABLE ModelInference
-            ADD COLUMN IF NOT EXISTS system Nullable(String),
-            ADD COLUMN IF NOT EXISTS input_messages String,
-            ADD COLUMN IF NOT EXISTS output String
-        ";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+        // Add system, input_messages, and output columns to ModelInference using sharding-aware ALTER
+        self.clickhouse
+            .get_alter_table_statements(
+                "ModelInference",
+                "ADD COLUMN IF NOT EXISTS system Nullable(String), ADD COLUMN IF NOT EXISTS input_messages String, ADD COLUMN IF NOT EXISTS output String",
+                false,
+            )
             .await?;
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the columns */\
-            ALTER TABLE ModelInference DROP COLUMN system, DROP COLUMN input_messages, DROP COLUMN output;"
-        .to_string()
+        format!(
+            "/* Drop the columns */\
+            {}",
+            self.clickhouse.get_alter_table_rollback_statements(
+                "ModelInference", 
+                "DROP COLUMN system, DROP COLUMN input_messages, DROP COLUMN output",
+                false
+            )
+        )
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)

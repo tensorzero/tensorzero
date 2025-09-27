@@ -49,27 +49,28 @@ impl Migration for Migration0017<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
-        // Add the `input_tokens` and `output_tokens` columns to the `ModelInferenceCache` table
-        let query = r"
-            ALTER TABLE ModelInferenceCache
-            ADD COLUMN IF NOT EXISTS input_tokens UInt32,
-            ADD COLUMN IF NOT EXISTS output_tokens UInt32
-        ";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+        // Add the `input_tokens` and `output_tokens` columns to the `ModelInferenceCache` table using sharding-aware ALTER
+        self.clickhouse
+            .get_alter_table_statements(
+                "ModelInferenceCache",
+                "ADD COLUMN IF NOT EXISTS input_tokens UInt32, ADD COLUMN IF NOT EXISTS output_tokens UInt32",
+                false,
+            )
             .await?;
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the columns */\
-            ALTER TABLE ModelInferenceCache \
-            DROP COLUMN IF EXISTS input_tokens,\
-            DROP COLUMN IF EXISTS output_tokens;\
-            "
-        .to_string()
+        format!(
+            "/* Drop the columns */\
+            {}",
+            self.clickhouse.get_alter_table_rollback_statements(
+                "ModelInferenceCache", 
+                "DROP COLUMN IF EXISTS input_tokens, DROP COLUMN IF EXISTS output_tokens",
+                false
+            )
+        )
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)

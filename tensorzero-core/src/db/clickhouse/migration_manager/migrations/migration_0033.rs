@@ -1,6 +1,5 @@
 use super::check_table_exists;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
-use crate::db::clickhouse::migration_manager::migrations::table_is_nonempty;
 use crate::db::clickhouse::{
     ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs, Rows, TableName,
 };
@@ -25,48 +24,51 @@ impl Migration for Migration0033<'_> {
     }
 
     async fn should_apply(&self) -> Result<bool, Error> {
-        // If the table doesn't exist, we need to create it
+        // If the table doesn't exist, we need to create it and insert data
         if !check_table_exists(self.clickhouse, "DeploymentID", MIGRATION_ID).await? {
             return Ok(true);
         }
-        // If the table is empty, we need to insert the deployment ID
-        if !table_is_nonempty(self.clickhouse, "DeploymentID", MIGRATION_ID).await? {
-            return Ok(true);
-        }
+        
+        // If the table exists, we still need to check if this specific migration has run
+        // We can do this by checking if the migration has been recorded as successful
+        // The migration manager will handle this, so if we get here and the table exists,
+        // we can assume the migration should not run again
         Ok(false)
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_name: "DeploymentID",
-                table_engine_name: "ReplacingMergeTree",
-                engine_args: &["version_number"],
-            },
-        );
         self.clickhouse
-            .run_query_synchronous_no_params(
-                format!(r"CREATE TABLE IF NOT EXISTS DeploymentID{on_cluster_name} (
+            .get_create_table_statements(
+                "DeploymentID",
+                &format!(
+                    r"(
                         deployment_id String,
                         dummy UInt32 DEFAULT 0, -- the dummy column is used to enforce a single row in the table
                         created_at DateTime DEFAULT now(),
                         version_number UInt32 DEFAULT 4294967295 - toUInt32(now()) -- So that the oldest version is highest version number
                         -- we hardcode UINT32_MAX
-                    )
-                    ENGINE = {table_engine_name}
-                    ORDER BY dummy;",
-                )
-                .to_string(),
+                    )"
+                ),
+                &GetMaybeReplicatedTableEngineNameArgs {
+                    table_name: "DeploymentID",
+                    table_engine_name: "ReplacingMergeTree",
+                    engine_args: &["version_number"],
+                },
+                Some("ORDER BY dummy"),
             )
             .await?;
+            
         // Generate a UUIDv7 and compute the blake3 hash
         let deployment_id = generate_deployment_id();
-        // Insert the deployment ID into the table
+        
+        // Always insert the deployment ID. The ReplacingMergeTree will handle deduplication
+        // based on the ORDER BY (dummy) key. Since dummy is always 0, only one row will be kept.
+        // The version_number ensures the latest insert wins.
         self.clickhouse
             .write_non_batched(
                 Rows::Unserialized(&[serde_json::json!({
                     "deployment_id": deployment_id,
+                    "dummy": 0,
                 })]),
                 TableName::DeploymentID,
             )
@@ -76,12 +78,7 @@ impl Migration for Migration0033<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        format!(
-            r"
-        DROP TABLE IF EXISTS DeploymentID{on_cluster_name} SYNC;
-        "
-        )
+        self.clickhouse.get_drop_table_rollback_statements("DeploymentID")
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

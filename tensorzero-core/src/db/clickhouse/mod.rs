@@ -36,6 +36,11 @@ use query_builder::ListInferencesParams;
 use super::HealthCheckable;
 
 #[derive(Debug, Clone)]
+pub struct ShardingConfig {
+    pub sharding_key: String,
+}
+
+#[derive(Debug, Clone)]
 pub enum ClickHouseConnectionInfo {
     Disabled,
     Mock {
@@ -45,6 +50,7 @@ pub enum ClickHouseConnectionInfo {
     Production {
         database_url: SecretString,
         cluster_name: Option<String>,
+        sharding_config: Option<ShardingConfig>,
         database: String,
         client: Client,
         batch_sender: Option<Arc<BatchSender>>,
@@ -159,9 +165,36 @@ impl ClickHouseConnectionInfo {
             }
         };
 
+        // Get sharding configuration from environment variables
+        let sharding_config = match std::env::var("TENSORZERO_CLICKHOUSE_SHARDING_ENABLED").as_deref() {
+            Ok("true") => {
+                if cluster_name.is_none() {
+                    return Err(Error::new(ErrorDetails::Config {
+                        message: "Sharding can only be enabled in clustered ClickHouse deployments. Please set TENSORZERO_CLICKHOUSE_CLUSTER_NAME.".to_string(),
+                    }));
+                }
+                
+                let sharding_key = std::env::var("TENSORZERO_CLICKHOUSE_SHARDING_KEY")
+                    .unwrap_or_else(|_| "rand()".to_string());
+                
+                tracing::info!("ClickHouse sharding enabled with key: {sharding_key}");
+                Some(ShardingConfig { sharding_key })
+            }
+            Ok("false") | Err(_) => {
+                tracing::debug!("ClickHouse sharding is disabled");
+                None
+            }
+            Ok(value) => {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!("Invalid value for TENSORZERO_CLICKHOUSE_SHARDING_ENABLED: '{}'. Must be 'true' or 'false'.", value),
+                }));
+            }
+        };
+
         let mut connection_info = Self::Production {
             database_url,
             cluster_name,
+            sharding_config,
             database,
             client: make_clickhouse_http_client()?,
             batch_sender: None,
@@ -662,29 +695,50 @@ impl ClickHouseConnectionInfo {
         // We decided to add this table after we had already created lots of migrations.
         // We create this table immediately after creating the database, so that
         // we can insert rows into it when running migrations
-        let on_cluster_name = self.get_on_cluster_name();
-        let table_engine_name =
-            self.get_maybe_replicated_table_engine_name(GetMaybeReplicatedTableEngineNameArgs {
-                table_engine_name: "MergeTree",
-                table_name: "TensorZeroMigration",
-                engine_args: &[],
-            });
-        let query = format!(
-            r"CREATE TABLE IF NOT EXISTS TensorZeroMigration{on_cluster_name} (
-                migration_id UInt32,
-                migration_name String,
-                gateway_version String,
-                gateway_git_sha String,
-                applied_at DateTime64(6, 'UTC') DEFAULT now(),
-                execution_time_ms UInt64,
-                extra_data Nullable(String)
-            )
-            ENGINE = {table_engine_name}
-            PRIMARY KEY (migration_id)"
-        );
-        self.run_query_synchronous_no_params(query)
-            .await
-            .map(|_| ())?;
+        
+        // Special handling for TensorZeroMigration table since it needs to exist for migration tracking
+        // but may have been created before sharding was enabled
+        if self.is_sharding_enabled() {
+            // Check if the regular (non-sharded) TensorZeroMigration table exists
+            let table_exists_query = format!(
+                "SELECT count() FROM system.tables WHERE database = '{}' AND name = 'TensorZeroMigration'",
+                self.database()
+            );
+            let result = self.run_query_synchronous_no_params(table_exists_query).await?;
+            let table_count: u32 = result.response.trim().parse().unwrap_or(0);
+            
+            if table_count > 0 {
+                tracing::warn!(
+                    "TensorZeroMigration table exists in non-sharded format but sharding is enabled. \
+                    Migration records will be written to the existing table for compatibility."
+                );
+                // For existing deployments with non-sharded TensorZeroMigration table,
+                // we'll continue using the existing table to avoid breaking migration tracking
+                return Ok(());
+            }
+        }
+        
+        let table_schema = r"(
+            migration_id UInt32,
+            migration_name String,
+            gateway_version String,
+            gateway_git_sha String,
+            applied_at DateTime64(6, 'UTC') DEFAULT now(),
+            execution_time_ms UInt64,
+            extra_data Nullable(String)
+        )";
+        let table_engine_args = GetMaybeReplicatedTableEngineNameArgs {
+            table_engine_name: "MergeTree",
+            table_name: "TensorZeroMigration",
+            engine_args: &[],
+        };
+        self.get_create_table_statements(
+            "TensorZeroMigration",
+            table_schema,
+            &table_engine_args,
+            Some("PRIMARY KEY (migration_id)"),
+        )
+        .await?;
         Ok(())
     }
 
@@ -756,6 +810,311 @@ impl ClickHouseConnectionInfo {
                 }
             },
         }
+    }
+
+    pub fn is_sharding_enabled(&self) -> bool {
+        match self {
+            Self::Disabled => false,
+            Self::Mock { .. } => false,
+            Self::Production { sharding_config, .. } => sharding_config.is_some(),
+        }
+    }
+
+    pub fn get_sharding_config(&self) -> Option<&ShardingConfig> {
+        match self {
+            Self::Disabled => None,
+            Self::Mock { .. } => None,
+            Self::Production { sharding_config, .. } => sharding_config.as_ref(),
+        }
+    }
+
+    pub fn get_local_table_name(&self, table_name: &str) -> String {
+        if self.is_sharding_enabled() {
+            format!("{table_name}_local")
+        } else {
+            table_name.to_string()
+        }
+    }
+
+    pub fn get_distributed_table_engine_name(
+        &self,
+        table_name: &str,
+        database: &str,
+        sharding_config: &ShardingConfig,
+    ) -> String {
+        match self {
+            Self::Disabled => "".to_string(),
+            Self::Mock { .. } => "".to_string(),
+            Self::Production { cluster_name, .. } => match cluster_name {
+                Some(cluster_name) => {
+                    let local_table_name = self.get_local_table_name(table_name);
+                    format!(
+                        "Distributed('{}', '{}', '{}', {})",
+                        cluster_name,
+                        database,
+                        local_table_name,
+                        sharding_config.sharding_key
+                    )
+                }
+                None => "".to_string(),
+            }
+        }
+    }
+
+    /// Creates both local and distributed tables for sharded configurations.
+    /// For non-sharded configurations, creates only the regular table.
+    /// 
+    /// Important: This does NOT migrate existing non-sharded tables to sharded setup.
+    /// If sharding is enabled and regular tables exist, this will fail with a clear error.
+    pub async fn get_create_table_statements(
+        &self,
+        table_name: &str,
+        table_schema: &str,
+        table_engine_args: &GetMaybeReplicatedTableEngineNameArgs<'_>,
+        order_by_clause: Option<&str>,
+    ) -> Result<(), Error> {
+        let on_cluster_name = self.get_on_cluster_name();
+
+        if self.is_sharding_enabled() {
+            // Check if regular (non-sharded) table already exists
+            let table_exists_query = format!(
+                "SELECT count() FROM system.tables WHERE database = '{}' AND name = '{}'",
+                self.database(),
+                table_name
+            );
+            let result = self.run_query_synchronous_no_params(table_exists_query).await?;
+            let table_count: u32 = result.response.trim().parse().unwrap_or(0);
+            
+            if table_count > 0 {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Cannot enable sharding: table '{}' already exists in non-sharded format. \
+                        Sharding cannot be enabled on existing deployments as it would break data distribution. \
+                        For new deployments, enable sharding from the start. \
+                        For existing deployments, you need to either: \
+                        1. Keep sharding disabled, or \
+                        2. Export data, drop tables, enable sharding, and re-import data.",
+                        table_name
+                    ),
+                }));
+            }
+
+            // Create local table
+            let local_table_name = self.get_local_table_name(table_name);
+            let local_table_engine_name = self.get_maybe_replicated_table_engine_name(
+                GetMaybeReplicatedTableEngineNameArgs {
+                    table_engine_name: table_engine_args.table_engine_name,
+                    table_name: &local_table_name,
+                    engine_args: table_engine_args.engine_args,
+                }
+            );
+
+            let local_query = match order_by_clause {
+                Some(order_by) => format!(
+                    "CREATE TABLE IF NOT EXISTS {local_table_name}{on_cluster_name} {table_schema} ENGINE = {local_table_engine_name} {order_by}"
+                ),
+                None => format!(
+                    "CREATE TABLE IF NOT EXISTS {local_table_name}{on_cluster_name} {table_schema} ENGINE = {local_table_engine_name}"
+                ),
+            };
+            self.run_query_synchronous_no_params(local_query).await?;
+
+            // Create distributed table
+            if let Some(sharding_config) = self.get_sharding_config() {
+                let distributed_engine_name = self.get_distributed_table_engine_name(
+                    table_name, 
+                    self.database(), 
+                    sharding_config
+                );
+                let distributed_query = format!(
+                    "CREATE TABLE IF NOT EXISTS {table_name}{on_cluster_name} AS {local_table_name} ENGINE = {distributed_engine_name}"
+                );
+                self.run_query_synchronous_no_params(distributed_query).await?;
+            }
+        } else {
+            // Create regular table
+            let table_engine_name = self.get_maybe_replicated_table_engine_name(
+                GetMaybeReplicatedTableEngineNameArgs {
+                    table_engine_name: table_engine_args.table_engine_name,
+                    table_name: table_engine_args.table_name,
+                    engine_args: table_engine_args.engine_args,
+                }
+            );
+            let query = match order_by_clause {
+                Some(order_by) => format!(
+                    "CREATE TABLE IF NOT EXISTS {table_name}{on_cluster_name} {table_schema} ENGINE = {table_engine_name} {order_by}"
+                ),
+                None => format!(
+                    "CREATE TABLE IF NOT EXISTS {table_name}{on_cluster_name} {table_schema} ENGINE = {table_engine_name}"
+                ),
+            };
+            self.run_query_synchronous_no_params(query).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Executes ALTER TABLE commands with proper sharding support.
+    /// For sharded deployments, alters the distributed table which automatically propagates to local tables.
+    /// For non-sharded deployments, alters the table directly with cluster support if available.
+    /// 
+    /// # Parameters
+    /// * `table_name` - The base table name (without _local suffix)
+    /// * `alter_operation` - The ALTER operation to perform
+    /// * `local_only` - If true, only alter local tables in sharded setups (useful for indices)
+    pub async fn get_alter_table_statements(
+        &self,
+        table_name: &str,
+        alter_operation: &str,
+        local_only: bool,
+    ) -> Result<(), Error> {
+        let on_cluster_name = self.get_on_cluster_name();
+        
+        if self.is_sharding_enabled() {
+            // Always alter the local tables (where the actual data lives)
+            let local_table_name = format!("{}_local", table_name);
+            let local_query = format!(
+                "ALTER TABLE {}{} {}",
+                local_table_name,
+                on_cluster_name,
+                alter_operation
+            );
+            self.run_query_synchronous_no_params(local_query).await?;
+            
+            // Only alter distributed table if not local_only (distributed tables don't support indices)
+            if !local_only {
+                let distributed_query = format!(
+                    "ALTER TABLE {}{} {}",
+                    table_name,
+                    on_cluster_name,
+                    alter_operation
+                );
+                self.run_query_synchronous_no_params(distributed_query).await?;
+            }
+        } else {
+            // In non-sharded setups, alter the table directly
+            let query = format!(
+                "ALTER TABLE {}{} {}",
+                table_name,
+                on_cluster_name,
+                alter_operation
+            );
+            self.run_query_synchronous_no_params(query).await?;
+        }
+        
+        Ok(())
+    }
+
+    /// Generates rollback instructions for tables with sharding support
+    pub fn get_drop_table_rollback_statements(&self, table_name: &str) -> String {
+        let on_cluster_name = self.get_on_cluster_name();
+        
+        if self.is_sharding_enabled() {
+            let local_table_name = self.get_local_table_name(table_name);
+            format!(
+                "/* Drop distributed and local tables */\
+                DROP TABLE IF EXISTS {table_name}{on_cluster_name} SYNC;\
+                DROP TABLE IF EXISTS {local_table_name}{on_cluster_name} SYNC;"
+            )
+        } else {
+            format!(
+                "/* Drop the table */\
+                DROP TABLE IF EXISTS {table_name}{on_cluster_name} SYNC;"
+            )
+        }
+    }
+
+    /// Generates ALTER TABLE statements for sharding-aware rollbacks
+    /// 
+    /// # Parameters
+    /// * `table_name` - Name of the table to generate rollback statements for
+    /// * `alter_operation` - The ALTER operation to perform (e.g., "DROP INDEX index_name")
+    /// * `local_only` - If true, only generates statements for local tables (useful for index operations).
+    ///                  If false, generates statements for both distributed and local tables in sharded setups.
+    /// 
+    /// # Behavior
+    /// - For sharded deployments with `local_only=true`: generates statement for local table only
+    /// - For sharded deployments with `local_only=false`: generates statements for both distributed and local tables
+    /// - For non-sharded deployments: generates statement for the table directly (ignores `local_only`)
+    pub fn get_alter_table_rollback_statements(&self, table_name: &str, alter_operation: &str, local_only: bool) -> String {
+        let on_cluster_name = self.get_on_cluster_name();
+        
+        if self.is_sharding_enabled() {
+            if local_only {
+                let local_table_name = self.get_local_table_name(table_name);
+                format!(
+                    "ALTER TABLE {}{} {};",
+                    local_table_name, on_cluster_name, alter_operation
+                )
+            } else {
+                let local_table_name = self.get_local_table_name(table_name);
+                format!(
+                    "ALTER TABLE {}{} {};\
+                    ALTER TABLE {}{} {};",
+                    local_table_name, on_cluster_name, alter_operation,
+                    table_name, on_cluster_name, alter_operation
+                )
+            }
+        } else {
+            format!(
+                "ALTER TABLE {}{} {};",
+                table_name, on_cluster_name, alter_operation
+            )
+        }
+    }
+
+    /// Creates materialized views with proper sharding support.
+    /// For sharded deployments, uses local tables as source and distributed tables as target.
+    /// For non-sharded deployments, uses regular table names.
+    /// 
+    /// # Arguments
+    /// * `view_name` - Name of the materialized view to create
+    /// * `target_table` - Name of the target table (will be converted to distributed table in sharded setups)
+    /// * `source_table` - Name of the source table (will be converted to local table in sharded setups)  
+    /// * `select_query` - The SELECT part of the materialized view query (without SELECT keyword)
+    /// * `where_clause` - Optional WHERE clause to append to the query
+    pub async fn get_create_materialized_view_statements(
+        &self,
+        view_name: &str,
+        target_table: &str,
+        source_table: &str,
+        select_query: &str,
+        where_clause: Option<&str>,
+    ) -> Result<(), Error> {
+        let on_cluster_name = self.get_on_cluster_name();
+        
+        // For sharded deployments:
+        // - Target should be distributed table (for writing)
+        // - Source should be local table (for reading from materialized view)
+        let actual_target_table = if self.is_sharding_enabled() {
+            // Use distributed table name for target
+            target_table.to_string()
+        } else {
+            target_table.to_string()
+        };
+        
+        let actual_source_table = if self.is_sharding_enabled() {
+            // Use local table name for source in materialized views
+            self.get_local_table_name(source_table)
+        } else {
+            source_table.to_string()
+        };
+        
+        let where_part = where_clause.map(|w| format!(" {}", w)).unwrap_or_default();
+        
+        let query = format!(
+            r"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS {view_name}{on_cluster_name}
+            TO {actual_target_table}
+            AS
+                SELECT
+                {select_query}
+                FROM {actual_source_table}{where_part}
+            "
+        );
+        
+        self.run_query_synchronous_no_params(query).await?;
+        Ok(())
     }
 }
 

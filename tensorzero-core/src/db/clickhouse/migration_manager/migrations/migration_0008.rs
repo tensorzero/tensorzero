@@ -99,51 +99,43 @@ impl Migration for Migration0008<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
-        // Add a `raw_request` column, a `raw_response` column, a `function_name` column and a `variant_name` column
-        // to the `BatchRequest` table
-        let query = r"
-            ALTER TABLE BatchRequest
-            ADD COLUMN IF NOT EXISTS raw_request String,
-            ADD COLUMN IF NOT EXISTS raw_response String,
-            ADD COLUMN IF NOT EXISTS function_name LowCardinality(String),
-            ADD COLUMN IF NOT EXISTS variant_name LowCardinality(String),
-            MODIFY COLUMN errors Array(String);";
+        // Add columns to BatchRequest table using sharding-aware ALTER
+        self.clickhouse
+            .get_alter_table_statements(
+                "BatchRequest",
+                "ADD COLUMN IF NOT EXISTS raw_request String, ADD COLUMN IF NOT EXISTS raw_response String, ADD COLUMN IF NOT EXISTS function_name LowCardinality(String), ADD COLUMN IF NOT EXISTS variant_name LowCardinality(String), MODIFY COLUMN errors Array(String)",
+                false,
+            )
+            .await?;
         // NOTE: this MODIFY COLUMN errors statement would convert data in bad ways
         // HOWEVER, TensorZero at the point of writing has never actually written any errors to the errors column
         // so this is safe to do.
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
-            .await?;
 
         // Alter the `response_time_ms` column of `ModelInference` to be a nullable column
-        let query = r"
-            ALTER TABLE ModelInference
-            MODIFY COLUMN response_time_ms Nullable(UInt32)
-        ";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+        self.clickhouse
+            .get_alter_table_statements(
+                "ModelInference",
+                "MODIFY COLUMN response_time_ms Nullable(UInt32)",
+                false,
+            )
             .await?;
 
         // Alter the `processing_time_ms` column of `ChatInference` to be a nullable column
-        let query = r"
-            ALTER TABLE ChatInference
-            MODIFY COLUMN processing_time_ms Nullable(UInt32)
-        ";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+        self.clickhouse
+            .get_alter_table_statements(
+                "ChatInference",
+                "MODIFY COLUMN processing_time_ms Nullable(UInt32)",
+                false,
+            )
             .await?;
 
         // Alter the `processing_time_ms` column of `JsonInference` to be a nullable column
-        let query = r"
-            ALTER TABLE JsonInference
-            MODIFY COLUMN processing_time_ms Nullable(UInt32)
-        ";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+        self.clickhouse
+            .get_alter_table_statements(
+                "JsonInference",
+                "MODIFY COLUMN processing_time_ms Nullable(UInt32)",
+                false,
+            )
             .await?;
 
         Ok(())
@@ -160,17 +152,17 @@ impl Migration for Migration0008<'_> {
         // ALTER TABLE MODIFY COLUMN' cannot change an array back into a Map
         // There shouldn't be anything in the database when this runs, so this is fine -
         // re-applying the migration after a rollback will just leave the 'errors' column unchanged
-        "/* Change the timing columns back to non-nullable types */\
-            ALTER TABLE ModelInference MODIFY COLUMN response_time_ms UInt32;
-            ALTER TABLE ChatInference MODIFY COLUMN processing_time_ms UInt32;
-            ALTER TABLE JsonInference MODIFY COLUMN processing_time_ms UInt32;
+        format!(
+            "/* Change the timing columns back to non-nullable types */\
+            {}\
+            {}\
+            {}\
             /* Drop the columns */\
-            ALTER TABLE BatchRequest \
-            DROP COLUMN raw_request,\
-            DROP COLUMN raw_response,\
-            DROP COLUMN function_name,\
-            DROP COLUMN variant_name;
-        "
-        .to_string()
+            {}",
+            self.clickhouse.get_alter_table_rollback_statements("ModelInference", "MODIFY COLUMN response_time_ms UInt32", false),
+            self.clickhouse.get_alter_table_rollback_statements("ChatInference", "MODIFY COLUMN processing_time_ms UInt32", false),
+            self.clickhouse.get_alter_table_rollback_statements("JsonInference", "MODIFY COLUMN processing_time_ms UInt32", false),
+            self.clickhouse.get_alter_table_rollback_statements("BatchRequest", "DROP COLUMN raw_request, DROP COLUMN raw_response, DROP COLUMN function_name, DROP COLUMN variant_name", false)
+        )
     }
 }

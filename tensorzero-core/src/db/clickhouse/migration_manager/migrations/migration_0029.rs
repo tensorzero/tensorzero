@@ -27,10 +27,11 @@ impl Migration for Migration0029<'_> {
         // This migration "cheats" by checking if the migration manager has written that this migration has
         // already been run successfully.
         // If not, we run this once, the migration manager will write the row, and we will skip it every subsequent time.
+        let database = self.clickhouse.database();
         let response = self
             .clickhouse
             .run_query_synchronous_no_params(
-                "SELECT 1 FROM TensorZeroMigration WHERE migration_id = 29 LIMIT 1".to_string(),
+                format!("SELECT 1 FROM {}.TensorZeroMigration WHERE migration_id = 29 LIMIT 1", database),
             )
             .await?;
         return Ok(response.response.trim() != "1");

@@ -70,204 +70,151 @@ impl Migration for Migration0009<'_> {
             + view_offset)
             .as_secs();
 
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_engine_name: "MergeTree",
-                table_name: "BooleanMetricFeedbackByTargetId",
-                engine_args: &[],
-            },
-        );
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
         // Create the `BooleanMetricFeedbackByTargetId` table
-        let query = format!(
+        self.clickhouse.get_create_table_statements(
+            "BooleanMetricFeedbackByTargetId",
             r"
-            CREATE TABLE IF NOT EXISTS BooleanMetricFeedbackByTargetId{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
                 target_id UUID, -- must be a UUIDv7
                 metric_name LowCardinality(String),
                 value Bool,
                 tags Map(String, String)
-            ) ENGINE = {table_engine_name}
-            ORDER BY target_id;
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
-            .await?;
+            )",
+            &GetMaybeReplicatedTableEngineNameArgs {
+                table_name: "BooleanMetricFeedbackByTargetId",
+                table_engine_name: "MergeTree",
+                engine_args: &[],
+            },
+            Some("ORDER BY target_id"),
+        ).await?;
         // Create the materialized view for the `BooleanMetricFeedbackByTargetId` table from BooleanMetricFeedback
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
         let view_where_clause = if clean_start {
-            String::new()
+            None
         } else {
-            format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
+            Some(format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))"))
         };
-        let query = format!(
-            r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanMetricFeedbackByTargetIdView{on_cluster_name}
-            TO BooleanMetricFeedbackByTargetId
-            AS
-                SELECT
-                    id,
+        
+        self.clickhouse
+            .get_create_materialized_view_statements(
+                "BooleanMetricFeedbackByTargetIdView",
+                "BooleanMetricFeedbackByTargetId",
+                "BooleanMetricFeedback",
+                "id,
                     target_id,
                     metric_name,
                     value,
-                    tags
-                FROM BooleanMetricFeedback
-                {view_where_clause};
-            "
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query)
+                    tags",
+                view_where_clause.as_deref(),
+            )
             .await?;
 
         // Create the `CommentFeedbackByTargetId` table
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_engine_name: "MergeTree",
-                table_name: "CommentFeedbackByTargetId",
-                engine_args: &[],
-            },
-        );
-        let query = format!(
+        self.clickhouse.get_create_table_statements(
+            "CommentFeedbackByTargetId",
             r"
-            CREATE TABLE IF NOT EXISTS CommentFeedbackByTargetId{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
                 target_id UUID, -- must be a UUIDv7
                 target_type Enum('inference' = 1, 'episode' = 2),
                 value String,
                 tags Map(String, String)
-            ) ENGINE = {table_engine_name}
-            ORDER BY target_id;
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
-            .await?;
+            )",
+            &GetMaybeReplicatedTableEngineNameArgs {
+                table_name: "CommentFeedbackByTargetId",
+                table_engine_name: "MergeTree",
+                engine_args: &[],
+            },
+            Some("ORDER BY target_id"),
+        ).await?;
 
         // Create the materialized view for the `CommentFeedbackByTargetId` table from CommentFeedback
-        // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
-        let query = format!(
-            r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS CommentFeedbackByTargetIdView{on_cluster_name}
-            TO CommentFeedbackByTargetId
-            AS
-                SELECT
-                    id,
+        self.clickhouse
+            .get_create_materialized_view_statements(
+                "CommentFeedbackByTargetIdView",
+                "CommentFeedbackByTargetId",
+                "CommentFeedback",
+                "id,
                     target_id,
                     target_type,
                     value,
-                    tags
-                FROM CommentFeedback
-                {view_where_clause};
-            "
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query)
+                    tags",
+                view_where_clause.as_deref(),
+            )
             .await?;
 
         // Create the `DemonstrationFeedbackByInferenceId` table
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_engine_name: "MergeTree",
-                table_name: "DemonstrationFeedbackByInferenceId",
-                engine_args: &[],
-            },
-        );
-        let query = format!(
+        self.clickhouse.get_create_table_statements(
+            "DemonstrationFeedbackByInferenceId",
             r"
-            CREATE TABLE IF NOT EXISTS DemonstrationFeedbackByInferenceId{on_cluster_name}
             (
                 id UUID, -- must be a UUIDv7
-                inference_id UUID, -- must be a UUIDv7
-                value String,
+                target_id UUID, -- must be a UUIDv7
+                metric_name LowCardinality(String),
+                value Float32,
                 tags Map(String, String)
-            ) ENGINE = {table_engine_name}
-            ORDER BY inference_id;
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
-            .await?;
+            )",
+            &GetMaybeReplicatedTableEngineNameArgs {
+                table_name: "DemonstrationFeedbackByInferenceId",
+                table_engine_name: "MergeTree",
+                engine_args: &[],
+            },
+            Some("ORDER BY target_id"),
+        ).await?;
 
         // Create the materialized view for the `DemonstrationFeedbackByInferenceId` table from DemonstrationFeedback
-        // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
-        let query = format!(
-            r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS DemonstrationFeedbackByInferenceIdView{on_cluster_name}
-            TO DemonstrationFeedbackByInferenceId
-            AS
-                SELECT
-                    id,
+        self.clickhouse
+            .get_create_materialized_view_statements(
+                "DemonstrationFeedbackByInferenceIdView",
+                "DemonstrationFeedbackByInferenceId", 
+                "DemonstrationFeedback",
+                "id,
                     inference_id,
                     value,
-                    tags
-                FROM DemonstrationFeedback
-                {view_where_clause};
-            "
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query)
+                    tags",
+                view_where_clause.as_deref(),
+            )
             .await?;
 
         // Create the `FloatMetricFeedbackByTargetId` table
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_engine_name: "MergeTree",
-                table_name: "FloatMetricFeedbackByTargetId",
-                engine_args: &[],
-            },
-        );
-        let query = format!(
+        self.clickhouse.get_create_table_statements(
+            "FloatMetricFeedbackByTargetId",
             r"
-            CREATE TABLE IF NOT EXISTS FloatMetricFeedbackByTargetId{on_cluster_name}
            (
                id UUID, -- must be a UUIDv7
                target_id UUID, -- must be a UUIDv7
                metric_name LowCardinality(String),
                value Float32,
                tags Map(String, String)
-           ) ENGINE = {table_engine_name}
-           ORDER BY target_id;
-       ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
-            .await?;
+           )",
+            &GetMaybeReplicatedTableEngineNameArgs {
+                table_name: "FloatMetricFeedbackByTargetId",
+                table_engine_name: "MergeTree",
+                engine_args: &[],
+            },
+            Some("ORDER BY target_id"),
+        ).await?;
 
         // Create the materialized view for the `FloatMetricFeedbackByTargetId` table from FloatMetricFeedback
-        // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
-        let view_where_clause = if clean_start {
-            String::new()
+        let view_where_clause_float = if clean_start {
+            None
         } else {
-            format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
+            Some(format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))"))
         };
-        let query = format!(
-            r"
-           CREATE MATERIALIZED VIEW IF NOT EXISTS FloatMetricFeedbackByTargetIdView{on_cluster_name}
-           TO FloatMetricFeedbackByTargetId
-           AS
-               SELECT
-                   id,
-                   target_id,
-                   metric_name,
-                   value,
-                   tags
-               FROM FloatMetricFeedback
-               {view_where_clause};
-           "
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query)
+        
+        self.clickhouse
+            .get_create_materialized_view_statements(
+                "FloatMetricFeedbackByTargetIdView",
+                "FloatMetricFeedbackByTargetId",
+                "FloatMetricFeedback",
+                "id,
+                    target_id,
+                    metric_name,
+                    value,
+                    tags",
+                view_where_clause_float.as_deref(),
+            )
             .await?;
 
         // Insert the data from the original tables into the new table (we do this concurrently since it could theoretically take a long time)
@@ -275,16 +222,20 @@ impl Migration for Migration0009<'_> {
             // Sleep for the duration specified by view_offset to allow the materialized views to catch up
             tokio::time::sleep(view_offset).await;
             let insert_boolean_metric_feedback = async {
+                // For INSERT operations, use distributed table names for both source and target
+                let source_table = "BooleanMetricFeedback"; // Use distributed table for SELECT 
+                let target_table = "BooleanMetricFeedbackByTargetId"; // Use distributed table for INSERT
+                
                 let query = format!(
                     r"
-                    INSERT INTO BooleanMetricFeedbackByTargetId
+                    INSERT INTO {target_table}
                     SELECT
                         id,
                         target_id,
                         metric_name,
                         value,
                         tags
-                    FROM BooleanMetricFeedback
+                    FROM {source_table}
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
                 "
                 );
@@ -292,16 +243,20 @@ impl Migration for Migration0009<'_> {
             };
 
             let insert_comment_feedback = async {
+                // For INSERT operations, use distributed table names for both source and target
+                let source_table = "CommentFeedback"; // Use distributed table for SELECT
+                let target_table = "CommentFeedbackByTargetId"; // Use distributed table for INSERT
+                
                 let query = format!(
                     r"
-                    INSERT INTO CommentFeedbackByTargetId
+                    INSERT INTO {target_table}
                     SELECT
                         id,
                         target_id,
                         target_type,
                         value,
                         tags
-                    FROM CommentFeedback
+                    FROM {source_table}
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
                 "
                 );
@@ -309,15 +264,19 @@ impl Migration for Migration0009<'_> {
             };
 
             let insert_demonstration_feedback = async {
+                // For INSERT operations, use distributed table names for both source and target
+                let source_table = "DemonstrationFeedback"; // Use distributed table for SELECT
+                let target_table = "DemonstrationFeedbackByInferenceId"; // Use distributed table for INSERT
+                
                 let query = format!(
                     r"
-                    INSERT INTO DemonstrationFeedbackByInferenceId
+                    INSERT INTO {target_table}
                     SELECT
                         id,
                         inference_id,
                         value,
                         tags
-                    FROM DemonstrationFeedback
+                    FROM {source_table}
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
                 "
                 );
@@ -325,16 +284,20 @@ impl Migration for Migration0009<'_> {
             };
 
             let insert_float_metric_feedback = async {
+                // For INSERT operations, use distributed table names for both source and target
+                let source_table = "FloatMetricFeedback"; // Use distributed table for SELECT
+                let target_table = "FloatMetricFeedbackByTargetId"; // Use distributed table for INSERT
+                
                 let query = format!(
                     r"
-                    INSERT INTO FloatMetricFeedbackByTargetId
+                    INSERT INTO {target_table}
                     SELECT
                         id,
                         target_id,
                         metric_name,
                         value,
                         tags
-                    FROM FloatMetricFeedback
+                    FROM {source_table}
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
                 "
                 );
@@ -354,18 +317,22 @@ impl Migration for Migration0009<'_> {
 
     fn rollback_instructions(&self) -> String {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        
         format!(
             "/* Drop the materialized views */\
-            DROP VIEW IF EXISTS BooleanMetricFeedbackByTargetIdView{on_cluster_name};
-            DROP VIEW IF EXISTS CommentFeedbackByTargetIdView{on_cluster_name};
-            DROP VIEW IF EXISTS DemonstrationFeedbackByInferenceIdView{on_cluster_name};
-            DROP VIEW IF EXISTS FloatMetricFeedbackByTargetIdView{on_cluster_name};
+            DROP VIEW IF EXISTS BooleanMetricFeedbackByTargetIdView{on_cluster_name};\
+            DROP VIEW IF EXISTS CommentFeedbackByTargetIdView{on_cluster_name};\
+            DROP VIEW IF EXISTS DemonstrationFeedbackByInferenceIdView{on_cluster_name};\
+            DROP VIEW IF EXISTS FloatMetricFeedbackByTargetIdView{on_cluster_name};\
             /* Drop the tables */\
-            DROP TABLE IF EXISTS BooleanMetricFeedbackByTargetId{on_cluster_name} SYNC;
-            DROP TABLE IF EXISTS CommentFeedbackByTargetId{on_cluster_name} SYNC;
-            DROP TABLE IF EXISTS DemonstrationFeedbackByInferenceId{on_cluster_name} SYNC;
-            DROP TABLE IF EXISTS FloatMetricFeedbackByTargetId{on_cluster_name} SYNC;
-            "
+            {}\
+            {}\
+            {}\
+            {}",
+            self.clickhouse.get_drop_table_rollback_statements("BooleanMetricFeedbackByTargetId"),
+            self.clickhouse.get_drop_table_rollback_statements("CommentFeedbackByTargetId"),
+            self.clickhouse.get_drop_table_rollback_statements("DemonstrationFeedbackByInferenceId"),
+            self.clickhouse.get_drop_table_rollback_statements("FloatMetricFeedbackByTargetId")
         )
     }
 

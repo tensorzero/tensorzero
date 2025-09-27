@@ -45,6 +45,7 @@ impl Migration for Migration0016<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         if check_table_exists(self.clickhouse, "ChatInferenceDataset", "0016").await? {
+            // table_is_nonempty is now sharding-aware
             let chat_inference_dataset_has_data =
                 table_is_nonempty(self.clickhouse, "ChatInferenceDataset", "0016").await?;
             if chat_inference_dataset_has_data {
@@ -57,6 +58,7 @@ impl Migration for Migration0016<'_> {
         }
 
         if check_table_exists(self.clickhouse, "JsonInferenceDataset", "0016").await? {
+            // table_is_nonempty is now sharding-aware
             let json_inference_dataset_has_data =
                 table_is_nonempty(self.clickhouse, "JsonInferenceDataset", "0016").await?;
             if json_inference_dataset_has_data {
@@ -69,6 +71,7 @@ impl Migration for Migration0016<'_> {
         }
 
         // First, drop the ChatInferenceDataset and JsonInferenceDataset tables if they were created in 0014
+        // Does not need to be sharding aware as sharding was introduced after 0014 was banned
         let query = "DROP TABLE IF EXISTS ChatInferenceDataset";
         let _ = self
             .clickhouse
@@ -82,88 +85,74 @@ impl Migration for Migration0016<'_> {
             .await?;
 
         // Create the `ChatInferenceDatapoint` table
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_engine_name: "ReplacingMergeTree",
-                table_name: "ChatInferenceDatapoint",
-                engine_args: &["updated_at", "is_deleted"],
-            },
-        );
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS ChatInferenceDatapoint{on_cluster_name}
-            (
-                dataset_name LowCardinality(String),
-                function_name LowCardinality(String),
-                id UUID, -- more important to join than to
-                        -- sort and sorting expected dataset sizes should be cheap
-                        -- If this example is generated from an inference then this
-                        -- should be the inference ID
-                episode_id Nullable(UUID), -- If this is a synthetic datapoint
-                                           -- (not based on an existing inference),
-                                           -- then this will be null
-                input String,
-                output Nullable(String),
-                tool_params String,
-                -- Don't think we need inference params, processing time,
-                -- timestamp, variant_name
-                tags Map(String, String),
-                auxiliary String, -- a JSON (unstructured, for now)
-                is_deleted Bool DEFAULT false,
-                updated_at DateTime64(6, 'UTC') DEFAULT now()
-            ) ENGINE = {table_engine_name}
-            ORDER BY (dataset_name, function_name, id)
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+        self.clickhouse
+            .get_create_table_statements(
+                "ChatInferenceDatapoint",
+                r"(
+                    dataset_name LowCardinality(String),
+                    function_name LowCardinality(String),
+                    id UUID, -- more important to join than to
+                            -- sort and sorting expected dataset sizes should be cheap
+                            -- If this example is generated from an inference then this
+                            -- should be the inference ID
+                    episode_id Nullable(UUID), -- If this is a synthetic datapoint
+                                               -- (not based on an existing inference),
+                                               -- then this will be null
+                    input String,
+                    output Nullable(String),
+                    tool_params String,
+                    -- Don't think we need inference params, processing time,
+                    -- timestamp, variant_name
+                    tags Map(String, String),
+                    auxiliary String, -- a JSON (unstructured, for now)
+                    is_deleted Bool DEFAULT false,
+                    updated_at DateTime64(6, 'UTC') DEFAULT now()
+                )",
+                &GetMaybeReplicatedTableEngineNameArgs {
+                    table_engine_name: "ReplacingMergeTree",
+                    table_name: "ChatInferenceDatapoint",
+                    engine_args: &["updated_at", "is_deleted"],
+                },
+                Some("ORDER BY (dataset_name, function_name, id)"),
+            )
             .await?;
 
         // Create the `JsonInferenceDatapoint` table
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_engine_name: "ReplacingMergeTree",
-                table_name: "JsonInferenceDatapoint",
-                engine_args: &["updated_at", "is_deleted"],
-            },
-        );
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS JsonInferenceDatapoint{on_cluster_name}
-            (
-                dataset_name LowCardinality(String),
-                function_name LowCardinality(String),
-                id UUID, -- same comment as above
-                episode_id Nullable(UUID), -- same comment as above
-                input String,
-                output Nullable(String),
-                output_schema String,
-                tags Map(String, String),
-                auxiliary String, -- a JSON (unstructured, for now)
-                is_deleted Bool DEFAULT false,
-                updated_at DateTime64(6, 'UTC') DEFAULT now()
-            ) ENGINE = {table_engine_name}
-            ORDER BY (dataset_name, function_name, id)
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+        self.clickhouse
+            .get_create_table_statements(
+                "JsonInferenceDatapoint",
+                r"(
+                    dataset_name LowCardinality(String),
+                    function_name LowCardinality(String),
+                    id UUID, -- same comment as above
+                    episode_id Nullable(UUID), -- same comment as above
+                    input String,
+                    output Nullable(String),
+                    output_schema String,
+                    tags Map(String, String),
+                    auxiliary String, -- a JSON (unstructured, for now)
+                    is_deleted Bool DEFAULT false,
+                    updated_at DateTime64(6, 'UTC') DEFAULT now()
+                )",
+                &GetMaybeReplicatedTableEngineNameArgs {
+                    table_engine_name: "ReplacingMergeTree",
+                    table_name: "JsonInferenceDatapoint",
+                    engine_args: &["updated_at", "is_deleted"],
+                },
+                Some("ORDER BY (dataset_name, function_name, id)"),
+            )
             .await?;
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
             "/* Drop the tables */\
-            DROP TABLE IF EXISTS ChatInferenceDatapoint{on_cluster_name} SYNC;
-            DROP TABLE IF EXISTS JsonInferenceDatapoint{on_cluster_name} SYNC;
-            "
+            {}\
+            {}",
+            self.clickhouse.get_drop_table_rollback_statements("ChatInferenceDatapoint"),
+            self.clickhouse.get_drop_table_rollback_statements("JsonInferenceDatapoint")
         )
     }
 

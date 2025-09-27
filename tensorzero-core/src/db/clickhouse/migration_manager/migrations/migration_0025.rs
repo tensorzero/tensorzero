@@ -30,18 +30,10 @@ impl Migration for Migration0025<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_engine_name: "ReplacingMergeTree",
-                table_name: "DynamicEvaluationRun",
-                engine_args: &["updated_at", "is_deleted"],
-            },
-        );
-        let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS DynamicEvaluationRun{on_cluster_name}
-                (
+        self.clickhouse
+            .get_create_table_statements(
+                "DynamicEvaluationRun",
+                r"(
                     run_id_uint UInt128, -- UUID encoded as a UInt128
                     variant_pins Map(String, String),
                     tags Map(String, String),
@@ -49,53 +41,47 @@ impl Migration for Migration0025<'_> {
                     run_display_name Nullable(String),
                     is_deleted Bool DEFAULT false,
                     updated_at DateTime64(6, 'UTC') DEFAULT now()
-                ) ENGINE = {table_engine_name}
-                ORDER BY run_id_uint;
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+                )",
+                &GetMaybeReplicatedTableEngineNameArgs {
+                    table_engine_name: "ReplacingMergeTree",
+                    table_name: "DynamicEvaluationRun",
+                    engine_args: &["updated_at", "is_deleted"],
+                },
+                Some("ORDER BY run_id_uint"),
+            )
             .await?;
 
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_engine_name: "ReplacingMergeTree",
-                table_name: "DynamicEvaluationRunEpisode",
-                engine_args: &["updated_at", "is_deleted"],
-            },
-        );
-        let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS DynamicEvaluationRunEpisode{on_cluster_name}
-            (
-                run_id UUID,
-                episode_id_uint UInt128, -- UUID encoded as a UInt128
-                -- this is duplicated so that we can look it up without joining at inference time
-                variant_pins Map(String, String),
-                datapoint_name Nullable(String),
-                tags Map(String, String),
-                is_deleted Bool DEFAULT false,
-                updated_at DateTime64(6, 'UTC') DEFAULT now()
-            ) ENGINE = {table_engine_name}
-                ORDER BY episode_id_uint;
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+        self.clickhouse
+            .get_create_table_statements(
+                "DynamicEvaluationRunEpisode",
+                r"(
+                    run_id UUID,
+                    episode_id_uint UInt128, -- UUID encoded as a UInt128
+                    -- this is duplicated so that we can look it up without joining at inference time
+                    variant_pins Map(String, String),
+                    datapoint_name Nullable(String),
+                    tags Map(String, String),
+                    is_deleted Bool DEFAULT false,
+                    updated_at DateTime64(6, 'UTC') DEFAULT now()
+                )",
+                &GetMaybeReplicatedTableEngineNameArgs {
+                    table_engine_name: "ReplacingMergeTree",
+                    table_name: "DynamicEvaluationRunEpisode",
+                    engine_args: &["updated_at", "is_deleted"],
+                },
+                Some("ORDER BY episode_id_uint"),
+            )
             .await?;
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
-            r"
-            DROP TABLE IF EXISTS DynamicEvaluationRunEpisode{on_cluster_name} SYNC;
-            DROP TABLE IF EXISTS DynamicEvaluationRun{on_cluster_name} SYNC;
-        "
+            "{}\
+            {}",
+            self.clickhouse.get_drop_table_rollback_statements("DynamicEvaluationRunEpisode"),
+            self.clickhouse.get_drop_table_rollback_statements("DynamicEvaluationRun")
         )
     }
 

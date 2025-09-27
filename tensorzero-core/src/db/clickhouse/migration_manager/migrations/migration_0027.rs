@@ -55,6 +55,7 @@ impl Migration for Migration0027<'_> {
     }
 
     async fn should_apply(&self) -> Result<bool, Error> {
+        // check_index_exists is now sharding-aware, so we can just pass base table names
         let index_exists =
             check_index_exists(self.clickhouse, "TagInference", "inference_id_index").await?;
         let chat_index_exists =
@@ -73,98 +74,108 @@ impl Migration for Migration0027<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
-        let create_index_query = r"
-            ALTER TABLE TagInference ADD INDEX IF NOT EXISTS inference_id_index inference_id TYPE bloom_filter GRANULARITY 1;
-        ";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(create_index_query.to_string())
+        // Add index for TagInference table
+        self.clickhouse
+            .get_alter_table_statements(
+                "TagInference",
+                "ADD INDEX IF NOT EXISTS inference_id_index inference_id TYPE bloom_filter GRANULARITY 1",
+                true,
+            )
+            .await?;
+        
+        self.clickhouse
+            .get_alter_table_statements(
+                "TagInference",
+                "MATERIALIZE INDEX inference_id_index",
+                true,
+            )
             .await?;
 
-        let materialize_index_query = r"
-            ALTER TABLE TagInference MATERIALIZE INDEX inference_id_index;
-        ";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(materialize_index_query.to_string())
+        // Add index for ChatInference table
+        self.clickhouse
+            .get_alter_table_statements(
+                "ChatInference",
+                "ADD INDEX IF NOT EXISTS inference_id_index id TYPE bloom_filter GRANULARITY 1",
+                true,
+            )
+            .await?;
+        
+        self.clickhouse
+            .get_alter_table_statements(
+                "ChatInference",
+                "MATERIALIZE INDEX inference_id_index",
+                true,
+            )
             .await?;
 
-        let create_index_query = r"
-            ALTER TABLE ChatInference ADD INDEX IF NOT EXISTS inference_id_index id TYPE bloom_filter GRANULARITY 1;
-        ";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(create_index_query.to_string())
+        // Add index for JsonInference table
+        self.clickhouse
+            .get_alter_table_statements(
+                "JsonInference",
+                "ADD INDEX IF NOT EXISTS inference_id_index id TYPE bloom_filter GRANULARITY 1",
+                true,
+            )
+            .await?;
+        
+        self.clickhouse
+            .get_alter_table_statements(
+                "JsonInference",
+                "MATERIALIZE INDEX inference_id_index",
+                true,
+            )
             .await?;
 
-        let materialize_index_query = r"
-            ALTER TABLE ChatInference MATERIALIZE INDEX inference_id_index;
-        ";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(materialize_index_query.to_string())
+        // Add index for ChatInferenceDatapoint table
+        self.clickhouse
+            .get_alter_table_statements(
+                "ChatInferenceDatapoint",
+                "ADD INDEX IF NOT EXISTS id_index id TYPE bloom_filter GRANULARITY 1",
+                true,
+            )
+            .await?;
+        
+        self.clickhouse
+            .get_alter_table_statements(
+                "ChatInferenceDatapoint",
+                "MATERIALIZE INDEX id_index",
+                true,
+            )
             .await?;
 
-        let create_index_query = r"
-            ALTER TABLE JsonInference ADD INDEX IF NOT EXISTS inference_id_index id TYPE bloom_filter GRANULARITY 1;
-        ";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(create_index_query.to_string())
+        // Add index for JsonInferenceDatapoint table
+        self.clickhouse
+            .get_alter_table_statements(
+                "JsonInferenceDatapoint",
+                "ADD INDEX IF NOT EXISTS id_index id TYPE bloom_filter GRANULARITY 1",
+                true,
+            )
             .await?;
-
-        let materialize_index_query = r"
-            ALTER TABLE JsonInference MATERIALIZE INDEX inference_id_index;
-        ";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(materialize_index_query.to_string())
-            .await?;
-
-        let create_index_query = r"
-            ALTER TABLE ChatInferenceDatapoint ADD INDEX IF NOT EXISTS id_index id TYPE bloom_filter GRANULARITY 1;
-        ";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(create_index_query.to_string())
-            .await?;
-
-        let materialize_index_query = r"
-            ALTER TABLE ChatInferenceDatapoint MATERIALIZE INDEX id_index;
-        ";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(materialize_index_query.to_string())
-            .await?;
-
-        let create_index_query = r"
-            ALTER TABLE JsonInferenceDatapoint ADD INDEX IF NOT EXISTS id_index id TYPE bloom_filter GRANULARITY 1;
-        ";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(create_index_query.to_string())
-            .await?;
-
-        let materialize_index_query = r"
-            ALTER TABLE JsonInferenceDatapoint MATERIALIZE INDEX id_index;
-        ";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(materialize_index_query.to_string())
+        
+        self.clickhouse
+            .get_alter_table_statements(
+                "JsonInferenceDatapoint",
+                "MATERIALIZE INDEX id_index",
+                true,
+            )
             .await?;
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        r"
-        ALTER TABLE TagInference DROP INDEX IF EXISTS inference_id_index;
-        ALTER TABLE ChatInference DROP INDEX IF EXISTS inference_id_index;
-        ALTER TABLE JsonInference DROP INDEX IF EXISTS inference_id_index;
-        ALTER TABLE ChatInferenceDatapoint DROP INDEX IF EXISTS id_index;
-        ALTER TABLE JsonInferenceDatapoint DROP INDEX IF EXISTS id_index;
-        "
-        .to_string()
+        format!(r"
+        {}
+        {}
+        {}
+        {}
+        {}
+        ",
+        self.clickhouse.get_alter_table_rollback_statements("TagInference", "DROP INDEX IF EXISTS inference_id_index", true),
+        self.clickhouse.get_alter_table_rollback_statements("ChatInference", "DROP INDEX IF EXISTS inference_id_index", true),
+        self.clickhouse.get_alter_table_rollback_statements("JsonInference", "DROP INDEX IF EXISTS inference_id_index", true),
+        self.clickhouse.get_alter_table_rollback_statements("ChatInferenceDatapoint", "DROP INDEX IF EXISTS id_index", true),
+        self.clickhouse.get_alter_table_rollback_statements("JsonInferenceDatapoint", "DROP INDEX IF EXISTS id_index", true)
+        )
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

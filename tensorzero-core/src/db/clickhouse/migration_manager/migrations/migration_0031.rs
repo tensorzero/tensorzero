@@ -28,16 +28,20 @@ impl Migration for Migration0031<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        // Add ttft_ms column to both ChatInference and JsonInference using sharding-aware ALTER
         self.clickhouse
-            .run_query_synchronous_no_params(
-                r"ALTER TABLE ChatInference ADD COLUMN IF NOT EXISTS ttft_ms Nullable(UInt32);"
-                    .to_string(),
+            .get_alter_table_statements(
+                "ChatInference",
+                "ADD COLUMN IF NOT EXISTS ttft_ms Nullable(UInt32)",
+                false,
             )
             .await?;
+
         self.clickhouse
-            .run_query_synchronous_no_params(
-                r"ALTER TABLE JsonInference ADD COLUMN IF NOT EXISTS ttft_ms Nullable(UInt32);"
-                    .to_string(),
+            .get_alter_table_statements(
+                "JsonInference", 
+                "ADD COLUMN IF NOT EXISTS ttft_ms Nullable(UInt32)",
+                false,
             )
             .await?;
 
@@ -45,9 +49,12 @@ impl Migration for Migration0031<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r"ALTER TABLE ChatInference DROP COLUMN ttft_ms;
-        ALTER TABLE JsonInference DROP COLUMN ttft_ms;"
-            .to_string()
+        format!(
+            "{}\
+            {}",
+            self.clickhouse.get_alter_table_rollback_statements("ChatInference", "DROP COLUMN ttft_ms", false),
+            self.clickhouse.get_alter_table_rollback_statements("JsonInference", "DROP COLUMN ttft_ms", false)
+        )
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {
