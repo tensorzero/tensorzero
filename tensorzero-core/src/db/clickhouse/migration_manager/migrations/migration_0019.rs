@@ -26,17 +26,16 @@ impl Migration for Migration0019<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
         self.clickhouse
             .run_query_synchronous_no_params(
-                "ALTER TABLE ChatInference ADD COLUMN IF NOT EXISTS extra_body Nullable(String)"
-                    .to_string(),
+                format!("ALTER TABLE ChatInference{on_cluster_name} ADD COLUMN IF NOT EXISTS extra_body Nullable(String)"),
             )
             .await?;
 
         self.clickhouse
             .run_query_synchronous_no_params(
-                "ALTER TABLE JsonInference ADD COLUMN IF NOT EXISTS extra_body Nullable(String)"
-                    .to_string(),
+                format!("ALTER TABLE JsonInference{on_cluster_name} ADD COLUMN IF NOT EXISTS extra_body Nullable(String)"),
             )
             .await?;
 
@@ -44,11 +43,10 @@ impl Migration for Migration0019<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the columns */\
-                ALTER TABLE ChatInference DROP COLUMN IF EXISTS extra_body;
-                ALTER TABLE JsonInference DROP COLUMN IF EXISTS extra_body;
-                "
-        .to_string()
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!("/* Drop the columns */\
+                ALTER TABLE ChatInference{on_cluster_name} DROP COLUMN IF EXISTS extra_body;
+                ALTER TABLE JsonInference{on_cluster_name} DROP COLUMN IF EXISTS extra_body;")
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {
