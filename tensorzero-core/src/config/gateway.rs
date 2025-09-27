@@ -1,20 +1,17 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{
-        ExportConfig, ObservabilityConfig, TemplateFilesystemAccess,
-        UninitializedObservabilityConfig,
-    },
+    config::{ExportConfig, ObservabilityConfig, TemplateFilesystemAccess},
     error::{Error, ErrorDetails},
 };
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedGatewayConfig {
     #[serde(serialize_with = "serialize_optional_socket_addr")]
     pub bind_address: Option<std::net::SocketAddr>,
     #[serde(default)]
-    pub observability: UninitializedObservabilityConfig,
+    pub observability: ObservabilityConfig,
     #[serde(default)]
     pub debug: bool,
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
@@ -65,7 +62,7 @@ impl UninitializedGatewayConfig {
         };
         Ok(GatewayConfig {
             bind_address: self.bind_address,
-            observability: self.observability.load(),
+            observability: self.observability,
             debug: self.debug,
             template_filesystem_access,
             export: self.export,
@@ -94,17 +91,4 @@ pub struct GatewayConfig {
     pub unstable_disable_feedback_target_validation: bool,
     #[serde(default)]
     pub disable_pseudonymous_usage_analytics: bool,
-}
-
-fn serialize_optional_socket_addr<S>(
-    addr: &Option<std::net::SocketAddr>,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    match addr {
-        Some(addr) => serializer.serialize_str(&addr.to_string()),
-        None => serializer.serialize_none(),
-    }
 }

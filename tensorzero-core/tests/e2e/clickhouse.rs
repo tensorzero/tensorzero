@@ -15,7 +15,7 @@ use tensorzero_core::db::clickhouse::migration_manager::{
     RunMigrationArgs, RunMigrationManagerArgs,
 };
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
-use tensorzero_core::error::Error;
+use tensorzero_core::error::{Error, ErrorDetails};
 use tokio::runtime::Handle;
 use tokio::time::sleep;
 use tracing_test::traced_test;
@@ -32,6 +32,7 @@ use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0009::Migration0009;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0011::Migration0011;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0013::Migration0013;
+use tensorzero_core::db::clickhouse::migration_manager::MigrationTableState;
 use tensorzero_core::inference::types::ModelInferenceDatabaseInsert;
 
 use tensorzero_core::db::clickhouse::migration_manager::{
@@ -913,8 +914,8 @@ async fn test_clean_clickhouse_start() {
     let is_manual = clickhouse.is_cluster_configured();
     migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
-        manual_run: is_manual,
-        skip_completed_migrations: false,
+        is_manual_run: is_manual,
+        disable_automatic_migrations: false,
     })
     .await
     .unwrap();
@@ -962,8 +963,8 @@ async fn test_startup_without_migration_table() {
     // Run the migrations so we can get the database into a "dirty" state
     migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
-        manual_run: is_manual,
-        skip_completed_migrations: false,
+        is_manual_run: is_manual,
+        disable_automatic_migrations: false,
     })
     .await
     .unwrap();
@@ -980,8 +981,8 @@ async fn test_startup_without_migration_table() {
     // Run the migrations again to ensure that they don't panic and that the table is recreated
     migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
-        manual_run: is_manual,
-        skip_completed_migrations: false,
+        is_manual_run: is_manual,
+        disable_automatic_migrations: false,
     })
     .await
     .unwrap();
@@ -999,8 +1000,8 @@ async fn test_deployment_id_oldest() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false).await;
     migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
-        manual_run: true,
-        skip_completed_migrations: false,
+        is_manual_run: true,
+        disable_automatic_migrations: false,
     })
     .await
     .unwrap();
@@ -1043,8 +1044,8 @@ async fn test_concurrent_clickhouse_migrations() {
         handles.push(tokio::spawn(async move {
             migration_manager::run(RunMigrationManagerArgs {
                 clickhouse: &clickhouse_clone,
-                manual_run: false,
-                skip_completed_migrations: false,
+                is_manual_run: false,
+                disable_automatic_migrations: false,
             })
             .await
             .unwrap();
@@ -1075,7 +1076,10 @@ async fn test_concurrent_clickhouse_migrations() {
     );
 
     let migrations = migration_manager::make_all_migrations(&clickhouse);
-    assert!(migration_manager::should_skip_migrations(&clickhouse, &migrations).await);
+    assert_eq!(
+        migration_manager::check_migrations_state(&clickhouse, &migrations).await,
+        Ok(MigrationTableState::JustRight)
+    );
 }
 
 /// Migration 0013 has some checks that enforce that concurrent migrations can't break
@@ -1255,8 +1259,8 @@ async fn test_run_migrations_clean() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false).await;
     migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
-        manual_run: true,
-        skip_completed_migrations: true,
+        is_manual_run: true,
+        disable_automatic_migrations: true,
     })
     .await
     .unwrap();
@@ -1266,8 +1270,8 @@ async fn test_run_migrations_clean() {
     // Run again, and we should skip all migrations
     migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
-        manual_run: true,
-        skip_completed_migrations: true,
+        is_manual_run: true,
+        disable_automatic_migrations: true,
     })
     .await
     .unwrap();
@@ -1309,8 +1313,8 @@ async fn test_run_migrations_fake_row() {
 
     let migration_manager_result = migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
-        manual_run: false,
-        skip_completed_migrations: true,
+        is_manual_run: false,
+        disable_automatic_migrations: false,
     })
     .await;
     assert!(
@@ -1332,12 +1336,15 @@ async fn test_run_migrations_fake_row() {
     .unwrap();
 
     let migrations = migration_manager::make_all_migrations(&clickhouse);
-    assert!(!migration_manager::should_skip_migrations(&clickhouse, &migrations).await);
+    assert_eq!(
+        migration_manager::check_migrations_state(&clickhouse, &migrations).await,
+        Ok(MigrationTableState::TooMany)
+    );
 
     let migration_manager_result = migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
-        skip_completed_migrations: true,
-        manual_run: false,
+        is_manual_run: false,
+        disable_automatic_migrations: false,
     })
     .await;
     assert!(
@@ -1366,4 +1373,55 @@ async fn test_run_migrations_fake_row() {
     } else {
         assert_eq!(actual_migration_ids, expected_migration_ids);
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+/// Test the is_manual_run and disable_automatic_migrations flags
+async fn test_migration_logic_with_flags() {
+    // Test case 1: is_manual_run = false, disable_automatic_migrations = false
+    let (clickhouse, _cleanup) = get_clean_clickhouse(true).await;
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        is_manual_run: false,
+        disable_automatic_migrations: false,
+    })
+    .await
+    .unwrap();
+
+    // Test case 2: false, true
+    let (clickhouse, _cleanup) = get_clean_clickhouse(true).await;
+    let err = migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        is_manual_run: false,
+        disable_automatic_migrations: true,
+    })
+    .await
+    .unwrap_err();
+    assert_eq!(err, Error::new(ErrorDetails::ClickHouseMigrationsDisabled));
+    // Create database to avoid panicking when the database is dropped via DeleteDbOnDrop.drop(),
+    // because it won't be created otherwise when migration_manager::run() throws an error.
+    clickhouse
+        .create_database_and_migrations_table()
+        .await
+        .unwrap();
+
+    // Test case 3: true, false
+    let (clickhouse, _cleanup) = get_clean_clickhouse(true).await;
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        is_manual_run: true,
+        disable_automatic_migrations: false,
+    })
+    .await
+    .unwrap();
+
+    // Test case 4: true, true
+    let (clickhouse, _cleanup) = get_clean_clickhouse(true).await;
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        is_manual_run: true,
+        disable_automatic_migrations: true,
+    })
+    .await
+    .unwrap();
 }

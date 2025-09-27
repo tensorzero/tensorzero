@@ -223,8 +223,8 @@ pub async fn setup_clickhouse(
     if let ClickHouseConnectionInfo::Production { .. } = &clickhouse_connection_info {
         migration_manager::run(RunMigrationManagerArgs {
             clickhouse: &clickhouse_connection_info,
-            skip_completed_migrations: true,
-            manual_run: false,
+            is_manual_run: false,
+            disable_automatic_migrations: config.gateway.observability.disable_automatic_migrations,
         })
         .await?;
     }
@@ -382,6 +382,7 @@ mod tests {
                 enabled: Some(false),
                 async_writes: false,
                 batch_writes: Default::default(),
+                disable_automatic_migrations: false,
             },
             bind_address: None,
             debug: false,
@@ -413,6 +414,7 @@ mod tests {
                 enabled: None,
                 async_writes: false,
                 batch_writes: Default::default(),
+                disable_automatic_migrations: false,
             },
             unstable_error_json: false,
             ..Default::default()
@@ -440,6 +442,7 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
+                disable_automatic_migrations: false,
             },
             bind_address: None,
             debug: false,
@@ -467,6 +470,7 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
+                disable_automatic_migrations: false,
             },
             bind_address: None,
             debug: false,
@@ -496,6 +500,7 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
+                disable_automatic_migrations: false,
             },
             bind_address: None,
             debug: false,

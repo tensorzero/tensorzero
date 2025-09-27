@@ -43,8 +43,8 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
     );
     migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
-        skip_completed_migrations: false,
-        manual_run: false,
+        is_manual_run: false,
+        disable_automatic_migrations: false,
     })
     .await
     .unwrap();
