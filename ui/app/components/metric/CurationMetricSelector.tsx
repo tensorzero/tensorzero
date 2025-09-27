@@ -1,25 +1,14 @@
+import clsx from "clsx";
+import { ChevronDown, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
   useFormContext,
-  useWatch,
   type Control,
   type Path,
   type PathValue,
 } from "react-hook-form";
-import type { Config } from "tensorzero-node";
-import {
-  FormField,
-  FormItem,
-  FormLabel,
-  FormControl,
-  FormMessage,
-} from "~/components/ui/form";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "~/components/ui/popover";
+import FeedbackBadges from "~/components/feedback/FeedbackBadges";
 import { Button } from "~/components/ui/button";
-import { ChevronDown, Loader2 } from "lucide-react";
 import {
   Command,
   CommandEmpty,
@@ -28,26 +17,31 @@ import {
   CommandItem,
   CommandList,
 } from "~/components/ui/command";
+import {
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "~/components/ui/form";
 import { Input } from "~/components/ui/input";
-import FeedbackBadges from "~/components/feedback/FeedbackBadges";
-import { useEffect, useMemo, useState } from "react";
-import { useFetcher } from "react-router";
-import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";
-import clsx from "clsx";
-import type { FeedbackConfig } from "~/utils/config/feedback";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "~/components/ui/popover";
 import { Skeleton } from "../ui/skeleton";
+import type { UseFunctionConfigMetricsReturn } from "./useFunctionConfigMetrics";
+import { useCountData } from "./useCountData";
+import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
 
 type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
   control: Control<T>;
   name: Path<T>;
-  functionFieldName: Path<T>;
-  config: Config;
-  addDemonstrations: boolean;
+  functionConfigMetrics: UseFunctionConfigMetricsReturn<T>;
   feedbackCount: number | null;
   curatedInferenceCount: number | null;
   isLoading?: boolean;
-  // Notifies parent when this component's internal fetcher is loading
-  onMetricsLoadingChange?: (loading: boolean) => void;
 };
 
 /**
@@ -62,71 +56,45 @@ type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
  */
 export default function CurationMetricSelector<
   T extends Record<string, unknown>,
->({
-  control,
-  name,
-  functionFieldName,
-  config,
-  addDemonstrations,
-  feedbackCount,
-  curatedInferenceCount,
-  isLoading = false,
-  onMetricsLoadingChange,
-}: CurationMetricSelectorProps<T>) {
-  const metricsFetcher = useFetcher<MetricsWithFeedbackData>();
+>({ control, name, functionConfigMetrics }: CurationMetricSelectorProps<T>) {
+  const {
+    metricsFetcher,
+    metrics,
+    functionValue,
+    metricsLoading,
+    validMetrics,
+  } = functionConfigMetrics;
   const { getValues, setValue } = useFormContext<T>();
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
-  const metrics = Object.fromEntries(
-    Object.entries(config.metrics).filter(([, v]) => v !== undefined),
-  ) as Record<string, FeedbackConfig>;
+  const filter = (getValues(name) as SFTFormValues["filters"][number]) || null;
 
-  if (addDemonstrations) {
-    metrics["demonstration"] = {
-      type: "demonstration",
-      level: "inference",
-    };
-  }
+  const threshold = filter?.threshold;
+  const parsedThreshold =
+    typeof threshold === "string" ? parseFloat(threshold) : threshold;
 
-  const functionValue = useWatch({
-    control,
-    name: functionFieldName,
+  const { counts } = useCountData({
+    functionName: functionValue as string | null,
+    metricName: filter?.metric ?? "",
+    parsedThreshold,
   });
+
+  const {
+    // inferenceCount,
+    feedbackCount,
+    curatedInferenceCount,
+    isLoading,
+  } = counts;
 
   const handleInputChange = (input: string) => {
     setInputValue(input);
   };
 
-  useEffect(() => {
-    if (functionValue && typeof functionValue === "string") {
-      metricsFetcher.load(
-        `/api/function/${encodeURIComponent(functionValue)}/feedback_counts`,
-      );
-    }
-    // TODO: Fix and stop ignoring lint rule
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [functionValue]);
-
-  const validMetrics = useMemo(() => {
-    if (!metricsFetcher.data) return new Set<string>();
-    return new Set(
-      metricsFetcher.data.metrics
-        .filter((m) => addDemonstrations || m.metric_name !== "demonstration")
-        .map((m) => m.metric_name),
-    );
-  }, [metricsFetcher.data, addDemonstrations]);
-
-  const metricsLoading = metricsFetcher.state === "loading";
-
-  // Inform parent when the internal metrics fetcher loading state changes
-  useEffect(() => {
-    onMetricsLoadingChange?.(metricsLoading);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [metricsLoading]);
-
   // Reset metric value if the selected function does not have the previously selected metric
   useEffect(() => {
+    if (metricsLoading) return;
+
     const metricValue = getValues(name);
     if (
       functionValue &&
@@ -139,15 +107,17 @@ export default function CurationMetricSelector<
     }
     // TODO: Fix and stop ignoring lint rule
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [functionValue, validMetrics, getValues, setValue]);
+  }, [metricsLoading, functionValue, validMetrics, getValues, setValue]);
 
   return (
     <FormField
       control={control}
-      name={name}
+      name={[name, "metric"].filter(Boolean).join(".") as Path<T>}
       render={({ field }) => (
-        <FormItem className="flex flex-col justify-center">
-          <FormLabel>Metric</FormLabel>
+        <FormItem className="flex grow flex-col justify-center">
+          <FormLabel>
+            Metric <span className="text-fg-tertiary">({name})</span>
+          </FormLabel>
           <div className="items-top grid gap-x-8 md:grid-cols-2">
             <div className="space-y-2">
               <Popover open={open} onOpenChange={setOpen}>
@@ -327,7 +297,9 @@ export default function CurationMetricSelector<
               {field.value && metrics[field.value]?.type === "float" && (
                 <FormField
                   control={control}
-                  name={"threshold" as Path<T>}
+                  name={
+                    [name, "threshold"].filter(Boolean).join(".") as Path<T>
+                  }
                   render={({ field: thresholdField }) => (
                     <FormItem className="flex flex-col gap-1 border-l pl-4">
                       <FormLabel>Threshold</FormLabel>

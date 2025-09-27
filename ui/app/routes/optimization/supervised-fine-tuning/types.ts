@@ -2,16 +2,41 @@ import { z } from "zod";
 import { ModelOptionSchema } from "./model_options";
 import { zodResolver } from "@hookform/resolvers/zod";
 
+const metric = z
+  .string()
+  .nullable()
+  .refine((val) => val === null || val !== "", {
+    message: "Please select a metric or 'None'",
+  });
+
+const threshold = z.union([
+  z
+    .string()
+    .refine((val) => val === "" || /^-?(?:\d+(?:\.\d*)?|\.\d+)?$/.test(val), {
+      message: "Must be a valid number",
+    }),
+  z.number(),
+]);
+
+const logicalOperator = z.enum(["and", "or"]);
+
 export const SFTFormValuesSchema = z.object({
   function: z.string().nonempty("Function is required"),
-  metric: z
-    .string()
-    .nullable()
-    .refine((val) => val === null || val !== "", {
-      message: "Please select a metric or 'None'",
-    }),
   model: ModelOptionSchema,
   variant: z.string().nonempty(),
+
+  // filters/metrics
+  logicalOperator,
+  filters: z
+    .array(
+      z.object({
+        metric,
+        threshold,
+      }),
+    )
+    .min(1),
+
+  // advanced parameters
   validationSplitPercent: z
     .number()
     .min(0, "Validation split percent must be greater than 0")
@@ -20,14 +45,6 @@ export const SFTFormValuesSchema = z.object({
     .number()
     .min(10, "You need at least 10 curated inferences to fine-tune a model")
     .optional(),
-  threshold: z.union([
-    z
-      .string()
-      .refine((val) => val === "" || /^-?(?:\d+(?:\.\d*)?|\.\d+)?$/.test(val), {
-        message: "Must be a valid number",
-      }),
-    z.number(),
-  ]),
 
   jobId: z.string().nonempty("Job ID is required"),
 });
