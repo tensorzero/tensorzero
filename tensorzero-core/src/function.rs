@@ -16,9 +16,8 @@ use pyo3::prelude::*;
 use pyo3::IntoPyObjectExt;
 use serde::Serialize;
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
@@ -634,101 +633,6 @@ fn validate_single_message(
         }
     }
     Ok(())
-}
-
-/// Sample a variant from the function based on variant weights (uniform random selection)
-/// This function pops the sampled variant from the candidate variants map.
-/// NOTE: We use a BTreeMap to ensure that the variants are sorted by their names and the
-/// sampling choices are deterministic given an episode ID.
-pub fn sample_variant(
-    candidate_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
-    function_name: &str,
-    episode_id: &Uuid,
-) -> Result<(String, Arc<VariantInfo>), Error> {
-    if candidate_variants.is_empty() {
-        return Err(Error::new(ErrorDetails::InvalidFunctionVariants {
-            message: format!("Function `{function_name}` has no variants"),
-        }));
-    }
-    // Compute the total weight of variants present in variant_names
-    let total_weight = candidate_variants
-        .values()
-        .map(|variant| variant.inner.weight().unwrap_or(0.0))
-        .sum::<f64>();
-
-    // If the total weight is non-positive, perform uniform sampling
-    // NOTE: We enforce non-negative weights at the config parsing stage,
-    //       but there's a chance we pin a weight-zero variant in the config.
-    //       This check also ensures that we catch any regressions we might introduce in the future.
-    if total_weight <= 0. {
-        // Perform uniform sampling if total weight is non-positive
-        let random_index = (get_uniform_value(function_name, episode_id)
-            * candidate_variants.len() as f64)
-            .floor() as usize;
-        let Some(sampled_variant_name) = candidate_variants.keys().nth(random_index).cloned()
-        else {
-            return Err(Error::new(ErrorDetails::InvalidFunctionVariants {
-                message: format!(
-                    "Invalid index {random_index} for function `{function_name}` with {} variants. {IMPOSSIBLE_ERROR_MESSAGE}",
-                    candidate_variants.len()
-                ),
-            }));
-        };
-        return candidate_variants.remove_entry(&sampled_variant_name).ok_or_else(|| {
-            Error::new(ErrorDetails::InvalidFunctionVariants {
-                message: format!(
-                    "Function `{function_name}` has no variant for the sampled variant `{sampled_variant_name}`. {IMPOSSIBLE_ERROR_MESSAGE}"
-                )
-            })
-        });
-    }
-
-    // Sample a random threshold between 0 and the total weight
-    let random_threshold = get_uniform_value(function_name, episode_id) * total_weight;
-
-    // Iterate over the variants to find the one that corresponds to the sampled threshold
-    let variant_to_remove = {
-        let mut cumulative_weight = 0.0;
-        candidate_variants
-            .iter()
-            .find(|(_, variant)| {
-                cumulative_weight += variant.inner.weight().unwrap_or(0.0);
-                cumulative_weight > random_threshold
-            })
-            .map(|(name, _)| name.clone()) // Clone the key
-    };
-
-    if let Some(variant_name) = variant_to_remove {
-        return candidate_variants.remove_entry(&variant_name).ok_or_else(|| {
-            Error::new(ErrorDetails::InvalidFunctionVariants {
-                message: format!(
-                    "Function `{function_name}` has no variant for the sampled variant `{variant_name}`. {IMPOSSIBLE_ERROR_MESSAGE}"
-                )
-            })
-        });
-    }
-
-    // If we didn't find a variant (which should only happen due to rare numerical precision issues),
-    // pop an arbitrary variant as a fallback
-    candidate_variants.pop_first().ok_or_else(|| {
-        Error::new(ErrorDetails::InvalidFunctionVariants {
-            message: format!(
-                "Function `{function_name}` has no variants. {IMPOSSIBLE_ERROR_MESSAGE}"
-            ),
-        })
-    })
-}
-
-/// Implements a uniform distribution over the interval [0, 1) using a hash function.
-/// This function is deterministic but should have good statistical properties.
-fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
-    let mut hasher = Sha256::new();
-    hasher.update(function_name.as_bytes());
-    hasher.update(episode_id.as_bytes());
-    let hash_value = hasher.finalize();
-    let truncated_hash =
-        u32::from_be_bytes([hash_value[0], hash_value[1], hash_value[2], hash_value[3]]);
-    truncated_hash as f64 / u32::MAX as f64
 }
 
 #[cfg(test)]

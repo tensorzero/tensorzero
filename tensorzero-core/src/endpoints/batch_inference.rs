@@ -22,7 +22,8 @@ use crate::cache::{CacheEnabledMode, CacheOptions};
 use crate::config::Config;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
-use crate::function::{sample_variant, FunctionConfig};
+use crate::experimentation::VariantSampler;
+use crate::function::FunctionConfig;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{
     BatchEpisodeIds, BatchEpisodeIdsWithSize, BatchInferenceDatabaseInsertMetadata,
@@ -251,11 +252,15 @@ pub async fn start_batch_inference(
 
     while !candidate_variants.is_empty() {
         // We sample the same variant for the whole batch
-        let (variant_name, variant) = sample_variant(
-            &mut candidate_variants,
-            &params.function_name,
-            first_episode_id,
-        )?;
+        let (variant_name, variant) = function
+            .experimentation()
+            .sample(
+                &params.function_name,
+                first_episode_id.clone(),
+                &mut candidate_variants,
+            )
+            .await?;
+
         let inference_config = BatchInferenceConfig::new(
             &config.templates,
             &tool_configs,
@@ -295,7 +300,7 @@ pub async fn start_batch_inference(
         // Write to ClickHouse (don't spawn a thread for this because it's required and we should fail loudly)
         let write_metadata = BatchInferenceDatabaseInsertMetadata {
             function_name: params.function_name.as_str(),
-            variant_name: variant_name.as_str(),
+            variant_name: &variant_name,
             episode_ids: &episode_ids,
             tags: params.tags,
         };

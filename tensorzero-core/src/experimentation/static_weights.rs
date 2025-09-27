@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
+    experimentation::get_uniform_value,
     variant::VariantInfo,
 };
 
@@ -92,9 +93,41 @@ impl VariantSampler for StaticWeightsConfig {
                 Ok((selected_variant, variant_data))
             }
         } else {
-            // Sample a variant from the candidate variants
-            // later
-            todo!()
+            // Sample a random threshold between 0 and the total weight using the deterministic hashing trick
+            let random_threshold = get_uniform_value(function_name, &episode_id) * total_weight;
+            // Iterate over the variants to find the one that corresponds to the sampled threshold
+            let variant_to_remove = {
+                let mut cumulative_weight = 0.0;
+                active_variants
+                    .iter()
+                    .find(|(variant_name, _)| {
+                        cumulative_weight += self
+                            .candidate_variants
+                            .get(variant_name.as_str())
+                            .unwrap_or(&0.0);
+                        cumulative_weight > random_threshold
+                    })
+                    .map(|(name, _)| name.clone()) // Clone the key
+            };
+
+            if let Some(variant_name) = variant_to_remove {
+                return active_variants.remove_entry(&variant_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidFunctionVariants {
+                        message: format!(
+                            "Function `{function_name}` has no variant for the sampled variant `{variant_name}`. {IMPOSSIBLE_ERROR_MESSAGE}"
+                        )
+                    })
+                });
+            }
+            // If we didn't find a variant (which should only happen due to rare numerical precision issues),
+            // pop an arbitrary variant as a fallback
+            active_variants.pop_first().ok_or_else(|| {
+                Error::new(ErrorDetails::InvalidFunctionVariants {
+                    message: format!(
+                        "Function `{function_name}` has no variants. {IMPOSSIBLE_ERROR_MESSAGE}"
+                    ),
+                })
+            })
         }
     }
 }

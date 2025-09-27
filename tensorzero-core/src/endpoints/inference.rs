@@ -27,9 +27,9 @@ use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
-use crate::experimentation::ExperimentationConfig;
+use crate::experimentation::{ExperimentationConfig, VariantSampler};
 use crate::function::FunctionConfig;
-use crate::function::{sample_variant, FunctionConfigChat};
+use crate::function::FunctionConfigChat;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
@@ -342,8 +342,11 @@ pub async fn inference(
     })?;
     // Keep sampling variants until one succeeds
     while !candidate_variants.is_empty() {
-        let (variant_name, variant) =
-            sample_variant(&mut candidate_variants, &function_name, &episode_id)?;
+        let (variant_name, variant) = function
+            .experimentation()
+            .sample(&function_name, episode_id, &mut candidate_variants)
+            .await?;
+
         // Will be edited by the variant as part of making the request so we must clone here
         let variant_inference_params = params.params.clone();
         let inference_config = InferenceConfig {

@@ -27,28 +27,28 @@ pub trait VariantSampler {
         &self,
         function_name: &str,
         episode_id: Uuid,
-        candidate_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
+        active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     ) -> Result<(String, Arc<VariantInfo>), Error>;
 
     async fn sample(
         &self,
         function_name: &str,
         episode_id: Uuid,
-        candidate_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
+        active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     ) -> Result<(String, Arc<VariantInfo>), Error> {
-        match candidate_variants.len() {
+        match active_variants.len() {
             0 => Err(Error::new(ErrorDetails::Inference {
                 message: format!("VariantSampler::sample called with no active variants. {IMPOSSIBLE_ERROR_MESSAGE}")
             })),
             1 => {
-                let Some((variant_name, variant)) = candidate_variants.pop_first() else {
+                let Some((variant_name, variant)) = active_variants.pop_first() else {
                     return Err(ErrorDetails::Inference {
                         message: format!("`pop_first` returned None in the 1 case in sampling. {IMPOSSIBLE_ERROR_MESSAGE}")
                     }.into());
                 };
                 Ok((variant_name, variant))
             }
-            _ => self.inner_sample(function_name, episode_id, candidate_variants).await
+            _ => self.inner_sample(function_name, episode_id, active_variants).await
         }
     }
 }
@@ -84,15 +84,15 @@ impl VariantSampler for ExperimentationConfig {
         &self,
         function_name: &str,
         episode_id: Uuid,
-        candidate_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
+        active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     ) -> Result<(String, Arc<VariantInfo>), Error> {
         match self {
             Self::StaticWeights(config) => {
                 config
-                    .inner_sample(function_name, episode_id, candidate_variants)
+                    .inner_sample(function_name, episode_id, active_variants)
                     .await
             }
-            Self::Uniform => sample_uniform(function_name, &episode_id, candidate_variants),
+            Self::Uniform => sample_uniform(function_name, &episode_id, active_variants),
         }
     }
 }
