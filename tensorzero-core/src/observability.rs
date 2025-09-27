@@ -735,7 +735,7 @@ pub fn setup_metrics() -> Result<PrometheusHandle, Error> {
 }
 
 /// Register the expected metrics along with their types and docstrings
-pub fn register_metrics() -> () {
+pub fn register_metrics() {
     describe_counter!(
         "request_count",
         Unit::Count,
