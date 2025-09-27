@@ -154,7 +154,7 @@ pub async fn create_postgres_pool(pool_size: u32) -> Result<PgPool> {
         .max_connections(pool_size)
         .connect(&database_url)
         .await
-        .map_err(|e| anyhow!("Failed to connect to database: {}", e))?;
+        .map_err(|e| anyhow!("Failed to connect to database: {e}"))?;
 
     Ok(pool)
 }

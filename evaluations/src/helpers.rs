@@ -60,7 +60,7 @@ pub fn setup_logging(args: &Args) -> Result<()> {
                 .with_env_filter(EnvFilter::from_default_env())
                 .finish();
             tracing::subscriber::set_global_default(subscriber)
-                .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))
+                .map_err(|e| anyhow!("Failed to initialize tracing: {e}"))
         }
         OutputFormat::Pretty => {
             let subscriber = tracing_subscriber::FmtSubscriber::builder()
@@ -68,7 +68,7 @@ pub fn setup_logging(args: &Args) -> Result<()> {
                 .with_env_filter(EnvFilter::from_default_env())
                 .finish();
             tracing::subscriber::set_global_default(subscriber)
-                .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))
+                .map_err(|e| anyhow!("Failed to initialize tracing: {e}"))
         }
     }
 }
@@ -123,7 +123,7 @@ pub async fn check_static_eval_human_feedback(
         return Ok(None);
     }
     let human_feedback_result: HumanFeedbackResult = serde_json::from_str(&result.response)
-        .map_err(|e| anyhow!("Failed to parse human feedback result: {}", e))?;
+        .map_err(|e| anyhow!("Failed to parse human feedback result: {e}"))?;
     Ok(Some(human_feedback_result))
 }
 
