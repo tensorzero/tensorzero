@@ -1,4 +1,5 @@
 use crate::config::SchemaData;
+#[cfg(feature = "pyo3")]
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::experimentation::ExperimentationConfig;
 #[cfg(feature = "pyo3")]
