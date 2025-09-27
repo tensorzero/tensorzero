@@ -52,6 +52,7 @@ env:
   VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct"
   VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
   XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+  NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
 
 jobs:
   batch-tests:
@@ -203,6 +204,13 @@ jobs:
         if: always()
         run: |
           docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
+
+      - name: Set OTEL_EXPORTER_OTLP_TRACES_ENDPOINT to ngrok URL
+        run: |
+          echo "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')" >> $GITHUB_ENV
+
+      - name: Print OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+        run: echo "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=$OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
 
       - name: Launch the provider-proxy cache for E2E tests
         run: |

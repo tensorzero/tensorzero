@@ -36,6 +36,18 @@ services:
       start_interval: 1s
       timeout: 1s
 
+  # We're using ngrok as an easy way to test OTLP exporting over TLS
+  ngrok:
+    image: ngrok/ngrok:latest
+    command:
+      - "http"
+      - "--app-protocol=http2"
+      - "http://host.docker.internal:4317"
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    ports:
+      - 4040:4040
+
   memcached:
     image: memcached:1.6.38
     container_name: memcached
