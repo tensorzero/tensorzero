@@ -302,7 +302,7 @@ async fn check_replication_settings(clickhouse: &ClickHouseConnectionInfo) -> Re
         && !non_replicated_tensorzero_on_replicated_clickhouse_override
     {
         return Err(Error::new(ErrorDetails::ClickHouseConfiguration {
-            message: "TensorZero is not configured for replication but ClickHouse contains a replicated cluster. Please set the environment variable TENSORZERO_OVERRIDE_NON_REPLICATED_CLICKHOUSE=1 to override if you're sure you'd like a non-replicated ClickHouse setup.".to_string(),
+            message: "TensorZero is not configured for replication but ClickHouse contains a replicated cluster. Please set the environment variable `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` to set up replication. (Advanced users only: Alternatively, set the environment variable `TENSORZERO_OVERRIDE_NON_REPLICATED_CLICKHOUSE=1` to set up a non-replicated deployment in your replicated cluster.)".to_string(),
         }));
     }
 
