@@ -57,7 +57,7 @@ impl VariantSampler for StaticWeightsConfig {
     /// This function pops the sampled variant from the candidate variants map.
     /// NOTE: We use a BTreeMap to ensure that the variants are sorted by their names and the
     /// sampling choices are deterministic given an episode ID.
-    async fn inner_sample(
+    async fn sample(
         &self,
         function_name: &str,
         episode_id: Uuid,
@@ -177,7 +177,7 @@ mod tests {
         let episode_id = Uuid::now_v7();
 
         let (variant_name, _) = config
-            .inner_sample("test_function", episode_id, &mut active_variants)
+            .sample("test_function", episode_id, &mut active_variants)
             .await
             .unwrap();
         assert!(["A", "B", "C"].contains(&variant_name.as_str()));
@@ -197,7 +197,7 @@ mod tests {
         let episode_id = Uuid::now_v7();
 
         let (variant_name, _) = config
-            .inner_sample("test_function", episode_id, &mut active_variants)
+            .sample("test_function", episode_id, &mut active_variants)
             .await
             .unwrap();
         assert!(["B", "C"].contains(&variant_name.as_str())); // Should pick from fallback variants
@@ -213,7 +213,7 @@ mod tests {
         let episode_id = Uuid::now_v7();
 
         let result = config
-            .inner_sample("test_function", episode_id, &mut active_variants)
+            .sample("test_function", episode_id, &mut active_variants)
             .await;
         assert!(result.is_err());
     }
@@ -238,7 +238,7 @@ mod tests {
             // Use different episode IDs to get different samples
             let episode_id = Uuid::from_u128(i as u128);
             let (variant_name, _) = config
-                .inner_sample("test_function", episode_id, &mut active_variants)
+                .sample("test_function", episode_id, &mut active_variants)
                 .await
                 .unwrap();
             *counts.entry(variant_name).or_insert(0) += 1;

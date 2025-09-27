@@ -23,34 +23,12 @@ pub enum ExperimentationConfig {
 pub trait VariantSampler {
     // TODO, when we add bandits: pass CH and PG clients here (but use opaque trait types)
     async fn setup(&self) -> Result<(), Error>;
-    async fn inner_sample(
-        &self,
-        function_name: &str,
-        episode_id: Uuid,
-        active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
-    ) -> Result<(String, Arc<VariantInfo>), Error>;
-
     async fn sample(
         &self,
         function_name: &str,
         episode_id: Uuid,
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
-    ) -> Result<(String, Arc<VariantInfo>), Error> {
-        match active_variants.len() {
-            0 => Err(Error::new(ErrorDetails::Inference {
-                message: format!("VariantSampler::sample called with no active variants. {IMPOSSIBLE_ERROR_MESSAGE}")
-            })),
-            1 => {
-                let Some((variant_name, variant)) = active_variants.pop_first() else {
-                    return Err(ErrorDetails::Inference {
-                        message: format!("`pop_first` returned None in the 1 case in sampling. {IMPOSSIBLE_ERROR_MESSAGE}")
-                    }.into());
-                };
-                Ok((variant_name, variant))
-            }
-            _ => self.inner_sample(function_name, episode_id, active_variants).await
-        }
-    }
+    ) -> Result<(String, Arc<VariantInfo>), Error>;
 }
 
 impl ExperimentationConfig {
@@ -80,19 +58,37 @@ impl VariantSampler for ExperimentationConfig {
         }
     }
 
-    async fn inner_sample(
+    async fn sample(
         &self,
         function_name: &str,
         episode_id: Uuid,
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     ) -> Result<(String, Arc<VariantInfo>), Error> {
-        match self {
-            Self::StaticWeights(config) => {
-                config
-                    .inner_sample(function_name, episode_id, active_variants)
-                    .await
+        match active_variants.len() {
+            0 => Err(Error::new(ErrorDetails::Inference {
+                message: format!(
+                    "VariantSampler::sample called with no active variants. {IMPOSSIBLE_ERROR_MESSAGE}"
+                ),
+            })),
+            1 => {
+                let Some((variant_name, variant)) = active_variants.pop_first() else {
+                    return Err(ErrorDetails::Inference {
+                        message: format!(
+                            "`pop_first` returned None in the 1 case in sampling. {IMPOSSIBLE_ERROR_MESSAGE}"
+                        ),
+                    }
+                    .into());
+                };
+                Ok((variant_name, variant))
             }
-            Self::Uniform => sample_uniform(function_name, &episode_id, active_variants),
+            _ => match self {
+                Self::StaticWeights(config) => {
+                    config
+                        .sample(function_name, episode_id, active_variants)
+                        .await
+                }
+                Self::Uniform => sample_uniform(function_name, &episode_id, active_variants),
+            },
         }
     }
 }
