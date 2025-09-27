@@ -74,19 +74,12 @@ impl Migration for Migration0037<'_> {
             + view_offset)
             .as_nanos();
 
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_name: "ModelProviderStatistics",
-                table_engine_name: "AggregatingMergeTree",
-                engine_args: &[],
-            },
-        );
-
         // Note: use `qs` inside the AggregateFunction type parameters
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
-                r"CREATE TABLE IF NOT EXISTS ModelProviderStatistics{on_cluster_name} (
+            .get_create_table_statements(
+                "ModelProviderStatistics",
+                &format!(
+                    r"(
                         model_name LowCardinality(String),
                         model_provider_name LowCardinality(String),
                         minute DateTime,
@@ -96,27 +89,27 @@ impl Migration for Migration0037<'_> {
                         total_input_tokens AggregateFunction(sum, Nullable(UInt32)),
                         total_output_tokens AggregateFunction(sum, Nullable(UInt32)),
                         count AggregateFunction(count, UInt32)
-                    )
-                    ENGINE = {table_engine_name}
-                    ORDER BY (model_name, model_provider_name, minute)"
-            ))
+                    )"
+                ),
+                &GetMaybeReplicatedTableEngineNameArgs {
+                    table_name: "ModelProviderStatistics",
+                    table_engine_name: "AggregatingMergeTree",
+                    engine_args: &[],
+                },
+                Some("ORDER BY (model_name, model_provider_name, minute)"),
+            )
             .await?;
 
         // If not a clean start, restrict MV ingestion to rows >= view timestamp.
-        let view_where_clause = if clean_start {
+        let view_where_clause_str = if clean_start {
             String::new()
         } else {
             format!("WHERE UUIDv7ToDateTime(id) >= fromUnixTimestamp64Nano({view_timestamp_nanos})")
         };
 
         // Build MV using the same `qs` list for quantilesTDigestState(...)
-        let query = format!(
-            r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS ModelProviderStatisticsView{on_cluster_name}
-            TO ModelProviderStatistics
-            AS
-            SELECT
-                model_name,
+        let select_query = format!(
+            "model_name,
                 model_provider_name,
                 toStartOfMinute(timestamp) as minute,
 
@@ -124,14 +117,23 @@ impl Migration for Migration0037<'_> {
                 quantilesTDigestState({qs})(ttft_ms) as ttft_ms_quantiles,
                 sumState(input_tokens) as total_input_tokens,
                 sumState(output_tokens) as total_output_tokens,
-                countState() as count
-            FROM ModelInference
-            {view_where_clause}
-            GROUP BY (model_name, model_provider_name, minute)
-            "
+                countState() as count"
         );
+
+        let full_where_clause = if view_where_clause_str.is_empty() {
+            "GROUP BY (model_name, model_provider_name, minute)".to_string()
+        } else {
+            format!("{} GROUP BY (model_name, model_provider_name, minute)", view_where_clause_str)
+        };
+        
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .get_create_materialized_view_statements(
+                "ModelProviderStatisticsView",
+                "ModelProviderStatistics", 
+                "ModelInference",
+                &select_query,
+                Some(&full_where_clause),
+            )
             .await?;
 
         // Backfill if needed
@@ -153,9 +155,13 @@ impl Migration for Migration0037<'_> {
             }
 
             tracing::info!("Running backfill of ModelProviderStatistics");
+            
+            let model_provider_statistics_target = "ModelProviderStatistics";
+            let model_inference_source_for_insert = "ModelInference";
+            
             let query = format!(
                 r"
-                INSERT INTO ModelProviderStatistics
+                INSERT INTO {model_provider_statistics_target}
                 SELECT
                     model_name,
                     model_provider_name,
@@ -166,7 +172,7 @@ impl Migration for Migration0037<'_> {
                     sumState(input_tokens) as total_input_tokens,
                     sumState(output_tokens) as total_output_tokens,
                     countState() as count
-                FROM ModelInference
+                FROM {model_inference_source_for_insert}
                 WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
                 GROUP BY model_name, model_provider_name, minute
                 "
@@ -181,12 +187,11 @@ impl Migration for Migration0037<'_> {
 
     fn rollback_instructions(&self) -> String {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        // N.B. The second line in your original looked like a typo.
-        // Keeping intent: drop the *table* that the MV targets.
+        
         format!(
-            r"
-        DROP TABLE IF EXISTS ModelProviderStatisticsView{on_cluster_name} SYNC;
-        DROP TABLE IF EXISTS ModelProviderStatistics{on_cluster_name} SYNC;"
+            "DROP TABLE IF EXISTS ModelProviderStatisticsView{on_cluster_name} SYNC;\
+            {}",
+            self.clickhouse.get_drop_table_rollback_statements("ModelProviderStatistics")
         )
     }
 

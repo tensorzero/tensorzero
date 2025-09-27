@@ -43,10 +43,12 @@ impl Migration for Migration0024<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        // Add auxiliary_content column to JsonInference using sharding-aware ALTER
         self.clickhouse
-            .run_query_synchronous_no_params(
-                "ALTER TABLE JsonInference ADD COLUMN IF NOT EXISTS auxiliary_content String"
-                    .to_string(),
+            .get_alter_table_statements(
+                "JsonInference",
+                "ADD COLUMN IF NOT EXISTS auxiliary_content String",
+                false,
             )
             .await?;
 
@@ -54,7 +56,11 @@ impl Migration for Migration0024<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "ALTER TABLE JsonInference DROP COLUMN auxiliary_content".to_string()
+        self.clickhouse.get_alter_table_rollback_statements(
+            "JsonInference", 
+            "DROP COLUMN auxiliary_content",
+            false
+        )
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

@@ -53,120 +53,90 @@ impl Migration for Migration0000<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `BooleanMetricFeedback` table
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_engine_name: "MergeTree",
-                table_name: "BooleanMetricFeedback",
-                engine_args: &[],
-            },
-        );
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS BooleanMetricFeedback{on_cluster_name}
+        let boolean_feedback_schema = r"
             (
                 id UUID, -- must be a UUIDv7
                 target_id UUID, -- must be a UUIDv7
                 metric_name LowCardinality(String),
                 value Bool,
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
-            ) ENGINE = {table_engine_name}
-            ORDER BY (metric_name, target_id);
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
-            .await?;
+            )";
 
-        // Create the `CommentFeedback` table
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
+        self.clickhouse.get_create_table_statements(
+            "BooleanMetricFeedback",
+            boolean_feedback_schema,
+            &GetMaybeReplicatedTableEngineNameArgs {
                 table_engine_name: "MergeTree",
-                table_name: "CommentFeedback",
+                table_name: "BooleanMetricFeedback",
                 engine_args: &[],
             },
-        );
-        let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS CommentFeedback{on_cluster_name}
+            Some("ORDER BY (metric_name, target_id)"),
+        ).await?;
+
+        // Create the `CommentFeedback` table
+        let comment_feedback_schema = r"
             (
                 id UUID, -- must be a UUIDv7
                 target_id UUID, -- must be a UUIDv7
                 target_type Enum('inference' = 1, 'episode' = 2),
                 value String,
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
-            ) ENGINE = {table_engine_name}
-            ORDER BY target_id;
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
-            .await?;
+            )";
 
-        // Create the `DemonstrationFeedback` table
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
+        self.clickhouse.get_create_table_statements(
+            "CommentFeedback",
+            comment_feedback_schema,
+            &GetMaybeReplicatedTableEngineNameArgs {
                 table_engine_name: "MergeTree",
-                table_name: "DemonstrationFeedback",
+                table_name: "CommentFeedback",
                 engine_args: &[],
             },
-        );
-        let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS DemonstrationFeedback{on_cluster_name}
+            Some("ORDER BY target_id"),
+        ).await?;
+
+        // Create the `DemonstrationFeedback` table
+        let demo_feedback_schema = r"
             (
                 id UUID, -- must be a UUIDv7
                 inference_id UUID, -- must be a UUIDv7
                 value String,
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
-            ) ENGINE = {table_engine_name}
-            ORDER BY inference_id;
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
-            .await?;
+            )";
 
-        // Create the `FloatMetricFeedback` table
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
+        self.clickhouse.get_create_table_statements(
+            "DemonstrationFeedback",
+            demo_feedback_schema,
+            &GetMaybeReplicatedTableEngineNameArgs {
                 table_engine_name: "MergeTree",
-                table_name: "FloatMetricFeedback",
+                table_name: "DemonstrationFeedback",
                 engine_args: &[],
             },
-        );
-        let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS FloatMetricFeedback{on_cluster_name}
+            Some("ORDER BY inference_id"),
+        ).await?;
+
+        // Create the `FloatMetricFeedback` table
+        let float_feedback_schema = r"
             (
                 id UUID, -- must be a UUIDv7
                 target_id UUID, -- must be a UUIDv7
                 metric_name LowCardinality(String),
                 value Float32,
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
-            ) ENGINE = {table_engine_name}
-            ORDER BY (metric_name, target_id);
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
-            .await?;
+            )";
 
-        // Create the `ChatInference` table
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
+        self.clickhouse.get_create_table_statements(
+            "FloatMetricFeedback",
+            float_feedback_schema,
+            &GetMaybeReplicatedTableEngineNameArgs {
                 table_engine_name: "MergeTree",
-                table_name: "ChatInference",
+                table_name: "FloatMetricFeedback",
                 engine_args: &[],
             },
-        );
-        let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS ChatInference{on_cluster_name}
+            Some("ORDER BY (metric_name, target_id)"),
+        ).await?;
+
+        // Create the `ChatInference` table
+        let chat_inference_schema = r"
             (
                 id UUID, -- must be a UUIDv7
                 function_name LowCardinality(String),
@@ -178,26 +148,21 @@ impl Migration for Migration0000<'_> {
                 inference_params String,
                 processing_time_ms UInt32,
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
-            ) ENGINE = {table_engine_name}
-            ORDER BY (function_name, variant_name, episode_id);
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
-            .await?;
+            )";
 
-        // Create the `JsonInference` table
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
+        self.clickhouse.get_create_table_statements(
+            "ChatInference",
+            chat_inference_schema,
+            &GetMaybeReplicatedTableEngineNameArgs {
                 table_engine_name: "MergeTree",
-                table_name: "JsonInference",
+                table_name: "ChatInference",
                 engine_args: &[],
             },
-        );
-        let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS JsonInference{on_cluster_name}
+            Some("ORDER BY (function_name, variant_name, episode_id)"),
+        ).await?;
+
+        // Create the `JsonInference` table
+        let json_inference_schema = r"
             (
                 id UUID, -- must be a UUIDv7
                 function_name LowCardinality(String),
@@ -209,26 +174,21 @@ impl Migration for Migration0000<'_> {
                 inference_params String,
                 processing_time_ms UInt32,
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
-            ) ENGINE = {table_engine_name}
-            ORDER BY (function_name, variant_name, episode_id);
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
-            .await?;
+            )";
 
-        // Create the `ModelInference` table
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
+        self.clickhouse.get_create_table_statements(
+            "JsonInference",
+            json_inference_schema,
+            &GetMaybeReplicatedTableEngineNameArgs {
                 table_engine_name: "MergeTree",
-                table_name: "ModelInference",
+                table_name: "JsonInference",
                 engine_args: &[],
             },
-        );
-        let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS ModelInference{on_cluster_name}
+            Some("ORDER BY (function_name, variant_name, episode_id)"),
+        ).await?;
+
+        // Create the `ModelInference` table
+        let model_inference_schema = r"
             (
                 id UUID, -- must be a UUIDv7
                 inference_id UUID, -- must be a UUIDv7
@@ -241,14 +201,18 @@ impl Migration for Migration0000<'_> {
                 response_time_ms UInt32,
                 ttft_ms Nullable(UInt32),
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
-            ) ENGINE = {table_engine_name}
-            ORDER BY inference_id;
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
-            .await?;
+            )";
+
+        self.clickhouse.get_create_table_statements(
+            "ModelInference",
+            model_inference_schema,
+            &GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "MergeTree",
+                table_name: "ModelInference",
+                engine_args: &[],
+            },
+            Some("ORDER BY inference_id"),
+        ).await?;
 
         Ok(())
     }
@@ -259,20 +223,26 @@ impl Migration for Migration0000<'_> {
 
         format!(
             "/* **CAREFUL: THIS WILL DELETE ALL DATA** */\
-            /* Drop each table first (this seems to be required for replicated setups) */\
-            DROP TABLE IF EXISTS BooleanMetricFeedback{on_cluster_name} SYNC;
-            DROP TABLE IF EXISTS CommentFeedback{on_cluster_name} SYNC;
-            DROP TABLE IF EXISTS DemonstrationFeedback{on_cluster_name} SYNC;
-            DROP TABLE IF EXISTS FloatMetricFeedback{on_cluster_name} SYNC;
-            DROP TABLE IF EXISTS ChatInference{on_cluster_name} SYNC;
-            DROP TABLE IF EXISTS JsonInference{on_cluster_name} SYNC;
-            DROP TABLE IF EXISTS ModelInference{on_cluster_name} SYNC;
-            /* Even though this is created elsewhere we should */\
-            /* drop it here to ensure a truly clean start.*/\
-            DROP TABLE IF EXISTS TensorZeroMigration{on_cluster_name} SYNC;
+            /* Drop each table */\
+            {}\
+            {}\
+            {}\
+            {}\
+            {}\
+            {}\
+            {}\
+            {}\
             /* Drop the database */\
             DROP DATABASE IF EXISTS {database}{on_cluster_name};\
-            /* **CAREFUL: THIS WILL DELETE ALL DATA** */"
+            /* **CAREFUL: THIS WILL DELETE ALL DATA** */",
+            self.clickhouse.get_drop_table_rollback_statements("BooleanMetricFeedback"),
+            self.clickhouse.get_drop_table_rollback_statements("CommentFeedback"),
+            self.clickhouse.get_drop_table_rollback_statements("DemonstrationFeedback"),
+            self.clickhouse.get_drop_table_rollback_statements("FloatMetricFeedback"),
+            self.clickhouse.get_drop_table_rollback_statements("ChatInference"),
+            self.clickhouse.get_drop_table_rollback_statements("JsonInference"),
+            self.clickhouse.get_drop_table_rollback_statements("ModelInference"),
+            self.clickhouse.get_drop_table_rollback_statements("TensorZeroMigration")
         )
     }
 

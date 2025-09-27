@@ -28,24 +28,15 @@ impl Migration for Migration0011<'_> {
     async fn should_apply(&self) -> Result<bool, Error> {
         let table_exists =
             check_table_exists(self.clickhouse, "ModelInferenceCache", "0011").await?;
+            
         let cached_column_exists =
             check_column_exists(self.clickhouse, "ModelInference", "cached", "0011").await?;
         Ok(!table_exists || !cached_column_exists)
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
-        // Create the `ModelInferenceCache` table
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_engine_name: "ReplacingMergeTree",
-                table_name: "ModelInferenceCache",
-                engine_args: &["timestamp", "is_deleted"],
-            },
-        );
-        let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS ModelInferenceCache{on_cluster_name}
+        // Create the `ModelInferenceCache` table with sharding support
+        let table_schema = r"
             (
                 short_cache_key UInt64,
                 long_cache_key FixedString(64), -- for a hex-encoded 256-bit key
@@ -55,38 +46,40 @@ impl Migration for Migration0011<'_> {
                 raw_response String,
                 is_deleted Bool DEFAULT false,
                 INDEX idx_long_cache_key long_cache_key TYPE bloom_filter GRANULARITY 100
-            ) ENGINE = {table_engine_name}
-            PARTITION BY toYYYYMM(timestamp)
-            ORDER BY (short_cache_key, long_cache_key)
-            PRIMARY KEY (short_cache_key)
-            SETTINGS index_granularity = 256
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
-            .await?;
+            )";
 
-        // Add the `cached` column to ModelInference
-        let query = r"
-            ALTER TABLE ModelInference ADD COLUMN IF NOT EXISTS cached Bool DEFAULT false;
-        ";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+        let table_engine_args = GetMaybeReplicatedTableEngineNameArgs {
+            table_engine_name: "ReplacingMergeTree",
+            table_name: "ModelInferenceCache",
+            engine_args: &["timestamp", "is_deleted"],
+        };
+
+        self.clickhouse.get_create_table_statements(
+            "ModelInferenceCache",
+            table_schema,
+            &table_engine_args,
+            Some("ORDER BY (short_cache_key, long_cache_key) PARTITION BY toYYYYMM(timestamp) SETTINGS index_granularity = 256"),
+        ).await?;
+
+        // Add the `cached` column to ModelInference using sharding-aware ALTER
+        self.clickhouse
+            .get_alter_table_statements(
+                "ModelInference",
+                "ADD COLUMN IF NOT EXISTS cached Bool DEFAULT false",
+                false,
+            )
             .await?;
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let model_cache_rollback = self.clickhouse.get_drop_table_rollback_statements("ModelInferenceCache");
         format!(
-            "/* Drop the table */\
-                DROP TABLE IF EXISTS ModelInferenceCache{on_cluster_name} SYNC;
+            "{model_cache_rollback}\
             /* Drop the `cached` column from ModelInference */\
-            ALTER TABLE ModelInference DROP COLUMN cached;
-            "
+            {}",
+            self.clickhouse.get_alter_table_rollback_statements("ModelInference", "DROP COLUMN cached", false)
         )
     }
 

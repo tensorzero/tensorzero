@@ -54,36 +54,49 @@ impl Migration for Migration0034<'_> {
             + view_offset)
             .as_nanos();
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_name: "CumulativeUsage",
-                table_engine_name: "SummingMergeTree",
-                engine_args: &[],
-            },
-        );
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
-                r"CREATE TABLE IF NOT EXISTS CumulativeUsage{on_cluster_name} (
-                        type LowCardinality(String),
-                        count UInt64,
-                    )
-                    ENGINE = {table_engine_name}
-                    ORDER BY type;"
-            ))
+            .get_create_table_statements(
+                "CumulativeUsage",
+                "(
+                    type LowCardinality(String),
+                    count UInt64,
+                )",
+                &GetMaybeReplicatedTableEngineNameArgs {
+                    table_name: "CumulativeUsage",
+                    table_engine_name: "SummingMergeTree",
+                    engine_args: &[],
+                },
+                Some("ORDER BY (type)"),
+            )
             .await?;
 
         // Create the materialized view for the CumulativeUsage table from ModelInference
-        // If we are not doing a clean start, we need to add a where clause ot the view to only include rows that have been created
+        // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created
         // after the view_timestamp
-        let view_where_clause = if clean_start {
-            String::new()
+        
+        // Note: This view uses a complex subquery with arrayJoin that doesn't fit the standard helper pattern
+        // We'll need to create it manually but use the helper's sharding logic
+        let cumulative_usage_target = if self.clickhouse.is_sharding_enabled() {
+            self.clickhouse.get_local_table_name("CumulativeUsage")
         } else {
-            format!("AND UUIDv7ToDateTime(id) >= fromUnixTimestamp64Nano({view_timestamp_nanos})")
+            "CumulativeUsage".to_string()
         };
+        let model_inference_source = if self.clickhouse.is_sharding_enabled() {
+            self.clickhouse.get_local_table_name("ModelInference")
+        } else {
+            "ModelInference".to_string()
+        };
+        
+        let view_where_condition = if clean_start {
+            "WHERE input_tokens IS NOT NULL".to_string()
+        } else {
+            format!("WHERE input_tokens IS NOT NULL AND UUIDv7ToDateTime(id) >= fromUnixTimestamp64Nano({view_timestamp_nanos})")
+        };
+        
         let query = format!(
             r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS CumulativeUsageView{on_cluster_name}
-            TO CumulativeUsage
+            TO {cumulative_usage_target}
             AS
             SELECT
                 tupleElement(t, 1) AS type,
@@ -95,9 +108,8 @@ impl Migration for Migration0034<'_> {
                         tuple('output_tokens', output_tokens),
                         tuple('model_inferences', 1)
                     ]) AS t
-                FROM ModelInference
-                WHERE input_tokens IS NOT NULL
-                {view_where_clause}
+                FROM {model_inference_source}
+                {view_where_condition}
             )
             "
         );
@@ -128,6 +140,7 @@ impl Migration for Migration0034<'_> {
             }
 
             tracing::info!("Running backfill of CumulativeUsage");
+            // Extract the backfill data that the materialized view will not get.
             let query = format!(
                 r"
                 SELECT
@@ -174,10 +187,11 @@ impl Migration for Migration0034<'_> {
 
     fn rollback_instructions(&self) -> String {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        
         format!(
-            r"
-        DROP TABLE IF EXISTS CumulativeUsageView{on_cluster_name} SYNC;
-        DROP TABLE IF EXISTS CumulativeUsage{on_cluster_name} SYNC;"
+            "DROP TABLE IF EXISTS CumulativeUsageView{on_cluster_name} SYNC;\
+            {}",
+            self.clickhouse.get_drop_table_rollback_statements("CumulativeUsage")
         )
     }
 

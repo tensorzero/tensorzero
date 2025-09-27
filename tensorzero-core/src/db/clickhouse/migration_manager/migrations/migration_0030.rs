@@ -46,26 +46,30 @@ impl Migration for Migration0030<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
-        self.clickhouse
-            .run_query_synchronous_no_params(
-                r"ALTER TABLE ModelInference
-                MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5, 'stop_sequence' = 6));".to_string(),
-            )
-            .await?;
+        // Add stop_sequence to the finish_reason enum
+        
+        self.clickhouse.get_alter_table_statements(
+            "ModelInference",
+            "MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5, 'stop_sequence' = 6))",
+            false,
+        ).await?;
 
-        self.clickhouse
-            .run_query_synchronous_no_params(
-                r"ALTER TABLE ModelInferenceCache
-                MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5, 'stop_sequence' = 6));".to_string(),
-            )
-            .await?;
+        self.clickhouse.get_alter_table_statements(
+            "ModelInferenceCache",
+            "MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5, 'stop_sequence' = 6))",
+            false,
+        ).await?;
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        r"ALTER TABLE ModelInference MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5));
-           ALTER TABLE ModelInferenceCache MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5));".to_string()
+        format!(
+            "{}\
+            {}",
+            self.clickhouse.get_alter_table_rollback_statements("ModelInference", "MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5))", false),
+            self.clickhouse.get_alter_table_rollback_statements("ModelInferenceCache", "MODIFY COLUMN finish_reason Nullable(Enum8('stop' = 1, 'length' = 2, 'tool_call' = 3, 'content_filter' = 4, 'unknown' = 5))", false)
+        )
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

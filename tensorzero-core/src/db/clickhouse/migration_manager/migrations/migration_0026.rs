@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use async_trait::async_trait;
 
 use super::check_table_exists;
@@ -72,18 +74,12 @@ impl Migration for Migration0026<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_engine_name: "ReplacingMergeTree",
-                table_name: "DynamicEvaluationRunEpisodeByRunId",
-                engine_args: &["updated_at", "is_deleted"],
-            },
-        );
-        let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS DynamicEvaluationRunEpisodeByRunId{on_cluster_name}
-                (
+        let _view_offset = Duration::from_secs(15);
+
+        self.clickhouse
+            .get_create_table_statements(
+                "DynamicEvaluationRunEpisodeByRunId",
+                r"(
                     run_id_uint UInt128, -- UUID encoded as a UInt128
                     episode_id_uint UInt128, -- UUID encoded as a UInt128
                     variant_pins Map(String, String),
@@ -91,40 +87,31 @@ impl Migration for Migration0026<'_> {
                     datapoint_name Nullable(String),
                     is_deleted Bool DEFAULT false,
                     updated_at DateTime64(6, 'UTC') DEFAULT now()
-                ) ENGINE = {table_engine_name}
-                ORDER BY (run_id_uint, episode_id_uint);
-        "
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+                )",
+                &GetMaybeReplicatedTableEngineNameArgs {
+                    table_engine_name: "ReplacingMergeTree",
+                    table_name: "DynamicEvaluationRunEpisodeByRunId",
+                    engine_args: &["updated_at", "is_deleted"],
+                },
+                Some("ORDER BY (run_id_uint, episode_id_uint)"),
+            )
             .await?;
 
-        let query = format!(
-            r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS DynamicEvaluationRunEpisodeByRunIdView{on_cluster_name}
-                TO DynamicEvaluationRunEpisodeByRunId
-                AS
-                SELECT * EXCEPT run_id, toUInt128(run_id) AS run_id_uint FROM DynamicEvaluationRunEpisode
-                ORDER BY run_id_uint, episode_id_uint;
-        "
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+        // Create the materialized view for the DynamicEvaluationRunEpisodeByRunId table
+        self.clickhouse
+            .get_create_materialized_view_statements(
+                "DynamicEvaluationRunEpisodeByRunIdView",
+                "DynamicEvaluationRunEpisodeByRunId",
+                "DynamicEvaluationRunEpisode",
+                "* EXCEPT run_id, toUInt128(run_id) AS run_id_uint",
+                None,
+            )
             .await?;
 
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_engine_name: "ReplacingMergeTree",
-                table_name: "DynamicEvaluationRunByProjectName",
-                engine_args: &["updated_at", "is_deleted"],
-            },
-        );
-        let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS DynamicEvaluationRunByProjectName{on_cluster_name}
-                (
+        self.clickhouse
+            .get_create_table_statements(
+                "DynamicEvaluationRunByProjectName",
+                r"(
                     run_id_uint UInt128, -- UUID encoded as a UInt128
                     variant_pins Map(String, String),
                     tags Map(String, String),
@@ -132,42 +119,41 @@ impl Migration for Migration0026<'_> {
                     run_display_name Nullable(String),
                     is_deleted Bool DEFAULT false,
                     updated_at DateTime64(6, 'UTC') DEFAULT now()
-                ) ENGINE = {table_engine_name}
-                ORDER BY (project_name, run_id_uint);
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+                )",
+                &GetMaybeReplicatedTableEngineNameArgs {
+                    table_engine_name: "ReplacingMergeTree",
+                    table_name: "DynamicEvaluationRunByProjectName",
+                    engine_args: &["updated_at", "is_deleted"],
+                },
+                Some("ORDER BY (project_name, run_id_uint)"),
+            )
             .await?;
 
-        let query = format!(
-            r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS DynamicEvaluationRunByProjectNameView{on_cluster_name}
-                TO DynamicEvaluationRunByProjectName
-                AS
-                SELECT * FROM DynamicEvaluationRun
-                WHERE project_name IS NOT NULL
-                ORDER BY project_name, run_id_uint;
-        "
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+        // Create the materialized view for the DynamicEvaluationRunByProjectName table
+        self.clickhouse
+            .get_create_materialized_view_statements(
+                "DynamicEvaluationRunByProjectNameView",
+                "DynamicEvaluationRunByProjectName",
+                "DynamicEvaluationRun",
+                "*",
+                Some("WHERE project_name IS NOT NULL"),
+            )
             .await?;
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        
         format!(
             "/* Drop the materialized views */\
-            DROP VIEW IF EXISTS DynamicEvaluationRunEpisodeByRunIdView{on_cluster_name};
-            DROP VIEW IF EXISTS DynamicEvaluationRunByProjectNameView{on_cluster_name};
+            DROP VIEW IF EXISTS DynamicEvaluationRunEpisodeByRunIdView{on_cluster_name};\
+            DROP VIEW IF EXISTS DynamicEvaluationRunByProjectNameView{on_cluster_name};\
             /* Drop the tables */\
-            DROP TABLE IF EXISTS DynamicEvaluationRunEpisodeByRunId{on_cluster_name} SYNC;
-            DROP TABLE IF EXISTS DynamicEvaluationRunByProjectName{on_cluster_name} SYNC;
-            "
+            {}\
+            {}",
+            self.clickhouse.get_drop_table_rollback_statements("DynamicEvaluationRunEpisodeByRunId"),
+            self.clickhouse.get_drop_table_rollback_statements("DynamicEvaluationRunByProjectName")
         )
     }
 

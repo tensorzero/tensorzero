@@ -26,17 +26,20 @@ impl Migration for Migration0019<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        // Add extra_body column to both ChatInference and JsonInference using sharding-aware ALTER
         self.clickhouse
-            .run_query_synchronous_no_params(
-                "ALTER TABLE ChatInference ADD COLUMN IF NOT EXISTS extra_body Nullable(String)"
-                    .to_string(),
+            .get_alter_table_statements(
+                "ChatInference",
+                "ADD COLUMN IF NOT EXISTS extra_body Nullable(String)",
+                false,
             )
             .await?;
 
         self.clickhouse
-            .run_query_synchronous_no_params(
-                "ALTER TABLE JsonInference ADD COLUMN IF NOT EXISTS extra_body Nullable(String)"
-                    .to_string(),
+            .get_alter_table_statements(
+                "JsonInference",
+                "ADD COLUMN IF NOT EXISTS extra_body Nullable(String)",
+                false,
             )
             .await?;
 
@@ -44,11 +47,13 @@ impl Migration for Migration0019<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Drop the columns */\
-                ALTER TABLE ChatInference DROP COLUMN IF EXISTS extra_body;
-                ALTER TABLE JsonInference DROP COLUMN IF EXISTS extra_body;
-                "
-        .to_string()
+        format!(
+            "/* Drop the columns */\
+            {}\
+            {}",
+            self.clickhouse.get_alter_table_rollback_statements("ChatInference", "DROP COLUMN IF EXISTS extra_body", false),
+            self.clickhouse.get_alter_table_rollback_statements("JsonInference", "DROP COLUMN IF EXISTS extra_body", false)
+        )
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

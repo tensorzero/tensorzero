@@ -37,34 +37,34 @@ impl Migration for Migration0015<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Alter the `input_tokens` column of `ModelInference` to be a nullable column
-        let query = r"
-            ALTER TABLE ModelInference
-            MODIFY COLUMN input_tokens Nullable(UInt32)
-        ";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+        self.clickhouse
+            .get_alter_table_statements(
+                "ModelInference",
+                "MODIFY COLUMN input_tokens Nullable(UInt32)",
+                false,
+            )
             .await?;
 
         // Alter the `output_tokens` column of `ModelInference` to be a nullable column
-        let query = r"
-            ALTER TABLE ModelInference
-            MODIFY COLUMN output_tokens Nullable(UInt32)
-        ";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+        self.clickhouse
+            .get_alter_table_statements(
+                "ModelInference", 
+                "MODIFY COLUMN output_tokens Nullable(UInt32)",
+                false,
+            )
             .await?;
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        "/* Change the columns back to non-nullable types */\
-            ALTER TABLE ModelInference MODIFY COLUMN input_tokens UInt32;
-            ALTER TABLE ModelInference MODIFY COLUMN output_tokens UInt32;
-            "
-        .to_string()
+        format!(
+            "/* Change the columns back to non-nullable types */\
+            {}\
+            {}",
+            self.clickhouse.get_alter_table_rollback_statements("ModelInference", "MODIFY COLUMN input_tokens UInt32", false),
+            self.clickhouse.get_alter_table_rollback_statements("ModelInference", "MODIFY COLUMN output_tokens UInt32", false)
+        )
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)

@@ -61,28 +61,23 @@ impl Migration for Migration0038<'_> {
             + view_offset)
             .as_nanos();
 
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_name: "EpisodeById",
-                table_engine_name: "AggregatingMergeTree",
-                engine_args: &[],
-            },
-        );
-
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
-                r"CREATE TABLE IF NOT EXISTS EpisodeById{on_cluster_name} (
-                        episode_id_uint UInt128,
-                        count SimpleAggregateFunction(sum, UInt64),
-                        inference_ids AggregateFunction(groupArray, UUID),
-                        min_inference_id_uint SimpleAggregateFunction(min, UInt128),
-                        max_inference_id_uint SimpleAggregateFunction(max, UInt128)
-                    )
-                    ENGINE = {table_engine_name}
-                    ORDER BY episode_id_uint
-                    "
-            ))
+            .get_create_table_statements(
+                "EpisodeById",
+                "(
+                    episode_id_uint UInt128,
+                    count SimpleAggregateFunction(sum, UInt64),
+                    inference_ids AggregateFunction(groupArray, UUID),
+                    min_inference_id_uint SimpleAggregateFunction(min, UInt128),
+                    max_inference_id_uint SimpleAggregateFunction(max, UInt128)
+                )",
+                &GetMaybeReplicatedTableEngineNameArgs {
+                    table_name: "EpisodeById",
+                    table_engine_name: "AggregatingMergeTree",
+                    engine_args: &[],
+                },
+                Some("ORDER BY (episode_id_uint)"),
+            )
             .await?;
 
         // If not a clean start, restrict MV ingestion to rows >= view timestamp.
@@ -94,44 +89,35 @@ impl Migration for Migration0038<'_> {
         let cutoff_uuid = get_dynamic_evaluation_cutoff_uuid();
 
         // Build MV for ChatInference table
-        let query = format!(
-            r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS EpisodeByIdChatView{on_cluster_name}
-            TO EpisodeById
-            AS
-            SELECT
-                toUInt128(episode_id) as episode_id_uint,
+        self.clickhouse
+            .get_create_materialized_view_statements(
+                "EpisodeByIdChatView",
+                "EpisodeById",
+                "ChatInference",
+                "toUInt128(episode_id) as episode_id_uint,
                 1 as count,
                 groupArrayState()(id) as inference_ids,
                 toUInt128(min(id)) as min_inference_id_uint,
-                toUInt128(max(id)) as max_inference_id_uint
-            FROM ChatInference
-            WHERE {view_condition} AND toUInt128(episode_id) < toUInt128(toUUID('{cutoff_uuid}'))
-            GROUP BY toUInt128(episode_id)
-            "
-        );
-        self.clickhouse
-            .run_query_synchronous_no_params(query)
+                toUInt128(max(id)) as max_inference_id_uint",
+                Some(&format!("WHERE {} AND toUInt128(episode_id) < toUInt128(toUUID('{}'))
+                GROUP BY toUInt128(episode_id)", view_condition, cutoff_uuid)),
+            )
             .await?;
+            
         // Build MV for JsonInference table
-        let query = format!(
-            r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS EpisodeByIdJsonView{on_cluster_name}
-            TO EpisodeById
-            AS
-            SELECT
-                toUInt128(episode_id) as episode_id_uint,
+        self.clickhouse
+            .get_create_materialized_view_statements(
+                "EpisodeByIdJsonView",
+                "EpisodeById", 
+                "JsonInference",
+                "toUInt128(episode_id) as episode_id_uint,
                 1 as count,
                 groupArrayState()(id) as inference_ids,
                 toUInt128(min(id)) as min_inference_id_uint,
-                toUInt128(max(id)) as max_inference_id_uint
-            FROM JsonInference
-            WHERE {view_condition} AND toUInt128(episode_id) < toUInt128(toUUID('{cutoff_uuid}'))
-            GROUP BY toUInt128(episode_id)
-            "
-        );
-        self.clickhouse
-            .run_query_synchronous_no_params(query)
+                toUInt128(max(id)) as max_inference_id_uint",
+                Some(&format!("WHERE {} AND toUInt128(episode_id) < toUInt128(toUUID('{}'))
+                GROUP BY toUInt128(episode_id)", view_condition, cutoff_uuid)),
+            )
             .await?;
 
         // Backfill if needed
@@ -149,16 +135,20 @@ impl Migration for Migration0038<'_> {
             let view_timestamp_nanos_string = view_timestamp_nanos.to_string();
             if create_chat_table.contains(&view_timestamp_nanos_string) {
                 // Run backfill for EpisodeByIdChatView if the chat timestamps match
+                
+                let episode_by_id_target_for_insert = "EpisodeById";
+                let chat_inference_source_for_insert = "ChatInference";
+                
                 let query = format!(
                     r"
-                    INSERT INTO EpisodeById
+                    INSERT INTO {episode_by_id_target_for_insert}
                     SELECT
                         toUInt128(episode_id) as episode_id_uint,
                         1 as count,
                         groupArrayState()(id) as inference_ids,
                         toUInt128(min(id)) as min_inference_id_uint,
                         toUInt128(max(id)) as max_inference_id_uint
-                    FROM ChatInference
+                    FROM {chat_inference_source_for_insert}
                     WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
                         AND toUInt128(episode_id) < toUInt128(toUUID('{cutoff_uuid}'))
                     GROUP BY toUInt128(episode_id)
@@ -181,16 +171,20 @@ impl Migration for Migration0038<'_> {
 
             if create_json_table.contains(&view_timestamp_nanos_string) {
                 // Run backfill for EpisodeByIdJsonView if the json timestamps match
+                
+                let episode_by_id_target_for_json_insert = "EpisodeById";
+                let json_inference_source_for_insert = "JsonInference";
+                
                 let query = format!(
                     r"
-                    INSERT INTO EpisodeById
+                    INSERT INTO {episode_by_id_target_for_json_insert}
                     SELECT
                         toUInt128(episode_id) as episode_id_uint,
                         1 as count,
                         groupArrayState()(id) as inference_ids,
                         toUInt128(min(id)) as min_inference_id_uint,
                         toUInt128(max(id)) as max_inference_id_uint
-                    FROM JsonInference
+                    FROM {json_inference_source_for_insert}
                     WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
                           AND toUInt128(episode_id) < toUInt128(toUUID('{cutoff_uuid}'))
                     GROUP BY toUInt128(episode_id)
@@ -209,11 +203,12 @@ impl Migration for Migration0038<'_> {
 
     fn rollback_instructions(&self) -> String {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        
         format!(
-            r"
-        DROP TABLE IF EXISTS EpisodeByIdJsonView{on_cluster_name} SYNC;
-        DROP TABLE IF EXISTS EpisodeByIdChatView{on_cluster_name} SYNC;
-        DROP TABLE IF EXISTS EpisodeById{on_cluster_name} SYNC;"
+            "DROP TABLE IF EXISTS EpisodeByIdJsonView{on_cluster_name} SYNC;\
+            DROP TABLE IF EXISTS EpisodeByIdChatView{on_cluster_name} SYNC;\
+            {}",
+            self.clickhouse.get_drop_table_rollback_statements("EpisodeById")
         )
     }
 

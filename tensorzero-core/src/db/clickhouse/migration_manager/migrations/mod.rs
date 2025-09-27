@@ -98,54 +98,92 @@ pub async fn check_detached_table_exists(
 }
 
 /// Returns true if the column exists in the table, false if it does not
+/// For sharded deployments, checks both distributed and local tables
 /// Errors if the query fails
-async fn check_column_exists(
+pub async fn check_column_exists(
     clickhouse: &ClickHouseConnectionInfo,
     table: &str,
     column: &str,
     migration_id: &str,
 ) -> Result<bool, Error> {
-    let query = format!(
-        r"
-            SELECT 1
-            FROM system.columns
-            WHERE database = '{}'
-              AND table = '{}'
-              AND name = '{}'
-            LIMIT 1
-        ",
-        clickhouse.database(),
-        table,
-        column,
-    );
-    match clickhouse.run_query_synchronous_no_params(query).await {
-        Err(e) => {
-            return Err(ErrorDetails::ClickHouseMigration {
-                id: migration_id.to_string(),
-                message: e.to_string(),
+    let database = clickhouse.database();
+    
+    if clickhouse.is_sharding_enabled() {
+        // Check both distributed and local tables in sharded deployments
+        let local_table = format!("{}_local", table);
+        
+        let query = format!(
+            r"
+                SELECT count() as table_count
+                FROM (
+                    SELECT 1 FROM system.columns 
+                    WHERE database = '{database}' AND table = '{table}' AND name = '{column}'
+                    UNION ALL
+                    SELECT 1 FROM system.columns 
+                    WHERE database = '{database}' AND table = '{local_table}' AND name = '{column}'
+                )
+            "
+        );
+        
+        match clickhouse.run_query_synchronous_no_params(query).await {
+            Err(e) => {
+                return Err(ErrorDetails::ClickHouseMigration {
+                    id: migration_id.to_string(),
+                    message: e.to_string(),
+                }
+                .into())
             }
-            .into())
+            Ok(response) => {
+                let count: u32 = response.response.trim().parse().unwrap_or(0);
+                // Column should exist in both tables (count = 2) for sharded deployments
+                return Ok(count == 2);
+            }
         }
-        Ok(response) => {
-            if response.response.trim() != "1" {
-                return Ok(false);
+    } else {
+        // Check only the main table in non-sharded deployments
+        let query = format!(
+            r"
+                SELECT 1
+                FROM system.columns
+                WHERE database = '{database}'
+                  AND table = '{table}'
+                  AND name = '{column}'
+                LIMIT 1
+            "
+        );
+        
+        match clickhouse.run_query_synchronous_no_params(query).await {
+            Err(e) => {
+                return Err(ErrorDetails::ClickHouseMigration {
+                    id: migration_id.to_string(),
+                    message: e.to_string(),
+                }
+                .into())
+            }
+            Ok(response) => {
+                return Ok(response.response.trim() == "1");
             }
         }
     }
-    Ok(true)
 }
 
-async fn get_column_type(
+pub async fn get_column_type(
     clickhouse: &ClickHouseConnectionInfo,
     table: &str,
     column: &str,
     migration_id: &str,
 ) -> Result<String, Error> {
+    let database = clickhouse.database();
+    
+    // For sharded deployments, check the local table as it contains the actual data structure
+    let table_to_check = if clickhouse.is_sharding_enabled() {
+        format!("{}_local", table)
+    } else {
+        table.to_string()
+    };
+    
     let query = format!(
-        "SELECT type FROM system.columns WHERE database='{}' AND table='{}' AND name='{}'",
-        clickhouse.database(),
-        table,
-        column
+        "SELECT type FROM system.columns WHERE database='{database}' AND table='{table_to_check}' AND name='{column}'"
     );
     match clickhouse.run_query_synchronous_no_params(query).await {
         Err(e) => Err(ErrorDetails::ClickHouseMigration {
@@ -157,17 +195,23 @@ async fn get_column_type(
     }
 }
 
-async fn get_default_expression(
+pub async fn get_default_expression(
     clickhouse: &ClickHouseConnectionInfo,
     table: &str,
     column: &str,
     migration_id: &str,
 ) -> Result<String, Error> {
+    let database = clickhouse.database();
+    
+    // For sharded deployments, check the local table as it contains the actual data structure
+    let table_to_check = if clickhouse.is_sharding_enabled() {
+        format!("{}_local", table)
+    } else {
+        table.to_string()
+    };
+    
     let query = format!(
-        "SELECT default_expression FROM system.columns WHERE database='{}' AND table='{}' AND name='{}'",
-        clickhouse.database(),
-        table,
-        column
+        "SELECT default_expression FROM system.columns WHERE database='{database}' AND table='{table_to_check}' AND name='{column}'"
     );
     match clickhouse.run_query_synchronous_no_params(query).await {
         Err(e) => Err(ErrorDetails::ClickHouseMigration {
@@ -184,7 +228,15 @@ async fn table_is_nonempty(
     table: &str,
     migration_id: &str,
 ) -> Result<bool, Error> {
-    let query = format!("SELECT COUNT() FROM {table} FORMAT CSV");
+    // For data checking, we need to check the local table in sharded deployments
+    // since that's where the actual data is stored
+    let table_to_check = if clickhouse.is_sharding_enabled() {
+        clickhouse.get_local_table_name(table)
+    } else {
+        table.to_string()
+    };
+    
+    let query = format!("SELECT COUNT() FROM {table_to_check} FORMAT CSV");
     let result = clickhouse.run_query_synchronous_no_params(query).await?;
     Ok(result.response.trim().parse::<i64>().map_err(|e| {
         Error::new(ErrorDetails::ClickHouseMigration {
@@ -198,10 +250,18 @@ async fn get_table_engine(
     clickhouse: &ClickHouseConnectionInfo,
     table: &str,
 ) -> Result<String, Error> {
+    // For engine inspection, we need to check the local table in sharded deployments
+    // since that's where the actual table definition/engine is stored
+    let table_to_check = if clickhouse.is_sharding_enabled() {
+        clickhouse.get_local_table_name(table)
+    } else {
+        table.to_string()
+    };
+    
     let query = format!(
         "SELECT engine FROM system.tables WHERE database='{}' AND name='{}'",
         clickhouse.database(),
-        table
+        table_to_check
     );
     let result = clickhouse.run_query_synchronous_no_params(query).await?;
     Ok(result.response.trim().to_string())
@@ -212,7 +272,34 @@ async fn check_index_exists(
     table: &str,
     index: &str,
 ) -> Result<bool, Error> {
-    let query = format!("SELECT 1 FROM system.data_skipping_indices WHERE database='{}' AND table='{}' AND name='{}'", clickhouse.database(), table, index);
+    // For sharded deployments, indices only exist on local tables, so we need to check the local table name
+    let actual_table = if clickhouse.is_sharding_enabled() {
+        clickhouse.get_local_table_name(table)
+    } else {
+        table.to_string()
+    };
+    
+    let query = format!("SELECT 1 FROM system.data_skipping_indices WHERE database='{}' AND table='{}' AND name='{}'", clickhouse.database(), actual_table, index);
     let result = clickhouse.run_query_synchronous_no_params(query).await?;
     Ok(result.response.trim() == "1")
+}
+
+/// Shows the CREATE TABLE statement for a table, automatically handling sharding.
+/// In sharded deployments, inspects the local table structure since that's where 
+/// the actual table definition is stored.
+async fn show_create_table(
+    clickhouse: &ClickHouseConnectionInfo,
+    table: &str,
+) -> Result<String, Error> {
+    // For table structure inspection, we need to check the local table in sharded deployments
+    // since that's where the actual table definition/structure is stored
+    let table_to_inspect = if clickhouse.is_sharding_enabled() {
+        clickhouse.get_local_table_name(table)
+    } else {
+        table.to_string()
+    };
+    
+    let query = format!("SHOW CREATE TABLE {}", table_to_inspect);
+    let result = clickhouse.run_query_synchronous_no_params(query).await?;
+    Ok(result.response.trim().to_string())
 }

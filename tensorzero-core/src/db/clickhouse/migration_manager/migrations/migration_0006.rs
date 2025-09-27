@@ -45,112 +45,88 @@ impl Migration for Migration0006<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_engine_name: "MergeTree",
-                table_name: "BatchModelInference",
-                engine_args: &[],
-            },
-        );
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
-
         // Create the `BatchModelInference` table
-        let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS BatchModelInference{on_cluster_name}
-            (
-                inference_id UUID,
-                batch_id UUID,
-                function_name LowCardinality(String),
-                variant_name LowCardinality(String),
-                episode_id UUID,
-                input String,
-                input_messages String,
-                system Nullable(String),
-                tool_params Nullable(String),
-                inference_params String,
-                raw_request String,
-                model_name LowCardinality(String),
-                model_provider_name LowCardinality(String),
-                output_schema Nullable(String),
-                tags Map(String, String) DEFAULT map(),
-                timestamp DateTime MATERIALIZED UUIDv7ToDateTime(inference_id),
-            ) ENGINE = {table_engine_name}
-            ORDER BY (batch_id, inference_id)
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+        self.clickhouse
+            .get_create_table_statements(
+                "BatchModelInference",
+                r"(
+                    inference_id UUID,
+                    batch_id UUID,
+                    function_name LowCardinality(String),
+                    variant_name LowCardinality(String),
+                    episode_id UUID,
+                    input String,
+                    input_messages String,
+                    system Nullable(String),
+                    tool_params Nullable(String),
+                    inference_params String,
+                    raw_request String,
+                    model_name LowCardinality(String),
+                    model_provider_name LowCardinality(String),
+                    output_schema Nullable(String),
+                    tags Map(String, String) DEFAULT map(),
+                    timestamp DateTime MATERIALIZED UUIDv7ToDateTime(inference_id),
+                )",
+                &GetMaybeReplicatedTableEngineNameArgs {
+                    table_engine_name: "MergeTree",
+                    table_name: "BatchModelInference",
+                    engine_args: &[],
+                },
+                Some("ORDER BY (batch_id, inference_id)"),
+            )
             .await?;
 
         // Create the `BatchRequest` table
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_engine_name: "MergeTree",
-                table_name: "BatchRequest",
-                engine_args: &[],
-            },
-        );
-        let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS BatchRequest{on_cluster_name}
-            (
-                batch_id UUID,
-                id UUID,
-                batch_params String,
-                model_name LowCardinality(String),
-                model_provider_name LowCardinality(String),
-                status Enum('pending' = 1, 'completed' = 2, 'failed' = 3),
-                errors Map(UUID, String),
-                timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id),
-            ) ENGINE = {table_engine_name}
-            ORDER BY (batch_id, id)
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+        self.clickhouse
+            .get_create_table_statements(
+                "BatchRequest",
+                r"(
+                    batch_id UUID,
+                    id UUID,
+                    batch_params String,
+                    model_name LowCardinality(String),
+                    model_provider_name LowCardinality(String),
+                    status Enum('pending' = 1, 'completed' = 2, 'failed' = 3),
+                    errors Map(UUID, String),
+                    timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id),
+                )",
+                &GetMaybeReplicatedTableEngineNameArgs {
+                    table_engine_name: "MergeTree",
+                    table_name: "BatchRequest",
+                    engine_args: &[],
+                },
+                Some("ORDER BY (batch_id, id)"),
+            )
             .await?;
 
         // Create the BatchIdByInferenceId table
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_engine_name: "MergeTree",
-                table_name: "BatchIdByInferenceId",
-                engine_args: &[],
-            },
-        );
-        let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS BatchIdByInferenceId{on_cluster_name}
-            (
-                inference_id UUID,
-                batch_id UUID,
-            ) ENGINE = {table_engine_name}
-            ORDER BY (inference_id)
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+        self.clickhouse
+            .get_create_table_statements(
+                "BatchIdByInferenceId",
+                r"(
+                    inference_id UUID,
+                    batch_id UUID,
+                )",
+                &GetMaybeReplicatedTableEngineNameArgs {
+                    table_engine_name: "MergeTree",
+                    table_name: "BatchIdByInferenceId",
+                    engine_args: &[],
+                },
+                Some("ORDER BY (inference_id)"),
+            )
             .await?;
 
         // Create the materialized view for the BatchIdByInferenceId table
-        let query = format!(
-            r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS BatchIdByInferenceIdView{on_cluster_name}
-            TO BatchIdByInferenceId
-            AS
-                SELECT
-                    inference_id,
-                    batch_id
-                FROM BatchModelInference
-            "
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+        
+        self.clickhouse
+            .get_create_materialized_view_statements(
+                "BatchIdByInferenceIdView",
+                "BatchIdByInferenceId",
+                "BatchModelInference",
+                "inference_id,
+                    batch_id",
+                None,
+            )
             .await?;
         Ok(())
     }
@@ -163,14 +139,17 @@ impl Migration for Migration0006<'_> {
 
     fn rollback_instructions(&self) -> String {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        
         format!(
             "/* Drop the materialized views */\
-            DROP VIEW IF EXISTS BatchIdByInferenceIdView{on_cluster_name};
+            DROP VIEW IF EXISTS BatchIdByInferenceIdView{on_cluster_name};\
             /* Drop the tables */\
-            DROP TABLE IF EXISTS BatchIdByInferenceId{on_cluster_name} SYNC;
-            DROP TABLE IF EXISTS BatchRequest{on_cluster_name} SYNC;
-            DROP TABLE IF EXISTS BatchModelInference{on_cluster_name} SYNC;
-        "
+            {}\
+            {}\
+            {}",
+            self.clickhouse.get_drop_table_rollback_statements("BatchIdByInferenceId"),
+            self.clickhouse.get_drop_table_rollback_statements("BatchRequest"),
+            self.clickhouse.get_drop_table_rollback_statements("BatchModelInference")
         )
     }
 }

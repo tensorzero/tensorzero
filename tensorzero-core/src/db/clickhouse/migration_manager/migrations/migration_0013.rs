@@ -4,7 +4,7 @@ use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 
-use super::check_table_exists;
+use super::{check_table_exists, show_create_table};
 use async_trait::async_trait;
 
 /// This migration reinitializes the `InferenceById` and `InferenceByEpisodeId` tables and
@@ -77,12 +77,10 @@ impl Migration for Migration0013<'_> {
         if !chat_inference_by_episode_id_view_exists {
             return Ok(true);
         }
-        let query = "SHOW CREATE TABLE InferenceById".to_string();
-        let result = self
-            .clickhouse
-            .run_query_synchronous_no_params(query)
-            .await?;
-        if !result.response.contains("UInt128") {
+        
+        // show_create_table is now sharding-aware
+        let create_table_result = show_create_table(self.clickhouse, "InferenceById").await?;
+        if !create_table_result.contains("UInt128") {
             return Err(ErrorDetails::ClickHouseMigration {
                 id: "0013".to_string(),
                 message:
@@ -91,12 +89,10 @@ impl Migration for Migration0013<'_> {
             }
             .into());
         }
-        let query = "SHOW CREATE TABLE InferenceByEpisodeId".to_string();
-        let result = self
-            .clickhouse
-            .run_query_synchronous_no_params(query)
-            .await?;
-        if !result.response.contains("UInt128") {
+        
+        // show_create_table is now sharding-aware
+        let create_table_result = show_create_table(self.clickhouse, "InferenceByEpisodeId").await?;
+        if !create_table_result.contains("UInt128") {
             return Err(ErrorDetails::ClickHouseMigration {
                 id: "0013".to_string(),
                 message:
@@ -129,7 +125,12 @@ impl Migration for Migration0013<'_> {
             })?
             + view_offset)
             .as_secs();
-        let query = "SELECT toUInt32(COUNT())  FROM ChatInference".to_string();
+            
+        // For SELECT COUNT operations, use distributed table names (same as other data queries)
+        let chat_inference_count_source = "ChatInference"; // Always use distributed name for SELECT operations
+        let json_inference_count_source = "JsonInference"; // Always use distributed name for SELECT operations
+        
+        let query = format!("SELECT toUInt32(COUNT()) FROM {chat_inference_count_source}");
         let chat_count: usize = self
             .clickhouse
             .run_query_synchronous_no_params(query)
@@ -143,7 +144,7 @@ impl Migration for Migration0013<'_> {
                     message: format!("failed to query if data is in Chat table: {e}"),
                 })
             })?;
-        let query = "SELECT toUInt32(COUNT())  FROM JsonInference".to_string();
+        let query = format!("SELECT toUInt32(COUNT()) FROM {json_inference_count_source}");
         let json_count: usize = self
             .clickhouse
             .run_query_synchronous_no_params(query)
@@ -190,60 +191,53 @@ impl Migration for Migration0013<'_> {
         // let query = "DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView".to_string();
         // let _ = self.clickhouse.run_query_synchronous(query, None).await?;
         // Create the new tables with UInt128 primary keys
-        // Create the `InferenceById` table
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_engine_name: "MergeTree",
-                table_name: "InferenceById",
-                engine_args: &[],
-            },
-        );
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS InferenceById{on_cluster_name}
+        // Create the `InferenceById` table with sharding support
+        let inference_by_id_schema = r"
             (
                 id_uint UInt128,
                 function_name LowCardinality(String),
                 variant_name LowCardinality(String),
                 episode_id UUID, -- must be a UUIDv7
                 function_type Enum8('chat' = 1, 'json' = 2)
-            ) ENGINE = {table_engine_name}
-            ORDER BY id_uint;
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
-            .await?;
-        // Create the `InferenceByEpisodeId` table
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_engine_name: "MergeTree",
-                table_name: "InferenceByEpisodeId",
-                engine_args: &[],
-            },
-        );
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        let query = format!(
-            r"
-            CREATE TABLE IF NOT EXISTS InferenceByEpisodeId{on_cluster_name}
+            )";
+
+        let inference_by_id_engine_args = GetMaybeReplicatedTableEngineNameArgs {
+            table_engine_name: "MergeTree",
+            table_name: "InferenceById",
+            engine_args: &[],
+        };
+
+        self.clickhouse.get_create_table_statements(
+            "InferenceById",
+            inference_by_id_schema,
+            &inference_by_id_engine_args,
+            Some("ORDER BY id_uint"),
+        ).await?;
+
+        // Create the `InferenceByEpisodeId` table with sharding support
+        let inference_by_episode_id_schema = r"
             (
                 episode_id_uint UInt128,
                 id_uint UInt128,
                 function_name LowCardinality(String),
                 variant_name LowCardinality(String),
                 function_type Enum8('chat' = 1, 'json' = 2)
-            )
-            ENGINE = {table_engine_name}
-            ORDER BY (episode_id_uint, id_uint);
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
-            .await?;
+            )";
+
+        let inference_by_episode_id_engine_args = GetMaybeReplicatedTableEngineNameArgs {
+            table_engine_name: "MergeTree",
+            table_name: "InferenceByEpisodeId",
+            engine_args: &[],
+        };
+
+        self.clickhouse.get_create_table_statements(
+            "InferenceByEpisodeId",
+            inference_by_episode_id_schema,
+            &inference_by_episode_id_engine_args,
+            Some("ORDER BY (episode_id_uint, id_uint)"),
+        ).await?;
         // Create the `uint_to_uuid` function
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let query = format!(
             r"CREATE FUNCTION IF NOT EXISTS uint_to_uuid{on_cluster_name} AS (x) -> reinterpretAsUUID(
             concat(
@@ -265,89 +259,83 @@ impl Migration for Migration0013<'_> {
         };
         // Create the materialized views for the `InferenceById` table
         // IMPORTANT: The function_type column is now correctly set to 'chat'
-        let query = format!(
-            r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceByIdView{on_cluster_name}
-            TO InferenceById
-            AS
-                SELECT
-                    toUInt128(id) as id_uint,
+        
+        // Create the materialized views for the `InferenceById` table
+        self.clickhouse
+            .get_create_materialized_view_statements(
+                "ChatInferenceByIdView",
+                "InferenceById",
+                "ChatInference", 
+                "toUInt128(id) as id_uint,
                     function_name,
                     variant_name,
                     episode_id,
-                    'chat' AS function_type
-                FROM ChatInference
-                {view_where_clause};
-            "
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query)
+                    'chat' as function_type,
+                    input,
+                    output,
+                    tool_calls,
+                    tool_call_results,
+                    processing_time_ms,
+                    raw_request,
+                    raw_response,
+                    usage",
+                if view_where_clause.is_empty() { None } else { Some(view_where_clause.as_str()) },
+            )
             .await?;
 
         // IMPORTANT: The function_type column is now correctly set to 'json'
-        let query = format!(
-            r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceByIdView{on_cluster_name}
-            TO InferenceById
-            AS
-                SELECT
-                    toUInt128(id) as id_uint,
+        self.clickhouse
+            .get_create_materialized_view_statements(
+                "JsonInferenceByIdView",
+                "InferenceById",
+                "JsonInference",
+                "toUInt128(id) as id_uint,
                     function_name,
                     variant_name,
                     episode_id,
-                    'json' AS function_type
-                FROM JsonInference
-                {view_where_clause};
-            "
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query)
+                    'json' AS function_type,
+                    input,
+                    output,
+                    '' as tool_calls,
+                    '' as tool_call_results,
+                    processing_time_ms,
+                    raw_request,
+                    raw_response,
+                    usage",
+                if view_where_clause.is_empty() { None } else { Some(view_where_clause.as_str()) },
+            )
             .await?;
 
         // Create the materialized view for the `InferenceByEpisodeId` table from ChatInference
         // IMPORTANT: The function_type column is now correctly set to 'chat'
-        let query = format!(
-            r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceByEpisodeIdView{on_cluster_name}
-            TO InferenceByEpisodeId
-            AS
-                SELECT
-                    toUInt128(episode_id) as episode_id_uint,
+        self.clickhouse
+            .get_create_materialized_view_statements(
+                "ChatInferenceByEpisodeIdView",
+                "InferenceByEpisodeId",
+                "ChatInference",
+                "toUInt128(episode_id) as episode_id_uint,
                     toUInt128(id) as id_uint,
                     function_name,
                     variant_name,
-                    'chat' as function_type
-                FROM ChatInference
-                {view_where_clause};
-            "
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query)
+                    'chat' as function_type",
+                if view_where_clause.is_empty() { None } else { Some(view_where_clause.as_str()) },
+            )
             .await?;
 
         // Create the materialized view for the `InferenceByEpisodeId` table from JsonInference
         // IMPORTANT: The function_type column is now correctly set to 'json'
-        let query = format!(
-            r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceByEpisodeIdView{on_cluster_name}
-            TO InferenceByEpisodeId
-            AS
-                SELECT
-                    toUInt128(episode_id) as episode_id_uint,
+        self.clickhouse
+            .get_create_materialized_view_statements(
+                "JsonInferenceByEpisodeIdView",
+                "InferenceByEpisodeId",
+                "JsonInference",
+                "toUInt128(episode_id) as episode_id_uint,
                     toUInt128(id) as id_uint,
                     function_name,
                     variant_name,
-                    'json' as function_type
-                FROM JsonInference
-                {view_where_clause};
-            "
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query)
+                    'json' as function_type",
+                if view_where_clause.is_empty() { None } else { Some(view_where_clause.as_str()) },
+            )
             .await?;
 
         /*
@@ -441,18 +429,20 @@ impl Migration for Migration0013<'_> {
 
     fn rollback_instructions(&self) -> String {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        
         format!(
             "/* Drop the materialized views */\
-            DROP VIEW IF EXISTS ChatInferenceByIdView{on_cluster_name};
-            DROP VIEW IF EXISTS JsonInferenceByIdView{on_cluster_name};
-            DROP VIEW IF EXISTS ChatInferenceByEpisodeIdView{on_cluster_name};
-            DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView{on_cluster_name};
+            DROP VIEW IF EXISTS ChatInferenceByIdView{on_cluster_name};\
+            DROP VIEW IF EXISTS JsonInferenceByIdView{on_cluster_name};\
+            DROP VIEW IF EXISTS ChatInferenceByEpisodeIdView{on_cluster_name};\
+            DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView{on_cluster_name};\
             /* Drop the function */\
-            DROP FUNCTION IF EXISTS uint_to_uuid{on_cluster_name};
+            DROP FUNCTION IF EXISTS uint_to_uuid{on_cluster_name};\
             /* Drop the tables */\
-            DROP TABLE IF EXISTS InferenceById{on_cluster_name} SYNC;
-            DROP TABLE IF EXISTS InferenceByEpisodeId{on_cluster_name} SYNC;
-            "
+            {}\
+            {}",
+            self.clickhouse.get_drop_table_rollback_statements("InferenceById"),
+            self.clickhouse.get_drop_table_rollback_statements("InferenceByEpisodeId")
         )
     }
 

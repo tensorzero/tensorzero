@@ -52,15 +52,20 @@ impl Migration for Migration0018<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        // Add finish_reason column to both ModelInference and ModelInferenceCache using sharding-aware ALTER
         self.clickhouse
-            .run_query_synchronous_no_params(
-                "ALTER TABLE ModelInference ADD COLUMN IF NOT EXISTS finish_reason Nullable(Enum8('stop', 'length', 'tool_call', 'content_filter', 'unknown'))".to_string(),
+            .get_alter_table_statements(
+                "ModelInference",
+                "ADD COLUMN IF NOT EXISTS finish_reason Nullable(Enum8('stop', 'length', 'tool_call', 'content_filter', 'unknown'))",
+                false,
             )
             .await?;
 
         self.clickhouse
-            .run_query_synchronous_no_params(
-                "ALTER TABLE ModelInferenceCache ADD COLUMN IF NOT EXISTS finish_reason Nullable(Enum8('stop', 'length', 'tool_call', 'content_filter', 'unknown'))".to_string(),
+            .get_alter_table_statements(
+                "ModelInferenceCache",
+                "ADD COLUMN IF NOT EXISTS finish_reason Nullable(Enum8('stop', 'length', 'tool_call', 'content_filter', 'unknown'))",
+                false,
             )
             .await?;
 
@@ -68,7 +73,12 @@ impl Migration for Migration0018<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "ALTER TABLE ModelInference DROP COLUMN finish_reason".to_string()
+        format!(
+            "{}\
+            {}",
+            self.clickhouse.get_alter_table_rollback_statements("ModelInference", "DROP COLUMN finish_reason", false),
+            self.clickhouse.get_alter_table_rollback_statements("ModelInferenceCache", "DROP COLUMN finish_reason", false)
+        )
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

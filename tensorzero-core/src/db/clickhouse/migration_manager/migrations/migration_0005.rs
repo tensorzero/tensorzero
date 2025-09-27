@@ -71,106 +71,89 @@ impl Migration for Migration0005<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         // Create the `InferenceTag` table
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_engine_name: "MergeTree",
-                table_name: "InferenceTag",
-                engine_args: &[],
-            },
-        );
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        let query = format!(
+        self.clickhouse.get_create_table_statements(
+            "InferenceTag",
             r"
-            CREATE TABLE IF NOT EXISTS InferenceTag{on_cluster_name}
             (
                 function_name LowCardinality(String),
                 key String,
                 value String,
                 inference_id UUID, -- must be a UUIDv7
-            ) ENGINE = {table_engine_name}
-            ORDER BY (function_name, key, value);
-        ",
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            )",
+            &GetMaybeReplicatedTableEngineNameArgs {
+                table_name: "InferenceTag",
+                table_engine_name: "MergeTree",
+                engine_args: &[],
+            },
+            Some("ORDER BY (function_name, key, value)"),
+        ).await?;
+
+        // Add a column `tags` to the ChatInference and JsonInference tables using sharding-aware ALTER
+        self.clickhouse
+            .get_alter_table_statements(
+                "ChatInference",
+                "ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map()",
+                false,
+            )
             .await?;
 
-        // Add a column `tags` to the `BooleanMetricFeedback` table
-        let query = r"
-            ALTER TABLE ChatInference
-            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
-            .await?;
-
-        // Add a column `tags` to the `JsonInference` table
-        let query = r"
-            ALTER TABLE JsonInference
-            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+        self.clickhouse
+            .get_alter_table_statements(
+                "JsonInference",
+                "ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map()",
+                false,
+            )
             .await?;
 
         // In the following few queries we create the materialized views that map the tags from the original tables to the new `InferenceTag` table
         // We do not need to handle the case where there are already tags in the table since we created those columns just now.
         // So, we don't worry about timestamps for cutting over to the materialized views.
+        
         // Create the materialized view for the `InferenceTag` table from ChatInference
-        let query = format!(
-            r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceTagView{on_cluster_name}
-            TO InferenceTag
-            AS
-                SELECT
-                    function_name,
+        self.clickhouse
+            .get_create_materialized_view_statements(
+                "ChatInferenceTagView",
+                "InferenceTag",
+                "ChatInference",
+                "function_name,
                     key,
                     tags[key] as value,
-                    id as inference_id
-                FROM ChatInference
-                ARRAY JOIN mapKeys(tags) as key
-            "
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+                    id as inference_id",
+                Some("ARRAY JOIN mapKeys(tags) as key"),
+            )
             .await?;
 
         // Create the materialized view for the `InferenceTag` table from JsonInference
-        let query = format!(
-            r"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceTagView{on_cluster_name}
-            TO InferenceTag
-            AS
-                SELECT
-                    function_name,
+        self.clickhouse
+            .get_create_materialized_view_statements(
+                "JsonInferenceTagView",
+                "InferenceTag", 
+                "JsonInference",
+                "function_name,
                     key,
                     tags[key] as value,
-                    id as inference_id
-                FROM JsonInference
-                ARRAY JOIN mapKeys(tags) as key
-            "
-        );
-        let _ = self
-            .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+                    id as inference_id",
+                Some("ARRAY JOIN mapKeys(tags) as key"),
+            )
             .await?;
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        
         format!(
             "/* Drop the materialized views */\
-            DROP VIEW IF EXISTS ChatInferenceTagView{on_cluster_name};
-            DROP VIEW IF EXISTS JsonInferenceTagView{on_cluster_name};
-            /* Drop the `InferenceTag` table */\
-            DROP TABLE IF EXISTS InferenceTag{on_cluster_name} SYNC;
-            /* Drop the `tags` column from the original inference tables */\
-            ALTER TABLE ChatInference DROP COLUMN tags;
-            ALTER TABLE JsonInference DROP COLUMN tags;
-        "
+            DROP VIEW IF EXISTS ChatInferenceTagView{on_cluster_name};\
+            DROP VIEW IF EXISTS JsonInferenceTagView{on_cluster_name};\
+            /* Drop the InferenceTag table */\
+            {}\
+            /* Drop the tags column from the original inference tables */\
+            {}\
+            {}",
+            self.clickhouse.get_drop_table_rollback_statements("InferenceTag"),
+            self.clickhouse.get_alter_table_rollback_statements("ChatInference", "DROP COLUMN tags", false),
+            self.clickhouse.get_alter_table_rollback_statements("JsonInference", "DROP COLUMN tags", false)
         )
     }
 

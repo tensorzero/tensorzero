@@ -113,38 +113,68 @@ impl Migration for Migration0028<'_> {
             format!("AND UUIDv7ToDateTime(feedback_id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
         };
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
-            GetMaybeReplicatedTableEngineNameArgs {
-                table_name: "StaticEvaluationHumanFeedback",
-                table_engine_name: "MergeTree",
-                engine_args: &[],
-            },
-        );
         self.clickhouse
-            .run_query_synchronous_no_params(
-                format!(r"CREATE TABLE IF NOT EXISTS StaticEvaluationHumanFeedback{on_cluster_name} (
-                    metric_name LowCardinality(String),
-                    datapoint_id UUID,
-                    output String,
-                    value String,  -- JSON encoded value of the feedback
-                    feedback_id UUID,
-                    evaluator_inference_id UUID,
-                    timestamp DateTime MATERIALIZED UUIDv7ToDateTime(feedback_id)
-                ) ENGINE = {table_engine_name}
-                ORDER BY (metric_name, datapoint_id, output)
-                SETTINGS index_granularity = 256 -- We use a small index granularity to improve lookup performance
-            ",
-        ))
+            .get_create_table_statements(
+                "StaticEvaluationHumanFeedback",
+                &format!(
+                    r"(
+                        metric_name LowCardinality(String),
+                        datapoint_id UUID,
+                        output String,
+                        value String,  -- JSON encoded value of the feedback
+                        feedback_id UUID,
+                        evaluator_inference_id UUID,
+                        timestamp DateTime MATERIALIZED UUIDv7ToDateTime(feedback_id)
+                    )"
+                ),
+                &GetMaybeReplicatedTableEngineNameArgs {
+                    table_name: "StaticEvaluationHumanFeedback",
+                    table_engine_name: "MergeTree",
+                    engine_args: &[],
+                },
+                Some("ORDER BY (metric_name, datapoint_id, output) SETTINGS index_granularity = 256"),
+            )
             .await?;
 
         // Since there cannot have been any StaticEvaluationHumanFeedback rows before this migration runs,
         // we can just create the materialized views in place.
 
+        let static_evaluation_human_feedback_target = if self.clickhouse.is_sharding_enabled() {
+            self.clickhouse.get_local_table_name("StaticEvaluationHumanFeedback")
+        } else {
+            "StaticEvaluationHumanFeedback".to_string()
+        };
+        let float_metric_feedback_source = if self.clickhouse.is_sharding_enabled() {
+            self.clickhouse.get_local_table_name("FloatMetricFeedback")
+        } else {
+            "FloatMetricFeedback".to_string()
+        };
+        let inference_by_id_source = if self.clickhouse.is_sharding_enabled() {
+            self.clickhouse.get_local_table_name("InferenceById")
+        } else {
+            "InferenceById".to_string()
+        };
+        let chat_inference_source = if self.clickhouse.is_sharding_enabled() {
+            self.clickhouse.get_local_table_name("ChatInference")
+        } else {
+            "ChatInference".to_string()
+        };
+        let json_inference_source = if self.clickhouse.is_sharding_enabled() {
+            self.clickhouse.get_local_table_name("JsonInference")
+        } else {
+            "JsonInference".to_string()
+        };
+        let boolean_metric_feedback_source = if self.clickhouse.is_sharding_enabled() {
+            self.clickhouse.get_local_table_name("BooleanMetricFeedback")
+        } else {
+            "BooleanMetricFeedback".to_string()
+        };
+
         // Create the materialized view for FloatMetricFeedback
         let query = format!(
             r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS StaticEvaluationFloatHumanFeedbackView{on_cluster_name}
-            TO StaticEvaluationHumanFeedback
+            TO {static_evaluation_human_feedback_target}
             AS
                 WITH float_human_feedback AS (
                     SELECT
@@ -157,7 +187,7 @@ impl Migration for Migration0028<'_> {
                         -- we enforce in the feedback endpoint that this is present
                         -- if the tensorzero::datapoint_id is present and the tensorzero::human_feedback
                         -- tag is present.
-                    FROM FloatMetricFeedback
+                    FROM {float_metric_feedback_source}
                     WHERE
                         mapContains(tags, 'tensorzero::human_feedback')
                         AND mapContains(tags, 'tensorzero::datapoint_id')
@@ -165,20 +195,20 @@ impl Migration for Migration0028<'_> {
 
                 ),
                 inference_by_id AS (
-                    SELECT id_uint, function_name, function_type, variant_name, episode_id FROM InferenceById
+                    SELECT id_uint, function_name, function_type, variant_name, episode_id FROM {inference_by_id_source}
                     WHERE id_uint IN (
                         SELECT toUInt128(target_id) FROM float_human_feedback
                     )
                 ),
                 chat_inference AS (
-                    SELECT function_name, variant_name, episode_id, id, output FROM ChatInference
+                    SELECT function_name, variant_name, episode_id, id, output FROM {chat_inference_source}
                     WHERE (function_name, variant_name, episode_id) IN (
                         SELECT function_name, variant_name, episode_id
                         FROM inference_by_id
                     )
                 ),
                 json_inference AS (
-                    SELECT function_name, variant_name, episode_id, id, output FROM JsonInference
+                    SELECT function_name, variant_name, episode_id, id, output FROM {json_inference_source}
                     WHERE (function_name, variant_name, episode_id) IN (
                         SELECT function_name, variant_name, episode_id
                         FROM inference_by_id
@@ -207,7 +237,14 @@ impl Migration for Migration0028<'_> {
                 i.variant_name = ji.variant_name AND
                 i.episode_id = ji.episode_id AND
                 f.target_id = ji.id;
-        "
+        ",
+            on_cluster_name = on_cluster_name,
+            static_evaluation_human_feedback_target = static_evaluation_human_feedback_target,
+            float_metric_feedback_source = float_metric_feedback_source,
+            inference_by_id_source = inference_by_id_source,
+            chat_inference_source = chat_inference_source,
+            json_inference_source = json_inference_source,
+            view_timestamp_where_clause = view_timestamp_where_clause,
         );
         self.clickhouse
             .run_query_synchronous_no_params(query.to_string())
@@ -217,7 +254,7 @@ impl Migration for Migration0028<'_> {
         let query = format!(
             r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS StaticEvaluationBooleanHumanFeedbackView{on_cluster_name}
-            TO StaticEvaluationHumanFeedback
+            TO {static_evaluation_human_feedback_table_name}
             AS
                 WITH boolean_human_feedback AS (
                     SELECT
@@ -230,7 +267,7 @@ impl Migration for Migration0028<'_> {
                        -- we enforce in the feedback endpoint that this is present
                        -- if the tensorzero::datapoint_id is present and the tensorzero::human_feedback
                        -- tag is present.
-                   FROM BooleanMetricFeedback
+                   FROM {boolean_metric_feedback_table_name}
                    WHERE
                        mapContains(tags, 'tensorzero::human_feedback')
                        AND mapContains(tags, 'tensorzero::datapoint_id')
@@ -238,20 +275,20 @@ impl Migration for Migration0028<'_> {
 
                 ),
                 inference_by_id AS (
-                    SELECT id_uint, function_name, function_type, variant_name, episode_id FROM InferenceById
+                    SELECT id_uint, function_name, function_type, variant_name, episode_id FROM {inference_by_id_table_name}
                     WHERE id_uint IN (
                         SELECT toUInt128(target_id) FROM boolean_human_feedback
                     )
                 ),
                 chat_inference AS (
-                    SELECT function_name, variant_name, episode_id, id, output FROM ChatInference
+                    SELECT function_name, variant_name, episode_id, id, output FROM {chat_inference_table_name}
                     WHERE (function_name, variant_name, episode_id) IN (
                         SELECT function_name, variant_name, episode_id
                         FROM inference_by_id
                     )
                 ),
                 json_inference AS (
-                    SELECT function_name, variant_name, episode_id, id, output FROM JsonInference
+                    SELECT function_name, variant_name, episode_id, id, output FROM {json_inference_table_name}
                     WHERE (function_name, variant_name, episode_id) IN (
                         SELECT function_name, variant_name, episode_id
                         FROM inference_by_id
@@ -280,7 +317,14 @@ impl Migration for Migration0028<'_> {
                 i.variant_name = ji.variant_name AND
                 i.episode_id = ji.episode_id AND
                 f.target_id = ji.id;
-        "
+        ",
+            on_cluster_name = on_cluster_name,
+            static_evaluation_human_feedback_table_name = static_evaluation_human_feedback_target,
+            boolean_metric_feedback_table_name = boolean_metric_feedback_source,
+            inference_by_id_table_name = inference_by_id_source,
+            chat_inference_table_name = chat_inference_source,
+            json_inference_table_name = json_inference_source,
+            view_timestamp_where_clause = view_timestamp_where_clause,
         );
 
         self.clickhouse
@@ -304,6 +348,14 @@ impl Migration for Migration0028<'_> {
                 AND UUIDv7ToDateTime(feedback_id) < toDateTime(toUnixTimestamp({view_timestamp}))
                 AND UUIDv7ToDateTime(feedback_id) >= toDateTime(toUnixTimestamp({current_timestamp}))"
             );
+            
+            // For data insertion operations, use distributed table names
+            let static_evaluation_human_feedback_target_for_insert = "StaticEvaluationHumanFeedback";
+            let float_metric_feedback_source_for_insert = "FloatMetricFeedback";
+            let boolean_metric_feedback_source_for_insert = "BooleanMetricFeedback";
+            let inference_by_id_source_for_insert = "InferenceById";
+            let chat_inference_source_for_insert = "ChatInference";
+            let json_inference_source_for_insert = "JsonInference";
 
             let query = format!(
                 r"
@@ -318,7 +370,7 @@ impl Migration for Migration0028<'_> {
                         -- we enforce in the feedback endpoint that this is present
                         -- if the tensorzero::datapoint_id is present and the tensorzero::human_feedback
                         -- tag is present.
-                    FROM FloatMetricFeedback
+                    FROM {float_metric_feedback_source_for_insert}
                     WHERE
                         mapContains(tags, 'tensorzero::human_feedback')
                         AND mapContains(tags, 'tensorzero::datapoint_id')
@@ -334,7 +386,7 @@ impl Migration for Migration0028<'_> {
                        -- we enforce in the feedback endpoint that this is present
                        -- if the tensorzero::datapoint_id is present and the tensorzero::human_feedback
                        -- tag is present.
-                    FROM BooleanMetricFeedback
+                    FROM {boolean_metric_feedback_source_for_insert}
                     WHERE
                        mapContains(tags, 'tensorzero::human_feedback')
                        AND mapContains(tags, 'tensorzero::datapoint_id')
@@ -342,26 +394,26 @@ impl Migration for Migration0028<'_> {
 
                 ),
                 inference_by_id AS (
-                    SELECT id_uint, function_name, function_type, variant_name, episode_id FROM InferenceById
+                    SELECT id_uint, function_name, function_type, variant_name, episode_id FROM {inference_by_id_source_for_insert}
                     WHERE id_uint IN (
                         SELECT toUInt128(target_id) FROM human_feedback
                     )
                 ),
                 chat_inference AS (
-                    SELECT function_name, variant_name, episode_id, id, output FROM ChatInference
+                    SELECT function_name, variant_name, episode_id, id, output FROM {chat_inference_source_for_insert}
                     WHERE (function_name, variant_name, episode_id) IN (
                         SELECT function_name, variant_name, episode_id
                         FROM inference_by_id
                     )
                 ),
                 json_inference AS (
-                    SELECT function_name, variant_name, episode_id, id, output FROM JsonInference
+                    SELECT function_name, variant_name, episode_id, id, output FROM {json_inference_source_for_insert}
                     WHERE (function_name, variant_name, episode_id) IN (
                         SELECT function_name, variant_name, episode_id
                         FROM inference_by_id
                     )
                 )
-            INSERT INTO StaticEvaluationHumanFeedback
+            INSERT INTO {static_evaluation_human_feedback_target_for_insert}
             SELECT
                 f.metric_name as metric_name,
                 f.datapoint_id as datapoint_id,
@@ -397,12 +449,12 @@ impl Migration for Migration0028<'_> {
 
     fn rollback_instructions(&self) -> String {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        
         format!(
-            r"
-        DROP VIEW IF EXISTS StaticEvaluationFloatHumanFeedbackView{on_cluster_name};
-        DROP VIEW IF EXISTS StaticEvaluationBooleanHumanFeedbackView{on_cluster_name};
-        DROP TABLE IF EXISTS StaticEvaluationHumanFeedback{on_cluster_name} SYNC;
-        "
+            "DROP VIEW IF EXISTS StaticEvaluationFloatHumanFeedbackView{on_cluster_name};\
+            DROP VIEW IF EXISTS StaticEvaluationBooleanHumanFeedbackView{on_cluster_name};\
+            {}",
+            self.clickhouse.get_drop_table_rollback_statements("StaticEvaluationHumanFeedback")
         )
     }
 

@@ -36,14 +36,15 @@ impl Migration for Migration0022<'_> {
     }
 
     async fn should_apply(&self) -> Result<bool, Error> {
-        let chat_source_inference_id_column_exists = check_column_exists(
+        let chat_column_exists = check_column_exists(
             self.clickhouse,
             "ChatInferenceDatapoint",
             "source_inference_id",
             "0022",
         )
         .await?;
-        let json_source_inference_id_column_exists = check_column_exists(
+        
+        let json_column_exists = check_column_exists(
             self.clickhouse,
             "JsonInferenceDatapoint",
             "source_inference_id",
@@ -51,19 +52,24 @@ impl Migration for Migration0022<'_> {
         )
         .await?;
 
-        Ok(!chat_source_inference_id_column_exists || !json_source_inference_id_column_exists)
+        Ok(!chat_column_exists || !json_column_exists)
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        // Add source_inference_id column to both datapoint tables using sharding-aware ALTER
         self.clickhouse
-            .run_query_synchronous_no_params(
-                "ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS source_inference_id Nullable(UUID)".to_string(),
+            .get_alter_table_statements(
+                "ChatInferenceDatapoint",
+                "ADD COLUMN IF NOT EXISTS source_inference_id Nullable(UUID)",
+                false,
             )
             .await?;
 
         self.clickhouse
-            .run_query_synchronous_no_params(
-                "ALTER TABLE JsonInferenceDatapoint ADD COLUMN IF NOT EXISTS source_inference_id Nullable(UUID)".to_string(),
+            .get_alter_table_statements(
+                "JsonInferenceDatapoint", 
+                "ADD COLUMN IF NOT EXISTS source_inference_id Nullable(UUID)",
+                false,
             )
             .await?;
 
@@ -71,7 +77,12 @@ impl Migration for Migration0022<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "ALTER TABLE ChatInferenceDatapoint DROP COLUMN source_inference_id".to_string()
+        format!(
+            "{}\
+            {}",
+            self.clickhouse.get_alter_table_rollback_statements("ChatInferenceDatapoint", "DROP COLUMN source_inference_id", false),
+            self.clickhouse.get_alter_table_rollback_statements("JsonInferenceDatapoint", "DROP COLUMN source_inference_id", false)
+        )
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {
