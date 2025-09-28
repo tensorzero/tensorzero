@@ -10,10 +10,7 @@ pub mod clickhouse;
 pub mod postgres;
 
 #[async_trait]
-pub trait ClickHouseConnection:
-    SelectQueries + HealthCheckable + BanditQueries + Send + Sync
-{
-}
+pub trait ClickHouseConnection: SelectQueries + HealthCheckable + Send + Sync {}
 
 #[async_trait]
 pub trait PostgresConnection: RateLimitQueries + HealthCheckable + Send + Sync {}
@@ -46,6 +43,13 @@ pub trait SelectQueries {
     ) -> Result<Vec<EpisodeByIdRow>, Error>;
 
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
+
+    async fn get_feedback_by_variant(
+        &self,
+        metric_name: &str,
+        function_name: &str,
+        variant_names: Option<&Vec<String>>,
+    ) -> Result<Vec<FeedbackByVariant>, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -103,7 +107,7 @@ pub struct TableBoundsWithCount {
     pub count: u64,
 }
 
-impl<T: SelectQueries + BanditQueries + HealthCheckable + Send + Sync> ClickHouseConnection for T {}
+impl<T: SelectQueries + HealthCheckable + Send + Sync> ClickHouseConnection for T {}
 
 pub trait RateLimitQueries {
     /// This function will fail if any of the requests individually fail.
@@ -155,16 +159,6 @@ pub struct ReturnTicketsRequest {
 pub struct ReturnTicketsReceipt {
     pub key: ActiveRateLimitKey,
     pub balance: u64,
-}
-
-#[async_trait]
-pub trait BanditQueries {
-    async fn get_feedback_by_variant(
-        &self,
-        metric_name: &str,
-        function_name: &str,
-        variant_names: Option<&Vec<String>>,
-    ) -> Result<Vec<FeedbackByVariant>, Error>;
 }
 
 #[derive(Debug, Deserialize)]
