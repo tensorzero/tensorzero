@@ -20,7 +20,6 @@ use crate::{
     },
     endpoints::{inference::InferenceCredentials, stored_inference::render_samples},
     error::{Error, ErrorDetails},
-    gateway_util::{AppState, AppStateData, StructuredJson},
     http::TensorzeroHttpClient,
     optimization::{
         JobHandle, OptimizationJobHandle, OptimizationJobInfo, Optimizer,
@@ -28,6 +27,7 @@ use crate::{
     },
     serde_util::deserialize_option_u64,
     stored_inference::RenderedSample,
+    utils::gateway::{AppState, AppStateData, StructuredJson},
 };
 
 #[cfg_attr(test, derive(ts_rs::TS))]

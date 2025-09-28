@@ -1,5 +1,8 @@
 # cargo-deny
 
+[sources]
+allow-git = ["https://github.com/hyperium/mime"]
+
 [bans]
 deny = [
     { name = "native-tls" },
@@ -9,7 +12,9 @@ deny = [
 
 [advisories]
 ignore = [
-    "RUSTSEC-2024-0436" # We don't care that 'paste' is unmaintained
+    "RUSTSEC-2024-0436", # We don't care that 'paste' is unmaintained
+    "RUSTSEC-2025-0057", # fxhash is unmaintained, used by rlt crate
+    "RUSTSEC-2024-0370"  # proc-macro-error is unmaintained, used by rlt crate
 ]
 
 [licenses]

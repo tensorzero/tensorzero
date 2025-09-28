@@ -23,8 +23,8 @@ use tensorzero_core::endpoints;
 use tensorzero_core::endpoints::openai_compatible::RouterExt as _;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error;
-use tensorzero_core::gateway_util;
 use tensorzero_core::observability::{self, LogFormat, RouterExt as _};
+use tensorzero_core::utils::gateway;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -208,7 +208,7 @@ async fn main() {
     }
 
     // Initialize GatewayHandle
-    let gateway_handle = gateway_util::GatewayHandle::new(config.clone())
+    let gateway_handle = gateway::GatewayHandle::new(config.clone())
         .await
         .expect_pretty("Failed to initialize AppState");
 

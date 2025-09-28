@@ -9,7 +9,7 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
 use tensorzero_core::config::ConfigFileGlob;
-pub use tensorzero_core::db::DatabaseConnection;
+pub use tensorzero_core::db::ClickHouseConnection;
 use tensorzero_core::db::HealthCheckable;
 pub use tensorzero_core::db::{ModelUsageTimePoint, TimeWindow};
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
@@ -17,12 +17,12 @@ pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 use tensorzero_core::endpoints::stored_inference::render_samples;
-pub use tensorzero_core::gateway_util::setup_clickhouse_without_config;
-use tensorzero_core::gateway_util::setup_postgres;
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::stored_input::StoragePathResolver;
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::stored_inference::StoredSample;
+pub use tensorzero_core::utils::gateway::setup_clickhouse_without_config;
+use tensorzero_core::utils::gateway::setup_postgres;
 use tensorzero_core::{
     config::Config,
     endpoints::{
@@ -33,7 +33,7 @@ use tensorzero_core::{
         validate_tags,
     },
     error::{Error, ErrorDetails},
-    gateway_util::{setup_clickhouse, GatewayHandle},
+    utils::gateway::{setup_clickhouse, GatewayHandle},
 };
 use thiserror::Error;
 use tokio::{sync::Mutex, time::error::Elapsed};
@@ -44,6 +44,8 @@ use uuid::Uuid;
 mod client_inference_params;
 mod client_input;
 mod git;
+#[cfg(feature = "e2e_tests")]
+pub mod test_helpers;
 pub use tensorzero_core::stored_inference::{
     RenderedSample, StoredChatInference, StoredInference, StoredJsonInference,
 };
@@ -601,6 +603,7 @@ impl Client {
                         gateway.handle.app_state.config.clone(),
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.clickhouse_connection_info.clone(),
+                        gateway.handle.app_state.postgres_connection_info.clone(),
                         params.try_into().map_err(err_to_http)?,
                     )
                     .await
@@ -1327,7 +1330,7 @@ impl Client {
     }
 
     #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
-    pub fn get_app_state_data(&self) -> Option<&tensorzero_core::gateway_util::AppStateData> {
+    pub fn get_app_state_data(&self) -> Option<&tensorzero_core::utils::gateway::AppStateData> {
         match &*self.mode {
             ClientMode::EmbeddedGateway { gateway, .. } => Some(&gateway.handle.app_state),
             ClientMode::HTTPGateway(_) => None,

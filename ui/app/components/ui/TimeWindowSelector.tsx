@@ -22,11 +22,11 @@ export function TimeWindowSelector({
         <SelectValue placeholder="Choose time granularity" />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="hour">Hour</SelectItem>
-        <SelectItem value="day">Day</SelectItem>
-        <SelectItem value="week">Week</SelectItem>
-        <SelectItem value="month">Month</SelectItem>
-        <SelectItem value="cumulative">Cumulative</SelectItem>
+        <SelectItem value="hour">Hourly</SelectItem>
+        <SelectItem value="day">Daily</SelectItem>
+        <SelectItem value="week">Weekly</SelectItem>
+        <SelectItem value="month">Monthly</SelectItem>
+        <SelectItem value="cumulative">All Time</SelectItem>
       </SelectContent>
     </Select>
   );

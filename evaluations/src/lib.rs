@@ -82,7 +82,7 @@ pub struct Clients {
     pub clickhouse_client: ClickHouseConnectionInfo,
 }
 
-#[instrument(skip(writer), fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
+#[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
 pub async fn run_evaluation(
     args: Args,
     evaluation_run_id: Uuid,
@@ -205,9 +205,10 @@ pub async fn run_evaluation(
                     input: &input,
                     inference_cache: args.inference_cache,
                 })
-                .await?,
+                .await.map_err(|e| anyhow!("Error inferring for datapoint {datapoint_id}: {e}"))?,
             );
 
+            let inference_id = inference_response.inference_id();
             let evaluation_result = evaluate_inference(
                 EvaluateInferenceParams {
                     inference_response: inference_response.clone(),
@@ -219,7 +220,7 @@ pub async fn run_evaluation(
                     evaluation_run_id: evaluation_run_id_clone,
                     inference_cache: args.inference_cache,
                 })
-                .await?;
+                .await.map_err(|e| anyhow!("Error evaluating inference {inference_id} for datapoint {datapoint_id}: {e}"))?;
             debug!(datapoint_id = %datapoint.id(), evaluations_count = evaluation_result.len(), "Evaluations completed");
 
             Ok::<(Datapoint, InferenceResponse, evaluators::EvaluationResult), anyhow::Error>((
@@ -369,7 +370,7 @@ struct InferDatapointParams<'a> {
     inference_cache: CacheEnabledMode,
 }
 
-#[instrument(skip(params), fields(datapoint_id = %params.datapoint.id(), function_name = %params.function_name, variant_name = %params.variant_name))]
+#[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), function_name = %params.function_name, variant_name = %params.variant_name))]
 async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceResponse> {
     let InferDatapointParams {
         clients,

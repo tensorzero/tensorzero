@@ -6,10 +6,11 @@ use serde_json::json;
 use crate::{
     cache::CacheOptions,
     config::{Config, UninitializedVariantConfig},
-    db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
-    embeddings::{
-        Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingModelConfig, EmbeddingRequest,
+    db::{
+        clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
+        postgres::PostgresConnectionInfo,
     },
+    embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
     endpoints::inference::{InferenceClients, InferenceCredentials},
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     function::FunctionConfig,
@@ -20,7 +21,8 @@ use crate::{
         default_api_key_location, OpenAICredentials, DEFAULT_CREDENTIALS, PROVIDER_TYPE,
     },
     stored_inference::RenderedSample,
-    variant::{dicl::UninitializedDiclConfig, RetryConfig},
+    utils::retries::RetryConfig,
+    variant::dicl::UninitializedDiclConfig,
 };
 use futures::future::try_join_all;
 use std::{collections::HashMap, sync::Arc};
@@ -286,20 +288,6 @@ impl Optimizer for DiclOptimizationConfig {
             }));
         }
 
-        // 4. Check that the embedding model exists in the config
-        let embedding_model_config = config
-            .embedding_models
-            .get(&self.embedding_model)
-            .await?
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::Config {
-                    message: format!(
-                        "embedding model '{}' not found in configuration",
-                        self.embedding_model
-                    ),
-                })
-            })?;
-
         tracing::info!(
             "Starting DICL optimization for function '{}' variant '{}' with {} examples",
             self.function_name,
@@ -325,7 +313,7 @@ impl Optimizer for DiclOptimizationConfig {
 
         // Process embeddings with batching and concurrency control
         let all_embeddings = process_embeddings_with_batching(
-            &embedding_model_config,
+            config,
             &self.embedding_model,
             client,
             credentials,
@@ -518,7 +506,7 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
 
 /// Processes a batch of input texts to get embeddings
 async fn process_embedding_batch(
-    embedding_model_config: &EmbeddingModelConfig,
+    config: &Config,
     model_name: &str,
     client: &TensorzeroHttpClient,
     credentials: &InferenceCredentials,
@@ -532,13 +520,27 @@ async fn process_embedding_batch(
         encoding_format: EmbeddingEncodingFormat::Float,
     };
 
+    let embedding_model_config =
+        config
+            .embedding_models
+            .get(model_name)
+            .await?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::Config {
+                    message: format!("embedding model '{model_name}' not found in configuration",),
+                })
+            })?;
+
     // Create InferenceClients context for the embedding model
     let cache_options = CacheOptions::default();
     let clients = InferenceClients {
         http_client: client,
         credentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
+        postgres_connection_info: &PostgresConnectionInfo::Disabled,
         cache_options: &cache_options,
+        tags: &HashMap::default(),
+        rate_limiting_config: &config.rate_limiting,
         // We don't currently perform any OTLP export in optimization workflows
         otlp_config: &Default::default(),
     };
@@ -567,7 +569,7 @@ async fn process_embedding_batch(
 /// Processes all embedding batches with concurrency control
 #[expect(clippy::too_many_arguments)]
 async fn process_embeddings_with_batching(
-    embedding_model_config: &EmbeddingModelConfig,
+    config: &Config,
     model_name: &str,
     client: &TensorzeroHttpClient,
     credentials: &InferenceCredentials,
@@ -607,7 +609,7 @@ async fn process_embeddings_with_batching(
                 })?;
 
                 let result = process_embedding_batch(
-                    embedding_model_config,
+                    config,
                     model_name,
                     client,
                     credentials,
@@ -795,18 +797,19 @@ mod tests {
         endpoints::inference::InferenceCredentials,
     };
     use std::collections::{HashMap, HashSet};
+    use std::sync::Arc;
 
     // Helper functions to create test embedding models using the Dummy provider
 
-    fn create_test_embedding_model() -> EmbeddingModelConfig {
+    fn create_test_embedding_model_config() -> Config {
         create_test_embedding_model_with_name("test-embedding")
     }
 
-    fn create_test_embedding_model_with_failure() -> EmbeddingModelConfig {
+    fn create_test_embedding_model_with_failure_config() -> Config {
         create_test_embedding_model_with_name("error") // This will cause the dummy provider to fail
     }
 
-    fn create_test_embedding_model_with_name(model_name: &str) -> EmbeddingModelConfig {
+    fn create_test_embedding_model_with_name(model_name: &str) -> Config {
         #[cfg(any(test, feature = "e2e_tests"))]
         {
             use crate::providers::dummy::DummyProvider;
@@ -823,10 +826,16 @@ mod tests {
                     extra_body: None,
                 },
             );
-            EmbeddingModelConfig {
+            let embedding_model_config = EmbeddingModelConfig {
                 routing: vec![Arc::from("dummy")],
                 providers,
                 timeouts: TimeoutsConfig::default(),
+            };
+            Config {
+                embedding_models: HashMap::from([(Arc::from(model_name), embedding_model_config)])
+                    .try_into()
+                    .unwrap(),
+                ..Default::default()
             }
         }
         #[cfg(not(any(test, feature = "e2e_tests")))]
@@ -837,14 +846,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_embedding_batch_success() {
-        let embedding_model = create_test_embedding_model();
+        let config = create_test_embedding_model_config();
 
         let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["hello".to_string(), "world".to_string()];
 
         let result = process_embedding_batch(
-            &embedding_model,
+            &config,
             "test-embedding",
             &client,
             &credentials,
@@ -864,7 +873,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_embedding_batch_with_dimensions() {
-        let embedding_model = create_test_embedding_model();
+        let config = create_test_embedding_model_config();
 
         let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
@@ -872,7 +881,7 @@ mod tests {
         let dimensions = Some(512);
 
         let result = process_embedding_batch(
-            &embedding_model,
+            &config,
             "test-embedding",
             &client,
             &credentials,
@@ -890,14 +899,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_embedding_batch_failure() {
-        let embedding_model = create_test_embedding_model_with_failure();
+        let config = create_test_embedding_model_with_failure_config();
 
         let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["test".to_string()];
 
         let result = process_embedding_batch(
-            &embedding_model,
+            &config,
             "error", // Use "error" model name to trigger failure
             &client,
             &credentials,
@@ -912,7 +921,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_embeddings_with_batching_success() {
-        let embedding_model = create_test_embedding_model();
+        let config = create_test_embedding_model_config();
 
         let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
@@ -923,7 +932,7 @@ mod tests {
         ];
 
         let result = process_embeddings_with_batching(
-            &embedding_model,
+            &config,
             "test-embedding",
             &client,
             &credentials,
@@ -945,14 +954,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_embeddings_with_batching_respects_concurrency() {
-        let embedding_model = create_test_embedding_model();
+        let config = create_test_embedding_model_config();
 
         let client = TensorzeroHttpClient::new().unwrap();
         let credentials = InferenceCredentials::default();
         let input_texts = vec!["1".to_string(), "2".to_string(), "3".to_string()];
 
         let result = process_embeddings_with_batching(
-            &embedding_model,
+            &config,
             "test-embedding",
             &client,
             &credentials,
@@ -972,8 +981,8 @@ mod tests {
     fn create_test_rendered_sample() -> RenderedSample {
         use crate::{
             inference::types::{
-                ContentBlock, ContentBlockChatOutput, ModelInput, RequestMessage, Role,
-                StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
+                ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage,
+                Role, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
             },
             stored_inference::StoredOutput,
         };
@@ -985,9 +994,9 @@ mod tests {
             function_name: "test_function".to_string(),
             input: ModelInput {
                 system: Some("Test system".to_string()),
-                messages: vec![RequestMessage {
+                messages: vec![ResolvedRequestMessage {
                     role: Role::User,
-                    content: vec![ContentBlock::Text(Text {
+                    content: vec![ResolvedContentBlock::Text(Text {
                         text: "Test message".to_string(),
                     })],
                 }],
@@ -1263,7 +1272,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         })
     }
 
@@ -1299,7 +1308,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config: invalid_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         })
     }
 

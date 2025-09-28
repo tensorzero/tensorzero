@@ -41,15 +41,14 @@ use tensorzero_core::cache::cache_lookup;
 use tensorzero_core::cache::start_cache_write;
 use tensorzero_core::cache::ModelProviderRequest;
 use tensorzero_core::inference::types::Latency;
-use tensorzero_core::inference::types::RequestMessage;
 use tensorzero_core::inference::types::Role;
 use tensorzero_core::inference::types::Usage;
 use tensorzero_core::inference::types::{
     FunctionType, ModelInferenceRequest, ModelInferenceRequestJsonMode,
 };
+use tensorzero_core::inference::types::{RequestMessage, StoredContentBlock, StoredRequestMessage};
 
 use crate::common::get_gateway_endpoint;
-use crate::providers::common::make_embedded_gateway;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
@@ -68,7 +67,9 @@ async fn test_cache_write_and_read() {
         inference_id: Uuid::now_v7(),
         messages: vec![RequestMessage {
             role: Role::User,
-            content: vec!["test message".to_string().into()],
+            content: vec![ContentBlock::Text(Text {
+                text: "test message".to_string(),
+            })],
         }],
         system: Some("test system".to_string()),
         tool_config: None,
@@ -154,7 +155,9 @@ async fn test_cache_write_and_read() {
         result.input_messages,
         vec![RequestMessage {
             role: Role::User,
-            content: vec!["test message".to_string().into()],
+            content: vec![ContentBlock::Text(Text {
+                text: "test message".to_string(),
+            })],
         }]
     );
     assert_eq!(
@@ -194,7 +197,9 @@ async fn test_cache_stream_write_and_read() {
         inference_id: Uuid::now_v7(),
         messages: vec![RequestMessage {
             role: Role::User,
-            content: vec!["test message".to_string().into()],
+            content: vec![ContentBlock::Text(Text {
+                text: "test message".to_string(),
+            })],
         }],
         system: Some("test system".to_string()),
         tool_config: None,
@@ -348,7 +353,7 @@ pub async fn test_dont_cache_invalid_tool_call() {
         // from GatewayHandle
         return;
     }
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let randomness = Uuid::now_v7();
     let params = ClientInferenceParams {
         model_name: Some("dummy::invalid_tool_arguments".to_string()),
@@ -399,7 +404,7 @@ pub async fn test_dont_cache_tool_call_schema_error() {
         // from GatewayHandle
         return;
     }
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let randomness = Uuid::now_v7();
     let params = ClientInferenceParams {
         model_name: Some("dummy::tool".to_string()),
@@ -744,14 +749,16 @@ pub async fn check_test_streaming_cache_with_err(
         format!("You are a helpful and friendly assistant named AskJeeves")
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["My test input string".to_string().into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "My test input string".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
 
     full_content

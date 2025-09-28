@@ -7,16 +7,15 @@ use tensorzero_core::{
         postgres::PostgresConnectionInfo,
     },
     endpoints::feedback::{feedback, Params},
-    gateway_util::GatewayHandle,
     http::TensorzeroHttpClient,
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text, TextKind},
+    utils::gateway::GatewayHandle,
 };
 use tokio::time::{sleep, Duration};
 use tracing_test::traced_test;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
-use crate::providers::common::make_embedded_gateway;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 
 #[tokio::test]
@@ -1485,7 +1484,7 @@ async fn test_fast_inference_then_feedback() {
     use std::collections::HashMap;
     use std::sync::Arc;
     // Create the client and wrap it in an Arc for shared ownership.
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let client = Arc::new(client);
 
     // Create a collection of tasks, each making an inference then a feedback call.
