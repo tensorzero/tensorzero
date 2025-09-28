@@ -211,7 +211,10 @@ impl Migration for Migration0039<'_> {
                         function_name,
                         unique_variants[1] as variant_name
                     FROM (
-                        SELECT
+                    -- NOTE: this is conservative and only takes episodes with a single
+                    -- unique variant for the function
+                    -- We may consider generalizing this in the future
+                    SELECT
                             episode_id_uint,
                             function_name,
                             groupUniqArray(variant_name) as unique_variants
@@ -269,6 +272,9 @@ impl Migration for Migration0039<'_> {
                         function_name,
                         unique_variants[1] as variant_name
                     FROM (
+                    -- NOTE: this is conservative and only takes episodes with a single
+                    -- unique variant for the function
+                    -- We may consider generalizing this in the future
                         SELECT
                             episode_id_uint,
                             function_name,
