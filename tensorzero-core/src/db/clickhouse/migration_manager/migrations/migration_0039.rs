@@ -97,6 +97,10 @@ impl Migration for Migration0039<'_> {
             },
         );
 
+        // We order by function_name, metric_name, variant_name, minute
+        // because it is more likely that we'll need to aggregate all variants for a given function and metric
+        // than to do metrics for a given variant and function
+
         self.clickhouse
             .run_query_synchronous_no_params(format!(
                 r"CREATE TABLE IF NOT EXISTS FloatMetricFeedbackByVariant{on_cluster_name} (
@@ -307,7 +311,7 @@ impl Migration for Migration0039<'_> {
                 count() as count
             FROM FloatMetricFeedbackByVariant
             WHERE {statistics_view_timestamp_where_clause}
-            GROUP BY function_name, variant_name, metric_name, minute;
+            GROUP BY function_name, metric_name, variant_name, minute;
             "
         );
         self.clickhouse
@@ -329,7 +333,7 @@ impl Migration for Migration0039<'_> {
                 count() as count
             FROM BooleanMetricFeedbackByVariant
             WHERE {statistics_view_timestamp_where_clause}
-            GROUP BY function_name, variant_name, metric_name, minute;
+            GROUP BY function_name, metric_name, variant_name, minute;
             "
         );
         self.clickhouse
@@ -501,7 +505,7 @@ impl Migration for Migration0039<'_> {
                         count() as count
                     FROM FloatMetricFeedbackByVariant
                     WHERE UUIDv7ToDateTime(uint_to_uuid(id_uint)) < fromUnixTimestamp64Nano({view_timestamp_nanos})
-                    GROUP BY function_name, variant_name, metric_name, minute;
+                    GROUP BY function_name, metric_name, variant_name, minute;
                     "
                 );
                 self.clickhouse
@@ -534,7 +538,7 @@ impl Migration for Migration0039<'_> {
                         count() as count
                     FROM BooleanMetricFeedbackByVariant
                     WHERE UUIDv7ToDateTime(uint_to_uuid(id_uint)) < fromUnixTimestamp64Nano({view_timestamp_nanos})
-                    GROUP BY function_name, variant_name, metric_name, minute;
+                    GROUP BY function_name, metric_name, variant_name, minute;
                     "
                 );
                 self.clickhouse
