@@ -46,6 +46,21 @@ async fn test_clickhouse_metrics_by_variant_singleton() {
         "BooleanMetricFeedbackByVariant count: {}",
         boolean_metric_by_variant_count
     );
+    let inference_count = clickhouse
+        .run_query_synchronous_no_params("SELECT count() FROM InferenceById".to_string())
+        .await
+        .unwrap()
+        .response;
+    println!("Inference by id count: {}", inference_count);
+    let inference_by_episode_count = clickhouse
+        .run_query_synchronous_no_params("SELECT count() FROM InferenceByEpisodeId".to_string())
+        .await
+        .unwrap()
+        .response;
+    println!(
+        "Inference by episode id count: {}",
+        inference_by_episode_count
+    );
     let all_feedback_by_variant_metrics = clickhouse
         .run_query_synchronous_no_params(
             r"
