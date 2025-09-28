@@ -18,7 +18,7 @@ use tracing::Level;
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
-use tensorzero_core::db::postgres::manual_run_postgres_migrations;
+use tensorzero_core::db::postgres::{manual_run_postgres_migrations, PostgresConnectionInfo};
 use tensorzero_core::endpoints;
 use tensorzero_core::endpoints::openai_compatible::RouterExt as _;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
@@ -223,6 +223,14 @@ async fn main() {
         }
     };
 
+    let postgres_enabled_pretty = match &gateway_handle.app_state.postgres_connection_info {
+        PostgresConnectionInfo::Disabled => "disabled".to_string(),
+        PostgresConnectionInfo::Mock { healthy, .. } => {
+            format!("mocked (healthy={healthy})")
+        }
+        PostgresConnectionInfo::Enabled { .. } => "enabled".to_string(),
+    };
+
     // Set debug mode
     error::set_debug(config.gateway.debug).expect_pretty("Failed to set debug mode");
     error::set_unstable_error_json(config.gateway.unstable_error_json)
@@ -379,6 +387,9 @@ async fn main() {
     } else {
         tracing::info!("├ Batch Writes: disabled");
     }
+
+    // Print whether postgres is enabled
+    tracing::info!("├ Postgres: {postgres_enabled_pretty}");
 
     // Print whether OpenTelemetry is enabled
     if config.gateway.export.otlp.traces.enabled {
