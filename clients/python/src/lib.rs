@@ -1612,7 +1612,7 @@ impl AsyncTensorZeroGateway {
         let uuid = self_module.getattr("UUID")?.unbind();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.insert_datapoints(dataset_name, params).await;
-            Python::with_gil(|py| match res {
+            Python::attach(|py| match res {
                 Ok(uuids) => Ok(PyList::new(
                     py,
                     uuids
