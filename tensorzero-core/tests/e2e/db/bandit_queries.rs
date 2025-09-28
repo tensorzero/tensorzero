@@ -12,6 +12,40 @@ fn assert_float_eq(actual: f32, expected: f32, epsilon: Option<f32>) {
 #[tokio::test]
 async fn test_clickhouse_metrics_by_variant_singleton() {
     let clickhouse = get_clickhouse().await;
+    let float_metric_count = clickhouse
+        .run_query_synchronous_no_params("SELECT count() FROM FloatMetricFeedback".to_string())
+        .await
+        .unwrap()
+        .response;
+    println!("FloatMetricFeedback count: {}", float_metric_count);
+    let boolean_metric_count = clickhouse
+        .run_query_synchronous_no_params("SELECT count() FROM BooleanMetricFeedback".to_string())
+        .await
+        .unwrap()
+        .response;
+    println!("BooleanMetricFeedback count: {}", boolean_metric_count);
+    let float_metric_by_variant_count = clickhouse
+        .run_query_synchronous_no_params(
+            "SELECT count() FROM FloatMetricFeedbackByVariant".to_string(),
+        )
+        .await
+        .unwrap()
+        .response;
+    println!(
+        "FloatMetricFeedbackByVariant count: {}",
+        float_metric_by_variant_count
+    );
+    let boolean_metric_by_variant_count = clickhouse
+        .run_query_synchronous_no_params(
+            "SELECT count() FROM BooleanMetricFeedbackByVariant".to_string(),
+        )
+        .await
+        .unwrap()
+        .response;
+    println!(
+        "BooleanMetricFeedbackByVariant count: {}",
+        boolean_metric_by_variant_count
+    );
     let all_feedback_by_variant_metrics = clickhouse
         .run_query_synchronous_no_params(
             r"
