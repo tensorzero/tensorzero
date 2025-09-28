@@ -116,8 +116,10 @@ export function VariantPerformance({
                         entry.payload[`${name}_num_inferences`];
                       return (
                         <div className="flex flex-1 items-center justify-between leading-none">
-                          <span className="text-muted-foreground">{name}</span>
-                          <div className="grid text-right">
+                          <span className="text-muted-foreground font-mono text-xs">
+                            {name}
+                          </span>
+                          <div className="ml-2 grid text-right">
                             <span className="text-foreground font-mono font-medium tabular-nums">
                               {formatDetailedNumber(value as number)}
                             </span>
@@ -131,7 +133,9 @@ export function VariantPerformance({
                   />
                 }
               />
-              <ChartLegend content={<ChartLegendContent />} />
+              <ChartLegend
+                content={<ChartLegendContent className="font-mono text-xs" />}
+              />
               {singleVariantMode ? (
                 <Bar
                   key={variantNames[0]}
