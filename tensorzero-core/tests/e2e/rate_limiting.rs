@@ -885,3 +885,70 @@ model = "dummy"
         );
     }
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rate_limiting_no_retries() {
+    let config = r#"
+[rate_limiting]
+enabled = true
+
+[models]
+
+[models."dummy"]
+routing = ["dummy"]
+
+[models."dummy".providers.dummy]
+type = "dummy"
+model_name = "flaky_rate_limit"
+
+[functions]
+
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.default]
+type = "chat_completion"
+model = "dummy"
+retries = { num_retries = 3 }
+"#;
+
+    let client =
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(config).await;
+    // First call should succeed (the model works on 1, 3, 5, ...)
+    client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "Hello".to_string(),
+                    })],
+                }],
+            },
+
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    // Second call should fail from flakiness and no retries despite them being configured
+    let err = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "Hello".to_string(),
+                    })],
+                }],
+            },
+
+            ..Default::default()
+        })
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("TensorZero rate limit exceeded"));
+}

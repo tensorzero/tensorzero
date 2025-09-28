@@ -16,6 +16,7 @@ use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeader
 use crate::inference::types::resolved_input::{
     LazyResolvedInput, LazyResolvedInputMessage, LazyResolvedInputMessageContent,
 };
+use crate::utils::retries::RetryConfig;
 
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultStream,
@@ -32,7 +33,7 @@ pub use templates::ChatTemplates;
 
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
-    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, RetryConfig, Variant,
+    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, Variant,
 };
 
 /// If we have a schema, then we forward the 'arguments' object as-is to the template.
@@ -1691,7 +1692,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         });
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -1867,7 +1868,7 @@ mod tests {
             output_schema: hardcoded_output_schema,
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         });
         let inference_params = InferenceParams {
             chat_completion: ChatCompletionInferenceParams {
@@ -1997,7 +1998,7 @@ mod tests {
             output_schema: hardcoded_output_schema,
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         });
         let inference_params = InferenceParams::default();
         // Will dynamically set "response" instead of "answer"
@@ -2524,7 +2525,7 @@ mod tests {
                 parallel_tool_calls: None,
             },
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         });
         let inference_config = InferenceConfig {
             ids: InferenceIds {

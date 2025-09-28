@@ -21,7 +21,8 @@ use crate::{
         default_api_key_location, OpenAICredentials, DEFAULT_CREDENTIALS, PROVIDER_TYPE,
     },
     stored_inference::RenderedSample,
-    variant::{dicl::UninitializedDiclConfig, RetryConfig},
+    utils::retries::RetryConfig,
+    variant::dicl::UninitializedDiclConfig,
 };
 use futures::future::try_join_all;
 use std::{collections::HashMap, sync::Arc};
@@ -1271,7 +1272,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         })
     }
 
@@ -1307,7 +1308,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config: invalid_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         })
     }
 

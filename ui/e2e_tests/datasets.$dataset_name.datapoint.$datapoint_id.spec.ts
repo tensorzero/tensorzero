@@ -57,6 +57,20 @@ test("should be able to add, edit and save a json datapoint", async ({
   // Click on the "Inference Output" button
   await page.getByText("Inference Output").click();
 
+  // Wait for the toast to appear with success message
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("New Datapoint"),
+  ).toBeVisible();
+
+  // Wait for and click on the "View" button in the toast
+  const viewButton = page
+    .getByRole("region", { name: /notifications/i })
+    .getByText("View");
+  await viewButton.waitFor({ state: "visible" });
+  await viewButton.click();
+
   // Wait for navigation to the new page
   await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
     timeout: 10000,
@@ -134,6 +148,20 @@ test("should be able to add, edit and save a chat datapoint", async ({
   // Click on the "Inference Output" button
   await page.getByText("Inference Output").click();
 
+  // Wait for the toast to appear with success message
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("New Datapoint"),
+  ).toBeVisible();
+
+  // Wait for and click on the "View" button in the toast
+  const viewButton = page
+    .getByRole("region", { name: /notifications/i })
+    .getByText("View");
+  await viewButton.waitFor({ state: "visible" });
+  await viewButton.click();
+
   // Wait for navigation to the new page
   await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
     timeout: 10000,
@@ -199,6 +227,20 @@ test("should be able to add, edit and save a chat datapoint with tool call", asy
 
   // Click on the "Inference Output" button
   await page.getByText("Inference Output").click();
+
+  // Wait for the toast to appear with success message
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("New Datapoint"),
+  ).toBeVisible();
+
+  // Wait for and click on the "View" button in the toast
+  const viewButton = page
+    .getByRole("region", { name: /notifications/i })
+    .getByText("View");
+  await viewButton.waitFor({ state: "visible" });
+  await viewButton.click();
 
   // Wait for navigation to the new page
   await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
