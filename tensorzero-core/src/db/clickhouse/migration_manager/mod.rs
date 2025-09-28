@@ -50,7 +50,7 @@ use serde::{Deserialize, Serialize};
 /// This must match the number of migrations returned by `make_all_migrations` - the tests
 /// will panic if they don't match.
 pub const NUM_MIGRATIONS: usize = 32;
-fn get_run_migrations_command() -> String {
+pub fn get_run_migrations_command() -> String {
     let version = env!("CARGO_PKG_VERSION");
     format!("docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-migrations-only")
 }

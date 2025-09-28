@@ -7,7 +7,7 @@ use sqlx::{migrate, postgres::PgPoolOptions, PgPool, Row};
 
 use crate::error::{Error, ErrorDetails};
 
-use super::HealthCheckable;
+use super::{clickhouse::migration_manager::get_run_migrations_command, HealthCheckable};
 
 pub mod rate_limiting;
 
@@ -50,7 +50,7 @@ impl PostgresConnectionInfo {
         // Query the database for all successfully applied migration versions.
         let applied_migrations = get_applied_migrations(pool).await.map_err(|e| {
             Error::new(ErrorDetails::PostgresConnectionInitialization {
-                message: format!("Failed to retrieve applied migrations: {e}"),
+                message: format!("Failed to retrieve applied migrations: {e}. You may need to run the migrations with `{}`", get_run_migrations_command()),
             })
         })?;
         // NOTE: this will break old versions of the gateway once new migrations are applied.
