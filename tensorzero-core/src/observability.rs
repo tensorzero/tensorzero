@@ -751,7 +751,7 @@ pub fn register_metrics() {
     describe_counter!(
         "inference_count",
         Unit::Count,
-        "Inferences performed by TensorZero",
+        "Inferences performed by TensorZero. Deprecated; use tensorzero_inferences_total instead",
     );
 
     describe_counter!(
