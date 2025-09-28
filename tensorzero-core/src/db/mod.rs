@@ -44,6 +44,7 @@ pub trait SelectQueries {
 
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
 
+    /// Retrieves cumulative feedback statistics for a given metric and function, optionally filtered by variant names.
     async fn get_feedback_by_variant(
         &self,
         metric_name: &str,

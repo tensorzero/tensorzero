@@ -294,9 +294,14 @@ impl SelectQueries for ClickHouseConnectionInfo {
         let escaped_function_name = escape_string_for_clickhouse_literal(function_name);
         let escaped_metric_name = escape_string_for_clickhouse_literal(metric_name);
 
+        // If None we don't filter at all;
+        // If empty, we'll return an empty vector for consistency
+        // If there are variants passed, we'll filter by them
         let variant_filter = match variant_names {
             None => String::new(),
-            Some(names) if names.is_empty() => " AND 1=0".to_string(),
+            Some(names) if names.is_empty() => {
+                return Ok(vec![]);
+            }
             Some(names) => {
                 let escaped_names: Vec<String> = names
                     .iter()
