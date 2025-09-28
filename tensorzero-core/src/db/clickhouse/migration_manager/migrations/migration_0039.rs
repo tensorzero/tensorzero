@@ -109,7 +109,7 @@ impl Migration for Migration0039<'_> {
                         feedback_tags Map(String, String)
                     )
                     ENGINE = {table_engine_name}
-                    ORDER BY (function_name, variant_name, metric_name, id_uint);
+                    ORDER BY (function_name, metric_name, variant_name, id_uint);
                     "
             ))
             .await?;
@@ -134,7 +134,7 @@ impl Migration for Migration0039<'_> {
                         feedback_tags Map(String, String)
                     )
                     ENGINE = {table_engine_name}
-                    ORDER BY (function_name, variant_name, metric_name, id_uint);
+                    ORDER BY (function_name, metric_name, variant_name, id_uint);
                     "
             ))
             .await?;
@@ -159,7 +159,7 @@ impl Migration for Migration0039<'_> {
                     count SimpleAggregateFunction(sum, UInt64)
                 )
                 Engine = {table_engine_name}
-                ORDER BY (function_name, variant_name, metric_name, minute);
+                ORDER BY (function_name, metric_name, variant_name, minute);
                     "
             ))
             .await?;
