@@ -739,7 +739,7 @@ pub fn register_metrics() {
     describe_counter!(
         "request_count",
         Unit::Count,
-        "Requests handled by TensorZero",
+        "Requests handled by TensorZero. Deprecated; use tensorzero_requests_total instead",
     );
 
     describe_counter!(
