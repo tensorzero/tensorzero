@@ -20,7 +20,6 @@ mod batching;
 pub mod migration_manager;
 pub mod query_builder;
 mod select_queries;
-
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod test_helpers;
 
