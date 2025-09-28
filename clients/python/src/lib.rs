@@ -895,7 +895,7 @@ impl TensorZeroGateway {
     /// :param datapoints: A list of datapoints to insert.
     /// :return: None.
     #[pyo3(signature = (*, dataset_name, datapoints))]
-    fn bulk_insert_datapoints(
+    fn insert_datapoints(
         this: PyRef<'_, Self>,
         dataset_name: String,
         datapoints: Vec<Bound<'_, PyAny>>,
@@ -906,7 +906,7 @@ impl TensorZeroGateway {
             .map(|dp| deserialize_from_pyobj(this.py(), dp))
             .collect::<Result<Vec<_>, _>>()?;
         let params = InsertDatapointParams { datapoints };
-        let fut = client.bulk_insert_datapoints(dataset_name, params);
+        let fut = client.insert_datapoints(dataset_name, params);
         let self_module = PyModule::import(this.py(), "uuid")?;
         let uuid = self_module.getattr("UUID")?.unbind();
         let res =
@@ -916,6 +916,33 @@ impl TensorZeroGateway {
             .map(|x| uuid.call(this.py(), (x.to_string(),), None))
             .collect::<Result<Vec<_>, _>>()?;
         PyList::new(this.py(), uuids).map(Bound::unbind)
+    }
+
+    /// DEPRECATED: Use `insert_datapoints` instead.
+    ///
+    /// Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
+    ///
+    /// :param dataset_name: The name of the dataset to insert the datapoints into.
+    /// :param datapoints: A list of datapoints to insert.
+    /// :return: None.
+    #[pyo3(signature = (*, dataset_name, datapoints))]
+    fn bulk_insert_datapoints(
+        this: PyRef<'_, Self>,
+        dataset_name: String,
+        datapoints: Vec<Bound<'_, PyAny>>,
+    ) -> PyResult<Py<PyList>> {
+        // Issue deprecation warning
+        let warnings = PyModule::import(this.py(), "warnings")?;
+        warnings.call_method1(
+            "warn",
+            (
+                "Please use `insert_datapoints` instead of `bulk_insert_datapoints`. In a future release, `bulk_insert_datapoints` will be removed.",
+                this.py().get_type::<pyo3::exceptions::PyDeprecationWarning>(),
+                2_i32, // stacklevel
+            ),
+        )?;
+
+        TensorZeroGateway::insert_datapoints(this, dataset_name, datapoints)
     }
 
     /// Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
@@ -1570,7 +1597,7 @@ impl AsyncTensorZeroGateway {
     /// :param datapoints: A list of datapoints to insert.
     /// :return: None.
     #[pyo3(signature = (*, dataset_name, datapoints))]
-    fn bulk_insert_datapoints<'a>(
+    fn insert_datapoints<'a>(
         this: PyRef<'a, Self>,
         dataset_name: String,
         datapoints: Vec<Bound<'a, PyAny>>,
@@ -1584,7 +1611,7 @@ impl AsyncTensorZeroGateway {
         let self_module = PyModule::import(this.py(), "uuid")?;
         let uuid = self_module.getattr("UUID")?.unbind();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.bulk_insert_datapoints(dataset_name, params).await;
+            let res = client.insert_datapoints(dataset_name, params).await;
             Python::with_gil(|py| match res {
                 Ok(uuids) => Ok(PyList::new(
                     py,
@@ -1597,6 +1624,33 @@ impl AsyncTensorZeroGateway {
                 Err(e) => Err(convert_error(py, e)),
             })
         })
+    }
+
+    /// DEPRECATED: Use `insert_datapoints` instead.
+    ///
+    /// Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
+    ///
+    /// :param dataset_name: The name of the dataset to insert the datapoints into.
+    /// :param datapoints: A list of datapoints to insert.
+    /// :return: None.
+    #[pyo3(signature = (*, dataset_name, datapoints))]
+    fn bulk_insert_datapoints<'a>(
+        this: PyRef<'a, Self>,
+        dataset_name: String,
+        datapoints: Vec<Bound<'a, PyAny>>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        // Issue deprecation warning
+        let warnings = PyModule::import(this.py(), "warnings")?;
+        warnings.call_method1(
+            "warn",
+            (
+                "Please use `insert_datapoints` instead of `bulk_insert_datapoints`. In a future release, `bulk_insert_datapoints` will be removed.",
+                this.py().get_type::<pyo3::exceptions::PyDeprecationWarning>(),
+                2_i32, // stacklevel
+            ),
+        )?;
+
+        AsyncTensorZeroGateway::insert_datapoints(this, dataset_name, datapoints)
     }
 
     /// Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.

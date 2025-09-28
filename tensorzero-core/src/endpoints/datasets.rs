@@ -514,8 +514,8 @@ pub struct InsertDatapointPathParams {
 
 // The handler for the POST `/datasets/:dataset_name/datapoints/bulk` endpoint.
 /// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`/
-#[tracing::instrument(name = "bulk_insert_datapoints_handler", skip(app_state, params))]
-pub async fn bulk_insert_datapoints_handler(
+#[tracing::instrument(name = "insert_datapoints_handler", skip(app_state, params))]
+pub async fn insert_datapoints_handler(
     State(app_state): AppState,
     Path(path_params): Path<InsertDatapointPathParams>,
     StructuredJson(params): StructuredJson<InsertDatapointParams>,
@@ -529,6 +529,19 @@ pub async fn bulk_insert_datapoints_handler(
     )
     .await?;
     Ok(Json(datapoint_ids))
+}
+
+/// DEPRECATED: Use `insert_datapoints_handler` instead.
+///
+/// The handler for the POST `/datasets/:dataset_name/datapoints/bulk` endpoint.
+/// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`/
+#[tracing::instrument(name = "bulk_insert_datapoints_handler", skip(app_state, params))]
+pub async fn bulk_insert_datapoints_handler(
+    State(app_state): AppState,
+    Path(path_params): Path<InsertDatapointPathParams>,
+    StructuredJson(params): StructuredJson<InsertDatapointParams>,
+) -> Result<Json<Vec<Uuid>>, Error> {
+    insert_datapoints_handler(State(app_state), Path(path_params), StructuredJson(params)).await
 }
 
 pub async fn insert_datapoint(
