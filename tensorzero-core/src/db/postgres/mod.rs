@@ -7,9 +7,14 @@ use sqlx::{migrate, postgres::PgPoolOptions, PgPool, Row};
 
 use crate::error::{Error, ErrorDetails};
 
-use super::{clickhouse::migration_manager::get_run_migrations_command, HealthCheckable};
+use super::HealthCheckable;
 
 pub mod rate_limiting;
+
+fn get_run_migrations_command() -> String {
+    let version = env!("CARGO_PKG_VERSION");
+    format!("docker run --rm -e TENSORZERO_POSTGRES_URL=$TENSORZERO_POSTGRES_URL tensorzero/gateway:{version} --run-migrations-only")
+}
 
 #[derive(Debug, Clone)]
 pub enum PostgresConnectionInfo {
