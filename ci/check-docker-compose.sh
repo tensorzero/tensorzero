@@ -7,10 +7,15 @@ if [[ "$dir_path" == */cursor ]]; then
   exit 0
 fi
 
-# We already use this in CI, so no need to test it twice
+# We already use these in CI, so no need to test it twice
 if [[ "$1" == *ui/fixtures/docker-compose.yml || \
       "$1" == *ui/fixtures/docker-compose.e2e.yml || \
       "$1" == *tensorzero-core/tests/e2e/docker-compose.yml || \
+      "$1" == *tensorzero-core/tests/e2e/docker-compose.replicated.yml || \
+      "$1" == *tensorzero-core/tests/e2e/docker-compose.live.yml || \
+      "$1" == *tensorzero-core/tests/e2e/docker-compose.clickhouse.yml || \
+      "$1" == *tensorzero-core/tests/e2e/docker-compose-common.yml || \
+      "$1" == *tensorzero-core/tests/optimization/docker-compose.yml || \
       "$1" == *ui/docker-compose.yml || \
       "$1" == *ci/internal-network.yml ]]; then
   exit 0

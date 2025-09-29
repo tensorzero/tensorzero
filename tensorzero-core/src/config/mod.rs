@@ -1,3 +1,4 @@
+use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
 ///            IT IS MEANT FOR INTERNAL USE ONLY.
 ///            EXPECT FREQUENT, UNANNOUNCED BREAKING CHANGES.
@@ -19,6 +20,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
+use tracing::Span;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
 use crate::config::path::ResolvedTomlPath;
@@ -32,6 +35,7 @@ use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 #[cfg(feature = "pyo3")]
 use crate::function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass};
 use crate::inference::types::storage::StorageKind;
+use crate::inference::types::Usage;
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
@@ -48,6 +52,7 @@ use std::error::Error as StdError;
 
 pub mod gateway;
 pub mod path;
+pub mod rate_limiting;
 mod span_map;
 #[cfg(test)]
 mod tests;
@@ -85,6 +90,8 @@ pub struct Config {
     pub object_store_info: Option<ObjectStoreInfo>,
     pub provider_types: ProviderTypesConfig,
     pub optimizers: HashMap<String, OptimizerInfo>,
+    pub postgres: PostgresConfig,
+    pub rate_limiting: RateLimitingConfig,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
@@ -405,7 +412,7 @@ pub struct ExportConfig {
     pub otlp: OtlpConfig,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -414,7 +421,34 @@ pub struct OtlpConfig {
     pub traces: OtlpTracesConfig,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+impl OtlpConfig {
+    /// Attaches usage inference to the model provider span (if traces are enabled).
+    /// This is used for both streaming and non-streaming requests.
+    pub fn apply_usage_to_model_provider_span(&self, span: &Span, usage: &Usage) {
+        if self.traces.enabled {
+            match self.traces.format {
+                OtlpTracesFormat::OpenTelemetry => {
+                    span.set_attribute("gen_ai.usage.input_tokens", usage.input_tokens as i64);
+                    span.set_attribute("gen_ai.usage.output_tokens", usage.output_tokens as i64);
+                    span.set_attribute(
+                        "gen_ai.usage.total_tokens",
+                        (usage.input_tokens + usage.output_tokens) as i64,
+                    );
+                }
+                OtlpTracesFormat::OpenInference => {
+                    span.set_attribute("llm.token_count.prompt", usage.input_tokens as i64);
+                    span.set_attribute("llm.token_count.completion", usage.output_tokens as i64);
+                    span.set_attribute(
+                        "llm.token_count.total",
+                        (usage.input_tokens + usage.output_tokens) as i64,
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -422,6 +456,22 @@ pub struct OtlpTracesConfig {
     /// Enable OpenTelemetry traces export to the configured OTLP endpoint (configured via OTLP environment variables)
     #[serde(default)]
     pub enabled: bool,
+    #[serde(default)]
+    pub format: OtlpTracesFormat,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export, rename_all = "lowercase"))]
+pub enum OtlpTracesFormat {
+    /// Sets 'gen_ai' attributes based on the OpenTelemetry GenAI semantic conventions:
+    /// https://github.com/open-telemetry/semantic-conventions/tree/main/docs/gen-ai
+    #[default]
+    OpenTelemetry,
+    // Sets attributes based on the OpenInference semantic conventions:
+    // https://github.com/Arize-ai/openinference/blob/main/spec/llm_spans.md
+    OpenInference,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -702,6 +752,8 @@ impl Config {
             object_store_info,
             provider_types: uninitialized_config.provider_types,
             optimizers,
+            postgres: uninitialized_config.postgres,
+            rate_limiting: uninitialized_config.rate_limiting.try_into()?,
         };
 
         // Initialize the templates
@@ -1080,6 +1132,10 @@ pub struct UninitializedConfig {
     pub object_storage: Option<StorageKind>,
     #[serde(default)]
     pub optimizers: HashMap<String, UninitializedOptimizerInfo>, // optimizer name => optimizer config
+    #[serde(default)]
+    pub postgres: PostgresConfig,
+    #[serde(default)]
+    pub rate_limiting: UninitializedRateLimitingConfig,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -1279,7 +1335,7 @@ impl UninitializedFunctionConfig {
                 for (name, variant) in &variants {
                     all_template_names.extend(variant.get_all_explicit_template_names());
                     if let VariantConfig::ChatCompletion(chat_config) = &variant.inner {
-                        if chat_config.json_mode.is_some() {
+                        if chat_config.json_mode().is_some() {
                             return Err(ErrorDetails::Config {
                                 message: format!(
                                     "JSON mode is not supported for variant `{name}` (parent function is a chat function)",
@@ -1345,27 +1401,27 @@ impl UninitializedFunctionConfig {
                     all_template_names.extend(variant.get_all_explicit_template_names());
                     match &variant.inner {
                         VariantConfig::ChatCompletion(chat_config) => {
-                            if chat_config.json_mode.is_none() {
+                            if chat_config.json_mode().is_none() {
                                 variant_missing_mode = Some(name.clone());
                             }
                         }
                         VariantConfig::BestOfNSampling(best_of_n_config) => {
-                            if best_of_n_config.evaluator.inner.json_mode.is_none() {
+                            if best_of_n_config.evaluator().inner.json_mode().is_none() {
                                 variant_missing_mode = Some(format!("{name}.evaluator"));
                             }
                         }
                         VariantConfig::MixtureOfN(mixture_of_n_config) => {
-                            if mixture_of_n_config.fuser.inner.json_mode.is_none() {
+                            if mixture_of_n_config.fuser().inner.json_mode().is_none() {
                                 variant_missing_mode = Some(format!("{name}.fuser"));
                             }
                         }
                         VariantConfig::Dicl(best_of_n_config) => {
-                            if best_of_n_config.json_mode.is_none() {
+                            if best_of_n_config.json_mode().is_none() {
                                 variant_missing_mode = Some(name.clone());
                             }
                         }
                         VariantConfig::ChainOfThought(chain_of_thought_config) => {
-                            if chain_of_thought_config.inner.json_mode.is_none() {
+                            if chain_of_thought_config.inner.json_mode().is_none() {
                                 variant_missing_mode = Some(name.clone());
                             }
                         }
@@ -1385,7 +1441,7 @@ impl UninitializedFunctionConfig {
                     output_schema,
                     implicit_tool_call_config,
                     description: params.description,
-                    all_template_names: HashSet::new(),
+                    all_explicit_template_names: all_template_names,
                 }))
             }
         }
@@ -1500,5 +1556,26 @@ impl PathWithContents {
     pub fn from_path(path: ResolvedTomlPath) -> Result<Self, Error> {
         let contents = path.read()?;
         Ok(Self { path, contents })
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(default)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct PostgresConfig {
+    #[serde(default = "default_connection_pool_size")]
+    pub connection_pool_size: u32,
+}
+
+fn default_connection_pool_size() -> u32 {
+    20
+}
+
+impl Default for PostgresConfig {
+    fn default() -> Self {
+        Self {
+            connection_pool_size: 20,
+        }
     }
 }

@@ -7,7 +7,7 @@ use crate::{
     error::{Error, ErrorDetails},
     jsonschema_util::DynamicJSONSchema,
     tool::{ToolCallConfig, ToolCallConfigDatabaseInsert},
-    uuid_util::validate_tensorzero_uuid,
+    utils::uuid::validate_tensorzero_uuid,
 };
 
 use super::{

@@ -45,9 +45,9 @@ spec:
               mountPath: /app/config
           resources:
             {{- toYaml .Values.ui.resources | nindent 12 }}
-      {{- if .Values.gateway.image.pullSecret }}
+      {{- if .Values.ui.image.pullSecret }}
       imagePullSecrets:
-        - name: {{ .Values.gateway.image.pullSecret }}
+        - name: {{ .Values.ui.image.pullSecret }}
       {{- end }}
       volumes:
         - name: config-volume

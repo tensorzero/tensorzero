@@ -8,20 +8,21 @@ use tensorzero::{File, Input, InputMessage, InputMessageContent, Role};
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_core::config::ProviderTypesConfig;
 use tensorzero_core::config::TimeoutsConfig;
+use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::embeddings::{
-    Embedding, EmbeddingEncodingFormat, EmbeddingModelConfig, EmbeddingProvider,
-    EmbeddingProviderConfig, EmbeddingRequest, UninitializedEmbeddingProviderConfig,
+    Embedding, EmbeddingEncodingFormat, EmbeddingModelConfig, EmbeddingProviderConfig,
+    EmbeddingRequest, UninitializedEmbeddingProviderConfig,
 };
 use tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams;
 use tensorzero_core::endpoints::inference::{InferenceClients, InferenceCredentials};
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::{Latency, ModelInferenceRequestJsonMode, TextKind};
+use tensorzero_core::rate_limiting::ScopeInfo;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::{
-    make_embedded_gateway_with_config, E2ETestProvider, E2ETestProviders, EmbeddingTestProvider,
-    FERRIS_PNG,
+    E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, FERRIS_PNG,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_batch_model_inference_clickhouse, select_chat_inference_clickhouse,
@@ -1111,9 +1112,9 @@ async fn test_embedding_request() {
         EmbeddingProviderConfig::OpenAI(_)
     ));
 
-    // Inject randomness into the model name to ensure that the first request
+    // Inject randomness into the model request to ensure that the first request
     // is a cache miss
-    let model_name = format!("my-embedding-{}", Uuid::now_v7());
+    let model_name = "my_embedding".to_string();
 
     let model_config = EmbeddingModelConfig {
         routing: vec![model_name.as_str().into()],
@@ -1124,7 +1125,7 @@ async fn test_embedding_request() {
     };
 
     let request = EmbeddingRequest {
-        input: "This is a test input".to_string().into(),
+        input: format!("This is a test input: {}", Uuid::now_v7()).into(),
         dimensions: None,
         encoding_format: EmbeddingEncodingFormat::Float,
     };
@@ -1135,12 +1136,16 @@ async fn test_embedding_request() {
             &model_name,
             &InferenceClients {
                 http_client: &TensorzeroHttpClient::new().unwrap(),
-                credentials: &api_keys,
                 clickhouse_connection_info: &clickhouse,
+                postgres_connection_info: &PostgresConnectionInfo::Disabled,
+                credentials: &api_keys,
                 cache_options: &CacheOptions {
                     max_age_s: None,
                     enabled: CacheEnabledMode::On,
                 },
+                tags: &Default::default(),
+                rate_limiting_config: &Default::default(),
+                otlp_config: &Default::default(),
             },
         )
         .await
@@ -1189,14 +1194,18 @@ async fn test_embedding_request() {
         !parsed_raw_request.is_null(),
         "Parsed raw request should not be null"
     );
-    // Hardcoded since the input is 5 tokens
-    assert_eq!(response.usage.input_tokens, 5);
+    // The randomness affects the exact number of tokens, so we just check that it's at least 20
+    assert!(
+        response.usage.input_tokens >= 20,
+        "Unexpected input tokens: {}",
+        response.usage.input_tokens
+    );
     assert_eq!(response.usage.output_tokens, 0);
     match response.latency {
         Latency::NonStreaming { response_time } => {
             assert!(
-                response_time.as_millis() > 10,
-                "Response time should be greater than 10ms: {}",
+                response_time.as_millis() > 100,
+                "Response time should be greater than 100ms: {}",
                 response_time.as_millis()
             );
         }
@@ -1211,24 +1220,33 @@ async fn test_embedding_request() {
             &model_name,
             &InferenceClients {
                 http_client: &TensorzeroHttpClient::new().unwrap(),
-                credentials: &api_keys,
                 clickhouse_connection_info: &clickhouse,
+                postgres_connection_info: &PostgresConnectionInfo::Disabled,
+                credentials: &api_keys,
                 cache_options: &CacheOptions {
                     max_age_s: None,
                     enabled: CacheEnabledMode::On,
                 },
+                tags: &Default::default(),
+                rate_limiting_config: &Default::default(),
+                otlp_config: &Default::default(),
             },
         )
         .await
         .unwrap();
     assert!(cached_response.cached);
     assert_eq!(response.embeddings, cached_response.embeddings);
-    assert_eq!(cached_response.usage.input_tokens, 5);
+    assert!(
+        cached_response.usage.input_tokens >= 20,
+        "Unexpected input tokens: {}",
+        cached_response.usage.input_tokens
+    );
     assert_eq!(cached_response.usage.output_tokens, 0);
 }
 
 #[tokio::test]
 async fn test_embedding_sanity_check() {
+    let clickhouse = get_clickhouse().await;
     let provider_config_serialized = r#"
     type = "openai"
     model_name = "text-embedding-3-small"
@@ -1268,12 +1286,28 @@ async fn test_embedding_sanity_check() {
     };
     let request_info = (&provider_config).into();
     let api_keys = InferenceCredentials::default();
+    let clients = InferenceClients {
+        http_client: &client,
+        clickhouse_connection_info: &clickhouse,
+        postgres_connection_info: &PostgresConnectionInfo::Disabled,
+        credentials: &api_keys,
+        cache_options: &CacheOptions {
+            max_age_s: None,
+            enabled: CacheEnabledMode::On,
+        },
+        tags: &Default::default(),
+        rate_limiting_config: &Default::default(),
+        otlp_config: &Default::default(),
+    };
+    let scope_info = ScopeInfo {
+        tags: &HashMap::new(),
+    };
 
     // Compute all 3 embeddings concurrently
     let (response_a, response_b, response_c) = tokio::join!(
-        provider_config.embed(&embedding_request_a, &client, &api_keys, &request_info),
-        provider_config.embed(&embedding_request_b, &client, &api_keys, &request_info),
-        provider_config.embed(&embedding_request_c, &client, &api_keys, &request_info)
+        provider_config.embed(&embedding_request_a, &clients, &scope_info, &request_info),
+        provider_config.embed(&embedding_request_b, &clients, &scope_info, &request_info),
+        provider_config.embed(&embedding_request_c, &clients, &scope_info, &request_info)
     );
 
     // Unwrap the results
@@ -1799,7 +1833,7 @@ pub async fn test_start_batch_inference_write_file() {
         temp_dir.path().to_string_lossy()
     );
 
-    let client = make_embedded_gateway_with_config(&config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_config(&config).await;
 
     let episode_id = Uuid::now_v7();
 

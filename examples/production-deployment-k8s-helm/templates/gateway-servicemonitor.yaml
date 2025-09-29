@@ -1,0 +1,19 @@
+{{- if .Values.monitoring.metrics.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "tensorzero.fullname" . }}-gateway-servicemonitor
+  labels:
+    {{- include "tensorzero.labels" . | nindent 4 }}
+    {{- include "tensorzero.monitorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  endpoints:
+    - interval: {{ .Values.monitoring.metrics.interval | default "30s" }}
+      port: http
+      path: /metrics
+  selector:
+    matchLabels:
+      {{- include "tensorzero.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: gateway
+{{- end }}

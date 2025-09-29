@@ -1,14 +1,19 @@
 use crate::error::Error;
+use crate::rate_limiting::ActiveRateLimitKey;
 use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 pub mod clickhouse;
 pub mod postgres;
 
 #[async_trait]
-pub trait DatabaseConnection: SelectQueries + HealthCheckable + Send + Sync {}
+pub trait ClickHouseConnection: SelectQueries + HealthCheckable + Send + Sync {}
+
+#[async_trait]
+pub trait PostgresConnection: RateLimitQueries + HealthCheckable + Send + Sync {}
 
 #[async_trait]
 pub trait HealthCheckable {
@@ -27,6 +32,17 @@ pub trait SelectQueries {
         &self,
         time_window: TimeWindow,
     ) -> Result<Vec<ModelLatencyDatapoint>, Error>;
+
+    async fn count_distinct_models_used(&self) -> Result<u32, Error>;
+
+    async fn query_episode_table(
+        &self,
+        page_size: u32,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+    ) -> Result<Vec<EpisodeByIdRow>, Error>;
+
+    async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -64,4 +80,78 @@ pub struct ModelLatencyDatapoint {
     pub count: u64,
 }
 
-impl<T: SelectQueries + HealthCheckable + Send + Sync> DatabaseConnection for T {}
+#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
+#[ts(export)]
+pub struct EpisodeByIdRow {
+    pub episode_id: Uuid,
+    #[serde(deserialize_with = "deserialize_u64")]
+    pub count: u64,
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
+    pub last_inference_id: Uuid,
+}
+
+#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
+#[ts(export)]
+pub struct TableBoundsWithCount {
+    pub first_id: Option<Uuid>,
+    pub last_id: Option<Uuid>,
+    #[serde(deserialize_with = "deserialize_u64")]
+    pub count: u64,
+}
+
+impl<T: SelectQueries + HealthCheckable + Send + Sync> ClickHouseConnection for T {}
+
+pub trait RateLimitQueries {
+    /// This function will fail if any of the requests individually fail.
+    /// It is an atomic operation so no tickets will be consumed if any request fails.
+    async fn consume_tickets(
+        &self,
+        requests: Vec<ConsumeTicketsRequest>,
+    ) -> Result<Vec<ConsumeTicketsReceipt>, Error>;
+
+    async fn return_tickets(
+        &self,
+        requests: Vec<ReturnTicketsRequest>,
+    ) -> Result<Vec<ReturnTicketsReceipt>, Error>;
+
+    async fn get_balance(
+        &self,
+        key: &str,
+        capacity: u64,
+        refill_amount: u64,
+        refill_interval: TimeDelta,
+    ) -> Result<u64, Error>;
+}
+
+#[derive(Debug)]
+pub struct ConsumeTicketsRequest {
+    pub key: ActiveRateLimitKey,
+    pub requested: u64,
+    pub capacity: u64,
+    pub refill_amount: u64,
+    pub refill_interval: TimeDelta,
+}
+
+#[derive(Debug)]
+pub struct ConsumeTicketsReceipt {
+    pub key: ActiveRateLimitKey,
+    pub success: bool,
+    pub tickets_remaining: u64,
+    pub tickets_consumed: u64,
+}
+
+pub struct ReturnTicketsRequest {
+    pub key: ActiveRateLimitKey,
+    pub returned: u64,
+    pub capacity: u64,
+    pub refill_amount: u64,
+    pub refill_interval: TimeDelta,
+}
+
+pub struct ReturnTicketsReceipt {
+    pub key: ActiveRateLimitKey,
+    pub balance: u64,
+}
+
+impl<T: RateLimitQueries + HealthCheckable + Send + Sync> PostgresConnection for T {}

@@ -1,4 +1,5 @@
 use crate::{error::IMPOSSIBLE_ERROR_MESSAGE, http::TensorzeroHttpClient};
+use futures::future::try_join_all;
 #[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyValueError;
 #[cfg(feature = "pyo3")]
@@ -195,21 +196,36 @@ impl Optimizer for OpenAISFTConfig {
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
         _config: &Config,
     ) -> Result<Self::Handle, Error> {
+        let train_examples = train_examples
+            .into_iter()
+            .map(RenderedSample::into_lazy_rendered_sample)
+            .collect::<Vec<_>>();
+        let val_examples = val_examples.map(|examples| {
+            examples
+                .into_iter()
+                .map(RenderedSample::into_lazy_rendered_sample)
+                .collect::<Vec<_>>()
+        });
         // TODO(#2642): improve error handling here so we know what index of example failed
-        let train_rows: Vec<OpenAISupervisedRow> = train_examples
-            .iter()
-            .map(OpenAISupervisedRow::try_from)
-            .collect::<Result<Vec<_>, _>>()?;
+        let train_rows: Vec<OpenAISupervisedRow> = try_join_all(
+            train_examples
+                .iter()
+                .map(OpenAISupervisedRow::from_rendered_sample),
+        )
+        .await?;
 
-        let val_rows: Option<Vec<OpenAISupervisedRow>> = val_examples
-            .as_ref()
-            .map(|examples| {
-                examples
-                    .iter()
-                    .map(OpenAISupervisedRow::try_from)
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .transpose()?;
+        let val_rows = if let Some(examples) = val_examples.as_ref() {
+            Some(
+                try_join_all(
+                    examples
+                        .iter()
+                        .map(OpenAISupervisedRow::from_rendered_sample),
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
 
         let api_key = self.credentials.get_api_key(credentials)?;
 
