@@ -462,3 +462,210 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   await expect(tagsSection5.locator("table")).not.toContainText(testKey2);
   await expect(tagsSection5.locator("table")).not.toContainText(testValue2);
 });
+
+test("should be able to add a system message when none exists", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/0196374b-0d7a-7a22-b2d2-598a14f2eacc",
+  );
+  await page.waitForLoadState("networkidle");
+  const datasetName =
+    "test_system_add_" + Math.random().toString(36).substring(2, 15);
+
+  // Create a new datapoint from an inference without a system message
+  await page.getByText("Add to dataset").click();
+  const commandInput = page.getByPlaceholder("Create or find a dataset...");
+  await commandInput.waitFor({ state: "visible" });
+  await commandInput.fill(datasetName);
+  const createOption = page
+    .locator("[cmdk-item]")
+    .filter({ hasText: datasetName });
+  await createOption.waitFor({ state: "visible" });
+  await createOption.click();
+  await page.getByText("Inference Output").click();
+
+  // Wait for the toast to appear with success message
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("New Datapoint"),
+  ).toBeVisible();
+
+  // Wait for and click on the "View" button in the toast
+  const viewButton = page
+    .getByRole("region", { name: /notifications/i })
+    .getByText("View");
+  await viewButton.waitFor({ state: "visible" });
+  await viewButton.click();
+
+  // Wait for navigation to the new page
+  await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
+    timeout: 10000,
+  });
+
+  // Enter edit mode
+  await page.getByRole("button", { name: "Edit" }).click();
+
+  // Verify that "Add System" button is visible
+  const addSystemMessageButton = page.getByRole("button", {
+    name: "Add System",
+  });
+  await expect(addSystemMessageButton).toBeVisible();
+
+  // Click the "Add System" button
+  await addSystemMessageButton.click();
+
+  // Wait for the system message editor to appear
+  // The system message should appear as the first contenteditable div
+  const systemMessageEditor = page
+    .locator("div[contenteditable='true']")
+    .first();
+  await systemMessageEditor.waitFor({ state: "visible" });
+
+  // Type a system message
+  const systemMessageText = v7();
+  await systemMessageEditor.fill(
+    `You are a helpful assistant. Context: ${systemMessageText}`,
+  );
+
+  // Save the datapoint
+  await page.getByRole("button", { name: "Save" }).click();
+
+  // Wait for redirect to new datapoint page (saving creates a new datapoint)
+  await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
+    timeout: 10000,
+  });
+  await page.waitForLoadState("networkidle");
+
+  // Wait for ClickHouse to fully commit the data (eventual consistency)
+  await page.waitForTimeout(2000);
+
+  // Assert that "error" is not in the page
+  await expect(page.getByText("error", { exact: false })).not.toBeVisible();
+
+  // Verify the system message is visible in the page
+  await expect(page.getByText(systemMessageText)).toBeVisible();
+
+  // Reload the page to verify persistence
+  await page.reload();
+  await page.waitForLoadState("networkidle");
+
+  // Verify system message is still present after reload
+  await expect(page.getByText(systemMessageText)).toBeVisible();
+});
+
+test("should be able to delete an existing system message", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/0196368f-1ae8-7551-b5df-9a61593eb307",
+  );
+  await page.waitForLoadState("networkidle");
+  const datasetName =
+    "test_system_delete_" + Math.random().toString(36).substring(2, 15);
+
+  // Create a new datapoint from an inference
+  await page.getByText("Add to dataset").click();
+  const commandInput = page.getByPlaceholder("Create or find a dataset...");
+  await commandInput.waitFor({ state: "visible" });
+  await commandInput.fill(datasetName);
+  const createOption = page
+    .locator("[cmdk-item]")
+    .filter({ hasText: datasetName });
+  await createOption.waitFor({ state: "visible" });
+  await createOption.click();
+  await page.getByText("Inference Output").click();
+
+  // Wait for the toast to appear with success message
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("New Datapoint"),
+  ).toBeVisible();
+
+  // Wait for and click on the "View" button in the toast
+  const viewButton = page
+    .getByRole("region", { name: /notifications/i })
+    .getByText("View");
+  await viewButton.waitFor({ state: "visible" });
+  await viewButton.click();
+
+  // Wait for navigation to the new page
+  await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
+    timeout: 10000,
+  });
+
+  // First, add a system message (deterministic test - always start fresh)
+  await page.getByRole("button", { name: "Edit" }).click();
+
+  // Click Add System to add a new system message
+  const addSystemMessageButton = page.getByRole("button", {
+    name: "Add System",
+  });
+  await addSystemMessageButton.click();
+
+  // Fill in the system message
+  const systemMessageEditor = page
+    .locator("div[contenteditable='true']")
+    .first();
+  await systemMessageEditor.waitFor({ state: "visible" });
+  const systemMessageText = v7();
+  await systemMessageEditor.fill(
+    `You are a helpful assistant. Context: ${systemMessageText}`,
+  );
+
+  // Save the datapoint with the system message
+  await page.getByRole("button", { name: "Save" }).click();
+
+  // Wait for redirect to new datapoint page
+  await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
+    timeout: 10000,
+  });
+  await page.waitForLoadState("networkidle");
+
+  // Wait for ClickHouse to fully commit the data (eventual consistency)
+  await page.waitForTimeout(2000);
+
+  // Verify system message was saved
+  await expect(page.getByText(systemMessageText)).toBeVisible();
+
+  // Enter edit mode to delete the system message
+  await page.getByRole("button", { name: "Edit" }).click();
+
+  // At this point we're in edit mode with a system message present
+  // Now delete the system message
+  const deleteSystemMessageButton = page.getByRole("button", {
+    name: "Delete system message",
+  });
+  await expect(deleteSystemMessageButton).toBeVisible();
+  await deleteSystemMessageButton.click();
+
+  // Verify the "Add System" button is now visible (system message removed from UI)
+  await expect(page.getByRole("button", { name: "Add System" })).toBeVisible();
+
+  // Save the datapoint
+  await page.getByRole("button", { name: "Save" }).click();
+
+  // Wait for redirect to new datapoint page (saving creates a new datapoint)
+  await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
+    timeout: 10000,
+  });
+  await page.waitForLoadState("networkidle");
+
+  // Wait for ClickHouse to fully commit the data (eventual consistency)
+  await page.waitForTimeout(2000);
+
+  // Assert that "error" is not in the page
+  await expect(page.getByText("error", { exact: false })).not.toBeVisible();
+
+  // Verify the system role is no longer visible on the page
+  await expect(page.getByText("system", { exact: true })).not.toBeVisible();
+
+  // Reload the page to verify persistence
+  await page.reload();
+  await page.waitForLoadState("networkidle");
+
+  // Verify system role is still not present after reload
+  await expect(page.getByText("system", { exact: true })).not.toBeVisible();
+});
