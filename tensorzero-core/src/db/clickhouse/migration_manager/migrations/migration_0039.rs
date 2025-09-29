@@ -89,7 +89,7 @@ impl Migration for Migration0039<'_> {
             .as_nanos();
 
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+        let float_table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
             GetMaybeReplicatedTableEngineNameArgs {
                 table_name: "FloatMetricFeedbackByVariant",
                 table_engine_name: "MergeTree",
@@ -112,13 +112,13 @@ impl Migration for Migration0039<'_> {
                         value Float32,
                         feedback_tags Map(String, String)
                     )
-                    ENGINE = {table_engine_name}
+                    ENGINE = {float_table_engine_name}
                     ORDER BY (function_name, metric_name, variant_name, id_uint);
                     "
             ))
             .await?;
 
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+        let boolean_table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
             GetMaybeReplicatedTableEngineNameArgs {
                 table_name: "BooleanMetricFeedbackByVariant",
                 table_engine_name: "MergeTree",
@@ -137,13 +137,13 @@ impl Migration for Migration0039<'_> {
                         value Bool,
                         feedback_tags Map(String, String)
                     )
-                    ENGINE = {table_engine_name}
+                    ENGINE = {boolean_table_engine_name}
                     ORDER BY (function_name, metric_name, variant_name, id_uint);
                     "
             ))
             .await?;
 
-        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+        let aggregating_table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
             GetMaybeReplicatedTableEngineNameArgs {
                 table_name: "FeedbackByVariantStatistics",
                 table_engine_name: "AggregatingMergeTree",
@@ -162,7 +162,7 @@ impl Migration for Migration0039<'_> {
                     feedback_variance AggregateFunction(varSampStable, Float32),
                     count SimpleAggregateFunction(sum, UInt64)
                 )
-                Engine = {table_engine_name}
+                Engine = {aggregating_table_engine_name}
                 ORDER BY (function_name, metric_name, variant_name, minute);
                     "
             ))
