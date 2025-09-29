@@ -62,13 +62,7 @@ impl RateLimitQueries for PostgresConnectionInfo {
             &refill_intervals
         )
         .fetch_all(pool)
-        .await
-        .map_err(|e| {
-            Error::new(ErrorDetails::PostgresQuery {
-                message: format!("Database query failed: {e}"),
-                function_name: Some("consume_multiple_resource_tickets".to_string()),
-            })
-        })?;
+        .await?;
 
         let mut results = Vec::new();
         for response in responses {

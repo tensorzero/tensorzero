@@ -1386,3 +1386,12 @@ impl From<serde_json::Error> for Error {
         })
     }
 }
+
+impl From<sqlx::Error> for Error {
+    fn from(err: sqlx::Error) -> Self {
+        Self::new(ErrorDetails::PostgresQuery {
+            message: err.to_string(),
+            function_name: None,
+        })
+    }
+}
