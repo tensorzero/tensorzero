@@ -274,6 +274,7 @@ pub async fn start_batch_inference(
             &batch_dynamic_output_schemas,
             &params.function_name,
             &variant_name,
+            config.gateway.fetch_and_encode_input_files_before_inference,
         );
         let inference_configs = inference_config.inference_configs(&episode_ids, &inference_ids);
         // Will be edited by the variant as part of making the request so we must clone here
@@ -913,6 +914,9 @@ pub async fn write_completed_batch_inference<'a>(
                 inference_id,
                 episode_id,
             },
+            fetch_and_encode_input_files_before_inference: config
+                .gateway
+                .fetch_and_encode_input_files_before_inference,
             // Not currently supported as a batch inference parameter
             extra_body: Cow::Borrowed(&extra_body),
             extra_headers: Cow::Borrowed(&extra_headers),

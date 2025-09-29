@@ -50,7 +50,7 @@ use crate::model::{build_creds_caching_default, Credential, CredentialLocation, 
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::providers::openai::check_api_base_suffix;
+use crate::providers::openai::{check_api_base_suffix, OpenAIMessagesConfig};
 use crate::tool::ToolCall;
 
 const PROVIDER_NAME: &str = "TGI";
@@ -456,8 +456,12 @@ impl<'a> TGIRequest<'a> {
         let messages = prepare_openai_messages(
             request.system.as_deref().map(SystemOrDeveloper::System),
             &request.messages,
-            Some(&request.json_mode),
-            PROVIDER_TYPE,
+            OpenAIMessagesConfig {
+                json_mode: Some(&request.json_mode),
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: request
+                    .fetch_and_encode_input_files_before_inference,
+            },
         )
         .await?;
 

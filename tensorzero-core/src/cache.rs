@@ -555,6 +555,7 @@ mod tests {
             output_schema: None,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             extra_cache_key: None,
             stop_sequences: None,
         };
@@ -580,6 +581,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -609,6 +611,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
