@@ -4,7 +4,7 @@ use axum::middleware::Next;
 use axum::response::Response;
 use axum::routing::{delete, get, post, put};
 use axum::Router;
-use clap::Parser;
+use clap::{Args, Parser};
 use mimalloc::MiMalloc;
 use std::fmt::Display;
 use std::io::ErrorKind;
@@ -31,8 +31,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
-#[group(id = "migrations", multiple = false)]
-struct Args {
+struct GatewayArgs {
     /// Use all of the config files matching the specified glob pattern. Incompatible with `--default-config`
     #[arg(long)]
     config_file: Option<PathBuf>,
@@ -52,20 +51,24 @@ struct Args {
     #[clap(default_value_t = LogFormat::default())]
     log_format: LogFormat,
 
+    #[command(flatten)]
+    migration_commands: MigrationCommands,
+
+    /// Deprecated: use `--config-file` instead
+    tensorzero_toml: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+#[group(multiple = false)]
+struct MigrationCommands {
     /// Run ClickHouse migrations manually then exit.
-    #[arg(long)]
-    #[arg(group = "migrations")]
     // TODO: remove
     #[arg(long, alias = "run-migrations")]
     run_clickhouse_migrations: bool,
 
     /// Run PostgreSQL migrations manually then exit.
     #[arg(long)]
-    #[arg(group = "migrations")]
     run_postgres_migrations: bool,
-
-    /// Deprecated: use `--config-file` instead
-    tensorzero_toml: Option<PathBuf>,
 }
 
 async fn add_version_header(request: Request, next: Next) -> Response {
@@ -96,7 +99,7 @@ async fn add_version_header(request: Request, next: Next) -> Response {
 
 #[tokio::main]
 async fn main() {
-    let args = Args::parse();
+    let args = GatewayArgs::parse();
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
     let delayed_log_config = observability::setup_observability(args.log_format)
@@ -104,14 +107,14 @@ async fn main() {
         .expect_pretty("Failed to set up logs");
 
     let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
-    if args.run_clickhouse_migrations {
+    if args.migration_commands.run_clickhouse_migrations {
         manual_run_clickhouse_migrations()
             .await
             .expect_pretty("Failed to run ClickHouse migrations");
         return;
     }
 
-    if args.run_postgres_migrations {
+    if args.migration_commands.run_postgres_migrations {
         manual_run_postgres_migrations()
             .await
             .expect_pretty("Failed to run PostgreSQL migrations");
