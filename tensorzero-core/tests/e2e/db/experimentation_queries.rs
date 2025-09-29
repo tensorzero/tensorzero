@@ -6,10 +6,6 @@ use uuid::Uuid;
 
 // ===== HELPER FUNCTIONS =====
 
-fn generate_episode_id() -> Uuid {
-    Uuid::now_v7()
-}
-
 fn generate_function_name(prefix: &str) -> String {
     format!("{}_func_{}", prefix, Uuid::new_v4())
 }
@@ -45,7 +41,7 @@ async fn verify_variant_stored(
 async fn test_cas_basic_functionality(pool: PgPool) {
     let conn = PostgresConnectionInfo::new_with_pool(pool);
 
-    let episode_id = generate_episode_id();
+    let episode_id = Uuid::now_v7();
     let function_name = generate_function_name("basic");
     let variant_name = generate_variant_name("test");
     let different_variant = generate_variant_name("different");
@@ -83,7 +79,7 @@ async fn test_cas_isolation(pool: PgPool) {
     let conn = PostgresConnectionInfo::new_with_pool(pool);
 
     // Create comprehensive test matrix: 3 episodes × 3 functions = 9 combinations
-    let episodes: Vec<Uuid> = (0..3).map(|_| generate_episode_id()).collect();
+    let episodes: Vec<Uuid> = (0..3).map(|_| Uuid::now_v7()).collect();
     let functions: Vec<String> = (0..3)
         .map(|i| generate_function_name(&format!("isolation_{i}")))
         .collect();
@@ -140,7 +136,7 @@ async fn test_cas_isolation(pool: PgPool) {
 async fn test_cas_concurrency_and_atomicity(pool: PgPool) {
     let conn = PostgresConnectionInfo::new_with_pool(pool);
 
-    let episode_id = generate_episode_id();
+    let episode_id = Uuid::now_v7();
     let function_name = generate_function_name("concurrency");
     let num_attempts = 100;
 
@@ -193,7 +189,7 @@ async fn test_cas_concurrency_and_atomicity(pool: PgPool) {
 async fn test_cas_edge_case_values(pool: PgPool) {
     let conn = PostgresConnectionInfo::new_with_pool(pool);
 
-    let episode_id = generate_episode_id();
+    let episode_id = Uuid::now_v7();
 
     // Create long strings first to avoid temporary value issues
     let long_function_name = "a".repeat(1000);
@@ -308,7 +304,7 @@ async fn test_cas_stress_test(pool: PgPool) {
     let operations_per_pair = 20;
     let _total_operations = num_episodes * num_functions * operations_per_pair;
 
-    let episodes: Vec<Uuid> = (0..num_episodes).map(|_| generate_episode_id()).collect();
+    let episodes: Vec<Uuid> = (0..num_episodes).map(|_| Uuid::now_v7()).collect();
     let functions: Vec<String> = (0..num_functions)
         .map(|i| generate_function_name(&format!("stress_func_{i}")))
         .collect();
@@ -389,7 +385,7 @@ async fn test_cas_stress_test(pool: PgPool) {
 async fn test_cas_failure_recovery(pool: PgPool) {
     let conn = PostgresConnectionInfo::new_with_pool(pool);
 
-    let episode_id = generate_episode_id();
+    let episode_id = Uuid::now_v7();
     let function_name = generate_function_name("failure_recovery");
     let original_variant = generate_variant_name("original");
 
@@ -422,7 +418,7 @@ async fn test_cas_failure_recovery(pool: PgPool) {
 async fn test_cas_performance_baseline(pool: PgPool) {
     let conn = PostgresConnectionInfo::new_with_pool(pool);
 
-    let episode_id = generate_episode_id();
+    let episode_id = Uuid::now_v7();
     let function_name = generate_function_name("performance");
     let variant_name = generate_variant_name("perf_test");
 
