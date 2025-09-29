@@ -217,13 +217,13 @@ export default function InputSnippet({
 
   return (
     <SnippetLayout>
-      {system == null && messages.length === 0 && (
+      {system == null && messages.length === 0 && !isEditing && (
         <SnippetContent maxHeight={maxHeight}>
           <EmptyMessage message="Empty input" />
         </SnippetContent>
       )}
 
-      {system == null && isEditing && messages.length > 0 && (
+      {system == null && isEditing && (
         <div className="flex items-center py-2">
           <Button
             variant="outline"
