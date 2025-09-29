@@ -9,6 +9,7 @@ use crate::error::{Error, ErrorDetails};
 
 use super::HealthCheckable;
 
+pub mod experimentation;
 pub mod rate_limiting;
 
 #[derive(Debug, Clone)]
@@ -36,6 +37,18 @@ impl PostgresConnectionInfo {
             Self::Enabled { pool } => Some(pool),
             Self::Mock { .. } => None,
             Self::Disabled => None,
+        }
+    }
+
+    pub fn get_pool_result(&self) -> Result<&PgPool, Error> {
+        match self {
+            Self::Enabled { pool } => Ok(pool),
+            Self::Mock { .. } => Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
+                message: "Mock database is not supported".to_string(),
+            })),
+            Self::Disabled => Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
+                message: "Database is disabled".to_string(),
+            })),
         }
     }
 
