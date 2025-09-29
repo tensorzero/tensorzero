@@ -727,19 +727,17 @@ pub async fn setup_observability(log_format: LogFormat) -> Result<ObservabilityH
 
 /// Set up Prometheus metrics exporter
 pub fn setup_metrics() -> Result<PrometheusHandle, Error> {
-    PrometheusBuilder::new().install_recorder().map_err(|e| {
+    let metrics_handle = PrometheusBuilder::new().install_recorder().map_err(|e| {
         Error::new(ErrorDetails::Observability {
             message: format!("Failed to install Prometheus exporter: {e}"),
         })
-    })
-}
+    })?;
 
-/// Register the expected metrics along with their types and docstrings
-pub fn register_metrics() {
+    // Register the expected metrics along with their types and docstrings
     describe_counter!(
         "request_count",
         Unit::Count,
-        "Requests handled by TensorZero. Deprecated; use tensorzero_requests_total instead",
+        "Requests handled by TensorZero (deprecated: use `tensorzero_requests_total` instead)",
     );
 
     describe_counter!(
@@ -751,7 +749,7 @@ pub fn register_metrics() {
     describe_counter!(
         "inference_count",
         Unit::Count,
-        "Inferences performed by TensorZero. Deprecated; use tensorzero_inferences_total instead",
+        "Inferences performed by TensorZero (deprecated: use `tensorzero_inferences_total` instead)",
     );
 
     describe_counter!(
@@ -759,4 +757,6 @@ pub fn register_metrics() {
         Unit::Count,
         "Inferences performed by TensorZero",
     );
+
+    Ok(metrics_handle)
 }
