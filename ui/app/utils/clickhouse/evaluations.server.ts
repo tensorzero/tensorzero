@@ -83,7 +83,7 @@ export async function getEvaluationRunInfosForDatapoint(
              '%Y-%m-%dT%H:%i:%SZ'
            ) as most_recent_inference_date
     FROM {inference_table_name:Identifier}
-      WHERE id IN (SELECT inference_id FROM datapoint_inference_ids)
+      WHERE id GLOBAL IN (SELECT inference_id FROM datapoint_inference_ids)
       AND function_name = {function_name:String}
     GROUP BY
       tags['tensorzero::evaluation_run_id']
@@ -181,7 +181,7 @@ const getEvaluationResultDatapointIdQuery = (
       FROM TagInference FINAL
       WHERE key = 'tensorzero::datapoint_id'
       AND function_name = {function_name:String}
-      AND inference_id IN (SELECT inference_id FROM all_inference_ids)
+      AND inference_id GLOBAL IN (SELECT inference_id FROM all_inference_ids)
       ORDER BY toUInt128(toUUID(datapoint_id)) DESC
       ${limit ? `LIMIT ${limit}` : ""}
       ${offset ? `OFFSET ${offset}` : ""}
@@ -209,11 +209,11 @@ export async function getEvaluationResults(
       SELECT * FROM {datapoint_table_name:Identifier} FINAL
       WHERE function_name = {function_name:String}
       -- We don't have the dataset_name here but there is an index on datapoint_ids so this should not be a full scan
-      AND id IN (SELECT datapoint_id FROM all_datapoint_ids)
+      AND id GLOBAL IN (SELECT datapoint_id FROM all_datapoint_ids)
     ),
     filtered_inference AS (
       SELECT * FROM {inference_table_name:Identifier}
-      WHERE id IN (SELECT inference_id FROM all_inference_ids)
+      WHERE id GLOBAL IN (SELECT inference_id FROM all_inference_ids)
       AND function_name = {function_name:String}
     ),
     filtered_feedback AS (
@@ -225,7 +225,7 @@ export async function getEvaluationResults(
              target_id
       FROM BooleanMetricFeedback
       WHERE metric_name IN ({metric_names:Array(String)})
-      AND target_id IN (SELECT inference_id FROM all_inference_ids)
+      AND target_id GLOBAL IN (SELECT inference_id FROM all_inference_ids)
       GROUP BY target_id, metric_name -- for the argMax
       UNION ALL
       SELECT metric_name,
@@ -236,7 +236,7 @@ export async function getEvaluationResults(
              target_id
       FROM FloatMetricFeedback
       WHERE metric_name IN ({metric_names:Array(String)})
-      AND target_id IN (SELECT inference_id FROM all_inference_ids)
+      AND target_id GLOBAL IN (SELECT inference_id FROM all_inference_ids)
       GROUP BY target_id, metric_name -- for the argMax
     )
   SELECT
@@ -302,7 +302,7 @@ export async function getEvaluationStatistics(
   WITH ${getEvaluationResultDatapointIdQuery()},
     filtered_inference AS (
       SELECT * FROM {inference_table_name:Identifier}
-      WHERE id IN (SELECT inference_id FROM all_inference_ids)
+      WHERE id GLOBAL IN (SELECT inference_id FROM all_inference_ids)
       AND function_name = {function_name:String}
     ),
    filtered_feedback AS (
@@ -313,7 +313,7 @@ export async function getEvaluationStatistics(
              target_id
       FROM BooleanMetricFeedback
       WHERE metric_name IN ({metric_names:Array(String)})
-      AND target_id IN (SELECT inference_id FROM all_inference_ids)
+      AND target_id GLOBAL IN (SELECT inference_id FROM all_inference_ids)
       GROUP BY target_id, metric_name -- for the argMax
       UNION ALL
       SELECT metric_name,
@@ -323,7 +323,7 @@ export async function getEvaluationStatistics(
              target_id
       FROM FloatMetricFeedback
       WHERE metric_name IN ({metric_names:Array(String)})
-      AND target_id IN (SELECT inference_id FROM all_inference_ids)
+      AND target_id GLOBAL IN (SELECT inference_id FROM all_inference_ids)
       GROUP BY target_id, metric_name -- for the argMax
     )
   SELECT
@@ -466,7 +466,7 @@ export async function searchEvaluationRuns(
     FROM TagInference FINAL
     WHERE key = 'tensorzero::evaluation_run_id'
       AND function_name = {function_name:String}
-      AND inference_id IN (SELECT inference_id FROM evaluation_inference_ids)
+      AND inference_id GLOBAL IN (SELECT inference_id FROM evaluation_inference_ids)
       AND (positionCaseInsensitive(value, {search_query:String}) > 0 OR positionCaseInsensitive(variant_name, {search_query:String}) > 0)
     ORDER BY toUInt128(toUUID(evaluation_run_id)) DESC
     LIMIT {limit:UInt32}
@@ -527,7 +527,7 @@ export async function getEvaluationsForDatapoint(
     ),
     filtered_inference AS (
       SELECT * FROM {inference_table_name:Identifier}
-      WHERE id IN (SELECT inference_id FROM all_inference_ids)
+      WHERE id GLOBAL IN (SELECT inference_id FROM all_inference_ids)
       AND function_name = {function_name:String}
       AND tags['tensorzero::evaluation_run_id'] IN ({evaluation_run_ids:Array(String)})
     ),
@@ -540,7 +540,7 @@ export async function getEvaluationsForDatapoint(
             argMax(tags['tensorzero::human_feedback'], timestamp) == 'true' as is_human_feedback
       FROM BooleanMetricFeedback
       WHERE metric_name IN ({metric_names:Array(String)})
-      AND target_id IN (SELECT inference_id FROM all_inference_ids)
+      AND target_id GLOBAL IN (SELECT inference_id FROM all_inference_ids)
       GROUP BY target_id, metric_name -- for the argMax
       UNION ALL
       SELECT target_id,
@@ -551,7 +551,7 @@ export async function getEvaluationsForDatapoint(
             argMax(tags['tensorzero::human_feedback'], timestamp) == 'true' as is_human_feedback
       FROM FloatMetricFeedback
       WHERE metric_name IN ({metric_names:Array(String)})
-      AND target_id IN (SELECT inference_id FROM all_inference_ids)
+      AND target_id GLOBAL IN (SELECT inference_id FROM all_inference_ids)
       GROUP BY target_id, metric_name -- for the argMax
     ),
     filtered_datapoint AS (

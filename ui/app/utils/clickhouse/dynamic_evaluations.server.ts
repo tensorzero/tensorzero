@@ -43,7 +43,7 @@ export async function getDynamicEvaluationRuns(
         run_id_uint,
         toUInt32(count()) as num_episodes
       FROM DynamicEvaluationRunEpisodeByRunId
-      WHERE run_id_uint IN (SELECT run_id_uint FROM FilteredDynamicEvaluationRuns)
+      WHERE run_id_uint GLOBAL IN (SELECT run_id_uint FROM FilteredDynamicEvaluationRuns)
       GROUP BY run_id_uint
     )
     SELECT
@@ -92,7 +92,7 @@ export async function getDynamicEvaluationRunsByIds(
         '%Y-%m-%dT%H:%i:%SZ'
       ) AS timestamp
     FROM DynamicEvaluationRun
-    WHERE run_id_uint IN (
+    WHERE run_id_uint GLOBAL IN (
       /* turn the parameter array of UUID strings into a real table
          expression of UInt128 values so the IN predicate is valid */
       SELECT arrayJoin(
@@ -160,7 +160,7 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
           metric_name,
           argMax(toString(value), toUInt128(id)) AS value
         FROM FloatMetricFeedbackByTargetId
-        WHERE target_id IN (
+        WHERE target_id GLOBAL IN (
           SELECT uint_to_uuid(episode_id_uint) FROM episodes
         )
         GROUP BY target_id, metric_name
@@ -170,7 +170,7 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
           metric_name,
           argMax(toString(value), toUInt128(id)) AS value
         FROM BooleanMetricFeedbackByTargetId
-        WHERE target_id IN (
+        WHERE target_id GLOBAL IN (
           SELECT uint_to_uuid(episode_id_uint) FROM episodes
         )
         GROUP BY target_id, metric_name
@@ -180,7 +180,7 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
           'comment' AS metric_name,
           value
         FROM CommentFeedbackByTargetId
-        WHERE target_id IN (
+        WHERE target_id GLOBAL IN (
           SELECT uint_to_uuid(episode_id_uint) FROM episodes
         )
       )
@@ -259,7 +259,7 @@ export async function getDynamicEvaluationRunStatisticsByMetricName(
       stddevSamp(value) as stdev,
       1.96 * (stddevSamp(value) / sqrt(count())) AS ci_error
     FROM FloatMetricFeedbackByTargetId
-    WHERE target_id IN (
+    WHERE target_id GLOBAL IN (
       SELECT uint_to_uuid(episode_id_uint) FROM episodes
     )
     ${metric_name ? `AND metric_name = {metric_name:String}` : ""}
@@ -272,7 +272,7 @@ export async function getDynamicEvaluationRunStatisticsByMetricName(
       stddevSamp(value) as stdev,
       1.96 * (stddevSamp(value) / sqrt(count())) AS ci_error
     FROM BooleanMetricFeedbackByTargetId
-    WHERE target_id IN (
+    WHERE target_id GLOBAL IN (
       SELECT uint_to_uuid(episode_id_uint) FROM episodes
     )
     ${metric_name ? `AND metric_name = {metric_name:String}` : ""}
@@ -421,7 +421,7 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
           updated_at,
           datapoint_name AS task_name
         FROM DynamicEvaluationRunEpisodeByRunId
-        WHERE run_id_uint IN (
+        WHERE run_id_uint GLOBAL IN (
           SELECT arrayJoin(
             arrayMap(x -> toUInt128(toUUID(x)), {runIds:Array(String)})
           )
@@ -447,7 +447,7 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
           ifNull(task_name, concat('NULL_EPISODE_', toString(episode_id_uint))) AS group_key
         FROM episodes_raw
         WHERE ifNull(task_name, concat('NULL_EPISODE_', toString(episode_id_uint)))
-          IN (SELECT group_key FROM group_keys)
+          GLOBAL IN (SELECT group_key FROM group_keys)
       ),
 
       -- 4) gather feedback just for those episodes
@@ -455,7 +455,7 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
         SELECT target_id, metric_name,
                argMax(toString(value), toUInt128(id)) AS value
         FROM FloatMetricFeedbackByTargetId
-        WHERE target_id IN (
+        WHERE target_id GLOBAL IN (
           SELECT uint_to_uuid(episode_id_uint) FROM episodes
         )
         GROUP BY target_id, metric_name
@@ -465,7 +465,7 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
         SELECT target_id, metric_name,
                argMax(toString(value), toUInt128(id)) AS value
         FROM BooleanMetricFeedbackByTargetId
-        WHERE target_id IN (
+        WHERE target_id GLOBAL IN (
           SELECT uint_to_uuid(episode_id_uint) FROM episodes
         )
         GROUP BY target_id, metric_name
@@ -476,7 +476,7 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
                'comment' AS metric_name,
                value
         FROM CommentFeedbackByTargetId
-        WHERE target_id IN (
+        WHERE target_id GLOBAL IN (
           SELECT uint_to_uuid(episode_id_uint) FROM episodes
         )
       )
@@ -554,7 +554,7 @@ export async function countDynamicEvaluationRunEpisodesByTaskName(
           updated_at,
           datapoint_name AS task_name
         FROM DynamicEvaluationRunEpisodeByRunId
-        WHERE run_id_uint IN (
+        WHERE run_id_uint GLOBAL IN (
           SELECT arrayJoin(
             arrayMap(x -> toUInt128(toUUID(x)), {runIds:Array(String)})
           )

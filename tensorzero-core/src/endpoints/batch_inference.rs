@@ -1032,7 +1032,7 @@ pub async fn get_completed_batch_inference_response(
                         argMax(mi.finish_reason, toUInt128(mi.id)) as finish_reason
                     FROM ChatInference ci
                     LEFT JOIN ModelInference mi ON ci.id = mi.inference_id
-                    WHERE ci.id IN (SELECT inference_id FROM batch_inferences)
+                    WHERE ci.id GLOBAL IN (SELECT inference_id FROM batch_inferences)
                     AND ci.function_name = '{}'
                     AND ci.variant_name = '{}'
                     GROUP BY ci.id, ci.episode_id, ci.variant_name, ci.output
@@ -1132,7 +1132,7 @@ pub async fn get_completed_batch_inference_response(
                         argMax(mi.finish_reason, toUInt128(mi.id)) as finish_reason
                     FROM JsonInference ji
                     LEFT JOIN ModelInference mi ON ji.id = mi.inference_id
-                    WHERE ji.id IN (SELECT inference_id FROM batch_inferences)
+                    WHERE ji.id GLOBAL IN (SELECT inference_id FROM batch_inferences)
                     AND ji.function_name = '{}'
                     AND ji.variant_name = '{}'
                     GROUP BY ji.id, ji.episode_id, ji.variant_name, ji.output

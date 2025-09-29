@@ -430,9 +430,9 @@ export async function queryInferenceById(
     FROM ChatInference c
     WHERE
         'chat' = (SELECT function_type FROM inference)
-        AND c.function_name IN (SELECT function_name FROM inference)
-        AND c.variant_name IN (SELECT variant_name FROM inference)
-        AND c.episode_id IN (SELECT episode_id FROM inference)
+        AND c.function_name GLOBAL IN (SELECT function_name FROM inference)
+        AND c.variant_name GLOBAL IN (SELECT variant_name FROM inference)
+        AND c.episode_id GLOBAL IN (SELECT episode_id FROM inference)
         AND c.id = {id:UUID}
 
     UNION ALL
@@ -455,9 +455,9 @@ export async function queryInferenceById(
     FROM JsonInference j
     WHERE
         'json' = (SELECT function_type FROM inference)
-        AND j.function_name IN (SELECT function_name FROM inference)
-        AND j.variant_name IN (SELECT variant_name FROM inference)
-        AND j.episode_id IN (SELECT episode_id FROM inference)
+        AND j.function_name GLOBAL IN (SELECT function_name FROM inference)
+        AND j.variant_name GLOBAL IN (SELECT variant_name FROM inference)
+        AND j.episode_id GLOBAL IN (SELECT episode_id FROM inference)
         AND j.id = {id:UUID}
   `;
 

@@ -70,7 +70,7 @@ pub async fn get_inferences_in_time_range(
     LEFT ANTI JOIN FloatMetricFeedbackByTargetId AS fmf ON fmf.target_id = ci.id
     WHERE
         ci.function_name = 'cursorzero'
-        AND ci.id IN (SELECT id FROM inference_ids)"
+        AND ci.id GLOBAL IN (SELECT id FROM inference_ids)"
         .to_string();
     query.push_str(&user_where_clause);
     query.push_str(" FORMAT JSONEachRow");

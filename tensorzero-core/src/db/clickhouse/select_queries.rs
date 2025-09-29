@@ -215,7 +215,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                         uint_to_uuid(max(id_uint)) as last_inference_id,
                         episode_id_uint
                     FROM InferenceByEpisodeId
-                    WHERE episode_id_uint IN (SELECT episode_id_uint FROM potentially_duplicated_episode_ids)
+                    WHERE episode_id_uint GLOBAL IN (SELECT episode_id_uint FROM potentially_duplicated_episode_ids)
                     GROUP BY episode_id_uint
                     ORDER BY episode_id_uint ASC
                     LIMIT {page_size}
@@ -241,7 +241,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
                     uint_to_uuid(max(id_uint)) as last_inference_id
                 FROM InferenceByEpisodeId
-                WHERE episode_id_uint IN (SELECT episode_id_uint FROM potentially_duplicated_episode_ids)
+                WHERE episode_id_uint GLOBAL IN (SELECT episode_id_uint FROM potentially_duplicated_episode_ids)
                 GROUP BY episode_id_uint
                 ORDER BY episode_id_uint DESC
                 LIMIT {page_size}

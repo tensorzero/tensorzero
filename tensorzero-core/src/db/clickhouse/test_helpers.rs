@@ -239,7 +239,7 @@ pub async fn select_all_model_inferences_by_chat_episode_id_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM ModelInference WHERE inference_id IN (SELECT id FROM ChatInference WHERE episode_id = '{episode_id}') FORMAT JSONEachRow"
+        "SELECT * FROM ModelInference WHERE inference_id GLOBAL IN (SELECT id FROM ChatInference WHERE episode_id = '{episode_id}') FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
