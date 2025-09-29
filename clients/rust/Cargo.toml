@@ -23,7 +23,7 @@ tokio-stream = { workspace = true }
 tensorzero-core = { path = "../../tensorzero-core" }
 ts-rs = { workspace = true }
 url = { workspace = true }
-thiserror = "2.0.16"
+thiserror = "2.0.17"
 pyo3 = { workspace = true, optional = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
