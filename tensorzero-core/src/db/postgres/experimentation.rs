@@ -20,18 +20,11 @@ impl ExperimentationQueries for PostgresConnectionInfo {
 
         let response = sqlx::query_as!(
             CASVariantResponse,
-            r"WITH inserted_row AS (
-                INSERT INTO variant_by_episode(function_name, episode_id, variant_name)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (function_name, episode_id) DO NOTHING
-                RETURNING variant_name
-            )
-            SELECT variant_name FROM inserted_row
-            UNION ALL
-            SELECT variant_name FROM variant_by_episode
-            WHERE
-                function_name = $1 AND episode_id = $2
-                AND NOT EXISTS (SELECT 1 FROM inserted_row);",
+            r"INSERT INTO variant_by_episode(function_name, episode_id, variant_name)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (function_name, episode_id) DO UPDATE
+                    SET variant_name = variant_by_episode.variant_name -- A no-op to enable RETURNING
+                    RETURNING variant_name;",
             &function_name,
             &episode_id,
             &candidate_variant_name
