@@ -3842,7 +3842,10 @@ mod tests {
             first_res,
             OpenAIContentBlock::File {
                 file: OpenAIFile {
-                    file_data: Some(Cow::Owned(BASE64_STANDARD.encode(b"Hello, world!"))),
+                    file_data: Some(Cow::Owned(format!(
+                        "data:text/plain;base64,{}",
+                        BASE64_STANDARD.encode("Hello, world!")
+                    ))),
                     filename: Some(Cow::Owned("input.txt".to_string())),
                 },
             }
@@ -4024,9 +4027,21 @@ mod tests {
                     // By specifying a non-image mime type, we should end up using a 'file' content block
                     mime_type: Some(mime::APPLICATION_PDF),
                 },
-                future: async { panic!("File future should not be resolved") }
-                    .boxed()
-                    .shared(),
+                future: async {
+                    Ok(FileWithPath {
+                        file: Base64File {
+                            url: None,
+                            mime_type: mime::APPLICATION_PDF,
+                            data: BASE64_STANDARD.encode(FERRIS_PNG),
+                        },
+                        storage_path: StoragePath {
+                            kind: StorageKind::Disabled,
+                            path: object_store::path::Path::parse("dummy-path").unwrap(),
+                        },
+                    })
+                }
+                .boxed()
+                .shared(),
             },
             fetch_and_encode,
         )
@@ -4038,8 +4053,11 @@ mod tests {
             res,
             OpenAIContentBlock::File {
                 file: OpenAIFile {
-                    file_data: Some(Cow::Owned(BASE64_STANDARD.encode(FERRIS_PNG))),
-                    filename: None,
+                    file_data: Some(Cow::Owned(format!(
+                        "data:application/pdf;base64,{}",
+                        BASE64_STANDARD.encode(FERRIS_PNG)
+                    ))),
+                    filename: Some(Cow::Owned("input.pdf".to_string())),
                 },
             }
         );
