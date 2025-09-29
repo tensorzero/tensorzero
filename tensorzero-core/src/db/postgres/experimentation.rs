@@ -15,7 +15,7 @@ impl ExperimentationQueries for PostgresConnectionInfo {
         episode_id: uuid::Uuid,
         function_name: &str,
         candidate_variant_name: &str,
-    ) -> Result<String, crate::error::Error> {
+    ) -> Result<String, Error> {
         let pool = self.get_pool_result()?;
 
         let response = sqlx::query_as!(
