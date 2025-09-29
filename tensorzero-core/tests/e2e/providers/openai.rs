@@ -20,14 +20,16 @@ use tensorzero_core::embeddings::{
 use tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams;
 use tensorzero_core::endpoints::inference::{InferenceClients, InferenceCredentials};
 use tensorzero_core::http::TensorzeroHttpClient;
-use tensorzero_core::inference::types::{ContentBlockChatOutput, Latency, ModelInferenceRequestJsonMode, TextKind};
+use tensorzero_core::inference::types::{
+    ContentBlockChatOutput, Latency, ModelInferenceRequestJsonMode, TextKind,
+};
 use tensorzero_core::rate_limiting::ScopeInfo;
 use url::Url;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::{
-    DEEPSEEK_PAPER_PDF, E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, FERRIS_PNG
+    E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, DEEPSEEK_PAPER_PDF, FERRIS_PNG,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_batch_model_inference_clickhouse, select_chat_inference_clickhouse,
