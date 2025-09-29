@@ -1378,6 +1378,11 @@ async fn test_run_migrations_fake_row() {
 #[tokio::test(flavor = "multi_thread")]
 /// Test the is_manual_run and disable_automatic_migrations flags
 async fn test_migration_logic_with_flags() {
+    if std::env::var("TENSORZERO_CLICKHOUSE_CLUSTER_NAME").is_ok() {
+        // We disable this test for replicated clickhouse because migrations have always been manual
+        // in that case.
+        return;
+    }
     // Test case 1: is_manual_run = false, disable_automatic_migrations = false
     let (clickhouse, _cleanup) = get_clean_clickhouse(true).await;
     migration_manager::run(RunMigrationManagerArgs {
