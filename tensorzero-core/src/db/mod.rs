@@ -157,7 +157,7 @@ pub struct ReturnTicketsReceipt {
 impl<T: RateLimitQueries + HealthCheckable + Send + Sync> PostgresConnection for T {}
 
 pub trait ExperimentationQueries {
-    async fn compare_and_swap_variant_by_episode(
+    async fn check_and_set_variant_by_episode(
         &self,
         episode_id: Uuid,
         function_name: &str,

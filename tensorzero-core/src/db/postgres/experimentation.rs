@@ -8,7 +8,9 @@ struct CASVariantResponse {
 }
 
 impl ExperimentationQueries for PostgresConnectionInfo {
-    async fn compare_and_swap_variant_by_episode(
+    /// Attempts to atomically set a variant for a function-episode pair
+    /// If it has already been set, returns the existing variant name
+    async fn check_and_set_variant_by_episode(
         &self,
         episode_id: uuid::Uuid,
         function_name: &str,
