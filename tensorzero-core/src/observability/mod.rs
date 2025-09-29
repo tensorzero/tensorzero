@@ -55,6 +55,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{middleware, Router};
 use clap::ValueEnum;
 use http::HeaderMap;
+use metrics::{describe_counter, Unit};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use moka::sync::Cache;
 use opentelemetry::trace::{Tracer, TracerProvider as _};
@@ -740,9 +741,36 @@ pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'stati
 
 /// Set up Prometheus metrics exporter
 pub fn setup_metrics() -> Result<PrometheusHandle, Error> {
-    PrometheusBuilder::new().install_recorder().map_err(|e| {
+    let metrics_handle = PrometheusBuilder::new().install_recorder().map_err(|e| {
         Error::new(ErrorDetails::Observability {
             message: format!("Failed to install Prometheus exporter: {e}"),
         })
-    })
+    })?;
+
+    // Register the expected metrics along with their types and docstrings
+    describe_counter!(
+        "request_count",
+        Unit::Count,
+        "Requests handled by TensorZero (deprecated: use `tensorzero_requests_total` instead)",
+    );
+
+    describe_counter!(
+        "tensorzero_requests_total",
+        Unit::Count,
+        "Requests handled by TensorZero",
+    );
+
+    describe_counter!(
+        "inference_count",
+        Unit::Count,
+        "Inferences performed by TensorZero (deprecated: use `tensorzero_inferences_total` instead)",
+    );
+
+    describe_counter!(
+        "tensorzero_inferences_total",
+        Unit::Count,
+        "Inferences performed by TensorZero",
+    );
+
+    Ok(metrics_handle)
 }
