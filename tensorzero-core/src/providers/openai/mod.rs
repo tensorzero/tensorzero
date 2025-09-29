@@ -33,7 +33,7 @@ use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
 use crate::inference::types::extra_body::FullExtraBodyConfig;
-use crate::inference::types::file::{mime_type_to_ext, require_image};
+use crate::inference::types::file::mime_type_to_ext;
 use crate::inference::types::resolved_input::{FileUrl, FileWithPath, LazyFile};
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
@@ -1321,13 +1321,103 @@ pub(super) async fn tensorzero_to_openai_messages<'a>(
         Role::Assistant => {
             let message = tensorzero_to_openai_assistant_message(
                 Cow::Borrowed(&message.content),
-                messages_config.provider_type,
+                messages_config,
             )
             .await?;
             if message.no_content() {
                 Ok(vec![])
             } else {
                 Ok(vec![message])
+            }
+        }
+    }
+}
+
+async fn prepare_file_message(
+    file: &LazyFile,
+    messages_config: OpenAIMessagesConfig<'_>,
+) -> Result<OpenAIContentBlock<'static>, Error> {
+    match file {
+        // If we have all of the following:
+        // * The user passed in a file URL (not base64-encoded file data)
+        // * The user explicitly specified a mime type
+        // * The `fetch_and_encode_input_files_before_inference` config setting is off (so we're allowed to forward image urls)
+        //
+        // Then, we can forward the file/image url directly to OpenAI. Unfortunately, we need to know the mime type for this to work,
+        // since we need to map images to "image_url" content blocks, and files to "file" content blocks.
+        // Without downloading the file, we cannot guarantee that we guess the mime type correctly, so we don't try.
+        LazyFile::Url {
+            file_url:
+                FileUrl {
+                    mime_type: Some(mime_type),
+                    url,
+                },
+            future: _,
+        } if !messages_config.fetch_and_encode_input_files_before_inference => {
+            if mime_type.type_() == mime::IMAGE {
+                Ok(OpenAIContentBlock::ImageUrl {
+                    image_url: OpenAIImageUrl {
+                        url: url.to_string(),
+                    },
+                })
+            } else {
+                Ok(OpenAIContentBlock::File {
+                    file: OpenAIFile {
+                        file_data: None,
+                        filename: None,
+                        file_url: Some(Cow::Owned(url.to_string())),
+                    },
+                })
+            }
+        }
+        _ => {
+            // If we could have forwarded an file/image (except for the fact that we're missing the mime_type), log a warning.
+            if matches!(
+                file,
+                LazyFile::Url {
+                    file_url: FileUrl {
+                        url: _,
+                        mime_type: None,
+                    },
+                    future: _
+                }
+            ) && !messages_config.fetch_and_encode_input_files_before_inference
+            {
+                tracing::warn!("Cannot forward image_url to OpenAI because no mime_type was provided. Specify `mime_type` (or `tensorzero::mime_type` for openai-compatible requests) when sending files to allow URL forwarding to OpenAI.");
+            }
+
+            let resolved_file = file.resolve().await?;
+            let FileWithPath {
+                file,
+                storage_path: _,
+            } = &*resolved_file;
+            let file_data = file.data()?;
+            let base64_url = format!("data:{};base64,{}", file.mime_type, file_data);
+            if file.mime_type.type_() == mime::IMAGE {
+                Ok(OpenAIContentBlock::ImageUrl {
+                    image_url: OpenAIImageUrl {
+                        // This will only produce an error if we pass in a bad
+                        // `Base64File` (with missing file data)
+                        url: base64_url,
+                    },
+                })
+            } else {
+                // OpenAI doesn't document how they determine the content type of the base64 blob
+                // - let's try to pick a good suffix for the filename, in case they don't sniff
+                // the mime type from the actual file content.
+                let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidMessage {
+                        message: format!("Mime type {} has no filetype suffix", file.mime_type),
+                    })
+                })?;
+                Ok(OpenAIContentBlock::File {
+                    file: OpenAIFile {
+                        file_data: Some(Cow::Owned(file_data.clone())),
+                        // TODO - should we allow the user to specify the file name?
+                        filename: Some(Cow::Owned(format!("input.{suffix}"))),
+                        file_url: None,
+                    },
+                })
             }
         }
     }
@@ -1361,83 +1451,7 @@ async fn tensorzero_to_openai_user_messages<'a>(
                 }));
             }
             ContentBlock::File(file) => {
-                match &**file {
-                    // If we have all of the following:
-                    // * The user passed in a file URL (not base64-encoded file data)
-                    // * The user explicitly specified a mime type (which is an image) for the file
-                    // * The `fetch_and_encode_input_files_before_inference` config setting is off (so we're allowed to forward image urls)
-                    //
-                    // Then, we can forward the image url directly to OpenAI. Unfortunately, we need to know the mime type for this to work,
-                    // since we need to map images to "image_url" content blocks, and files to "file" content blocks.
-                    // Without downloading the file, we cannot guarantee that we guess the mime type correctly, so we don't try.
-                    LazyFile::Url {
-                        file_url,
-                        future: _,
-                    } if !messages_config.fetch_and_encode_input_files_before_inference
-                        && file_url
-                            .mime_type
-                            .as_ref()
-                            .is_some_and(|t| t.type_() == mime::IMAGE) =>
-                    {
-                        user_content_blocks.push(OpenAIContentBlock::ImageUrl {
-                            image_url: OpenAIImageUrl {
-                                url: file_url.url.to_string(),
-                            },
-                        });
-                    }
-                    _ => {
-                        // If we could have forwarded an image_url (except for the fact that we're missing the mime_type), log a warning.
-                        if matches!(
-                            &**file,
-                            LazyFile::Url {
-                                file_url: FileUrl {
-                                    url: _,
-                                    mime_type: None,
-                                },
-                                future: _
-                            }
-                        ) && !messages_config.fetch_and_encode_input_files_before_inference
-                        {
-                            tracing::warn!("Cannot forward image_url to OpenAI because no mime_type was provided. Specify `mime_type` (or `tensorzero::mime_type` for openai-compatible requests) when sending files to allow URL forwarding to OpenAI.");
-                        }
-
-                        let resolved_file = file.resolve().await?;
-                        let FileWithPath {
-                            file,
-                            storage_path: _,
-                        } = &*resolved_file;
-                        let data = format!("data:{};base64,{}", file.mime_type, file.data()?);
-                        if file.mime_type.type_() == mime::IMAGE {
-                            user_content_blocks.push(OpenAIContentBlock::ImageUrl {
-                                image_url: OpenAIImageUrl {
-                                    // This will only produce an error if we pass in a bad
-                                    // `Base64File` (with missing file data)
-                                    url: data,
-                                },
-                            });
-                        } else {
-                            // OpenAI doesn't document how they determine the content type of the base64 blob
-                            // - let's try to pick a good suffix for the filename, in case they don't sniff
-                            // the mime type from the actual file content.
-                            let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
-                                Error::new(ErrorDetails::InvalidMessage {
-                                    message: format!(
-                                        "Mime type {} has no filetype suffix",
-                                        file.mime_type
-                                    ),
-                                })
-                            })?;
-                            user_content_blocks.push(OpenAIContentBlock::File {
-                                file: OpenAIFile {
-                                    file_data: Some(Cow::Owned(data)),
-                                    // TODO - should we allow the user to specify the file name?
-                                    filename: Some(Cow::Owned(format!("input.{suffix}"))),
-                                    file_url: None,
-                                },
-                            });
-                        }
-                    }
-                }
+                user_content_blocks.push(prepare_file_message(file, messages_config).await?);
             }
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(messages_config.provider_type, thought);
@@ -1465,7 +1479,7 @@ async fn tensorzero_to_openai_user_messages<'a>(
 
 pub async fn tensorzero_to_openai_assistant_message<'a>(
     content_blocks: Cow<'a, [ContentBlock]>,
-    provider_type: &str,
+    messages_config: OpenAIMessagesConfig<'a>,
 ) -> Result<OpenAIRequestMessage<'a>, Error> {
     let content_block_cows: Vec<Cow<'_, ContentBlock>> = match content_blocks {
         Cow::Borrowed(content_blocks) => content_blocks.iter().map(Cow::Borrowed).collect(),
@@ -1520,23 +1534,11 @@ pub async fn tensorzero_to_openai_assistant_message<'a>(
             }
             Cow::Borrowed(ContentBlock::File(ref file))
             | Cow::Owned(ContentBlock::File(ref file)) => {
-                let resolved_file = file.resolve().await?;
-                let FileWithPath {
-                    file,
-                    storage_path: _,
-                } = &*resolved_file;
-                require_image(&file.mime_type, PROVIDER_TYPE)?;
-                assistant_content_blocks.push(OpenAIContentBlock::ImageUrl {
-                    image_url: OpenAIImageUrl {
-                        // This will only produce an error if we pass in a bad
-                        // `Base64File` (with missing file data)
-                        url: format!("data:{};base64,{}", file.mime_type, file.data()?),
-                    },
-                });
+                assistant_content_blocks.push(prepare_file_message(file, messages_config).await?);
             }
             Cow::Borrowed(ContentBlock::Thought(ref thought))
             | Cow::Owned(ContentBlock::Thought(ref thought)) => {
-                warn_discarded_thought_block(provider_type, thought);
+                warn_discarded_thought_block(messages_config.provider_type, thought);
             }
             Cow::Borrowed(ContentBlock::Unknown {
                 data,
@@ -2454,17 +2456,23 @@ struct OpenAIBatchFileResponse {
 
 #[cfg(test)]
 mod tests {
+    use base64::prelude::*;
+    use base64::Engine;
+    use futures::FutureExt;
     use serde_json::json;
     use std::borrow::Cow;
     use tracing_test::traced_test;
 
-    use crate::inference::types::{FunctionType, RequestMessage};
+    use crate::inference::types::storage::{StorageKind, StoragePath};
+    use crate::inference::types::{Base64File, FunctionType, RequestMessage};
     use crate::providers::test_helpers::{
         MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
     };
     use crate::tool::ToolCallConfig;
 
     use super::*;
+
+    static FERRIS_PNG: &[u8] = include_bytes!("../../../tests/e2e/providers/ferris.png");
 
     #[test]
     fn test_get_chat_url() {
@@ -3310,10 +3318,16 @@ mod tests {
             arguments: "{}".to_string(),
         });
         let content_blocks = vec!["Hello".to_string().into(), tool_block];
-        let openai_message =
-            tensorzero_to_openai_assistant_message(Cow::Borrowed(&content_blocks), PROVIDER_TYPE)
-                .await
-                .unwrap();
+        let openai_message = tensorzero_to_openai_assistant_message(
+            Cow::Borrowed(&content_blocks),
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: false,
+            },
+        )
+        .await
+        .unwrap();
         match &openai_message {
             OpenAIRequestMessage::Assistant(content) => {
                 assert_eq!(
@@ -3806,6 +3820,242 @@ mod tests {
             serialized,
             r#"{"content":[{"type":"text","text":"My first message"},{"type":"text","text":"My second message"}]}"#
         );
+    }
+
+    #[tokio::test]
+    async fn test_prepare_resolved_file_message() {
+        let dummy_storage_path = StoragePath {
+            kind: StorageKind::Disabled,
+            path: object_store::path::Path::parse("dummy-path").unwrap(),
+        };
+        let file = LazyFile::FileWithPath(FileWithPath {
+            file: Base64File {
+                url: None,
+                mime_type: mime::TEXT_PLAIN,
+                data: BASE64_STANDARD.encode(b"Hello, world!"),
+            },
+            storage_path: dummy_storage_path.clone(),
+        });
+        let first_res = prepare_file_message(
+            &file,
+            OpenAIMessagesConfig {
+                fetch_and_encode_input_files_before_inference: true,
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            first_res,
+            OpenAIContentBlock::File {
+                file: OpenAIFile {
+                    file_data: Some(Cow::Owned(BASE64_STANDARD.encode(b"Hello, world!"))),
+                    filename: Some(Cow::Owned("input.txt".to_string())),
+                    file_url: None,
+                },
+            }
+        );
+
+        let second_res = prepare_file_message(
+            &file,
+            OpenAIMessagesConfig {
+                fetch_and_encode_input_files_before_inference: false,
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+            },
+        )
+        .await
+        .unwrap();
+
+        // Since the file is already resolved, 'fetch_and_encode_input_files_before_inference' should have no effect
+        assert_eq!(second_res, first_res);
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_file_url_no_mime_type_fetch_and_encode() {
+        let fetch_and_encode = OpenAIMessagesConfig {
+            fetch_and_encode_input_files_before_inference: true,
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+        };
+        let dummy_storage_path = StoragePath {
+            kind: StorageKind::Disabled,
+            path: object_store::path::Path::parse("dummy-path").unwrap(),
+        };
+        let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
+        let res = prepare_file_message(
+            &LazyFile::Url {
+                file_url: FileUrl {
+                    url: url.clone(),
+                    mime_type: None,
+                },
+                future: async move {
+                    Ok(FileWithPath {
+                        file: Base64File {
+                            url: None,
+                            // Deliberately use a different mime type to make sure we adjust the input filename
+                            mime_type: mime::IMAGE_JPEG,
+                            data: BASE64_STANDARD.encode(FERRIS_PNG),
+                        },
+                        storage_path: dummy_storage_path.clone(),
+                    })
+                }
+                .boxed()
+                .shared(),
+            },
+            fetch_and_encode,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            res,
+            OpenAIContentBlock::ImageUrl {
+                image_url: OpenAIImageUrl {
+                    url: format!(
+                        "data:image/jpeg;base64,{}",
+                        BASE64_STANDARD.encode(FERRIS_PNG)
+                    ),
+                },
+            }
+        );
+
+        // We're encoding the file, so don't produce a warning about the user not providing an explicit mime_type
+        assert!(!logs_contain("mime_type"));
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_file_url_warn_mime_type() {
+        let fetch_and_encode = OpenAIMessagesConfig {
+            fetch_and_encode_input_files_before_inference: false,
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+        };
+        let dummy_storage_path = StoragePath {
+            kind: StorageKind::Disabled,
+            path: object_store::path::Path::parse("dummy-path").unwrap(),
+        };
+        let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
+        let res = prepare_file_message(
+            &LazyFile::Url {
+                file_url: FileUrl {
+                    url: url.clone(),
+                    mime_type: None,
+                },
+                future: async move {
+                    Ok(FileWithPath {
+                        file: Base64File {
+                            url: None,
+                            // Deliberately use a different mime type to make sure we adjust the input filename
+                            mime_type: mime::IMAGE_JPEG,
+                            data: BASE64_STANDARD.encode(FERRIS_PNG),
+                        },
+                        storage_path: dummy_storage_path.clone(),
+                    })
+                }
+                .boxed()
+                .shared(),
+            },
+            fetch_and_encode,
+        )
+        .await
+        .unwrap();
+
+        // We didn't provide an input mime_mime, so we should end up encoding the file anyway
+        assert_eq!(
+            res,
+            OpenAIContentBlock::ImageUrl {
+                image_url: OpenAIImageUrl {
+                    url: format!(
+                        "data:image/jpeg;base64,{}",
+                        BASE64_STANDARD.encode(FERRIS_PNG)
+                    ),
+                },
+            }
+        );
+
+        assert!(logs_contain("mime_type"));
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_forward_image_url() {
+        let fetch_and_encode = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+        let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
+        let res = prepare_file_message(
+            &LazyFile::Url {
+                file_url: FileUrl {
+                    url: url.clone(),
+                    mime_type: Some(mime::IMAGE_JPEG),
+                },
+                future: async { panic!("File future should not be resolved") }
+                    .boxed()
+                    .shared(),
+            },
+            fetch_and_encode,
+        )
+        .await
+        .unwrap();
+
+        // We provided an input mime_type, so we should forward the image url
+        assert_eq!(
+            res,
+            OpenAIContentBlock::ImageUrl {
+                image_url: OpenAIImageUrl {
+                    url: url.to_string()
+                },
+            }
+        );
+
+        assert!(!logs_contain("mime_type"));
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_forward_file_url() {
+        let fetch_and_encode = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+        let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
+        let res = prepare_file_message(
+            &LazyFile::Url {
+                file_url: FileUrl {
+                    url: url.clone(),
+                    // By specifying a non-image mime type, we should end up using a 'file' content block
+                    mime_type: Some(mime::APPLICATION_PDF),
+                },
+                future: async { panic!("File future should not be resolved") }
+                    .boxed()
+                    .shared(),
+            },
+            fetch_and_encode,
+        )
+        .await
+        .unwrap();
+
+        // We provided an input mime_type, so we should forward the image url
+        assert_eq!(
+            res,
+            OpenAIContentBlock::File {
+                file: OpenAIFile {
+                    file_data: None,
+                    filename: None,
+                    file_url: Some(Cow::Owned(url.to_string())),
+                },
+            }
+        );
+
+        assert!(!logs_contain("mime_type"));
     }
 
     #[test]

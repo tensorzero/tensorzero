@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent, File,
-    InferenceOutput, Input, InputMessage, InputMessageContent, Role,
+    InferenceOutput, InferenceResponse, Input, InputMessage, InputMessageContent, Role,
 };
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_core::config::ProviderTypesConfig;
@@ -20,14 +20,14 @@ use tensorzero_core::embeddings::{
 use tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams;
 use tensorzero_core::endpoints::inference::{InferenceClients, InferenceCredentials};
 use tensorzero_core::http::TensorzeroHttpClient;
-use tensorzero_core::inference::types::{Latency, ModelInferenceRequestJsonMode, TextKind};
+use tensorzero_core::inference::types::{ContentBlockChatOutput, Latency, ModelInferenceRequestJsonMode, TextKind};
 use tensorzero_core::rate_limiting::ScopeInfo;
 use url::Url;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::{
-    E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, FERRIS_PNG,
+    DEEPSEEK_PAPER_PDF, E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, FERRIS_PNG
 };
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_batch_model_inference_clickhouse, select_chat_inference_clickhouse,
@@ -1995,4 +1995,95 @@ async fn test_forward_image_url() {
     // Check that the file exists on the filesystem
     let result = std::fs::read(temp_dir.path().join(file_path)).unwrap();
     assert_eq!(result, FERRIS_PNG);
+
+    println!("Got response: {response:#?}");
+
+    let InferenceResponse::Chat(response) = response else {
+        panic!("Expected chat inference response");
+    };
+    let text_block = &response.content[0];
+    let ContentBlockChatOutput::Text(text) = text_block else {
+        panic!("Expected text content block");
+    };
+    assert!(
+        text.text.to_lowercase().contains("cartoon")
+            || text.text.to_lowercase().contains("crab")
+            || text.text.to_lowercase().contains("animal"),
+        "Content should contain 'cartoon' or 'crab' or 'animal': {text:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_forward_file_url() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config = format!(
+        r#"
+    [object_storage]
+    type = "filesystem"
+    path = "{}"
+
+    [gateway]
+    fetch_and_encode_input_files_before_inference = false
+    "#,
+        temp_dir.path().to_string_lossy()
+    );
+
+    let client = make_embedded_gateway_with_config(&config).await;
+
+    let response = client.inference(ClientInferenceParams {
+        model_name: Some("openai::gpt-4o-mini".to_string()),
+        input: ClientInput {
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the PDF".to_string() }),
+                ClientInputMessageContent::File(File::Url {
+                    url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
+                    mime_type: Some(mime::APPLICATION_PDF)
+                }),
+                ],
+            }],
+            ..Default::default()
+        },
+        ..Default::default()
+    }).await.unwrap();
+
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming inference response");
+    };
+
+    // Sleep for 1 second to allow writing to ClickHouse
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let clickhouse = get_clickhouse().await;
+
+    let model_inference = select_model_inference_clickhouse(&clickhouse, response.inference_id())
+        .await
+        .unwrap();
+
+    let raw_request = model_inference
+        .get("raw_request")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert_eq!(raw_request, "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the PDF\"},{\"type\":\"file\",\"file\":{\"file_url\":\"https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf\"}}]}],\"model\":\"gpt-4o-mini\",\"stream\":false}");
+
+    let file_path =
+        "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png";
+
+    // Check that the file exists on the filesystem
+    let result = std::fs::read(temp_dir.path().join(file_path)).unwrap();
+    assert_eq!(result, DEEPSEEK_PAPER_PDF);
+
+    println!("Got response: {response:#?}");
+
+    let InferenceResponse::Chat(response) = response else {
+        panic!("Expected chat inference response");
+    };
+    let text_block = &response.content[0];
+    let ContentBlockChatOutput::Text(text) = text_block else {
+        panic!("Expected text content block");
+    };
+    assert!(
+        text.text.to_lowercase().contains("deepseek"),
+        "Content should contain 'deepseek': {text:?}"
+    );
 }
