@@ -82,6 +82,9 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 use uuid::Uuid;
 
 use crate::error::{Error, ErrorDetails};
+use crate::observability::tracing_bug::apply_filter_fixing_tracing_bug;
+
+pub mod tracing_bug;
 
 #[derive(Clone, Debug, Default, ValueEnum)]
 pub enum LogFormat {
@@ -363,7 +366,7 @@ pub fn build_opentelemetry_layer<T: SpanExporter + 'static>(
                 })
                 .map_err(|e| {
                     Error::new(ErrorDetails::Observability {
-                        message: format!("Failed to enable OTLP exporter: {e}"),
+                        message: format!("Failed to enable OTLP exporter: {e:?}"),
                     })
                 })?;
             Ok(())
@@ -376,7 +379,7 @@ pub fn build_opentelemetry_layer<T: SpanExporter + 'static>(
         // We attach a reloadable filter, which we use to start exporting spans when `delayed_enable` is called.
         // This means that we unconditionally construct the `tracing_opentelemetry` layer,
         // (including the batch exporter), which will just end being unused if OTEL exporting is disabled.
-        base_otel_layer.with_filter(otel_reload_filter),
+        apply_filter_fixing_tracing_bug(base_otel_layer, otel_reload_filter),
         wrapper,
     ))
 }
@@ -640,6 +643,15 @@ const DEFAULT_GATEWAY_DEBUG_DIRECTIVES: &str =
 /// so marking this function as async makes it clear to callers that they need to
 /// be in an async context.
 pub async fn setup_observability(log_format: LogFormat) -> Result<ObservabilityHandle, Error> {
+    // We need to provide a dummy generic parameter to satisfy the compiler
+    setup_observability_with_exporter_override::<opentelemetry_otlp::SpanExporter>(log_format, None)
+        .await
+}
+
+pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'static>(
+    log_format: LogFormat,
+    exporter_override: Option<T>,
+) -> Result<ObservabilityHandle, Error> {
     let env_var_name = "RUST_LOG";
     let has_env_var = std::env::var(env_var_name).is_ok();
 
@@ -684,17 +696,19 @@ pub async fn setup_observability(log_format: LogFormat) -> Result<ObservabilityH
         LogFormat::Json => Box::new(tracing_subscriber::fmt::layer().json()),
     };
 
-    // We need to provide a dummy generic parameter to satisfy the compiler
-    let otel_data = build_opentelemetry_layer::<opentelemetry_otlp::SpanExporter>(None);
+    let otel_data = build_opentelemetry_layer(exporter_override);
     let (delayed_otel, otel_layer, tracer_wrapper) = match otel_data {
         Ok((delayed_otel, otel_layer, tracer_wrapper)) => {
             (Ok(delayed_otel), Some(otel_layer), Some(tracer_wrapper))
         }
         Err(e) => (Err(e), None, None),
     };
+    // IMPORTANT: If you add any new layers here that have per-layer filtering applied
+    // you *MUST* call `apply_filter_fixing_tracing_bug` instead of `layer.with_filter(filter)`
+    // See the docs for `apply_filter_fixing_tracing_bug` for more details.
     tracing_subscriber::registry()
         .with(otel_layer)
-        .with(log_layer.with_filter(log_level))
+        .with(apply_filter_fixing_tracing_bug(log_layer, log_level))
         .init();
 
     // If `RUST_LOG` is explicitly set, it takes precedence over `gateway.debug`,
