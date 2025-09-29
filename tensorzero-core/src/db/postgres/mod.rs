@@ -12,6 +12,11 @@ use super::HealthCheckable;
 pub mod experimentation;
 pub mod rate_limiting;
 
+fn get_run_migrations_command() -> String {
+    let version = env!("CARGO_PKG_VERSION");
+    format!("docker run --rm -e TENSORZERO_POSTGRES_URL=$TENSORZERO_POSTGRES_URL tensorzero/gateway:{version} --run-postgres-migrations")
+}
+
 #[derive(Debug, Clone)]
 pub enum PostgresConnectionInfo {
     Enabled { pool: PgPool },
@@ -63,7 +68,7 @@ impl PostgresConnectionInfo {
         // Query the database for all successfully applied migration versions.
         let applied_migrations = get_applied_migrations(pool).await.map_err(|e| {
             Error::new(ErrorDetails::PostgresConnectionInitialization {
-                message: format!("Failed to retrieve applied migrations: {e}"),
+                message: format!("Failed to retrieve applied migrations: {e}. You may need to run the migrations with `{}`", get_run_migrations_command()),
             })
         })?;
         // NOTE: this will break old versions of the gateway once new migrations are applied.
