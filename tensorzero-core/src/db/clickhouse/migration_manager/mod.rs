@@ -52,7 +52,7 @@ use serde::{Deserialize, Serialize};
 pub const NUM_MIGRATIONS: usize = 32;
 fn get_run_migrations_command() -> String {
     let version = env!("CARGO_PKG_VERSION");
-    format!("docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-migrations-only")
+    format!("docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-clickhouse-migrations")
 }
 
 /// Constructs (but does not run) a vector of all our database migrations.

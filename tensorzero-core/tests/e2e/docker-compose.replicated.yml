@@ -123,7 +123,7 @@ services:
       clickhouse-01:
         condition: service_healthy
     entrypoint: /bin/bash
-    command: -c "gateway --run-migrations-only && gateway --default-config"
+    command: -c "gateway --run-clickhouse-migrations && gateway --default-config"
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
     healthcheck:

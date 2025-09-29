@@ -31,6 +31,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
+#[group(id = "migrations", multiple = false)]
 struct Args {
     /// Use all of the config files matching the specified glob pattern. Incompatible with `--default-config`
     #[arg(long)]
@@ -51,9 +52,17 @@ struct Args {
     #[clap(default_value_t = LogFormat::default())]
     log_format: LogFormat,
 
-    /// Run database migrations manually then exit.
+    /// Run ClickHouse migrations manually then exit.
     #[arg(long)]
-    run_migrations_only: bool,
+    #[arg(group = "migrations")]
+    // TODO: remove
+    #[arg(long, alias = "run-migrations")]
+    run_clickhouse_migrations: bool,
+
+    /// Run PostgreSQL migrations manually then exit.
+    #[arg(long)]
+    #[arg(group = "migrations")]
+    run_postgres_migrations: bool,
 
     /// Deprecated: use `--config-file` instead
     tensorzero_toml: Option<PathBuf>,
@@ -95,19 +104,17 @@ async fn main() {
         .expect_pretty("Failed to set up logs");
 
     let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
-    if args.run_migrations_only {
+    if args.run_clickhouse_migrations {
         manual_run_clickhouse_migrations()
             .await
             .expect_pretty("Failed to run ClickHouse migrations");
-        // Remove once we are ready for Postgres in prime time.
-        // We also should remove the expect behavior from ClickHouse so this command will warn
-        // if it doesn't have clickhouse or doesn't have postgres and then run migrations for the
-        // databases it does have URLs for
-        if std::env::var("TENSORZERO_POSTGRES_URL").is_ok() {
-            manual_run_postgres_migrations()
-                .await
-                .expect_pretty("Failed to run PostgreSQL migrations");
-        }
+        return;
+    }
+
+    if args.run_postgres_migrations {
+        manual_run_postgres_migrations()
+            .await
+            .expect_pretty("Failed to run PostgreSQL migrations");
         return;
     }
 
