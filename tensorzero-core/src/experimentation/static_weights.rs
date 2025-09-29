@@ -310,52 +310,79 @@ mod tests {
         // no-op but we call it for completeness
         experiment.setup().await.unwrap();
 
-        let mut variants = BTreeMap::from([
-            (
-                "foo".to_string(),
-                Arc::new(VariantInfo {
-                    inner: VariantConfig::ChatCompletion(ChatCompletionConfig::default()),
-                    timeouts: TimeoutsConfig::default(),
-                }),
-            ),
-            (
-                "bar".to_string(),
-                Arc::new(VariantInfo {
-                    inner: VariantConfig::ChatCompletion(ChatCompletionConfig::default()),
-                    timeouts: TimeoutsConfig::default(),
-                }),
-            ),
-            (
-                "baz".to_string(),
-                Arc::new(VariantInfo {
-                    inner: VariantConfig::ChatCompletion(ChatCompletionConfig::default()),
-                    timeouts: TimeoutsConfig::default(),
-                }),
-            ),
-        ]);
+        // Test sampling distribution with many samples
+        let sample_size = 10_000;
+        let mut first_sample_counts = std::collections::HashMap::new();
+        let mut third_sample_counts = std::collections::HashMap::new();
 
-        let (first_sample_name, _info) = experiment
-            .sample("test", Uuid::now_v7(), &mut variants)
-            .await
-            .unwrap();
-        assert!(!variants.contains_key(&first_sample_name));
-        assert!(first_sample_name == "foo" || first_sample_name == "bar");
+        for i in 0..sample_size {
+            let mut variants = BTreeMap::from([
+                (
+                    "foo".to_string(),
+                    Arc::new(VariantInfo {
+                        inner: VariantConfig::ChatCompletion(ChatCompletionConfig::default()),
+                        timeouts: TimeoutsConfig::default(),
+                    }),
+                ),
+                (
+                    "bar".to_string(),
+                    Arc::new(VariantInfo {
+                        inner: VariantConfig::ChatCompletion(ChatCompletionConfig::default()),
+                        timeouts: TimeoutsConfig::default(),
+                    }),
+                ),
+                (
+                    "baz".to_string(),
+                    Arc::new(VariantInfo {
+                        inner: VariantConfig::ChatCompletion(ChatCompletionConfig::default()),
+                        timeouts: TimeoutsConfig::default(),
+                    }),
+                ),
+            ]);
 
-        let (second_sample_name, _info) = experiment
-            .sample("test", Uuid::now_v7(), &mut variants)
-            .await
-            .unwrap();
-        assert!(variants.contains_key(&second_sample_name));
-        assert!(second_sample_name == "foo" || second_sample_name == "bar");
-        assert!(first_sample_name != second_sample_name);
+            // Use different episode IDs to get different samples
+            let episode_id = Uuid::from_u128(i as u128);
 
-        let (third_sample_name, _info) = experiment
-            .sample("test", Uuid::now_v7(), &mut variants)
-            .await
-            .unwrap();
-        assert!(variants.contains_key(&third_sample_name));
-        assert_eq!(third_sample_name, "baz");
-        assert!(first_sample_name != third_sample_name);
-        assert!(second_sample_name != third_sample_name);
+            // Sample first variant (should be from candidate variants: foo or bar)
+            let (first_sample_name, _) = experiment
+                .sample("test", episode_id, &mut variants)
+                .await
+                .unwrap();
+            *first_sample_counts
+                .entry(first_sample_name.clone())
+                .or_insert(0) += 1;
+
+            // Sample second variant
+            let (second_sample_name, _) = experiment
+                .sample("test", episode_id, &mut variants)
+                .await
+                .unwrap();
+
+            assert_ne!(first_sample_name, second_sample_name);
+
+            // Sample third variant (should always be baz since it's the fallback)
+            let (third_sample_name, _) = experiment
+                .sample("test", episode_id, &mut variants)
+                .await
+                .unwrap();
+            *third_sample_counts.entry(third_sample_name).or_insert(0) += 1;
+        }
+
+        // Check that "foo" was selected first ~83.3% of the time (5/6)
+        let total_weight = 5.0 + 1.0; // foo=5, bar=1
+        let expected_foo_first = 5.0 / total_weight; // ~0.833
+        let actual_foo_first =
+            *first_sample_counts.get("foo").unwrap_or(&0) as f64 / sample_size as f64;
+
+        // Allow 2% tolerance for statistical variation
+        let tolerance = 0.02;
+        assert!(
+            (actual_foo_first - expected_foo_first).abs() < tolerance,
+            "Foo selected first: expected {expected_foo_first:.3}, got {actual_foo_first:.3}"
+        );
+
+        // Check that "baz" was always selected third (as the fallback variant)
+        assert_eq!(*third_sample_counts.get("baz").unwrap(), sample_size);
+        assert_eq!(third_sample_counts.len(), 1); // Only "baz" should appear in third samples
     }
 }
