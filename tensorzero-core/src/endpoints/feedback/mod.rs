@@ -148,6 +148,12 @@ pub async fn feedback(
             "metric_name" => params.metric_name.to_string()
         )
         .increment(1);
+        counter!(
+            "tensorzero_requests_total",
+            "endpoint" => "feedback",
+            "metric_name" => params.metric_name.to_string()
+        )
+        .increment(1);
     }
 
     match feedback_metadata.r#type {
