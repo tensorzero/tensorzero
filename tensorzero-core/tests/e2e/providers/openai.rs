@@ -2064,10 +2064,11 @@ async fn test_forward_file_url() {
         .unwrap()
         .as_str()
         .unwrap();
-    assert_eq!(raw_request, "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the PDF\"},{\"type\":\"file\",\"file\":{\"file_url\":\"https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf\"}}]}],\"model\":\"gpt-4o-mini\",\"stream\":false}");
+    // OpenAI currently doesn't support forwarding file urls, so we should base64 encode the file data
+    assert_eq!(raw_request, "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the PDF\"},{\"type\":\"file\",\"file\":{\"file_data\":\"data:application/pdf;base64,<TENSORZERO_FILE_0>\",\"filename\":\"input.pdf\"}}]}],\"model\":\"gpt-4o-mini\",\"stream\":false}");
 
     let file_path =
-        "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png";
+        "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf";
 
     // Check that the file exists on the filesystem
     let result = std::fs::read(temp_dir.path().join(file_path)).unwrap();

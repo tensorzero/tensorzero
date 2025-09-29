@@ -1021,8 +1021,6 @@ pub struct OpenAIFile<'a> {
     file_data: Option<Cow<'a, str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     filename: Option<Cow<'a, str>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    file_url: Option<Cow<'a, str>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1406,10 +1404,9 @@ async fn prepare_file_message(
                 })?;
                 Ok(OpenAIContentBlock::File {
                     file: OpenAIFile {
-                        file_data: Some(Cow::Owned(file_data.clone())),
+                        file_data: Some(Cow::Owned(base64_url)),
                         // TODO - should we allow the user to specify the file name?
                         filename: Some(Cow::Owned(format!("input.{suffix}"))),
-                        file_url: None,
                     },
                 })
             }
@@ -3847,7 +3844,6 @@ mod tests {
                 file: OpenAIFile {
                     file_data: Some(Cow::Owned(BASE64_STANDARD.encode(b"Hello, world!"))),
                     filename: Some(Cow::Owned("input.txt".to_string())),
-                    file_url: None,
                 },
             }
         );
@@ -4014,7 +4010,7 @@ mod tests {
 
     #[tokio::test]
     #[traced_test]
-    async fn test_forward_file_url() {
+    async fn test_cannot_forward_file_url() {
         let fetch_and_encode = OpenAIMessagesConfig {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
@@ -4042,9 +4038,8 @@ mod tests {
             res,
             OpenAIContentBlock::File {
                 file: OpenAIFile {
-                    file_data: None,
+                    file_data: Some(Cow::Owned(BASE64_STANDARD.encode(FERRIS_PNG))),
                     filename: None,
-                    file_url: Some(Cow::Owned(url.to_string())),
                 },
             }
         );
