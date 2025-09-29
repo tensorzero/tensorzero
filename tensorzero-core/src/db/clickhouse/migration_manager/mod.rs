@@ -188,7 +188,7 @@ fn compare_migration_tables(
     tracing::debug!("Expected migration ids: {expected:?}");
 
     if actual == expected {
-        tracing::info!("All required migrations present, no extra migrations present.");
+        tracing::debug!("All required migrations present, no extra migrations present.");
         MigrationTableState::JustRight
     } else if actual.is_superset(&expected) {
         tracing::warn!("Extra migrations were run");
