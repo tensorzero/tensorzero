@@ -14,6 +14,9 @@ uv run pytest tests/test_embeddings.py
 ```
 """
 
+import asyncio
+import random
+
 import pytest
 
 
@@ -214,3 +217,77 @@ async def test_embeddings_consistency(async_openai_client):
         assert abs(embedding1[i] - embedding2[i]) < 0.01, (
             f"Embeddings differ significantly at index {i}"
         )
+
+
+@pytest.mark.asyncio
+async def test_embeddings_cache_with_float_encoding(async_openai_client):
+    """Test that caching works correctly with float encoding format"""
+    # Use a unique input to ensure we're not hitting existing cache
+    input_text = f"Cache test with float encoding - {random.randint(0, 1000000)}"
+
+    # First request with float encoding and cache enabled
+    result1 = await async_openai_client.embeddings.create(
+        input=input_text,
+        model="tensorzero::embedding_model_name::text-embedding-3-small",
+        encoding_format="float",
+        extra_body={"tensorzero::cache_options": {"enabled": "on"}},
+    )
+
+    # Verify first response has non-zero usage (not from cache)
+    assert result1.usage.prompt_tokens > 0
+    assert result1.usage.total_tokens > 0
+    assert isinstance(result1.data[0].embedding[0], float)  # float encoded
+
+    # Wait briefly for cache write to complete
+    await asyncio.sleep(2)
+
+    # Second request with same parameters - should hit cache
+    result2 = await async_openai_client.embeddings.create(
+        input=input_text,
+        model="tensorzero::embedding_model_name::text-embedding-3-small",
+        encoding_format="float",
+        extra_body={"tensorzero::cache_options": {"enabled": "on"}},
+    )
+
+    # Verify second response has zero usage (from cache)
+    assert result2.usage.prompt_tokens == 0
+    assert result2.usage.total_tokens == 0
+    assert isinstance(result2.data[0].embedding[0], float)  # float encoded
+    assert result1.data[0].embedding == result2.data[0].embedding  # Same embedding
+
+
+@pytest.mark.asyncio
+async def test_embeddings_cache_with_base64_encoding(async_openai_client):
+    """Test that caching works correctly with base64 encoding format"""
+    # Use a unique input to ensure we're not hitting existing cache
+    input_text = f"Cache test with base64 encoding - {random.randint(0, 1000000)}"
+
+    # First request with base64 encoding and cache enabled
+    result1 = await async_openai_client.embeddings.create(
+        input=input_text,
+        model="tensorzero::embedding_model_name::text-embedding-3-small",
+        encoding_format="base64",
+        extra_body={"tensorzero::cache_options": {"enabled": "on"}},
+    )
+
+    # Verify first response has non-zero usage (not from cache)
+    assert result1.usage.prompt_tokens > 0
+    assert result1.usage.total_tokens > 0
+    assert isinstance(result1.data[0].embedding, str)  # base64 encoded
+
+    # Wait briefly for cache write to complete
+    await asyncio.sleep(2)
+
+    # Second request with same parameters - should hit cache
+    result2 = await async_openai_client.embeddings.create(
+        input=input_text,
+        model="tensorzero::embedding_model_name::text-embedding-3-small",
+        encoding_format="base64",
+        extra_body={"tensorzero::cache_options": {"enabled": "on"}},
+    )
+
+    # Verify second response has zero usage (from cache)
+    assert result2.usage.prompt_tokens == 0
+    assert result2.usage.total_tokens == 0
+    assert isinstance(result2.data[0].embedding, str)  # base64 encoded
+    assert result1.data[0].embedding == result2.data[0].embedding  # Same embedding
