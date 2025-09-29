@@ -75,7 +75,8 @@ If you're using a self-hosted replicated ClickHouse deployment, you must also pr
 By default, the TensorZero Gateway applies database migrations automatically when it starts up.
 This behavior can be suppressed by setting `observability.disable_automatic_migrations = true` under the `[gateway]` section of `config/tensorzero.toml`.
 See https://www.tensorzero.com/docs/gateway/configuration-reference#gateway.
-If automatic migrations are disabled, then you must apply them manually with `gateway --run-migrations-only` or by using your own code.
+If automatic migrations are disabled, then you must apply them manually with
+`docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-migrations-only`.
 The gateway will error on startup if automatic migrations are disabled and any required migrations are missing.
 
 If you're using a self-hosted replicated ClickHouse deployment, you must apply database migrations manually;

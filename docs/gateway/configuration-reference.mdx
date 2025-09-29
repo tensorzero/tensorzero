@@ -153,8 +153,8 @@ observability.enabled = true
 - **Required:** no (default `false`)
 
 Disable automatic running of the TensorZero migrations when the TensorZero Gateway launches.
-If `true`, then the migrations are not run upon launch and must instead be run manually,
-either by running `gateway --run_migrations_only` or via the user's own code.
+If `true`, then the migrations are not applied upon launch and must instead be applied manually
+by running `docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-migrations-only`.
 If `false`, then the migrations are run automatically upon launch.
 
 ### `template_filesystem_access`

@@ -132,7 +132,7 @@ pub enum MigrationTableState {
 /// Returns a Result<MigrationTableState,Err> value that describes which migrations have been run vis-a-vis the required migrations.
 /// There are six possible results. Note that we allow multiple rows to exist per migration id (since the migrations might have been run concurrently).
 ///   1. Ok(JustRight): Exactly the set of required migrations have been run. Downstream should proceed as normal.
-///   2. Ok(TooMany): Extra migrations have been run, possibly due to use of an older vresion. Downstream should proceed as normal.
+///   2. Ok(TooMany): Extra migrations have been run, possibly due to use of an older version of TensorZero. Downstream should proceed as normal.
 ///   3. Ok(TooFew): Not all the required migrations have been run. Downstream should proceed to run the missing migrations.
 ///   4. Ok(Inconsistent): Some but not all required migrations have been run, and some extra migrations have been run. Downstream
 ///      should proceed to run the missing required migrations.
@@ -179,12 +179,9 @@ pub async fn check_migrations_state(
 }
 
 fn compare_migration_tables(
-    mut expected_migration_ids: Vec<u32>,
-    mut actual_migration_ids: Vec<u32>,
+    expected_migration_ids: Vec<u32>,
+    actual_migration_ids: Vec<u32>,
 ) -> MigrationTableState {
-    expected_migration_ids.sort();
-    actual_migration_ids.sort();
-
     let expected: BTreeSet<_> = expected_migration_ids.into_iter().collect();
     let actual: BTreeSet<_> = actual_migration_ids.into_iter().collect();
     tracing::debug!("Actual   migration ids: {actual:?}");
