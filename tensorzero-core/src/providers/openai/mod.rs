@@ -1339,13 +1339,15 @@ async fn prepare_file_message(
 ) -> Result<OpenAIContentBlock<'static>, Error> {
     match file {
         // If we have all of the following:
-        // * The user passed in a file URL (not base64-encoded file data)
-        // * The user explicitly specified a mime type
+        // * The user passed in an image URL (not base64-encoded file data)
+        // * The user explicitly specified an image mime type
         // * The `fetch_and_encode_input_files_before_inference` config setting is off (so we're allowed to forward image urls)
         //
-        // Then, we can forward the file/image url directly to OpenAI. Unfortunately, we need to know the mime type for this to work,
-        // since we need to map images to "image_url" content blocks, and files to "file" content blocks.
+        // Then, we can forward the image url directly to OpenAI. Unfortunately, we need to know the mime type for this to work,
+        // since we need to map images to "image_url" content blocks.
         // Without downloading the file, we cannot guarantee that we guess the mime type correctly, so we don't try.
+        //
+        // OpenAI doesn't support passing in urls for 'file' content blocks, so we can only forward image urls.
         LazyFile::Url {
             file_url:
                 FileUrl {
@@ -1353,25 +1355,17 @@ async fn prepare_file_message(
                     url,
                 },
             future: _,
-        } if !messages_config.fetch_and_encode_input_files_before_inference => {
-            if mime_type.type_() == mime::IMAGE {
-                Ok(OpenAIContentBlock::ImageUrl {
-                    image_url: OpenAIImageUrl {
-                        url: url.to_string(),
-                    },
-                })
-            } else {
-                Ok(OpenAIContentBlock::File {
-                    file: OpenAIFile {
-                        file_data: None,
-                        filename: None,
-                        file_url: Some(Cow::Owned(url.to_string())),
-                    },
-                })
-            }
+        } if !messages_config.fetch_and_encode_input_files_before_inference
+            && mime_type.type_() == mime::IMAGE =>
+        {
+            Ok(OpenAIContentBlock::ImageUrl {
+                image_url: OpenAIImageUrl {
+                    url: url.to_string(),
+                },
+            })
         }
         _ => {
-            // If we could have forwarded an file/image (except for the fact that we're missing the mime_type), log a warning.
+            // If we could have forwarded an image_url (except for the fact that we're missing the mime_type), log a warning.
             if matches!(
                 file,
                 LazyFile::Url {
