@@ -2991,9 +2991,12 @@ mod tests {
             )]),
             timeouts: Default::default(),
         };
-        let model_table: ModelTable = HashMap::from([("claude".into(), anthropic_model_config)])
-            .try_into()
-            .unwrap();
+        let provider_types = ProviderTypesConfig::default();
+        let model_table: ModelTable = ModelTable::new(
+            HashMap::from([("claude".into(), anthropic_model_config)]),
+            &provider_types,
+        )
+        .unwrap();
 
         model_table.validate("dummy::claude").unwrap();
     }

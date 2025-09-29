@@ -96,6 +96,7 @@ pub struct EmbeddingResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::provider_types::ProviderTypesConfig;
     use crate::config::Config;
     use crate::config::TimeoutsConfig;
     use crate::embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo};
@@ -127,8 +128,13 @@ mod tests {
         let mut embedding_models = HashMap::new();
         embedding_models.insert("test-model".to_string().into(), embedding_model);
 
+        let provider_types = ProviderTypesConfig::default();
         let config = Config {
-            embedding_models: embedding_models.try_into().unwrap(),
+            embedding_models: crate::embeddings::EmbeddingModelTable::new(
+                embedding_models,
+                &provider_types,
+            )
+            .unwrap(),
             ..Default::default()
         };
 

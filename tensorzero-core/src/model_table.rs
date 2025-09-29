@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Deref, sync::Arc};
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::{
     config::provider_types::ProviderTypesConfig,
@@ -40,6 +40,7 @@ pub struct BaseModelTable<T> {
     table: HashMap<Arc<str>, T>,
     #[serde(skip)]
     #[ts(skip)]
+    #[expect(dead_code, reason = "Will be used in future implementation")]
     default_credentials: ProviderTypeDefaultCredentials,
 }
 
@@ -190,6 +191,7 @@ impl<T: ShorthandModelConfig> BaseModelTable<T> {
     }
 }
 
+#[expect(dead_code, reason = "Will be used in future implementation")]
 #[derive(Debug)]
 struct ProviderTypeDefaultCredentials {
     anthropic: AnthropicCredentials,
@@ -215,7 +217,8 @@ struct ProviderTypeDefaultCredentials {
 }
 
 impl ProviderTypeDefaultCredentials {
-    pub fn new(provider_types_config: &ProviderTypesConfig) -> Self {
+    #[expect(clippy::todo, reason = "Will be implemented in future")]
+    pub fn new(_provider_types_config: &ProviderTypesConfig) -> Self {
         todo!()
         // note: is this fallible or async?
     }
