@@ -121,7 +121,6 @@ jobs:
               ]
             }
 
-
       - name: Send Slack notification for pull request review
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review'
         uses: slackapi/slack-github-action@v2.1.1
@@ -137,7 +136,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "👀 *Pull request review submitted*\n\n*PR:* <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>\n*Review by:* <https://github.com/${{ github.actor }}|${{ github.actor }}>\n*State:* ${{ github.event.review.state }}\n"
+                    "text": "👀 *Pull request review submitted*\n\n*PR:* <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>\n*Review by:* <https://github.com/${{ github.actor }}|${{ github.actor }}>\n"
                   }
                 }
               ]
