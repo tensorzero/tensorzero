@@ -19,6 +19,23 @@ services:
       start_interval: 1s
       timeout: 1s
 
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: tensorzero
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      start_period: 5s
+      start_interval: 5s
+      retries: 5
+      timeout: 1s
+
   # The TensorZero Python client *doesn't* require a separate gateway service.
   #
   # The gateway is only needed if you want to use the OpenAI Python client
@@ -33,6 +50,7 @@ services:
     command: --config-file /app/config/tensorzero.toml
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero
       OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
     ports:
       - "3000:3000"
@@ -54,6 +72,8 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
 
   ui:
     image: tensorzero/ui
@@ -74,3 +94,4 @@ services:
 
 volumes:
   clickhouse-data:
+  pgdata:
