@@ -150,6 +150,7 @@ fn build_tracer<T: SpanExporter + 'static>(
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
         .with_metadata(metadata)
+        .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())
         .build()
         .map_err(|e| {
             Error::new(ErrorDetails::Observability {

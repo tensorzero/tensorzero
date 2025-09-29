@@ -3154,6 +3154,35 @@ async fn test_dummy_only_inference_invalid_default_function_arg() {
         ),
         "Unexpected error message: {response_text}",
     );
+
+    let bad_system_prompt_json_function = json!({
+        "function_name": "null_json",
+        "input":{
+            "system": {"assistant_name": "Dr. Mehta"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the name of the capital city of Japan?"
+                }
+            ]},
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&bad_system_prompt_json_function)
+        .send()
+        .await
+        .unwrap();
+
+    // Should fail with 400 Bad Request
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response_text = response.text().await.unwrap();
+    assert!(
+        response_text.contains(
+            "System message has non-string content but there is no template `system` in any variant"
+        ),
+        "Unexpected error message: {response_text}",
+    );
 }
 
 #[tokio::test]

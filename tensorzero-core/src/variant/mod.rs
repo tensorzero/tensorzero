@@ -988,7 +988,7 @@ mod tests {
             output_schema: output_schema.clone(),
             implicit_tool_call_config: implicit_tool_call_config.clone(),
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         });
 
         let json_mode = JsonMode::On;
@@ -1266,7 +1266,7 @@ mod tests {
                 parallel_tool_calls: None,
             },
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         });
         let output_schema = json!({
             "type": "object",

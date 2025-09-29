@@ -3260,7 +3260,7 @@ mod tests {
             implicit_tool_call_config,
             output_schema,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -3550,7 +3550,7 @@ mod tests {
             implicit_tool_call_config,
             output_schema,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -3652,7 +3652,7 @@ mod tests {
             implicit_tool_call_config,
             output_schema,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
