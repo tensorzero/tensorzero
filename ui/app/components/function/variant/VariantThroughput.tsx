@@ -114,10 +114,10 @@ export function VariantThroughput({
                                 style={{ backgroundColor: entry.color }}
                               />
                               <div className="flex flex-1 items-center justify-between gap-2 leading-none">
-                                <span className="text-muted-foreground">
+                                <span className="text-muted-foreground font-mono text-xs">
                                   {entry.name}
                                 </span>
-                                <span className="text-foreground font-mono font-medium tabular-nums">
+                                <span className="text-foreground ml-2 font-mono font-medium tabular-nums">
                                   {Number(entry.value).toLocaleString()}
                                 </span>
                               </div>
@@ -139,7 +139,9 @@ export function VariantThroughput({
                   );
                 }}
               />
-              <ChartLegend content={<ChartLegendContent />} />
+              <ChartLegend
+                content={<ChartLegendContent className="font-mono text-xs" />}
+              />
               {variantNames.map((variantName) => (
                 <Area
                   key={variantName}

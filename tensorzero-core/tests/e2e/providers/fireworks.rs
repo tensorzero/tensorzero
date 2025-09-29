@@ -14,7 +14,7 @@ async fn get_providers() -> E2ETestProviders {
     let providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "fireworks".to_string(),
-        model_name: "fireworks::accounts/fireworks/models/mixtral-8x22b-instruct".into(),
+        model_name: "fireworks::accounts/fireworks/models/deepseek-v3p1".into(),
         model_provider_name: "fireworks".into(),
         credentials: HashMap::new(),
     }];
@@ -22,7 +22,7 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "fireworks-extra-body".to_string(),
-        model_name: "fireworks::accounts/fireworks/models/deepseek-r1-0528".into(),
+        model_name: "fireworks::accounts/fireworks/models/deepseek-v3p1".into(),
         model_provider_name: "fireworks".into(),
         credentials: HashMap::new(),
     }];
@@ -38,7 +38,7 @@ async fn get_providers() -> E2ETestProviders {
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "fireworks-dynamic".to_string(),
-        model_name: "fireworks::accounts/fireworks/models/mixtral-8x22b-instruct".into(),
+        model_name: "fireworks::accounts/fireworks/models/deepseek-v3p1".into(),
         model_provider_name: "fireworks".into(),
         credentials,
     }];
@@ -46,7 +46,7 @@ async fn get_providers() -> E2ETestProviders {
     let tool_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "fireworks".to_string(),
-        model_name: "fireworks::accounts/fireworks/models/mixtral-8x22b-instruct".into(),
+        model_name: "fireworks::accounts/fireworks/models/deepseek-v3p1".into(),
         model_provider_name: "fireworks".into(),
         credentials: HashMap::new(),
     }];
@@ -55,21 +55,21 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "fireworks".to_string(),
-            model_name: "fireworks::accounts/fireworks/models/mixtral-8x22b-instruct".into(),
+            model_name: "fireworks::accounts/fireworks/models/deepseek-v3p1".into(),
             model_provider_name: "fireworks".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "fireworks-implicit".to_string(),
-            model_name: "fireworks::accounts/fireworks/models/mixtral-8x22b-instruct".into(),
+            model_name: "fireworks::accounts/fireworks/models/deepseek-v3p1".into(),
             model_provider_name: "fireworks".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "fireworks-strict".to_string(),
-            model_name: "fireworks::accounts/fireworks/models/mixtral-8x22b-instruct".into(),
+            model_name: "fireworks::accounts/fireworks/models/deepseek-v3p1".into(),
             model_provider_name: "fireworks".into(),
             credentials: HashMap::new(),
         },
@@ -78,7 +78,7 @@ async fn get_providers() -> E2ETestProviders {
     let json_mode_off_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "fireworks_json_mode_off".to_string(),
-        model_name: "fireworks::accounts/fireworks/models/mixtral-8x22b-instruct".into(),
+        model_name: "fireworks::accounts/fireworks/models/deepseek-v3p1".into(),
         model_provider_name: "fireworks".into(),
         credentials: HashMap::new(),
     }];

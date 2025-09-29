@@ -137,6 +137,10 @@ impl Error {
     pub fn log(&self) {
         self.0.log();
     }
+
+    pub fn is_retryable(&self) -> bool {
+        self.0.is_retryable()
+    }
 }
 
 // Expect for derive Serialize
@@ -799,6 +803,17 @@ impl ErrorDetails {
             tracing::Level::INFO => tracing::info!("{self}"),
             tracing::Level::DEBUG => tracing::debug!("{self}"),
             tracing::Level::TRACE => tracing::trace!("{self}"),
+        }
+    }
+
+    pub fn is_retryable(&self) -> bool {
+        match &self {
+            ErrorDetails::RateLimitExceeded { .. } => false,
+            // For ModelProvidersExhausted we will retry if any provider error is retryable
+            ErrorDetails::ModelProvidersExhausted { provider_errors } => provider_errors
+                .iter()
+                .any(|(_, error)| error.is_retryable()),
+            _ => true,
         }
     }
 }

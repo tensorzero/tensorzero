@@ -1422,7 +1422,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(output_schema.clone()).unwrap(),
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         })));
 
         // Case 5: a JSON function with correct output
