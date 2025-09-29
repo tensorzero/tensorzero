@@ -20,6 +20,8 @@ async fn verify_variant_stored(
     function_name: &str,
     expected_variant: &str,
 ) {
+    // TODO: once we implement a read for the variant_by_episode table we should
+    // replace this with something simpler.
     let result = conn
         .check_and_set_variant_by_episode(
             episode_id,

@@ -3,7 +3,7 @@ use crate::{
     error::{Error, ErrorDetails},
 };
 
-struct CASVariantResponse {
+struct CheckAndSetVariantResponse {
     variant_name: Option<String>,
 }
 
@@ -19,7 +19,7 @@ impl ExperimentationQueries for PostgresConnectionInfo {
         let pool = self.get_pool_result()?;
 
         let response = sqlx::query_as!(
-            CASVariantResponse,
+            CheckAndSetVariantResponse,
             r"INSERT INTO variant_by_episode(function_name, episode_id, variant_name)
                     VALUES ($1, $2, $3)
                     ON CONFLICT (function_name, episode_id) DO UPDATE
@@ -33,7 +33,7 @@ impl ExperimentationQueries for PostgresConnectionInfo {
         .await?;
         let variant_name = response.variant_name.ok_or_else(|| {
             Error::new(ErrorDetails::PostgresResult {
-                result_type: "compare_and_swap_variant_by_episode",
+                result_type: "check_and_set_variant_by_episode",
                 message: "Missing variant name".to_string(),
             })
         })?;
