@@ -17,6 +17,7 @@ import {
   TextMessage,
   EmptyMessage,
   ParameterizedMessage,
+  TemplateMessage,
 } from "~/components/layout/SnippetContent";
 import type { JsonObject } from "type-fest";
 
@@ -178,10 +179,10 @@ function renderContentBlock(
 
     case "template":
       return (
-        <ParameterizedMessage
+        <TemplateMessage
           key={key}
-          parameters={block.arguments}
           templateName={block.name}
+          arguments={block.arguments}
           isEditing={isEditing}
           onChange={(updatedArguments) => {
             onChange?.({ ...block, arguments: updatedArguments });
