@@ -298,6 +298,22 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   await createOption.waitFor({ state: "visible" });
   await createOption.click();
   await page.getByText("Inference Output").click();
+
+  // Wait for the toast to appear with success message
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("New Datapoint"),
+  ).toBeVisible();
+
+  // Wait for and click on the "View" button in the toast
+  const viewButton = page
+    .getByRole("region", { name: /notifications/i })
+    .getByText("View");
+  await viewButton.waitFor({ state: "visible" });
+  await viewButton.click();
+
+  // Wait for navigation to the new page
   await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
     timeout: 10000,
   });
