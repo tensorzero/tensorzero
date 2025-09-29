@@ -3,8 +3,17 @@ use std::{collections::HashMap, ops::Deref, sync::Arc};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    config::provider_types::ProviderTypesConfig,
     error::{Error, ErrorDetails},
     model::UninitializedProviderConfig,
+    providers::{
+        anthropic::AnthropicCredentials, azure::AzureCredentials, deepseek::DeepSeekCredentials,
+        fireworks::FireworksCredentials, gcp_vertex_gemini::GCPVertexCredentials,
+        google_ai_studio_gemini::GoogleAIStudioCredentials, groq::GroqCredentials,
+        hyperbolic::HyperbolicCredentials, mistral::MistralCredentials, openai::OpenAICredentials,
+        openrouter::OpenRouterCredentials, sglang::SGLangCredentials, tgi::TGICredentials,
+        together::TogetherCredentials, vllm::VLLMCredentials, xai::XAICredentials,
+    },
 };
 use lazy_static::lazy_static;
 use strum::VariantNames;
@@ -22,17 +31,24 @@ lazy_static! {
     };
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Serialize, Debug, ts_rs::TS)]
+#[ts(export)]
 // TODO: investigate why derive(TS) doesn't work if we add bounds to BaseModelTable itself
-#[serde(bound(deserialize = "T: ShorthandModelConfig + Deserialize<'de>"))]
-#[serde(try_from = "HashMap<Arc<str>, T>")]
-pub struct BaseModelTable<T>(HashMap<Arc<str>, T>);
+// #[serde(bound(deserialize = "T: ShorthandModelConfig + Deserialize<'de>"))]
+// #[serde(try_from = "HashMap<Arc<str>, T>")]
+pub struct BaseModelTable<T> {
+    table: HashMap<Arc<str>, T>,
+    #[serde(skip)]
+    #[ts(skip)]
+    default_credentials: ProviderTypeDefaultCredentials,
+}
 
 impl<T: ShorthandModelConfig> Default for BaseModelTable<T> {
     fn default() -> Self {
-        BaseModelTable(HashMap::new())
+        BaseModelTable {
+            table: HashMap::new(),
+            default_credentials: ProviderTypeDefaultCredentials::default(),
+        }
     }
 }
 
@@ -44,31 +60,31 @@ pub trait ShorthandModelConfig: Sized {
     fn validate(&self, key: &str) -> Result<(), Error>;
 }
 
-impl<T: ShorthandModelConfig> TryFrom<HashMap<Arc<str>, T>> for BaseModelTable<T> {
-    type Error = String;
+// impl<T: ShorthandModelConfig> TryFrom<HashMap<Arc<str>, T>> for BaseModelTable<T> {
+//     type Error = String;
 
-    fn try_from(map: HashMap<Arc<str>, T>) -> Result<Self, Self::Error> {
-        for key in map.keys() {
-            if RESERVED_MODEL_PREFIXES
-                .iter()
-                .any(|name| key.starts_with(name))
-            {
-                return Err(format!(
-                    "{} name '{}' contains a reserved prefix",
-                    T::MODEL_TYPE,
-                    key
-                ));
-            }
-        }
-        Ok(BaseModelTable(map))
-    }
-}
+//     fn try_from(map: HashMap<Arc<str>, T>) -> Result<Self, Self::Error> {
+//         for key in map.keys() {
+//             if RESERVED_MODEL_PREFIXES
+//                 .iter()
+//                 .any(|name| key.starts_with(name))
+//             {
+//                 return Err(format!(
+//                     "{} name '{}' contains a reserved prefix",
+//                     T::MODEL_TYPE,
+//                     key
+//                 ));
+//             }
+//         }
+//         Ok(BaseModelTable(map))
+//     }
+// }
 
 impl<T: ShorthandModelConfig> std::ops::Deref for BaseModelTable<T> {
     type Target = HashMap<Arc<str>, T>;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.table
     }
 }
 
@@ -110,8 +126,31 @@ fn check_shorthand<'a>(prefixes: &[&'a str], key: &'a str) -> Option<Shorthand<'
 }
 
 impl<T: ShorthandModelConfig> BaseModelTable<T> {
+    pub fn new(
+        models: HashMap<Arc<str>, T>,
+        provider_types_config: &ProviderTypesConfig,
+    ) -> Result<Self, String> {
+        for key in models.keys() {
+            if RESERVED_MODEL_PREFIXES
+                .iter()
+                .any(|name| key.starts_with(name))
+            {
+                return Err(format!(
+                    "{} name '{}' contains a reserved prefix",
+                    T::MODEL_TYPE,
+                    key
+                ));
+            }
+        }
+        let default_credentials = ProviderTypeDefaultCredentials::new(provider_types_config);
+        Ok(Self {
+            table: models,
+            default_credentials,
+        })
+    }
+
     pub async fn get(&self, key: &str) -> Result<Option<CowNoClone<'_, T>>, Error> {
-        if let Some(model_config) = self.0.get(key) {
+        if let Some(model_config) = self.table.get(key) {
             return Ok(Some(CowNoClone::Borrowed(model_config)));
         }
         if let Some(shorthand) = check_shorthand(T::SHORTHAND_MODEL_PREFIXES, key) {
@@ -126,7 +165,7 @@ impl<T: ShorthandModelConfig> BaseModelTable<T> {
     pub fn validate(&self, key: &str) -> Result<(), Error> {
         // Try direct lookup (if it's blacklisted, it's not in the table)
         // If it's shorthand and already in the table, it's valid
-        if let Some(model_config) = self.0.get(key) {
+        if let Some(model_config) = self.table.get(key) {
             model_config.validate(key)?;
             return Ok(());
         }
@@ -143,10 +182,47 @@ impl<T: ShorthandModelConfig> BaseModelTable<T> {
 
     #[cfg(any(test, feature = "e2e_tests"))]
     pub fn static_model_len(&self) -> usize {
-        self.0.len()
+        self.table.len()
     }
 
     pub fn iter_static_models(&self) -> impl Iterator<Item = (&Arc<str>, &T)> {
-        self.0.iter()
+        self.table.iter()
+    }
+}
+
+#[derive(Debug)]
+struct ProviderTypeDefaultCredentials {
+    anthropic: AnthropicCredentials,
+    // TODO: do this lazy
+    // aws_bedrock:
+    // aws_sagemaker:
+    azure: AzureCredentials,
+    deepseek: DeepSeekCredentials,
+    fireworks: FireworksCredentials,
+    gcp_vertex_anthropic: GCPVertexCredentials,
+    gcp_vertex_gemini: GCPVertexCredentials,
+    google_ai_studio_gemini: GoogleAIStudioCredentials,
+    groq: GroqCredentials,
+    hyperbolic: HyperbolicCredentials,
+    mistral: MistralCredentials,
+    openai: OpenAICredentials,
+    openrouter: OpenRouterCredentials,
+    sglang: SGLangCredentials,
+    tgi: TGICredentials,
+    together: TogetherCredentials,
+    vllm: VLLMCredentials,
+    xai: XAICredentials,
+}
+
+impl ProviderTypeDefaultCredentials {
+    pub fn new(provider_types_config: &ProviderTypesConfig) -> Self {
+        todo!()
+        // note: is this fallible or async?
+    }
+}
+
+impl Default for ProviderTypeDefaultCredentials {
+    fn default() -> Self {
+        Self::new(&ProviderTypesConfig::default())
     }
 }

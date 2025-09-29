@@ -20,7 +20,8 @@ use crate::cache::{
     StreamingCacheData,
 };
 use crate::config::{
-    skip_credential_validation, OtlpConfig, OtlpTracesFormat, ProviderTypesConfig, TimeoutsConfig,
+    provider_types::ProviderTypesConfig, skip_credential_validation, OtlpConfig, OtlpTracesFormat,
+    TimeoutsConfig,
 };
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;

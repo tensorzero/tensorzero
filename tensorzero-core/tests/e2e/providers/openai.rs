@@ -6,7 +6,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero::{File, Input, InputMessage, InputMessageContent, Role};
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
-use tensorzero_core::config::ProviderTypesConfig;
+use tensorzero_core::config::provider_types::ProviderTypesConfig;
 use tensorzero_core::config::TimeoutsConfig;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::embeddings::{

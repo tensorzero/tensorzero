@@ -6,7 +6,7 @@ use crate::cache::{
     embedding_cache_lookup, start_cache_write, CacheData, CacheValidationInfo, EmbeddingCacheData,
     EmbeddingModelProviderRequest,
 };
-use crate::config::{ProviderTypesConfig, TimeoutsConfig};
+use crate::config::{provider_types::ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::extra_body::ExtraBodyConfig;

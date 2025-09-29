@@ -7,6 +7,7 @@ use futures::future::try_join_all;
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
+use provider_types::ProviderTypesConfig;
 #[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyKeyError;
 #[cfg(feature = "pyo3")]
@@ -52,6 +53,7 @@ use std::error::Error as StdError;
 
 pub mod gateway;
 pub mod path;
+pub mod provider_types;
 pub mod rate_limiting;
 mod span_map;
 #[cfg(test)]
@@ -134,38 +136,6 @@ pub struct TemplateFilesystemAccess {
     #[serde(default)]
     enabled: bool,
     base_path: Option<ResolvedTomlPath>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-pub struct GCPProviderTypeConfig {
-    #[serde(default)]
-    pub batch: Option<GCPBatchConfigType>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "storage_type", rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-#[serde(deny_unknown_fields)]
-pub enum GCPBatchConfigType {
-    // In the future, we'll want to allow explicitly setting 'none' at the model provider level,
-    // to override the global provider-types batch config.
-    None,
-    CloudStorage(GCPBatchConfigCloudStorage),
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-pub struct GCPBatchConfigCloudStorage {
-    pub input_uri_prefix: String,
-    pub output_uri_prefix: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -731,19 +701,24 @@ impl Config {
         .await?
         .into_iter()
         .collect::<HashMap<_, _>>();
-
-        let mut config = Config {
-            gateway: uninitialized_config.gateway.load()?,
-            models: models.try_into().map_err(|e| {
+        let models =
+            ModelTable::new(models, &uninitialized_config.provider_types).map_err(|e| {
                 Error::new(ErrorDetails::Config {
                     message: format!("Failed to load models: {e}"),
                 })
-            })?,
-            embedding_models: embedding_models.try_into().map_err(|e| {
-                Error::new(ErrorDetails::Config {
-                    message: format!("Failed to load embedding models: {e}"),
-                })
-            })?,
+            })?;
+        let embedding_models =
+            EmbeddingModelTable::new(embedding_models, &uninitialized_config.provider_types)
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Failed to load embedding models: {e}"),
+                    })
+                })?;
+
+        let mut config = Config {
+            gateway: uninitialized_config.gateway.load()?,
+            models,
+            embedding_models,
             functions,
             metrics: uninitialized_config.metrics,
             tools,
@@ -1136,15 +1111,6 @@ pub struct UninitializedConfig {
     pub postgres: PostgresConfig,
     #[serde(default)]
     pub rate_limiting: UninitializedRateLimitingConfig,
-}
-
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-pub struct ProviderTypesConfig {
-    #[serde(default)]
-    pub gcp_vertex_gemini: Option<GCPProviderTypeConfig>,
 }
 
 /// The result of parsing all of the globbed config files,

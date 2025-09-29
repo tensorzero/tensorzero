@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tensorzero_core::{
     cache::{CacheEnabledMode, CacheOptions},
-    config::ProviderTypesConfig,
+    config::provider_types::ProviderTypesConfig,
     db::{
         clickhouse::{test_helpers::select_json_inference_clickhouse, ClickHouseConnectionInfo},
         postgres::PostgresConnectionInfo,

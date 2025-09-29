@@ -11,7 +11,7 @@ use tracing_subscriber::{self, EnvFilter};
 use tensorzero::{InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role};
 use tensorzero_core::{
     cache::CacheOptions,
-    config::{Config, ConfigFileGlob, ProviderTypesConfig},
+    config::{provider_types::ProviderTypesConfig, Config, ConfigFileGlob},
     db::{
         clickhouse::{test_helpers::CLICKHOUSE_URL, ClickHouseConnectionInfo, ClickhouseFormat},
         postgres::PostgresConnectionInfo,
