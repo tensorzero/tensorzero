@@ -31,13 +31,13 @@ export const models: ModelOption[] = [
     provider: "openai",
   },
   {
-    displayName: "gpt-3.5-turbo-0125",
-    name: "gpt-3.5-turbo-0125",
+    displayName: "gpt-4.1-mini-0125",
+    name: "gpt-4.1-mini-0125",
     provider: "openai",
   },
   {
-    displayName: "gpt-3.5-turbo-1106",
-    name: "gpt-3.5-turbo-1106",
+    displayName: "gpt-4.1-mini-1106",
+    name: "gpt-4.1-mini-1106",
     provider: "openai",
   },
 
