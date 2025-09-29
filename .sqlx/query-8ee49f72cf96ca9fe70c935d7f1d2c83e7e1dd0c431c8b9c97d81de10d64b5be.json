@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH inserted_row AS (\n                INSERT INTO variant_by_episode(function_name, episode_id, variant_name)\n                VALUES ($1, $2, $3)\n                ON CONFLICT (function_name, episode_id) DO NOTHING\n                RETURNING variant_name\n            )\n            SELECT variant_name FROM inserted_row\n            UNION ALL\n            SELECT variant_name FROM variant_by_episode\n            WHERE\n                function_name = $1 AND episode_id = $2\n                AND NOT EXISTS (SELECT 1 FROM inserted_row);",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "variant_name",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8ee49f72cf96ca9fe70c935d7f1d2c83e7e1dd0c431c8b9c97d81de10d64b5be"
+}
