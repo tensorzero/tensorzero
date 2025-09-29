@@ -19,7 +19,7 @@ pub static DISABLE_TRACING_BUG_WORKAROUND: std::sync::atomic::AtomicBool =
 /// 2. Some other crate calls `tracing::enabled!` for a disabled event (e.g. a debug event from `sqlx`)
 ///    for the first time
 /// 3. The `tracing` crate calls `Layer::enabled` for our `Filtered` layer (created with `layer.with_filter(filter)`)
-/// 4. The `Filtered` layer implementation ome very sketchy thread-local usage -
+/// 4. The `Filtered` layer implementation uses some very sketchy thread-local usage -
 ///    it sets a thread-local to the filter result for that event:
 ///    https://github.com/tokio-rs/tracing/blob/c297a37096ae1562d453624984aa5f924ab490a1/tracing-subscriber/src/filter/layer_filters/mod.rs#L767-L769
 ///
