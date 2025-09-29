@@ -58,26 +58,71 @@ jobs:
 
           echo "should_skip=false" >> $GITHUB_OUTPUT
 
+      - name: Build payload for new issue notification
+        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'issues' && github.event.action == 'opened'
+        id: build-issue-payload
+        run: |
+          TITLE=$(jq -n --arg title "${{ github.event.issue.title }}" '$title')
+          ACTOR=$(jq -n --arg actor "${{ github.actor }}" '$actor')
+          PAYLOAD=$(jq -n \
+            --arg channel "C09HC3Q2XV2" \
+            --arg text "🐛 New issue opened by ${{ github.actor }}" \
+            --arg url "${{ github.event.issue.html_url }}" \
+            --arg title "${{ github.event.issue.title }}" \
+            --arg actor "${{ github.actor }}" \
+            --arg actor_url "https://github.com/${{ github.actor }}" \
+            '{
+              "channel": $channel,
+              "text": $text,
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ("🐛 *New issue opened*\n\n*Title:* <" + $url + "|" + $title + ">\n*Author:* <" + $actor_url + "|" + $actor + ">\n")
+                  }
+                }
+              ]
+            }')
+          echo "payload<<EOF" >> $GITHUB_OUTPUT
+          echo "$PAYLOAD" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Send Slack notification for new issue
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'issues' && github.event.action == 'opened'
         uses: slackapi/slack-github-action@v2.1.1
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
-          payload: |
-            {
-              "channel": "C09HC3Q2XV2",
-              "text": "🐛 New issue opened by ${{ github.actor }}",
+          payload: ${{ steps.build-issue-payload.outputs.payload }}
+
+      - name: Build payload for issue comment notification
+        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'issue_comment'
+        id: build-issue-comment-payload
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg channel "C09HC3Q2XV2" \
+            --arg text "💬 New comment on issue by ${{ github.actor }}" \
+            --arg url "${{ github.event.issue.html_url }}" \
+            --arg title "${{ github.event.issue.title }}" \
+            --arg actor "${{ github.actor }}" \
+            --arg actor_url "https://github.com/${{ github.actor }}" \
+            '{
+              "channel": $channel,
+              "text": $text,
               "blocks": [
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "🐛 *New issue opened*\n\n*Title:* <${{ github.event.issue.html_url }}|${{ github.event.issue.title }}>\n*Author:* <https://github.com/${{ github.actor }}|${{ github.actor }}>\n"
+                    "text": ("💬 *New comment on issue*\n\n*Issue:* <" + $url + "|" + $title + ">\n*Comment by:* <" + $actor_url + "|" + $actor + ">\n")
                   }
                 }
               ]
-            }
+            }')
+          echo "payload<<EOF" >> $GITHUB_OUTPUT
+          echo "$PAYLOAD" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Send Slack notification for issue comment
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'issue_comment'
@@ -85,20 +130,35 @@ jobs:
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
-          payload: |
-            {
-              "channel": "C09HC3Q2XV2",
-              "text": "💬 New comment on issue by ${{ github.actor }}",
+          payload: ${{ steps.build-issue-comment-payload.outputs.payload }}
+
+      - name: Build payload for new pull request notification
+        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_target' && github.event.action == 'opened'
+        id: build-pr-payload
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg channel "C09HC3Q2XV2" \
+            --arg text "🔀 New pull request opened by ${{ github.actor }}" \
+            --arg url "${{ github.event.pull_request.html_url }}" \
+            --arg title "${{ github.event.pull_request.title }}" \
+            --arg actor "${{ github.actor }}" \
+            --arg actor_url "https://github.com/${{ github.actor }}" \
+            '{
+              "channel": $channel,
+              "text": $text,
               "blocks": [
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "💬 *New comment on issue*\n\n*Issue:* <${{ github.event.issue.html_url }}|${{ github.event.issue.title }}>\n*Comment by:* <https://github.com/${{ github.actor }}|${{ github.actor }}>\n"
+                    "text": ("🔀 *New pull request opened*\n\n*Title:* <" + $url + "|" + $title + ">\n*Author:* <" + $actor_url + "|" + $actor + ">\n")
                   }
                 }
               ]
-            }
+            }')
+          echo "payload<<EOF" >> $GITHUB_OUTPUT
+          echo "$PAYLOAD" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Send Slack notification for new pull request
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_target' && github.event.action == 'opened'
@@ -106,20 +166,36 @@ jobs:
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
-          payload: |
-            {
-              "channel": "C09HC3Q2XV2",
-              "text": "🔀 New pull request opened by ${{ github.actor }}",
+          payload: ${{ steps.build-pr-payload.outputs.payload }}
+
+      - name: Build payload for pull request review notification
+        # TODO - figure out how to make this work on PRs from forks. Currently, we skip it, since we don't have secrets available.
+        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review' && !(github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]')
+        id: build-pr-review-payload
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg channel "C09HC3Q2XV2" \
+            --arg text "👀 Pull request review submitted by ${{ github.actor }}" \
+            --arg url "${{ github.event.pull_request.html_url }}" \
+            --arg title "${{ github.event.pull_request.title }}" \
+            --arg actor "${{ github.actor }}" \
+            --arg actor_url "https://github.com/${{ github.actor }}" \
+            '{
+              "channel": $channel,
+              "text": $text,
               "blocks": [
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "🔀 *New pull request opened*\n\n*Title:* <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>\n*Author:* <https://github.com/${{ github.actor }}|${{ github.actor }}>\n"
+                    "text": ("👀 *Pull request review submitted*\n\n*PR:* <" + $url + "|" + $title + ">\n*Review by:* <" + $actor_url + "|" + $actor + ">\n")
                   }
                 }
               ]
-            }
+            }')
+          echo "payload<<EOF" >> $GITHUB_OUTPUT
+          echo "$PAYLOAD" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Send Slack notification for pull request review
         # TODO - figure out how to make this work on PRs from forks. Currently, we skip it, since we don't have secrets available.
@@ -128,20 +204,35 @@ jobs:
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
-          payload: |
-            {
-              "channel": "C09HC3Q2XV2",
-              "text": "👀 Pull request review submitted by ${{ github.actor }}",
+          payload: ${{ steps.build-pr-review-payload.outputs.payload }}
+
+      - name: Build payload for new discussion notification
+        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'discussion' && github.event.action == 'created'
+        id: build-discussion-payload
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg channel "C09HC3Q2XV2" \
+            --arg text "💭 New discussion created by ${{ github.actor }}" \
+            --arg url "${{ github.event.discussion.html_url }}" \
+            --arg title "${{ github.event.discussion.title }}" \
+            --arg actor "${{ github.actor }}" \
+            --arg actor_url "https://github.com/${{ github.actor }}" \
+            '{
+              "channel": $channel,
+              "text": $text,
               "blocks": [
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "👀 *Pull request review submitted*\n\n*PR:* <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>\n*Review by:* <https://github.com/${{ github.actor }}|${{ github.actor }}>\n"
+                    "text": ("💭 *New discussion created*\n\n*Title:* <" + $url + "|" + $title + ">\n*Author:* <" + $actor_url + "|" + $actor + ">\n")
                   }
                 }
               ]
-            }
+            }')
+          echo "payload<<EOF" >> $GITHUB_OUTPUT
+          echo "$PAYLOAD" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Send Slack notification for new discussion
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'discussion' && github.event.action == 'created'
@@ -149,20 +240,35 @@ jobs:
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
-          payload: |
-            {
-              "channel": "C09HC3Q2XV2",
-              "text": "💭 New discussion created by ${{ github.actor }}",
+          payload: ${{ steps.build-discussion-payload.outputs.payload }}
+
+      - name: Build payload for discussion comment notification
+        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'discussion_comment'
+        id: build-discussion-comment-payload
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg channel "C09HC3Q2XV2" \
+            --arg text "💬 New comment on discussion by ${{ github.actor }}" \
+            --arg url "${{ github.event.discussion.html_url }}" \
+            --arg title "${{ github.event.discussion.title }}" \
+            --arg actor "${{ github.actor }}" \
+            --arg actor_url "https://github.com/${{ github.actor }}" \
+            '{
+              "channel": $channel,
+              "text": $text,
               "blocks": [
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "💭 *New discussion created*\n\n*Title:* <${{ github.event.discussion.html_url }}|${{ github.event.discussion.title }}>\n*Author:* <https://github.com/${{ github.actor }}|${{ github.actor }}>\n"
+                    "text": ("💬 *New comment on discussion*\n\n*Discussion:* <" + $url + "|" + $title + ">\n*Comment by:* <" + $actor_url + "|" + $actor + ">\n")
                   }
                 }
               ]
-            }
+            }')
+          echo "payload<<EOF" >> $GITHUB_OUTPUT
+          echo "$PAYLOAD" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Send Slack notification for discussion comment
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'discussion_comment'
@@ -170,17 +276,4 @@ jobs:
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
-          payload: |
-            {
-              "channel": "C09HC3Q2XV2",
-              "text": "💬 New comment on discussion by ${{ github.actor }}",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "💬 *New comment on discussion*\n\n*Discussion:* <${{ github.event.discussion.html_url }}|${{ github.event.discussion.title }}>\n*Comment by:* <https://github.com/${{ github.actor }}|${{ github.actor }}>\n"
-                  }
-                }
-              ]
-            }
+          payload: ${{ steps.build-discussion-comment-payload.outputs.payload }}
