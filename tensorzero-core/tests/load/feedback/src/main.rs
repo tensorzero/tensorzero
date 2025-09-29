@@ -35,6 +35,9 @@ pub struct Args {
     /// Number of distinct inferences to send feedback to
     #[arg(long, default_value_t = 10000)]
     pub num_distinct_inferences: usize,
+
+    #[arg(long, default_value_t = false)]
+    pub disable_feedback_target_validation: bool,
 }
 
 #[derive(Deserialize)]
@@ -92,12 +95,14 @@ max_rows = {}",
     // Set up a TensorZero client with a metric and the appropriate writing settings
     let config = format!(
         r#"
+gateway.unstable_disable_feedback_target_validation = {}
 {write_config}
 [metrics.test]
 type = "float"
 optimize = "max"
 level = "inference"
-    "#
+    "#,
+        args.disable_feedback_target_validation
     );
 
     let client = make_embedded_gateway_with_config(&config).await;
