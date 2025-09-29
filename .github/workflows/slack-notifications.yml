@@ -62,8 +62,6 @@ jobs:
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'issues' && github.event.action == 'opened'
         id: build-issue-payload
         run: |
-          TITLE=$(jq -n --arg title "${{ github.event.issue.title }}" '$title')
-          ACTOR=$(jq -n --arg actor "${{ github.actor }}" '$actor')
           PAYLOAD=$(jq -n \
             --arg channel "C09HC3Q2XV2" \
             --arg text "🐛 New issue opened by ${{ github.actor }}" \
