@@ -133,9 +133,13 @@ impl VariantSampler for StaticWeightsConfig {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+
     use super::*;
-    use crate::config::{ErrorContext, SchemaData};
+    use crate::config::{Config, ConfigFileGlob, ErrorContext, SchemaData, TimeoutsConfig};
+    use crate::variant::chat_completion::ChatCompletionConfig;
     use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
+    use tempfile::NamedTempFile;
     use tokio;
     use uuid::Uuid;
 
@@ -268,5 +272,90 @@ mod tests {
             (actual_c - expected_c).abs() < tolerance,
             "Variant C: expected {expected_c:.3}, got {actual_c:.3}"
         );
+    }
+
+    #[tokio::test]
+    async fn test_sampling_from_config() {
+        let config_str = r#"
+            [functions.test]
+            type = "chat"
+            [functions.test.experimentation]
+            type = "static_weights"
+            candidate_variants = {"foo" = 5, "bar" = 1 }
+            fallback_variants = ["baz"]
+
+            [functions.test.variants.foo]
+            type = "chat_completion"
+            model = "openai::gpt-5"
+
+            [functions.test.variants.bar]
+            type = "chat_completion"
+            model = "anthropic::claude"
+
+            [functions.test.variants.baz]
+            type = "chat_completion"
+            model = "fireworks::deepseek-v3"
+            "#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(config_str.as_bytes()).unwrap();
+
+        let config = Config::load_from_path_optional_verify_credentials(
+            &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+            false,
+        )
+        .await
+        .unwrap();
+        let experiment = config.functions.get("test").unwrap().experimentation();
+        // no-op but we call it for completeness
+        experiment.setup().await.unwrap();
+
+        let mut variants = BTreeMap::from([
+            (
+                "foo".to_string(),
+                Arc::new(VariantInfo {
+                    inner: VariantConfig::ChatCompletion(ChatCompletionConfig::default()),
+                    timeouts: TimeoutsConfig::default(),
+                }),
+            ),
+            (
+                "bar".to_string(),
+                Arc::new(VariantInfo {
+                    inner: VariantConfig::ChatCompletion(ChatCompletionConfig::default()),
+                    timeouts: TimeoutsConfig::default(),
+                }),
+            ),
+            (
+                "baz".to_string(),
+                Arc::new(VariantInfo {
+                    inner: VariantConfig::ChatCompletion(ChatCompletionConfig::default()),
+                    timeouts: TimeoutsConfig::default(),
+                }),
+            ),
+        ]);
+
+        let (first_sample_name, _info) = experiment
+            .sample("test", Uuid::now_v7(), &mut variants)
+            .await
+            .unwrap();
+        assert!(!variants.contains_key(&first_sample_name));
+        assert!(first_sample_name == "foo" || first_sample_name == "bar");
+
+        let (second_sample_name, _info) = experiment
+            .sample("test", Uuid::now_v7(), &mut variants)
+            .await
+            .unwrap();
+        assert!(variants.contains_key(&second_sample_name));
+        assert!(second_sample_name == "foo" || second_sample_name == "bar");
+        assert!(first_sample_name != second_sample_name);
+
+        let (third_sample_name, _info) = experiment
+            .sample("test", Uuid::now_v7(), &mut variants)
+            .await
+            .unwrap();
+        assert!(variants.contains_key(&third_sample_name));
+        assert_eq!(third_sample_name, "baz");
+        assert!(first_sample_name != third_sample_name);
+        assert!(second_sample_name != third_sample_name);
     }
 }
