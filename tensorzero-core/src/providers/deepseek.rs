@@ -50,7 +50,7 @@ lazy_static! {
 const PROVIDER_NAME: &str = "DeepSeek";
 pub const PROVIDER_TYPE: &str = "deepseek";
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum DeepSeekCredentials {
     Static(SecretString),
     Dynamic(String),

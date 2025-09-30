@@ -9,11 +9,31 @@ use std::{
 
 use secrecy::SecretString;
 use serde::Serialize;
+use tokio::sync::OnceCell;
 
 use crate::{
     config::{provider_types::ProviderTypesConfig, skip_credential_validation},
     error::{Error, ErrorDetails},
     model::{Credential, CredentialLocation, UninitializedProviderConfig},
+    providers::{
+        anthropic::AnthropicCredentials,
+        azure::AzureCredentials,
+        deepseek::DeepSeekCredentials,
+        fireworks::FireworksCredentials,
+        gcp_vertex_anthropic::make_gcp_sdk_credentials,
+        gcp_vertex_gemini::{build_gcp_non_sdk_credentials, GCPVertexCredentials},
+        google_ai_studio_gemini::GoogleAIStudioCredentials,
+        groq::GroqCredentials,
+        hyperbolic::HyperbolicCredentials,
+        mistral::MistralCredentials,
+        openai::OpenAICredentials,
+        openrouter::OpenRouterCredentials,
+        sglang::SGLangCredentials,
+        tgi::TGICredentials,
+        together::TogetherCredentials,
+        vllm::VLLMCredentials,
+        xai::XAICredentials,
+    },
 };
 use lazy_static::lazy_static;
 use strum::VariantNames;
@@ -37,7 +57,7 @@ trait ProviderKind {
     async fn get_credential_field(
         &self,
         default_credentials: &ProviderTypeDefaultCredentials,
-    ) -> Result<&Self::Credential, Error>;
+    ) -> Result<Self::Credential, Error>;
     async fn get_defaulted_credential(
         &self,
         api_key_location: Option<&CredentialLocation>,
@@ -52,22 +72,6 @@ trait ProviderKind {
             .get_credential_field(default_credentials)
             .await?
             .clone())
-    }
-}
-
-struct OpenAIKind;
-
-impl ProviderKind for OpenAIKind {
-    type Credential = OpenAICredential;
-    fn get_provider_type(&self) -> ProviderType {
-        ProviderType::OpenAI
-    }
-
-    async fn get_credential_field(
-        &self,
-        default_credentials: &ProviderTypeDefaultCredentials,
-    ) -> Result<&Self::Credential, Error> {
-        &default_credentials.openai
     }
 }
 
@@ -151,26 +155,7 @@ pub trait ShorthandModelConfig: Sized {
     fn validate(&self, key: &str) -> Result<(), Error>;
 }
 
-// impl<T: ShorthandModelConfig> TryFrom<HashMap<Arc<str>, T>> for BaseModelTable<T> {
-//     type Error = String;
-
-//     fn try_from(map: HashMap<Arc<str>, T>) -> Result<Self, Self::Error> {
-//         for key in map.keys() {
-//             if RESERVED_MODEL_PREFIXES
-//                 .iter()
-//                 .any(|name| key.starts_with(name))
-//             {
-//                 return Err(format!(
-//                     "{} name '{}' contains a reserved prefix",
-//                     T::MODEL_TYPE,
-//                     key
-//                 ));
-//             }
-//         }
-//         Ok(BaseModelTable(map))
-//     }
-// }
-
+// TODO: consider commenting this out
 impl<T: ShorthandModelConfig> std::ops::Deref for BaseModelTable<T> {
     type Target = HashMap<Arc<str>, T>;
 
@@ -286,15 +271,15 @@ impl<T: ShorthandModelConfig> BaseModelTable<T> {
     }
 }
 
-pub struct LazyCredential {
-    cell: OnceLock<Result<Credential, Error>>,
-    loader: Box<dyn Fn() -> Result<Credential, Error> + Send + Sync>,
+pub struct LazyCredential<T: Clone> {
+    cell: OnceLock<Result<T, Error>>,
+    loader: Box<dyn Fn() -> Result<T, Error> + Send + Sync>,
 }
 
-impl LazyCredential {
+impl<T: Clone> LazyCredential<T> {
     pub fn new<F>(loader: F) -> Self
     where
-        F: Fn() -> Result<Credential, Error> + Send + Sync + 'static,
+        F: Fn() -> Result<T, Error> + Send + Sync + 'static,
     {
         Self {
             cell: OnceLock::new(),
@@ -302,32 +287,36 @@ impl LazyCredential {
         }
     }
 
-    pub fn get(&self) -> Result<&Credential, &Error> {
+    pub fn get(&self) -> Result<&T, &Error> {
         self.cell.get_or_init(|| (self.loader)()).as_ref()
     }
 
-    pub fn get_cloned(&self) -> Result<Credential, Error>
+    pub fn get_cloned(&self) -> Result<T, Error>
     where
         Error: Clone,
     {
         self.get().map(|t| t.clone()).map_err(|e| e.clone())
     }
 }
-/*
 
-use tokio::sync::OnceCell as AsyncOnceCell;
-pub struct LazyAsyncCredential<T> {
-    cell: AsyncOnceCell<Result<T, Error>>,
-    loader: fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, Error>> + Send>>,
+pub struct LazyAsyncCredential<T: Clone> {
+    cell: OnceCell<Result<T, Error>>,
+    loader: Box<
+        dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, Error>> + Send>>
+            + Send
+            + Sync,
+    >,
 }
 
-impl<T> LazyAsyncCredential<T> {
-    pub fn new(
-        loader: fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, Error>> + Send>>,
-    ) -> Self {
+impl<T: Clone> LazyAsyncCredential<T> {
+    pub fn new<F, Fut>(loader: F) -> Self
+    where
+        F: Fn() -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Result<T, Error>> + Send + 'static,
+    {
         Self {
-            cell: AsyncOnceCell::new(),
-            loader,
+            cell: OnceCell::new(),
+            loader: Box::new(move || Box::pin(loader())),
         }
     }
 
@@ -345,28 +334,29 @@ impl<T> LazyAsyncCredential<T> {
     {
         self.get().await.map(|t| t.clone()).map_err(|e| e.clone())
     }
-}*/
+}
 
 pub struct ProviderTypeDefaultCredentials {
-    pub anthropic: LazyCredential,
+    anthropic: LazyCredential<AnthropicCredentials>,
+    // Note: we currently do not support shorthand for either AWS Bedrock or AWS Sagemaker
     // aws_bedrock:
     // aws_sagemaker:
-    pub azure: LazyCredential,
-    pub deepseek: LazyCredential,
-    pub fireworks: LazyCredential,
-    // gcp_vertex_anthropic: GCPVertexCredentials,
-    // gcp_vertex_gemini: GCPVertexCredentials,
-    pub google_ai_studio_gemini: LazyCredential,
-    pub groq: LazyCredential,
-    pub hyperbolic: LazyCredential,
-    pub mistral: LazyCredential,
-    pub openai: LazyCredential,
-    pub openrouter: LazyCredential,
-    pub sglang: LazyCredential,
-    pub tgi: LazyCredential,
-    pub together: LazyCredential,
-    pub vllm: LazyCredential,
-    pub xai: LazyCredential,
+    azure: LazyCredential<AzureCredentials>,
+    deepseek: LazyCredential<DeepSeekCredentials>,
+    fireworks: LazyCredential<FireworksCredentials>,
+    gcp_vertex_anthropic: LazyAsyncCredential<GCPVertexCredentials>,
+    gcp_vertex_gemini: LazyAsyncCredential<GCPVertexCredentials>,
+    google_ai_studio_gemini: LazyCredential<GoogleAIStudioCredentials>,
+    groq: LazyCredential<GroqCredentials>,
+    hyperbolic: LazyCredential<HyperbolicCredentials>,
+    mistral: LazyCredential<MistralCredentials>,
+    openai: LazyCredential<OpenAICredentials>,
+    openrouter: LazyCredential<OpenRouterCredentials>,
+    sglang: LazyCredential<SGLangCredentials>,
+    tgi: LazyCredential<TGICredentials>,
+    together: LazyCredential<TogetherCredentials>,
+    vllm: LazyCredential<VLLMCredentials>,
+    xai: LazyCredential<XAICredentials>,
 }
 
 impl ProviderTypeDefaultCredentials {
@@ -393,6 +383,16 @@ impl ProviderTypeDefaultCredentials {
             .clone();
         let google_ai_studio_gemini_location = provider_types_config
             .google_ai_studio_gemini
+            .defaults
+            .credential_location
+            .clone();
+        let gcp_vertex_anthropic_location = provider_types_config
+            .gcp_vertex_anthropic
+            .defaults
+            .credential_location
+            .clone();
+        let gcp_vertex_gemini_location = provider_types_config
+            .gcp_vertex_gemini
             .defaults
             .credential_location
             .clone();
@@ -449,73 +449,83 @@ impl ProviderTypeDefaultCredentials {
 
         ProviderTypeDefaultCredentials {
             anthropic: LazyCredential::new(move || {
-                load_credential(&anthropic_location, ProviderType::Anthropic)
+                Ok(load_credential(&anthropic_location, ProviderType::Anthropic)?.try_into()?)
             }),
             azure: LazyCredential::new(move || {
-                load_credential(&azure_location, ProviderType::Azure)
+                Ok(load_credential(&azure_location, ProviderType::Azure)?.try_into()?)
             }),
             deepseek: LazyCredential::new(move || {
-                load_credential(&deepseek_location, ProviderType::Deepseek)
+                Ok(load_credential(&deepseek_location, ProviderType::Deepseek)?.try_into()?)
             }),
             fireworks: LazyCredential::new(move || {
-                load_credential(&fireworks_location, ProviderType::Fireworks)
+                Ok(load_credential(&fireworks_location, ProviderType::Fireworks)?.try_into()?)
             }),
             google_ai_studio_gemini: LazyCredential::new(move || {
-                load_credential(
+                Ok(load_credential(
                     &google_ai_studio_gemini_location,
                     ProviderType::GoogleAIStudioGemini,
-                )
+                )?
+                .try_into()?)
             }),
-            groq: LazyCredential::new(move || load_credential(&groq_location, ProviderType::Groq)),
+            gcp_vertex_anthropic: LazyAsyncCredential::new(move || {
+                let location = gcp_vertex_anthropic_location.clone();
+                async move {
+                    match location {
+                        CredentialLocation::Sdk => {
+                            make_gcp_sdk_credentials(&ProviderType::GCPVertexAnthropic).await
+                        }
+                        _ => build_gcp_non_sdk_credentials(
+                            load_credential(&location, ProviderType::GCPVertexAnthropic)?,
+                            &ProviderType::GCPVertexAnthropic,
+                        ),
+                    }
+                }
+            }),
+            gcp_vertex_gemini: LazyAsyncCredential::new(move || {
+                let location = gcp_vertex_gemini_location.clone();
+                async move {
+                    match location {
+                        CredentialLocation::Sdk => {
+                            make_gcp_sdk_credentials(&ProviderType::GCPVertexGemini).await
+                        }
+                        _ => build_gcp_non_sdk_credentials(
+                            load_credential(&location, ProviderType::GCPVertexGemini)?,
+                            &ProviderType::GCPVertexGemini,
+                        ),
+                    }
+                }
+            }),
+
+            groq: LazyCredential::new(move || {
+                Ok(load_credential(&groq_location, ProviderType::Groq)?.try_into()?)
+            }),
             hyperbolic: LazyCredential::new(move || {
-                load_credential(&hyperbolic_location, ProviderType::Hyperbolic)
+                Ok(load_credential(&hyperbolic_location, ProviderType::Hyperbolic)?.try_into()?)
             }),
             mistral: LazyCredential::new(move || {
-                load_credential(&mistral_location, ProviderType::Mistral)
+                Ok(load_credential(&mistral_location, ProviderType::Mistral)?.try_into()?)
             }),
             openai: LazyCredential::new(move || {
-                load_credential(&openai_location, ProviderType::OpenAI)
+                Ok(load_credential(&openai_location, ProviderType::OpenAI)?.try_into()?)
             }),
             openrouter: LazyCredential::new(move || {
-                load_credential(&openrouter_location, ProviderType::OpenRouter)
+                Ok(load_credential(&openrouter_location, ProviderType::OpenRouter)?.try_into()?)
             }),
             sglang: LazyCredential::new(move || {
-                load_credential(&sglang_location, ProviderType::SGLang)
+                Ok(load_credential(&sglang_location, ProviderType::SGLang)?.try_into()?)
             }),
-            tgi: LazyCredential::new(move || load_credential(&tgi_location, ProviderType::TGI)),
+            tgi: LazyCredential::new(move || {
+                Ok(load_credential(&tgi_location, ProviderType::TGI)?.try_into()?)
+            }),
             together: LazyCredential::new(move || {
-                load_credential(&together_location, ProviderType::Together)
+                Ok(load_credential(&together_location, ProviderType::Together)?.try_into()?)
             }),
-            vllm: LazyCredential::new(move || load_credential(&vllm_location, ProviderType::VLLM)),
-            xai: LazyCredential::new(move || load_credential(&xai_location, ProviderType::XAI)),
-        }
-    }
-
-    pub fn get_defaulted_credential<T: ProviderKind>(
-        &self,
-        api_key_location: Option<&CredentialLocation>,
-
-        provider_kind: T,
-    ) -> Result<T::Credential, Error> {
-        let provider_type = provider_kind.provider_type();
-        if let Some(api_key_location) = api_key_location {
-            return load_credential(api_key_location, provider_type);
-        }
-        match provider_type {
-            ProviderType::Anthropic => self.anthropic.get_cloned(),
-            ProviderType::Azure => self.azure.get_cloned(),
-            ProviderType::Deepseek => self.deepseek.get_cloned(),
-            ProviderType::Fireworks => self.fireworks.get_cloned(),
-            ProviderType::GoogleAIStudioGemini => self.google_ai_studio_gemini.get_cloned(),
-            ProviderType::Groq => self.groq.get_cloned(),
-            ProviderType::Hyperbolic => self.hyperbolic.get_cloned(),
-            ProviderType::OpenRouter => self.openrouter.get_cloned(),
-            ProviderType::SGLang => self.sglang.get_cloned(),
-            ProviderType::TGI => self.tgi.get_cloned(),
-            ProviderType::Together => self.together.get_cloned(),
-            ProviderType::VLLM => self.vllm.get_cloned(),
-            ProviderType::XAI => self.xai.get_cloned(),
-            _ => todo!(),
+            vllm: LazyCredential::new(move || {
+                Ok(load_credential(&vllm_location, ProviderType::VLLM)?.try_into()?)
+            }),
+            xai: LazyCredential::new(move || {
+                Ok(load_credential(&xai_location, ProviderType::XAI)?.try_into()?)
+            }),
         }
     }
 }
@@ -627,5 +637,37 @@ fn load_credential(
         CredentialLocation::Dynamic(key_name) => Ok(Credential::Dynamic(key_name.clone())),
         CredentialLocation::Sdk => Ok(Credential::Sdk),
         CredentialLocation::None => Ok(Credential::None),
+    }
+}
+
+struct AnthropicKind;
+
+impl ProviderKind for AnthropicKind {
+    type Credential = AnthropicCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::Anthropic
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.anthropic.get_cloned()
+    }
+}
+
+struct OpenAIKind;
+
+impl ProviderKind for OpenAIKind {
+    type Credential = OpenAICredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::OpenAI
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.openai.get_cloned()
     }
 }

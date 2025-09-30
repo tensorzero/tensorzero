@@ -56,6 +56,7 @@ use crate::inference::types::{
 };
 use crate::inference::InferenceProvider;
 use crate::model::{fully_qualified_name, Credential, CredentialLocation, ModelProvider};
+use crate::model_table::ProviderType;
 use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_anthropic::make_gcp_sdk_credentials;
@@ -637,33 +638,32 @@ pub enum GCPVertexCredentials {
     None,
 }
 
-impl GCPVertexCredentials {
-    /// Helper method to build credentials for a GCP-based provider
-    /// You should call either `GCPVertexGeminiProvider::build_credentials` or
-    /// `GCPVertexAnthropicProvider::build_credentials` rather than calling this directly.
-    pub async fn new(
-        cred_location: Option<CredentialLocation>,
-        cache: &'static OnceLock<GCPVertexCredentials>,
-        default_location: CredentialLocation,
-        provider_type: &'static str,
-    ) -> Result<Self, Error> {
-        if matches!(cred_location, Some(CredentialLocation::Sdk)) {
-            make_gcp_sdk_credentials(provider_type).await
-        } else {
-            build_creds_caching_default_with_fn(
-                cred_location,
-                default_location,
-                provider_type,
-                cache,
-                |creds| build_non_sdk_credentials(creds, provider_type),
-            )
-        }
-    }
-}
+// impl GCPVertexCredentials {
+//     /// Helper method to build credentials for a GCP-based provider
+//     /// You should call either `GCPVertexGeminiProvider::build_credentials` or
+//     /// `GCPVertexAnthropicProvider::build_credentials` rather than calling this directly.
+//     pub async fn new(
+//         cred_location: CredentialLocation,
+//         provider_type: &'static str,
+//     ) -> Result<Self, Error> {
+//         if matches!(cred_location, Some(CredentialLocation::Sdk)) {
+//             make_gcp_sdk_credentials(provider_type).await
+//         } else {
+//             build_gcp_non_sdk_credentials
+//             build_creds_caching_default_with_fn(
+//                 cred_location,
+//                 default_location,
+//                 provider_type,
+//                 cache,
+//                 |creds| build_gcp_non_sdk_credentials(creds, provider_type),
+//             )
+//         }
+//     }
+// }
 
-fn build_non_sdk_credentials(
+pub fn build_gcp_non_sdk_credentials(
     credentials: Credential,
-    provider_type: &str,
+    provider_type: &ProviderType,
 ) -> Result<GCPVertexCredentials, Error> {
     match credentials {
         Credential::FileContents(file_content) => Ok(GCPVertexCredentials::Static {
@@ -3783,23 +3783,23 @@ mod tests {
             "universe_domain": "googleapis.com"
         }"#;
         let generic = Credential::FileContents(SecretString::from(json_content));
-        let creds = build_non_sdk_credentials(generic, "GCPVertexGemini").unwrap();
+        let creds = build_gcp_non_sdk_credentials(generic, "GCPVertexGemini").unwrap();
         assert!(matches!(creds, GCPVertexCredentials::Static { .. }));
 
         // Test Dynamic credential
         let generic = Credential::Dynamic("key_name".to_string());
-        let creds = build_non_sdk_credentials(generic, "GCPVertexGemini").unwrap();
+        let creds = build_gcp_non_sdk_credentials(generic, "GCPVertexGemini").unwrap();
         assert!(matches!(creds, GCPVertexCredentials::Dynamic(_)));
 
         // Test Missing credential
         let generic = Credential::Missing;
-        let creds = build_non_sdk_credentials(generic, "GCPVertexGemini").unwrap();
+        let creds = build_gcp_non_sdk_credentials(generic, "GCPVertexGemini").unwrap();
         assert!(matches!(creds, GCPVertexCredentials::None));
 
         // Test invalid JSON content
         let invalid_json = "invalid json";
         let generic = Credential::FileContents(SecretString::from(invalid_json));
-        let result = build_non_sdk_credentials(generic, "GCPVertexGemini");
+        let result = build_gcp_non_sdk_credentials(generic, "GCPVertexGemini");
         assert!(result.is_err());
         let error = result.unwrap_err();
         let err = error.get_details();
@@ -3809,7 +3809,7 @@ mod tests {
 
         // Test invalid credential type (Static)
         let generic = Credential::Static(SecretString::from("test"));
-        let result = build_non_sdk_credentials(generic, "GCPVertexGemini");
+        let result = build_gcp_non_sdk_credentials(generic, "GCPVertexGemini");
         assert!(result.is_err());
         let error = result.unwrap_err();
         let err = error.get_details();
