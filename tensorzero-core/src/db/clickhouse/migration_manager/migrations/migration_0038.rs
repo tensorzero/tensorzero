@@ -96,7 +96,7 @@ impl Migration for Migration0038<'_> {
                 "ChatInference",
                 "toUInt128(episode_id) as episode_id_uint,
                 1 as count,
-                groupArrayState()(id) as inference_ids,
+                groupArrayState(id) as inference_ids,
                 toUInt128(min(id)) as min_inference_id_uint,
                 toUInt128(max(id)) as max_inference_id_uint",
                 Some(&format!("WHERE {} AND toUInt128(episode_id) < toUInt128(toUUID('{}'))
@@ -112,7 +112,7 @@ impl Migration for Migration0038<'_> {
                 "JsonInference",
                 "toUInt128(episode_id) as episode_id_uint,
                 1 as count,
-                groupArrayState()(id) as inference_ids,
+                groupArrayState(id) as inference_ids,
                 toUInt128(min(id)) as min_inference_id_uint,
                 toUInt128(max(id)) as max_inference_id_uint",
                 Some(&format!("WHERE {} AND toUInt128(episode_id) < toUInt128(toUUID('{}'))
@@ -145,7 +145,7 @@ impl Migration for Migration0038<'_> {
                     SELECT
                         toUInt128(episode_id) as episode_id_uint,
                         1 as count,
-                        groupArrayState()(id) as inference_ids,
+                        groupArrayState(id) as inference_ids,
                         toUInt128(min(id)) as min_inference_id_uint,
                         toUInt128(max(id)) as max_inference_id_uint
                     FROM {chat_inference_source_for_insert}

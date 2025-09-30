@@ -100,30 +100,15 @@ impl Migration for Migration0037<'_> {
             )
             .await?;
 
-        // If not a clean start, restrict MV ingestion to rows >= view timestamp.
-        let view_where_clause_str = if clean_start {
-            String::new()
+        // Combine WHERE clause (if needed) and GROUP BY clause
+        let where_and_group_by = if clean_start {
+            // Clean start: only GROUP BY needed
+            "GROUP BY model_name, model_provider_name, minute".to_string()
         } else {
-            format!("WHERE UUIDv7ToDateTime(id) >= fromUnixTimestamp64Nano({view_timestamp_nanos})")
-        };
-
-        // Build MV using the same `qs` list for quantilesTDigestState(...)
-        let select_query = format!(
-            "model_name,
-                model_provider_name,
-                toStartOfMinute(timestamp) as minute,
-
-                quantilesTDigestState({qs})(response_time_ms) as response_time_ms_quantiles,
-                quantilesTDigestState({qs})(ttft_ms) as ttft_ms_quantiles,
-                sumState(input_tokens) as total_input_tokens,
-                sumState(output_tokens) as total_output_tokens,
-                countState() as count"
-        );
-
-        let full_where_clause = if view_where_clause_str.is_empty() {
-            "GROUP BY (model_name, model_provider_name, minute)".to_string()
-        } else {
-            format!("{} GROUP BY (model_name, model_provider_name, minute)", view_where_clause_str)
+            // Not clean start: WHERE clause to filter recent data + GROUP BY
+            format!(
+                "WHERE UUIDv7ToDateTime(id) >= fromUnixTimestamp64Nano({view_timestamp_nanos}) GROUP BY model_name, model_provider_name, minute"
+            )
         };
         
         self.clickhouse
@@ -131,8 +116,19 @@ impl Migration for Migration0037<'_> {
                 "ModelProviderStatisticsView",
                 "ModelProviderStatistics", 
                 "ModelInference",
-                &select_query,
-                Some(&full_where_clause),
+                // Build MV using the same `qs` list for quantilesTDigestState(...)
+                &format!(
+                    "model_name,
+                        model_provider_name,
+                        toStartOfMinute(timestamp) as minute,
+
+                        quantilesTDigestState({qs})(response_time_ms) as response_time_ms_quantiles,
+                        quantilesTDigestState({qs})(ttft_ms) as ttft_ms_quantiles,
+                        sumState(input_tokens) as total_input_tokens,
+                        sumState(output_tokens) as total_output_tokens,
+                        countState() as count"
+                ),
+                Some(&where_and_group_by),
             )
             .await?;
 

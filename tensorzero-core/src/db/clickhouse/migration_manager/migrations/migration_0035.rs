@@ -59,6 +59,14 @@ impl Migration for Migration0035<'_> {
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        
+        // Use local table name for ModelInference in sharded environments
+        let model_inference_source = if self.clickhouse.is_sharding_enabled() {
+            self.clickhouse.get_local_table_name("ModelInference")
+        } else {
+            "ModelInference".to_string()
+        };
+        
         self.clickhouse
             .run_query_synchronous_no_params(format!(
                 r"ALTER TABLE CumulativeUsageView{on_cluster_name} MODIFY QUERY
@@ -72,7 +80,7 @@ impl Migration for Migration0035<'_> {
                             tuple('output_tokens', ifNull(output_tokens, 0)),
                             tuple('model_inferences', 1)
                         ]) AS t
-                  FROM ModelInference
+                  FROM {model_inference_source}
                   WHERE input_tokens IS NOT NULL
                 )
                 "

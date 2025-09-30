@@ -796,14 +796,20 @@ impl ClickHouseConnectionInfo {
             Self::Production {
                 cluster_name,
                 database,
+                sharding_config,
                 ..
             } => match cluster_name {
-                Some(_) => get_replicated_table_engine_name(
-                    table_engine_name,
-                    table_name,
-                    database,
-                    engine_args,
-                ),
+                Some(_) => {
+                    // Use automatic paths only for sharded setups to avoid ZooKeeper coordination issues
+                    let use_automatic_paths = sharding_config.is_some();
+                    get_replicated_table_engine_name(
+                        table_engine_name,
+                        table_name,
+                        database,
+                        engine_args,
+                        use_automatic_paths,
+                    )
+                }
                 None => {
                     let engine_args_str = engine_args.join(", ");
                     format!("{table_engine_name}({engine_args_str})")
@@ -1072,7 +1078,7 @@ impl ClickHouseConnectionInfo {
     /// * `target_table` - Name of the target table (will be converted to distributed table in sharded setups)
     /// * `source_table` - Name of the source table (will be converted to local table in sharded setups)  
     /// * `select_query` - The SELECT part of the materialized view query (without SELECT keyword)
-    /// * `where_clause` - Optional WHERE clause to append to the query
+    /// * `where_clause` - Optional WHERE clause and/or GROUP BY clause to append after FROM
     pub async fn get_create_materialized_view_statements(
         &self,
         view_name: &str,
@@ -1181,21 +1187,36 @@ pub struct GetMaybeReplicatedTableEngineNameArgs<'a> {
 /// The following arguments must be the arguments that the table engine takes.
 /// See https://clickhouse.com/docs/engines/table-engines/mergetree-family/replication for more details.
 ///
-/// Since there may be issues with renaming tables, we don't use the database or table name shortcuts in the path.
-/// This method requires that the macros for {{shard}} and {{replica}} are defined in the ClickHouse configuration.
+/// For sharded setups, we use automatic ZooKeeper path generation to avoid coordination
+/// metadata corruption issues when default_replica_path configuration is missing.
+/// For non-sharded replicated setups, we use explicit paths with macros.
+///
 /// This method should only be called if a cluster name is provided.
 fn get_replicated_table_engine_name(
     table_engine_name: &str,
     table_name: &str,
     database: &str,
     engine_args: &[&str],
+    use_automatic_paths: bool,
 ) -> String {
-    let keeper_path = format!("'/clickhouse/tables/{{shard}}/{database}/{table_name}'");
-    if engine_args.is_empty() {
-        format!("Replicated{table_engine_name}({keeper_path}, '{{replica}}')")
+    if use_automatic_paths {
+        // Use automatic ZooKeeper path generation for sharded setups
+        // This avoids ZooKeeper coordination metadata corruption issues
+        if engine_args.is_empty() {
+            format!("Replicated{table_engine_name}()")
+        } else {
+            let engine_args_str = engine_args.join(", ");
+            format!("Replicated{table_engine_name}({engine_args_str})")
+        }
     } else {
-        let engine_args_str = engine_args.join(", ");
-        format!("Replicated{table_engine_name}({keeper_path}, '{{replica}}', {engine_args_str})")
+        // Use explicit paths for non-sharded replicated setups
+        let keeper_path = format!("'/clickhouse/tables/{{shard}}/{database}/{table_name}'");
+        if engine_args.is_empty() {
+            format!("Replicated{table_engine_name}({keeper_path}, '{{replica}}')")
+        } else {
+            let engine_args_str = engine_args.join(", ");
+            format!("Replicated{table_engine_name}({keeper_path}, '{{replica}}', {engine_args_str})")
+        }
     }
 }
 
@@ -1593,7 +1614,7 @@ mod tests {
 
     #[test]
     fn test_get_replicated_table_engine_name_basic() {
-        let result = get_replicated_table_engine_name("MergeTree", "test_table", "test_db", &[]);
+        let result = get_replicated_table_engine_name("MergeTree", "test_table", "test_db", &[], false);
         assert_eq!(
             result,
             "ReplicatedMergeTree('/clickhouse/tables/{shard}/test_db/test_table', '{replica}')"
@@ -1603,7 +1624,7 @@ mod tests {
     #[test]
     fn test_get_replicated_table_engine_name_with_single_arg() {
         let result =
-            get_replicated_table_engine_name("MergeTree", "users", "analytics", &["ORDER BY id"]);
+            get_replicated_table_engine_name("MergeTree", "users", "analytics", &["ORDER BY id"], false);
         assert_eq!(
             result,
             "ReplicatedMergeTree('/clickhouse/tables/{shard}/analytics/users', '{replica}', ORDER BY id)"
@@ -1617,6 +1638,7 @@ mod tests {
             "events",
             "production",
             &["version_column", "ORDER BY (timestamp, user_id)"],
+            false,
         );
         assert_eq!(
             result,
@@ -1631,6 +1653,7 @@ mod tests {
             "user_activity_log",
             "metrics_database",
             &["sign_column"],
+            false,
         );
         assert_eq!(
             result,
@@ -1640,7 +1663,7 @@ mod tests {
 
     #[test]
     fn test_get_replicated_table_engine_name_empty_args() {
-        let result = get_replicated_table_engine_name("Log", "simple_table", "simple_db", &[]);
+        let result = get_replicated_table_engine_name("Log", "simple_table", "simple_db", &[], false);
         assert_eq!(
             result,
             "ReplicatedLog('/clickhouse/tables/{shard}/simple_db/simple_table', '{replica}')"
@@ -1654,10 +1677,39 @@ mod tests {
             "table_with_underscores",
             "db-with-dashes",
             &["'primary_key'", "PARTITION BY toYYYYMM(date)"],
+            false,
         );
         assert_eq!(
             result,
             "ReplicatedMergeTree('/clickhouse/tables/{shard}/db-with-dashes/table_with_underscores', '{replica}', 'primary_key', PARTITION BY toYYYYMM(date))"
+        );
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_automatic_paths_basic() {
+        let result = get_replicated_table_engine_name("MergeTree", "test_table", "test_db", &[], true);
+        assert_eq!(result, "ReplicatedMergeTree()");
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_automatic_paths_with_args() {
+        let result =
+            get_replicated_table_engine_name("MergeTree", "users", "analytics", &["ORDER BY id"], true);
+        assert_eq!(result, "ReplicatedMergeTree(ORDER BY id)");
+    }
+
+    #[test]
+    fn test_get_replicated_table_engine_name_automatic_paths_multiple_args() {
+        let result = get_replicated_table_engine_name(
+            "ReplacingMergeTree",
+            "events",
+            "production",
+            &["version_column", "ORDER BY (timestamp, user_id)"],
+            true,
+        );
+        assert_eq!(
+            result,
+            "ReplicatedReplacingMergeTree(version_column, ORDER BY (timestamp, user_id))"
         );
     }
 }
