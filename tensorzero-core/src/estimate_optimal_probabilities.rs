@@ -15,27 +15,6 @@ pub fn argmax<T: PartialOrd>(slice: &[T]) -> Option<usize> {
         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         .map(|(idx, _)| idx)
 }
-
-// pub fn assert_vecs_almost_equal(slice1: &[f64], slice2: &[f64], tol: Option<f64>) {
-//     assert_eq!(
-//         slice1.len(),
-//         slice2.len(),
-//         "Vector lengths differ: {} vs {}",
-//         slice1.len(),
-//         slice2.len()
-//     );
-
-//     let tol = tol.unwrap_or(1e-10);
-//     for (idx, (val1, val2)) in slice1.iter().zip(slice2.iter()).enumerate() {
-//         let diff: f64 = (val1 - val2).abs();
-//         assert!(
-//             !diff.is_nan(),
-//             "NaN encountered at index {idx}: {val1} vs {val2}"
-//         );
-//         assert!(diff < tol, "Values differ at index {idx}: {val1} vs {val2}")
-//     }
-// }
-
 // TODO: Make sure inputs are validated upstream:
 //    - Vectors of same length K, with K >= 2, no NAs
 //    - pull_counts > 0
@@ -249,4 +228,282 @@ pub fn estimate_optimal_probabilities(
     let w_star = x[0..num_arms].to_vec();
 
     Ok(w_star)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_vecs_almost_equal(slice1: &[f64], slice2: &[f64], tol: Option<f64>) {
+        assert_eq!(
+            slice1.len(),
+            slice2.len(),
+            "Vector lengths differ: {} vs {}",
+            slice1.len(),
+            slice2.len()
+        );
+
+        let tol = tol.unwrap_or(1e-10);
+        for (idx, (val1, val2)) in slice1.iter().zip(slice2.iter()).enumerate() {
+            let diff: f64 = (val1 - val2).abs();
+            assert!(
+                !diff.is_nan(),
+                "NaN encountered at index {idx}: {val1} vs {val2}"
+            );
+            assert!(diff < tol, "Values differ at index {idx}: {val1} vs {val2}");
+        }
+    }
+
+    #[test]
+    fn test_two_arms_different_means() {
+        // Simple test with clear leader
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![10, 10])
+            .means(vec![0.3, 0.7])
+            .variances(vec![1.1, 1.0])
+            .epsilon(0.1)
+            .min_prob(0.05)
+            .reg0(1.0)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+        // eprintln!("probs = {:?}", probs);
+        assert!(
+            probs[0] > probs[1],
+            "Arm with higher variance should have higher probability"
+        );
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+    #[test]
+    fn test_two_arms_equal_means() {
+        // Equal means: both need sampling to distinguish which is better
+        // Should allocate roughly equally (exact solution depends on variances)
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![10, 10])
+            .means(vec![0.5, 0.5])
+            .variances(vec![0.1, 0.1])
+            .epsilon(0.01)
+            .reg0(0.0)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+        // eprintln!("{:?}", probs);
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        // With equal means and variances, should be roughly equal
+        assert!((probs[0] - probs[1]).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_two_arms_clear_leader() {
+        // Clear leader (0.9 vs 0.3): the worse arm needs more sampling
+        // to confidently rule it out as ε-best
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![10, 10])
+            .means(vec![0.3, 0.9])
+            .variances(vec![0.2, 0.1])
+            .epsilon(0.0)
+            .reg0(0.0)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+        // eprintln!("{probs:?}");
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        // The worse arm (arm 0) should get MORE probability to rule it out
+        assert!(
+            probs[0] > probs[1],
+            "Worse arm should get more sampling to rule it out"
+        );
+    }
+
+    #[test]
+    fn test_min_prob_constraint() {
+        // All arms should respect minimum probability
+        let min_prob = 0.1;
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![10, 10, 10])
+            .means(vec![0.2, 0.9, 0.3])
+            .variances(vec![0.1, 0.1, 0.1])
+            .epsilon(0.01)
+            .min_prob(min_prob)
+            .reg0(0.0)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+        // eprintln!("{probs:?}");
+        for &p in &probs {
+            assert!(
+                p >= min_prob - 1e-9,
+                "Probability {p} violates min_prob {min_prob}"
+            );
+        }
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_high_variance_arm() {
+        // Higher variance means more sampling needed for accurate mean estimate
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![10, 10])
+            .means(vec![0.5, 0.5])
+            .variances(vec![0.01, 0.5])
+            .epsilon(0.01)
+            .reg0(1.0)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+        // eprintln!("{probs:?}");
+        assert!(probs[1] > probs[0], "High variance arm needs more samples");
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_epsilon_effect() {
+        // With larger epsilon, the gap to rule out the worse arm increases
+        // This means we need to sample more to distinguish them
+        let args_small_eps = OptimalProbsArgs::builder()
+            .pull_counts(vec![10, 10])
+            .means(vec![0.3, 0.7])
+            .variances(vec![0.1, 0.1])
+            .epsilon(0.01)
+            .reg0(0.0)
+            .build();
+        let probs_small_eps = estimate_optimal_probabilities(args_small_eps).unwrap();
+
+        let args_large_eps = OptimalProbsArgs::builder()
+            .pull_counts(vec![10, 10])
+            .means(vec![0.3, 0.7])
+            .variances(vec![0.1, 0.1])
+            .epsilon(0.2)
+            .reg0(0.0)
+            .build();
+        let probs_large_eps = estimate_optimal_probabilities(args_large_eps).unwrap();
+
+        // Basic sanity checks
+        assert!((probs_small_eps.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_large_eps.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_regularization_effect() {
+        // Higher reg0 should pull probabilities toward uniform
+        let args_no_reg = OptimalProbsArgs::builder()
+            .pull_counts(vec![100, 100])
+            .means(vec![0.3, 0.7])
+            .variances(vec![0.3, 0.1])
+            .epsilon(0.0)
+            .reg0(0.0)
+            .build();
+        let probs_no_reg = estimate_optimal_probabilities(args_no_reg).unwrap();
+        // eprintln!("{probs_no_reg:?}");
+
+        let args_with_reg = OptimalProbsArgs::builder()
+            .pull_counts(vec![100, 100])
+            .means(vec![0.3, 0.7])
+            .variances(vec![0.3, 0.1])
+            .epsilon(0.0)
+            .reg0(10.0)
+            .build();
+        let probs_with_reg = estimate_optimal_probabilities(args_with_reg).unwrap();
+        // eprintln!("{probs_with_reg:?}");
+
+        // With regularization, probabilities should be closer to 0.5
+        let diff_no_reg = (probs_no_reg[0] - 0.5).abs();
+        let diff_with_reg = (probs_with_reg[0] - 0.5).abs();
+        assert!(diff_with_reg < diff_no_reg);
+    }
+
+    #[test]
+    fn test_many_arms() {
+        // Test with 10 arms - spread out means
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![10; 10])
+            .means(vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+            .variances(vec![0.1; 10])
+            .epsilon(0.0)
+            .reg0(0.0)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+        // eprintln!("{probs:?}");
+
+        // All probabilities should be non-negative
+        for &p in &probs {
+            assert!(p >= 0.0);
+        }
+        // Sum to 1
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        // The highest should get most sampling
+        assert!(probs[9] >= probs[0]);
+    }
+
+    #[test]
+    fn test_close_competition() {
+        // Two arms very close in mean - both need substantial sampling
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![10, 10, 10])
+            .means(vec![0.50, 0.51, 0.3])
+            .variances(vec![0.1, 0.1, 0.1])
+            .epsilon(0.0)
+            .reg0(0.0)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        // The close competitors (arms 0 and 1) should together get most probability
+        assert!(probs[0] + probs[1] > probs[2]);
+    }
+
+    #[test]
+    fn test_ridge_variance_applied() {
+        // Ridge variance should lower bound all variances
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![10, 10])
+            .means(vec![0.5, 0.5])
+            .variances(vec![1e-20, 1e-20])
+            .epsilon(0.0)
+            // .ridge_variance(1e-12)
+            .ridge_variance(0.01)
+            .reg0(0.0)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+        // eprintln!("{probs:?}");
+
+        // Should not fail and should return valid probabilities
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert_vecs_almost_equal(&probs, &[0.5, 0.5], Some(1e-4));
+    }
+
+    #[test]
+    fn test_zero_variance_with_ridge() {
+        // Zero variance should be handled by ridge
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![10, 10])
+            .means(vec![0.3, 0.7])
+            .variances(vec![0.0, 0.0])
+            .epsilon(0.0)
+            .ridge_variance(1e-6)
+            .reg0(0.0)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        // Worse arm needs more sampling
+        assert!(probs[0] > probs[1]);
+    }
+
+    #[test]
+    fn test_basic_constraints() {
+        // Test that basic constraints are always satisfied
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![15, 30, 20, 35])
+            .means(vec![0.25, 0.55, 0.40, 0.60])
+            .variances(vec![0.05, 0.15, 0.10, 0.20])
+            .epsilon(0.05)
+            .ridge_variance(1e-8)
+            .min_prob(0.05)
+            .reg0(2.0)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+
+        // Verify basic constraints
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        for &p in &probs {
+            assert!(p >= 0.05 - 1e-9, "min_prob constraint violated");
+            assert!(p >= 0.0, "Probability is negative");
+        }
+    }
 }
