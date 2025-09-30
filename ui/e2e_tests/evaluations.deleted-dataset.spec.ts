@@ -15,16 +15,15 @@ async function createTestDataset(
 
   // Click on the Add to dataset button
   await page.getByText("Add to dataset").click();
-  await page.waitForTimeout(500);
 
   // Find the CommandInput and create the dataset
   const commandInput = page.getByPlaceholder("Create or find a dataset...");
   await commandInput.waitFor({ state: "visible" });
   await commandInput.fill(datasetName);
-  await page.waitForTimeout(500);
 
   // Click on the CommandItem to create the dataset
   const createOption = page.locator('div[data-value^="create-"][cmdk-item]');
+  await expect(createOption).toBeVisible();
   await createOption.click();
 
   // Click on the "Inference Output" button
@@ -54,42 +53,51 @@ test.describe("Launch Evaluation Modal - Deleted Dataset", () => {
 
     // Open the launch evaluation modal
     await page.getByText("New Run").click();
-    await page.waitForTimeout(500);
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByText("Select an evaluation")).toBeVisible();
 
     // Select evaluation
     await page.getByText("Select an evaluation").click();
-    await page.waitForTimeout(500);
-    await page.getByRole("option", { name: "entity_extraction" }).click();
-    await page.waitForTimeout(500);
+    const evaluationOption = page.getByRole("option", {
+      name: "entity_extraction",
+    });
+    await expect(evaluationOption).toBeVisible();
+    await evaluationOption.click();
+    await expect(page.getByText("Select a dataset")).toBeVisible();
 
     // Select the dataset we created
     await page.getByText("Select a dataset").click();
-    await page.waitForTimeout(500);
 
     // Type to filter/search for our dataset
     const datasetInput = page.getByPlaceholder("Find a dataset...");
     await datasetInput.fill(datasetName);
-    await page.waitForTimeout(500);
+    const datasetOption = page.getByRole("option", { name: datasetName });
+    await expect(datasetOption).toBeVisible();
 
     // Click on our dataset
-    await page.getByRole("option", { name: datasetName }).click();
-    await page.waitForTimeout(500);
+    await datasetOption.click();
+    await expect(page.getByText("Select a variant")).toBeVisible();
 
     // Select variant
     await page.getByText("Select a variant").click();
-    await page.waitForTimeout(500);
-    await page
-      .getByRole("option", { name: "gpt4o_mini_initial_prompt" })
-      .click();
-    await page.waitForTimeout(500);
+    const variantOption = page.getByRole("option", {
+      name: "gpt4o_mini_initial_prompt",
+    });
+    await expect(variantOption).toBeVisible();
+    await variantOption.click();
 
     // Set concurrency and launch the evaluation (which saves to localStorage)
-    await page.getByTestId("concurrency-limit").fill("1");
-    await page.waitForTimeout(500);
+    const concurrencyInput = page.getByTestId("concurrency-limit");
+    await expect(concurrencyInput).toBeVisible();
+    await concurrencyInput.fill("1");
 
     // Click Launch to submit the form (saves to localStorage via onSubmit)
-    await page.getByRole("button", { name: "Launch" }).click();
-    await page.waitForTimeout(2000);
+    const launchButton = page.getByRole("button", { name: "Launch" });
+    await expect(launchButton).toBeEnabled();
+    await launchButton.click();
+
+    // Wait for the dialog to close after launching
+    await expect(page.getByRole("dialog")).toBeHidden();
 
     // The evaluation will likely fail because the dataset has wrong function datapoints
     // But the form was submitted and saved to localStorage, which is what matters
@@ -104,14 +112,12 @@ test.describe("Launch Evaluation Modal - Deleted Dataset", () => {
 
     const deleteButton = datasetRow.locator("button").last();
     await deleteButton.click();
-    await page.waitForTimeout(500);
 
     // Confirm deletion
     await expect(
       page.getByText(`Are you sure you want to delete the dataset`),
     ).toBeVisible();
     await page.getByRole("button", { name: "Delete" }).click();
-    await page.waitForTimeout(500);
 
     // Wait for the dataset to be deleted
     await expect(datasetRow).not.toBeVisible({ timeout: 10000 });
@@ -122,22 +128,31 @@ test.describe("Launch Evaluation Modal - Deleted Dataset", () => {
 
     // Open the modal again
     await page.getByText("New Run").click();
-    await page.waitForTimeout(1000);
+
+    // Wait for the dialog to be visible
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
 
     // Verify the evaluation is still selected (from localStorage)
-    await expect(page.getByText("entity_extraction")).toBeVisible();
+    const evaluationCombobox = dialog
+      .getByRole("combobox")
+      .filter({ hasText: "entity_extraction" });
+    await expect(evaluationCombobox).toBeVisible();
 
     // Verify the variant is still selected (from localStorage)
-    await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible();
+    const variantCombobox = dialog
+      .getByRole("combobox")
+      .filter({ hasText: "gpt4o_mini_initial_prompt" });
+    await expect(variantCombobox).toBeVisible();
 
     // Verify the dataset field is cleared (not showing the deleted dataset)
     // The dataset selector should show placeholder text
-    const datasetTrigger = page
+    const datasetTrigger = dialog
       .locator('button[role="combobox"]')
       .filter({ hasText: "Select a dataset" });
     await expect(datasetTrigger).toBeVisible();
 
     // Verify our deleted dataset name is NOT visible in the modal
-    await expect(page.getByText(datasetName)).not.toBeVisible();
+    await expect(dialog.getByText(datasetName)).not.toBeVisible();
   });
 });
