@@ -20,7 +20,7 @@ pub struct ProviderTypesConfig {
     #[serde(default)]
     pub gcp_vertex_anthropic: GCPProviderTypeConfig,
     #[serde(default)]
-    pub google_ai_studio: GoogleAIStudioProviderTypeConfig,
+    pub google_ai_studio_gemini: GoogleAIStudioGeminiProviderTypeConfig,
     #[serde(default)]
     pub groq: GroqProviderTypeConfig,
     #[serde(default)]
@@ -49,14 +49,14 @@ pub struct ProviderTypesConfig {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct AnthropicProviderTypeConfig {
-    defaults: AnthropicDefaults,
+    pub defaults: AnthropicDefaults,
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct AnthropicDefaults {
     #[ts(type = "string")]
-    credential_location: CredentialLocation,
+    pub credential_location: CredentialLocation,
 }
 
 impl Default for AnthropicDefaults {
@@ -73,14 +73,14 @@ impl Default for AnthropicDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct AzureProviderTypeConfig {
-    defaults: AzureDefaults,
+    pub defaults: AzureDefaults,
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct AzureDefaults {
     #[ts(type = "string")]
-    credential_location: CredentialLocation,
+    pub credential_location: CredentialLocation,
 }
 
 impl Default for AzureDefaults {
@@ -97,14 +97,14 @@ impl Default for AzureDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct DeepSeekProviderTypeConfig {
-    defaults: DeepSeekDefaults,
+    pub defaults: DeepSeekDefaults,
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct DeepSeekDefaults {
     #[ts(type = "string")]
-    credential_location: CredentialLocation,
+    pub credential_location: CredentialLocation,
 }
 
 impl Default for DeepSeekDefaults {
@@ -121,14 +121,14 @@ impl Default for DeepSeekDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct FireworksProviderTypeConfig {
-    defaults: FireworksDefaults,
+    pub defaults: FireworksDefaults,
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct FireworksDefaults {
     #[ts(type = "string")]
-    credential_location: CredentialLocation,
+    pub credential_location: CredentialLocation,
 }
 
 impl Default for FireworksDefaults {
@@ -178,7 +178,7 @@ pub struct GCPBatchConfigCloudStorage {
 #[ts(export)]
 pub struct GCPDefaults {
     #[ts(type = "string")]
-    credential_location: CredentialLocation,
+    pub credential_location: CredentialLocation,
 }
 
 impl Default for GCPDefaults {
@@ -196,18 +196,18 @@ impl Default for GCPDefaults {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-pub struct GoogleAIStudioProviderTypeConfig {
-    defaults: GoogleAIStudioDefaults,
+pub struct GoogleAIStudioGeminiProviderTypeConfig {
+    pub defaults: GoogleAIStudioGeminiDefaults,
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
-pub struct GoogleAIStudioDefaults {
+pub struct GoogleAIStudioGeminiDefaults {
     #[ts(type = "string")]
-    credential_location: CredentialLocation,
+    pub credential_location: CredentialLocation,
 }
 
-impl Default for GoogleAIStudioDefaults {
+impl Default for GoogleAIStudioGeminiDefaults {
     fn default() -> Self {
         Self {
             credential_location: CredentialLocation::Env("GOOGLE_AI_STUDIO_API_KEY".to_string()),
@@ -221,14 +221,14 @@ impl Default for GoogleAIStudioDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct GroqProviderTypeConfig {
-    defaults: GroqDefaults,
+    pub defaults: GroqDefaults,
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct GroqDefaults {
     #[ts(type = "string")]
-    credential_location: CredentialLocation,
+    pub credential_location: CredentialLocation,
 }
 
 impl Default for GroqDefaults {
@@ -245,14 +245,14 @@ impl Default for GroqDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct HyperbolicProviderTypeConfig {
-    defaults: HyperbolicDefaults,
+    pub defaults: HyperbolicDefaults,
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct HyperbolicDefaults {
     #[ts(type = "string")]
-    credential_location: CredentialLocation,
+    pub credential_location: CredentialLocation,
 }
 
 impl Default for HyperbolicDefaults {
@@ -269,14 +269,14 @@ impl Default for HyperbolicDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct MistralProviderTypeConfig {
-    defaults: MistralDefaults,
+    pub defaults: MistralDefaults,
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct MistralDefaults {
     #[ts(type = "string")]
-    credential_location: CredentialLocation,
+    pub credential_location: CredentialLocation,
 }
 
 impl Default for MistralDefaults {
@@ -293,14 +293,14 @@ impl Default for MistralDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct OpenAIProviderTypeConfig {
-    defaults: OpenAIDefaults,
+    pub defaults: OpenAIDefaults,
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct OpenAIDefaults {
     #[ts(type = "string")]
-    credential_location: CredentialLocation,
+    pub credential_location: CredentialLocation,
 }
 
 impl Default for OpenAIDefaults {
@@ -317,14 +317,14 @@ impl Default for OpenAIDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct OpenRouterProviderTypeConfig {
-    defaults: OpenRouterDefaults,
+    pub defaults: OpenRouterDefaults,
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct OpenRouterDefaults {
     #[ts(type = "string")]
-    credential_location: CredentialLocation,
+    pub credential_location: CredentialLocation,
 }
 
 impl Default for OpenRouterDefaults {
@@ -341,14 +341,14 @@ impl Default for OpenRouterDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct SGLangProviderTypeConfig {
-    defaults: SGLangDefaults,
+    pub defaults: SGLangDefaults,
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct SGLangDefaults {
     #[ts(type = "string")]
-    credential_location: CredentialLocation,
+    pub credential_location: CredentialLocation,
 }
 
 impl Default for SGLangDefaults {
@@ -365,14 +365,14 @@ impl Default for SGLangDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct TGIProviderTypeConfig {
-    defaults: TGIDefaults,
+    pub defaults: TGIDefaults,
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct TGIDefaults {
     #[ts(type = "string")]
-    credential_location: CredentialLocation,
+    pub credential_location: CredentialLocation,
 }
 
 impl Default for TGIDefaults {
@@ -389,14 +389,14 @@ impl Default for TGIDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct TogetherProviderTypeConfig {
-    defaults: TogetherDefaults,
+    pub defaults: TogetherDefaults,
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct TogetherDefaults {
     #[ts(type = "string")]
-    credential_location: CredentialLocation,
+    pub credential_location: CredentialLocation,
 }
 
 impl Default for TogetherDefaults {
@@ -413,14 +413,14 @@ impl Default for TogetherDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct VLLMProviderTypeConfig {
-    defaults: VLLMDefaults,
+    pub defaults: VLLMDefaults,
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct VLLMDefaults {
     #[ts(type = "string")]
-    credential_location: CredentialLocation,
+    pub credential_location: CredentialLocation,
 }
 
 impl Default for VLLMDefaults {
@@ -437,14 +437,14 @@ impl Default for VLLMDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct XAIProviderTypeConfig {
-    defaults: XAIDefaults,
+    pub defaults: XAIDefaults,
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct XAIDefaults {
     #[ts(type = "string")]
-    credential_location: CredentialLocation,
+    pub credential_location: CredentialLocation,
 }
 
 impl Default for XAIDefaults {

@@ -55,10 +55,7 @@ use crate::inference::types::{
     ProviderInferenceResponseStreamInner, Role, Text, TextChunk, Thought, ThoughtChunk,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{
-    build_creds_caching_default_with_fn, fully_qualified_name, Credential, CredentialLocation,
-    ModelProvider,
-};
+use crate::model::{fully_qualified_name, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_anthropic::make_gcp_sdk_credentials;

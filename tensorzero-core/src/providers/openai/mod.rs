@@ -12,7 +12,6 @@ use serde_json::{json, Value};
 use std::borrow::Cow;
 use std::io::Write;
 use std::pin::Pin;
-use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
 use tracing::instrument;
@@ -46,7 +45,7 @@ use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, ThoughtChunk,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, CredentialLocation, ModelProvider};
 use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::providers::helpers::{
@@ -83,31 +82,18 @@ pub struct OpenAIProvider {
     credentials: OpenAICredentials,
 }
 
-pub static DEFAULT_CREDENTIALS: OnceLock<OpenAICredentials> = OnceLock::new();
-
 impl OpenAIProvider {
-    pub fn new(
-        model_name: String,
-        api_base: Option<Url>,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-
+    pub fn new(model_name: String, api_base: Option<Url>, credentials: OpenAICredentials) -> Self {
         // Check if the api_base has the `/chat/completions` suffix and warn if it does
         if let Some(api_base) = &api_base {
             check_api_base_suffix(api_base);
         }
 
-        Ok(OpenAIProvider {
+        OpenAIProvider {
             model_name,
             api_base,
             credentials,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {

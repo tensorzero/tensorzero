@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::sync::OnceLock;
 use std::time::Duration;
 
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
@@ -25,7 +24,7 @@ use crate::inference::types::{
     ProviderInferenceResponseStreamInner, TextChunk,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
@@ -37,10 +36,6 @@ use super::openai::{
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
     OpenAIUsage, StreamOptions, SystemOrDeveloper,
 };
-
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("SGLANG_API_KEY".to_string())
-}
 
 const PROVIDER_NAME: &str = "SGLang";
 pub const PROVIDER_TYPE: &str = "sglang";
@@ -55,29 +50,16 @@ pub struct SGLangProvider {
     credentials: SGLangCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<SGLangCredentials> = OnceLock::new();
-
 impl SGLangProvider {
-    pub fn new(
-        model_name: String,
-        api_base: Url,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-
+    pub fn new(model_name: String, api_base: Url, credentials: SGLangCredentials) -> Self {
         // Check if the api_base has the `/chat/completions` suffix and warn if it does
         check_api_base_suffix(&api_base);
 
-        Ok(SGLangProvider {
+        SGLangProvider {
             model_name,
             api_base,
             credentials,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {

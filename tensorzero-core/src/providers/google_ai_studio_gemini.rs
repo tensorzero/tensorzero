@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::sync::OnceLock;
 use std::time::Duration;
 
 use futures::{future::try_join_all, StreamExt};
@@ -37,10 +36,7 @@ use crate::inference::types::{
 };
 use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::inference::InferenceProvider;
-use crate::model::{
-    build_creds_caching_default, fully_qualified_name, Credential, CredentialLocation,
-    ModelProvider,
-};
+use crate::model::{fully_qualified_name, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_gemini::process_output_schema;
@@ -63,20 +59,8 @@ pub struct GoogleAIStudioGeminiProvider {
     credentials: GoogleAIStudioCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<GoogleAIStudioCredentials> = OnceLock::new();
-
 impl GoogleAIStudioGeminiProvider {
-    pub fn new(
-        model_name: String,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-
+    pub fn new(model_name: String, credentials: GoogleAIStudioCredentials) -> Result<Self, Error> {
         let request_url = Url::parse(&format!(
             "https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
         ))

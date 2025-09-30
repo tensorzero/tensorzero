@@ -28,7 +28,7 @@ use crate::inference::types::{
     PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::tool::ToolCallChunk;
 
 use super::openai::{
@@ -45,10 +45,6 @@ lazy_static! {
         Url::parse("https://api.deepseek.com/v1")
             .expect("Failed to parse DEEPSEEK_DEFAULT_BASE_URL")
     };
-}
-
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("DEEPSEEK_API_KEY".to_string())
 }
 
 const PROVIDER_NAME: &str = "DeepSeek";
@@ -111,18 +107,11 @@ pub struct DeepSeekProvider {
 }
 
 impl DeepSeekProvider {
-    pub fn new(
-        model_name: String,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or_else(default_api_key_location);
-        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials = DeepSeekCredentials::try_from(generic_credentials)?;
-
-        Ok(DeepSeekProvider {
+    pub fn new(model_name: String, credentials: DeepSeekCredentials) -> Self {
+        DeepSeekProvider {
             model_name,
-            credentials: provider_credentials,
-        })
+            credentials,
+        }
     }
 
     pub fn model_name(&self) -> &str {

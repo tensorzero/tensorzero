@@ -40,7 +40,7 @@ use crate::inference::types::Usage;
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
-use crate::model_table::{CowNoClone, ShorthandModelConfig};
+use crate::model_table::{CowNoClone, ProviderTypeDefaultCredentials, ShorthandModelConfig};
 use crate::optimization::{OptimizerInfo, UninitializedOptimizerInfo};
 use crate::tool::{create_implicit_tool_call_config, StaticToolConfig, ToolChoice};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
@@ -666,11 +666,17 @@ impl Config {
             .into_iter()
             .map(|(name, config)| config.load(name.clone()).map(|c| (name, Arc::new(c))))
             .collect::<Result<HashMap<String, Arc<StaticToolConfig>>, Error>>()?;
+        let provider_type_default_credentials =
+            ProviderTypeDefaultCredentials::new(&uninitialized_config.provider_types);
 
         let models = try_join_all(uninitialized_config.models.into_iter().map(
             |(name, config)| async {
                 config
-                    .load(&name, &uninitialized_config.provider_types)
+                    .load(
+                        &name,
+                        &uninitialized_config.provider_types,
+                        &provider_type_default_credentials,
+                    )
                     .await
                     .map(|c| (name, c))
             },
@@ -682,7 +688,10 @@ impl Config {
         let embedding_models = try_join_all(uninitialized_config.embedding_models.into_iter().map(
             |(name, config)| async {
                 config
-                    .load(&uninitialized_config.provider_types)
+                    .load(
+                        &uninitialized_config.provider_types,
+                        &provider_type_default_credentials,
+                    )
                     .await
                     .map(|c| (name, c))
             },
@@ -701,19 +710,21 @@ impl Config {
         .await?
         .into_iter()
         .collect::<HashMap<_, _>>();
-        let models =
-            ModelTable::new(models, &uninitialized_config.provider_types).map_err(|e| {
-                Error::new(ErrorDetails::Config {
-                    message: format!("Failed to load models: {e}"),
-                })
-            })?;
+        let models = ModelTable::new(models, provider_type_default_credentials).map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Failed to load models: {e}"),
+            })
+        })?;
+        let embedding_default_credentials =
+            ProviderTypeDefaultCredentials::new(&uninitialized_config.provider_types);
         let embedding_models =
-            EmbeddingModelTable::new(embedding_models, &uninitialized_config.provider_types)
-                .map_err(|e| {
+            EmbeddingModelTable::new(embedding_models, embedding_default_credentials).map_err(
+                |e| {
                     Error::new(ErrorDetails::Config {
                         message: format!("Failed to load embedding models: {e}"),
                     })
-                })?;
+                },
+            )?;
 
         let mut config = Config {
             gateway: uninitialized_config.gateway.load()?,

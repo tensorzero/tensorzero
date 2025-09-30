@@ -13,8 +13,8 @@ use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::RequestMessagesOrBatch;
 use crate::inference::types::{ContentBlock, Text};
 use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
-use crate::model_table::BaseModelTable;
 use crate::model_table::ShorthandModelConfig;
+use crate::model_table::{BaseModelTable, ProviderTypeDefaultCredentials};
 use crate::providers::azure::AzureProvider;
 use crate::rate_limiting::{
     get_estimated_tokens, RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
@@ -44,12 +44,18 @@ pub type EmbeddingModelTable = BaseModelTable<EmbeddingModelConfig>;
 impl ShorthandModelConfig for EmbeddingModelConfig {
     const SHORTHAND_MODEL_PREFIXES: &[&str] = &["openai::"];
     const MODEL_TYPE: &str = "Embedding model";
-    async fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
+    async fn from_shorthand(
+        provider_type: &str,
+        model_name: &str,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self, Error> {
         let model_name = model_name.to_string();
         let provider_config = match provider_type {
-            "openai" => {
-                EmbeddingProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?)
-            }
+            "openai" => EmbeddingProviderConfig::OpenAI(OpenAIProvider::new(
+                model_name,
+                None,
+                default_credentials.openai.get_cloned()?.try_into()?,
+            )),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
             _ => {
@@ -91,9 +97,12 @@ impl UninitializedEmbeddingModelConfig {
     pub async fn load(
         self,
         provider_types: &ProviderTypesConfig,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<EmbeddingModelConfig, Error> {
         let providers = try_join_all(self.providers.into_iter().map(|(name, config)| async {
-            let provider_config = config.load(provider_types, name.clone()).await?;
+            let provider_config = config
+                .load(provider_types, name.clone(), default_credentials)
+                .await?;
             Ok::<_, Error>((name, provider_config))
         }))
         .await?
@@ -574,8 +583,12 @@ impl UninitializedEmbeddingProviderConfig {
         self,
         provider_types: &ProviderTypesConfig,
         provider_name: Arc<str>,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<EmbeddingProviderInfo, Error> {
-        let provider_config = self.config.load(provider_types).await?;
+        let provider_config = self
+            .config
+            .load(provider_types, default_credentials)
+            .await?;
         let timeouts = self.timeouts;
         let extra_body = self.extra_body;
         Ok(match provider_config {

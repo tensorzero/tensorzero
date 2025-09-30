@@ -20,7 +20,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
 use std::pin::Pin;
-use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
@@ -46,7 +45,7 @@ use crate::inference::types::{
 use crate::inference::InferenceProvider;
 use crate::inference::TensorZeroEventError;
 use crate::inference::WrappedProvider;
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
@@ -55,10 +54,6 @@ use crate::tool::ToolCall;
 
 const PROVIDER_NAME: &str = "TGI";
 pub const PROVIDER_TYPE: &str = "tgi";
-
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("TGI_API_KEY".to_string())
-}
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -69,24 +64,15 @@ pub struct TGIProvider {
     credentials: TGICredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<TGICredentials> = OnceLock::new();
-
 impl TGIProvider {
-    pub fn new(api_base: Url, api_key_location: Option<CredentialLocation>) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-
+    pub fn new(api_base: Url, credentials: TGICredentials) -> Self {
         // Check if the api_base has the `/chat/completions` suffix and warn if it does
         check_api_base_suffix(&api_base);
 
-        Ok(TGIProvider {
+        TGIProvider {
             api_base,
             credentials,
-        })
+        }
     }
 }
 
