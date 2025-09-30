@@ -38,8 +38,6 @@ from tensorzero.types import (
 
 @final
 class JsonInferenceOutput:
-    raw: Optional[str]
-    parsed: Optional[Dict[str, Any]]
     def __init__(
         self,
         /,
@@ -48,6 +46,11 @@ class JsonInferenceOutput:
         parsed: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None: ...
+    @property
+    def raw(self) -> Optional[str]: ...
+    @property
+    def parsed(self) -> Optional[Dict[str, Any]]: ...
+    def to_dict(self) -> Dict[str, Any]: ...
 
 @final
 class ResolvedInputMessage:

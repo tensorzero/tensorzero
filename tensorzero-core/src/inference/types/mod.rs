@@ -1192,6 +1192,35 @@ impl std::fmt::Display for JsonInferenceOutput {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl JsonInferenceOutput {
+    #[new]
+    #[pyo3(signature = (*, raw=None, parsed=None))]
+    fn new(
+        py: Python<'_>,
+        raw: Option<String>,
+        parsed: Option<Bound<'_, PyAny>>,
+    ) -> PyResult<Self> {
+        use pyo3_helpers::deserialize_from_pyobj;
+
+        let parsed_value = parsed.map(|x| deserialize_from_pyobj(py, &x)).transpose()?;
+
+        Ok(JsonInferenceOutput {
+            raw,
+            parsed: parsed_value,
+        })
+    }
+
+    fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        use pyo3::types::PyDict;
+        let dict = PyDict::new(py);
+        if let Some(raw) = &self.raw {
+            dict.set_item("raw", raw)?;
+        }
+        if let Some(parsed) = &self.parsed {
+            dict.set_item("parsed", serialize_to_dict(py, parsed)?)?;
+        }
+        Ok(dict.into_any())
+    }
+
     #[getter]
     fn get_raw(&self) -> Option<String> {
         self.raw.clone()
