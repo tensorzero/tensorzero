@@ -1,5 +1,3 @@
-//! Tests for static OTLP headers configured in the config file (issue #3289)
-
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent, Role,
@@ -17,7 +15,8 @@ async fn test_otel_config_headers_static() {
     let config = r#"
 [gateway.export.otlp.traces]
 enabled = true
-extra_headers = { "X-Static-Header-1" = "static-value-1", "X-Static-Header-2" = "static-value-2" }
+extra_headers."X-Static-Header-1" = "static-value-1"
+extra_headers."X-Static-Header-2" = "static-value-2"
 "#;
 
     let client = make_embedded_gateway_with_config(config).await;
@@ -59,7 +58,7 @@ async fn test_otel_config_headers_with_dynamic_override() {
     let config = r#"
 [gateway.export.otlp.traces]
 enabled = true
-extra_headers = { "X-Config-Header" = "config-value" }
+extra_headers."X-Config-Header" = "config-value"
 "#;
 
     let client = make_embedded_gateway_with_config(config).await;
@@ -97,7 +96,7 @@ async fn test_otel_config_headers_empty_value() {
     let config = r#"
 [gateway.export.otlp.traces]
 enabled = true
-extra_headers = { "X-Empty-Header" = "" }
+extra_headers."X-Empty-Header" = ""
 "#;
 
     let client = make_embedded_gateway_with_config(config).await;
@@ -167,7 +166,7 @@ async fn test_otel_config_headers_multiple_requests() {
     let config = r#"
 [gateway.export.otlp.traces]
 enabled = true
-extra_headers = { "X-Multi-Header" = "multi-value" }
+extra_headers."X-Multi-Header" = "multi-value"
 "#;
 
     let client = make_embedded_gateway_with_config(config).await;

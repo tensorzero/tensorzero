@@ -193,7 +193,9 @@ async fn main() {
     if let Some(ref tracer_wrapper) = delayed_log_config.otel_tracer {
         if !config.gateway.export.otlp.traces.extra_headers.is_empty() {
             tracer_wrapper
-                .set_config_headers(&config.gateway.export.otlp.traces.extra_headers)
+                .set_static_otlp_traces_extra_headers(
+                    &config.gateway.export.otlp.traces.extra_headers,
+                )
                 .expect_pretty("Failed to set OTLP config headers");
         }
     }
