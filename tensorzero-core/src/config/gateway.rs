@@ -5,7 +5,7 @@ use crate::{
     error::{Error, ErrorDetails},
 };
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedGatewayConfig {
     #[serde(serialize_with = "serialize_optional_socket_addr")]
@@ -138,4 +138,17 @@ impl Default for GatewayConfig {
 
 fn default_fetch_and_encode_input_files_before_inference() -> bool {
     true
+}
+
+fn serialize_optional_socket_addr<S>(
+    addr: &Option<std::net::SocketAddr>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match addr {
+        Some(addr) => serializer.serialize_str(&addr.to_string()),
+        None => serializer.serialize_none(),
+    }
 }
