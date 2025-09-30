@@ -130,7 +130,10 @@ pub fn estimate_optimal_probabilities(
 
     // (A) Equality constraint: sum_i w_i = 1 (simplex equality) --> ZeroConeT(1)
     {
-        let row = vec![1.0; num_decision_vars];
+        let mut row = vec![0.0; num_decision_vars];
+        for val in &mut row[..num_arms] {
+            *val = 1.0;
+        }
         A_rows.push(row);
         b.push(1.0);
         cones.push(ZeroConeT(1));
@@ -147,9 +150,9 @@ pub fn estimate_optimal_probabilities(
         // Lower bounding weights at min_prob
         for i in 0..num_arms {
             let mut row: Vec<f64> = vec![0.0; num_decision_vars];
-            row[i] = -min_prob;
+            row[i] = -1.0;
             A_rows.push(row);
-            b.push(0.0);
+            b.push(-min_prob);
         }
 
         // Linear constraints for the slack variables for all arms besides leader
@@ -166,31 +169,48 @@ pub fn estimate_optimal_probabilities(
         cones.push(NonnegativeConeT(2 * num_arms));
     }
 
-    // (C) SOCP constraints (3 per arms) --> SecondOrderConeT
+    // (C) SOCP constraints (3 rows per arm, one cone per arm) --> SecondOrderConeT
+    // We want the cone s to satisfy: s_1 >= ||(s_2, s_3)||_2
+    // where s = b - Ax, so we set up rows such that:
+    //   s_1 = w_i + s_i/2
+    //   s_2 = w_i - s_i/2
+    //   s_3 = √2 σ_i
     {
         for i in 0..num_arms {
+            // First row: s_1 = b_1 - row1·x = w_i + s_i/2
+            // So we need: row1·x = -w_i - s_i/2, b_1 = 0
             let mut row1: Vec<f64> = vec![0.0; num_decision_vars];
-            row1[i] = 1.0;
-            row1[num_arms + i] = 0.5;
+            row1[i] = -1.0;
+            row1[num_arms + i] = -0.5;
             A_rows.push(row1);
             b.push(0.0);
 
+            // Second row: s_2 = b_2 - row2·x = w_i - s_i/2
+            // So we need: row2·x = -w_i + s_i/2, b_2 = 0
             let mut row2: Vec<f64> = vec![0.0; num_decision_vars];
-            row2[i] = 1.0;
-            row2[num_arms + i] = -0.5;
+            row2[i] = -1.0;
+            row2[num_arms + i] = 0.5;
             A_rows.push(row2);
             b.push(0.0);
 
+            // Third row: s_3 = b_3 - row3·x = √2 σ_i
+            // So we need: row3·x = 0, b_3 = √2 σ_i
             let row3: Vec<f64> = vec![0.0; num_decision_vars];
             A_rows.push(row3);
-            b.push(f64::sqrt(2.0) * variances[i]);
+            b.push(f64::sqrt(2.0 * variances[i]));
+
+            // Each arm gets its own 3-dimensional second-order cone
+            cones.push(SecondOrderConeT(3));
         }
-        cones.push(SecondOrderConeT(3 * num_arms));
     }
 
     // Solve for the optimal weights
     let A = CscMatrix::from(&A_rows);
-    let settings = DefaultSettings::default();
+    let mut settings = DefaultSettings::<f64> {
+        verbose: false,
+        ..Default::default()
+    };
+    settings.verbose = false; // Disable solver output
     let mut solver = DefaultSolver::new(&P, &q, &A, &b, &cones, settings)
         .map_err(|_| OptimalProbsError::CouldntBuildSolver)?;
     solver.solve();
