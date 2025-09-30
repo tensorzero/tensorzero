@@ -1,6 +1,6 @@
-use crate::db::PostgresConnectionInfo;
 use chrono::Duration;
 use sqlx::PgPool;
+use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::{RateLimitQueries, ReturnTicketsRequest};
 use tensorzero_core::{db::ConsumeTicketsRequest, rate_limiting::ActiveRateLimitKey};
 
