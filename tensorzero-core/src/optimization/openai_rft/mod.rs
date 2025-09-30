@@ -1,8 +1,9 @@
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
 use crate::{
-    error::IMPOSSIBLE_ERROR_MESSAGE, http::TensorzeroHttpClient,
-    model_table::ProviderTypeDefaultCredentials,
+    error::IMPOSSIBLE_ERROR_MESSAGE,
+    http::TensorzeroHttpClient,
+    model_table::{OpenAIKind, ProviderKind, ProviderTypeDefaultCredentials},
 };
 use futures::future::try_join_all;
 #[cfg(feature = "pyo3")]
@@ -203,7 +204,7 @@ impl UninitializedOpenAIRFTConfig {
 }
 
 impl UninitializedOpenAIRFTConfig {
-    pub fn load(
+    pub async fn load(
         self,
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<OpenAIRFTConfig, Error> {
@@ -218,7 +219,9 @@ impl UninitializedOpenAIRFTConfig {
             learning_rate_multiplier: self.learning_rate_multiplier,
             n_epochs: self.n_epochs,
             reasoning_effort: self.reasoning_effort,
-            credentials: default_credentials.openai.get_cloned()?.try_into()?,
+            credentials: OpenAIKind
+                .get_defaulted_credential(self.credentials.as_ref(), default_credentials)
+                .await?,
             credential_location: self.credentials,
             api_base: self.api_base,
             suffix: self.suffix,
@@ -417,8 +420,9 @@ impl JobHandle for OpenAIRFTJobHandle {
         credentials: &InferenceCredentials,
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
-        let openai_credentials: OpenAICredentials =
-            default_credentials.openai.get_cloned()?.try_into()?;
+        let openai_credentials: OpenAICredentials = crate::model_table::OpenAIKind
+            .get_defaulted_credential(None, default_credentials)
+            .await?;
         let mut request = client.get(self.job_api_url.clone());
         let api_key = openai_credentials.get_api_key(credentials)?;
         if let Some(api_key) = api_key {

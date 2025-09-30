@@ -133,7 +133,6 @@ pub struct BaseModelTable<T> {
     table: HashMap<Arc<str>, T>,
     #[serde(skip)]
     #[ts(skip)]
-    #[expect(dead_code, reason = "Will be used in future implementation")]
     pub default_credentials: ProviderTypeDefaultCredentials,
 }
 
@@ -659,7 +658,7 @@ impl ProviderKind for AnthropicKind {
     }
 }
 
-struct OpenAIKind;
+pub struct OpenAIKind;
 
 impl ProviderKind for OpenAIKind {
     type Credential = OpenAICredentials;
@@ -675,7 +674,7 @@ impl ProviderKind for OpenAIKind {
     }
 }
 
-struct AzureKind;
+pub struct AzureKind;
 
 impl ProviderKind for AzureKind {
     type Credential = AzureCredentials;
@@ -691,7 +690,7 @@ impl ProviderKind for AzureKind {
     }
 }
 
-struct DeepSeekKind;
+pub struct DeepSeekKind;
 
 impl ProviderKind for DeepSeekKind {
     type Credential = DeepSeekCredentials;
@@ -707,7 +706,7 @@ impl ProviderKind for DeepSeekKind {
     }
 }
 
-struct FireworksKind;
+pub struct FireworksKind;
 
 impl ProviderKind for FireworksKind {
     type Credential = FireworksCredentials;
@@ -723,7 +722,7 @@ impl ProviderKind for FireworksKind {
     }
 }
 
-struct GCPVertexAnthropicKind;
+pub struct GCPVertexAnthropicKind;
 
 impl ProviderKind for GCPVertexAnthropicKind {
     type Credential = GCPVertexCredentials;
@@ -739,26 +738,12 @@ impl ProviderKind for GCPVertexAnthropicKind {
     }
 }
 
-struct GCPVertexGeminiKind;
-
-impl ProviderKind for GCPVertexGeminiKind {
-    type Credential = GCPVertexCredentials;
-    fn get_provider_type(&self) -> ProviderType {
-        ProviderType::GCPVertexGemini
-    }
-
-    async fn get_credential_field(
-        &self,
-        default_credentials: &ProviderTypeDefaultCredentials,
-    ) -> Result<Self::Credential, Error> {
-        default_credentials.gcp_vertex_gemini.get_cloned().await
-    }
-
-    async fn get_defaulted_credential(
+impl GCPVertexAnthropicKind {
+    pub async fn get_defaulted_credential(
         &self,
         api_key_location: Option<&CredentialLocation>,
         default_credentials: &ProviderTypeDefaultCredentials,
-    ) -> Result<Self::Credential, Error> {
+    ) -> Result<GCPVertexCredentials, Error> {
         if let Some(api_key_location) = api_key_location {
             return match api_key_location {
                 CredentialLocation::Sdk => {
@@ -778,7 +763,48 @@ impl ProviderKind for GCPVertexGeminiKind {
     }
 }
 
-struct GoogleAIStudioGeminiKind;
+pub struct GCPVertexGeminiKind;
+
+impl ProviderKind for GCPVertexGeminiKind {
+    type Credential = GCPVertexCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::GCPVertexGemini
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.gcp_vertex_gemini.get_cloned().await
+    }
+}
+
+impl GCPVertexGeminiKind {
+    pub async fn get_defaulted_credential(
+        &self,
+        api_key_location: Option<&CredentialLocation>,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<GCPVertexCredentials, Error> {
+        if let Some(api_key_location) = api_key_location {
+            return match api_key_location {
+                CredentialLocation::Sdk => {
+                    make_gcp_sdk_credentials(&ProviderType::GCPVertexGemini).await
+                }
+                _ => build_gcp_non_sdk_credentials(
+                    load_credential(&api_key_location, ProviderType::GCPVertexGemini)?,
+                    &ProviderType::GCPVertexGemini,
+                ),
+            };
+        }
+
+        Ok(self
+            .get_credential_field(default_credentials)
+            .await?
+            .clone())
+    }
+}
+
+pub struct GoogleAIStudioGeminiKind;
 
 impl ProviderKind for GoogleAIStudioGeminiKind {
     type Credential = GoogleAIStudioCredentials;
@@ -794,7 +820,7 @@ impl ProviderKind for GoogleAIStudioGeminiKind {
     }
 }
 
-struct GroqKind;
+pub struct GroqKind;
 
 impl ProviderKind for GroqKind {
     type Credential = GroqCredentials;
@@ -810,7 +836,7 @@ impl ProviderKind for GroqKind {
     }
 }
 
-struct HyperbolicKind;
+pub struct HyperbolicKind;
 
 impl ProviderKind for HyperbolicKind {
     type Credential = HyperbolicCredentials;
@@ -826,7 +852,7 @@ impl ProviderKind for HyperbolicKind {
     }
 }
 
-struct MistralKind;
+pub struct MistralKind;
 
 impl ProviderKind for MistralKind {
     type Credential = MistralCredentials;
@@ -842,7 +868,7 @@ impl ProviderKind for MistralKind {
     }
 }
 
-struct OpenRouterKind;
+pub struct OpenRouterKind;
 
 impl ProviderKind for OpenRouterKind {
     type Credential = OpenRouterCredentials;
@@ -858,7 +884,7 @@ impl ProviderKind for OpenRouterKind {
     }
 }
 
-struct SGLangKind;
+pub struct SGLangKind;
 
 impl ProviderKind for SGLangKind {
     type Credential = SGLangCredentials;
@@ -874,7 +900,7 @@ impl ProviderKind for SGLangKind {
     }
 }
 
-struct TGIKind;
+pub struct TGIKind;
 
 impl ProviderKind for TGIKind {
     type Credential = TGICredentials;
@@ -890,7 +916,7 @@ impl ProviderKind for TGIKind {
     }
 }
 
-struct TogetherKind;
+pub struct TogetherKind;
 
 impl ProviderKind for TogetherKind {
     type Credential = TogetherCredentials;
@@ -906,7 +932,7 @@ impl ProviderKind for TogetherKind {
     }
 }
 
-struct VLLMKind;
+pub struct VLLMKind;
 
 impl ProviderKind for VLLMKind {
     type Credential = VLLMCredentials;
@@ -922,7 +948,7 @@ impl ProviderKind for VLLMKind {
     }
 }
 
-struct XAIKind;
+pub struct XAIKind;
 
 impl ProviderKind for XAIKind {
     type Credential = XAICredentials;

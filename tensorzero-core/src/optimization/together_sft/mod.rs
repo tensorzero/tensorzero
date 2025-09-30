@@ -1,7 +1,7 @@
 use crate::http::TensorzeroHttpClient;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
-use crate::model_table::{ProviderType, ProviderTypeDefaultCredentials};
+use crate::model_table::{ProviderKind, ProviderTypeDefaultCredentials, TogetherKind};
 use futures::future::try_join_all;
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions::PyValueError, prelude::*};
@@ -434,16 +434,16 @@ impl UninitializedTogetherSFTConfig {
 }
 
 impl UninitializedTogetherSFTConfig {
-    pub fn load(
+    pub async fn load(
         self,
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<TogetherSFTConfig, Error> {
         Ok(TogetherSFTConfig {
             model: self.model,
             api_base: self.api_base.unwrap_or_else(|| TOGETHER_API_BASE.clone()),
-            credentials: default_credentials
-                .get_defaulted_credential(self.credentials.as_ref(), ProviderType::Together)?
-                .try_into()?,
+            credentials: TogetherKind
+                .get_defaulted_credential(self.credentials.as_ref(), default_credentials)
+                .await?,
             credential_location: self.credentials,
             // Hyperparameters
             n_epochs: self.n_epochs,
@@ -834,9 +834,9 @@ impl JobHandle for TogetherSFTJobHandle {
         credentials: &InferenceCredentials,
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
-        let together_credentials: TogetherCredentials = default_credentials
-            .get_defaulted_credential(self.credential_location.as_ref(), ProviderType::Together)?
-            .try_into()?;
+        let together_credentials: TogetherCredentials = crate::model_table::TogetherKind
+            .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
+            .await?;
 
         let api_key = together_credentials.get_api_key(credentials)?;
         let res: TogetherJobResponse = client

@@ -31,7 +31,8 @@ use crate::http::TensorzeroHttpClient;
 use crate::model::UninitializedModelConfig;
 use crate::model::UninitializedModelProvider;
 use crate::model::UninitializedProviderConfig;
-use crate::model_table::ProviderType;
+use crate::model_table::FireworksKind;
+use crate::model_table::ProviderKind;
 use crate::model_table::ProviderTypeDefaultCredentials;
 use crate::optimization::JobHandle;
 use crate::optimization::OptimizationJobInfo;
@@ -298,7 +299,7 @@ impl UninitializedFireworksSFTConfig {
 }
 
 impl UninitializedFireworksSFTConfig {
-    pub fn load(
+    pub async fn load(
         self,
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<FireworksSFTConfig, Error> {
@@ -321,9 +322,9 @@ impl UninitializedFireworksSFTConfig {
             mtp_freeze_base_model: self.mtp_freeze_base_model,
             api_base: self.api_base.unwrap_or_else(|| FIREWORKS_API_BASE.clone()),
             account_id: self.account_id,
-            credentials: default_credentials
-                .get_defaulted_credential(self.credentials.as_ref(), ProviderType::Fireworks)?
-                .try_into()?,
+            credentials: FireworksKind
+                .get_defaulted_credential(self.credentials.as_ref(), default_credentials)
+                .await?,
             credential_location: self.credentials,
         })
     }
@@ -954,9 +955,9 @@ impl JobHandle for FireworksSFTJobHandle {
         credentials: &InferenceCredentials,
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
-        let fireworks_credentials: FireworksCredentials = default_credentials
-            .get_defaulted_credential(self.credential_location.as_ref(), ProviderType::Fireworks)?
-            .try_into()?;
+        let fireworks_credentials: FireworksCredentials = crate::model_table::FireworksKind
+            .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
+            .await?;
         let api_key = fireworks_credentials.get_api_key(credentials)?;
         let job_status = self.poll_job(client, api_key).await?;
         if let FireworksFineTuningJobState::JobStateCompleted = job_status.state {

@@ -11,10 +11,7 @@ use crate::{
     config::TimeoutsConfig,
     error::{Error, ErrorDetails},
     inference::types::{ContentBlock, FlattenUnknown},
-    model::{
-        CredentialLocation, UninitializedModelConfig, UninitializedModelProvider,
-        UninitializedProviderConfig,
-    },
+    model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     optimization::{OptimizationJobInfo, OptimizerOutput},
     providers::gcp_vertex_gemini::{
         GCPVertexGeminiContent, GCPVertexGeminiContentPart, GCPVertexGeminiRole, PROVIDER_TYPE,
@@ -140,7 +137,6 @@ pub fn convert_to_optimizer_status(
     job: GCPVertexGeminiFineTuningJob,
     location: String,
     project_id: String,
-    credential_location: CredentialLocation,
 ) -> Result<OptimizationJobInfo, Error> {
     let estimated_finish: Option<DateTime<Utc>> = None;
 
@@ -202,7 +198,7 @@ pub fn convert_to_optimizer_status(
                     endpoint_id,
                     location,
                     project_id,
-                    credential_location: Some(credential_location),
+                    credential_location: None,
                 },
                 extra_headers: None,
                 extra_body: None,

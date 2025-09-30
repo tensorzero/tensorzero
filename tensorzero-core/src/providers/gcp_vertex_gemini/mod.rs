@@ -56,10 +56,9 @@ use crate::inference::types::{
 };
 use crate::inference::InferenceProvider;
 use crate::model::{fully_qualified_name, Credential, CredentialLocation, ModelProvider};
-use crate::model_table::ProviderType;
+use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultCredentials};
 use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use super::gcp_vertex_anthropic::make_gcp_sdk_credentials;
 use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
 use super::openai::convert_stream_error;
 
@@ -430,22 +429,18 @@ pub fn location_subdomain_prefix(location: &str) -> String {
 }
 
 impl GCPVertexGeminiProvider {
-    pub async fn build_credentials(credential: Credential) -> Result<GCPVertexCredentials, Error> {
-        GCPVertexCredentials::new(
-            cred_location,
-            &DEFAULT_CREDENTIALS,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-        )
-        .await
-    }
     // Constructs a provider from a shorthand string of the form:
     // * 'projects/<project_id>/locations/<location>/publishers/google/models/XXX'
     // * 'projects/<project_id>/locations/<location>/endpoints/XXX'
     //
     // This is *not* a full url - we append ':generateContent' or ':streamGenerateContent' to the end of the path as needed.
-    pub async fn new_shorthand(project_url_path: String) -> Result<Self, Error> {
-        let credentials = Self::build_credentials(None).await?;
+    pub async fn new_shorthand(
+        project_url_path: String,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self, Error> {
+        let credentials = GCPVertexGeminiKind
+            .get_defaulted_credential(None, default_credentials)
+            .await?;
 
         let shorthand_url = parse_shorthand_url(&project_url_path, "google")?;
         let (location, model_id, endpoint_id, model_or_endpoint_id) = match shorthand_url {
@@ -502,10 +497,11 @@ impl GCPVertexGeminiProvider {
         project_id: String,
         api_key_location: Option<CredentialLocation>,
         provider_types: &ProviderTypesConfig,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<Self, Error> {
-        let default_location = default_api_key_location();
-        let cred_location = api_key_location.as_ref().unwrap_or(&default_location);
-        let credentials = Self::build_credentials(Some(cred_location.clone())).await?;
+        let credentials = GCPVertexGeminiKind
+            .get_defaulted_credential(api_key_location.as_ref(), default_credentials)
+            .await?;
 
         let location_prefix = location_subdomain_prefix(&location);
 
@@ -621,10 +617,6 @@ impl GCPVertexGeminiProvider {
             }
         }
     }
-}
-
-pub fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::PathFromEnv("GCP_VERTEX_CREDENTIALS_PATH".to_string())
 }
 
 #[derive(Clone, Debug)]

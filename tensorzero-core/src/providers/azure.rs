@@ -24,7 +24,7 @@ use crate::inference::types::{
     ProviderInferenceResponse,
 };
 use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
-use crate::model::{Credential, CredentialLocation, EndpointLocation, ModelProvider};
+use crate::model::{Credential, EndpointLocation, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
@@ -170,10 +170,6 @@ impl AzureCredentials {
             .into()),
         }
     }
-}
-
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("AZURE_OPENAI_API_KEY".to_string())
 }
 
 impl InferenceProvider for AzureProvider {

@@ -36,7 +36,7 @@ use crate::inference::types::{
 };
 use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::inference::InferenceProvider;
-use crate::model::{fully_qualified_name, Credential, CredentialLocation, ModelProvider};
+use crate::model::{fully_qualified_name, Credential, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_gemini::process_output_schema;
@@ -88,10 +88,6 @@ impl GoogleAIStudioGeminiProvider {
     pub fn model_name(&self) -> &str {
         &self.model_name
     }
-}
-
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("GOOGLE_AI_STUDIO_API_KEY".to_string())
 }
 
 #[derive(Clone, Debug)]

@@ -30,7 +30,7 @@ use crate::inference::types::{
     ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk, Usage,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{fully_qualified_name, Credential, CredentialLocation, ModelProvider};
+use crate::model::{fully_qualified_name, Credential, ModelProvider};
 use crate::providers;
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
@@ -50,10 +50,6 @@ lazy_static! {
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 const PROVIDER_NAME: &str = "Anthropic";
 pub const PROVIDER_TYPE: &str = "anthropic";
-
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("ANTHROPIC_API_KEY".to_string())
-}
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]

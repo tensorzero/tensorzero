@@ -423,22 +423,24 @@ impl UninitializedOptimizerConfig {
     ) -> Result<OptimizerConfig, Error> {
         Ok(match self {
             UninitializedOptimizerConfig::Dicl(config) => {
-                OptimizerConfig::Dicl(config.load(default_credentials)?)
+                OptimizerConfig::Dicl(config.load(default_credentials).await?)
             }
             UninitializedOptimizerConfig::OpenAISFT(config) => {
-                OptimizerConfig::OpenAISFT(config.load(default_credentials)?)
+                OptimizerConfig::OpenAISFT(config.load(default_credentials).await?)
             }
             UninitializedOptimizerConfig::OpenAIRFT(config) => {
-                OptimizerConfig::OpenAIRFT(Box::new(config.load(default_credentials)?))
+                OptimizerConfig::OpenAIRFT(Box::new(config.load(default_credentials).await?))
             }
             UninitializedOptimizerConfig::FireworksSFT(config) => {
-                OptimizerConfig::FireworksSFT(config.load(default_credentials)?)
+                OptimizerConfig::FireworksSFT(config.load(default_credentials).await?)
             }
             UninitializedOptimizerConfig::GCPVertexGeminiSFT(config) => {
-                OptimizerConfig::GCPVertexGeminiSFT(Box::new(config.load().await?))
+                OptimizerConfig::GCPVertexGeminiSFT(Box::new(
+                    config.load(default_credentials).await?,
+                ))
             }
             UninitializedOptimizerConfig::TogetherSFT(config) => {
-                OptimizerConfig::TogetherSFT(Box::new(config.load(default_credentials)?))
+                OptimizerConfig::TogetherSFT(Box::new(config.load(default_credentials).await?))
             }
         })
     }

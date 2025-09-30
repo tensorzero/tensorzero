@@ -26,16 +26,12 @@ use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
-use crate::model::{Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("GROQ_API_KEY".to_string())
-}
 
 const PROVIDER_NAME: &str = "Groq";
 pub const PROVIDER_TYPE: &str = "groq";

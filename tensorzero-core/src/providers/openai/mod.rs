@@ -237,7 +237,6 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let foo: OpenAIProviderType;
         let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();

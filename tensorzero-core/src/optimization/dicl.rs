@@ -16,7 +16,7 @@ use crate::{
     function::FunctionConfig,
     http::TensorzeroHttpClient,
     model::CredentialLocation,
-    model_table::ProviderTypeDefaultCredentials,
+    model_table::{OpenAIKind, ProviderKind, ProviderTypeDefaultCredentials},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput},
     providers::openai::OpenAICredentials,
     stored_inference::RenderedSample,
@@ -187,7 +187,7 @@ impl UninitializedDiclOptimizationConfig {
 }
 
 impl UninitializedDiclOptimizationConfig {
-    pub fn load(
+    pub async fn load(
         self,
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<DiclOptimizationConfig, Error> {
@@ -201,7 +201,9 @@ impl UninitializedDiclOptimizationConfig {
             k: self.k,
             model: Arc::from(self.model),
             append_to_existing_variants: self.append_to_existing_variants,
-            credentials: default_credentials.openai.get_cloned()?.try_into()?,
+            credentials: OpenAIKind
+                .get_defaulted_credential(self.credentials.as_ref(), default_credentials)
+                .await?,
             credential_location: self.credentials,
         })
     }

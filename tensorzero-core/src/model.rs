@@ -42,8 +42,10 @@ use crate::inference::types::{
 };
 use crate::inference::WrappedProvider;
 use crate::model_table::{
-    AnthropicKind, BaseModelTable, ProviderType, ProviderTypeDefaultCredentials,
-    ShorthandModelConfig,
+    AnthropicKind, AzureKind, BaseModelTable, DeepSeekKind, FireworksKind,
+    GoogleAIStudioGeminiKind, GroqKind, HyperbolicKind, MistralKind, OpenAIKind, OpenRouterKind,
+    ProviderTypeDefaultCredentials, SGLangKind, ShorthandModelConfig, TGIKind, TogetherKind,
+    VLLMKind, XAIKind,
 };
 use crate::providers::helpers::peek_first_chunk;
 use crate::providers::hyperbolic::HyperbolicProvider;
@@ -1036,9 +1038,12 @@ impl UninitializedProviderConfig {
                 api_key_location,
             } => ProviderConfig::Anthropic(AnthropicProvider::new(
                 model_name,
-                provider_type_default_credentials
-                    .get_defaulted_credential(api_key_location.as_ref(), ProviderType::Anthropic)?
-                    .try_into()?,
+                AnthropicKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
             )),
             UninitializedProviderConfig::AWSBedrock {
                 model_id,
@@ -1070,13 +1075,23 @@ impl UninitializedProviderConfig {
                         HostedProviderKind::OpenAI => Box::new(OpenAIProvider::new(
                             model_name,
                             None,
-                            provider_type_default_credentials.get_defaulted_credential(Some(&CredentialLocation::None), ProviderType::OpenAI)?.try_into()?,
+                            OpenAIKind
+                                .get_defaulted_credential(
+                                    Some(&CredentialLocation::None),
+                                    provider_type_default_credentials,
+                                )
+                                .await?,
                         )),
                         HostedProviderKind::TGI => Box::new(TGIProvider::new(
                             Url::parse("http://tensorzero-unreachable-domain-please-file-a-bug-report.invalid").map_err(|e| {
                                 Error::new(ErrorDetails::InternalError { message: format!("Failed to parse fake TGI endpoint: `{e}`. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new") })
                             })?,
-                            provider_type_default_credentials.get_defaulted_credential(Some(&CredentialLocation::None), ProviderType::TGI)?.try_into()?,
+                            TGIKind
+                                .get_defaulted_credential(
+                                    Some(&CredentialLocation::None),
+                                    provider_type_default_credentials,
+                                )
+                                .await?,
                         )),
                     };
 
@@ -1091,9 +1106,12 @@ impl UninitializedProviderConfig {
             } => ProviderConfig::Azure(AzureProvider::new(
                 deployment_id,
                 endpoint,
-                provider_type_default_credentials
-                    .get_defaulted_credential(api_key_location.as_ref(), ProviderType::Azure)?
-                    .try_into()?,
+                AzureKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
             )?),
             UninitializedProviderConfig::Fireworks {
                 model_name,
@@ -1101,9 +1119,12 @@ impl UninitializedProviderConfig {
                 parse_think_blocks,
             } => ProviderConfig::Fireworks(FireworksProvider::new(
                 model_name,
-                provider_type_default_credentials
-                    .get_defaulted_credential(api_key_location.as_ref(), ProviderType::Fireworks)?
-                    .try_into()?,
+                FireworksKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
                 parse_think_blocks,
             )),
             UninitializedProviderConfig::GCPVertexAnthropic {
@@ -1112,8 +1133,14 @@ impl UninitializedProviderConfig {
                 project_id,
                 credential_location: api_key_location,
             } => ProviderConfig::GCPVertexAnthropic(
-                GCPVertexAnthropicProvider::new(model_id, location, project_id, api_key_location)
-                    .await?,
+                GCPVertexAnthropicProvider::new(
+                    model_id,
+                    location,
+                    project_id,
+                    api_key_location,
+                    provider_type_default_credentials,
+                )
+                .await?,
             ),
             UninitializedProviderConfig::GCPVertexGemini {
                 model_id,
@@ -1129,6 +1156,7 @@ impl UninitializedProviderConfig {
                     project_id,
                     api_key_location,
                     provider_types,
+                    provider_type_default_credentials,
                 )
                 .await?,
             ),
@@ -1137,39 +1165,48 @@ impl UninitializedProviderConfig {
                 api_key_location,
             } => ProviderConfig::GoogleAIStudioGemini(GoogleAIStudioGeminiProvider::new(
                 model_name,
-                provider_type_default_credentials
+                GoogleAIStudioGeminiKind
                     .get_defaulted_credential(
                         api_key_location.as_ref(),
-                        ProviderType::GoogleAIStudioGemini,
-                    )?
-                    .try_into()?,
+                        provider_type_default_credentials,
+                    )
+                    .await?,
             )?),
             UninitializedProviderConfig::Groq {
                 model_name,
                 api_key_location,
             } => ProviderConfig::Groq(GroqProvider::new(
                 model_name,
-                provider_type_default_credentials
-                    .get_defaulted_credential(api_key_location.as_ref(), ProviderType::Groq)?
-                    .try_into()?,
+                GroqKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
             )),
             UninitializedProviderConfig::Hyperbolic {
                 model_name,
                 api_key_location,
             } => ProviderConfig::Hyperbolic(HyperbolicProvider::new(
                 model_name,
-                provider_type_default_credentials
-                    .get_defaulted_credential(api_key_location.as_ref(), ProviderType::Hyperbolic)?
-                    .try_into()?,
+                HyperbolicKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
             )),
             UninitializedProviderConfig::Mistral {
                 model_name,
                 api_key_location,
             } => ProviderConfig::Mistral(MistralProvider::new(
                 model_name,
-                provider_type_default_credentials
-                    .get_defaulted_credential(api_key_location.as_ref(), ProviderType::Mistral)?
-                    .try_into()?,
+                MistralKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
             )),
             UninitializedProviderConfig::OpenAI {
                 model_name,
@@ -1178,18 +1215,24 @@ impl UninitializedProviderConfig {
             } => ProviderConfig::OpenAI(OpenAIProvider::new(
                 model_name,
                 api_base,
-                provider_type_default_credentials
-                    .get_defaulted_credential(api_key_location.as_ref(), ProviderType::OpenAI)?
-                    .try_into()?,
+                OpenAIKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
             )),
             UninitializedProviderConfig::OpenRouter {
                 model_name,
                 api_key_location,
             } => ProviderConfig::OpenRouter(OpenRouterProvider::new(
                 model_name,
-                provider_type_default_credentials
-                    .get_defaulted_credential(api_key_location.as_ref(), ProviderType::OpenRouter)?
-                    .try_into()?,
+                OpenRouterKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
             )),
             UninitializedProviderConfig::Together {
                 model_name,
@@ -1197,9 +1240,12 @@ impl UninitializedProviderConfig {
                 parse_think_blocks,
             } => ProviderConfig::Together(TogetherProvider::new(
                 model_name,
-                provider_type_default_credentials
-                    .get_defaulted_credential(api_key_location.as_ref(), ProviderType::Together)?
-                    .try_into()?,
+                TogetherKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
                 parse_think_blocks,
             )),
             UninitializedProviderConfig::VLLM {
@@ -1209,18 +1255,24 @@ impl UninitializedProviderConfig {
             } => ProviderConfig::VLLM(VLLMProvider::new(
                 model_name,
                 api_base,
-                provider_type_default_credentials
-                    .get_defaulted_credential(api_key_location.as_ref(), ProviderType::VLLM)?
-                    .try_into()?,
+                VLLMKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
             )),
             UninitializedProviderConfig::XAI {
                 model_name,
                 api_key_location,
             } => ProviderConfig::XAI(XAIProvider::new(
                 model_name,
-                provider_type_default_credentials
-                    .get_defaulted_credential(api_key_location.as_ref(), ProviderType::XAI)?
-                    .try_into()?,
+                XAIKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
             )),
             UninitializedProviderConfig::SGLang {
                 model_name,
@@ -1229,27 +1281,36 @@ impl UninitializedProviderConfig {
             } => ProviderConfig::SGLang(SGLangProvider::new(
                 model_name,
                 api_base,
-                provider_type_default_credentials
-                    .get_defaulted_credential(api_key_location.as_ref(), ProviderType::SGLang)?
-                    .try_into()?,
+                SGLangKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
             )),
             UninitializedProviderConfig::TGI {
                 api_base,
                 api_key_location,
             } => ProviderConfig::TGI(TGIProvider::new(
                 api_base,
-                provider_type_default_credentials
-                    .get_defaulted_credential(api_key_location.as_ref(), ProviderType::TGI)?
-                    .try_into()?,
+                TGIKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
             )),
             UninitializedProviderConfig::DeepSeek {
                 model_name,
                 api_key_location,
             } => ProviderConfig::DeepSeek(DeepSeekProvider::new(
                 model_name,
-                provider_type_default_credentials
-                    .get_defaulted_credential(api_key_location.as_ref(), ProviderType::Deepseek)?
-                    .try_into()?,
+                DeepSeekKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
             )),
             #[cfg(any(test, feature = "e2e_tests"))]
             UninitializedProviderConfig::Dummy {
@@ -1981,68 +2042,82 @@ impl ShorthandModelConfig for ModelConfig {
     ) -> Result<Self, Error> {
         let model_name = model_name.to_string();
         let provider_config = match provider_type {
-            "anthropic" => {
-                let provider = AnthropicKind;
-                ProviderConfig::Anthropic(AnthropicProvider::new(
-                    model_name,
-                    provider
-                        .get_defaulted_credential(None, default_credentials)
-                        .await?,
-                ))
-            }
+            "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(
+                model_name,
+                AnthropicKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
+            )),
             "deepseek" => ProviderConfig::DeepSeek(DeepSeekProvider::new(
                 model_name,
-                default_credentials.deepseek.get_cloned()?.try_into()?,
+                DeepSeekKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
             )),
             "fireworks" => ProviderConfig::Fireworks(FireworksProvider::new(
                 model_name,
-                default_credentials.fireworks.get_cloned()?.try_into()?,
+                FireworksKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
                 crate::providers::fireworks::default_parse_think_blocks(),
             )),
             "google_ai_studio_gemini" => {
                 ProviderConfig::GoogleAIStudioGemini(GoogleAIStudioGeminiProvider::new(
                     model_name,
-                    default_credentials
-                        .google_ai_studio_gemini
-                        .get_cloned()?
-                        .try_into()?,
+                    GoogleAIStudioGeminiKind
+                        .get_defaulted_credential(None, default_credentials)
+                        .await?,
                 )?)
             }
             "gcp_vertex_gemini" => ProviderConfig::GCPVertexGemini(
-                GCPVertexGeminiProvider::new_shorthand(model_name).await?,
+                GCPVertexGeminiProvider::new_shorthand(model_name, default_credentials).await?,
             ),
             "gcp_vertex_anthropic" => ProviderConfig::GCPVertexAnthropic(
-                GCPVertexAnthropicProvider::new_shorthand(model_name).await?,
+                GCPVertexAnthropicProvider::new_shorthand(model_name, default_credentials).await?,
             ),
             "groq" => ProviderConfig::Groq(GroqProvider::new(
                 model_name,
-                default_credentials.groq.get_cloned()?.try_into()?,
+                GroqKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
             )),
             "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(
                 model_name,
-                default_credentials.hyperbolic.get_cloned()?.try_into()?,
+                HyperbolicKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
             )),
             "mistral" => ProviderConfig::Mistral(MistralProvider::new(
                 model_name,
-                default_credentials.mistral.get_cloned()?.try_into()?,
+                MistralKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
             )),
             "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(
                 model_name,
                 None,
-                default_credentials.openai.get_cloned()?.try_into()?,
+                OpenAIKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
             )),
             "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(
                 model_name,
-                default_credentials.openrouter.get_cloned()?.try_into()?,
+                OpenRouterKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
             )),
             "together" => ProviderConfig::Together(TogetherProvider::new(
                 model_name,
-                default_credentials.together.get_cloned()?.try_into()?,
+                TogetherKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
                 crate::providers::together::default_parse_think_blocks(),
             )),
             "xai" => ProviderConfig::XAI(XAIProvider::new(
                 model_name,
-                default_credentials.xai.get_cloned()?.try_into()?,
+                XAIKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
             )),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
