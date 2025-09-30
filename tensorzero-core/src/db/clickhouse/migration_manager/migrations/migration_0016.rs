@@ -114,7 +114,7 @@ impl Migration for Migration0016<'_> {
                     engine_args: &["updated_at", "is_deleted"],
                 },
                 Some("ORDER BY (dataset_name, function_name, id)"),
-                None,
+                Some("cityHash64(function_name)"),
             )
             .await?;
 
@@ -141,7 +141,7 @@ impl Migration for Migration0016<'_> {
                     engine_args: &["updated_at", "is_deleted"],
                 },
                 Some("ORDER BY (dataset_name, function_name, id)"),
-                None,
+                Some("cityHash64(function_name)"),
             )
             .await?;
 

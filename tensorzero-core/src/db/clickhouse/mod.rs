@@ -894,25 +894,16 @@ impl ClickHouseConnectionInfo {
             self.run_query_synchronous_no_params(local_query).await?;
 
             // Create distributed table
-            if let Some(sharding_key) = table_specific_sharding_key {
-                let distributed_engine_name = self.get_distributed_table_engine_name(
-                    table_name, 
-                    self.database(), 
-                    sharding_key
-                );
-                let distributed_query = format!(
-                    "CREATE TABLE IF NOT EXISTS {table_name}{on_cluster_name} AS {local_table_name} ENGINE = {distributed_engine_name}"
-                );
-                self.run_query_synchronous_no_params(distributed_query).await?;
-            } else {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: format!(
-                        "Sharding is enabled but no sharding key provided for table '{}'. \
-                        All tables must have explicit sharding keys when clustering is enabled.",
-                        table_name
-                    ),
-                }));
-            }
+            let sharding_key = table_specific_sharding_key.unwrap_or("rand()");
+            let distributed_engine_name = self.get_distributed_table_engine_name(
+                table_name, 
+                self.database(), 
+                sharding_key
+            );
+            let distributed_query = format!(
+                "CREATE TABLE IF NOT EXISTS {table_name}{on_cluster_name} AS {local_table_name} ENGINE = {distributed_engine_name}"
+            );
+            self.run_query_synchronous_no_params(distributed_query).await?;
         } else {
             // Create regular table
             let table_engine_name = self.get_maybe_replicated_table_engine_name(

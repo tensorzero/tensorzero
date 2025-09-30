@@ -87,7 +87,7 @@ impl Migration for Migration0009<'_> {
                 engine_args: &[],
             },
             Some("ORDER BY target_id"),
-            None,
+            Some("cityHash64(target_id)"),
         ).await?;
         // Create the materialized view for the `BooleanMetricFeedbackByTargetId` table from BooleanMetricFeedback
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
@@ -128,7 +128,7 @@ impl Migration for Migration0009<'_> {
                 engine_args: &[],
             },
             Some("ORDER BY target_id"),
-            None,
+            Some("cityHash64(target_id)"),
         ).await?;
 
         // Create the materialized view for the `CommentFeedbackByTargetId` table from CommentFeedback
@@ -152,9 +152,8 @@ impl Migration for Migration0009<'_> {
             r"
             (
                 id UUID, -- must be a UUIDv7
-                target_id UUID, -- must be a UUIDv7
-                metric_name LowCardinality(String),
-                value Float32,
+                inference_id UUID, -- must be a UUIDv7
+                value String,
                 tags Map(String, String)
             )",
             &GetMaybeReplicatedTableEngineNameArgs {
@@ -162,8 +161,8 @@ impl Migration for Migration0009<'_> {
                 table_engine_name: "MergeTree",
                 engine_args: &[],
             },
-            Some("ORDER BY target_id"),
-            None,
+            Some("ORDER BY inference_id"),
+            Some("cityHash64(inference_id)"),
         ).await?;
 
         // Create the materialized view for the `DemonstrationFeedbackByInferenceId` table from DemonstrationFeedback
@@ -197,7 +196,7 @@ impl Migration for Migration0009<'_> {
                 engine_args: &[],
             },
             Some("ORDER BY target_id"),
-            None,
+            Some("cityHash64(target_id)"),
         ).await?;
 
         // Create the materialized view for the `FloatMetricFeedbackByTargetId` table from FloatMetricFeedback

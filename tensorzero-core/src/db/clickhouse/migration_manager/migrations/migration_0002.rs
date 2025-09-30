@@ -55,7 +55,7 @@ impl Migration for Migration0002<'_> {
             table_schema,
             &table_engine_args,
             Some("ORDER BY (function_name, variant_name, namespace)"),
-            None,
+            Some("cityHash64(function_name)"),
         ).await?;
 
         Ok(())

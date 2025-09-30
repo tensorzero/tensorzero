@@ -71,7 +71,7 @@ impl Migration for Migration0000<'_> {
                 engine_args: &[],
             },
             Some("ORDER BY (metric_name, target_id)"),
-            None,
+            Some("cityHash64(target_id)"),
         ).await?;
 
         // Create the `CommentFeedback` table
@@ -93,7 +93,7 @@ impl Migration for Migration0000<'_> {
                 engine_args: &[],
             },
             Some("ORDER BY target_id"),
-            None,
+            Some("cityHash64(target_id)"),
         ).await?;
 
         // Create the `DemonstrationFeedback` table
@@ -114,7 +114,7 @@ impl Migration for Migration0000<'_> {
                 engine_args: &[],
             },
             Some("ORDER BY inference_id"),
-            None,
+            Some("cityHash64(inference_id)"),
         ).await?;
 
         // Create the `FloatMetricFeedback` table
@@ -136,7 +136,7 @@ impl Migration for Migration0000<'_> {
                 engine_args: &[],
             },
             Some("ORDER BY (metric_name, target_id)"),
-            None,
+            Some("cityHash64(target_id)"),
         ).await?;
 
         // Create the `ChatInference` table
@@ -218,7 +218,7 @@ impl Migration for Migration0000<'_> {
                 engine_args: &[],
             },
             Some("ORDER BY inference_id"),
-            None,
+            Some("cityHash64(inference_id)"),
         ).await?;
 
         Ok(())
