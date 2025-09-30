@@ -23,6 +23,7 @@ use crate::config::{
 };
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
+use crate::model_table::ProviderKind;
 use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
@@ -41,7 +42,8 @@ use crate::inference::types::{
 };
 use crate::inference::WrappedProvider;
 use crate::model_table::{
-    BaseModelTable, ProviderType, ProviderTypeDefaultCredentials, ShorthandModelConfig,
+    AnthropicKind, BaseModelTable, ProviderType, ProviderTypeDefaultCredentials,
+    ShorthandModelConfig,
 };
 use crate::providers::helpers::peek_first_chunk;
 use crate::providers::hyperbolic::HyperbolicProvider;
@@ -1979,10 +1981,15 @@ impl ShorthandModelConfig for ModelConfig {
     ) -> Result<Self, Error> {
         let model_name = model_name.to_string();
         let provider_config = match provider_type {
-            "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(
-                model_name,
-                default_credentials.anthropic.get_cloned()?.try_into()?,
-            )),
+            "anthropic" => {
+                let provider = AnthropicKind;
+                ProviderConfig::Anthropic(AnthropicProvider::new(
+                    model_name,
+                    provider
+                        .get_defaulted_credential(None, default_credentials)
+                        .await?,
+                ))
+            }
             "deepseek" => ProviderConfig::DeepSeek(DeepSeekProvider::new(
                 model_name,
                 default_credentials.deepseek.get_cloned()?.try_into()?,

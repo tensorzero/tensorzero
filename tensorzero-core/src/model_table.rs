@@ -51,8 +51,8 @@ lazy_static! {
     };
 }
 
-trait ProviderKind {
-    type Credential: TryFrom<Credential, Error = Error> + Clone;
+pub trait ProviderKind {
+    type Credential: Clone;
     fn get_provider_type(&self) -> ProviderType;
     async fn get_credential_field(
         &self,
@@ -62,7 +62,10 @@ trait ProviderKind {
         &self,
         api_key_location: Option<&CredentialLocation>,
         default_credentials: &ProviderTypeDefaultCredentials,
-    ) -> Result<Self::Credential, Error> {
+    ) -> Result<Self::Credential, Error>
+    where
+        Self::Credential: TryFrom<Credential, Error = Error>,
+    {
         let provider_type = self.get_provider_type();
         if let Some(api_key_location) = api_key_location {
             return Ok(load_credential(api_key_location, provider_type)?.try_into()?);
@@ -640,7 +643,7 @@ fn load_credential(
     }
 }
 
-struct AnthropicKind;
+pub struct AnthropicKind;
 
 impl ProviderKind for AnthropicKind {
     type Credential = AnthropicCredentials;
@@ -669,5 +672,268 @@ impl ProviderKind for OpenAIKind {
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<Self::Credential, Error> {
         default_credentials.openai.get_cloned()
+    }
+}
+
+struct AzureKind;
+
+impl ProviderKind for AzureKind {
+    type Credential = AzureCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::Azure
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.azure.get_cloned()
+    }
+}
+
+struct DeepSeekKind;
+
+impl ProviderKind for DeepSeekKind {
+    type Credential = DeepSeekCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::Deepseek
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.deepseek.get_cloned()
+    }
+}
+
+struct FireworksKind;
+
+impl ProviderKind for FireworksKind {
+    type Credential = FireworksCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::Fireworks
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.fireworks.get_cloned()
+    }
+}
+
+struct GCPVertexAnthropicKind;
+
+impl ProviderKind for GCPVertexAnthropicKind {
+    type Credential = GCPVertexCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::GCPVertexAnthropic
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.gcp_vertex_anthropic.get_cloned().await
+    }
+}
+
+struct GCPVertexGeminiKind;
+
+impl ProviderKind for GCPVertexGeminiKind {
+    type Credential = GCPVertexCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::GCPVertexGemini
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.gcp_vertex_gemini.get_cloned().await
+    }
+
+    async fn get_defaulted_credential(
+        &self,
+        api_key_location: Option<&CredentialLocation>,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        if let Some(api_key_location) = api_key_location {
+            return match api_key_location {
+                CredentialLocation::Sdk => {
+                    make_gcp_sdk_credentials(&ProviderType::GCPVertexAnthropic).await
+                }
+                _ => build_gcp_non_sdk_credentials(
+                    load_credential(&api_key_location, ProviderType::GCPVertexAnthropic)?,
+                    &ProviderType::GCPVertexAnthropic,
+                ),
+            };
+        }
+
+        Ok(self
+            .get_credential_field(default_credentials)
+            .await?
+            .clone())
+    }
+}
+
+struct GoogleAIStudioGeminiKind;
+
+impl ProviderKind for GoogleAIStudioGeminiKind {
+    type Credential = GoogleAIStudioCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::GoogleAIStudioGemini
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.google_ai_studio_gemini.get_cloned()
+    }
+}
+
+struct GroqKind;
+
+impl ProviderKind for GroqKind {
+    type Credential = GroqCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::Groq
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.groq.get_cloned()
+    }
+}
+
+struct HyperbolicKind;
+
+impl ProviderKind for HyperbolicKind {
+    type Credential = HyperbolicCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::Hyperbolic
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.hyperbolic.get_cloned()
+    }
+}
+
+struct MistralKind;
+
+impl ProviderKind for MistralKind {
+    type Credential = MistralCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::Mistral
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.mistral.get_cloned()
+    }
+}
+
+struct OpenRouterKind;
+
+impl ProviderKind for OpenRouterKind {
+    type Credential = OpenRouterCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::OpenRouter
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.openrouter.get_cloned()
+    }
+}
+
+struct SGLangKind;
+
+impl ProviderKind for SGLangKind {
+    type Credential = SGLangCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::SGLang
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.sglang.get_cloned()
+    }
+}
+
+struct TGIKind;
+
+impl ProviderKind for TGIKind {
+    type Credential = TGICredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::TGI
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.tgi.get_cloned()
+    }
+}
+
+struct TogetherKind;
+
+impl ProviderKind for TogetherKind {
+    type Credential = TogetherCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::Together
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.together.get_cloned()
+    }
+}
+
+struct VLLMKind;
+
+impl ProviderKind for VLLMKind {
+    type Credential = VLLMCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::VLLM
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.vllm.get_cloned()
+    }
+}
+
+struct XAIKind;
+
+impl ProviderKind for XAIKind {
+    type Credential = XAICredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::XAI
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.xai.get_cloned()
     }
 }
