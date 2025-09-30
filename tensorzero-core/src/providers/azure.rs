@@ -1030,7 +1030,7 @@ mod tests {
         let provider = SKIP_CREDENTIAL_VALIDATION
             .scope((), async {
                 AzureProvider::new(
-                    "gpt-35-turbo".to_string(),
+                    "gpt-4.1-mini".to_string(),
                     EndpointLocation::Static("https://test.openai.azure.com".to_string()),
                     None,
                 )
@@ -1038,7 +1038,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(provider.deployment_id(), "gpt-35-turbo");
+        assert_eq!(provider.deployment_id(), "gpt-4.1-mini");
         match provider.endpoint {
             AzureEndpoint::Static(url) => {
                 assert_eq!(url.as_str(), "https://test.openai.azure.com/");
@@ -1053,7 +1053,7 @@ mod tests {
         let provider = SKIP_CREDENTIAL_VALIDATION
             .scope((), async {
                 AzureProvider::new(
-                    "gpt-35-turbo".to_string(),
+                    "gpt-4.1-mini".to_string(),
                     EndpointLocation::Dynamic("azure_endpoint".to_string()),
                     None,
                 )
@@ -1061,7 +1061,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(provider.deployment_id(), "gpt-35-turbo");
+        assert_eq!(provider.deployment_id(), "gpt-4.1-mini");
         match provider.endpoint {
             AzureEndpoint::Dynamic(key) => {
                 assert_eq!(key, "azure_endpoint");

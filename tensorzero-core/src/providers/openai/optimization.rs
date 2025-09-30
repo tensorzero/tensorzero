@@ -832,7 +832,7 @@ mod tests {
         let succeeded_model = json!({
             "id": "ftjob-123",
             "status": "succeeded",
-            "fine_tuned_model": "ft:gpt-3.5-turbo:my-org:custom_suffix:id",
+            "fine_tuned_model": "ft:gpt-4.1-mini:my-org:custom_suffix:id",
             "created_at": 1620000000,
             "metadata": {},
         });
@@ -850,7 +850,7 @@ mod tests {
             "id": "ftjob-456",
             "status": "succeeded",
             "result_files": ["file-abc"],
-            "fine_tuned_model": "ft:gpt-3.5-turbo:my-org:custom_suffix:id",
+            "fine_tuned_model": "ft:gpt-4.1-mini:my-org:custom_suffix:id",
             "created_at": 1620000000,
             "metadata": {},
         });

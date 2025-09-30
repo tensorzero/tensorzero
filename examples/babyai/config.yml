@@ -20,54 +20,54 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 agent:
-  type: naive            # Type of agent to use (e.g., 'naive', 'cot', etc.)
-  remember_cot: True     # Whether the agent should remember its reasoning across turns
-  max_history: 16        # Maximum number of previous turns to keep in the dialogue history
-  max_image_history: 0   # Maximum number of images to keep in the history
-  max_cot_history: 1     # Maximum number of chain-of-thought steps to keep in history (if using 'cot' type of agent)
-  max_icl_history: 1000   # Maximum number of ICL steps to keep in history (if using 'few_shot' type of agent)
+  type: naive # Type of agent to use (e.g., 'naive', 'cot', etc.)
+  remember_cot: True # Whether the agent should remember its reasoning across turns
+  max_history: 16 # Maximum number of previous turns to keep in the dialogue history
+  max_image_history: 0 # Maximum number of images to keep in the history
+  max_cot_history: 1 # Maximum number of chain-of-thought steps to keep in history (if using 'cot' type of agent)
+  max_icl_history: 1000 # Maximum number of ICL steps to keep in history (if using 'few_shot' type of agent)
   cache_icl: False
 
 eval:
-  output_dir: "results"  # Directory where evaluation results will be saved
-  resume_from: null      # Path to to the incomplete results file to resume an incomplete run
-  num_workers: 16        # Number of parallel workers. Increase for faster evaluation if you have enough resources
-  num_episodes:          # Minimum number of episodes to run for each environment. You can optionally increase this to get more reliable results
-    nle: 5               # Number of episodes for the 'nle' environment
-    minihack: 5          # Number of episodes for each 'minihack' task
-    babyai: 10           # Number of episodes for each 'babyai' task
-    crafter: 10          # Number of episodes for the 'crafter' environment
-    babaisai: 3          # Number of episodes for each 'babaisai' task
-    textworld: 10        # Number of episodes for each 'textworld' task
-  max_steps_per_episode: null   # Max steps per episode; null uses the environment default
-  save_trajectories: True       # Whether to save agent trajectories (text only)
-  save_images: False            # Whether to save images from the environment
+  output_dir: "results" # Directory where evaluation results will be saved
+  resume_from: null # Path to to the incomplete results file to resume an incomplete run
+  num_workers: 16 # Number of parallel workers. Increase for faster evaluation if you have enough resources
+  num_episodes: # Minimum number of episodes to run for each environment. You can optionally increase this to get more reliable results
+    nle: 5 # Number of episodes for the 'nle' environment
+    minihack: 5 # Number of episodes for each 'minihack' task
+    babyai: 10 # Number of episodes for each 'babyai' task
+    crafter: 10 # Number of episodes for the 'crafter' environment
+    babaisai: 3 # Number of episodes for each 'babaisai' task
+    textworld: 10 # Number of episodes for each 'textworld' task
+  max_steps_per_episode: null # Max steps per episode; null uses the environment default
+  save_trajectories: True # Whether to save agent trajectories (text only)
+  save_images: False # Whether to save images from the environment
   icl_episodes: 1
   icl_dataset: records
 
 client:
-  client_name: openai           # LLM client to use (e.g., 'openai', 'gemini', 'claude')
-  model_id: gpt-4o              # Model identifier (e.g., 'gpt-4', 'gpt-3.5-turbo')
-  base_url: http://localhost:8080/v1   # Base URL for the API (if using a local server)
+  client_name: openai # LLM client to use (e.g., 'openai', 'gemini', 'claude')
+  model_id: gpt-4o # Model identifier (e.g., 'gpt-4', 'gpt-4.1-mini')
+  base_url: http://localhost:8080/v1 # Base URL for the API (if using a local server)
   generate_kwargs:
-    temperature: 0.0            # Sampling temperature; 0.0 makes the output deterministic
-    max_tokens: 1024            # Max tokens to generate in the response
-  timeout: 60                   # Timeout for API requests in seconds
-  max_retries: 5                # Max number of retries for failed API calls
-  delay: 2                      # Exponential backoff factor between retries in seconds
-  alternate_roles: False        # Whether the client requires alternating between the agent and the environment
+    temperature: 0.0 # Sampling temperature; 0.0 makes the output deterministic
+    max_tokens: 1024 # Max tokens to generate in the response
+  timeout: 60 # Timeout for API requests in seconds
+  max_retries: 5 # Max number of retries for failed API calls
+  delay: 2 # Exponential backoff factor between retries in seconds
+  alternate_roles: False # Whether the client requires alternating between the agent and the environment
 
 envs:
-  names: babyai-babaisai-textworld-crafter-nle-minihack   # Environments to evaluate, separated by hyphens
+  names: babyai-babaisai-textworld-crafter-nle-minihack # Environments to evaluate, separated by hyphens
   env_kwargs:
-    seed: null                # Random seed; null means a random seed is used
+    seed: null # Random seed; null means a random seed is used
   nle_kwargs:
-    character: "@"            # Character representing the agent in NLE
-    max_episode_steps: 100_000  # Max steps per episode in NLE
-    no_progress_timeout: 150    # Timeout for no progress in NLE
-    savedir: null               # Directory to save NLE data; null disables saving
-    save_ttyrec_every: 0        # Frequency of saving TTY recordings
-    skip_more: False            # Whether to skip the 'more' prompt in NLE
+    character: "@" # Character representing the agent in NLE
+    max_episode_steps: 100_000 # Max steps per episode in NLE
+    no_progress_timeout: 150 # Timeout for no progress in NLE
+    savedir: null # Directory to save NLE data; null disables saving
+    save_ttyrec_every: 0 # Frequency of saving TTY recordings
+    skip_more: False # Whether to skip the 'more' prompt in NLE
   minihack_kwargs:
     character: "@"
     max_episode_steps: 100
@@ -83,7 +83,7 @@ envs:
   crafter_kwargs:
     area: [64, 64]
     view: [9, 9]
-    size: [256, 256]            # Image size in Crafter
+    size: [256, 256] # Image size in Crafter
     reward: True
     length: 10000
     seed: null
@@ -101,7 +101,7 @@ envs:
 
 tasks:
   nle_tasks:
-    - NetHackChallenge-v0       # Tasks for the NLE environment
+    - NetHackChallenge-v0 # Tasks for the NLE environment
 
   minihack_tasks:
     - "MiniHack-Boxoban-Hard-v0"
@@ -114,7 +114,7 @@ tasks:
     - "MiniHack-Quest-Medium-v0"
 
   crafter_tasks:
-    - "default"                 # Tasks for Crafter
+    - "default" # Tasks for Crafter
 
   babyai_tasks:
     - "BabyAI-MixedTrainLocal-v0/goto"
@@ -172,5 +172,5 @@ tasks:
 
 hydra:
   run:
-    dir: .                     # Set the working directory to the current directory
-  output_subdir: null          # Do not use an output subdirectory
+    dir: . # Set the working directory to the current directory
+  output_subdir: null # Do not use an output subdirectory
