@@ -168,23 +168,21 @@ impl EmbeddingModelConfig {
                             }
                             .into());
                             };
-                            if let Some(float_data) = first_embedding.as_float() {
-                                let _ = start_cache_write(
-                                    clients.clickhouse_connection_info,
-                                    provider_request.get_cache_key()?,
-                                    CacheData {
-                                        output: EmbeddingCacheData {
-                                            embedding: float_data.clone(),
-                                        },
-                                        raw_request: response.raw_request.clone(),
-                                        raw_response: response.raw_response.clone(),
-                                        input_tokens: response.usage.input_tokens,
-                                        output_tokens: response.usage.output_tokens,
-                                        finish_reason: None,
+                            let _ = start_cache_write(
+                                clients.clickhouse_connection_info,
+                                provider_request.get_cache_key()?,
+                                CacheData {
+                                    output: EmbeddingCacheData {
+                                        embedding: first_embedding.clone(),
                                     },
-                                    CacheValidationInfo { tool_config: None },
-                                );
-                            }
+                                    raw_request: response.raw_request.clone(),
+                                    raw_response: response.raw_response.clone(),
+                                    input_tokens: response.usage.input_tokens,
+                                    output_tokens: response.usage.output_tokens,
+                                    finish_reason: None,
+                                },
+                                CacheValidationInfo { tool_config: None },
+                            );
                         };
                         let embedding_response =
                             EmbeddingModelResponse::new(response, provider_name.clone());
@@ -341,7 +339,7 @@ impl EmbeddingModelResponse {
             id: Uuid::now_v7(),
             created: current_timestamp(),
             input: request.request.input.clone(),
-            embeddings: vec![Embedding::Float(cache_lookup.output.embedding)],
+            embeddings: vec![cache_lookup.output.embedding],
             raw_request: cache_lookup.raw_request,
             raw_response: cache_lookup.raw_response,
             usage: Usage {

@@ -80,6 +80,8 @@ impl Variant for ChainOfThoughtConfig {
             function_name: inference_config.function_name,
             variant_name: inference_config.variant_name,
             ids: inference_config.ids,
+            fetch_and_encode_input_files_before_inference: inference_config
+                .fetch_and_encode_input_files_before_inference,
             extra_body: inference_config.extra_body.clone(),
             extra_cache_key: inference_config.extra_cache_key.clone(),
             extra_headers: inference_config.extra_headers.clone(),

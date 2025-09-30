@@ -22,6 +22,7 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { Badge } from "~/components/ui/badge";
+import { TagsTable } from "~/components/tags/TagsTable";
 import { useFunctionConfig } from "~/context/config";
 import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference.utils";
 import {
@@ -242,36 +243,81 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [input, setInput] = useState<typeof datapoint.input>(datapoint.input);
-  const [originalInput] = useState(datapoint.input);
-  const [originalOutput] = useState(datapoint.output);
+  const [originalInput, setOriginalInput] = useState(datapoint.input);
+  const [originalOutput, setOriginalOutput] = useState(datapoint.output);
+  const [originalTags, setOriginalTags] = useState(datapoint.tags || {});
   const [output, setOutput] = useState<
     ContentBlockChatOutput[] | JsonInferenceOutput | null
   >(datapoint.output ?? null);
+  const [tags, setTags] = useState<Record<string, string>>(
+    datapoint.tags || {},
+  );
   const [isEditing, setIsEditing] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  // Reset state when datapoint changes (e.g., after save redirect)
+  useEffect(() => {
+    setInput(datapoint.input);
+    setOriginalInput(datapoint.input);
+    setOutput(datapoint.output ?? null);
+    setOriginalOutput(datapoint.output);
+    setTags(datapoint.tags || {});
+    setOriginalTags(datapoint.tags || {});
+    setIsEditing(false);
+    setValidationError(null);
+  }, [datapoint]);
+
   const canSave = useMemo(() => {
-    // Use JSON.stringify to compare object values rather than references
-    const hasInputChanged =
-      JSON.stringify(input) !== JSON.stringify(originalInput);
+    // Check if system has changed (added, removed, or modified)
+    const hasSystemChanged =
+      "system" in input !== "system" in originalInput ||
+      JSON.stringify(input.system) !== JSON.stringify(originalInput.system);
+
+    // Check if messages changed
+    const hasMessagesChanged =
+      JSON.stringify(input.messages) !== JSON.stringify(originalInput.messages);
+
+    const hasInputChanged = hasSystemChanged || hasMessagesChanged;
+
     const hasOutputChanged =
       JSON.stringify(output) !== JSON.stringify(originalOutput);
+    const hasTagsChanged =
+      JSON.stringify(tags) !== JSON.stringify(originalTags);
 
-    return isEditing && (hasInputChanged || hasOutputChanged);
-  }, [isEditing, input, output, originalInput, originalOutput]);
+    return isEditing && (hasInputChanged || hasOutputChanged || hasTagsChanged);
+  }, [
+    isEditing,
+    input,
+    output,
+    tags,
+    originalInput,
+    originalOutput,
+    originalTags,
+  ]);
 
   const toggleEditing = () => setIsEditing(!isEditing);
 
   const handleReset = () => {
     setInput(datapoint.input);
     setOutput(datapoint.output ?? null);
+    setTags(datapoint.tags || {});
   };
 
-  const handleSystemChange = (system: string | object) =>
-    setInput({ ...input, system });
+  const handleSystemChange = (system: string | object | null) => {
+    setInput((prevInput) => {
+      if (system === null) {
+        // Explicitly create new object without system key
+        return {
+          messages: prevInput.messages,
+        };
+      } else {
+        return { ...prevInput, system };
+      }
+    });
+  };
 
   const handleMessagesChange = (messages: DisplayInputMessage[]) => {
-    setInput({ ...input, messages });
+    setInput((prevInput) => ({ ...prevInput, messages }));
   };
 
   const fetcher = useFetcher();
@@ -280,8 +326,8 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const submitDatapointAction = (action: string) => {
     const formData = new FormData();
 
-    // Create a copy of datapoint with updated input and output if we're saving
-    const dataToSubmit = { ...datapoint, input, output };
+    // Create a copy of datapoint with updated input, output, and tags if we're saving
+    const dataToSubmit = { ...datapoint, input, output, tags };
 
     Object.entries(dataToSubmit).forEach(([key, value]) => {
       if (value === undefined) return;
@@ -413,6 +459,11 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             />
           </SectionLayout>
         )}
+
+        <SectionLayout>
+          <SectionHeader heading="Tags" />
+          <TagsTable tags={tags} onTagsChange={setTags} isEditing={isEditing} />
+        </SectionLayout>
       </SectionsGroup>
 
       {selectedVariant && (

@@ -148,6 +148,12 @@ pub async fn feedback(
             "metric_name" => params.metric_name.to_string()
         )
         .increment(1);
+        counter!(
+            "tensorzero_requests_total",
+            "endpoint" => "feedback",
+            "metric_name" => params.metric_name.to_string()
+        )
+        .increment(1);
     }
 
     match feedback_metadata.r#type {
@@ -1422,7 +1428,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(output_schema.clone()).unwrap(),
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         })));
 
         // Case 5: a JSON function with correct output

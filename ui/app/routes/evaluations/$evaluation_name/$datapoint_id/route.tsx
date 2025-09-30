@@ -53,9 +53,11 @@ import type {
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 import { InferenceButton } from "~/components/utils/InferenceButton";
 import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
+import { handleAddToDatasetAction } from "~/utils/dataset.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
+import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { logger } from "~/utils/logger";
 
 export const handle: RouteHandle = {
@@ -152,6 +154,9 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const _action = formData.get("_action");
   switch (_action) {
+    case "addToDataset": {
+      return handleAddToDatasetAction(formData);
+    }
     case "addFeedback": {
       const response = await addEvaluationHumanFeedback(formData);
       const url = new URL(request.url);
@@ -208,10 +213,12 @@ export default function EvaluationDatapointPage({
       metrics: [],
       variant_name: "Reference",
       inferenceId: null,
+      episodeId: null,
     },
     ...consolidatedEvaluationResults.map((result) => ({
       id: result.evaluation_run_id,
       inferenceId: result.inference_id,
+      episodeId: result.episode_id,
       variant_name: result.variant_name,
       output: result.generated_output,
       metrics: result.metrics,
@@ -225,6 +232,7 @@ export default function EvaluationDatapointPage({
       });
     }
   }, [newFeedbackId, newJudgeDemonstrationId, toast]);
+
   return (
     // Provider remains here
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
@@ -448,6 +456,7 @@ type OutputsSectionProps = {
     output: ContentBlockChatOutput[] | JsonInferenceOutput;
     metrics: ConsolidatedMetric[];
     inferenceId: string | null;
+    episodeId: string | null;
   }>;
   evaluation_name: string;
   evaluation_config: EvaluationConfig; // Use the specific config type
@@ -487,16 +496,27 @@ function OutputsSection({
                     // Use the getColor obtained from the correct context
                     getColor={getColor}
                   />
-
                   {result.inferenceId && (
-                    <div className="text-xs text-gray-500">
-                      Inference:{" "}
-                      <Link
-                        to={`/observability/inferences/${result.inferenceId}`}
-                        className="text-blue-600 hover:text-blue-800 hover:underline"
-                      >
-                        {result.inferenceId}
-                      </Link>
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span>
+                        Inference:{" "}
+                        <Link
+                          to={`/observability/inferences/${result.inferenceId}`}
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {result.inferenceId}
+                        </Link>
+                      </span>
+                      {result.inferenceId && result.episodeId && (
+                        <AddToDatasetButton
+                          inferenceId={result.inferenceId}
+                          functionName={evaluation_config.function_name}
+                          variantName={result.variant_name}
+                          episodeId={result.episodeId}
+                          hasDemonstration={false}
+                          alwaysUseInherit={true}
+                        />
+                      )}
                     </div>
                   )}
                 </>

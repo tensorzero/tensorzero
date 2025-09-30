@@ -9,16 +9,16 @@ bind_address = "0.0.0.0:3000"
 # │                                   MODELS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[models."gpt-3.5-turbo"]
+[models."gpt-4.1-mini"]
 routing = ["openai", "azure"]
 
-[models."gpt-3.5-turbo".providers.openai]
+[models."gpt-4.1-mini".providers.openai]
 type = "openai"
-model_name = "gpt-3.5-turbo"
+model_name = "gpt-4.1-mini"
 
-[models."gpt-3.5-turbo".providers.azure]
+[models."gpt-4.1-mini".providers.azure]
 type = "azure"
-deployment_id = "gpt-35-turbo"
+deployment_id = "gpt-4.1-mini"
 endpoint = "https://your-endpoint.openai.azure.com"
 
 [models.claude-3-haiku-20240307]
@@ -50,13 +50,13 @@ system_schema = "fixtures/config/functions/generate_draft/system_schema.json"
 [functions.generate_draft.variants.openai_promptA]
 type = "chat_completion"
 weight = 0.9
-model = "gpt-3.5-turbo"
+model = "gpt-4.1-mini"
 system_template = "fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
 
 [functions.generate_draft.variants.openai_promptB]
 type = "chat_completion"
 weight = 0.1
-model = "gpt-3.5-turbo"
+model = "gpt-4.1-mini"
 system_template = "fixtures/config/functions/generate_draft/promptB/system_template.minijinja"
 
 [functions.json_with_schemas]
@@ -67,14 +67,14 @@ output_schema = "fixtures/config/functions/json_with_schemas/output_schema.json"
 [functions.json_with_schemas.variants.openai_promptA]
 type = "chat_completion"
 weight = 0.9
-model = "gpt-3.5-turbo"
+model = "gpt-4.1-mini"
 system_template = "fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
 json_mode = "implicit_tool"
 
 [functions.json_with_schemas.variants.openai_promptB]
 type = "chat_completion"
 weight = 0.1
-model = "gpt-3.5-turbo"
+model = "gpt-4.1-mini"
 system_template = "fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
 
 [functions.weather_helper]
@@ -85,7 +85,7 @@ tool_choice = { specific = "get_temperature" }
 [functions.weather_helper.variants.openai_promptA]
 type = "chat_completion"
 weight = 1.0
-model = "gpt-3.5-turbo"
+model = "gpt-4.1-mini"
 
 [functions.templates_without_variables_chat]
 type = "chat"
@@ -93,7 +93,7 @@ type = "chat"
 [functions.templates_without_variables_chat.variants.variant_without_templates]
 type = "chat_completion"
 weight = 1.0
-model = "gpt-3.5-turbo"
+model = "gpt-4.1-mini"
 system_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
 user_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
 assistant_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
@@ -107,7 +107,7 @@ assistant_schema = "fixtures/config/functions/templates_with_variables/assistant
 [functions.templates_with_variables_chat.variants.variant_with_variables]
 type = "chat_completion"
 weight = 1.0
-model = "gpt-3.5-turbo"
+model = "gpt-4.1-mini"
 system_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
 user_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
 assistant_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
@@ -118,7 +118,7 @@ weight = 1.0
 candidates = ["variant_with_variables", "variant_with_variables"]
 
 [functions.templates_with_variables_chat.variants.best_of_n.evaluator]
-model = "gpt-3.5-turbo"
+model = "gpt-4.1-mini"
 system_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
 user_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
 assistant_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
@@ -130,7 +130,7 @@ output_schema = "fixtures/config/functions/json_with_schemas/output_schema.json"
 [functions.templates_without_variables_json.variants.variant_without_templates]
 type = "chat_completion"
 weight = 1.0
-model = "gpt-3.5-turbo"
+model = "gpt-4.1-mini"
 system_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
 user_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
 assistant_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
@@ -144,7 +144,7 @@ output_schema = "fixtures/config/functions/json_with_schemas/output_schema.json"
 
 [functions.templates_with_variables_json.variants.variant_with_variables]
 type = "chat_completion"
-model = "gpt-3.5-turbo"
+model = "gpt-4.1-mini"
 system_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
 user_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
 assistant_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
