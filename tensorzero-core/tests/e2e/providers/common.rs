@@ -10544,7 +10544,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
         return;
     }
 
-    // THe OpenAI Responses API has a minimum value of 16
+    // The OpenAI Responses API has a minimum value of 16
     let max_tokens = if provider.model_name.starts_with("responses-") {
         16
     } else {
