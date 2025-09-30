@@ -102,6 +102,7 @@ impl Migration for Migration0003<'_> {
                 engine_args: &[],
             },
             Some("ORDER BY (metric_name, key, value)"),
+            None,
         ).await?;
 
         // Add a column `tags` to all feedback tables using sharding-aware ALTER

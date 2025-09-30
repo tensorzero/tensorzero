@@ -59,6 +59,7 @@ impl Migration for Migration0011<'_> {
             table_schema,
             &table_engine_args,
             Some("ORDER BY (short_cache_key, long_cache_key) PARTITION BY toYYYYMM(timestamp) SETTINGS index_granularity = 256"),
+            None,
         ).await?;
 
         // Add the `cached` column to ModelInference using sharding-aware ALTER

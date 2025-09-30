@@ -121,7 +121,7 @@ WITH sub AS (
         i.episode_id AS episode_id,
         any(f.value) AS value_per_episode
     FROM ${inference_table_name} i
-    JOIN (
+    GLOBAL JOIN (
         SELECT
             target_id,
             value,
@@ -173,7 +173,7 @@ WITH sub AS (
         */
         any(f.value) AS value_per_episode
     FROM ${inference_table_name} i
-    JOIN (
+    GLOBAL JOIN (
         SELECT
             target_id,
             value,
@@ -267,7 +267,7 @@ SELECT
     stddevSamp(f.value) AS stdev,
     1.96 * (stddevSamp(f.value) / sqrt(count())) AS ci_error
 FROM ${inference_table_name} i
-JOIN (
+GLOBAL JOIN (
     SELECT
         target_id,
         value,
@@ -291,7 +291,7 @@ SELECT
     stddevSamp(f.value) AS stdev,
     1.96 * (stddevSamp(f.value) / sqrt(count())) AS ci_error
 FROM ${inference_table_name} i
-JOIN (
+GLOBAL JOIN (
     SELECT
         target_id,
         value,

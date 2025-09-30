@@ -133,6 +133,7 @@ impl Migration for Migration0028<'_> {
                     engine_args: &[],
                 },
                 Some("ORDER BY (metric_name, datapoint_id, output) SETTINGS index_granularity = 256"),
+                None,
             )
             .await?;
 

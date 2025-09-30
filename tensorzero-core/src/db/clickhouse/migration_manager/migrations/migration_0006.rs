@@ -73,6 +73,7 @@ impl Migration for Migration0006<'_> {
                     engine_args: &[],
                 },
                 Some("ORDER BY (batch_id, inference_id)"),
+                Some("cityHash64(episode_id)"),
             )
             .await?;
 
@@ -96,6 +97,7 @@ impl Migration for Migration0006<'_> {
                     engine_args: &[],
                 },
                 Some("ORDER BY (batch_id, id)"),
+                None,
             )
             .await?;
 
@@ -113,6 +115,7 @@ impl Migration for Migration0006<'_> {
                     engine_args: &[],
                 },
                 Some("ORDER BY (inference_id)"),
+                None,
             )
             .await?;
 

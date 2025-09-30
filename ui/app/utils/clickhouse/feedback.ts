@@ -859,7 +859,7 @@ export async function queryMetricsWithFeedback(params: {
         'boolean' as metric_type,
         COUNT(DISTINCT i.id) as feedback_count
       FROM ${inference_table} i
-      JOIN BooleanMetricFeedback bmf ON bmf.target_id = i.id
+      GLOBAL JOIN BooleanMetricFeedback bmf ON bmf.target_id = i.id
       WHERE i.function_name = {function_name:String}
         ${variantClause}
       GROUP BY i.function_name, bmf.metric_name
@@ -873,7 +873,7 @@ export async function queryMetricsWithFeedback(params: {
         'boolean' as metric_type,
         COUNT(DISTINCT i.id) as feedback_count
       FROM ${inference_table} i
-      JOIN BooleanMetricFeedback bmf ON bmf.target_id = i.episode_id
+      GLOBAL JOIN BooleanMetricFeedback bmf ON bmf.target_id = i.episode_id
       WHERE i.function_name = {function_name:String}
         ${variantClause}
       GROUP BY i.function_name, bmf.metric_name
@@ -887,7 +887,7 @@ export async function queryMetricsWithFeedback(params: {
         'float' as metric_type,
         COUNT(DISTINCT i.id) as feedback_count
       FROM ${inference_table} i
-      JOIN FloatMetricFeedback fmf ON fmf.target_id = i.id
+      GLOBAL JOIN FloatMetricFeedback fmf ON fmf.target_id = i.id
       WHERE i.function_name = {function_name:String}
         ${variantClause}
       GROUP BY i.function_name, fmf.metric_name
@@ -901,7 +901,7 @@ export async function queryMetricsWithFeedback(params: {
         'float' as metric_type,
         COUNT(DISTINCT i.id) as feedback_count
       FROM ${inference_table} i
-      JOIN FloatMetricFeedback fmf ON fmf.target_id = i.episode_id
+      GLOBAL JOIN FloatMetricFeedback fmf ON fmf.target_id = i.episode_id
       WHERE i.function_name = {function_name:String}
         ${variantClause}
       GROUP BY i.function_name, fmf.metric_name
@@ -914,7 +914,7 @@ export async function queryMetricsWithFeedback(params: {
         'demonstration' as metric_type,
         COUNT(DISTINCT i.id) as feedback_count
       FROM ${inference_table} i
-      JOIN DemonstrationFeedback df ON df.inference_id = i.id
+      GLOBAL JOIN DemonstrationFeedback df ON df.inference_id = i.id
       WHERE i.function_name = {function_name:String}
         ${variantClause}
       GROUP BY i.function_name

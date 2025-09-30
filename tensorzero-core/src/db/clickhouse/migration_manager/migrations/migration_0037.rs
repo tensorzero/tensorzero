@@ -97,6 +97,7 @@ impl Migration for Migration0037<'_> {
                     engine_args: &[],
                 },
                 Some("ORDER BY (model_name, model_provider_name, minute)"),
+                None,
             )
             .await?;
 

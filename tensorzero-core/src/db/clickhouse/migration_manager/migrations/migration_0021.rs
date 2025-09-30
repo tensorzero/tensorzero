@@ -139,6 +139,7 @@ impl Migration for Migration0021<'_> {
                     engine_args: &["updated_at", "is_deleted"],
                 },
                 Some("ORDER BY (key, value, inference_id)"),
+                Some("cityHash64(episode_id)"),
             )
             .await?;
 

@@ -212,6 +212,7 @@ impl Migration for Migration0013<'_> {
             inference_by_id_schema,
             &inference_by_id_engine_args,
             Some("ORDER BY id_uint"),
+            Some("cityHash64(toString(id_uint))"),
         ).await?;
 
         // Create the `InferenceByEpisodeId` table with sharding support
@@ -235,6 +236,7 @@ impl Migration for Migration0013<'_> {
             inference_by_episode_id_schema,
             &inference_by_episode_id_engine_args,
             Some("ORDER BY (episode_id_uint, id_uint)"),
+            Some("cityHash64(toString(episode_id_uint))"),
         ).await?;
         // Create the `uint_to_uuid` function
         let on_cluster_name = self.clickhouse.get_on_cluster_name();

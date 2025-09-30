@@ -146,7 +146,7 @@ function buildDatasetSelectQuery(params: DatasetQueryParams): {
     // Build the condition for filtering based on the metric threshold.
     const reward_condition = `AND value ${metric_filter.operator} {metric_threshold:Float}`;
     // Append the JOIN clause for the metric feedback.
-    query += ` JOIN (
+    query += ` GLOBAL JOIN (
       SELECT
         target_id,
         value,
@@ -166,7 +166,7 @@ function buildDatasetSelectQuery(params: DatasetQueryParams): {
   // This join selects the latest demonstration feedback and uses its value as the output.
   // -------------------------------------------------------------------
   if (output_source === "demonstration") {
-    query += ` JOIN (
+    query += ` GLOBAL JOIN (
       SELECT
         inference_id,
         value,
@@ -403,7 +403,7 @@ export async function insertRowsForDataset(
     FROM (
       ${sourceQuery}
     ) AS subquery
-    LEFT JOIN {datapoint_table:Identifier} as existing FINAL
+    GLOBAL LEFT JOIN {datapoint_table:Identifier} as existing FINAL
       ON {dataset_name:String} = existing.dataset_name
          AND subquery.function_name = existing.function_name
          AND subquery.id = existing.source_inference_id

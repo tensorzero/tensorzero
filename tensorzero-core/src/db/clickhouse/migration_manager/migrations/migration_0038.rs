@@ -77,6 +77,7 @@ impl Migration for Migration0038<'_> {
                     engine_args: &[],
                 },
                 Some("ORDER BY (episode_id_uint)"),
+                Some("cityHash64(toString(episode_id_uint))"),
             )
             .await?;
 

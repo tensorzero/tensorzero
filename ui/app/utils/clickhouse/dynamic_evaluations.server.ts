@@ -55,7 +55,7 @@ export async function getDynamicEvaluationRuns(
       COALESCE(num_episodes, 0) AS num_episodes,
       timestamp
     FROM FilteredDynamicEvaluationRuns
-    LEFT JOIN DynamicEvaluationRunsEpisodeCounts USING run_id_uint
+    GLOBAL LEFT JOIN DynamicEvaluationRunsEpisodeCounts USING run_id_uint
     ORDER BY run_id_uint DESC
   `;
   const result = await getClickhouseClient().query({
@@ -214,7 +214,7 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
       ) AS feedback_values
 
     FROM episodes AS e
-    LEFT JOIN feedback_union AS f
+    GLOBAL LEFT JOIN feedback_union AS f
       ON f.target_id = uint_to_uuid(e.episode_id_uint)
     GROUP BY
       e.episode_id_uint,
@@ -500,8 +500,8 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
       ) AS feedback_values
     FROM episodes AS e
     -- rejoin the group_keys CTE to get the last_updated timestamp
-    JOIN group_keys AS g USING group_key
-    LEFT JOIN feedback_union AS f
+    GLOBAL JOIN group_keys AS g USING group_key
+    GLOBAL LEFT JOIN feedback_union AS f
       ON f.target_id = uint_to_uuid(e.episode_id_uint)
     GROUP BY
       e.group_key,

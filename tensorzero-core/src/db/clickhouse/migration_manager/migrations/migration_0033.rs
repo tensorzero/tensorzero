@@ -55,6 +55,7 @@ impl Migration for Migration0033<'_> {
                     engine_args: &["version_number"],
                 },
                 Some("ORDER BY dummy"),
+                None,
             )
             .await?;
             

@@ -220,7 +220,7 @@ async function queryCuratedMetricData(
         i.episode_id
       FROM
         ${inference_table_name} i
-      JOIN
+      GLOBAL JOIN
         (SELECT
           target_id,
           value,
@@ -282,7 +282,7 @@ async function countMetricData(
         toUInt32(COUNT(*)) as count
       FROM
         ${inference_table_name} i
-      JOIN
+      GLOBAL JOIN
         (SELECT
           target_id,
           value,
@@ -326,7 +326,7 @@ async function queryDemonstrationDataForFunction(
         i.episode_id
       FROM
         ${inference_table_name} i
-      JOIN
+      GLOBAL JOIN
         (SELECT
           inference_id,
           value,
@@ -359,7 +359,7 @@ export async function countDemonstrationDataForFunction(
         toUInt32(COUNT(*)) as count
       FROM
         ${inference_table_name} i
-      JOIN
+      GLOBAL JOIN
         (SELECT
           inference_id,
           value,

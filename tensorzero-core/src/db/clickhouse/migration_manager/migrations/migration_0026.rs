@@ -94,6 +94,7 @@ impl Migration for Migration0026<'_> {
                     engine_args: &["updated_at", "is_deleted"],
                 },
                 Some("ORDER BY (run_id_uint, episode_id_uint)"),
+                Some("cityHash64(toString(episode_id_uint))"),
             )
             .await?;
 
@@ -126,6 +127,7 @@ impl Migration for Migration0026<'_> {
                     engine_args: &["updated_at", "is_deleted"],
                 },
                 Some("ORDER BY (project_name, run_id_uint)"),
+                None,
             )
             .await?;
 

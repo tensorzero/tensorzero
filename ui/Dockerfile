@@ -138,4 +138,4 @@ ENV RUST_LOG=warn
 ENV TENSORZERO_UI_CONFIG_PATH=/app/config/tensorzero.toml
 
 ENTRYPOINT ["./entrypoint.sh"]
-HEALTHCHECK --start-period=10s --start-interval=1s --timeout=1s CMD wget --no-verbose --tries=1 --spider http://localhost:4000/health
+HEALTHCHECK --start-period=10s --timeout=1s CMD wget --no-verbose --tries=1 --spider http://localhost:4000/health

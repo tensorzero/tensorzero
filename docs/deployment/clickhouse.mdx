@@ -77,22 +77,26 @@ TensorZero supports sharded ClickHouse deployments for horizontal scaling. To en
 2. **Enable sharding in TensorZero**: Set the required environment variables
 
 ```bash title=".env"
-# Required for sharded deployments
+# Required for clustered deployments
 TENSORZERO_CLICKHOUSE_CLUSTER_NAME="your_cluster_name"
-TENSORZERO_CLICKHOUSE_SHARDING_ENABLED="true"
 
-# Optional: customize the sharding key (defaults to "rand()")
-TENSORZERO_CLICKHOUSE_SHARDING_KEY="rand()"
+# Required for sharded deployments
+TENSORZERO_CLICKHOUSE_SHARDING_ENABLED="true"
 ```
 
-#### Sharding configuration options
+#### Clustering vs Sharding
 
-- **`TENSORZERO_CLICKHOUSE_SHARDING_ENABLED`**: Set to `"true"` to enable sharding support (default: `"false"`)
-- **`TENSORZERO_CLICKHOUSE_SHARDING_KEY`**: The sharding key expression for data distribution (default: `"rand()"`)
+- **Clustering** (`TENSORZERO_CLICKHOUSE_CLUSTER_NAME`): Enables replication across multiple ClickHouse nodes for high availability
+- **Sharding** (`TENSORZERO_CLICKHOUSE_SHARDING_ENABLED`): Distributes data across multiple nodes for horizontal scaling
 
-Common sharding key options:
-- `"rand()"` - Random distribution across shards (recommended for most use cases)
-- `"cityHash64(column_name)"` - Hash-based distribution on a specific column for data locality
+You can have clustering without sharding (replication only) or clustering with sharding (replication + data distribution).
+
+#### Sharding configuration
+
+When both clustering and sharding are enabled, TensorZero uses table-specific sharding keys optimized for each table's access patterns:
+
+- Data distribution is handled automatically based on table content
+- Each table uses a carefully designed sharding key for optimal performance
 - Custom expressions based on your specific data distribution requirements
 
 #### How sharding works in TensorZero

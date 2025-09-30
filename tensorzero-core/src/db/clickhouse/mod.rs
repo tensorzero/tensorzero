@@ -36,11 +36,6 @@ use query_builder::ListInferencesParams;
 use super::HealthCheckable;
 
 #[derive(Debug, Clone)]
-pub struct ShardingConfig {
-    pub sharding_key: String,
-}
-
-#[derive(Debug, Clone)]
 pub enum ClickHouseConnectionInfo {
     Disabled,
     Mock {
@@ -50,7 +45,6 @@ pub enum ClickHouseConnectionInfo {
     Production {
         database_url: SecretString,
         cluster_name: Option<String>,
-        sharding_config: Option<ShardingConfig>,
         database: String,
         client: Client,
         batch_sender: Option<Arc<BatchSender>>,
@@ -165,36 +159,9 @@ impl ClickHouseConnectionInfo {
             }
         };
 
-        // Get sharding configuration from environment variables
-        let sharding_config = match std::env::var("TENSORZERO_CLICKHOUSE_SHARDING_ENABLED").as_deref() {
-            Ok("true") => {
-                if cluster_name.is_none() {
-                    return Err(Error::new(ErrorDetails::Config {
-                        message: "Sharding can only be enabled in clustered ClickHouse deployments. Please set TENSORZERO_CLICKHOUSE_CLUSTER_NAME.".to_string(),
-                    }));
-                }
-                
-                let sharding_key = std::env::var("TENSORZERO_CLICKHOUSE_SHARDING_KEY")
-                    .unwrap_or_else(|_| "rand()".to_string());
-                
-                tracing::info!("ClickHouse sharding enabled with key: {sharding_key}");
-                Some(ShardingConfig { sharding_key })
-            }
-            Ok("false") | Err(_) => {
-                tracing::debug!("ClickHouse sharding is disabled");
-                None
-            }
-            Ok(value) => {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: format!("Invalid value for TENSORZERO_CLICKHOUSE_SHARDING_ENABLED: '{}'. Must be 'true' or 'false'.", value),
-                }));
-            }
-        };
-
         let mut connection_info = Self::Production {
             database_url,
             cluster_name,
-            sharding_config,
             database,
             client: make_clickhouse_http_client()?,
             batch_sender: None,
@@ -737,6 +704,7 @@ impl ClickHouseConnectionInfo {
             table_schema,
             &table_engine_args,
             Some("PRIMARY KEY (migration_id)"),
+            None,
         )
         .await?;
         Ok(())
@@ -796,12 +764,11 @@ impl ClickHouseConnectionInfo {
             Self::Production {
                 cluster_name,
                 database,
-                sharding_config,
                 ..
             } => match cluster_name {
                 Some(_) => {
                     // Use automatic paths only for sharded setups to avoid ZooKeeper coordination issues
-                    let use_automatic_paths = sharding_config.is_some();
+                    let use_automatic_paths = self.is_sharding_enabled();
                     get_replicated_table_engine_name(
                         table_engine_name,
                         table_name,
@@ -822,17 +789,17 @@ impl ClickHouseConnectionInfo {
         match self {
             Self::Disabled => false,
             Self::Mock { .. } => false,
-            Self::Production { sharding_config, .. } => sharding_config.is_some(),
+            Self::Production { cluster_name, .. } => {
+                // Sharding is enabled when we have a cluster AND the sharding flag is explicitly enabled
+                cluster_name.is_some() && 
+                std::env::var("TENSORZERO_CLICKHOUSE_SHARDING_ENABLED")
+                    .map(|v| v == "true")
+                    .unwrap_or(false)
+            },
         }
     }
 
-    pub fn get_sharding_config(&self) -> Option<&ShardingConfig> {
-        match self {
-            Self::Disabled => None,
-            Self::Mock { .. } => None,
-            Self::Production { sharding_config, .. } => sharding_config.as_ref(),
-        }
-    }
+
 
     pub fn get_local_table_name(&self, table_name: &str) -> String {
         if self.is_sharding_enabled() {
@@ -846,7 +813,7 @@ impl ClickHouseConnectionInfo {
         &self,
         table_name: &str,
         database: &str,
-        sharding_config: &ShardingConfig,
+        table_specific_sharding_key: &str,
     ) -> String {
         match self {
             Self::Disabled => "".to_string(),
@@ -859,7 +826,7 @@ impl ClickHouseConnectionInfo {
                         cluster_name,
                         database,
                         local_table_name,
-                        sharding_config.sharding_key
+                        table_specific_sharding_key
                     )
                 }
                 None => "".to_string(),
@@ -878,6 +845,7 @@ impl ClickHouseConnectionInfo {
         table_schema: &str,
         table_engine_args: &GetMaybeReplicatedTableEngineNameArgs<'_>,
         order_by_clause: Option<&str>,
+        table_specific_sharding_key: Option<&str>,
     ) -> Result<(), Error> {
         let on_cluster_name = self.get_on_cluster_name();
 
@@ -926,16 +894,24 @@ impl ClickHouseConnectionInfo {
             self.run_query_synchronous_no_params(local_query).await?;
 
             // Create distributed table
-            if let Some(sharding_config) = self.get_sharding_config() {
+            if let Some(sharding_key) = table_specific_sharding_key {
                 let distributed_engine_name = self.get_distributed_table_engine_name(
                     table_name, 
                     self.database(), 
-                    sharding_config
+                    sharding_key
                 );
                 let distributed_query = format!(
                     "CREATE TABLE IF NOT EXISTS {table_name}{on_cluster_name} AS {local_table_name} ENGINE = {distributed_engine_name}"
                 );
                 self.run_query_synchronous_no_params(distributed_query).await?;
+            } else {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Sharding is enabled but no sharding key provided for table '{}'. \
+                        All tables must have explicit sharding keys when clustering is enabled.",
+                        table_name
+                    ),
+                }));
             }
         } else {
             // Create regular table

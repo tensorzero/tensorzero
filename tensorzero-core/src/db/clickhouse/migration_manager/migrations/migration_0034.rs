@@ -67,6 +67,7 @@ impl Migration for Migration0034<'_> {
                     engine_args: &[],
                 },
                 Some("ORDER BY (type)"),
+                None,
             )
             .await?;
 

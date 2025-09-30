@@ -255,9 +255,9 @@ export async function getEvaluationResults(
     feedback.feedback_id as feedback_id,
     toBool(feedback.is_human_feedback) as is_human_feedback
   FROM filtered_dp dp
-  INNER JOIN filtered_inference ci
+  GLOBAL INNER JOIN filtered_inference ci
     ON toUUIDOrNull(ci.tags['tensorzero::datapoint_id']) = dp.id
-  LEFT JOIN filtered_feedback feedback
+  GLOBAL LEFT JOIN filtered_feedback feedback
     ON feedback.target_id = ci.id
   ORDER BY toUInt128(datapoint_id) DESC
   `;
@@ -333,7 +333,7 @@ export async function getEvaluationStatistics(
     avg(toFloat64(filtered_feedback.value)) AS mean_metric,
     stddevSamp(toFloat64(filtered_feedback.value)) / sqrt(count()) AS stderr_metric
   FROM filtered_inference
-  INNER JOIN filtered_feedback
+  GLOBAL INNER JOIN filtered_feedback
     ON filtered_feedback.target_id = filtered_inference.id
     AND filtered_feedback.value IS NOT NULL
   GROUP BY
@@ -575,9 +575,9 @@ export async function getEvaluationsForDatapoint(
       filtered_feedback.feedback_id as feedback_id,
       toBool(filtered_feedback.is_human_feedback) as is_human_feedback
     FROM filtered_inference
-    INNER JOIN filtered_datapoint
+    GLOBAL INNER JOIN filtered_datapoint
       ON filtered_datapoint.id = toUUIDOrNull(filtered_inference.tags['tensorzero::datapoint_id'])
-    LEFT JOIN filtered_feedback
+    GLOBAL LEFT JOIN filtered_feedback
       ON filtered_feedback.target_id = filtered_inference.id
   `;
 

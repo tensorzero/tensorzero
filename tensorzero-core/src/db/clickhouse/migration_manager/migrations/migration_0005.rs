@@ -86,6 +86,7 @@ impl Migration for Migration0005<'_> {
                 engine_args: &[],
             },
             Some("ORDER BY (function_name, key, value)"),
+            None,
         ).await?;
 
         // Add a column `tags` to the ChatInference and JsonInference tables using sharding-aware ALTER

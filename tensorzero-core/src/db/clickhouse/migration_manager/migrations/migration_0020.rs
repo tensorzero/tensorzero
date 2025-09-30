@@ -194,6 +194,7 @@ impl Migration for Migration0020<'_> {
                         engine_args: &["id_uint"],
                     },
                     Some("ORDER BY id_uint"),
+                    Some("cityHash64(toString(id_uint))"),
                 )
                 .await?;
         }
@@ -282,6 +283,7 @@ impl Migration for Migration0020<'_> {
                         engine_args: &["id_uint"],
                     },
                     Some("ORDER BY (episode_id_uint, id_uint)"),
+                    Some("cityHash64(toString(episode_id_uint))"),
                 )
                 .await?;
         }
