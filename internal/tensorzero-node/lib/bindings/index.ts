@@ -100,6 +100,7 @@ export * from "./ModelUsageTimePoint";
 export * from "./NonStreamingTimeouts";
 export * from "./ObjectStoreInfo";
 export * from "./ObservabilityConfig";
+export * from "./OpenAIAPIType";
 export * from "./OpenAIGrader";
 export * from "./OpenAIModelGraderInput";
 export * from "./OpenAIProvider";
