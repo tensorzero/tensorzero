@@ -429,9 +429,7 @@ pub fn location_subdomain_prefix(location: &str) -> String {
 }
 
 impl GCPVertexGeminiProvider {
-    pub async fn build_credentials(
-        cred_location: Option<CredentialLocation>,
-    ) -> Result<GCPVertexCredentials, Error> {
+    pub async fn build_credentials(credential: Credential) -> Result<GCPVertexCredentials, Error> {
         GCPVertexCredentials::new(
             cred_location,
             &DEFAULT_CREDENTIALS,

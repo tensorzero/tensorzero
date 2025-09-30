@@ -45,7 +45,7 @@ use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, ThoughtChunk,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::providers::helpers::{
@@ -63,10 +63,6 @@ lazy_static! {
         #[expect(clippy::expect_used)]
         Url::parse("https://api.openai.com/v1/").expect("Failed to parse OPENAI_DEFAULT_BASE_URL")
     };
-}
-
-pub fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("OPENAI_API_KEY".to_string())
 }
 
 const PROVIDER_NAME: &str = "OpenAI";

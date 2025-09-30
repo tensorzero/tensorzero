@@ -21,7 +21,6 @@ use crate::{
     model::CredentialLocation,
     optimization::{JobHandle, OptimizationJobInfo, Optimizer},
     providers::openai::{
-        default_api_key_location,
         optimization::{
             convert_to_optimizer_status, OpenAIFineTuningJob, OpenAIFineTuningMethod,
             OpenAIFineTuningRequest, OpenAISupervisedRow, Supervised, SupervisedHyperparameters,
@@ -99,8 +98,8 @@ impl UninitializedOpenAISFTConfig {
         let credentials = credentials
             .map(|s| serde_json::from_str(&s))
             .transpose()
-            .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid credentials JSON: {e}")))?
-            .or_else(|| Some(default_api_key_location()));
+            .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid credentials JSON: {e}")))?;
+
         let api_base = api_base
             .map(|s| {
                 Url::parse(&s)

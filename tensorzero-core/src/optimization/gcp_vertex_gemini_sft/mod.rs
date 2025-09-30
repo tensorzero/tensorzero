@@ -14,6 +14,7 @@ use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     http::TensorzeroHttpClient,
     model::CredentialLocation,
+    model_table::ProviderTypeDefaultCredentials,
     optimization::{JobHandle, OptimizationJobInfo, Optimizer},
     providers::gcp_vertex_gemini::{
         default_api_key_location, location_subdomain_prefix,
@@ -405,6 +406,7 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
         &self,
         client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
         let gcp_credentials =
             GCPVertexGeminiProvider::build_credentials(self.credential_location.clone()).await?;

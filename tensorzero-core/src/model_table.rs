@@ -309,13 +309,11 @@ impl<T> LazyAsyncCredential<T> {
 
 pub struct ProviderTypeDefaultCredentials {
     pub anthropic: LazyCredential,
-    // TODO: do this lazy
     // aws_bedrock:
     // aws_sagemaker:
     pub azure: LazyCredential,
     pub deepseek: LazyCredential,
     pub fireworks: LazyCredential,
-    // needs to be lazy / shared
     // gcp_vertex_anthropic: GCPVertexCredentials,
     // gcp_vertex_gemini: GCPVertexCredentials,
     pub google_ai_studio_gemini: LazyCredential,
@@ -463,6 +461,18 @@ impl ProviderTypeDefaultCredentials {
         }
         match provider_type {
             ProviderType::Anthropic => self.anthropic.get_cloned(),
+            ProviderType::Azure => self.azure.get_cloned(),
+            ProviderType::Deepseek => self.deepseek.get_cloned(),
+            ProviderType::Fireworks => self.fireworks.get_cloned(),
+            ProviderType::GoogleAIStudioGemini => self.google_ai_studio_gemini.get_cloned(),
+            ProviderType::Groq => self.groq.get_cloned(),
+            ProviderType::Hyperbolic => self.hyperbolic.get_cloned(),
+            ProviderType::OpenRouter => self.openrouter.get_cloned(),
+            ProviderType::SGLang => self.sglang.get_cloned(),
+            ProviderType::TGI => self.tgi.get_cloned(),
+            ProviderType::Together => self.together.get_cloned(),
+            ProviderType::VLLM => self.vllm.get_cloned(),
+            ProviderType::XAI => self.xai.get_cloned(),
             _ => todo!(),
         }
     }
@@ -470,8 +480,7 @@ impl ProviderTypeDefaultCredentials {
 
 impl Default for ProviderTypeDefaultCredentials {
     fn default() -> Self {
-        todo!()
-        // Self::new(&ProviderTypesConfig::default())
+        Self::new(&ProviderTypesConfig::default())
     }
 }
 

@@ -701,12 +701,14 @@ impl Config {
         .collect::<HashMap<_, _>>();
 
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
-        let optimizers = try_join_all(
-            uninitialized_config
-                .optimizers
-                .into_iter()
-                .map(|(name, config)| async { config.load().await.map(|c| (name, c)) }),
-        )
+        let optimizers = try_join_all(uninitialized_config.optimizers.into_iter().map(
+            |(name, config)| async {
+                config
+                    .load(&provider_type_default_credentials)
+                    .await
+                    .map(|c| (name, c))
+            },
+        ))
         .await?
         .into_iter()
         .collect::<HashMap<_, _>>();

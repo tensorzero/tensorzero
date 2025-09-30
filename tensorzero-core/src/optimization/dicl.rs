@@ -18,7 +18,7 @@ use crate::{
     model::CredentialLocation,
     model_table::ProviderTypeDefaultCredentials,
     optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput},
-    providers::openai::{default_api_key_location, OpenAICredentials, PROVIDER_TYPE},
+    providers::openai::OpenAICredentials,
     stored_inference::RenderedSample,
     utils::retries::RetryConfig,
     variant::dicl::UninitializedDiclConfig,
