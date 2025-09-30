@@ -1,6 +1,6 @@
-use crate::db::PostgresConnectionInfo;
 use sqlx::PgPool;
 use std::time::Instant;
+use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::ExperimentationQueries;
 use uuid::Uuid;
 
