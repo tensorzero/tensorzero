@@ -43,7 +43,7 @@ use crate::inference::types::{
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
-use crate::rate_limiting::{RateLimitingConfig, TicketBorrows};
+use crate::rate_limiting::RateLimitingConfig;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
@@ -140,7 +140,6 @@ struct InferenceMetadata {
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub fetch_and_encode_input_files_before_inference: bool,
     pub include_original_response: bool,
-    pub ticket_borrow: TicketBorrows,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -420,7 +419,6 @@ pub async fn inference(
                 fetch_and_encode_input_files_before_inference: config
                     .gateway
                     .fetch_and_encode_input_files_before_inference,
-                ticket_borrow: model_used_info.ticket_borrow,
             };
 
             let stream = create_stream(
@@ -429,7 +427,6 @@ pub async fn inference(
                 inference_metadata,
                 stream,
                 clickhouse_connection_info,
-                postgres_connection_info,
             );
 
             return Ok(InferenceOutput::Streaming(Box::pin(stream)));
@@ -602,7 +599,6 @@ fn create_stream(
     metadata: InferenceMetadata,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
-    postgres_connection_info: PostgresConnectionInfo,
 ) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
@@ -688,7 +684,6 @@ fn create_stream(
                 extra_headers,
                 fetch_and_encode_input_files_before_inference,
                 include_original_response: _,
-                ticket_borrow,
             } = metadata;
 
             let config = config.clone();
@@ -716,8 +711,6 @@ fn create_stream(
                     extra_body: extra_body.clone(),
                     extra_headers: extra_headers.clone(),
                     fetch_and_encode_input_files_before_inference,
-                    ticket_borrow,
-                    postgres_connection_info,
                 };
                 let inference_response: Result<InferenceResult, Error> =
                     collect_chunks(collect_chunks_args).await;
@@ -1337,7 +1330,6 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             include_original_response: false,
-            ticket_borrow: TicketBorrows::empty(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();
@@ -1392,7 +1384,6 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             include_original_response: false,
-            ticket_borrow: TicketBorrows::empty(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk, &mut None).unwrap();
