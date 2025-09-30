@@ -562,6 +562,7 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizat
                     model_name: model_name.clone(),
                     api_base: None,
                     api_key_location: None,
+                    api_type: Default::default(),
                 },
                 extra_headers: None,
                 extra_body: None,

@@ -32,6 +32,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
+
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::file::mime_type_to_ext;
 use crate::inference::types::resolved_input::{FileUrl, FileWithPath, LazyFile};
@@ -47,6 +48,10 @@ use crate::inference::types::{
 };
 use crate::inference::InferenceProvider;
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::providers::openai::responses::{
+    get_responses_url, OpenAIResponsesInput, OpenAIResponsesInputMessage,
+    OpenAIResponsesInputMessageContent, OpenAIResponsesRequest, OpenAIResponsesResponse,
+};
 use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::providers::helpers::{
@@ -58,6 +63,7 @@ use crate::inference::TensorZeroEventError;
 use crate::inference::WrappedProvider;
 
 pub mod optimization;
+mod responses;
 
 lazy_static! {
     pub static ref OPENAI_DEFAULT_BASE_URL: Url = {
@@ -81,6 +87,7 @@ pub struct OpenAIProvider {
     api_base: Option<Url>,
     #[serde(skip)]
     credentials: OpenAICredentials,
+    use_responses: bool,
 }
 
 pub static DEFAULT_CREDENTIALS: OnceLock<OpenAICredentials> = OnceLock::new();
@@ -90,6 +97,7 @@ impl OpenAIProvider {
         model_name: String,
         api_base: Option<Url>,
         api_key_location: Option<CredentialLocation>,
+        use_responses: bool,
     ) -> Result<Self, Error> {
         let credentials = build_creds_caching_default(
             api_key_location,
@@ -107,6 +115,7 @@ impl OpenAIProvider {
             model_name,
             api_base,
             credentials,
+            use_responses,
         })
     }
 
@@ -194,18 +203,31 @@ impl WrappedProvider for OpenAIProvider {
             otlp_config: _,
         }: ModelProviderRequest<'a>,
     ) -> Result<serde_json::Value, Error> {
-        let request_body = serde_json::to_value(
-            OpenAIRequest::new(&self.model_name, request).await?,
-        )
-        .map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing OpenAI request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        Ok(request_body)
+        if self.use_responses {
+            Ok(
+                serde_json::to_value(OpenAIResponsesRequest::new(&self.model_name, request).await?)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Error serializing OpenAI request: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                        })
+                    })?,
+            )
+        } else {
+            Ok(
+                serde_json::to_value(OpenAIRequest::new(&self.model_name, request).await?)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Error serializing OpenAI request: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                        })
+                    })?,
+            )
+        }
     }
     fn parse_response(
         &self,
@@ -214,26 +236,44 @@ impl WrappedProvider for OpenAIProvider {
         raw_response: String,
         latency: Latency,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let response = serde_json::from_str(&raw_response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error parsing JSON response: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                raw_request: Some(raw_request.clone()),
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
+        if self.use_responses {
+            // TODO - include 'responses' somewhere in te error message
+            let response: OpenAIResponsesResponse =
+                serde_json::from_str(&raw_response).map_err(|e| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!(
+                            "Error parsing JSON response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        raw_request: Some(raw_request.clone()),
+                        raw_response: Some(raw_response.clone()),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
 
-        OpenAIResponseWithMetadata {
-            response,
-            raw_response,
-            latency,
-            raw_request,
-            generic_request: request,
+            response.into_provider_response(latency, raw_request, raw_response.clone(), request)
+        } else {
+            let response = serde_json::from_str(&raw_response).map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error parsing JSON response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: Some(raw_response.clone()),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
+
+            OpenAIResponseWithMetadata {
+                response,
+                raw_response,
+                latency,
+                raw_request,
+                generic_request: request,
+            }
+            .try_into()
         }
-        .try_into()
     }
 
     fn stream_events(
@@ -255,7 +295,11 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+        let request_url = if self.use_responses {
+            get_responses_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?
+        } else {
+            get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?
+        };
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let request_body = self.make_body(request).await?;
@@ -289,29 +333,53 @@ impl InferenceProvider for OpenAIProvider {
                 })
             })?;
 
-            let response = serde_json::from_str(&raw_response).map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!(
-                        "Error parsing JSON response: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: Some(raw_response.clone()),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+            if self.use_responses {
+                let response: OpenAIResponsesResponse = serde_json::from_str(&raw_response)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InferenceServer {
+                            message: format!(
+                                "Error parsing JSON response: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                            raw_request: Some(raw_request.clone()),
+                            raw_response: Some(raw_response.clone()),
+                            provider_type: PROVIDER_TYPE.to_string(),
+                        })
+                    })?;
+                let latency = Latency::NonStreaming {
+                    response_time: start_time.elapsed(),
+                };
+                response.into_provider_response(
+                    latency,
+                    raw_request,
+                    raw_response.clone(),
+                    request.request,
+                )
+            } else {
+                let response = serde_json::from_str(&raw_response).map_err(|e| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!(
+                            "Error parsing JSON response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        raw_request: Some(raw_request.clone()),
+                        raw_response: Some(raw_response.clone()),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
 
-            let latency = Latency::NonStreaming {
-                response_time: start_time.elapsed(),
-            };
-            Ok(OpenAIResponseWithMetadata {
-                response,
-                raw_response,
-                latency,
-                raw_request: raw_request.clone(),
-                generic_request: request.request,
+                let latency = Latency::NonStreaming {
+                    response_time: start_time.elapsed(),
+                };
+                Ok(OpenAIResponseWithMetadata {
+                    response,
+                    raw_response,
+                    latency,
+                    raw_request: raw_request.clone(),
+                    generic_request: request.request,
+                }
+                .try_into()?)
             }
-            .try_into()?)
         } else {
             Err(handle_openai_error(
                 &raw_request.clone(),
@@ -344,6 +412,16 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
+        if self.use_responses {
+            return Err(
+                ErrorDetails::UnsupportedModelProviderForStreamingInference {
+                    provider_type: "OpenAI Responses".to_string(),
+                }
+                .into(),
+            );
+        }
+        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+
         let request_body = serde_json::to_value(
             OpenAIRequest::new(&self.model_name, request).await?,
         )
@@ -355,7 +433,6 @@ impl InferenceProvider for OpenAIProvider {
                 ),
             })
         })?;
-        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut request_builder = http_client.post(request_url);
@@ -1015,7 +1092,7 @@ where
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Deserialize, Debug, PartialEq, Serialize)]
 pub struct OpenAIFile<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     file_data: Option<Cow<'a, str>>,
@@ -1169,9 +1246,32 @@ impl OpenAIRequestMessage<'_> {
     }
 }
 
-pub enum SystemOrDeveloper<'a> {
-    System(&'a str),
-    Developer(&'a str),
+impl<'a> SystemOrDeveloperMessage<'a> {
+    pub fn into_openai_request_message(self) -> OpenAIRequestMessage<'a> {
+        match self {
+            SystemOrDeveloperMessage::System(msg) => {
+                OpenAIRequestMessage::System(OpenAISystemRequestMessage { content: msg })
+            }
+            SystemOrDeveloperMessage::Developer(msg) => {
+                OpenAIRequestMessage::Developer(OpenAISystemRequestMessage { content: msg })
+            }
+        }
+    }
+    pub fn into_openai_responses_input(self) -> OpenAIResponsesInput<'a> {
+        let role = match self {
+            SystemOrDeveloperMessage::System(_) => "system",
+            SystemOrDeveloperMessage::Developer(_) => "developer",
+        };
+        let text = match self {
+            SystemOrDeveloperMessage::System(msg) => msg,
+            SystemOrDeveloperMessage::Developer(msg) => msg,
+        };
+        OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
+            role,
+            id: None,
+            content: vec![OpenAIResponsesInputMessageContent::InputText { text }],
+        })
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -1228,6 +1328,16 @@ pub(super) fn prepare_openai_tools<'a>(
     }
 }
 
+pub enum SystemOrDeveloper<'a> {
+    System(&'a str),
+    Developer(&'a str),
+}
+
+pub enum SystemOrDeveloperMessage<'a> {
+    System(Cow<'a, str>),
+    Developer(Cow<'a, str>),
+}
+
 /// Prepares a system or developer message for OpenAI APIs with JSON mode handling.
 ///
 /// When JSON mode is `On`, OpenAI/Azure require "JSON" to appear in either the system/developer
@@ -1261,6 +1371,17 @@ pub(super) fn prepare_system_or_developer_message<'a>(
     json_mode: Option<&'_ ModelInferenceRequestJsonMode>,
     messages: &[OpenAIRequestMessage<'a>],
 ) -> Option<OpenAIRequestMessage<'a>> {
+    prepare_system_or_developer_message_helper(system_or_developer, json_mode, |content| {
+        should_add_json_instruction_chat_completion(content, messages)
+    })
+    .map(SystemOrDeveloperMessage::into_openai_request_message)
+}
+
+pub(super) fn prepare_system_or_developer_message_helper<'a>(
+    system_or_developer: Option<SystemOrDeveloper<'a>>,
+    json_mode: Option<&'_ ModelInferenceRequestJsonMode>,
+    contains_content: impl FnOnce(&str) -> bool,
+) -> Option<SystemOrDeveloperMessage<'a>> {
     let (content, is_system) = match system_or_developer {
         Some(SystemOrDeveloper::System(content)) => (Some(content), true),
         Some(SystemOrDeveloper::Developer(content)) => (Some(content), false),
@@ -1281,7 +1402,7 @@ pub(super) fn prepare_system_or_developer_message<'a>(
 
         // Has content and JSON mode is on - conditionally add JSON instruction
         (Some(content), Some(ModelInferenceRequestJsonMode::On)) => {
-            if should_add_json_instruction(content, messages) {
+            if contains_content(content) {
                 Cow::Owned(format!("Respond using JSON.\n\n{content}"))
             } else {
                 Cow::Borrowed(content)
@@ -1292,18 +1413,17 @@ pub(super) fn prepare_system_or_developer_message<'a>(
         (Some(content), _) => Cow::Borrowed(content),
     };
 
-    let system_msg = OpenAISystemRequestMessage {
-        content: final_content,
-    };
-
     Some(if is_system {
-        OpenAIRequestMessage::System(system_msg)
+        SystemOrDeveloperMessage::System(final_content)
     } else {
-        OpenAIRequestMessage::Developer(system_msg)
+        SystemOrDeveloperMessage::Developer(final_content)
     })
 }
 
-fn should_add_json_instruction(content: &str, messages: &[OpenAIRequestMessage<'_>]) -> bool {
+fn should_add_json_instruction_chat_completion(
+    content: &str,
+    messages: &[OpenAIRequestMessage<'_>],
+) -> bool {
     !content.to_lowercase().contains("json")
         && !messages
             .iter()
@@ -1331,7 +1451,7 @@ pub(super) async fn tensorzero_to_openai_messages<'a>(
     }
 }
 
-async fn prepare_file_message(
+pub(super) async fn prepare_file_message(
     file: &LazyFile,
     messages_config: OpenAIMessagesConfig<'_>,
 ) -> Result<OpenAIContentBlock<'static>, Error> {
@@ -4110,6 +4230,7 @@ mod tests {
             model_name.clone(),
             Some(Url::parse("http://localhost:1234/v1/").unwrap()),
             api_key_location.clone(),
+            false,
         )
         .unwrap();
 
@@ -4117,6 +4238,7 @@ mod tests {
             model_name.clone(),
             Some(Url::parse("http://localhost:1234/v1").unwrap()),
             api_key_location.clone(),
+            false,
         )
         .unwrap();
 
@@ -4126,6 +4248,7 @@ mod tests {
             model_name.clone(),
             Some(invalid_url_1.clone()),
             api_key_location.clone(),
+            false,
         )
         .unwrap();
         assert!(logs_contain("automatically appends `/chat/completions`"));
@@ -4136,6 +4259,7 @@ mod tests {
             model_name.clone(),
             Some(invalid_url_2.clone()),
             api_key_location.clone(),
+            false,
         )
         .unwrap();
         assert!(logs_contain("automatically appends `/chat/completions`"));

@@ -185,6 +185,16 @@ pub fn fully_qualified_name(model_name: &str, provider_name: &str) -> String {
     format!("tensorzero::model_name::{model_name}::provider_name::{provider_name}")
 }
 
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub enum OpenAIAPIType {
+    #[default]
+    ChatCompletions,
+    Responses,
+}
+
 impl ModelConfig {
     fn filter_content_blocks<'a>(
         request: &'a ModelInferenceRequest<'a>,
@@ -968,6 +978,8 @@ pub enum UninitializedProviderConfig {
         api_base: Option<Url>,
         #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
+        #[serde(default)]
+        api_type: OpenAIAPIType,
     },
     OpenRouter {
         model_name: String,
@@ -1053,6 +1065,7 @@ impl UninitializedProviderConfig {
                             model_name,
                             None,
                             Some(CredentialLocation::None),
+                            false,
                         )?),
                         HostedProviderKind::TGI => Box::new(TGIProvider::new(
                             Url::parse("http://tensorzero-unreachable-domain-please-file-a-bug-report.invalid").map_err(|e| {
@@ -1133,9 +1146,16 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_base,
                 api_key_location,
-            } => {
-                ProviderConfig::OpenAI(OpenAIProvider::new(model_name, api_base, api_key_location)?)
-            }
+                api_type,
+            } => ProviderConfig::OpenAI(OpenAIProvider::new(
+                model_name,
+                api_base,
+                api_key_location,
+                match api_type {
+                    OpenAIAPIType::ChatCompletions => false,
+                    OpenAIAPIType::Responses => true,
+                },
+            )?),
             UninitializedProviderConfig::OpenRouter {
                 model_name,
                 api_key_location,
@@ -2076,7 +2096,8 @@ impl ShorthandModelConfig for ModelConfig {
             "groq" => ProviderConfig::Groq(GroqProvider::new(model_name, None)?),
             "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
             "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
-            "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
+            // TODO - decide how to handle the responses api for shorthand models
+            "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None, false)?),
             "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(model_name, None)?),
             "together" => ProviderConfig::Together(TogetherProvider::new(
                 model_name,

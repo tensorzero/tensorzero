@@ -48,7 +48,8 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
         let model_name = model_name.to_string();
         let provider_config = match provider_type {
             "openai" => {
-                EmbeddingProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?)
+                // TODO - decide how to handle the responses api for shorthand models
+                EmbeddingProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None, false)?)
             }
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
@@ -773,6 +774,7 @@ mod tests {
                 model_name: "text-embedding-ada-002".to_string(),
                 api_base: None,
                 api_key_location: Some(crate::model::CredentialLocation::None),
+                api_type: Default::default(),
             },
             timeouts: TimeoutsConfig::default(),
             extra_body: Some(extra_body_config.clone()),

@@ -84,15 +84,31 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
-    let inference_params_providers = vec![E2ETestProvider {
-        supports_batch_inference: true,
-        variant_name: "openai".to_string(),
-        model_name: "gpt-4o-mini-2024-07-18".into(),
-        model_provider_name: "openai".into(),
-        credentials: credentials.clone(),
-    }];
+    let inference_params_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai".to_string(),
+            model_name: "gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: credentials.clone(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+    ];
 
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         supports_batch_inference: true,
@@ -102,13 +118,22 @@ async fn get_providers() -> E2ETestProviders {
         credentials,
     }];
 
-    let image_providers = vec![E2ETestProvider {
-        supports_batch_inference: true,
-        variant_name: "openai".to_string(),
-        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
-        model_provider_name: "openai".into(),
-        credentials: HashMap::new(),
-    }];
+    let image_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai".to_string(),
+            model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+    ];
 
     let json_providers = vec![
         E2ETestProvider {
@@ -146,6 +171,20 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses-strict".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     let json_mode_off_providers = vec![
@@ -160,6 +199,13 @@ async fn get_providers() -> E2ETestProviders {
             supports_batch_inference: true,
             variant_name: "openai_o1_json_mode_off".to_string(),
             model_name: "o1-2024-12-17".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai-responses_json_mode_off".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
