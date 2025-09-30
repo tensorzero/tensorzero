@@ -78,5 +78,5 @@ If you're using a self-hosted replicated ClickHouse deployment, you must also pr
 
 The TensorZero Gateway typically applies database migrations automatically when it starts up.
 
-If you're using a self-hosted replicated ClickHouse deployment, you must apply database migrations manually with `gateway --run-migrations-only`.
+If you're using a self-hosted replicated ClickHouse deployment, you must apply database migrations manually with `gateway --run-clickhouse-migrations`.
 In this case, the gateway will not apply migrations automatically, and will error on startup if migrations are missing.
