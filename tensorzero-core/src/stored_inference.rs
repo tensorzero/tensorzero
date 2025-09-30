@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
-    content_block_chat_output_to_python, deserialize_from_pyobj, serialize_to_dict, uuid_to_python,
+    content_block_chat_output_to_python, deserialize_from_pyobj, import_json_inference_output,
+    serialize_to_dict, uuid_to_python,
 };
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{RequestMessage, ResolvedRequestMessage, Text};
@@ -527,7 +528,6 @@ impl RenderedSample {
                     PyList::new(py, output).map(Bound::into_any)
                 }
                 StoredOutput::Json(output) => {
-                    use crate::inference::types::pyo3_helpers::import_json_inference_output;
                     let json_output_class = import_json_inference_output(py)?;
                     // Call JsonInferenceOutput(raw=..., parsed=...)
                     let kwargs = PyDict::new(py);
