@@ -41,10 +41,9 @@ class JsonInferenceOutput:
     def __init__(
         self,
         /,
-        *args: Any,
+        *,
         raw: Optional[str] = None,
         parsed: Optional[Dict[str, Any]] = None,
-        **kwargs: Any,
     ) -> None: ...
     @property
     def raw(self) -> Optional[str]: ...
