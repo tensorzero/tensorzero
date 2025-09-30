@@ -55,6 +55,7 @@ use tensorzero_core::{
     },
     inference::types::{
         extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
+        JsonInferenceOutput,
     },
     utils::gateway::ShutdownHandle,
 };
@@ -116,6 +117,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<OptimizationJobHandle>()?;
     m.add_class::<OptimizationJobInfoPyClass>()?;
     m.add_class::<OptimizationJobStatus>()?;
+    m.add_class::<JsonInferenceOutput>()?;
 
     let py_json = PyModule::import(m.py(), "json")?;
     let json_loads = py_json.getattr("loads")?;

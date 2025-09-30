@@ -15,7 +15,7 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 #[cfg(feature = "pyo3")]
-use pyo3::types::{PyAny, PyList};
+use pyo3::types::{PyAny, PyDict, PyList};
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions::PyValueError, prelude::*, IntoPyObjectExt};
 use serde::{Deserialize, Serialize};
@@ -526,7 +526,21 @@ impl RenderedSample {
                         .collect::<PyResult<Vec<_>>>()?;
                     PyList::new(py, output).map(Bound::into_any)
                 }
-                StoredOutput::Json(output) => Ok(output.clone().into_py_any(py)?.into_bound(py)),
+                StoredOutput::Json(output) => {
+                    use crate::inference::types::pyo3_helpers::import_json_inference_output;
+                    let json_output_class = import_json_inference_output(py)?;
+                    // Call JsonInferenceOutput(raw=..., parsed=...)
+                    let kwargs = PyDict::new(py);
+                    if let Some(raw) = &output.raw {
+                        kwargs.set_item("raw", raw)?;
+                    }
+                    if let Some(parsed) = &output.parsed {
+                        kwargs.set_item("parsed", serialize_to_dict(py, parsed)?)?;
+                    }
+                    Ok(json_output_class
+                        .call(py, (), Some(&kwargs))?
+                        .into_bound(py))
+                }
             }
         } else {
             Ok(py.None().into_bound(py))
