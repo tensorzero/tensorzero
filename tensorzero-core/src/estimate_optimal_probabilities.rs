@@ -16,6 +16,26 @@ pub fn argmax<T: PartialOrd>(slice: &[T]) -> Option<usize> {
         .map(|(idx, _)| idx)
 }
 
+// pub fn assert_vecs_almost_equal(slice1: &[f64], slice2: &[f64], tol: Option<f64>) {
+//     assert_eq!(
+//         slice1.len(),
+//         slice2.len(),
+//         "Vector lengths differ: {} vs {}",
+//         slice1.len(),
+//         slice2.len()
+//     );
+
+//     let tol = tol.unwrap_or(1e-10);
+//     for (idx, (val1, val2)) in slice1.iter().zip(slice2.iter()).enumerate() {
+//         let diff: f64 = (val1 - val2).abs();
+//         assert!(
+//             !diff.is_nan(),
+//             "NaN encountered at index {idx}: {val1} vs {val2}"
+//         );
+//         assert!(diff < tol, "Values differ at index {idx}: {val1} vs {val2}")
+//     }
+// }
+
 // TODO: Make sure inputs are validated upstream:
 //    - Vectors of same length K, with K >= 2, no NAs
 //    - pull_counts > 0
@@ -97,6 +117,19 @@ pub fn estimate_optimal_probabilities(
     let gaps: Vec<f64> = means.iter().map(|&x| leader_mean - x + epsilon).collect();
     let gaps2: Vec<f64> = gaps.iter().map(|&x| (x * x).max(1e-16)).collect();
 
+    // Edge case: if all arms have essentially equal means and variances, return uniform distribution
+    // This avoids numerical issues when the optimization problem becomes degenerate
+    let all_gaps_tiny = gaps.iter().all(|&g| g.abs() < 1e-10);
+    let (min_var, max_var) = variances
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(min, max), &v| {
+            (min.min(v), max.max(v))
+        });
+    let variance_range = max_var - min_var;
+    if all_gaps_tiny && variance_range < 1e-10 {
+        return Ok(vec![1.0 / num_arms as f64; num_arms]);
+    }
+
     // ---------- Objective: (1/2) x^T P x + q^T x ----------
     // Quadratic part: α_t ||w - u||^2 = α_t ||w||^2 - 2α_t u^T w + const
     // => P_ww = 2α I_K ; q_w = -2α_t u ; q_t = 1
@@ -105,10 +138,7 @@ pub fn estimate_optimal_probabilities(
     let mut q = vec![0.0; num_decision_vars];
     q[2 * num_arms] = 1.0;
     if alpha_t > 0.0 {
-        let u_val = 1.0 / (num_arms as f64);
-        // for i in 0..num_arms {
-        //     q[i] = -2.0 * alpha_t * u_val;
-        // }
+        let u_val = 1.0 / (num_arms as f64); // to penalize deviation from uniform
         for val in &mut q[..num_arms] {
             *val = -2.0 * alpha_t * u_val;
         }
