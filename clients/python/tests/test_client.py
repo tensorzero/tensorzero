@@ -2349,6 +2349,30 @@ def test_extra_headers_raw(sync_client: TensorZeroGateway):
     assert "You didn't provide an API key" in str(exc_info.value)
 
 
+def test_otlp_traces_extra_headers(sync_client: TensorZeroGateway):
+    """Test that otlp_traces_extra_headers parameter is accepted and doesn't break inference."""
+    result = sync_client.inference(
+        function_name="basic_test",
+        variant_name="openai",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Write me a haiku"}],
+        },
+        otlp_traces_extra_headers={
+            "My-Custom-Header": "My-Custom-Value",
+            "Another-Header": "Another-Value",
+        },
+    )
+    # Verify the inference completed successfully
+    assert isinstance(result, ChatInferenceResponse)
+    assert result.variant_name == "openai"
+    content = result.content
+    assert len(content) >= 1
+    assert content[0].type == "text"
+    assert isinstance(content[0], Text)
+    assert content[0].text is not None
+
+
 def test_extra_body_raw(sync_client: TensorZeroGateway):
     result = sync_client.inference(
         function_name="basic_test",
@@ -3484,6 +3508,31 @@ async def test_async_embedded_client_no_spurious_log(capfd: CaptureFixture[str])
     captured = capfd.readouterr()
     assert captured.err == ""
     assert captured.out == ""
+
+
+@pytest.mark.asyncio
+async def test_async_otlp_traces_extra_headers(async_client: AsyncTensorZeroGateway):
+    """Test that otlp_traces_extra_headers parameter is accepted in async inference."""
+    result = await async_client.inference(
+        function_name="basic_test",
+        variant_name="openai",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Write me a haiku"}],
+        },
+        otlp_traces_extra_headers={
+            "My-Async-Header": "My-Async-Value",
+            "Test-Header": "Test-Value",
+        },
+    )
+    # Verify the inference completed successfully
+    assert isinstance(result, ChatInferenceResponse)
+    assert result.variant_name == "openai"
+    content = result.content
+    assert len(content) >= 1
+    assert content[0].type == "text"
+    assert isinstance(content[0], Text)
+    assert content[0].text is not None
 
 
 def test_capfd_captured_warnings(capfd: CaptureFixture[str]):
