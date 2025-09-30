@@ -2136,3 +2136,45 @@ async fn test_forward_file_url() {
         "Content should contain 'deepseek': {text:?}"
     );
 }
+
+#[tokio::test]
+async fn test_responses_api_reasoning() {
+    let payload = json!({
+        "function_name": "openai_responses_gpt5",
+        "variant_name": "openai",
+        "input":
+            {
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "How many letters are in the word potato?"
+                }
+            ]},
+        "extra_body": [
+            {
+                "variant_name": "openai",
+                "pointer": "/reasoning",
+                "value": {
+                    "effort": "high",
+                    "summary": "auto"
+                }
+            }
+        ]
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json}");
+
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    assert_eq!(content_blocks.len(), 2);
+    let content_block = content_blocks.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "thought");
+}
