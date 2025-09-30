@@ -76,7 +76,8 @@ impl PostgresConnectionInfo {
         if applied_migrations != expected_migrations {
             return Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
                 message: format!(
-                    "Applied migrations do not match expected migrations. Applied: {applied_migrations:?}, Expected: {expected_migrations:?}",
+                    "Applied migrations do not match expected migrations. Applied: {applied_migrations:?}, Expected: {expected_migrations:?}. Please run the migrations with `{}`",
+                    get_run_migrations_command()
                 ),
             }));
         }
