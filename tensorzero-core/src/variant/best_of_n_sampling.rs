@@ -8,9 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
-use crate::config::{
-    ErrorContext, PathWithContents, SchemaData,
-};
+use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
@@ -805,6 +803,7 @@ mod tests {
             get_system_filled_template, get_system_template, get_test_template_config,
         },
         model::{ModelConfig, ModelProvider, ProviderConfig},
+        model_table::ProviderTypeDefaultCredentials,
         providers::dummy::DummyProvider,
     };
 
@@ -1294,7 +1293,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
-            &provider_types,
+            ProviderTypeDefaultCredentials::new(&provider_types),
         )
         .expect("Failed to create model table");
         let client = TensorzeroHttpClient::new().unwrap();
@@ -1403,7 +1402,8 @@ mod tests {
                 },
             );
             let provider_types = ProviderTypesConfig::default();
-            ModelTable::new(map, &provider_types).expect("Failed to create model table")
+            ModelTable::new(map, ProviderTypeDefaultCredentials::new(&provider_types))
+                .expect("Failed to create model table")
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1473,7 +1473,8 @@ mod tests {
                 },
             );
             let provider_types = ProviderTypesConfig::default();
-            ModelTable::new(map, &provider_types).expect("Failed to create model table")
+            ModelTable::new(map, ProviderTypeDefaultCredentials::new(&provider_types))
+                .expect("Failed to create model table")
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1560,8 +1561,11 @@ mod tests {
             },
         );
         let provider_types = ProviderTypesConfig::default();
-        let big_models =
-            ModelTable::new(big_models, &provider_types).expect("Failed to create model table");
+        let big_models = ModelTable::new(
+            big_models,
+            ProviderTypeDefaultCredentials::new(&provider_types),
+        )
+        .expect("Failed to create model table");
 
         let result_big = best_of_n_big_variant
             .select_best_candidate(

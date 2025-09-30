@@ -49,6 +49,7 @@ pub struct ProviderTypesConfig {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct AnthropicProviderTypeConfig {
+    #[serde(default)]
     pub defaults: AnthropicDefaults,
 }
 
@@ -73,6 +74,7 @@ impl Default for AnthropicDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct AzureProviderTypeConfig {
+    #[serde(default)]
     pub defaults: AzureDefaults,
 }
 
@@ -97,6 +99,7 @@ impl Default for AzureDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct DeepSeekProviderTypeConfig {
+    #[serde(default)]
     pub defaults: DeepSeekDefaults,
 }
 
@@ -121,6 +124,7 @@ impl Default for DeepSeekDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct FireworksProviderTypeConfig {
+    #[serde(default)]
     pub defaults: FireworksDefaults,
 }
 
@@ -149,6 +153,7 @@ impl Default for FireworksDefaults {
 pub struct GCPProviderTypeConfig {
     #[serde(default)]
     pub batch: Option<GCPBatchConfigType>,
+    #[serde(default)]
     pub defaults: GCPDefaults,
 }
 
@@ -197,6 +202,7 @@ impl Default for GCPDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct GoogleAIStudioGeminiProviderTypeConfig {
+    #[serde(default)]
     pub defaults: GoogleAIStudioGeminiDefaults,
 }
 
@@ -221,6 +227,7 @@ impl Default for GoogleAIStudioGeminiDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct GroqProviderTypeConfig {
+    #[serde(default)]
     pub defaults: GroqDefaults,
 }
 
@@ -245,6 +252,7 @@ impl Default for GroqDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct HyperbolicProviderTypeConfig {
+    #[serde(default)]
     pub defaults: HyperbolicDefaults,
 }
 
@@ -269,6 +277,7 @@ impl Default for HyperbolicDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct MistralProviderTypeConfig {
+    #[serde(default)]
     pub defaults: MistralDefaults,
 }
 
@@ -293,6 +302,7 @@ impl Default for MistralDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct OpenAIProviderTypeConfig {
+    #[serde(default)]
     pub defaults: OpenAIDefaults,
 }
 
@@ -341,6 +351,7 @@ impl Default for OpenRouterDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct SGLangProviderTypeConfig {
+    #[serde(default)]
     pub defaults: SGLangDefaults,
 }
 
@@ -378,7 +389,7 @@ pub struct TGIDefaults {
 impl Default for TGIDefaults {
     fn default() -> Self {
         Self {
-            credential_location: CredentialLocation::None,
+            credential_location: CredentialLocation::Env("TGI_API_KEY".to_string()),
         }
     }
 }
@@ -402,7 +413,7 @@ pub struct TogetherDefaults {
 impl Default for TogetherDefaults {
     fn default() -> Self {
         Self {
-            credential_location: CredentialLocation::None,
+            credential_location: CredentialLocation::Env("TOGETHER_API_KEY".to_string()),
         }
     }
 }
@@ -413,6 +424,7 @@ impl Default for TogetherDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct VLLMProviderTypeConfig {
+    #[serde(default)]
     pub defaults: VLLMDefaults,
 }
 
@@ -437,6 +449,7 @@ impl Default for VLLMDefaults {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct XAIProviderTypeConfig {
+    #[serde(default)]
     pub defaults: XAIDefaults,
 }
 

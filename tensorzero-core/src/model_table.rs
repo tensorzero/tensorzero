@@ -68,7 +68,7 @@ pub trait ProviderKind {
     {
         let provider_type = self.get_provider_type();
         if let Some(api_key_location) = api_key_location {
-            return Ok(load_credential(api_key_location, provider_type)?.try_into()?);
+            return load_credential(api_key_location, provider_type)?.try_into();
         }
 
         Ok(self
@@ -297,17 +297,19 @@ impl<T: Clone> LazyCredential<T> {
     where
         Error: Clone,
     {
-        self.get().map(|t| t.clone()).map_err(|e| e.clone())
+        self.get().cloned().map_err(std::clone::Clone::clone)
     }
 }
 
+type AsyncCredentialLoader<T> = Box<
+    dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, Error>> + Send>>
+        + Send
+        + Sync,
+>;
+
 pub struct LazyAsyncCredential<T: Clone> {
     cell: OnceCell<Result<T, Error>>,
-    loader: Box<
-        dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, Error>> + Send>>
-            + Send
-            + Sync,
-    >,
+    loader: AsyncCredentialLoader<T>,
 }
 
 impl<T: Clone> LazyAsyncCredential<T> {
@@ -334,7 +336,7 @@ impl<T: Clone> LazyAsyncCredential<T> {
         T: Clone,
         Error: Clone,
     {
-        self.get().await.map(|t| t.clone()).map_err(|e| e.clone())
+        self.get().await.cloned().map_err(std::clone::Clone::clone)
     }
 }
 
@@ -451,23 +453,23 @@ impl ProviderTypeDefaultCredentials {
 
         ProviderTypeDefaultCredentials {
             anthropic: LazyCredential::new(move || {
-                Ok(load_credential(&anthropic_location, ProviderType::Anthropic)?.try_into()?)
+                load_credential(&anthropic_location, ProviderType::Anthropic)?.try_into()
             }),
             azure: LazyCredential::new(move || {
-                Ok(load_credential(&azure_location, ProviderType::Azure)?.try_into()?)
+                load_credential(&azure_location, ProviderType::Azure)?.try_into()
             }),
             deepseek: LazyCredential::new(move || {
-                Ok(load_credential(&deepseek_location, ProviderType::Deepseek)?.try_into()?)
+                load_credential(&deepseek_location, ProviderType::Deepseek)?.try_into()
             }),
             fireworks: LazyCredential::new(move || {
-                Ok(load_credential(&fireworks_location, ProviderType::Fireworks)?.try_into()?)
+                load_credential(&fireworks_location, ProviderType::Fireworks)?.try_into()
             }),
             google_ai_studio_gemini: LazyCredential::new(move || {
-                Ok(load_credential(
+                load_credential(
                     &google_ai_studio_gemini_location,
                     ProviderType::GoogleAIStudioGemini,
                 )?
-                .try_into()?)
+                .try_into()
             }),
             gcp_vertex_anthropic: LazyAsyncCredential::new(move || {
                 let location = gcp_vertex_anthropic_location.clone();
@@ -499,34 +501,34 @@ impl ProviderTypeDefaultCredentials {
             }),
 
             groq: LazyCredential::new(move || {
-                Ok(load_credential(&groq_location, ProviderType::Groq)?.try_into()?)
+                load_credential(&groq_location, ProviderType::Groq)?.try_into()
             }),
             hyperbolic: LazyCredential::new(move || {
-                Ok(load_credential(&hyperbolic_location, ProviderType::Hyperbolic)?.try_into()?)
+                load_credential(&hyperbolic_location, ProviderType::Hyperbolic)?.try_into()
             }),
             mistral: LazyCredential::new(move || {
-                Ok(load_credential(&mistral_location, ProviderType::Mistral)?.try_into()?)
+                load_credential(&mistral_location, ProviderType::Mistral)?.try_into()
             }),
             openai: LazyCredential::new(move || {
-                Ok(load_credential(&openai_location, ProviderType::OpenAI)?.try_into()?)
+                load_credential(&openai_location, ProviderType::OpenAI)?.try_into()
             }),
             openrouter: LazyCredential::new(move || {
-                Ok(load_credential(&openrouter_location, ProviderType::OpenRouter)?.try_into()?)
+                load_credential(&openrouter_location, ProviderType::OpenRouter)?.try_into()
             }),
             sglang: LazyCredential::new(move || {
-                Ok(load_credential(&sglang_location, ProviderType::SGLang)?.try_into()?)
+                load_credential(&sglang_location, ProviderType::SGLang)?.try_into()
             }),
             tgi: LazyCredential::new(move || {
-                Ok(load_credential(&tgi_location, ProviderType::TGI)?.try_into()?)
+                load_credential(&tgi_location, ProviderType::TGI)?.try_into()
             }),
             together: LazyCredential::new(move || {
-                Ok(load_credential(&together_location, ProviderType::Together)?.try_into()?)
+                load_credential(&together_location, ProviderType::Together)?.try_into()
             }),
             vllm: LazyCredential::new(move || {
-                Ok(load_credential(&vllm_location, ProviderType::VLLM)?.try_into()?)
+                load_credential(&vllm_location, ProviderType::VLLM)?.try_into()
             }),
             xai: LazyCredential::new(move || {
-                Ok(load_credential(&xai_location, ProviderType::XAI)?.try_into()?)
+                load_credential(&xai_location, ProviderType::XAI)?.try_into()
             }),
         }
     }
@@ -550,7 +552,7 @@ fn load_credential(
     provider_type: ProviderType,
 ) -> Result<Credential, Error> {
     match location {
-        CredentialLocation::Env(key_name) => match env::var(&key_name) {
+        CredentialLocation::Env(key_name) => match env::var(key_name) {
             Ok(value) => Ok(Credential::Static(SecretString::from(value))),
             Err(_) => {
                 if skip_credential_validation() {
@@ -571,7 +573,7 @@ fn load_credential(
         },
         CredentialLocation::PathFromEnv(env_key) => {
             // First get the path from environment variable
-            let path = match env::var(&env_key) {
+            let path = match env::var(env_key) {
                 Ok(path) => path,
                 Err(_) => {
                     if skip_credential_validation() {
@@ -750,7 +752,7 @@ impl GCPVertexAnthropicKind {
                     make_gcp_sdk_credentials(&ProviderType::GCPVertexAnthropic).await
                 }
                 _ => build_gcp_non_sdk_credentials(
-                    load_credential(&api_key_location, ProviderType::GCPVertexAnthropic)?,
+                    load_credential(api_key_location, ProviderType::GCPVertexAnthropic)?,
                     &ProviderType::GCPVertexAnthropic,
                 ),
             };
@@ -791,7 +793,7 @@ impl GCPVertexGeminiKind {
                     make_gcp_sdk_credentials(&ProviderType::GCPVertexGemini).await
                 }
                 _ => build_gcp_non_sdk_credentials(
-                    load_credential(&api_key_location, ProviderType::GCPVertexGemini)?,
+                    load_credential(api_key_location, ProviderType::GCPVertexGemini)?,
                     &ProviderType::GCPVertexGemini,
                 ),
             };

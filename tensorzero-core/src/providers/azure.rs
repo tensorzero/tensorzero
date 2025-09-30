@@ -1011,7 +1011,7 @@ mod tests {
                 AzureProvider::new(
                     "gpt-35-turbo".to_string(),
                     EndpointLocation::Static("https://test.openai.azure.com".to_string()),
-                    None,
+                    AzureCredentials::None,
                 )
             })
             .await
@@ -1034,7 +1034,7 @@ mod tests {
                 AzureProvider::new(
                     "gpt-35-turbo".to_string(),
                     EndpointLocation::Dynamic("azure_endpoint".to_string()),
-                    None,
+                    AzureCredentials::None,
                 )
             })
             .await

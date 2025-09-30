@@ -705,6 +705,7 @@ mod tests {
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
+        model_table::ProviderTypeDefaultCredentials,
     };
 
     use super::*;
@@ -796,7 +797,11 @@ mod tests {
         };
 
         let provider_info = uninitialized_config
-            .load(&ProviderTypesConfig::default(), Arc::from("test_provider"))
+            .load(
+                &ProviderTypesConfig::default(),
+                Arc::from("test_provider"),
+                &ProviderTypeDefaultCredentials::default(),
+            )
             .await
             .unwrap();
 

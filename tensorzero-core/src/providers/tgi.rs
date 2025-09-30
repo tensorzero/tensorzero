@@ -1034,29 +1034,25 @@ mod tests {
     #[test]
     #[traced_test]
     fn test_tgi_provider_new_api_base_check() {
-        let api_key_location = Some(CredentialLocation::None);
-
         // Valid cases (should not warn)
         let _ = TGIProvider::new(
             Url::parse("http://localhost:1234/v1/").unwrap(),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            TGICredentials::None,
+        );
 
         let _ = TGIProvider::new(
             Url::parse("http://localhost:1234/v1").unwrap(),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            TGICredentials::None,
+        );
 
         // Invalid cases (should warn)
         let invalid_url_1 = Url::parse("http://localhost:1234/chat/completions").unwrap();
-        let _ = TGIProvider::new(invalid_url_1.clone(), api_key_location.clone()).unwrap();
+        let _ = TGIProvider::new(invalid_url_1.clone(), TGICredentials::None);
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_1.as_ref()));
 
         let invalid_url_2 = Url::parse("http://localhost:1234/v1/chat/completions/").unwrap();
-        let _ = TGIProvider::new(invalid_url_2.clone(), api_key_location.clone()).unwrap();
+        let _ = TGIProvider::new(invalid_url_2.clone(), TGICredentials::None);
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_2.as_ref()));
     }

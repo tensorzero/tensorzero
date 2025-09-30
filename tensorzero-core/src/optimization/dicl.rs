@@ -835,7 +835,7 @@ mod tests {
             Config {
                 embedding_models: crate::embeddings::EmbeddingModelTable::new(
                     HashMap::from([(Arc::from(model_name), embedding_model_config)]),
-                    &provider_types,
+                    ProviderTypeDefaultCredentials::new(&provider_types),
                 )
                 .unwrap(),
                 ..Default::default()

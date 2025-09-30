@@ -2003,7 +2003,7 @@ impl Serialize for CredentialLocation {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Credential {
     Static(SecretString),
     FileContents(SecretString),
@@ -2197,7 +2197,7 @@ impl ShorthandModelConfig for ModelConfig {
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, cell::Cell};
+    use std::borrow::Cow;
 
     use crate::cache::CacheEnabledMode;
     use crate::config::SKIP_CREDENTIAL_VALIDATION;
@@ -2209,6 +2209,7 @@ mod tests {
             ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk,
         },
         model_table::RESERVED_MODEL_PREFIXES,
+        providers::anthropic::AnthropicCredentials,
         providers::dummy::{
             DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
             DUMMY_STREAMING_RESPONSE,
@@ -3008,7 +3009,10 @@ mod tests {
         );
         // Test that it works with an initialized model
         let anthropic_provider_config = SKIP_CREDENTIAL_VALIDATION.sync_scope((), || {
-            ProviderConfig::Anthropic(AnthropicProvider::new("claude".to_string(), None).unwrap())
+            ProviderConfig::Anthropic(AnthropicProvider::new(
+                "claude".to_string(),
+                AnthropicCredentials::None,
+            ))
         });
         let anthropic_model_config = ModelConfig {
             routing: vec!["anthropic".into()],
@@ -3028,7 +3032,7 @@ mod tests {
         let provider_types = ProviderTypesConfig::default();
         let model_table: ModelTable = ModelTable::new(
             HashMap::from([("claude".into(), anthropic_model_config)]),
-            &provider_types,
+            ProviderTypeDefaultCredentials::new(&provider_types),
         )
         .unwrap();
 
@@ -3043,83 +3047,5 @@ mod tests {
                 "Shorthand prefix '{shorthand}' is not in RESERVED_MODEL_PREFIXES"
             );
         }
-    }
-
-    #[test]
-    fn test_racy_get_or_try_init() {
-        let lock: OnceLock<bool> = OnceLock::new();
-
-        // If the closure returns an error, `racy_get_or_try_init` should return an error
-        racy_get_or_try_init(&lock, || {
-            Err::<_, Box<dyn std::error::Error>>("Test error".into())
-        })
-        .expect_err("Test error");
-        assert!(
-            lock.get().is_none(),
-            "OnceLock was initialized after an error"
-        );
-
-        racy_get_or_try_init(&lock, || Ok::<_, Box<dyn std::error::Error>>(true))
-            .expect("racy_get_or_try_init should succeed with successful closure");
-
-        assert_eq!(lock.get(), Some(&true));
-    }
-
-    #[test]
-    fn test_cache_default_creds() {
-        let make_creds_call_count = Cell::new(0);
-        let make_creds = |_| {
-            make_creds_call_count.set(make_creds_call_count.get() + 1);
-            Ok(())
-        };
-
-        let cache = OnceLock::new();
-
-        build_creds_caching_default_with_fn(
-            None,
-            CredentialLocation::None,
-            "test",
-            &cache,
-            make_creds,
-        )
-        .expect("Failed to build creds");
-        // The first call should initialize the OnceLock, and call `make_creds`
-        assert_eq!(make_creds_call_count.get(), 1);
-        assert_eq!(cache.get(), Some(&()));
-
-        // Subsequent calls should not call `make_creds`
-        build_creds_caching_default_with_fn(
-            None,
-            CredentialLocation::None,
-            "test",
-            &cache,
-            make_creds,
-        )
-        .expect("Failed to build creds");
-        assert_eq!(make_creds_call_count.get(), 1);
-    }
-
-    #[test]
-    fn test_dont_cache_non_default_creds() {
-        let make_creds_call_count = Cell::new(0);
-        let make_creds = |_| {
-            make_creds_call_count.set(make_creds_call_count.get() + 1);
-            Ok(())
-        };
-
-        let cache = OnceLock::new();
-
-        // When we provide a `Some(credential_location)`, we should not cache the creds.
-        build_creds_caching_default_with_fn(
-            Some(CredentialLocation::None),
-            CredentialLocation::None,
-            "test",
-            &cache,
-            make_creds,
-        )
-        .expect("Failed to build creds");
-
-        assert_eq!(cache.get(), None);
-        assert_eq!(make_creds_call_count.get(), 1);
     }
 }

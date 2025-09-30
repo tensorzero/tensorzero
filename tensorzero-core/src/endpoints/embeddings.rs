@@ -100,6 +100,7 @@ mod tests {
     use crate::config::Config;
     use crate::config::TimeoutsConfig;
     use crate::embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo};
+    use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::DummyProvider;
     use std::collections::HashMap;
     use tracing_test::traced_test;
@@ -132,7 +133,7 @@ mod tests {
         let config = Config {
             embedding_models: crate::embeddings::EmbeddingModelTable::new(
                 embedding_models,
-                &provider_types,
+                ProviderTypeDefaultCredentials::new(&provider_types),
             )
             .unwrap(),
             ..Default::default()

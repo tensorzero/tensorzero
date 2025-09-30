@@ -6,9 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::config::path::ResolvedTomlPath;
-use crate::config::{
-    ErrorContext, PathWithContents, SchemaData,
-};
+use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::{Error, ErrorDetails};
@@ -798,6 +796,7 @@ mod tests {
         test_system_template_schema, test_user_template_schema,
     };
     use crate::model::{ModelConfig, ModelProvider, ProviderConfig};
+    use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
     use crate::providers::test_helpers::get_temperature_tool_config;
     use crate::tool::{ToolCallConfig, ToolChoice};
@@ -1360,7 +1359,7 @@ mod tests {
         let provider_types = ProviderTypesConfig::default();
         let models = ModelTable::new(
             HashMap::from([("invalid_model".into(), text_model_config)]),
-            &provider_types,
+            ProviderTypeDefaultCredentials::new(&provider_types),
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -1426,10 +1425,15 @@ mod tests {
         let inference_params = InferenceParams::default();
         let models = HashMap::from([("error".into(), error_model_config)]);
         let provider_types = ProviderTypesConfig::default();
-        let models = ModelTable::new(models, &provider_types).unwrap();
+        let models =
+            ModelTable::new(models, ProviderTypeDefaultCredentials::new(&provider_types)).unwrap();
         let inference_models = InferenceModels {
             models: &models,
-            embedding_models: &EmbeddingModelTable::new(HashMap::new(), &provider_types).unwrap(),
+            embedding_models: &EmbeddingModelTable::new(
+                HashMap::new(),
+                ProviderTypeDefaultCredentials::new(&provider_types),
+            )
+            .unwrap(),
         };
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -1522,7 +1526,7 @@ mod tests {
         let provider_types = ProviderTypesConfig::default();
         let models = ModelTable::new(
             HashMap::from([("good".into(), text_model_config)]),
-            &provider_types,
+            ProviderTypeDefaultCredentials::new(&provider_types),
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -1603,7 +1607,7 @@ mod tests {
         let provider_types = ProviderTypesConfig::default();
         let models = ModelTable::new(
             HashMap::from([("tool".into(), tool_model_config)]),
-            &provider_types,
+            ProviderTypeDefaultCredentials::new(&provider_types),
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -1770,7 +1774,7 @@ mod tests {
         let provider_types = ProviderTypesConfig::default();
         let models = ModelTable::new(
             HashMap::from([("json".into(), json_model_config)]),
-            &provider_types,
+            ProviderTypeDefaultCredentials::new(&provider_types),
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -2246,12 +2250,16 @@ mod tests {
         let models = Box::leak(Box::new(
             ModelTable::new(
                 HashMap::from([("error".into(), error_model_config)]),
-                provider_types,
+                ProviderTypeDefaultCredentials::new(provider_types),
             )
             .unwrap(),
         ));
         let embedding_models = Box::leak(Box::new(
-            EmbeddingModelTable::new(HashMap::new(), provider_types).unwrap(),
+            EmbeddingModelTable::new(
+                HashMap::new(),
+                ProviderTypeDefaultCredentials::new(provider_types),
+            )
+            .unwrap(),
         ));
         let inference_models = InferenceModels {
             models,
@@ -2329,7 +2337,7 @@ mod tests {
         let models = Box::leak(Box::new(
             ModelTable::new(
                 HashMap::from([("good".into(), text_model_config)]),
-                provider_types,
+                ProviderTypeDefaultCredentials::new(provider_types),
             )
             .unwrap(),
         ));
