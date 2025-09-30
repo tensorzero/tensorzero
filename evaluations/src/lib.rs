@@ -25,7 +25,10 @@ use tensorzero_core::{
     config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::Datapoint,
     function::FunctionConfig,
 };
-use tokio::{sync::Semaphore, task::JoinSet};
+use tokio::{
+    sync::{mpsc, Semaphore},
+    task::JoinSet,
+};
 use tracing::{debug, error, info, instrument};
 use url::Url;
 use uuid::Uuid;
@@ -35,8 +38,9 @@ pub mod evaluators;
 pub mod helpers;
 pub mod stats;
 
-#[derive(clap::ValueEnum, Clone, Debug, Default, PartialEq)]
+#[derive(clap::ValueEnum, Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 #[clap(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum OutputFormat {
     Jsonl,
     #[default]
@@ -109,9 +113,6 @@ pub struct EvaluationCoreArgs {
     /// Number of concurrent requests to make.
     pub concurrency: usize,
 
-    /// Output format for results
-    pub output_format: OutputFormat,
-
     /// Cache configuration for inference requests
     pub inference_cache: CacheEnabledMode,
 }
@@ -169,22 +170,95 @@ pub async fn run_evaluation(
 
     let core_args = EvaluationCoreArgs {
         tensorzero_client,
-        clickhouse_client,
+        clickhouse_client: clickhouse_client.clone(),
         config,
         dataset_name: args.dataset_name,
         variant_name: args.variant_name,
         evaluation_name: args.evaluation_name,
         evaluation_run_id,
         inference_cache: args.inference_cache,
-        output_format: args.format,
         concurrency: args.concurrency,
     };
 
-    run_evaluation_core(core_args, &mut writer).await
+    let output_format = args.format.clone();
+    let result = run_evaluation_core_streaming(core_args).await?;
+
+    let mut receiver = result.receiver;
+    let dataset_len = result.run_info.num_datapoints;
+
+    // Write the run info first
+    write_run_info(&mut writer, &result.run_info, &output_format)?;
+
+    // Collect results from the streaming channel
+    let mut evaluation_stats = EvaluationStats::new(output_format.clone(), dataset_len);
+
+    while let Some(update) = receiver.recv().await {
+        match update {
+            EvaluationUpdate::RunInfo(_) => {
+                // Skip RunInfo as we already wrote it
+                continue;
+            }
+            update => {
+                evaluation_stats.push(update, &mut writer)?;
+            }
+        }
+    }
+
+    if let Some(progress_bar) = &evaluation_stats.progress_bar {
+        progress_bar.finish_with_message("Done");
+    }
+
+    if evaluation_stats.output_format == OutputFormat::Pretty {
+        let EvaluationConfig::Static(static_evaluation_config) = &*result.evaluation_config;
+        let stats = evaluation_stats.compute_stats(&static_evaluation_config.evaluators);
+
+        // Print all stats
+        for (evaluator_name, evaluator_stats) in &stats {
+            writeln!(writer, "{evaluator_name}: {evaluator_stats}")?;
+        }
+
+        // Check cutoffs and handle failures
+        let failures = check_evaluator_cutoffs(&stats, &static_evaluation_config.evaluators)?;
+
+        // Print failure messages
+        for (name, cutoff, actual) in &failures {
+            writeln!(
+                writer,
+                "Failed cutoff for evaluator {name} ({cutoff:.2}, got {actual:.2})"
+            )?;
+        }
+
+        // If there are failures, return an error with all failures listed
+        if !failures.is_empty() {
+            let failure_messages = format_cutoff_failures(&failures);
+            bail!("Failed cutoffs for evaluators: {}", failure_messages);
+        }
+    }
+
+    // Since we construct our own `ClickHouseConnectionInfo` outside of our `TensorZeroClient`,
+    // we need to wait for the batch writer to finish.
+    // This happens automatically when `run_evaluation` is called from the standalone `evaluations` binary
+    // (since Tokio will wait for the `spawn_blocking` task to finish before shutting down the runtime).
+    // We explicitly wait here for the batch writer to finish, so that `run_evaluation` can be called
+    // from other places in the codebase (e.g. e2e tests), and subsequently query ClickHouse for the evaluation results.
+    if let Some(handle) = clickhouse_client.batcher_join_handle() {
+        tracing::info!("Waiting for evaluations ClickHouse batch writer to finish");
+        handle
+            .await
+            .map_err(|e| anyhow!("Error waiting for ClickHouse batch writer: {e}"))?;
+        tracing::info!("Evaluations ClickHouse batch writer finished");
+    }
+
+    Ok(())
 }
 
+/// Streaming version of run_evaluation_core that returns a receiver for streaming updates
 #[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
-pub async fn run_evaluation_core<W: Write>(args: EvaluationCoreArgs, writer: &mut W) -> Result<()> {
+pub async fn run_evaluation_core_streaming(
+    args: EvaluationCoreArgs,
+) -> Result<EvaluationStreamResult> {
+    let (sender, receiver) = mpsc::channel(100); // Buffer size of 100 for backpressure
+
     // Build the semaphore and clients
     let semaphore = Semaphore::new(args.concurrency);
     let clients = Arc::new(Clients {
@@ -231,14 +305,15 @@ pub async fn run_evaluation_core<W: Write>(args: EvaluationCoreArgs, writer: &mu
     let dataset_len = dataset.len();
     let mut task_id_to_datapoint_id = HashMap::new();
 
-    write_run_info(
-        writer,
-        &RunInfo {
-            evaluation_run_id: args.evaluation_run_id,
-            num_datapoints: dataset_len,
-        },
-        &args.output_format,
-    )?;
+    let run_info = RunInfo {
+        evaluation_run_id: args.evaluation_run_id,
+        num_datapoints: dataset_len,
+    };
+
+    // Send the run info as the first message
+    let _ = sender
+        .send(EvaluationUpdate::RunInfo(run_info.clone()))
+        .await;
 
     // Spawn concurrent tasks for each datapoint
     for datapoint in dataset {
@@ -294,87 +369,57 @@ pub async fn run_evaluation_core<W: Write>(args: EvaluationCoreArgs, writer: &mu
         task_id_to_datapoint_id.insert(abort_handle.id(), datapoint_id);
     }
 
-    // Collect results
-    let mut evaluation_stats = EvaluationStats::new(args.output_format, dataset_len);
+    // Get a shared reference to the evaluation config (which includes evaluators)
+    let evaluators = evaluation_config.clone();
 
-    while let Some(result) = join_set.join_next_with_id().await {
-        match result {
-            Ok((_, Ok((datapoint, inference_response, evaluation_result)))) => {
-                evaluation_stats.push(
+    // Spawn a task to collect results and stream them
+    let sender_clone = sender.clone();
+    let clients_clone = clients.clone();
+    tokio::spawn(async move {
+        while let Some(result) = join_set.join_next_with_id().await {
+            let update = match result {
+                Ok((_, Ok((datapoint, inference_response, evaluation_result)))) => {
                     EvaluationUpdate::Success(EvaluationInfo::new(
                         datapoint,
                         inference_response,
                         evaluation_result,
-                    )),
-                    writer,
-                )?;
-            }
-            Ok((task_id, Err(e))) => {
-                tracing::warn!("Task error: {}", e);
-                evaluation_stats.push(
+                    ))
+                }
+                Ok((task_id, Err(e))) => {
+                    tracing::warn!("Task error: {}", e);
                     EvaluationUpdate::Error(EvaluationError {
                         datapoint_id: task_id_to_datapoint_id[&task_id],
                         message: e.to_string(),
-                    }),
-                    writer,
-                )?;
-            }
-            Err(e) => evaluation_stats.push(
-                EvaluationUpdate::Error(EvaluationError {
+                    })
+                }
+                Err(e) => EvaluationUpdate::Error(EvaluationError {
                     datapoint_id: task_id_to_datapoint_id[&e.id()],
                     message: e.to_string(),
                 }),
-                writer,
-            )?,
-        }
-    }
+            };
 
-    if let Some(progress_bar) = &evaluation_stats.progress_bar {
-        progress_bar.finish_with_message("Done");
-    }
-
-    if evaluation_stats.output_format == OutputFormat::Pretty {
-        let stats = evaluation_stats.compute_stats(&static_evaluation_config.evaluators);
-
-        // Print all stats
-        for (evaluator_name, evaluator_stats) in &stats {
-            writeln!(writer, "{evaluator_name}: {evaluator_stats}")?;
+            if sender_clone.send(update).await.is_err() {
+                // Receiver dropped, stop sending
+                break;
+            }
         }
 
-        // Check cutoffs and handle failures
-        let failures = check_evaluator_cutoffs(&stats, &static_evaluation_config.evaluators)?;
-
-        // Print failure messages
-        for (name, cutoff, actual) in &failures {
-            writeln!(
-                writer,
-                "Failed cutoff for evaluator {name} ({cutoff:.2}, got {actual:.2})"
-            )?;
+        // Wait for batch writer to finish
+        if let Some(handle) = clients_clone.clickhouse_client.batcher_join_handle() {
+            drop(clients_clone);
+            tracing::info!("Waiting for evaluations ClickHouse batch writer to finish");
+            if let Err(e) = handle.await {
+                tracing::error!("Error waiting for ClickHouse batch writer: {e}");
+            }
+            tracing::info!("Evaluations ClickHouse batch writer finished");
         }
+    });
 
-        // If there are failures, return an error with all failures listed
-        if !failures.is_empty() {
-            let failure_messages = format_cutoff_failures(&failures);
-            bail!("Failed cutoffs for evaluators: {}", failure_messages);
-        }
-    }
-
-    // Since we construct our own `ClickHouseConnectionInfo` outside of our `TensorZeroClient`,
-    // we need to wait for the batch writer to finish.
-    // This happens automatically when `run_evaluation` is called from the standalone `evaluations` binary
-    // (since Tokio will wait for the `spawn_blocking` task to finish before shutting down the runtime).
-    // We explicitly wait here for the batch writer to finish, so that `run_evaluation` can be called
-    // from other places in the codebase (e.g. e2e tests), and subsequently query ClickHouse for the evaluation results.
-    if let Some(handle) = clients.clickhouse_client.batcher_join_handle() {
-        drop(clients);
-        tracing::info!("Waiting for evaluations ClickHouse batch writer to finish");
-        handle
-            .await
-            .map_err(|e| anyhow!("Error waiting for ClickHouse batch writer: {e}"))?;
-        tracing::info!("Evaluations ClickHouse batch writer finished");
-    }
-
-    Ok(())
+    Ok(EvaluationStreamResult {
+        receiver,
+        run_info,
+        evaluation_config: evaluators,
+    })
 }
 
 /// Checks if evaluator results meet their cutoff thresholds
@@ -546,10 +591,17 @@ fn write_run_info(
     Ok(())
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunInfo {
     pub evaluation_run_id: Uuid,
     pub num_datapoints: usize,
+}
+
+/// Result from running an evaluation that supports streaming
+pub struct EvaluationStreamResult {
+    pub receiver: mpsc::Receiver<EvaluationUpdate>,
+    pub run_info: RunInfo,
+    pub evaluation_config: Arc<EvaluationConfig>,
 }
 
 pub struct ThrottledTensorZeroClient {
