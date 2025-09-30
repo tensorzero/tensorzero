@@ -143,9 +143,10 @@ impl OpenAIResponsesResponse<'_> {
                         name: function_call.name.to_string(),
                     }));
                 }
-                _ => {
+                OpenAIResponsesInput::FunctionCallOutput(_) => {
                     return Err(Error::new(ErrorDetails::InferenceServer {
-                        message: "Only message and function_call output are supported in responses API output".to_string(),
+                        message: "Function calls output is not supported in responses API output"
+                            .to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
                         raw_request: Some(raw_request.clone()),
                         raw_response: Some(raw_response.clone()),
@@ -156,7 +157,6 @@ impl OpenAIResponsesResponse<'_> {
 
         let finish_reason = match self.incomplete_details {
             Some(incomplete_details) => {
-                eprintln!("Got reason: {}", incomplete_details.reason);
                 // The contents of the 'reason' field is undocumented,
                 // but OpenAI appears to set it to 'max_output_tokens' when the 'max_output_tokens'
                 // field is provided and the response is incomplete.
