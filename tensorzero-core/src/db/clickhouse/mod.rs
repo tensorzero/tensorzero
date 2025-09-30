@@ -793,39 +793,27 @@ impl HealthCheckable for ClickHouseConnectionInfo {
                 client,
                 ..
             } => {
-                // Run a simple SELECT 1 query to check if ClickHouse is healthy and credentials are valid
-                // This is better than /ping because /ping doesn't test authentication
-                let database_url = Url::parse(database_url.expose_secret()).map_err(|_| {
+                // We need to ping the /ping endpoint to check if ClickHouse is healthy
+                let mut ping_url = Url::parse(database_url.expose_secret()).map_err(|_| {
                     Error::new(ErrorDetails::Config {
                         message: "Invalid ClickHouse database URL".to_string(),
                     })
                 })?;
+                ping_url.set_path("/ping");
+                ping_url.set_query(None);
 
                 let timeout = Duration::from_secs(180);
 
-                let result = client
-                    .post(database_url)
-                    .body("SELECT 1")
-                    .timeout(timeout)
-                    .send()
-                    .await;
-
-                match result {
-                    Ok(response) => {
-                        let status = response.status();
-                        let body = response.text().await.unwrap_or_default();
-
-                        if status.is_success() {
-                            Ok(())
-                        } else {
-                            Err(ErrorDetails::ClickHouseConnection {
-                                message: format!(
-                                    "ClickHouse is not healthy (status code {status}): {body}",
-                                ),
-                            }
-                            .into())
-                        }
+                match client.get(ping_url).timeout(timeout).send().await {
+                    Ok(response) if response.status().is_success() => Ok(()),
+                    Ok(response) => Err(ErrorDetails::ClickHouseConnection {
+                        message: format!(
+                            "ClickHouse is not healthy (status code {}): {}",
+                            response.status(),
+                            response.text().await.unwrap_or_default()
+                        ),
                     }
+                    .into()),
                     Err(e) => Err(ErrorDetails::ClickHouseConnection {
                         message: format!("ClickHouse is not healthy: {e:?}"),
                     }
