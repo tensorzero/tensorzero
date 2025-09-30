@@ -3,6 +3,7 @@
 #![expect(async_fn_in_trait)]
 
 pub mod cache;
+pub mod check_stopping;
 pub mod config; // TensorZero config file
 pub mod db;
 pub mod embeddings; // embedding inference

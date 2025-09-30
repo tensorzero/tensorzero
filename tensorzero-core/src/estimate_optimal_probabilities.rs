@@ -8,7 +8,7 @@ use clarabel::solver::{
 use thiserror::Error;
 use typed_builder::TypedBuilder;
 
-fn argmax<T: PartialOrd>(slice: &[T]) -> Option<usize> {
+pub fn argmax<T: PartialOrd>(slice: &[T]) -> Option<usize> {
     slice
         .iter()
         .enumerate()
