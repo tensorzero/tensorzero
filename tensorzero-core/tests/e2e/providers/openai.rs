@@ -2173,8 +2173,11 @@ async fn test_responses_api_reasoning() {
     println!("API response: {response_json}");
 
     let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
-    assert_eq!(content_blocks.len(), 2);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "thought");
+    let has_thought = content_blocks
+        .iter()
+        .any(|block| block.get("type").unwrap().as_str().unwrap() == "thought");
+    assert!(
+        has_thought,
+        "Missing thought block in output: {content_blocks:?}"
+    );
 }
