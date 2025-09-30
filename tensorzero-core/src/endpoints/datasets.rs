@@ -401,7 +401,7 @@ pub async fn update_datapoint_handler(
             let datapoint = ChatInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: chat.function_name,
-                name: None,
+                name: chat.name,
                 id: path_params.datapoint_id,
                 episode_id: None,
                 input: resolved_input.into_stored_input(),
@@ -470,7 +470,7 @@ pub async fn update_datapoint_handler(
             let datapoint = JsonInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: json.function_name,
-                name: None,
+                name: json.name,
                 id: path_params.datapoint_id,
                 episode_id: None,
                 input: resolved_input.into_stored_input(),
@@ -635,7 +635,7 @@ pub async fn insert_datapoint(
                 chat_datapoints.push(ChatInferenceDatapoint {
                     dataset_name: dataset_name.clone(),
                     function_name: chat.function_name,
-                    name: None,
+                    name: chat.name,
                     id: datapoint_id,
                     episode_id: None,
                     input: resolved_input.into_stored_input(),
@@ -717,7 +717,7 @@ pub async fn insert_datapoint(
                 let datapoint = JsonInferenceDatapoint {
                     dataset_name: dataset_name.clone(),
                     function_name: json.function_name,
-                    name: None,
+                    name: json.name,
                     id: datapoint_id,
                     episode_id: None,
                     input: resolved_input.into_stored_input(),
