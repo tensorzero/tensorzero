@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -595,8 +596,7 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
                     }
                     _ => {
                         return Err(Error::new(ErrorDetails::InternalError {
-                            message: "`prepare_file_message` produced an unexpected content block. {IMPOSSIBLE_ERROR_MESSAGE}"
-                                .to_string(),
+                            message: format!("`prepare_file_message` produced an unexpected content block. {IMPOSSIBLE_ERROR_MESSAGE}")
                         }));
                     }
                 }
