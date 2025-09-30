@@ -17,10 +17,11 @@ DISPLAY_BASE_URL=$(
 )
 
 
-# Attempt to ping ClickHouse and check for OK response
-echo "Pinging ClickHouse at $DISPLAY_BASE_URL/ping to verify connectivity..."
-if ! curl -s --connect-timeout 5 "$BASE_URL/ping" > /dev/null; then
-  echo "Error: Failed to connect to ClickHouse at $DISPLAY_BASE_URL/ping"
+# Run a simple SELECT 1 query to check if ClickHouse is healthy and credentials are valid
+# This is better than /ping because /ping doesn't test authentication
+echo "Checking ClickHouse connectivity at $DISPLAY_BASE_URL..."
+if ! curl -s --connect-timeout 5 -X POST -d "SELECT 1" "$TENSORZERO_CLICKHOUSE_URL" > /dev/null; then
+  echo "Error: Failed to connect to ClickHouse at $DISPLAY_BASE_URL"
   exit 1
 fi
 

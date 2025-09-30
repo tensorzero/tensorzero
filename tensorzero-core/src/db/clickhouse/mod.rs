@@ -578,11 +578,25 @@ impl ClickHouseConnectionInfo {
                             message: e.to_string(),
                         })
                     })?;
+
+                let status = response.status();
                 let text = response.text().await.map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
                         message: format!("Failed to fetch response text: {e}"),
                     })
                 })?;
+
+                // Check if the request was successful before trying to parse the response
+                if !status.is_success() {
+                    return Err(Error::new(ErrorDetails::ClickHouseConnection {
+                        message: format!(
+                            "ClickHouse query failed with status {}: {}",
+                            status.as_u16(),
+                            text
+                        ),
+                    }));
+                }
+
                 let count: u8 = text.trim().parse().map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
                         message: format!("Failed to parse count response as u8: {e}"),
@@ -779,27 +793,39 @@ impl HealthCheckable for ClickHouseConnectionInfo {
                 client,
                 ..
             } => {
-                // We need to ping the /ping endpoint to check if ClickHouse is healthy
-                let mut ping_url = Url::parse(database_url.expose_secret()).map_err(|_| {
+                // Run a simple SELECT 1 query to check if ClickHouse is healthy and credentials are valid
+                // This is better than /ping because /ping doesn't test authentication
+                let database_url = Url::parse(database_url.expose_secret()).map_err(|_| {
                     Error::new(ErrorDetails::Config {
                         message: "Invalid ClickHouse database URL".to_string(),
                     })
                 })?;
-                ping_url.set_path("/ping");
-                ping_url.set_query(None);
 
                 let timeout = Duration::from_secs(180);
 
-                match client.get(ping_url).timeout(timeout).send().await {
-                    Ok(response) if response.status().is_success() => Ok(()),
-                    Ok(response) => Err(ErrorDetails::ClickHouseConnection {
-                        message: format!(
-                            "ClickHouse is not healthy (status code {}): {}",
-                            response.status(),
-                            response.text().await.unwrap_or_default()
-                        ),
+                let result = client
+                    .post(database_url)
+                    .body("SELECT 1")
+                    .timeout(timeout)
+                    .send()
+                    .await;
+
+                match result {
+                    Ok(response) => {
+                        let status = response.status();
+                        let body = response.text().await.unwrap_or_default();
+
+                        if status.is_success() {
+                            Ok(())
+                        } else {
+                            Err(ErrorDetails::ClickHouseConnection {
+                                message: format!(
+                                    "ClickHouse is not healthy (status code {status}): {body}",
+                                ),
+                            }
+                            .into())
+                        }
                     }
-                    .into()),
                     Err(e) => Err(ErrorDetails::ClickHouseConnection {
                         message: format!("ClickHouse is not healthy: {e:?}"),
                     }
@@ -939,13 +965,16 @@ async fn write_production<T: Serialize + Send + Sync>(
             })
         })?;
 
-    match response.status() {
+    let status = response.status();
+    let response_body = response
+        .text()
+        .await
+        .unwrap_or_else(|e| format!("Failed to get response text: {e}"));
+
+    match status {
         reqwest::StatusCode::OK => Ok(()),
         _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
-            message: response
-                .text()
-                .await
-                .unwrap_or_else(|e| format!("Failed to get response text: {e}")),
+            message: response_body,
         })),
     }
 }
