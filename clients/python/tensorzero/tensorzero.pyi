@@ -33,9 +33,21 @@ from tensorzero import (
 from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 from tensorzero.types import (
     InferenceFilterTreeNode,
-    JsonInferenceOutput,
     OrderBy,
 )
+
+@final
+class JsonInferenceOutput:
+    raw: Optional[str]
+    parsed: Optional[Dict[str, Any]]
+    def __init__(
+        self,
+        /,
+        *args: Any,
+        raw: Optional[str] = None,
+        parsed: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> None: ...
 
 @final
 class ResolvedInputMessage:
@@ -1099,6 +1111,7 @@ __all__ = [
     "FunctionsConfig",
     "FireworksSFTConfig",
     "GCPVertexGeminiSFTConfig",
+    "JsonInferenceOutput",
     "TensorZeroGateway",
     "LocalHttpGateway",
     "MixtureOfNConfig",
@@ -1109,9 +1122,9 @@ __all__ = [
     "OptimizationJobInfo",
     "OptimizationJobStatus",
     "RenderedSample",
-    "TogetherSFTConfig",
-    "StoredInference",
     "ResolvedInput",
     "ResolvedInputMessage",
+    "StoredInference",
+    "TogetherSFTConfig",
     "VariantsConfig",
 ]
