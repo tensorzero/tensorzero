@@ -390,7 +390,7 @@ pub enum OpenAIResponsesInput<'a> {
     FunctionCall(OpenAIResponsesFunctionCall<'a>),
 }
 
-impl<'a> OpenAIResponsesInput<'a> {
+impl OpenAIResponsesInput<'_> {
     pub fn content_contains_case_insensitive(&self, value: &str) -> bool {
         match self {
             OpenAIResponsesInput::Message(msg) => {
