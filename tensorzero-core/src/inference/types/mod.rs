@@ -1209,18 +1209,6 @@ impl JsonInferenceOutput {
         })
     }
 
-    fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        use pyo3::types::PyDict;
-        let dict = PyDict::new(py);
-        if let Some(raw) = &self.raw {
-            dict.set_item("raw", raw)?;
-        }
-        if let Some(parsed) = &self.parsed {
-            dict.set_item("parsed", serialize_to_dict(py, parsed)?)?;
-        }
-        Ok(dict.into_any())
-    }
-
     #[getter]
     fn get_raw(&self) -> Option<String> {
         self.raw.clone()
