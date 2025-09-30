@@ -47,8 +47,10 @@
 //!   and passed along to `TracerWrapper::build_with_context` when the span is closed and exported.
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
+
+use once_cell::sync::OnceCell;
 
 use axum::extract::MatchedPath;
 use axum::middleware::Next;
@@ -135,8 +137,8 @@ pub struct TracerWrapper {
     default_tracer: SdkTracer,
     default_provider: SdkTracerProvider,
     // Static headers from the config that are always included (can be overridden by dynamic headers)
-    // Wrapped in Arc<RwLock> so we can update them after initialization (e.g. in the gateway after loading config)
-    static_otlp_traces_extra_headers: Arc<RwLock<MetadataMap>>,
+    // Wrapped in Arc<OnceCell> so we can set them once after initialization (e.g. in the gateway after loading config)
+    static_otlp_traces_extra_headers: Arc<OnceCell<MetadataMap>>,
     // We need to build a new `CustomTracer` for each unique list of extra headers,
     // since export headers can only be configured at the `Tracer` level.
     // We use a `moka` Cache to handle automatic eviction (see `internal_build_otel_layer` for
@@ -199,17 +201,12 @@ impl Tracer for TracerWrapper {
         parent_cx: &opentelemetry::Context,
     ) -> Self::Span {
         // Check if we have any headers (config or dynamic)
-        // If the lock is poisoned (a thread panicked while holding it), recover the data
-        let static_otlp_traces_extra_headers = self
-            .static_otlp_traces_extra_headers
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone();
+        let static_otlp_traces_extra_headers = self.static_otlp_traces_extra_headers.get();
         let dynamic_key = parent_cx.get::<CustomTracerKey>();
 
         // If we have any headers (config OR dynamic), create a custom tracer with merged headers
         let has_otlp_traces_extra_headers =
-            !static_otlp_traces_extra_headers.is_empty() || dynamic_key.is_some();
+            static_otlp_traces_extra_headers.is_some() || dynamic_key.is_some();
 
         if has_otlp_traces_extra_headers {
             // This is the potentially expensive part - we need to dynamically create a new `SdkTracer`.
@@ -222,7 +219,9 @@ impl Tracer for TracerWrapper {
             //    lookup and nested `build_with_context` inside the closure.
 
             // Merge config headers with dynamic headers (dynamic takes precedence)
-            let mut merged_headers = static_otlp_traces_extra_headers;
+            let mut merged_headers = static_otlp_traces_extra_headers
+                .cloned()
+                .unwrap_or_default();
             if let Some(key) = dynamic_key {
                 for key_value_ref in key.extra_headers.iter() {
                     if let tonic::metadata::KeyAndValueRef::Ascii(k, v) = key_value_ref {
@@ -296,8 +295,8 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
     opentelemetry::global::set_tracer_provider(provider.clone());
     let shutdown_tasks = TaskTracker::new();
     let shutdown_tasks_clone = shutdown_tasks.clone();
-    // Initialize with empty headers - can be updated later via set_static_otlp_traces_extra_headers()
-    let config_headers = Arc::new(RwLock::new(MetadataMap::new()));
+    // Initialize empty - will be set once later via set_static_otlp_traces_extra_headers()
+    let config_headers = Arc::new(OnceCell::new());
     let wrapper = TracerWrapper {
         default_tracer: tracer,
         default_provider: provider,
@@ -662,20 +661,20 @@ pub struct ObservabilityHandle {
 }
 
 impl TracerWrapper {
-    /// Update the config headers that will be merged with dynamic headers.
-    /// This allows updating headers after initialization (e.g. in the gateway after loading config).
+    /// Set the config headers that will be merged with dynamic headers.
+    /// This can only be called once after initialization (e.g. in the gateway after loading config).
     pub fn set_static_otlp_traces_extra_headers(
         &self,
         headers: &HashMap<String, String>,
     ) -> Result<(), Error> {
         let metadata_map = config_headers_to_metadata(headers)?;
-        let mut config_headers = self.static_otlp_traces_extra_headers.write().map_err(|e| {
-            Error::new(ErrorDetails::Observability {
-                message: format!("Failed to update static OTLP headers: write lock acquisition failed due to thread panic: {e}"),
+        self.static_otlp_traces_extra_headers
+            .set(metadata_map)
+            .map_err(|_| {
+                Error::new(ErrorDetails::Observability {
+                    message: "Failed to set static OTLP headers: already initialized".to_string(),
+                })
             })
-        })?;
-        *config_headers = metadata_map;
-        Ok(())
     }
 
     pub async fn shutdown(self) {
