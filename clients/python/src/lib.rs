@@ -10,7 +10,11 @@
 /// and defines methods on them.
 use std::{collections::HashMap, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
-use evaluations::{run_evaluation_core, EvaluationCoreArgs, OutputFormat};
+use evaluations::{
+    run_evaluation_core_streaming,
+    stats::{EvaluationError, EvaluationInfo, EvaluationUpdate},
+    EvaluationCoreArgs, OutputFormat, RunInfo,
+};
 use futures::StreamExt;
 use pyo3::{
     exceptions::{PyStopAsyncIteration, PyStopIteration, PyValueError},
@@ -95,6 +99,8 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<LocalHttpGateway>()?;
     m.add_class::<RenderedSample>()?;
     m.add_class::<StoredInference>()?;
+    m.add_class::<EvaluationJobHandler>()?;
+    m.add_class::<AsyncEvaluationJobHandler>()?;
     m.add_class::<UninitializedOpenAIRFTConfig>()?;
     m.add_class::<UninitializedOpenAISFTConfig>()?;
     m.add_class::<UninitializedFireworksSFTConfig>()?;
@@ -263,6 +269,289 @@ impl StreamWrapper {
         };
         let chunk = chunk.map_err(|e| convert_error(py, err_to_http(e)))?;
         parse_inference_chunk(py, chunk)
+    }
+}
+
+/// Job handler for streaming evaluation results (synchronous)
+#[pyclass(frozen)]
+struct EvaluationJobHandler {
+    receiver: Arc<Mutex<tokio::sync::mpsc::Receiver<EvaluationUpdate>>>,
+    run_info: RunInfo,
+    evaluation_config: Arc<tensorzero_core::evaluations::EvaluationConfig>,
+    evaluation_infos: Arc<Mutex<Vec<EvaluationInfo>>>,
+    evaluation_errors: Arc<Mutex<Vec<EvaluationError>>>,
+}
+
+#[pymethods]
+impl EvaluationJobHandler {
+    /// Get the run information for this evaluation
+    #[getter]
+    fn run_info(&self) -> PyResult<Py<PyAny>> {
+        Python::attach(|py| {
+            let dict = pyo3::types::PyDict::new(py);
+            dict.set_item(
+                "evaluation_run_id",
+                self.run_info.evaluation_run_id.to_string(),
+            )?;
+            dict.set_item("num_datapoints", self.run_info.num_datapoints)?;
+            Ok(dict.into())
+        })
+    }
+
+    /// Returns an iterator over evaluation results as they complete
+    fn results(this: Py<Self>) -> Py<Self> {
+        this
+    }
+
+    fn __iter__(this: Py<Self>) -> Py<Self> {
+        this
+    }
+
+    fn __next__(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        // Loop to skip RunInfo updates instead of using recursion
+        loop {
+            let receiver = self.receiver.clone();
+            let evaluation_infos = self.evaluation_infos.clone();
+            let evaluation_errors = self.evaluation_errors.clone();
+
+            let update =
+                tokio_block_on_without_gil(py, async move { receiver.lock().await.recv().await });
+
+            match update {
+                Some(EvaluationUpdate::RunInfo(_)) => {
+                    // Skip RunInfo, continue to next update
+                    continue;
+                }
+                Some(EvaluationUpdate::Success(info)) => {
+                    let info_clone = info.clone();
+                    tokio_block_on_without_gil(py, async move {
+                        evaluation_infos.lock().await.push(info_clone);
+                    });
+                    // Convert EvaluationInfo to Python dict
+                    let dict = pyo3::types::PyDict::new(py);
+                    dict.set_item("type", "success")?;
+                    dict.set_item(
+                        "datapoint",
+                        serde_json::to_string(&info.datapoint).map_err(|e| {
+                            pyo3::exceptions::PyRuntimeError::new_err(format!(
+                                "Serialization error: {e}"
+                            ))
+                        })?,
+                    )?;
+                    dict.set_item(
+                        "response",
+                        serde_json::to_string(&info.response).map_err(|e| {
+                            pyo3::exceptions::PyRuntimeError::new_err(format!(
+                                "Serialization error: {e}"
+                            ))
+                        })?,
+                    )?;
+                    dict.set_item(
+                        "evaluations",
+                        serde_json::to_string(&info.evaluations).map_err(|e| {
+                            pyo3::exceptions::PyRuntimeError::new_err(format!(
+                                "Serialization error: {e}"
+                            ))
+                        })?,
+                    )?;
+                    dict.set_item(
+                        "evaluator_errors",
+                        serde_json::to_string(&info.evaluator_errors).map_err(|e| {
+                            pyo3::exceptions::PyRuntimeError::new_err(format!(
+                                "Serialization error: {e}"
+                            ))
+                        })?,
+                    )?;
+                    return Ok(dict.into());
+                }
+                Some(EvaluationUpdate::Error(error)) => {
+                    let error_clone = error.clone();
+                    tokio_block_on_without_gil(py, async move {
+                        evaluation_errors.lock().await.push(error_clone);
+                    });
+                    // Convert EvaluationError to Python dict
+                    let dict = pyo3::types::PyDict::new(py);
+                    dict.set_item("type", "error")?;
+                    dict.set_item("datapoint_id", error.datapoint_id.to_string())?;
+                    dict.set_item("message", error.message)?;
+                    return Ok(dict.into());
+                }
+                None => return Err(PyStopIteration::new_err(())),
+            }
+        }
+    }
+
+    /// Get summary statistics for all evaluations after completion
+    fn summary_stats(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let evaluation_infos = self.evaluation_infos.clone();
+        let evaluation_errors = self.evaluation_errors.clone();
+        let evaluation_config = self.evaluation_config.clone();
+
+        let stats = tokio_block_on_without_gil(py, async move {
+            let infos = evaluation_infos.lock().await.clone();
+            let errors = evaluation_errors.lock().await.clone();
+            let stats = evaluations::stats::EvaluationStats {
+                output_format: OutputFormat::Jsonl,
+                evaluation_infos: infos,
+                evaluation_errors: errors,
+                progress_bar: None,
+            };
+            // Extract evaluators from the evaluation config
+            let tensorzero_core::evaluations::EvaluationConfig::Static(static_config) =
+                &*evaluation_config;
+            stats.compute_stats(&static_config.evaluators)
+        });
+
+        let dict = pyo3::types::PyDict::new(py);
+        for (evaluator_name, evaluator_stats) in stats {
+            let stats_dict = pyo3::types::PyDict::new(py);
+            stats_dict.set_item("mean", evaluator_stats.mean)?;
+            stats_dict.set_item("stderr", evaluator_stats.stderr)?;
+            dict.set_item(evaluator_name, stats_dict)?;
+        }
+        Ok(dict.into())
+    }
+}
+
+/// Job handler for streaming evaluation results (asynchronous)
+#[pyclass(frozen)]
+struct AsyncEvaluationJobHandler {
+    receiver: Arc<Mutex<tokio::sync::mpsc::Receiver<EvaluationUpdate>>>,
+    run_info: RunInfo,
+    evaluation_config: Arc<tensorzero_core::evaluations::EvaluationConfig>,
+    evaluation_infos: Arc<Mutex<Vec<EvaluationInfo>>>,
+    evaluation_errors: Arc<Mutex<Vec<EvaluationError>>>,
+}
+
+#[pymethods]
+impl AsyncEvaluationJobHandler {
+    /// Get the run information for this evaluation
+    #[getter]
+    fn run_info(&self) -> PyResult<Py<PyAny>> {
+        Python::attach(|py| {
+            let dict = pyo3::types::PyDict::new(py);
+            dict.set_item(
+                "evaluation_run_id",
+                self.run_info.evaluation_run_id.to_string(),
+            )?;
+            dict.set_item("num_datapoints", self.run_info.num_datapoints)?;
+            Ok(dict.into())
+        })
+    }
+
+    /// Returns an async iterator over evaluation results as they complete
+    fn results(this: Py<Self>) -> Py<Self> {
+        this
+    }
+
+    fn __aiter__(this: Py<Self>) -> Py<Self> {
+        this
+    }
+
+    fn __anext__<'a>(&self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
+        let receiver = self.receiver.clone();
+        let evaluation_infos = self.evaluation_infos.clone();
+        let evaluation_errors = self.evaluation_errors.clone();
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            // Loop to skip RunInfo updates
+            loop {
+                let update = receiver.lock().await.recv().await;
+
+                match update {
+                    Some(EvaluationUpdate::RunInfo(_)) => {
+                        // Skip RunInfo, continue to next update
+                        continue;
+                    }
+                    Some(EvaluationUpdate::Success(info)) => {
+                        let info_clone = info.clone();
+                        evaluation_infos.lock().await.push(info_clone);
+                        return Python::attach(|py| -> PyResult<Py<PyAny>> {
+                            let dict = pyo3::types::PyDict::new(py);
+                            dict.set_item("type", "success")?;
+                            dict.set_item(
+                                "datapoint",
+                                serde_json::to_string(&info.datapoint).map_err(|e| {
+                                    pyo3::exceptions::PyRuntimeError::new_err(format!(
+                                        "Serialization error: {e}"
+                                    ))
+                                })?,
+                            )?;
+                            dict.set_item(
+                                "response",
+                                serde_json::to_string(&info.response).map_err(|e| {
+                                    pyo3::exceptions::PyRuntimeError::new_err(format!(
+                                        "Serialization error: {e}"
+                                    ))
+                                })?,
+                            )?;
+                            dict.set_item(
+                                "evaluations",
+                                serde_json::to_string(&info.evaluations).map_err(|e| {
+                                    pyo3::exceptions::PyRuntimeError::new_err(format!(
+                                        "Serialization error: {e}"
+                                    ))
+                                })?,
+                            )?;
+                            dict.set_item(
+                                "evaluator_errors",
+                                serde_json::to_string(&info.evaluator_errors).map_err(|e| {
+                                    pyo3::exceptions::PyRuntimeError::new_err(format!(
+                                        "Serialization error: {e}"
+                                    ))
+                                })?,
+                            )?;
+                            Ok(dict.into())
+                        });
+                    }
+                    Some(EvaluationUpdate::Error(error)) => {
+                        let error_clone = error.clone();
+                        evaluation_errors.lock().await.push(error_clone);
+                        return Python::attach(|py| -> PyResult<Py<PyAny>> {
+                            let dict = pyo3::types::PyDict::new(py);
+                            dict.set_item("type", "error")?;
+                            dict.set_item("datapoint_id", error.datapoint_id.to_string())?;
+                            dict.set_item("message", error.message)?;
+                            Ok(dict.into())
+                        });
+                    }
+                    None => return Err(PyStopAsyncIteration::new_err(())),
+                }
+            }
+        })
+    }
+
+    /// Get summary statistics for all evaluations after completion
+    fn summary_stats<'a>(&self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
+        let evaluation_infos = self.evaluation_infos.clone();
+        let evaluation_errors = self.evaluation_errors.clone();
+        let evaluation_config = self.evaluation_config.clone();
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let infos = evaluation_infos.lock().await.clone();
+            let errors = evaluation_errors.lock().await.clone();
+            let stats = evaluations::stats::EvaluationStats {
+                output_format: OutputFormat::Jsonl,
+                evaluation_infos: infos,
+                evaluation_errors: errors,
+                progress_bar: None,
+            };
+            // Extract evaluators from the evaluation config
+            let tensorzero_core::evaluations::EvaluationConfig::Static(static_config) =
+                &*evaluation_config;
+            let computed_stats = stats.compute_stats(&static_config.evaluators);
+
+            Python::attach(|py| -> PyResult<Py<PyAny>> {
+                let dict = pyo3::types::PyDict::new(py);
+                for (evaluator_name, evaluator_stats) in computed_stats {
+                    let stats_dict = pyo3::types::PyDict::new(py);
+                    stats_dict.set_item("mean", evaluator_stats.mean)?;
+                    stats_dict.set_item("stderr", evaluator_stats.stderr)?;
+                    dict.set_item(evaluator_name, stats_dict)?;
+                }
+                Ok(dict.into())
+            })
+        })
     }
 }
 
@@ -992,17 +1281,15 @@ impl TensorZeroGateway {
     /// * `dataset_name` - The name of the stored dataset to use for variant evaluation
     /// * `variant_name` - The name of the variant to evaluate
     /// * `concurrency` - The maximum number of examples to process in parallel
-    /// * `output_format` - Output format for results ("jsonl" or "pretty")
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
                         variant_name,
                         concurrency=1,
-                        output_format="pretty".to_string(),
                         inference_cache="on".to_string()
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name, concurrency=1, output_format='pretty', inference_cache='on')"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name, concurrency=1, inference_cache='on')"
     )]
     fn experimental_run_evaluation(
         this: PyRef<'_, Self>,
@@ -1010,9 +1297,8 @@ impl TensorZeroGateway {
         dataset_name: String,
         variant_name: String,
         concurrency: usize,
-        output_format: String,
         inference_cache: String,
-    ) -> PyResult<()> {
+    ) -> PyResult<EvaluationJobHandler> {
         let client = this.as_super().client.clone();
 
         // Get app state data
@@ -1022,12 +1308,6 @@ impl TensorZeroGateway {
 
         let evaluation_run_id = uuid::Uuid::now_v7();
 
-        let output_format_enum: OutputFormat =
-            serde_json::from_str(&format!("\"{output_format}\"")).map_err(|_| {
-                pyo3::exceptions::PyValueError::new_err(
-                    "Invalid output_format. Must be 'jsonl' or 'pretty'",
-                )
-            })?;
         let inference_cache_enum: tensorzero_core::cache::CacheEnabledMode =
             serde_json::from_str(&format!("\"{inference_cache}\"")).map_err(|_| {
                 pyo3::exceptions::PyValueError::new_err(
@@ -1044,18 +1324,22 @@ impl TensorZeroGateway {
             dataset_name,
             variant_name,
             concurrency,
-            output_format: output_format_enum,
             inference_cache: inference_cache_enum,
         };
 
-        let mut writer = std::io::stdout();
+        let result =
+            tokio_block_on_without_gil(this.py(), run_evaluation_core_streaming(core_args))
+                .map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
+                })?;
 
-        tokio_block_on_without_gil(this.py(), run_evaluation_core(core_args, &mut writer))
-            .map_err(|e| {
-                pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
-            })?;
-
-        Ok(())
+        Ok(EvaluationJobHandler {
+            receiver: Arc::new(Mutex::new(result.receiver)),
+            run_info: result.run_info,
+            evaluation_config: result.evaluation_config,
+            evaluation_infos: Arc::new(Mutex::new(Vec::new())),
+            evaluation_errors: Arc::new(Mutex::new(Vec::new())),
+        })
     }
 
     /// Query the Clickhouse database for inferences.
@@ -1754,17 +2038,15 @@ impl AsyncTensorZeroGateway {
     /// * `dataset_name` - The name of the stored dataset to use for variant evaluation
     /// * `variant_name` - The name of the variant to evaluate
     /// * `concurrency` - The maximum number of examples to process in parallel
-    /// * `output_format` - Output format for results ("jsonl" or "pretty")
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
                         variant_name,
                         concurrency=1,
-                        output_format="pretty".to_string(),
                         inference_cache="on".to_string()
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name, concurrency=1, output_format='pretty', inference_cache='on')"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name, concurrency=1, inference_cache='on')"
     )]
     fn experimental_run_evaluation(
         this: PyRef<'_, Self>,
@@ -1772,17 +2054,10 @@ impl AsyncTensorZeroGateway {
         dataset_name: String,
         variant_name: String,
         concurrency: usize,
-        output_format: String,
         inference_cache: String,
     ) -> PyResult<Bound<'_, PyAny>> {
         let client = this.as_super().client.clone();
 
-        let output_format_enum: OutputFormat =
-            serde_json::from_str(&format!("\"{output_format}\"")).map_err(|_| {
-                pyo3::exceptions::PyValueError::new_err(
-                    "Invalid output_format. Must be 'jsonl' or 'pretty'",
-                )
-            })?;
         let inference_cache_enum: tensorzero_core::cache::CacheEnabledMode =
             serde_json::from_str(&format!("\"{inference_cache}\"")).map_err(|_| {
                 pyo3::exceptions::PyValueError::new_err(
@@ -1807,19 +2082,25 @@ impl AsyncTensorZeroGateway {
                 dataset_name,
                 variant_name,
                 concurrency,
-                output_format: output_format_enum,
                 inference_cache: inference_cache_enum,
             };
 
-            let mut writer = std::io::stdout();
-
-            run_evaluation_core(core_args, &mut writer)
+            let result = run_evaluation_core_streaming(core_args)
                 .await
                 .map_err(|e| {
                     pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
                 })?;
 
-            Python::attach(|py| Ok(py.None()))
+            Python::attach(|py| -> PyResult<Py<PyAny>> {
+                let handler = AsyncEvaluationJobHandler {
+                    receiver: Arc::new(Mutex::new(result.receiver)),
+                    run_info: result.run_info,
+                    evaluation_config: result.evaluation_config,
+                    evaluation_infos: Arc::new(Mutex::new(Vec::new())),
+                    evaluation_errors: Arc::new(Mutex::new(Vec::new())),
+                };
+                Py::new(py, handler).map(Py::into_any)
+            })
         })
     }
 
