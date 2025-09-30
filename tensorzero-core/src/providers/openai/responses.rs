@@ -10,7 +10,7 @@ use crate::{
     inference::types::{
         ContentBlock, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
         ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseArgs,
-        RequestMessage, Role, Text, Usage,
+        RequestMessage, Role, Text, Thought, Usage,
     },
     providers::openai::{
         prepare_file_message, prepare_system_or_developer_message_helper, OpenAIContentBlock,
@@ -66,10 +66,8 @@ pub enum OpenAIResponsesTextConfigFormat {
 
 #[derive(Deserialize, Debug, Clone)]
 pub(super) struct OpenAIResponsesResponse<'a> {
-    // Output messages are a subset of the input messages, so we
-    // re-use the same type and reject invalid messages when convering to TensorZero output
     #[serde(borrow)]
-    pub(super) output: Vec<OpenAIResponsesInput<'a>>,
+    pub(super) output: Vec<OpenAIResponsesOutput<'a>>,
     pub(super) usage: OpenAIResponsesUsage,
     pub incomplete_details: Option<OpenAIResponsesIncompleteDetails>,
 }
@@ -105,7 +103,7 @@ impl OpenAIResponsesResponse<'_> {
         let mut output = Vec::new();
         for message in self.output {
             match message {
-                OpenAIResponsesInput::Message(message) => {
+                OpenAIResponsesOutput::Message(message) => {
                     if message.role != "assistant" {
                         return Err(Error::new(ErrorDetails::InferenceServer {
                             message:
@@ -136,21 +134,25 @@ impl OpenAIResponsesResponse<'_> {
                         }
                     }
                 }
-                OpenAIResponsesInput::FunctionCall(function_call) => {
+                OpenAIResponsesOutput::FunctionCall(function_call) => {
                     output.push(ContentBlockOutput::ToolCall(ToolCall {
                         id: function_call.call_id.to_string(),
                         arguments: function_call.arguments.to_string(),
                         name: function_call.name.to_string(),
                     }));
                 }
-                OpenAIResponsesInput::FunctionCallOutput(_) => {
-                    return Err(Error::new(ErrorDetails::InferenceServer {
-                        message: "Function calls output is not supported in responses API output"
-                            .to_string(),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: Some(raw_request.clone()),
-                        raw_response: Some(raw_response.clone()),
-                    }));
+                OpenAIResponsesOutput::Reasoning { summary } => {
+                    for summary in summary {
+                        match summary {
+                            OpenAIResponsesReasoningSummary::SummaryText { text } => {
+                                output.push(ContentBlockOutput::Thought(Thought {
+                                    text: Some(text.to_string()),
+                                    signature: None,
+                                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                                }));
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -356,6 +358,24 @@ impl<'a> OpenAIResponsesRequest<'a> {
             stream: request.stream,
         })
     }
+}
+
+#[derive(Clone, Deserialize, Debug)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenAIResponsesOutput<'a> {
+    #[serde(borrow)]
+    Message(OpenAIResponsesInputMessage<'a>),
+    #[serde(borrow)]
+    FunctionCall(OpenAIResponsesFunctionCall<'a>),
+    Reasoning {
+        summary: Vec<OpenAIResponsesReasoningSummary<'a>>,
+    },
+}
+
+#[derive(Clone, Deserialize, Debug)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenAIResponsesReasoningSummary<'a> {
+    SummaryText { text: Cow<'a, str> },
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
