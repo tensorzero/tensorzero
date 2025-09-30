@@ -30,17 +30,6 @@ export const models: ModelOption[] = [
     name: "gpt-4o-mini-2024-07-18",
     provider: "openai",
   },
-  {
-    displayName: "gpt-4.1-mini-0125",
-    name: "gpt-4.1-mini-0125",
-    provider: "openai",
-  },
-  {
-    displayName: "gpt-4.1-mini-1106",
-    name: "gpt-4.1-mini-1106",
-    provider: "openai",
-  },
-
   // Fireworks
   {
     displayName: "llama-3.1-8b-instruct",

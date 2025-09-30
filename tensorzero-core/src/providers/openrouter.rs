@@ -2419,7 +2419,7 @@ mod tests {
             _ => panic!("Expected JsonSchema format"),
         }
 
-        // Test JSON mode Strict with schema but gpt-4.1-mini
+        // Test JSON mode Strict with schema but gpt-3.5-turbo (doesn't support strict mode)
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let schema = serde_json::json!({
             "type": "object",
@@ -2428,7 +2428,7 @@ mod tests {
             }
         });
         let output_schema = Some(&schema);
-        let format = OpenRouterResponseFormat::new(json_mode, output_schema, "gpt-4.1-mini");
+        let format = OpenRouterResponseFormat::new(json_mode, output_schema, "gpt-3.5-turbo");
         assert_eq!(format, Some(OpenRouterResponseFormat::JsonObject));
     }
 
