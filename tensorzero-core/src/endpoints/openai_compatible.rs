@@ -592,6 +592,8 @@ struct OpenAICompatibleResponseMessage {
     content: Option<String>,
     tool_calls: Option<Vec<OpenAICompatibleToolCall>>,
     role: String,
+    #[serde(default)]
+    reasoning_content: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1142,7 +1144,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
     fn from((inference_response, response_model_prefix): (InferenceResponse, String)) -> Self {
         match inference_response {
             InferenceResponse::Chat(response) => {
-                let (content, tool_calls) = process_chat_content(response.content);
+                let (content, tool_calls, reasoning_str) = process_chat_content(response.content);
 
                 OpenAICompatibleResponse {
                     id: response.inference_id.to_string(),
@@ -1153,6 +1155,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                             content,
                             tool_calls: Some(tool_calls),
                             role: "assistant".to_string(),
+                            reasoning_content: reasoning_str,
                         },
                     }],
                     created: current_timestamp() as u32,
@@ -1173,6 +1176,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                         content: response.output.raw,
                         tool_calls: None,
                         role: "assistant".to_string(),
+                        reasoning_content: String::new(),
                     },
                 }],
                 created: current_timestamp() as u32,
@@ -1191,12 +1195,13 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
     }
 }
 
-// Takes a vector of ContentBlockOutput and returns a tuple of (Option<String>, Vec<OpenAICompatibleToolCall>).
+// Takes a vector of ContentBlockOutput and returns a tuple of (Option<String>, Vec<OpenAICompatibleToolCall>, String).
 // This is useful since the OpenAI format separates text and tool calls in the response fields.
 fn process_chat_content(
     content: Vec<ContentBlockChatOutput>,
-) -> (Option<String>, Vec<OpenAICompatibleToolCall>) {
+) -> (Option<String>, Vec<OpenAICompatibleToolCall>, String) {
     let mut content_str: Option<String> = None;
+    let mut reasoning_str = String::new();
     let mut tool_calls = Vec::new();
     for block in content {
         match block {
@@ -1207,13 +1212,14 @@ fn process_chat_content(
             ContentBlockChatOutput::ToolCall(tool_call) => {
                 tool_calls.push(tool_call.into());
             }
-            ContentBlockChatOutput::Thought(_thought) => {
-                // OpenAI compatible endpoint does not support thought blocks
-                // Users of this endpoint will need to check observability to see them
-                tracing::warn!(
-                    "Ignoring 'thought' content block when constructing OpenAI-compatible response"
-                );
-            }
+            ContentBlockChatOutput::Thought(thought) =>  {
+                if let Some(t) = thought.text.as_deref() {
+                    if !reasoning_str.is_empty() {
+                        reasoning_str.push('\n');
+                    }
+                    reasoning_str.push_str(t);
+                }
+            },
             ContentBlockChatOutput::Unknown {
                 data: _,
                 model_provider_name: _,
@@ -1224,7 +1230,7 @@ fn process_chat_content(
             }
         }
     }
-    (content_str, tool_calls)
+    (content_str, tool_calls, reasoning_str)
 }
 
 impl From<ToolCallOutput> for OpenAICompatibleToolCall {
@@ -1282,6 +1288,8 @@ struct OpenAICompatibleDelta {
     content: Option<String>,
     #[serde(skip_serializing_if = "is_none_or_empty")]
     tool_calls: Option<Vec<OpenAICompatibleToolCallChunk>>,
+    #[serde(default)]
+    reasoning_content: String,
 }
 
 fn convert_inference_response_chunk_to_openai_compatible(
@@ -1291,7 +1299,7 @@ fn convert_inference_response_chunk_to_openai_compatible(
 ) -> Vec<OpenAICompatibleResponseChunk> {
     let response_chunk = match chunk {
         InferenceResponseChunk::Chat(c) => {
-            let (content, tool_calls) = process_chat_content_chunk(c.content, tool_id_to_index);
+            let (content, tool_calls, reasoning_str) = process_chat_content_chunk(c.content, tool_id_to_index);
             OpenAICompatibleResponseChunk {
                 id: c.inference_id.to_string(),
                 episode_id: c.episode_id.to_string(),
@@ -1302,6 +1310,7 @@ fn convert_inference_response_chunk_to_openai_compatible(
                     delta: OpenAICompatibleDelta {
                         content,
                         tool_calls: Some(tool_calls),
+                        reasoning_content: reasoning_str,
                     },
                 }],
                 created: current_timestamp() as u32,
@@ -1323,6 +1332,7 @@ fn convert_inference_response_chunk_to_openai_compatible(
                 delta: OpenAICompatibleDelta {
                     content: Some(c.raw),
                     tool_calls: None,
+                    reasoning_content: String::new(),
                 },
             }],
             created: current_timestamp() as u32,
@@ -1341,9 +1351,10 @@ fn convert_inference_response_chunk_to_openai_compatible(
 fn process_chat_content_chunk(
     content: Vec<ContentBlockChunk>,
     tool_id_to_index: &mut HashMap<String, usize>,
-) -> (Option<String>, Vec<OpenAICompatibleToolCallChunk>) {
+) -> (Option<String>, Vec<OpenAICompatibleToolCallChunk>, String) {
     let mut content_str: Option<String> = None;
     let mut tool_calls = Vec::new();
+    let mut reasoning_str = String::new();
     for block in content {
         match block {
             ContentBlockChunk::Text(text) => match content_str {
@@ -1364,16 +1375,19 @@ fn process_chat_content_chunk(
                     },
                 });
             }
-            ContentBlockChunk::Thought(_thought) => {
+            ContentBlockChunk::Thought(thought) => {
                 // OpenAI compatible endpoint does not support thought blocks
                 // Users of this endpoint will need to check observability to see them
-                tracing::warn!(
-                    "Ignoring 'thought' content block chunk when constructing OpenAI-compatible response"
-                );
+                if let Some(t) = thought.text.as_deref() {
+                    if !reasoning_str.is_empty() {
+                        reasoning_str.push('\n');
+                    }
+                    reasoning_str.push_str(t);
+                }
             }
         }
     }
-    (content_str, tool_calls)
+    (content_str, tool_calls, reasoning_str)
 }
 
 /// Prepares an Event for SSE on the way out of the gateway
@@ -1860,14 +1874,14 @@ mod tests {
                 text: ", world!".to_string(),
             }),
         ];
-        let (content_str, tool_calls) = process_chat_content(content);
+        let (content_str, tool_calls, reasoning_str) = process_chat_content(content);
         assert_eq!(content_str, Some("Hello, world!".to_string()));
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].id, "1");
         assert_eq!(tool_calls[0].function.name, "test_tool");
         assert_eq!(tool_calls[0].function.arguments, "{}");
         let content: Vec<ContentBlockChatOutput> = vec![];
-        let (content_str, tool_calls) = process_chat_content(content);
+        let (content_str, tool_calls, reasoning_str) = process_chat_content(content);
         assert_eq!(content_str, None);
         assert!(tool_calls.is_empty());
 
@@ -1892,7 +1906,7 @@ mod tests {
                 text: " fourth part".to_string(),
             }),
         ];
-        let (content_str, tool_calls) = process_chat_content(content);
+        let (content_str, tool_calls, reasoning_str) = process_chat_content(content);
         assert_eq!(
             content_str,
             Some("First part second part third part fourth part".to_string())
@@ -1921,7 +1935,7 @@ mod tests {
             }),
         ];
         let mut tool_id_to_index = HashMap::new();
-        let (content_str, tool_calls) = process_chat_content_chunk(content, &mut tool_id_to_index);
+        let (content_str, tool_calls, reasoning_str) = process_chat_content_chunk(content, &mut tool_id_to_index);
         assert_eq!(content_str, Some("Hello, world!".to_string()));
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].id, Some("1".to_string()));
@@ -1930,7 +1944,7 @@ mod tests {
         assert_eq!(tool_calls[0].function.arguments, "{}");
 
         let content: Vec<ContentBlockChunk> = vec![];
-        let (content_str, tool_calls) = process_chat_content_chunk(content, &mut tool_id_to_index);
+        let (content_str, tool_calls, reasoning_str) = process_chat_content_chunk(content, &mut tool_id_to_index);
         assert_eq!(content_str, None);
         assert!(tool_calls.is_empty());
 
@@ -1963,7 +1977,7 @@ mod tests {
             }),
         ];
         let mut tool_id_to_index = HashMap::new();
-        let (content_str, tool_calls) = process_chat_content_chunk(content, &mut tool_id_to_index);
+        let (content_str, tool_calls, reasoning_str) = process_chat_content_chunk(content, &mut tool_id_to_index);
         assert_eq!(
             content_str,
             Some("First part second part third part fourth part".to_string())
