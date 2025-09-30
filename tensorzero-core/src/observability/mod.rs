@@ -671,7 +671,7 @@ impl TracerWrapper {
         let metadata_map = config_headers_to_metadata(headers)?;
         let mut config_headers = self.static_otlp_traces_extra_headers.write().map_err(|e| {
             Error::new(ErrorDetails::Observability {
-                message: format!("Failed to acquire write lock for config headers: {e}"),
+                message: format!("Failed to update static OTLP headers: write lock acquisition failed due to thread panic: {e}"),
             })
         })?;
         *config_headers = metadata_map;
