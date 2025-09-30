@@ -28,7 +28,7 @@ serde = { workspace = true }
 serde_json.workspace = true
 sha2 = "0.10.9"
 tokio.workspace = true
-tokio-rustls = "0.26.1"
+tokio-rustls = "0.26.4"
 tracing = "0.1.41"
 tracing-subscriber.workspace = true
 tempfile = "3.21.0"
