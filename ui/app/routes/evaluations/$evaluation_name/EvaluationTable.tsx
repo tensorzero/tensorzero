@@ -152,6 +152,12 @@ function getInputSummary(input: DisplayInput): string {
     return text.length > 30 ? text.substring(0, 30) + "..." : text;
   }
 
+  if (firstContent.type === "template") {
+    const argsText = JSON.stringify(firstContent.arguments, null, 2);
+    const summary = `${firstContent.name}: ${argsText}`;
+    return summary.length > 30 ? summary.substring(0, 30) + "..." : summary;
+  }
+
   return `${firstMessage.role} message (${firstContent.type})`;
 }
 

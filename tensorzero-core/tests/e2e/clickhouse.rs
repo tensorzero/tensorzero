@@ -32,6 +32,7 @@ use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0009::Migration0009;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0011::Migration0011;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0013::Migration0013;
+use tensorzero_core::db::SelectQueries;
 use tensorzero_core::inference::types::ModelInferenceDatabaseInsert;
 
 use tensorzero_core::db::clickhouse::migration_manager::{
@@ -550,7 +551,7 @@ invoke_all_separate_tests!(
     test_rollback_up_to_migration_index_,
     [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26, 27, 28, 29, 30, 31
+        25, 26, 27, 28, 29, 30, 31, 32
     ]
 );
 
@@ -775,7 +776,7 @@ async fn test_clickhouse_migration_manager() {
         // for each element in the array.
         [
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-            24, 25, 26, 27, 28, 29, 30, 31
+            24, 25, 26, 27, 28, 29, 30, 31, 32
         ]
     );
     let rows = get_all_migration_records(&clickhouse).await.unwrap();
@@ -869,6 +870,18 @@ async fn test_clickhouse_migration_manager() {
         .unwrap();
     let episode_count: u64 = response.response.trim().parse().unwrap();
     assert_eq!(episode_count, 20000000);
+
+    // Check that the FeedbackByVariantStatistics migration worked
+    let response = clickhouse
+        .get_feedback_by_variant("exact_match", "dummy_function", None)
+        .await
+        .unwrap();
+    assert_eq!(response.len(), 1);
+    let feedback_by_variant = response.first().unwrap();
+    assert_eq!(feedback_by_variant.variant_name, "dummy");
+    assert_eq!(feedback_by_variant.count, 2500000);
+    assert_eq!(feedback_by_variant.mean, 1.0);
+    assert_eq!(feedback_by_variant.variance, 0.0);
 
     // Since we've already ran all of the migrations, we shouldn't have written any new records
     // except for Migration0029 (which runs every time)

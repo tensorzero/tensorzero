@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 
 use crate::config::{ErrorContext, LoadableConfig, UninitializedSchemas};
+use crate::utils::retries::RetryConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::Variant;
 use crate::{
@@ -25,7 +26,7 @@ use crate::{
         chat_completion::ChatCompletionConfig,
         dicl::UninitializedDiclConfig,
         mixture_of_n::{UninitializedFuserConfig, UninitializedMixtureOfNConfig},
-        JsonMode, RetryConfig, VariantConfig, VariantInfo,
+        JsonMode, VariantConfig, VariantInfo,
     },
 };
 
@@ -421,7 +422,7 @@ impl UninitializedEvaluatorConfig {
                     output_schema,
                     implicit_tool_call_config,
                     description: None,
-                    all_template_names,
+                    all_explicit_template_names: all_template_names,
                 });
                 Ok((
                     EvaluatorConfig::LLMJudge(LLMJudgeConfig {
@@ -1006,7 +1007,7 @@ mod tests {
             output_schema: create_test_schema(),
             implicit_tool_call_config: create_implicit_tool_call_config(create_test_schema()),
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         });
         functions.insert(function_name.to_string(), Arc::new(function_config));
 
@@ -1063,7 +1064,7 @@ mod tests {
                     inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
-                            model: Arc::from("gpt-3.5-turbo"),
+                            model: Arc::from("gpt-4.1-mini"),
                             system_instructions:
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
                                     .into(),
@@ -1187,7 +1188,7 @@ mod tests {
                     inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
-                            model: Arc::from("gpt-3.5-turbo"),
+                            model: Arc::from("gpt-4.1-mini"),
                             system_instructions:
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
                                     .into(),
@@ -1338,7 +1339,7 @@ mod tests {
                     inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
-                            model: Arc::from("gpt-3.5-turbo"),
+                            model: Arc::from("gpt-4.1-mini"),
                             system_instructions:
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
                                     .into(),
@@ -1444,7 +1445,7 @@ mod tests {
                         create_test_schema(),
                     ),
                     description: None,
-                    all_template_names: HashSet::new(),
+                    all_explicit_template_names: HashSet::new(),
                 })),
             );
 
@@ -1480,7 +1481,7 @@ mod tests {
                     inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
-                            model: Arc::from("gpt-3.5-turbo"),
+                            model: Arc::from("gpt-4.1-mini"),
                             system_instructions: ResolvedTomlPath::new_for_tests(PathBuf::from(
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                             ), None),
@@ -1551,7 +1552,7 @@ mod tests {
                     inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: None, // No 'active' field specified
-                            model: Arc::from("gpt-3.5-turbo"),
+                            model: Arc::from("gpt-4.1-mini"),
                             system_instructions: ResolvedTomlPath::new_for_tests(PathBuf::from(
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                             ), None),
@@ -1624,7 +1625,7 @@ mod tests {
                     inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(false), // Explicitly inactive
-                            model: Arc::from("gpt-3.5-turbo"),
+                            model: Arc::from("gpt-4.1-mini"),
                             system_instructions: ResolvedTomlPath::new_for_tests(PathBuf::from(
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                             ), None),

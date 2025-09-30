@@ -449,7 +449,21 @@ test("should be able to add a datapoint from the inference page", async ({
   // Click on the "Inference Output" button
   await page.getByText("Inference Output").click();
 
-  // Wait for navigation to the new page
+  // Wait for the toast to appear with success message
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("New Datapoint"),
+  ).toBeVisible();
+
+  // Wait for and click on the "View" button in the toast
+  const viewButton = page
+    .getByRole("region", { name: /notifications/i })
+    .getByText("View");
+  await viewButton.waitFor({ state: "visible" });
+  await viewButton.click();
+
+  // Wait for navigation to the new datapoint page
   await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
     timeout: 5000,
   });
@@ -459,7 +473,10 @@ test("should be able to add a datapoint from the inference page", async ({
     new RegExp(`/datasets/${datasetName}/datapoint/.*`),
   );
 
-  // Next, let's delete the dataset by going to the list datasets page
+  // Verify we can see the datapoint content
+  await expect(page.getByText("Datapoint", { exact: true })).toBeVisible();
+
+  // Clean up: delete the dataset by going to the list datasets page
   await page.goto("/datasets");
   // Wait for the page to load
   await page.waitForLoadState("networkidle");

@@ -39,7 +39,11 @@ Other options for managed ClickHouse deployments include [Tinybird](https://www.
 You can alternatively run your own self-managed ClickHouse instance or cluster.
 
 TensorZero supports single-node and replicated deployments.
-It currently does not support sharded deployments.
+
+<Warning>
+  TensorZero does not currently support **sharded** self-hosted ClickHouse
+  deployments.
+</Warning>
 
 See the [ClickHouse documentation](https://clickhouse.com/docs/install) for more details on configuring your ClickHouse deployment.
 
@@ -74,5 +78,5 @@ If you're using a self-hosted replicated ClickHouse deployment, you must also pr
 
 The TensorZero Gateway typically applies database migrations automatically when it starts up.
 
-If you're using a self-hosted replicated ClickHouse deployment, you must apply database migrations manually with `gateway --run-migrations-only`.
+If you're using a self-hosted replicated ClickHouse deployment, you must apply database migrations manually with `gateway --run-clickhouse-migrations`.
 In this case, the gateway will not apply migrations automatically, and will error on startup if migrations are missing.

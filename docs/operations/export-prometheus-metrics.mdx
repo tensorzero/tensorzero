@@ -10,16 +10,21 @@ It's not meant to replace TensorZero's observability features.
 
 You can access the metrics by scraping the `/metrics` endpoint.
 
-The gateway currently exports two metrics:
+The gateway currently exports the following metrics:
 
-- `inference_count`
-- `request_count`
+- `tensorzero_requests_total`
+- `tensorzero_inferences_total`
 
 The metrics include relevant labels such as `endpoint`, `function_name`, `model_name`, and `metric_name`.
 For example:
 
 ```txt title="GET /metrics"
-inference_count{endpoint="inference",function_name="draft_email"} 10
-request_count{endpoint="inference",function_name="draft_email"} 10
-request_count{endpoint="feedback",metric_name="draft_accepted"} 10
+# HELP tensorzero_requests_total Requests handled by TensorZero
+# TYPE tensorzero_requests_total counter
+tensorzero_requests_total{endpoint="inference",function_name="tensorzero::default",model_name="gpt-4o-mini-2024-07-18"} 1
+tensorzero_requests_total{endpoint="feedback",metric_name="draft_accepted"} 10
+
+# HELP tensorzero_inferences_total Inferences performed by TensorZero
+# TYPE tensorzero_inferences_total counter
+tensorzero_inferences_total{endpoint="inference",function_name="tensorzero::default",model_name="gpt-4o-mini-2024-07-18"} 1
 ```

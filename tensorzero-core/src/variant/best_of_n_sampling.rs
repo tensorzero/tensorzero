@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
 
-use backon::Retryable;
 use futures::future::{join_all, try_join_all};
 use lazy_static::lazy_static;
 use rand::Rng;
@@ -489,13 +488,15 @@ async fn inner_select_best_candidate<'a, 'request>(
             name: evaluator.inner.model().to_string(),
         })
     })?;
-    let model_inference_response = (|| async {
-        model_config
-            .infer(&inference_request, clients, evaluator.inner.model())
-            .await
-    })
-    .retry(evaluator.inner.retries().get_backoff())
-    .await?;
+    let model_inference_response = evaluator
+        .inner
+        .retries()
+        .retry(|| async {
+            model_config
+                .infer(&inference_request, clients, evaluator.inner.model())
+                .await
+        })
+        .await?;
     let model_inference_result = ModelInferenceResponseWithMetadata::new(
         model_inference_response,
         evaluator.inner.model().clone(),
@@ -754,6 +755,8 @@ impl BestOfNEvaluatorConfig {
                 stream: false,
                 json_mode: json_mode.into(),
                 function_type: FunctionType::Json,
+                fetch_and_encode_input_files_before_inference: inference_config
+                    .fetch_and_encode_input_files_before_inference,
                 output_schema: Some(&EVALUATOR_OUTPUT_SCHEMA.value),
                 extra_body,
                 extra_headers,
@@ -1320,6 +1323,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: "",
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,

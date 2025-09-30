@@ -137,6 +137,10 @@ impl Error {
     pub fn log(&self) {
         self.0.log();
     }
+
+    pub fn is_retryable(&self) -> bool {
+        self.0.is_retryable()
+    }
 }
 
 // Expect for derive Serialize
@@ -801,6 +805,17 @@ impl ErrorDetails {
             tracing::Level::TRACE => tracing::trace!("{self}"),
         }
     }
+
+    pub fn is_retryable(&self) -> bool {
+        match &self {
+            ErrorDetails::RateLimitExceeded { .. } => false,
+            // For ModelProvidersExhausted we will retry if any provider error is retryable
+            ErrorDetails::ModelProvidersExhausted { provider_errors } => provider_errors
+                .iter()
+                .any(|(_, error)| error.is_retryable()),
+            _ => true,
+        }
+    }
 }
 
 impl std::fmt::Display for ErrorDetails {
@@ -1368,6 +1383,15 @@ impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
         Self::new(ErrorDetails::Serialization {
             message: err.to_string(),
+        })
+    }
+}
+
+impl From<sqlx::Error> for Error {
+    fn from(err: sqlx::Error) -> Self {
+        Self::new(ErrorDetails::PostgresQuery {
+            message: err.to_string(),
+            function_name: None,
         })
     }
 }
