@@ -1,11 +1,12 @@
 import { test, expect, type Page } from "@playwright/test";
+import { randomUUID } from "crypto";
 
 // Helper function to create a unique dataset for testing
 async function createTestDataset(
   page: Page,
   baseName: string = "test-eval-dataset",
 ): Promise<string> {
-  const datasetName = `${baseName}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+  const datasetName = `${baseName}-${Date.now()}-${randomUUID()}`;
 
   await page.goto(
     "/observability/inferences/0196368f-1ae8-7551-b5df-9a61593eb307",
