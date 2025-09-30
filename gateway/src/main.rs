@@ -111,6 +111,7 @@ async fn main() {
         manual_run_clickhouse_migrations()
             .await
             .expect_pretty("Failed to run ClickHouse migrations");
+        tracing::info!("ClickHouse is ready.");
         return;
     }
 
@@ -118,6 +119,7 @@ async fn main() {
         manual_run_postgres_migrations()
             .await
             .expect_pretty("Failed to run PostgreSQL migrations");
+        tracing::info!("Postgres is ready.");
         return;
     }
 
