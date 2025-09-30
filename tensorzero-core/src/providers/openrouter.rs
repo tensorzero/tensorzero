@@ -2419,7 +2419,7 @@ mod tests {
             _ => panic!("Expected JsonSchema format"),
         }
 
-        // Test JSON mode Strict with schema but gpt-3.5-turbo (doesn't support strict mode)
+        // Test JSON mode Strict with schema but gpt-3.5-turbo (does not support strict mode)
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let schema = serde_json::json!({
             "type": "object",
