@@ -85,7 +85,6 @@ function EvaluationForm({
     if (
       selectedDatasetName &&
       !datasetsLoading &&
-      datasets.length >= 0 &&
       !datasets.some((d) => d.name === selectedDatasetName)
     ) {
       setSelectedDatasetName(null);
