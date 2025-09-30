@@ -188,18 +188,6 @@ async fn main() {
     // If we ever want to emit earlier OTLP spans, we'll need to come up with a different way
     // of doing OTLP initialization (e.g. buffer spans, and submit them once we know if OTLP should be enabled).
     // See `build_opentelemetry_layer` for the details of exactly what spans we export.
-
-    // Set config-level OTLP headers if we have a tracer wrapper
-    if let Some(ref tracer_wrapper) = delayed_log_config.otel_tracer {
-        if !config.gateway.export.otlp.traces.extra_headers.is_empty() {
-            tracer_wrapper
-                .set_static_otlp_traces_extra_headers(
-                    &config.gateway.export.otlp.traces.extra_headers,
-                )
-                .expect_pretty("Failed to set OTLP config headers");
-        }
-    }
-
     if config.gateway.export.otlp.traces.enabled {
         if std::env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT").is_err() {
             // This makes it easier to run the gateway in local development and CI
@@ -208,6 +196,17 @@ async fn main() {
             } else {
                 tracing::error!("The `gateway.export.otlp.traces.enabled` configuration option is `true`, but environment variable `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is not set. Please set it to the OTLP endpoint (e.g. `http://localhost:4317`).");
                 std::process::exit(1);
+            }
+        }
+
+        // Set config-level OTLP headers if we have a tracer wrapper
+        if let Some(ref tracer_wrapper) = delayed_log_config.otel_tracer {
+            if !config.gateway.export.otlp.traces.extra_headers.is_empty() {
+                tracer_wrapper
+                    .set_static_otlp_traces_extra_headers(
+                        &config.gateway.export.otlp.traces.extra_headers,
+                    )
+                    .expect_pretty("Failed to set OTLP config headers");
             }
         }
 
