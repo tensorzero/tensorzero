@@ -31,6 +31,46 @@ lazy_static! {
     };
 }
 
+trait ProviderKind {
+    type Credential: TryFrom<Credential, Error = Error> + Clone;
+    fn get_provider_type(&self) -> ProviderType;
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<&Self::Credential, Error>;
+    async fn get_defaulted_credential(
+        &self,
+        api_key_location: Option<&CredentialLocation>,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        let provider_type = self.get_provider_type();
+        if let Some(api_key_location) = api_key_location {
+            return Ok(load_credential(api_key_location, provider_type)?.try_into()?);
+        }
+
+        Ok(self
+            .get_credential_field(default_credentials)
+            .await?
+            .clone())
+    }
+}
+
+struct OpenAIKind;
+
+impl ProviderKind for OpenAIKind {
+    type Credential = OpenAICredential;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::OpenAI
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<&Self::Credential, Error> {
+        &default_credentials.openai
+    }
+}
+
 pub enum ProviderType {
     Anthropic,
     Azure,
@@ -451,11 +491,13 @@ impl ProviderTypeDefaultCredentials {
         }
     }
 
-    pub fn get_defaulted_credential(
+    pub fn get_defaulted_credential<T: ProviderKind>(
         &self,
         api_key_location: Option<&CredentialLocation>,
-        provider_type: ProviderType,
-    ) -> Result<Credential, Error> {
+
+        provider_kind: T,
+    ) -> Result<T::Credential, Error> {
+        let provider_type = provider_kind.provider_type();
         if let Some(api_key_location) = api_key_location {
             return load_credential(api_key_location, provider_type);
         }
