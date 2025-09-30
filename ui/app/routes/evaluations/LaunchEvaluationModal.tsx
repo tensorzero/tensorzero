@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useState, useEffect } from "react";
 import { useFetcher, Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
@@ -21,6 +21,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import type { InferenceCacheSetting } from "~/utils/evaluations.server";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
+import { useDatasetCounts } from "~/hooks/use-dataset-counts";
 
 interface LaunchEvaluationModalProps {
   isOpen: boolean;
@@ -60,10 +61,53 @@ function EvaluationForm({
   }
   const functionConfig = useFunctionConfig(function_name);
 
+  const { data: datasets = [], isLoading: datasetsLoading } = useDatasetCounts(
+    function_name ?? undefined,
+  );
+
   const { count: datasetCount, isLoading: datasetLoading } =
     useDatasetCountFetcher(selectedDatasetName, function_name);
   count = datasetCount;
   isLoading = datasetLoading;
+
+  // Validate that stored values still exist in the current config/datasets
+  useEffect(() => {
+    // Validate evaluation name - if it doesn't exist in config, clear it
+    if (
+      selectedEvaluationName &&
+      !evaluation_names.includes(selectedEvaluationName)
+    ) {
+      setSelectedEvaluationName(null);
+      setSelectedVariantName(null);
+    }
+
+    // Validate dataset name - if datasets have loaded and the dataset doesn't exist, clear it
+    if (
+      selectedDatasetName &&
+      !datasetsLoading &&
+      datasets.length >= 0 &&
+      !datasets.some((d) => d.name === selectedDatasetName)
+    ) {
+      setSelectedDatasetName(null);
+    }
+
+    // Validate variant name - if it doesn't exist in the function config, clear it
+    if (
+      selectedVariantName &&
+      functionConfig &&
+      !Object.keys(functionConfig.variants).includes(selectedVariantName)
+    ) {
+      setSelectedVariantName(null);
+    }
+  }, [
+    selectedEvaluationName,
+    evaluation_names,
+    selectedDatasetName,
+    datasets,
+    datasetsLoading,
+    selectedVariantName,
+    functionConfig,
+  ]);
 
   // Check if all fields are filled
   const isFormValid =
