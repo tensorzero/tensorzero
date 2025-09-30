@@ -1317,6 +1317,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -1368,6 +1369,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
@@ -1431,6 +1433,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
@@ -1526,6 +1529,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
@@ -1605,6 +1609,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
@@ -1692,7 +1697,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         });
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -1700,6 +1705,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
@@ -1772,6 +1778,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -1868,7 +1875,7 @@ mod tests {
             output_schema: hardcoded_output_schema,
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         });
         let inference_params = InferenceParams {
             chat_completion: ChatCompletionInferenceParams {
@@ -1902,6 +1909,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: Some(&output_schema),
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -1998,7 +2006,7 @@ mod tests {
             output_schema: hardcoded_output_schema,
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         });
         let inference_params = InferenceParams::default();
         // Will dynamically set "response" instead of "answer"
@@ -2021,6 +2029,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: Some(&output_schema),
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -2247,6 +2256,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: "",
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -2324,6 +2334,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -2427,6 +2438,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -2525,7 +2537,7 @@ mod tests {
                 parallel_tool_calls: None,
             },
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         });
         let inference_config = InferenceConfig {
             ids: InferenceIds {
@@ -2537,6 +2549,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: "",
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -2619,6 +2632,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,

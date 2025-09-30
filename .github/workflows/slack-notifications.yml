@@ -31,17 +31,25 @@ jobs:
           SKIP_USERS="${{ vars.SLACK_NOTIFICATION_SKIP_USERS }}"
           ACTOR="${{ github.actor }}"
 
+          # Check if user is a bot (ends with [bot], case insensitive)
+          ACTOR_LOWER=$(echo "$ACTOR" | tr '[:upper:]' '[:lower:]')
+          if [[ "$ACTOR_LOWER" == *"[bot]" ]]; then
+            echo "should_skip=true" >> $GITHUB_OUTPUT
+            echo "Skipping notification for bot user: $ACTOR"
+            exit 0
+          fi
+
           if [ -z "$SKIP_USERS" ]; then
             echo "should_skip=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          # Convert comma-separated list to array and check if actor is in the list
+          # Convert comma-separated list to array and check if actor is in the list (case insensitive)
           IFS=',' read -ra SKIP_ARRAY <<< "$SKIP_USERS"
           for skip_user in "${SKIP_ARRAY[@]}"; do
-            # Trim whitespace
-            skip_user=$(echo "$skip_user" | xargs)
-            if [ "$skip_user" = "$ACTOR" ]; then
+            # Trim whitespace and convert to lowercase
+            skip_user=$(echo "$skip_user" | xargs | tr '[:upper:]' '[:lower:]')
+            if [ "$skip_user" = "$ACTOR_LOWER" ]; then
               echo "should_skip=true" >> $GITHUB_OUTPUT
               echo "Skipping notification for user: $ACTOR"
               exit 0
@@ -113,9 +121,9 @@ jobs:
               ]
             }
 
-
       - name: Send Slack notification for pull request review
-        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review'
+        # TODO - figure out how to make this work on PRs from forks. Currently, we skip it, since we don't have secrets available.
+        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review' && !(github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]')
         uses: slackapi/slack-github-action@v2.1.1
         with:
           method: chat.postMessage
@@ -129,7 +137,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "👀 *Pull request review submitted*\n\n*PR:* <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>\n*Review by:* <https://github.com/${{ github.actor }}|${{ github.actor }}>\n*State:* ${{ github.event.review.state }}\n"
+                    "text": "👀 *Pull request review submitted*\n\n*PR:* <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>\n*Review by:* <https://github.com/${{ github.actor }}|${{ github.actor }}>\n"
                   }
                 }
               ]

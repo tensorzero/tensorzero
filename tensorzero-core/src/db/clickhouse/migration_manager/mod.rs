@@ -52,7 +52,7 @@ use serde::{Deserialize, Serialize};
 pub const NUM_MIGRATIONS: usize = 32;
 pub fn get_run_migrations_command() -> String {
     let version = env!("CARGO_PKG_VERSION");
-    format!("docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-migrations-only")
+    format!("docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-clickhouse-migrations")
 }
 
 /// Constructs (but does not run) a vector of all our database migrations.
@@ -354,7 +354,7 @@ async fn check_replication_settings(clickhouse: &ClickHouseConnectionInfo) -> Re
         && !non_replicated_tensorzero_on_replicated_clickhouse_override
     {
         return Err(Error::new(ErrorDetails::ClickHouseConfiguration {
-            message: "TensorZero is not configured for replication but ClickHouse contains a replicated cluster. Please set the environment variable TENSORZERO_OVERRIDE_NON_REPLICATED_CLICKHOUSE=1 to override if you're sure you'd like a non-replicated ClickHouse setup.".to_string(),
+            message: "TensorZero is not configured for replication but ClickHouse contains a replicated cluster. Please set the environment variable `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` to set up replication. (Advanced users only: Alternatively, set the environment variable `TENSORZERO_OVERRIDE_NON_REPLICATED_CLICKHOUSE=1` to set up a non-replicated deployment in your replicated cluster.)".to_string(),
         }));
     }
 

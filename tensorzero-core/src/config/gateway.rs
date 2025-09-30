@@ -5,7 +5,7 @@ use crate::{
     error::{Error, ErrorDetails},
 };
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedGatewayConfig {
     #[serde(serialize_with = "serialize_optional_socket_addr")]
@@ -37,6 +37,27 @@ pub struct UninitializedGatewayConfig {
     pub unstable_error_json: bool,
     #[serde(default)]
     pub disable_pseudonymous_usage_analytics: bool,
+    #[serde(default = "default_fetch_and_encode_input_files_before_inference")]
+    pub fetch_and_encode_input_files_before_inference: bool,
+}
+
+impl Default for UninitializedGatewayConfig {
+    fn default() -> Self {
+        Self {
+            bind_address: Default::default(),
+            observability: Default::default(),
+            debug: Default::default(),
+            enable_template_filesystem_access: Default::default(),
+            template_filesystem_access: Default::default(),
+            export: Default::default(),
+            base_path: Default::default(),
+            unstable_disable_feedback_target_validation: Default::default(),
+            unstable_error_json: Default::default(),
+            disable_pseudonymous_usage_analytics: Default::default(),
+            fetch_and_encode_input_files_before_inference:
+                default_fetch_and_encode_input_files_before_inference(),
+        }
+    }
 }
 
 impl UninitializedGatewayConfig {
@@ -71,11 +92,13 @@ impl UninitializedGatewayConfig {
             unstable_disable_feedback_target_validation: self
                 .unstable_disable_feedback_target_validation,
             disable_pseudonymous_usage_analytics: self.disable_pseudonymous_usage_analytics,
+            fetch_and_encode_input_files_before_inference: self
+                .fetch_and_encode_input_files_before_inference,
         })
     }
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct GatewayConfig {
@@ -91,4 +114,28 @@ pub struct GatewayConfig {
     pub unstable_disable_feedback_target_validation: bool,
     #[serde(default)]
     pub disable_pseudonymous_usage_analytics: bool,
+    #[serde(default = "default_fetch_and_encode_input_files_before_inference")]
+    pub fetch_and_encode_input_files_before_inference: bool,
+}
+
+impl Default for GatewayConfig {
+    fn default() -> Self {
+        Self {
+            bind_address: Default::default(),
+            observability: Default::default(),
+            debug: Default::default(),
+            template_filesystem_access: Default::default(),
+            export: Default::default(),
+            base_path: Default::default(),
+            unstable_error_json: Default::default(),
+            unstable_disable_feedback_target_validation: Default::default(),
+            disable_pseudonymous_usage_analytics: Default::default(),
+            fetch_and_encode_input_files_before_inference:
+                default_fetch_and_encode_input_files_before_inference(),
+        }
+    }
+}
+
+fn default_fetch_and_encode_input_files_before_inference() -> bool {
+    true
 }

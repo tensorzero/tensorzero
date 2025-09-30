@@ -13,4 +13,5 @@ export type GatewayConfig = {
   unstable_error_json: boolean;
   unstable_disable_feedback_target_validation: boolean;
   disable_pseudonymous_usage_analytics: boolean;
+  fetch_and_encode_input_files_before_inference: boolean;
 };

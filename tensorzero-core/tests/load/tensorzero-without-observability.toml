@@ -9,12 +9,12 @@ observability.enabled = false
 # │                                   MODELS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[models."gpt-3.5-turbo"]
+[models."gpt-4.1-mini"]
 routing = ["openai"]
 
-[models."gpt-3.5-turbo".providers.openai]
+[models."gpt-4.1-mini".providers.openai]
 type = "openai"
-model_name = "gpt-3.5-turbo"
+model_name = "gpt-4.1-mini"
 api_base = "http://localhost:3030/openai/"
 api_key_location = "none"
 
@@ -27,7 +27,7 @@ type = "chat"
 
 [functions.function1.variants.variant1]
 type = "chat_completion"
-model = "gpt-3.5-turbo"
+model = "gpt-4.1-mini"
 max_tokens = 100
 
 # ┌────────────────────────────────────────────────────────────────────────────┐

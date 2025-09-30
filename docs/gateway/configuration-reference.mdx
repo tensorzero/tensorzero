@@ -29,7 +29,7 @@ For example, if `base_path` is set to `/custom/prefix`, the inference endpoint w
 - **Type:** string
 - **Required:** no (default: `[::]:3000`)
 
-Defines the socket address to bind the TensorZero Gateway to.
+Defines the socket address (including port) to bind the TensorZero Gateway to.
 
 You can bind the gateway to IPv4 and/or IPv6 addresses.
 To bind to an IPv6 address, you can set this field to a value like `[::]:3000`.
@@ -2869,7 +2869,7 @@ You can define multiple metrics by including multiple `[metrics.metric_name]` se
 The metric name can't be `comment` or `demonstration`, as those names are reserved for internal use.
 
 If your `metric_name` is not a basic string, it can be escaped with quotation marks.
-For example, periods are not allowed in basic strings, so you can define `beats-gpt-3.5` as `[metrics."beats-gpt-3.5"]`.
+For example, periods are not allowed in basic strings, so you can define `beats-gpt-4.1` as `[metrics."beats-gpt-4.1"]`.
 
 ```toml title="tensorzero.toml"
 [metrics.task-completed]

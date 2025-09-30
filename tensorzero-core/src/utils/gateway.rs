@@ -392,6 +392,7 @@ mod tests {
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
+            fetch_and_encode_input_files_before_inference: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -416,6 +417,7 @@ mod tests {
                 batch_writes: Default::default(),
                 disable_automatic_migrations: false,
             },
+            fetch_and_encode_input_files_before_inference: false,
             unstable_error_json: false,
             ..Default::default()
         };
@@ -452,6 +454,7 @@ mod tests {
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
+            fetch_and_encode_input_files_before_inference: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -480,6 +483,7 @@ mod tests {
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
+            fetch_and_encode_input_files_before_inference: false,
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,
@@ -510,6 +514,7 @@ mod tests {
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
+            fetch_and_encode_input_files_before_inference: false,
         };
         let config = Config {
             gateway: gateway_config,
