@@ -71,6 +71,31 @@ system](/gateway/guides/opentelemetry-otlp).
   environment variable. See the above-linked guide for details.
 </Warning>
 
+### `export.otlp.traces.extra_headers`
+
+- **Type:** object (map of string to string)
+- **Required:** no (default: `{}`)
+
+Static headers to include in all OTLP trace export requests.
+This is useful for adding metadata to OTLP exports.
+
+These headers are merged with any dynamic headers sent via HTTP request headers.
+When the same header key is present in both static and dynamic headers, the dynamic header value takes precedence.
+
+```toml title="tensorzero.toml"
+[gateway.export.otlp.traces]
+# ...
+extra_headers.space_id = "123"
+extra_headers."X-Custom-Header" = "custom-value"
+# ...
+```
+
+<Warning>
+  Avoid storing sensitive credentials directly in configuration files. See
+  [Export OpenTelemetry traces](/operations/export-opentelemetry-traces) for
+  instructions on sending headers dynamically.
+</Warning>
+
 ### `export.otlp.traces.format`
 
 - **Type:** either "opentelemetry" or "openinference"

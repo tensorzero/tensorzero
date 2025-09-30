@@ -102,6 +102,7 @@ async fn main() {
     let args = GatewayArgs::parse();
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
+    // We start with empty headers and update them after loading the config
     let delayed_log_config = observability::setup_observability(args.log_format)
         .await
         .expect_pretty("Failed to set up logs");
@@ -187,6 +188,16 @@ async fn main() {
     // If we ever want to emit earlier OTLP spans, we'll need to come up with a different way
     // of doing OTLP initialization (e.g. buffer spans, and submit them once we know if OTLP should be enabled).
     // See `build_opentelemetry_layer` for the details of exactly what spans we export.
+
+    // Set config-level OTLP headers if we have a tracer wrapper
+    if let Some(ref tracer_wrapper) = delayed_log_config.otel_tracer {
+        if !config.gateway.export.otlp.traces.extra_headers.is_empty() {
+            tracer_wrapper
+                .set_config_headers(&config.gateway.export.otlp.traces.extra_headers)
+                .expect_pretty("Failed to set OTLP config headers");
+        }
+    }
+
     if config.gateway.export.otlp.traces.enabled {
         if std::env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT").is_err() {
             // This makes it easier to run the gateway in local development and CI
