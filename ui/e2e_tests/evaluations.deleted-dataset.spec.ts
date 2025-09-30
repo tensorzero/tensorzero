@@ -27,7 +27,9 @@ async function createTestDataset(
   await createOption.click();
 
   // Click on the "Inference Output" button
-  await page.getByText("Inference Output").click();
+  const inferenceOutputButton = page.getByText("Inference Output");
+  await expect(inferenceOutputButton).toBeVisible();
+  await inferenceOutputButton.click();
 
   // Wait for the toast to appear with success message
   await expect(
