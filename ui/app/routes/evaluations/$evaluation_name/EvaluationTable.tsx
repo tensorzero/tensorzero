@@ -249,7 +249,7 @@ export function EvaluationTable({
       {
         id: string;
         input: DisplayInput;
-        reference_output: JsonInferenceOutput | ContentBlockChatOutput[];
+        reference_output: JsonInferenceOutput | ContentBlockChatOutput[] | null;
       }
     >();
 
@@ -443,12 +443,16 @@ export function EvaluationTable({
                             {index === 0 && (
                               <TableCell
                                 rowSpan={filteredVariants.length}
-                                className="max-w-[200px] align-middle"
+                                className="max-w-[200px] text-center align-middle"
                               >
-                                <TruncatedContent
-                                  content={datapoint.reference_output}
-                                  type="output"
-                                />
+                                {datapoint.reference_output ? (
+                                  <TruncatedContent
+                                    content={datapoint.reference_output}
+                                    type="output"
+                                  />
+                                ) : (
+                                  "-"
+                                )}
                               </TableCell>
                             )}
 
