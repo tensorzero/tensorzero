@@ -27,8 +27,9 @@ use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
+use crate::experimentation::{ExperimentationConfig, VariantSampler};
 use crate::function::FunctionConfig;
-use crate::function::{sample_variant, FunctionConfigChat};
+use crate::function::FunctionConfigChat;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
@@ -344,8 +345,23 @@ pub async fn inference(
     })?;
     // Keep sampling variants until one succeeds
     while !candidate_variants.is_empty() {
-        let (variant_name, variant) =
-            sample_variant(&mut candidate_variants, &function_name, &episode_id)?;
+        let result = function
+            .experimentation()
+            .sample(&function_name, episode_id, &mut candidate_variants)
+            .await;
+        let (variant_name, variant) = match result {
+            Ok((variant_name, variant)) => (variant_name, variant),
+            Err(e) => {
+                if variant_errors.is_empty() {
+                    return Err(e);
+                }
+                // If the sampling fails we break out of the loop and return the AllVariantsExhausted error
+                // It is more informative to the caller that variants have failed than that there's some internal error with the sampling strategy.
+                // As we continue work on experimentation we will make sure that the sampler only errors if there is no way to provide a valid variant.
+                break;
+            }
+        };
+
         // Will be edited by the variant as part of making the request so we must clone here
         let variant_inference_params = params.params.clone();
         let inference_config = InferenceConfig {
@@ -576,6 +592,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                     parallel_tool_calls: None,
                     description: None,
                     all_explicit_templates_names: HashSet::new(),
+                    experimentation: ExperimentationConfig::default(),
                 })),
                 DEFAULT_FUNCTION_NAME.to_string(),
             ))
@@ -1208,6 +1225,12 @@ impl ChatCompletionInferenceParams {
     }
 }
 
+/// Prepares the candidate variants map using inference parameters prior to sampling
+/// This function handles 2 cases:
+/// 1. If a variant is pinned, only that variant should be attempted
+/// 2. If a dynamic variant is configured, only that variant should be attempted
+///
+/// It also errors if both are configured or there is a failure to initialize the dynamic variant
 fn prepare_candidate_variants(
     candidate_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     tags: &mut HashMap<String, String>,
@@ -1263,14 +1286,9 @@ fn prepare_candidate_variants(
                 Arc::new(candidate_variant_info),
             );
         }
-        (None, None) => {
-            // Remove all zero-weight variants - these can only be used if explicitly pinned above
-            candidate_variants.retain(|_, variant| {
-                // Retain 'None' and positive-weight variants, discarding zero-weight variants
-                variant.inner.weight().is_none_or(|w| w > 0.0)
-            });
-        }
-        _ => {
+        // If neither variant_name nor internal_dynamic_variant_config is set, we don't need to do anything
+        (None, None) => {}
+        (Some(_), Some(_)) => {
             return Err(ErrorDetails::InvalidRequest {
                 message: "`variant_name` and `internal_dynamic_variant_config` cannot both be set."
                     .to_string(),

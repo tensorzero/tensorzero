@@ -22,7 +22,8 @@ use crate::cache::{CacheEnabledMode, CacheOptions};
 use crate::config::Config;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
-use crate::function::{sample_variant, FunctionConfig};
+use crate::experimentation::VariantSampler;
+use crate::function::FunctionConfig;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{
     BatchEpisodeIds, BatchEpisodeIdsWithSize, BatchInferenceDatabaseInsertMetadata,
@@ -263,11 +264,27 @@ pub async fn start_batch_inference(
 
     while !candidate_variants.is_empty() {
         // We sample the same variant for the whole batch
-        let (variant_name, variant) = sample_variant(
-            &mut candidate_variants,
-            &params.function_name,
-            first_episode_id,
-        )?;
+        let result = function
+            .experimentation()
+            .sample(
+                &params.function_name,
+                *first_episode_id,
+                &mut candidate_variants,
+            )
+            .await;
+        let (variant_name, variant) = match result {
+            Ok((variant_name, variant)) => (variant_name, variant),
+            Err(e) => {
+                if variant_errors.is_empty() {
+                    return Err(e);
+                }
+                // If the sampling fails we break out of the loop and return the AllVariantsExhausted error
+                // It is more informative to the caller that variants have failed than that there's some internal error with the sampling strategy.
+                // As we continue work on experimentation we will make sure that the sampler only errors if there is no way to provide a valid variant.
+                break;
+            }
+        };
+
         let inference_config = BatchInferenceConfig::new(
             &config.templates,
             &tool_configs,
@@ -308,7 +325,7 @@ pub async fn start_batch_inference(
         // Write to ClickHouse (don't spawn a thread for this because it's required and we should fail loudly)
         let write_metadata = BatchInferenceDatabaseInsertMetadata {
             function_name: params.function_name.as_str(),
-            variant_name: variant_name.as_str(),
+            variant_name: &variant_name,
             episode_ids: &episode_ids,
             tags: params.tags,
         };

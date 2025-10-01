@@ -11,6 +11,7 @@ pub mod endpoints; // API endpoints
 pub mod error; // error handling
 pub mod estimate_optimal_probabilities; // optimal sampling probabilities for bandits
 pub mod evaluations; // evaluation
+pub mod experimentation;
 pub mod function; // types and methods for working with TensorZero functions
 pub mod howdy;
 pub mod http;
