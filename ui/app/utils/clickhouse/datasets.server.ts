@@ -77,6 +77,8 @@ function buildDatasetSelectQuery(params: DatasetQueryParams): {
       "function_name",
       "id",
       "episode_id",
+      // When building a dataset from inferences, there are no datapoint names.
+      "NULL as name",
       "input",
       "output",
       "tool_params",
@@ -87,6 +89,8 @@ function buildDatasetSelectQuery(params: DatasetQueryParams): {
       "function_name",
       "id",
       "episode_id",
+      // When building a dataset from inferences, there are no datapoint names.
+      "NULL as name",
       "input",
       "output",
       "output_schema",
@@ -390,6 +394,7 @@ export async function insertRowsForDataset(
       subquery.function_name as function_name,
       generateUUIDv7() as id,
       subquery.episode_id as episode_id,
+      subquery.name as name,
       subquery.input as input,
       subquery.output as output,
       ${validatedParams.data.inferenceType === "chat" ? "subquery.tool_params" : "subquery.output_schema"},
