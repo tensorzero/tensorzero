@@ -343,9 +343,10 @@ pub async fn run_evaluation_core_streaming(
                     input: &input,
                     inference_cache,
                 })
-                .await?,
+                .await.map_err(|e| anyhow!("Error inferring for datapoint {datapoint_id}: {e}"))?,
             );
 
+            let inference_id = inference_response.inference_id();
             let evaluation_result = evaluate_inference(
                 EvaluateInferenceParams {
                     inference_response: inference_response.clone(),
@@ -357,7 +358,7 @@ pub async fn run_evaluation_core_streaming(
                     evaluation_run_id: evaluation_run_id_clone,
                     inference_cache,
                 })
-                .await?;
+                .await.map_err(|e| anyhow!("Error evaluating inference {inference_id} for datapoint {datapoint_id}: {e}"))?;
             debug!(datapoint_id = %datapoint.id(), evaluations_count = evaluation_result.len(), "Evaluations completed");
 
             Ok::<(Datapoint, InferenceResponse, evaluators::EvaluationResult), anyhow::Error>((
