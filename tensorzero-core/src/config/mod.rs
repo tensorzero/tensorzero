@@ -873,7 +873,7 @@ impl Config {
             model.validate(model_name)?;
         }
 
-        for embedding_model_name in self.embedding_models.keys() {
+        for embedding_model_name in self.embedding_models.table.keys() {
             if embedding_model_name.starts_with("tensorzero::") {
                 return Err(ErrorDetails::Config {
                     message: format!(

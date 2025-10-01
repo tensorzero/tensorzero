@@ -130,7 +130,7 @@ impl Display for ProviderType {
 // #[serde(bound(deserialize = "T: ShorthandModelConfig + Deserialize<'de>"))]
 // #[serde(try_from = "HashMap<Arc<str>, T>")]
 pub struct BaseModelTable<T> {
-    table: HashMap<Arc<str>, T>,
+    pub table: HashMap<Arc<str>, T>,
     #[serde(skip)]
     #[ts(skip)]
     pub default_credentials: ProviderTypeDefaultCredentials,
@@ -155,15 +155,6 @@ pub trait ShorthandModelConfig: Sized {
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<Self, Error>;
     fn validate(&self, key: &str) -> Result<(), Error>;
-}
-
-// TODO: consider commenting this out
-impl<T: ShorthandModelConfig> std::ops::Deref for BaseModelTable<T> {
-    type Target = HashMap<Arc<str>, T>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.table
-    }
 }
 
 /// This is `Cow` without the `T: Clone` bound.
