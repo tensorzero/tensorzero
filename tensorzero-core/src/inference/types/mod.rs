@@ -963,8 +963,10 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
                 .iter()
                 .map(RateLimitedInputContent::estimated_input_token_usage)
                 .sum();
-            let output_tokens = max_tokens.map(|t| t as u64);
-            output_tokens.map(|out| system_tokens + messages_tokens + out)
+            let output_tokens = max_tokens
+                .ok_or_else(|| Error::new(crate::error::ErrorDetails::RateLimitMissingMaxTokens))?
+                as u64;
+            Some(system_tokens + messages_tokens + output_tokens)
         } else {
             None
         };

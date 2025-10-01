@@ -17,8 +17,9 @@ use crate::model_table::BaseModelTable;
 use crate::model_table::ShorthandModelConfig;
 use crate::providers::azure::AzureProvider;
 use crate::rate_limiting::{
-    get_estimated_tokens, RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
-    RateLimitedResponse, ScopeInfo,
+    get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
+    RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest, RateLimitedResponse,
+    ScopeInfo,
 };
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -290,10 +291,8 @@ pub struct EmbeddingRequest {
 impl RateLimitedRequest for EmbeddingRequest {
     fn estimated_resource_usage(
         &self,
-        resources: &[crate::rate_limiting::RateLimitResource],
-    ) -> Result<crate::rate_limiting::EstimatedRateLimitResourceUsage, Error> {
-        use crate::rate_limiting::RateLimitResource;
-
+        resources: &[RateLimitResource],
+    ) -> Result<EstimatedRateLimitResourceUsage, Error> {
         let EmbeddingRequest {
             input,
             dimensions: _,
@@ -312,7 +311,7 @@ impl RateLimitedRequest for EmbeddingRequest {
             None
         };
 
-        Ok(crate::rate_limiting::EstimatedRateLimitResourceUsage {
+        Ok(EstimatedRateLimitResourceUsage {
             model_inferences,
             tokens,
         })

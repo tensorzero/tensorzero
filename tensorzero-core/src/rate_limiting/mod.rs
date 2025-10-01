@@ -202,9 +202,14 @@ impl ActiveRateLimit {
         &self,
         requests: &EstimatedRateLimitResourceUsage,
     ) -> Result<ConsumeTicketsRequest, Error> {
-        let request_amount = requests
-            .get_usage(self.limit.resource)
-            .ok_or_else(|| Error::new(ErrorDetails::RateLimitMissingMaxTokens))?;
+        let request_amount = requests.get_usage(self.limit.resource).ok_or_else(|| {
+            Error::new(ErrorDetails::Inference {
+                message: format!(
+                    "estimated_resource_usage did not provide {:?} resource. {IMPOSSIBLE_ERROR_MESSAGE}",
+                    self.limit.resource
+                ),
+            })
+        })?;
         self.get_consume_tickets_request_for_return(request_amount)
     }
 
