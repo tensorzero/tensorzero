@@ -30,6 +30,8 @@ struct LimitedClient {
     // This needs to be an `Arc` so that we can share the counter
     // when we create a `TensorzeroEventSource` stream wrapper
     // (we need to decrement it when the stream is dropped)
+    // Be careful - this should only ever be cloned from `LimitedClientTicket.into_owned`,
+    // where we also set `should_decrement` to `false`
     concurrent_requests: Arc<AtomicU8>,
     client: Client,
 }
@@ -473,7 +475,7 @@ mod tests {
                 "/hello-stream",
                 get(|_req: Request| async {
                     Sse::new(futures::stream::iter(vec![
-                        Ok::<_, String>(Event::default().data("Hello".to_string())),
+                        Ok::<_, String>(Event::default().data("Hello")),
                         Ok(Event::default().data("[DONE]")),
                     ]))
                 }),
@@ -705,7 +707,7 @@ mod tests {
         );
 
         for client_cell in client.clients.iter() {
-            assert_eq!(client_cell.get().is_some(), true);
+            assert!(client_cell.get().is_some(), "Client should be initialized");
         }
     }
 }
