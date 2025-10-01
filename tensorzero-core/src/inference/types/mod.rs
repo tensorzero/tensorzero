@@ -81,6 +81,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 use serde_untagged::UntaggedEnumVisitor;
 use std::borrow::Borrow;
+#[cfg(test)]
+use std::collections::HashSet;
 use std::ops::Add;
 use std::{
     borrow::Cow,
@@ -93,7 +95,10 @@ use uuid::Uuid;
 
 use crate::cache::NonStreamingCacheData;
 use crate::{cache::CacheData, config::ObjectStoreInfo};
-use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
+use crate::{
+    endpoints::inference::InferenceParams,
+    error::{ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens},
+};
 use crate::{
     endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceIds},
     variant::InferenceConfig,
@@ -963,9 +968,8 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
                 .iter()
                 .map(RateLimitedInputContent::estimated_input_token_usage)
                 .sum();
-            let output_tokens = max_tokens
-                .ok_or_else(|| Error::new(crate::error::ErrorDetails::RateLimitMissingMaxTokens))?
-                as u64;
+            let output_tokens =
+                max_tokens.ok_or_else(|| Error::new(RateLimitMissingMaxTokens))? as u64;
             Some(system_tokens + messages_tokens + output_tokens)
         } else {
             None
@@ -2497,8 +2501,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use super::*;
     use crate::config::SchemaData;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
