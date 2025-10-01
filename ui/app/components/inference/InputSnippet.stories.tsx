@@ -1,6 +1,5 @@
 import InputSnippet from "./InputSnippet";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { withRouter } from "storybook-addon-remix-react-router";
 import pdfUrl from "./InputSnippet.stories.fixture.tensorzero.pdf?url";
 import mp3Url from "./InputSnippet.stories.fixture.tensorzero.mp3?url";
 import type { JsonValue } from "tensorzero-node";
@@ -8,7 +7,6 @@ import type { JsonValue } from "tensorzero-node";
 const meta = {
   title: "InputSnippet",
   component: InputSnippet,
-  decorators: [withRouter],
   render: (args) => (
     <div className="w-[80vw] p-4">
       <InputSnippet {...args} />

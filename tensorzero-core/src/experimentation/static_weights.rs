@@ -52,7 +52,7 @@ impl VariantSampler for StaticWeightsConfig {
         for weight in self.candidate_variants.values() {
             if *weight < 0.0 {
                 return Err(Error::new(ErrorDetails::Config {
-                    message: format!("Invalid weight in static weights config: {}", weight),
+                    message: format!("Invalid weight in static weights config: {weight}"),
                 }));
             }
         }

@@ -39,7 +39,6 @@ use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::model::StreamResponse;
 use crate::model::StreamResponseAndMessages;
-use crate::rate_limiting::TicketBorrows;
 use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
 use crate::utils::retries::RetryConfig;
 use crate::{inference::types::InferenceResult, model::ModelConfig};
@@ -135,6 +134,7 @@ pub struct InferenceConfig<'request> {
     pub ids: InferenceIds,
     pub extra_body: Cow<'request, UnfilteredInferenceExtraBody>,
     pub extra_headers: Cow<'request, UnfilteredInferenceExtraHeaders>,
+    pub fetch_and_encode_input_files_before_inference: bool,
     /// Optional arbitrary data, only used when constructing the cache key.
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
@@ -150,6 +150,7 @@ pub struct BatchInferenceConfig<'a> {
     pub dynamic_output_schemas: &'a Vec<Option<DynamicJSONSchema>>,
     pub function_name: &'a str,
     pub variant_name: &'a str,
+    pub fetch_and_encode_input_files_before_inference: bool,
 }
 impl<'a> BatchInferenceConfig<'a> {
     pub fn inference_configs(
@@ -174,6 +175,8 @@ impl<'a> BatchInferenceConfig<'a> {
                     inference_id: *inference_id,
                     episode_id: *episode_id,
                 },
+                fetch_and_encode_input_files_before_inference: self
+                    .fetch_and_encode_input_files_before_inference,
                 // Not yet supported for batch inference requests
                 extra_body: Default::default(),
                 extra_headers: Default::default(),
@@ -194,7 +197,6 @@ pub struct ModelUsedInfo {
     pub input_messages: Vec<RequestMessage>,
     pub inference_params: InferenceParams,
     pub cached: bool,
-    pub ticket_borrow: TicketBorrows,
     // These responses will get added into the final inference result (after `collect_chunks` finishes)
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
 }
@@ -630,6 +632,8 @@ where
                     .map(Cow::Owned),
                 extra_body,
                 extra_headers,
+                fetch_and_encode_input_files_before_inference: inference_config
+                    .fetch_and_encode_input_files_before_inference,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
             }
         }
@@ -658,6 +662,8 @@ where
                 presence_penalty: inference_params.chat_completion.presence_penalty,
                 frequency_penalty: inference_params.chat_completion.frequency_penalty,
                 seed: inference_params.chat_completion.seed,
+                fetch_and_encode_input_files_before_inference: inference_config
+                    .fetch_and_encode_input_files_before_inference,
                 stream,
                 // In json mode, we fall back to 'JsonMode::Strict' if it was unset in both
                 // the `chat_completions` params and the variant config.
@@ -740,7 +746,6 @@ async fn infer_model_request_stream<'request>(
                 cached,
             },
         messages: input_messages,
-        ticket_borrow,
     } = retry_config
         .retry(|| async {
             model_config
@@ -759,7 +764,6 @@ async fn infer_model_request_stream<'request>(
         system,
         input_messages,
         cached,
-        ticket_borrow,
     };
     let config_type = function.config_type();
     let stream =
@@ -774,6 +778,7 @@ impl<'a> BatchInferenceConfig<'a> {
         dynamic_output_schemas: &'a Vec<Option<DynamicJSONSchema>>,
         function_name: &'a str,
         variant_name: &'a str,
+        fetch_and_encode_input_files_before_inference: bool,
     ) -> Self {
         Self {
             tool_configs,
@@ -781,6 +786,7 @@ impl<'a> BatchInferenceConfig<'a> {
             dynamic_output_schemas,
             function_name,
             variant_name,
+            fetch_and_encode_input_files_before_inference,
         }
     }
 }
@@ -890,6 +896,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -1028,6 +1035,7 @@ mod tests {
             function_name: "test_function",
             variant_name: "test_variant",
             dynamic_output_schema: Some(&dynamic_output_schema),
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -1127,6 +1135,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -1167,6 +1176,7 @@ mod tests {
             function_type: FunctionType::Chat,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             ..Default::default()
         };
 
@@ -1430,6 +1440,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,

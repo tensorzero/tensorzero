@@ -253,8 +253,8 @@ pub async fn setup_clickhouse(
     if let ClickHouseConnectionInfo::Production { .. } = &clickhouse_connection_info {
         migration_manager::run(RunMigrationManagerArgs {
             clickhouse: &clickhouse_connection_info,
-            skip_completed_migrations: true,
-            manual_run: false,
+            is_manual_run: false,
+            disable_automatic_migrations: config.gateway.observability.disable_automatic_migrations,
         })
         .await?;
     }
@@ -266,6 +266,12 @@ pub async fn setup_postgres(
     postgres_url: Option<String>,
 ) -> Result<PostgresConnectionInfo, Error> {
     let Some(postgres_url) = postgres_url else {
+        // Check if rate limiting is configured but Postgres is not available
+        if config.rate_limiting.enabled() && !config.rate_limiting.rules().is_empty() {
+            return Err(Error::new(ErrorDetails::Config {
+                message: "Rate limiting is configured but PostgreSQL is not available. Rate limiting requires PostgreSQL to be configured. Please set the TENSORZERO_POSTGRES_URL environment variable or disable rate limiting.".to_string(),
+            }));
+        }
         return Ok(PostgresConnectionInfo::Disabled);
     };
 
@@ -412,6 +418,7 @@ mod tests {
                 enabled: Some(false),
                 async_writes: false,
                 batch_writes: Default::default(),
+                disable_automatic_migrations: false,
             },
             bind_address: None,
             debug: false,
@@ -421,6 +428,7 @@ mod tests {
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
+            fetch_and_encode_input_files_before_inference: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -443,7 +451,9 @@ mod tests {
                 enabled: None,
                 async_writes: false,
                 batch_writes: Default::default(),
+                disable_automatic_migrations: false,
             },
+            fetch_and_encode_input_files_before_inference: false,
             unstable_error_json: false,
             ..Default::default()
         };
@@ -470,6 +480,7 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
+                disable_automatic_migrations: false,
             },
             bind_address: None,
             debug: false,
@@ -479,6 +490,7 @@ mod tests {
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
+            fetch_and_encode_input_files_before_inference: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -497,6 +509,7 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
+                disable_automatic_migrations: false,
             },
             bind_address: None,
             debug: false,
@@ -506,6 +519,7 @@ mod tests {
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
+            fetch_and_encode_input_files_before_inference: false,
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,
@@ -526,6 +540,7 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
+                disable_automatic_migrations: false,
             },
             bind_address: None,
             debug: false,
@@ -535,6 +550,7 @@ mod tests {
             unstable_error_json: false,
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
+            fetch_and_encode_input_files_before_inference: false,
         };
         let config = Config {
             gateway: gateway_config,

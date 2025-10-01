@@ -1668,6 +1668,7 @@ mod tests {
             dynamic_output_schema: None,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             extra_cache_key: None,
         };
         let response = function_config
@@ -1979,6 +1980,7 @@ mod tests {
             dynamic_output_schema: Some(&dynamic_output_schema),
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             extra_cache_key: None,
         };
         // Test with a correct content block

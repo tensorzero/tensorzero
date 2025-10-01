@@ -792,7 +792,6 @@ pub async fn dicl_examples_exist(
 mod tests {
     use super::*;
     use crate::{
-        config::TimeoutsConfig,
         embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo},
         endpoints::inference::InferenceCredentials,
         experimentation::ExperimentationConfig,
@@ -822,7 +821,7 @@ mod tests {
                         model_name: model_name.to_string(),
                         ..Default::default()
                     }),
-                    timeouts: TimeoutsConfig::default(),
+                    timeout_ms: None,
                     provider_name: Arc::from("dummy"),
                     extra_body: None,
                 },
@@ -830,7 +829,7 @@ mod tests {
             let embedding_model_config = EmbeddingModelConfig {
                 routing: vec![Arc::from("dummy")],
                 providers,
-                timeouts: TimeoutsConfig::default(),
+                timeout_ms: None,
             };
             Config {
                 embedding_models: HashMap::from([(Arc::from(model_name), embedding_model_config)])

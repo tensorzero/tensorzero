@@ -12,6 +12,7 @@ use tokio::sync::OnceCell;
 use url::Url;
 use uuid::Uuid;
 
+use crate::db::clickhouse::migration_manager::get_run_migrations_command;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::Thought;
 use crate::rate_limiting::{ActiveRateLimitKey, RateLimitingConfigScopes};
@@ -228,6 +229,7 @@ pub enum ErrorDetails {
         id: String,
         message: String,
     },
+    ClickHouseMigrationsDisabled,
     ClickHouseQuery {
         message: String,
     },
@@ -573,6 +575,7 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseConfiguration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseMigrationsDisabled => tracing::Level::ERROR,
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
@@ -687,6 +690,7 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseMigrationsDisabled => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DatapointNotFound { .. } => StatusCode::NOT_FOUND,
@@ -949,6 +953,10 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::ClickHouseMigration { id, message } => {
                 write!(f, "Error running ClickHouse migration {id}: {message}")
+            }
+            ErrorDetails::ClickHouseMigrationsDisabled => {
+                let run_migrations_command: String = get_run_migrations_command();
+                write!(f, "Automatic ClickHouse migrations were disabled, but not all migrations were run. Please run `{run_migrations_command}`")
             }
             ErrorDetails::ClickHouseQuery { message } => {
                 write!(f, "Failed to run ClickHouse query: {message}")
@@ -1389,6 +1397,15 @@ impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
         Self::new(ErrorDetails::Serialization {
             message: err.to_string(),
+        })
+    }
+}
+
+impl From<sqlx::Error> for Error {
+    fn from(err: sqlx::Error) -> Self {
+        Self::new(ErrorDetails::PostgresQuery {
+            message: err.to_string(),
+            function_name: None,
         })
     }
 }

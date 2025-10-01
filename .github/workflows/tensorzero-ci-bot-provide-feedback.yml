@@ -1,0 +1,53 @@
+name: Provide Pull Request Feedback to TensorZero CI Bot
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+jobs:
+  create-pr-feedback:
+    runs-on: ubuntu-latest
+    name: Create PR Feedback
+    steps:
+      - name: Checkout TensorZero config file
+        uses: actions/checkout@v5
+        with:
+          repository: tensorzero/experimental-ci-bot
+          sparse-checkout: |
+            tensorzero
+
+      - name: Start TensorZero gateway
+        run: |
+          docker pull tensorzero/gateway:latest
+          docker run -d --rm \
+            --name tensorzero-gateway \
+            -e TENSORZERO_CLICKHOUSE_URL=${{ secrets.CI_BOT_CLICKHOUSE_URL }} \
+            -e OPENAI_API_KEY=${{ secrets.CI_BOT_OPENAI_API_KEY }} \
+            -p 3000:3000 \
+            --volume ./tensorzero:/action-config \
+            tensorzero/gateway:latest --config-file /action-config/tensorzero.toml
+
+          for _i in {1..100}; do
+            curl -fsS http://localhost:3000/health && exit 0
+            sleep 3
+          done
+          echo "Gateway never became ready" >&2
+          exit 1
+
+      - name: Send PR Feedback
+        uses: tensorzero/experimental-ci-bot/create-pr-feedback@main
+        with:
+          tensorzero-base-url: http://localhost:3000
+          tensorzero-pr-merged-metric-name: tensorzero_github_ci_bot_pr_merged
+          clickhouse-url: ${{ secrets.CI_BOT_CLICKHOUSE_URL }}
+          clickhouse-table: GitHubBotPullRequestToInferenceMap
+
+      - name: Stop TensorZero gateway
+        if: always()
+        run: docker stop tensorzero-gateway
+        continue-on-error: true
