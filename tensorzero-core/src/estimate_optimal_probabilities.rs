@@ -123,7 +123,7 @@ pub fn estimate_optimal_probabilities(
         }
     }
     // Build P, the quadratic coefficients, as diagonal on the w block: P_ii = 2α_t for i in [0..K-1]
-    // Could build this directly as a sparse matrix; started with dense matrix for legibility. See CscMatrix::new_from_triplets()
+    // TODO: Build this directly as a sparse matrix. See CscMatrix::new_from_triplets()
     let mut P_dense = vec![vec![0.0; num_decision_vars]; num_decision_vars];
     if alpha_t > 0.0 {
         for (i, row) in P_dense[..num_arms].iter_mut().enumerate() {
