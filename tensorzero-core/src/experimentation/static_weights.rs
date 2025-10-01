@@ -25,8 +25,6 @@ pub struct StaticWeightsConfig {
 
 impl StaticWeightsConfig {
     pub fn legacy_from_variants_map(variants: &HashMap<String, Arc<VariantInfo>>) -> Self {
-        // TODO: produce a candidate variants map
-        // and a list of fallback variants
         let mut candidate_variants = BTreeMap::new();
         let mut fallback_variants = Vec::new();
 
@@ -50,6 +48,14 @@ impl StaticWeightsConfig {
 
 impl VariantSampler for StaticWeightsConfig {
     async fn setup(&self) -> Result<(), Error> {
+        // We just assert that all weights are non-negative
+        for weight in self.candidate_variants.values() {
+            if *weight < 0.0 {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!("Invalid weight in static weights config: {}", weight),
+                }));
+            }
+        }
         Ok(())
     }
 
