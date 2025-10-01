@@ -163,7 +163,8 @@ jobs:
 
   macos:
     runs-on: ${{ matrix.platform.runner }}
-    if: github.repository == 'tensorzero/tensorzero'
+    # disabled because github mac runners are broken 2025-10-01
+    if: false # github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
         platform:
