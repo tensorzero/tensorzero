@@ -59,6 +59,14 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let provider_type_default_credentials_shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "hyperbolic-shorthand".to_string(),
+        model_name: "hyperbolic::meta-llama/Meta-Llama-3-70B-Instruct".into(),
+        model_provider_name: "hyperbolic".into(),
+        credentials: HashMap::new(),
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         bad_auth_extra_headers,
@@ -68,7 +76,8 @@ async fn get_providers() -> E2ETestProviders {
         inference_params_inference: standard_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
         provider_type_default_credentials: provider_type_default_credentials_providers,
-        provider_type_default_credentials_shorthand: vec![],
+        provider_type_default_credentials_shorthand:
+            provider_type_default_credentials_shorthand_providers,
         tool_use_inference: vec![],
         tool_multi_turn_inference: vec![],
         dynamic_tool_use_inference: vec![],

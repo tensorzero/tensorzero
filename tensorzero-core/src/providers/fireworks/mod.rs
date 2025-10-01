@@ -35,7 +35,7 @@ use crate::{
         },
         InferenceProvider,
     },
-    model::{Credential, CredentialLocation, ModelProvider},
+    model::{Credential, ModelProvider},
     tool::{ToolCall, ToolCallChunk},
 };
 
@@ -140,10 +140,6 @@ impl FireworksCredentials {
             .into()),
         }
     }
-}
-
-pub fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("FIREWORKS_API_KEY".to_string())
 }
 
 /// Key differences between Fireworks and OpenAI inference:

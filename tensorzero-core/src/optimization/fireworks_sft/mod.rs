@@ -52,7 +52,7 @@ use crate::{
     inference::types::ContentBlock,
     model::CredentialLocation,
     providers::{
-        fireworks::{default_api_key_location, FireworksCredentials, FireworksTool, PROVIDER_TYPE},
+        fireworks::{FireworksCredentials, FireworksTool, PROVIDER_TYPE},
         openai::OpenAIRequestMessage,
     },
 };
@@ -232,8 +232,7 @@ impl UninitializedFireworksSFTConfig {
         let credentials = credentials
             .map(|s| serde_json::from_str(&s))
             .transpose()
-            .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid credentials JSON: {e}")))?
-            .or_else(|| Some(default_api_key_location()));
+            .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid credentials JSON: {e}")))?;
         let api_base = api_base
             .map(|s| {
                 Url::parse(&s)
