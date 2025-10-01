@@ -38,6 +38,10 @@ pub mod evaluators;
 pub mod helpers;
 pub mod stats;
 
+/// Buffer size for the mpsc channel used to stream evaluation updates.
+/// This provides backpressure if the consumer can't keep up with the producer.
+const EVALUATION_CHANNEL_BUFFER_SIZE: usize = 128;
+
 #[derive(clap::ValueEnum, Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 #[clap(rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
@@ -331,7 +335,7 @@ pub async fn run_evaluation(
 pub async fn run_evaluation_core_streaming(
     args: EvaluationCoreArgs,
 ) -> Result<EvaluationStreamResult> {
-    let (sender, receiver) = mpsc::channel(100); // Buffer size of 100 for backpressure
+    let (sender, receiver) = mpsc::channel(EVALUATION_CHANNEL_BUFFER_SIZE);
 
     // Build the semaphore and clients
     let semaphore = Semaphore::new(args.concurrency);
@@ -385,9 +389,13 @@ pub async fn run_evaluation_core_streaming(
     };
 
     // Send the run info as the first message
-    let _ = sender
+    if sender
         .send(EvaluationUpdate::RunInfo(run_info.clone()))
-        .await;
+        .await
+        .is_err()
+    {
+        tracing::warn!("Failed to send RunInfo: receiver dropped before evaluation started");
+    }
 
     // Spawn concurrent tasks for each datapoint
     for datapoint in dataset {
