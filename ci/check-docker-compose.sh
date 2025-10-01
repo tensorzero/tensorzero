@@ -15,6 +15,7 @@ if [[ "$1" == *ui/fixtures/docker-compose.yml || \
       "$1" == *tensorzero-core/tests/e2e/docker-compose.live.yml || \
       "$1" == *tensorzero-core/tests/e2e/docker-compose.clickhouse.yml || \
       "$1" == *tensorzero-core/tests/e2e/docker-compose-common.yml || \
+      "$1" == *tensorzero-core/tests/e2e/docker-compose.ngrok.yml || \
       "$1" == *tensorzero-core/tests/optimization/docker-compose.yml || \
       "$1" == *ui/docker-compose.yml || \
       "$1" == *ci/internal-network.yml ]]; then

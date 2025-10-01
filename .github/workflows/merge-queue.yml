@@ -198,12 +198,12 @@ jobs:
 
       - name: Launch ClickHouse container for E2E tests
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --build -d --wait
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml -f tensorzero-core/tests/e2e/docker-compose.ngrok.yml up --build -d --wait
 
       - name: Print ClickHouse container logs
         if: always()
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml -f tensorzero-core/tests/e2e/docker-compose.ngrok.yml logs -t
 
       - name: Set OTEL_EXPORTER_OTLP_TRACES_ENDPOINT to ngrok URL
         run: |
