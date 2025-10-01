@@ -177,6 +177,14 @@ async fn get_providers() -> E2ETestProviders {
         model_name: "text-embedding-3-small".into(),
     }];
 
+    let provider_type_default_credentials_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
+        variant_name: "openai".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -185,6 +193,7 @@ async fn get_providers() -> E2ETestProviders {
         embeddings: embedding_providers,
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
+        provider_type_default_credentials: provider_type_default_credentials_providers,
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),

@@ -84,6 +84,7 @@ async fn get_providers() -> E2ETestProviders {
         embeddings: vec![],
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: vec![],
+        provider_type_default_credentials: vec![],
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),

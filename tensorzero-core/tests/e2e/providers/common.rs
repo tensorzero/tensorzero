@@ -46,6 +46,8 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use tensorzero_core::config::provider_types::*;
+use tensorzero_core::model::CredentialLocation;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
     select_json_inference_clickhouse, select_model_inference_clickhouse,
@@ -86,6 +88,8 @@ pub struct E2ETestProviders {
 
     pub inference_params_dynamic_credentials: Vec<E2ETestProvider>,
 
+    pub provider_type_default_credentials: Vec<E2ETestProvider>,
+
     pub inference_params_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
     pub tool_multi_turn_inference: Vec<E2ETestProvider>,
@@ -108,6 +112,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_dynamic_tool_use_streaming_inference_request_with_provider;
         use $crate::providers::common::test_inference_params_inference_request_with_provider;
         use $crate::providers::common::test_inference_params_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_provider_type_default_credentials_with_provider;
         use $crate::providers::common::test_json_mode_inference_request_with_provider;
         use $crate::providers::common::test_json_mode_streaming_inference_request_with_provider;
         use $crate::providers::common::test_bad_auth_extra_headers_with_provider;
@@ -249,6 +254,15 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.inference_params_dynamic_credentials;
             for provider in providers {
                 test_inference_params_streaming_inference_request_with_provider(provider).await;
+            }
+        }
+
+
+        #[tokio::test]
+        async fn test_provider_type_default_credentials() {
+            let providers = $func().await.provider_type_default_credentials;
+            for provider in providers {
+                test_provider_type_default_credentials_with_provider(provider).await;
             }
         }
 
@@ -739,6 +753,142 @@ type = "aws_bedrock"
 model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
 region = "us-east-1"
 "#;
+
+/// Helper function to get the default credential location for a provider type.
+/// This calls the Default implementation directly, ensuring we test the actual defaults.
+fn get_default_credential_location(provider_type: &str) -> CredentialLocation {
+    match provider_type {
+        "anthropic" => AnthropicDefaults::default().credential_location,
+        "openai" => OpenAIDefaults::default().credential_location,
+        "azure" => AzureDefaults::default().credential_location,
+        "deepseek" => DeepSeekDefaults::default().credential_location,
+        "fireworks" => FireworksDefaults::default().credential_location,
+        "gcp_vertex_anthropic" => GCPDefaults::default().credential_location,
+        "gcp_vertex_gemini" => GCPDefaults::default().credential_location,
+        "google_ai_studio_gemini" => GoogleAIStudioGeminiDefaults::default().credential_location,
+        "groq" => GroqDefaults::default().credential_location,
+        "hyperbolic" => HyperbolicDefaults::default().credential_location,
+        "mistral" => MistralDefaults::default().credential_location,
+        "openrouter" => OpenRouterDefaults::default().credential_location,
+        "sglang" => SGLangDefaults::default().credential_location,
+        "tgi" => TGIDefaults::default().credential_location,
+        "together" => TogetherDefaults::default().credential_location,
+        "vllm" => VLLMDefaults::default().credential_location,
+        "xai" => XAIDefaults::default().credential_location,
+        _ => panic!("Unknown provider type: {}", provider_type),
+    }
+}
+
+/// Test that provider type default credentials work correctly.
+/// This test:
+/// 1. Gets the default credential location from the provider's Default impl
+/// 2. Removes the credential from its default location
+/// 3. Sets it at a custom location
+/// 4. Configures the gateway to use the custom location via provider_types config
+/// 5. Verifies inference works
+pub async fn test_provider_type_default_credentials_with_provider(provider: E2ETestProvider) {
+    // Get the default credential location for this provider
+    let default_location = get_default_credential_location(&provider.model_provider_name);
+
+    // Extract the env var name from the credential location
+    let (original_env_var, is_path_env) = match &default_location {
+        CredentialLocation::Env(var_name) => (var_name.clone(), false),
+        CredentialLocation::PathFromEnv(var_name) => (var_name.clone(), true),
+        _ => {
+            println!("Skipping test for {} - unsupported credential location type", provider.model_provider_name);
+            return;
+        }
+    };
+
+    // Save the original credential value if it exists
+    let original_value = std::env::var(&original_env_var).ok();
+
+    // Get the credential value from the provider (it should be set for the test to run)
+    let credential_value = if let Some(ref creds) = original_value {
+        creds.clone()
+    } else {
+        println!("Skipping test for {} - credential not set in {}", provider.model_provider_name, original_env_var);
+        return;
+    };
+
+    // Remove the default env var
+    std::env::remove_var(&original_env_var);
+
+    // Set up a custom env var with a test-specific name
+    let custom_env_var = format!("TENSORZERO_TEST_{}_KEY", provider.model_provider_name.to_uppercase());
+    std::env::set_var(&custom_env_var, &credential_value);
+
+    // Create the credential location config based on the type
+    let credential_location_config = if is_path_env {
+        format!(r#"credential_location = "path_from_env::{}""#, custom_env_var)
+    } else {
+        format!(r#"credential_location = "env::{}""#, custom_env_var)
+    };
+
+    // Create a config with the custom credential location
+    let config = format!(
+        r#"
+[provider_types.{}]
+defaults.{}
+
+[models."test-model"]
+routing = ["test-provider"]
+
+[models."test-model".providers.test-provider]
+type = "{}"
+model_name = "{}"
+
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.default]
+type = "chat_completion"
+model = "test-model"
+"#,
+        provider.model_provider_name,
+        credential_location_config,
+        provider.model_provider_name,
+        provider.model_name
+    );
+
+    println!("Testing provider type default credentials for {}", provider.model_provider_name);
+    println!("Config:\n{}", config);
+
+    // Create an embedded gateway with this config
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_config(&config).await;
+
+    // Make a simple inference request to verify it works
+    let episode_id = Uuid::now_v7();
+    let result = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("default".to_string()),
+            episode_id: Some(episode_id),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "Say hello".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            ..Default::default()
+        })
+        .await;
+
+    // Clean up: restore the original env var and remove the custom one
+    std::env::remove_var(&custom_env_var);
+    if let Some(original) = original_value {
+        std::env::set_var(&original_env_var, original);
+    }
+
+    // Assert the inference succeeded
+    assert!(result.is_ok(), "Inference failed for {}: {:?}", provider.model_provider_name, result.err());
+
+    println!("✓ Provider type default credentials test passed for {}", provider.model_provider_name);
+}
 
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
