@@ -948,21 +948,18 @@ pub async fn test_provider_type_default_credentials_shorthand_with_provider(
 
     // Create the credential location config based on the type
     let credential_location_config = if is_path_env {
-        format!(
-            r#"credential_location = "path_from_env::{}""#,
-            custom_env_var
-        )
+        format!(r#"credential_location = "path_from_env::{custom_env_var}""#)
     } else {
-        format!(r#"credential_location = "env::{}""#, custom_env_var)
+        format!(r#"credential_location = "env::{custom_env_var}""#)
     };
 
     // Create a config with the custom credential location and shorthand model syntax
     let config = format!(
-        r#"
+        r"
 [provider_types.{}]
 defaults.{}
 
-"#,
+",
         provider.model_provider_name, credential_location_config
     );
 
@@ -970,7 +967,7 @@ defaults.{}
         "Testing provider type default credentials (shorthand) for {}",
         provider.model_provider_name
     );
-    println!("Config:\n{}", config);
+    println!("Config:\n{config}");
 
     // Create an embedded gateway with this config
     let client = tensorzero::test_helpers::make_embedded_gateway_with_config(&config).await;
