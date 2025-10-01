@@ -539,3 +539,37 @@ test("should display inferences with thought block output", async ({
     page.locator(".text-fg-tertiary").getByText("Thought"),
   ).toBeVisible();
 });
+
+test("should handle model inference with null input and output tokens", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/01954435-76a5-7331-8a3a-16296a0ba5b6",
+  );
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Verify the inference page loads
+  await expect(
+    page.getByText("01954435-76a5-7331-8a3a-16296a0ba5b6").first(),
+  ).toBeVisible();
+
+  // Click on the model inference ID to open the model inference detail sheet
+  await page.getByText("01954435-76ab-78b1-a76e-d5676b0dd2f9").click();
+
+  // Wait for the sheet/dialog to appear
+  const sheet = page.locator('[role="dialog"]');
+  await sheet.waitFor({ state: "visible" });
+
+  // Verify we're on the model inference page (use exact match to avoid matching "Model Inferences")
+  await expect(
+    sheet.getByText("Model Inference", { exact: true }),
+  ).toBeVisible();
+
+  // Verify that null tokens are displayed in the sheet (they should show as "null tok")
+  await expect(sheet.getByText("null tok")).toHaveCount(2);
+
+  // Verify the crab description output is visible in the sheet
+  await expect(sheet.getByText("cartoon-style crab").first()).toBeVisible();
+});
