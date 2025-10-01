@@ -71,12 +71,8 @@ export async function saveDatapoint(params: {
   const { parsedFormData, functionType } = params;
 
   // Transform input to match TensorZero client's expected format
-  const transformedInput = resolvedInputToTensorZeroInput(
-    parsedFormData.input,
-  );
-  const transformedOutput = transformOutputForTensorZero(
-    parsedFormData.output,
-  );
+  const transformedInput = resolvedInputToTensorZeroInput(parsedFormData.input);
+  const transformedOutput = transformOutputForTensorZero(parsedFormData.output);
 
   // For future reference:
   // These two calls would be a transaction but ClickHouse isn't transactional.

@@ -43,10 +43,7 @@ import type {
   JsonInferenceOutput,
   ContentBlockChatOutput,
 } from "tensorzero-node";
-import {
-  deleteDatapoint,
-  saveDatapoint,
-} from "./datapointOperations.server";
+import { deleteDatapoint, saveDatapoint } from "./datapointOperations.server";
 
 function parseDatapointFormData(formData: FormData): ParsedDatasetRow {
   const rawData = {
@@ -79,7 +76,6 @@ function parseDatapointFormData(formData: FormData): ParsedDatasetRow {
   return ParsedDatasetRowSchema.parse(cleanedData);
 }
 
-
 export function validateJsonOutput(
   output: ContentBlockChatOutput[] | JsonInferenceOutput | null,
 ): { valid: true } | { valid: false; error: string } {
@@ -90,7 +86,8 @@ export function validateJsonOutput(
     } catch {
       return {
         valid: false,
-        error: "Invalid JSON in output. Please fix the JSON format before saving.",
+        error:
+          "Invalid JSON in output. Please fix the JSON format before saving.",
       };
     }
   }
@@ -117,7 +114,8 @@ export function hasDatapointChanged(params: {
   // Check if system has changed (added, removed, or modified)
   const hasSystemChanged =
     "system" in currentInput !== "system" in originalInput ||
-    JSON.stringify(currentInput.system) !== JSON.stringify(originalInput.system);
+    JSON.stringify(currentInput.system) !==
+      JSON.stringify(originalInput.system);
 
   // Check if messages changed
   const hasMessagesChanged =
@@ -277,7 +275,15 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
         originalTags,
       })
     );
-  }, [isEditing, input, output, tags, originalInput, originalOutput, originalTags]);
+  }, [
+    isEditing,
+    input,
+    output,
+    tags,
+    originalInput,
+    originalOutput,
+    originalTags,
+  ]);
 
   const toggleEditing = () => setIsEditing(!isEditing);
 
