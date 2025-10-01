@@ -76,6 +76,14 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let provider_type_default_credentials_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "mistral".to_string(),
+        model_name: "open-mistral-nemo-2407".into(),
+        model_provider_name: "mistral".into(),
+        credentials: HashMap::new(),
+    }];
+
     E2ETestProviders {
         simple_inference: providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -84,7 +92,7 @@ async fn get_providers() -> E2ETestProviders {
         embeddings: vec![],
         inference_params_inference: providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
-        provider_type_default_credentials: vec![],
+        provider_type_default_credentials: provider_type_default_credentials_providers,
         tool_use_inference: providers.clone(),
         tool_multi_turn_inference: providers.clone(),
         dynamic_tool_use_inference: providers.clone(),

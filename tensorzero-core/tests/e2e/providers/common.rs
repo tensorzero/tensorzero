@@ -47,11 +47,11 @@ use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 use tensorzero_core::config::provider_types::*;
-use tensorzero_core::model::CredentialLocation;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
     select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
+use tensorzero_core::model::CredentialLocation;
 
 use super::helpers::get_extra_headers;
 
@@ -775,7 +775,7 @@ fn get_default_credential_location(provider_type: &str) -> CredentialLocation {
         "together" => TogetherDefaults::default().credential_location,
         "vllm" => VLLMDefaults::default().credential_location,
         "xai" => XAIDefaults::default().credential_location,
-        _ => panic!("Unknown provider type: {}", provider_type),
+        _ => panic!("Unknown provider type: {provider_type}"),
     }
 }
 
@@ -795,7 +795,10 @@ pub async fn test_provider_type_default_credentials_with_provider(provider: E2ET
         CredentialLocation::Env(var_name) => (var_name.clone(), false),
         CredentialLocation::PathFromEnv(var_name) => (var_name.clone(), true),
         _ => {
-            println!("Skipping test for {} - unsupported credential location type", provider.model_provider_name);
+            println!(
+                "Skipping test for {} - unsupported credential location type",
+                provider.model_provider_name
+            );
             return;
         }
     };
@@ -807,7 +810,10 @@ pub async fn test_provider_type_default_credentials_with_provider(provider: E2ET
     let credential_value = if let Some(ref creds) = original_value {
         creds.clone()
     } else {
-        println!("Skipping test for {} - credential not set in {}", provider.model_provider_name, original_env_var);
+        println!(
+            "Skipping test for {} - credential not set in {}",
+            provider.model_provider_name, original_env_var
+        );
         return;
     };
 
@@ -815,14 +821,17 @@ pub async fn test_provider_type_default_credentials_with_provider(provider: E2ET
     std::env::remove_var(&original_env_var);
 
     // Set up a custom env var with a test-specific name
-    let custom_env_var = format!("TENSORZERO_TEST_{}_KEY", provider.model_provider_name.to_uppercase());
+    let custom_env_var = format!(
+        "TENSORZERO_TEST_{}_KEY",
+        provider.model_provider_name.to_uppercase()
+    );
     std::env::set_var(&custom_env_var, &credential_value);
 
     // Create the credential location config based on the type
     let credential_location_config = if is_path_env {
-        format!(r#"credential_location = "path_from_env::{}""#, custom_env_var)
+        format!(r#"credential_location = "path_from_env::{custom_env_var}""#)
     } else {
-        format!(r#"credential_location = "env::{}""#, custom_env_var)
+        format!(r#"credential_location = "env::{custom_env_var}""#)
     };
 
     // Create a config with the custom credential location
@@ -851,8 +860,11 @@ model = "test-model"
         provider.model_name
     );
 
-    println!("Testing provider type default credentials for {}", provider.model_provider_name);
-    println!("Config:\n{}", config);
+    println!(
+        "Testing provider type default credentials for {}",
+        provider.model_provider_name
+    );
+    println!("Config:\n{config}");
 
     // Create an embedded gateway with this config
     let client = tensorzero::test_helpers::make_embedded_gateway_with_config(&config).await;
@@ -885,9 +897,17 @@ model = "test-model"
     }
 
     // Assert the inference succeeded
-    assert!(result.is_ok(), "Inference failed for {}: {:?}", provider.model_provider_name, result.err());
+    assert!(
+        result.is_ok(),
+        "Inference failed for {}: {:?}",
+        provider.model_provider_name,
+        result.err()
+    );
 
-    println!("✓ Provider type default credentials test passed for {}", provider.model_provider_name);
+    println!(
+        "✓ Provider type default credentials test passed for {}",
+        provider.model_provider_name
+    );
 }
 
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
