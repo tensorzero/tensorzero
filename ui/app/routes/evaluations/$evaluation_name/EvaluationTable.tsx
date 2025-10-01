@@ -43,6 +43,7 @@ import {
 } from "~/hooks/evaluations/ColorAssigner";
 import MetricValue, { isCutoffFailed } from "~/components/metric/MetricValue";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
+import { InferenceButton } from "~/components/utils/InferenceButton";
 import InputSnippet from "~/components/inference/InputSnippet";
 import { logger } from "~/utils/logger";
 
@@ -151,6 +152,12 @@ function getInputSummary(input: DisplayInput): string {
     return text.length > 30 ? text.substring(0, 30) + "..." : text;
   }
 
+  if (firstContent.type === "template") {
+    const argsText = JSON.stringify(firstContent.arguments, null, 2);
+    const summary = `${firstContent.name}: ${argsText}`;
+    return summary.length > 30 ? summary.substring(0, 30) + "..." : summary;
+  }
+
   return `${firstMessage.role} message (${firstContent.type})`;
 }
 
@@ -242,7 +249,7 @@ export function EvaluationTable({
       {
         id: string;
         input: DisplayInput;
-        reference_output: JsonInferenceOutput | ContentBlockChatOutput[];
+        reference_output: JsonInferenceOutput | ContentBlockChatOutput[] | null;
       }
     >();
 
@@ -436,12 +443,16 @@ export function EvaluationTable({
                             {index === 0 && (
                               <TableCell
                                 rowSpan={filteredVariants.length}
-                                className="max-w-[200px] align-middle"
+                                className="max-w-[200px] text-center align-middle"
                               >
-                                <TruncatedContent
-                                  content={datapoint.reference_output}
-                                  type="output"
-                                />
+                                {datapoint.reference_output ? (
+                                  <TruncatedContent
+                                    content={datapoint.reference_output}
+                                    type="output"
+                                  />
+                                ) : (
+                                  "-"
+                                )}
                               </TableCell>
                             )}
 
@@ -511,7 +522,7 @@ export function EvaluationTable({
                                         {evaluatorConfig.type ===
                                           "llm_judge" && (
                                           <div
-                                            className="ml-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                                            className="ml-2 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
                                             // Stop click event propagation so the row navigation is not triggered
                                             onClick={(e) => e.stopPropagation()}
                                           >
@@ -531,6 +542,14 @@ export function EvaluationTable({
                                                 "Unknown"
                                               }
                                             />
+                                            {metricValue.evaluator_inference_id && (
+                                              <InferenceButton
+                                                inferenceId={
+                                                  metricValue.evaluator_inference_id
+                                                }
+                                                tooltipText="View LLM judge inference"
+                                              />
+                                            )}
                                           </div>
                                         )}
                                       </>

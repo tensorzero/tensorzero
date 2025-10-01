@@ -16,10 +16,10 @@ use tensorzero_core::db::clickhouse::migration_manager::RunMigrationManagerArgs;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
-use tensorzero_core::gateway_util::GatewayHandle;
 use tensorzero_core::howdy::{get_deployment_id, get_howdy_report};
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::TextKind;
+use tensorzero_core::utils::gateway::GatewayHandle;
 use tokio::time::Duration;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -43,8 +43,8 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
     );
     migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
-        skip_completed_migrations: false,
-        manual_run: false,
+        is_manual_run: false,
+        disable_automatic_migrations: false,
     })
     .await
     .unwrap();

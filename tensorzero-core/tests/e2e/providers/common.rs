@@ -30,10 +30,10 @@ use tracing_test::traced_test;
 
 use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
 
-use tensorzero_core::gateway_util::AppStateData;
 use tensorzero_core::inference::types::file::Base64FileMetadata;
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::{FinishReason, TextKind, Thought};
+use tensorzero_core::utils::gateway::AppStateData;
 use tensorzero_core::{
     cache::CacheEnabledMode,
     inference::types::{
@@ -5214,10 +5214,12 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
 ) {
     // Azure, Together, and SGLang don't support `tool_choice: "required"`
     // Groq says they support it, but it doesn't return the required tool as expected
+    // Fireworks returns trash.
     if provider.model_provider_name == "azure"
         || provider.model_provider_name == "together"
         || provider.model_provider_name == "sglang"
         || provider.model_provider_name == "groq"
+        || provider.model_provider_name == "fireworks"
     {
         return;
     }

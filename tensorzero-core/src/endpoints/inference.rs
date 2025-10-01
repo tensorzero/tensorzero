@@ -29,7 +29,6 @@ use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::function::{sample_variant, FunctionConfigChat};
-use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
@@ -46,6 +45,7 @@ use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::rate_limiting::{RateLimitingConfig, TicketBorrows};
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
+use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
@@ -138,6 +138,7 @@ struct InferenceMetadata {
     pub cached: bool,
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
+    pub fetch_and_encode_input_files_before_inference: bool,
     pub include_original_response: bool,
     pub ticket_borrow: TicketBorrows,
 }
@@ -308,7 +309,9 @@ pub async fn inference(
             labels.push(("model_name", model_name.clone()));
         }
         counter!("request_count", &labels).increment(1);
+        counter!("tensorzero_requests_total", &labels).increment(1);
         counter!("inference_count", &labels).increment(1);
+        counter!("tensorzero_inferences_total", &labels).increment(1);
     }
 
     // Should we stream the inference?
@@ -355,6 +358,9 @@ pub async fn inference(
                 inference_id,
                 episode_id,
             },
+            fetch_and_encode_input_files_before_inference: config
+                .gateway
+                .fetch_and_encode_input_files_before_inference,
             extra_cache_key: None,
             extra_body: Cow::Borrowed(&params.extra_body),
             extra_headers: Cow::Borrowed(&params.extra_headers),
@@ -411,6 +417,9 @@ pub async fn inference(
                 extra_body,
                 extra_headers,
                 include_original_response: params.include_original_response,
+                fetch_and_encode_input_files_before_inference: config
+                    .gateway
+                    .fetch_and_encode_input_files_before_inference,
                 ticket_borrow: model_used_info.ticket_borrow,
             };
 
@@ -677,6 +686,7 @@ fn create_stream(
                 cached,
                 extra_body,
                 extra_headers,
+                fetch_and_encode_input_files_before_inference,
                 include_original_response: _,
                 ticket_borrow,
             } = metadata;
@@ -705,6 +715,7 @@ fn create_stream(
                     cached,
                     extra_body: extra_body.clone(),
                     extra_headers: extra_headers.clone(),
+                    fetch_and_encode_input_files_before_inference,
                     ticket_borrow,
                     postgres_connection_info,
                 };
@@ -1324,6 +1335,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             include_original_response: false,
             ticket_borrow: TicketBorrows::empty(),
         };
@@ -1378,6 +1390,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             include_original_response: false,
             ticket_borrow: TicketBorrows::empty(),
         };

@@ -21,7 +21,8 @@ use crate::{
         default_api_key_location, OpenAICredentials, DEFAULT_CREDENTIALS, PROVIDER_TYPE,
     },
     stored_inference::RenderedSample,
-    variant::{dicl::UninitializedDiclConfig, RetryConfig},
+    utils::retries::RetryConfig,
+    variant::dicl::UninitializedDiclConfig,
 };
 use futures::future::try_join_all;
 use std::{collections::HashMap, sync::Arc};
@@ -791,7 +792,6 @@ pub async fn dicl_examples_exist(
 mod tests {
     use super::*;
     use crate::{
-        config::TimeoutsConfig,
         embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo},
         endpoints::inference::InferenceCredentials,
     };
@@ -820,7 +820,7 @@ mod tests {
                         model_name: model_name.to_string(),
                         ..Default::default()
                     }),
-                    timeouts: TimeoutsConfig::default(),
+                    timeout_ms: None,
                     provider_name: Arc::from("dummy"),
                     extra_body: None,
                 },
@@ -828,7 +828,7 @@ mod tests {
             let embedding_model_config = EmbeddingModelConfig {
                 routing: vec![Arc::from("dummy")],
                 providers,
-                timeouts: TimeoutsConfig::default(),
+                timeout_ms: None,
             };
             Config {
                 embedding_models: HashMap::from([(Arc::from(model_name), embedding_model_config)])
@@ -1271,7 +1271,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         })
     }
 
@@ -1307,7 +1307,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config: invalid_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         })
     }
 

@@ -17,14 +17,14 @@ use crate::config::{Config, MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
-use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, FunctionType, Text,
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::serde_util::deserialize_optional_json_string;
 use crate::tool::{ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
-use crate::uuid_util::uuid_elapsed;
+use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
+use crate::utils::uuid::uuid_elapsed;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::validate_tags;
@@ -144,6 +144,12 @@ pub async fn feedback(
     if !dryrun {
         counter!(
             "request_count",
+            "endpoint" => "feedback",
+            "metric_name" => params.metric_name.to_string()
+        )
+        .increment(1);
+        counter!(
+            "tensorzero_requests_total",
             "endpoint" => "feedback",
             "metric_name" => params.metric_name.to_string()
         )
@@ -1422,7 +1428,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(output_schema.clone()).unwrap(),
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         })));
 
         // Case 5: a JSON function with correct output

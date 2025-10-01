@@ -1,11 +1,9 @@
 import ModelInferenceOutput from "./ModelInferenceOutput";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { withRouter } from "storybook-addon-remix-react-router";
 
 const meta = {
   title: "ModelInferenceOutput",
   component: ModelInferenceOutput,
-  decorators: [withRouter],
   render: (args) => (
     <div className="w-[80vw] p-4">
       <ModelInferenceOutput {...args} />

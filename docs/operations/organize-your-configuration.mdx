@@ -34,7 +34,7 @@ For example:
 ```toml
 [functions.my_function.variants.my_variant]
 # ...
-system_template = "templates/system.minijinja"  # relative to this TOML file
+templates.my_template.path = "path/to/template.minijinja"  # relative to this TOML file
 # ...
 ```
 
@@ -43,10 +43,11 @@ system_template = "templates/system.minijinja"  # relative to this TOML file
 You can decompose your templates into smaller, reusable snippets.
 This makes it easier to maintain and reuse code across multiple templates.
 
+Templates can reference other templates using the MiniJinja directives `{% include %}` and `{% import %}`.
+To use these directives, you need to enable template file system access with `gateway.template_filesystem_access` in your configuration file.
+
 By default, file system access is disabled for security reasons, since template imports are evaluated dynamically and could potentially access sensitive files.
 You should ensure that only trusted templates are allowed access to the file system.
-
-To enable template file system access, you can set the `allow_file_system` option in your configuration file:
 
 ```toml
 [gateway]

@@ -12,6 +12,7 @@ use tokio::sync::OnceCell;
 use url::Url;
 use uuid::Uuid;
 
+use crate::db::clickhouse::migration_manager::get_run_migrations_command;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::Thought;
 use crate::rate_limiting::{ActiveRateLimitKey, RateLimitingConfigScopes};
@@ -137,6 +138,10 @@ impl Error {
     pub fn log(&self) {
         self.0.log();
     }
+
+    pub fn is_retryable(&self) -> bool {
+        self.0.is_retryable()
+    }
 }
 
 // Expect for derive Serialize
@@ -224,6 +229,7 @@ pub enum ErrorDetails {
         id: String,
         message: String,
     },
+    ClickHouseMigrationsDisabled,
     ClickHouseQuery {
         message: String,
     },
@@ -568,6 +574,7 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseConfiguration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseMigrationsDisabled => tracing::Level::ERROR,
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
@@ -681,6 +688,7 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseMigrationsDisabled => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DatapointNotFound { .. } => StatusCode::NOT_FOUND,
@@ -799,6 +807,17 @@ impl ErrorDetails {
             tracing::Level::INFO => tracing::info!("{self}"),
             tracing::Level::DEBUG => tracing::debug!("{self}"),
             tracing::Level::TRACE => tracing::trace!("{self}"),
+        }
+    }
+
+    pub fn is_retryable(&self) -> bool {
+        match &self {
+            ErrorDetails::RateLimitExceeded { .. } => false,
+            // For ModelProvidersExhausted we will retry if any provider error is retryable
+            ErrorDetails::ModelProvidersExhausted { provider_errors } => provider_errors
+                .iter()
+                .any(|(_, error)| error.is_retryable()),
+            _ => true,
         }
     }
 }
@@ -931,6 +950,10 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::ClickHouseMigration { id, message } => {
                 write!(f, "Error running ClickHouse migration {id}: {message}")
+            }
+            ErrorDetails::ClickHouseMigrationsDisabled => {
+                let run_migrations_command: String = get_run_migrations_command();
+                write!(f, "Automatic ClickHouse migrations were disabled, but not all migrations were run. Please run `{run_migrations_command}`")
             }
             ErrorDetails::ClickHouseQuery { message } => {
                 write!(f, "Failed to run ClickHouse query: {message}")
@@ -1269,14 +1292,19 @@ impl std::fmt::Display for ErrorDetails {
                 key,
                 tickets_remaining,
             } => {
-                // TODO: improve this error
+                // TODO: improve this error:
+                // - `{key}` should more closely match the definition of the rule in TOML
+                // - Display the number of requested tickets (units) if possible.
                 write!(
                     f,
-                    "Rate limit exceeded for key {key} with {tickets_remaining} tickets remaining"
+                    "TensorZero rate limit exceeded for rule {key}. {tickets_remaining} units currently available."
                 )
             }
             ErrorDetails::RateLimitMissingMaxTokens => {
-                write!(f, "Missing max tokens for rate limited request.")
+                write!(
+                    f,
+                    "Missing `max_tokens` for request subject to rate limiting rules."
+                )
             }
             ErrorDetails::StreamError { source } => {
                 write!(f, "Error in streaming response: {source}")
@@ -1363,6 +1391,15 @@ impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
         Self::new(ErrorDetails::Serialization {
             message: err.to_string(),
+        })
+    }
+}
+
+impl From<sqlx::Error> for Error {
+    fn from(err: sqlx::Error) -> Self {
+        Self::new(ErrorDetails::PostgresQuery {
+            message: err.to_string(),
+            function_name: None,
         })
     }
 }

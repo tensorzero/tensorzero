@@ -20,6 +20,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
+use tracing::Span;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
 use crate::config::path::ResolvedTomlPath;
@@ -33,6 +35,7 @@ use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 #[cfg(feature = "pyo3")]
 use crate::function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass};
 use crate::inference::types::storage::StorageKind;
+use crate::inference::types::Usage;
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
@@ -322,47 +325,8 @@ pub struct ObservabilityConfig {
     pub async_writes: bool,
     #[serde(default)]
     pub batch_writes: BatchWritesConfig,
-}
-
-#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-pub struct UninitializedObservabilityConfig {
-    pub enabled: Option<bool>,
     #[serde(default)]
-    pub async_writes: bool,
-    #[serde(default)]
-    pub batch_writes: BatchWritesConfig,
-    /// If `true`, then we skip checking/applying migrations if the `TensorZeroMigration` table
-    /// contains exactly the migrations that we expect to have run.
-    #[serde(default)]
-    pub skip_completed_migrations: Option<bool>,
-}
-
-impl UninitializedObservabilityConfig {
-    pub fn load(self) -> ObservabilityConfig {
-        let UninitializedObservabilityConfig {
-            enabled,
-            async_writes,
-            batch_writes,
-            skip_completed_migrations,
-        } = self;
-        match skip_completed_migrations {
-            None => {}
-            Some(true) => {
-                tracing::warn!("Deprecation Warning: `gateway.observability.skip_completed_migrations` is now always enabled, and does not need to be manually enabled");
-            }
-            Some(false) => {
-                tracing::warn!("Deprecation Warning: `gateway.observability.skip_completed_migrations` is now always enabled, and cannot be manually disabled");
-            }
-        }
-        ObservabilityConfig {
-            enabled,
-            async_writes,
-            batch_writes,
-        }
-    }
+    pub disable_automatic_migrations: bool,
 }
 
 fn default_flush_interval_ms() -> u64 {
@@ -409,7 +373,7 @@ pub struct ExportConfig {
     pub otlp: OtlpConfig,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -418,7 +382,34 @@ pub struct OtlpConfig {
     pub traces: OtlpTracesConfig,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+impl OtlpConfig {
+    /// Attaches usage inference to the model provider span (if traces are enabled).
+    /// This is used for both streaming and non-streaming requests.
+    pub fn apply_usage_to_model_provider_span(&self, span: &Span, usage: &Usage) {
+        if self.traces.enabled {
+            match self.traces.format {
+                OtlpTracesFormat::OpenTelemetry => {
+                    span.set_attribute("gen_ai.usage.input_tokens", usage.input_tokens as i64);
+                    span.set_attribute("gen_ai.usage.output_tokens", usage.output_tokens as i64);
+                    span.set_attribute(
+                        "gen_ai.usage.total_tokens",
+                        (usage.input_tokens + usage.output_tokens) as i64,
+                    );
+                }
+                OtlpTracesFormat::OpenInference => {
+                    span.set_attribute("llm.token_count.prompt", usage.input_tokens as i64);
+                    span.set_attribute("llm.token_count.completion", usage.output_tokens as i64);
+                    span.set_attribute(
+                        "llm.token_count.total",
+                        (usage.input_tokens + usage.output_tokens) as i64,
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -430,7 +421,7 @@ pub struct OtlpTracesConfig {
     pub format: OtlpTracesFormat,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "lowercase")]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, rename_all = "lowercase"))]
@@ -1411,7 +1402,7 @@ impl UninitializedFunctionConfig {
                     output_schema,
                     implicit_tool_call_config,
                     description: params.description,
-                    all_template_names: HashSet::new(),
+                    all_explicit_template_names: all_template_names,
                 }))
             }
         }

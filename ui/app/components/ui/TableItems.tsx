@@ -66,6 +66,18 @@ function TableItemTime({ timestamp }: TableItemTimeProps) {
   );
 }
 
+interface TableItemTextProps {
+  text: string | null;
+}
+
+function TableItemText({ text }: TableItemTextProps) {
+  if (text === null) {
+    return <span className="text-fg-muted">—</span>;
+  } else {
+    return <span className="whitespace-nowrap">{text}</span>;
+  }
+}
+
 interface TableItemFunctionProps {
   functionName: string;
   functionType: string;
@@ -128,4 +140,4 @@ function TableItemFunction({
   return <div className={`${baseClasses} cursor-default`}>{content}</div>;
 }
 
-export { TableItemShortUuid, TableItemTime, TableItemFunction };
+export { TableItemFunction, TableItemShortUuid, TableItemText, TableItemTime };

@@ -914,6 +914,7 @@ pub struct ModelInferenceRequest<'a> {
     pub output_schema: Option<&'a Value>,
     pub extra_body: FullExtraBodyConfig,
     pub extra_headers: FullExtraHeadersConfig,
+    pub fetch_and_encode_input_files_before_inference: bool,
     /// Optional arbitrary data, only used when constructing the cache key.
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
@@ -950,6 +951,7 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
             function_type: _,
             output_schema: _,
             extra_body: _,
+            fetch_and_encode_input_files_before_inference: _,
             extra_headers: _,
             extra_cache_key: _,
         } = self;
@@ -2041,6 +2043,7 @@ pub struct CollectChunksArgs<'a, 'b> {
     pub cached: bool,
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
+    pub fetch_and_encode_input_files_before_inference: bool,
     pub ticket_borrow: TicketBorrows,
     pub postgres_connection_info: PostgresConnectionInfo,
 }
@@ -2066,6 +2069,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         templates,
         tool_config,
         cached,
+        fetch_and_encode_input_files_before_inference,
         extra_body,
         extra_headers,
         ticket_borrow,
@@ -2322,6 +2326,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         tool_config,
         templates,
         dynamic_output_schema: dynamic_output_schema.as_ref(),
+        fetch_and_encode_input_files_before_inference,
         extra_body: Cow::Borrowed(&extra_body),
         extra_headers: Cow::Borrowed(&extra_headers),
         extra_cache_key: None,
@@ -3155,6 +3160,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             ticket_borrow: TicketBorrows::empty(),
         };
@@ -3222,6 +3228,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             ticket_borrow: TicketBorrows::empty(),
         };
@@ -3270,7 +3277,7 @@ mod tests {
             implicit_tool_call_config,
             output_schema,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -3320,6 +3327,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             ticket_borrow: TicketBorrows::empty(),
         };
@@ -3402,6 +3410,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             ticket_borrow: TicketBorrows::empty(),
         };
@@ -3492,6 +3501,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             ticket_borrow: TicketBorrows::empty(),
         };
@@ -3557,7 +3567,7 @@ mod tests {
             implicit_tool_call_config,
             output_schema,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -3607,6 +3617,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             ticket_borrow: TicketBorrows::empty(),
         };
@@ -3658,7 +3669,7 @@ mod tests {
             implicit_tool_call_config,
             output_schema,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -3717,6 +3728,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             ticket_borrow: TicketBorrows::empty(),
         };
@@ -3855,6 +3867,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             ticket_borrow: TicketBorrows::empty(),
         };
@@ -3978,6 +3991,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             ticket_borrow: TicketBorrows::empty(),
         };
@@ -4066,6 +4080,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             ticket_borrow: TicketBorrows::empty(),
         };
@@ -4145,6 +4160,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             ticket_borrow: TicketBorrows::empty(),
         };
@@ -4228,6 +4244,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             ticket_borrow: TicketBorrows::empty(),
         };
@@ -4295,6 +4312,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             ticket_borrow: TicketBorrows::empty(),
         };
@@ -4415,6 +4433,7 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             postgres_connection_info: PostgresConnectionInfo::Disabled,
+            fetch_and_encode_input_files_before_inference: false,
             ticket_borrow: TicketBorrows::empty(),
         };
 

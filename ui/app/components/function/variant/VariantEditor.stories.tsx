@@ -138,7 +138,7 @@ export const MinimalConfig: Story = {
         inner: {
           type: "chat_completion",
           weight: null,
-          model: "gpt-3.5-turbo",
+          model: "gpt-4.1-mini",
           templates: {},
           temperature: null,
           top_p: null,
@@ -256,7 +256,7 @@ export const WithTemplatesOnly: Story = {
               template: {
                 path: "templates/creative_user.jinja2",
                 contents: `Write a story about: {{ prompt }}
-    
+
     Requirements:
     - Length: {{ word_count }} words
     - Include these elements: {{ elements | join(", ") }}`,
@@ -268,9 +268,9 @@ export const WithTemplatesOnly: Story = {
               template: {
                 path: "templates/creative_assistant.jinja2",
                 contents: `Title: {{ title }}
-    
+
     {{ story }}
-    
+
     ---
     The End`,
               },

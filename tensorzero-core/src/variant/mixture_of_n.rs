@@ -1277,7 +1277,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
             implicit_tool_call_config: ToolCallConfig::default(),
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         });
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
@@ -1398,6 +1398,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: "",
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
