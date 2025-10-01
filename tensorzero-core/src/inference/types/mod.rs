@@ -978,8 +978,8 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
         };
 
         Ok(crate::rate_limiting::EstimatedRateLimitResourceUsage {
-            tokens,
             model_inferences,
+            tokens,
         })
     }
 }

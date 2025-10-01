@@ -1406,9 +1406,9 @@ mod tests {
             }],
         };
 
-        let usage = RateLimitResourceUsage {
-            model_inferences: 5,
-            tokens: 50,
+        let usage = EstimatedRateLimitResourceUsage {
+            model_inferences: Some(5),
+            tokens: Some(50),
         };
 
         let consume_request = token_active_limit
@@ -1458,8 +1458,8 @@ mod tests {
         );
 
         // Test resource usage mapping works correctly
-        assert_eq!(usage.get_usage(RateLimitResource::Token), 50);
-        assert_eq!(usage.get_usage(RateLimitResource::ModelInference), 5);
+        assert_eq!(usage.get_usage(RateLimitResource::Token), Some(50));
+        assert_eq!(usage.get_usage(RateLimitResource::ModelInference), Some(5));
     }
 
     #[test]
