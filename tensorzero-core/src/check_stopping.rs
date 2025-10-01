@@ -84,7 +84,9 @@ pub fn check_stopping(args: CheckStoppingArgs) -> Result<(bool, usize), CheckSto
         epsilon,
         delta,
     } = args;
+    // TODO: return struct instead of tuple
     // TODO: how to validate inputs?
+    // TODO: Should probably return false inside of throwing error
     if pull_counts.iter().any(|&x| x < min_pulls) {
         return Err(CheckStoppingError::StoppingError);
     }
@@ -95,6 +97,7 @@ pub fn check_stopping(args: CheckStoppingArgs) -> Result<(bool, usize), CheckSto
     }
 
     // TODO: implement tie-breaking for leader arm
+    // TODO: in case of tie, choose arm with largest value of variance / pull_count, for both stopping condition and return value. Log a warning
     let num_arms: usize = pull_counts.len();
     let leader_arm: usize = argmax(&means).ok_or(CheckStoppingError::StoppingError)?;
 

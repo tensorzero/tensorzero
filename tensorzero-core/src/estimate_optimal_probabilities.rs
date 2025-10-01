@@ -123,6 +123,7 @@ pub fn estimate_optimal_probabilities(
         }
     }
     // Build P, the quadratic coefficients, as diagonal on the w block: P_ii = 2α_t for i in [0..K-1]
+    // Could build this directly as a sparse matrix; started with dense matrix for legibility. See CscMatrix::new_from_triplets()
     let mut P_dense = vec![vec![0.0; num_decision_vars]; num_decision_vars];
     if alpha_t > 0.0 {
         for (i, row) in P_dense[..num_arms].iter_mut().enumerate() {
@@ -215,11 +216,10 @@ pub fn estimate_optimal_probabilities(
 
     // Solve for the optimal weights
     let A = CscMatrix::from(&A_rows);
-    let mut settings = DefaultSettings::<f64> {
+    let settings = DefaultSettings::<f64> {
         verbose: false,
         ..Default::default()
     };
-    settings.verbose = false; // Disable solver output
     let mut solver = DefaultSolver::new(&P, &q, &A, &b, &cones, settings)
         .map_err(|_| OptimalProbsError::CouldntBuildSolver)?;
     solver.solve();
@@ -417,8 +417,8 @@ mod tests {
             .epsilon(0.0)
             .reg0(0.0)
             .build();
+
         let probs = estimate_optimal_probabilities(args).unwrap();
-        // eprintln!("{probs:?}");
 
         // All probabilities should be non-negative
         for &p in &probs {
