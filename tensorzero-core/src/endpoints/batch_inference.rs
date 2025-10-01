@@ -267,6 +267,8 @@ pub async fn start_batch_inference(
                     return Err(e);
                 }
                 // If the sampling fails we break out of the loop and return the AllVariantsExhausted error
+                // It is more informative to the caller that variants have failed than that there's some internal error with the sampling strategy.
+                // As we continue work on experimentation we will make sure that the sampler only errors if there is no way to provide a valid variant.
                 break;
             }
         };
