@@ -29,7 +29,7 @@ use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::providers::openai::check_api_base_suffix;
+use crate::providers::openai::{check_api_base_suffix, OpenAIMessagesConfig};
 
 const PROVIDER_NAME: &str = "vLLM";
 pub const PROVIDER_TYPE: &str = "vllm";
@@ -325,7 +325,16 @@ impl<'a> VLLMRequest<'a> {
         } else {
             None
         };
-        let messages = prepare_vllm_messages(request).await?;
+        let messages = prepare_vllm_messages(
+            request,
+            OpenAIMessagesConfig {
+                json_mode: Some(&request.json_mode),
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: request
+                    .fetch_and_encode_input_files_before_inference,
+            },
+        )
+        .await?;
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
 
@@ -429,12 +438,13 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
 
 pub(super) async fn prepare_vllm_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
+    config: OpenAIMessagesConfig<'a>,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages: Vec<_> = try_join_all(
         request
             .messages
             .iter()
-            .map(|msg| tensorzero_to_openai_messages(msg, PROVIDER_TYPE)),
+            .map(|msg| tensorzero_to_openai_messages(msg, config)),
     )
     .await?
     .into_iter()

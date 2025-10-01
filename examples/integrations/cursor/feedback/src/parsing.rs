@@ -85,7 +85,7 @@ fn get_language_for_extension(ext: &str) -> Result<Language> {
         Ok(lang.clone())
     } else {
         Err(anyhow::anyhow!(
-            "Failed to insert language for extension: {ext}",
+            "Failed to insert language for extension: {ext}"
         ))
     }
 }

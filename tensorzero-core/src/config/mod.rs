@@ -295,47 +295,8 @@ pub struct ObservabilityConfig {
     pub async_writes: bool,
     #[serde(default)]
     pub batch_writes: BatchWritesConfig,
-}
-
-#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-pub struct UninitializedObservabilityConfig {
-    pub enabled: Option<bool>,
     #[serde(default)]
-    pub async_writes: bool,
-    #[serde(default)]
-    pub batch_writes: BatchWritesConfig,
-    /// If `true`, then we skip checking/applying migrations if the `TensorZeroMigration` table
-    /// contains exactly the migrations that we expect to have run.
-    #[serde(default)]
-    pub skip_completed_migrations: Option<bool>,
-}
-
-impl UninitializedObservabilityConfig {
-    pub fn load(self) -> ObservabilityConfig {
-        let UninitializedObservabilityConfig {
-            enabled,
-            async_writes,
-            batch_writes,
-            skip_completed_migrations,
-        } = self;
-        match skip_completed_migrations {
-            None => {}
-            Some(true) => {
-                tracing::warn!("Deprecation Warning: `gateway.observability.skip_completed_migrations` is now always enabled, and does not need to be manually enabled");
-            }
-            Some(false) => {
-                tracing::warn!("Deprecation Warning: `gateway.observability.skip_completed_migrations` is now always enabled, and cannot be manually disabled");
-            }
-        }
-        ObservabilityConfig {
-            enabled,
-            async_writes,
-            batch_writes,
-        }
-    }
+    pub disable_automatic_migrations: bool,
 }
 
 fn default_flush_interval_ms() -> u64 {

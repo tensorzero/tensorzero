@@ -1,7 +1,7 @@
 use std::{borrow::Cow, time::Duration};
 
 use crate::inference::types::RequestMessage;
-use crate::providers::openai::OpenAIToolChoiceString;
+use crate::providers::openai::{OpenAIMessagesConfig, OpenAIToolChoiceString};
 use futures::{future::try_join_all, StreamExt};
 use lazy_static::lazy_static;
 use reqwest_eventsource::Event;
@@ -355,8 +355,17 @@ impl<'a> TogetherRequest<'a> {
             }
             ModelInferenceRequestJsonMode::Off => None,
         };
-        let messages =
-            prepare_together_messages(request.system.as_deref(), &request.messages).await?;
+        let messages = prepare_together_messages(
+            request.system.as_deref(),
+            &request.messages,
+            OpenAIMessagesConfig {
+                json_mode: Some(&request.json_mode),
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: request
+                    .fetch_and_encode_input_files_before_inference,
+            },
+        )
+        .await?;
 
         // NOTE: Together AI doesn't seem to support `tool_choice="none"`, so we simply don't include the `tools` field if that's the case
         let tool_choice = request
@@ -395,11 +404,12 @@ impl<'a> TogetherRequest<'a> {
 pub async fn prepare_together_messages<'a>(
     system: Option<&'a str>,
     request_messages: &'a [RequestMessage],
+    config: OpenAIMessagesConfig<'a>,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages: Vec<_> = try_join_all(
         request_messages
             .iter()
-            .map(|msg| tensorzero_to_openai_messages(msg, PROVIDER_TYPE)),
+            .map(|msg| tensorzero_to_openai_messages(msg, config)),
     )
     .await?
     .into_iter()

@@ -101,3 +101,45 @@ test("push the new run button, launch an image evaluation", async ({
   // Assert that "error" is not in the page
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
+
+// This test depends on model inference cache hits (within ClickHouse)
+// If it starts failing, you may need to regenerate the model inference cache
+test("run evaluation with dataset with no output", async ({ page }) => {
+  test.setTimeout(600_000);
+  await page.goto("/evaluations");
+  await page.waitForTimeout(500);
+  await page.getByText("New Run").click();
+  await page.waitForTimeout(500);
+  await page.getByText("Select an evaluation").click();
+  await page.waitForTimeout(500);
+  await page.getByRole("option", { name: "haiku" }).click();
+  await page.waitForTimeout(500);
+  await page.getByText("Select a dataset").click();
+  await page.waitForTimeout(500);
+  await page.getByRole("option", { name: "no_output" }).click();
+  await page.waitForTimeout(500);
+  await page.getByText("Select a variant").click();
+  await page.waitForTimeout(500);
+  await page.getByRole("option", { name: "initial_prompt_gpt4o_mini" }).click();
+  await page.getByTestId("concurrency-limit").fill("5");
+  await page.getByRole("button", { name: "Launch" }).click();
+
+  await expect(
+    page.getByText("Select evaluation runs to compare..."),
+  ).toBeVisible();
+  // Wait for evals to start, then wait for them to finish
+  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute(
+    "data-running",
+    "true",
+  );
+  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute(
+    "data-running",
+    "false",
+    { timeout: 500_000 },
+  );
+  await expect(page.getByText("initial_prompt_gpt4o_mini")).toBeVisible();
+  await expect(page.getByText("n=", { exact: false }).first()).toBeVisible();
+
+  // Assert that "error" is not in the page
+  await expect(page.getByText("error", { exact: false })).not.toBeVisible();
+});

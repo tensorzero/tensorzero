@@ -34,12 +34,11 @@ export default function LLMFineTuningStatus({
   result,
   jobHandle,
 }: {
-  status: { status: "idle" } | OptimizationJobInfo;
+  status: OptimizationJobInfo;
   formData: SFTFormValues;
   result: string | null;
   jobHandle: OptimizationJobHandle;
 }) {
-  if (status.status === "idle") return null;
   const createdAt = extractTimestampFromUUIDv7(formData.jobId);
   return (
     <SectionsGroup>

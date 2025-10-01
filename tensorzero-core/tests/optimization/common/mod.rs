@@ -188,6 +188,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 json_mode: JsonMode::Off.into(),
                 function_type: FunctionType::Chat,
                 output_schema: None,
+                fetch_and_encode_input_files_before_inference: true,
                 extra_body: Default::default(),
                 extra_headers: Default::default(),
                 extra_cache_key: None,

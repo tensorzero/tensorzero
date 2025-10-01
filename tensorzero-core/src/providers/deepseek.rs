@@ -29,6 +29,7 @@ use crate::inference::types::{
 };
 use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
+use crate::providers::openai::OpenAIMessagesConfig;
 use crate::tool::ToolCallChunk;
 
 use super::openai::{
@@ -374,7 +375,17 @@ impl<'a> DeepSeekRequest<'a> {
         // NOTE: as mentioned by the DeepSeek team here: https://github.com/deepseek-ai/DeepSeek-R1?tab=readme-ov-file#usage-recommendations
         // the R1 series of models does not perform well with the system prompt. As we move towards first-class support for reasoning models we should check
         // if a model is an R1 model and if so, remove the system prompt from the request and instead put it in the first user message.
-        let messages = prepare_deepseek_messages(request, model).await?;
+        let messages = prepare_deepseek_messages(
+            request,
+            model,
+            OpenAIMessagesConfig {
+                json_mode: Some(&request.json_mode),
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: request
+                    .fetch_and_encode_input_files_before_inference,
+            },
+        )
+        .await?;
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);
 
@@ -585,10 +596,11 @@ struct DeepSeekResponse {
 pub(super) async fn prepare_deepseek_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
     model_name: &'a str,
+    config: OpenAIMessagesConfig<'a>,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
     for message in &request.messages {
-        messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE).await?);
+        messages.extend(tensorzero_to_openai_messages(message, config).await?);
     }
     // If this is an R1 model, prepend the system message as the first user message instead of using it as a system message
     if model_name.to_lowercase().contains("reasoner") {
@@ -1020,17 +1032,33 @@ mod tests {
             ..Default::default()
         };
 
-        let messages = prepare_deepseek_messages(&request, "deepseek-chat")
-            .await
-            .unwrap();
+        let messages = prepare_deepseek_messages(
+            &request,
+            "deepseek-chat",
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: false,
+            },
+        )
+        .await
+        .unwrap();
         assert_eq!(messages.len(), 2);
         assert!(matches!(messages[0], OpenAIRequestMessage::System(_)));
         assert!(matches!(messages[1], OpenAIRequestMessage::User(_)));
 
         // Test case 2: Reasoner model with system message
-        let messages = prepare_deepseek_messages(&request, "deepseek-reasoner")
-            .await
-            .unwrap();
+        let messages = prepare_deepseek_messages(
+            &request,
+            "deepseek-reasoner",
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: false,
+            },
+        )
+        .await
+        .unwrap();
         assert_eq!(messages.len(), 1);
         match &messages[0] {
             OpenAIRequestMessage::User(user_msg) => {
@@ -1072,9 +1100,17 @@ mod tests {
             ..Default::default()
         };
 
-        let messages = prepare_deepseek_messages(&request_no_system, "deepseek-chat")
-            .await
-            .unwrap();
+        let messages = prepare_deepseek_messages(
+            &request_no_system,
+            "deepseek-chat",
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: false,
+            },
+        )
+        .await
+        .unwrap();
         assert_eq!(messages.len(), 1);
         assert!(matches!(messages[0], OpenAIRequestMessage::User(_)));
 
@@ -1111,9 +1147,17 @@ mod tests {
             ..Default::default()
         };
 
-        let messages = prepare_deepseek_messages(&request_multiple, "deepseek-chat")
-            .await
-            .unwrap();
+        let messages = prepare_deepseek_messages(
+            &request_multiple,
+            "deepseek-chat",
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: false,
+            },
+        )
+        .await
+        .unwrap();
         assert_eq!(messages.len(), 4);
         assert!(matches!(messages[0], OpenAIRequestMessage::System(_)));
         assert!(matches!(messages[1], OpenAIRequestMessage::User(_)));

@@ -1403,6 +1403,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: "",
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
