@@ -2399,7 +2399,7 @@ mod tests {
             ..Default::default()
         };
 
-        // This should error cause postgres is disabled, but it should not be the RateLimitMissingMaxTokens error
+        // This should error because postgres is disabled, but it should not be the RateLimitMissingMaxTokens error
         let provider_request = ModelProviderRequest {
             request: &request_with_max_tokens,
             model_name: "test",
