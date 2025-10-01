@@ -268,15 +268,33 @@ pub struct EmbeddingRequest {
 }
 
 impl RateLimitedRequest for EmbeddingRequest {
-    fn estimated_resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
+    fn estimated_resource_usage(
+        &self,
+        resources: &[crate::rate_limiting::RateLimitResource],
+    ) -> Result<crate::rate_limiting::EstimatedRateLimitResourceUsage, Error> {
+        use crate::rate_limiting::RateLimitResource;
+
         let EmbeddingRequest {
             input,
             dimensions: _,
             encoding_format: _,
         } = self;
-        Ok(RateLimitResourceUsage {
-            model_inferences: 1,
-            tokens: input.estimated_input_token_usage(),
+
+        let tokens = if resources.contains(&RateLimitResource::Token) {
+            Some(input.estimated_input_token_usage())
+        } else {
+            None
+        };
+
+        let model_inferences = if resources.contains(&RateLimitResource::ModelInference) {
+            Some(1)
+        } else {
+            None
+        };
+
+        Ok(crate::rate_limiting::EstimatedRateLimitResourceUsage {
+            model_inferences,
+            tokens,
         })
     }
 }

@@ -127,7 +127,9 @@ impl RateLimitingConfig {
             return Ok(TicketBorrows::empty());
         }
 
-        let rate_limit_resource_requests = rate_limited_request.estimated_resource_usage()?;
+        let rate_limited_resources = self.get_rate_limited_resources(scope_info);
+        let rate_limit_resource_requests =
+            rate_limited_request.estimated_resource_usage(&rate_limited_resources)?;
         let ticket_requests: Result<Vec<ConsumeTicketsRequest>, Error> = limits
             .iter()
             .map(|limit| limit.get_consume_tickets_request(&rate_limit_resource_requests))
@@ -200,9 +202,11 @@ struct ActiveRateLimit {
 impl ActiveRateLimit {
     pub fn get_consume_tickets_request(
         &self,
-        requests: &RateLimitResourceUsage,
+        requests: &EstimatedRateLimitResourceUsage,
     ) -> Result<ConsumeTicketsRequest, Error> {
-        let request_amount = requests.get_usage(self.limit.resource);
+        let request_amount = requests
+            .get_usage(self.limit.resource)
+            .ok_or_else(|| Error::new(ErrorDetails::RateLimitMissingMaxTokens))?;
         self.get_consume_tickets_request_for_return(request_amount)
     }
 
@@ -325,6 +329,21 @@ pub struct RateLimitResourceUsage {
 
 impl RateLimitResourceUsage {
     pub fn get_usage(&self, resource: RateLimitResource) -> u64 {
+        match resource {
+            RateLimitResource::ModelInference => self.model_inferences,
+            RateLimitResource::Token => self.tokens,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct EstimatedRateLimitResourceUsage {
+    pub model_inferences: Option<u64>,
+    pub tokens: Option<u64>,
+}
+
+impl EstimatedRateLimitResourceUsage {
+    pub fn get_usage(&self, resource: RateLimitResource) -> Option<u64> {
         match resource {
             RateLimitResource::ModelInference => self.model_inferences,
             RateLimitResource::Token => self.tokens,
@@ -592,7 +611,10 @@ impl TicketBorrows {
 }
 
 pub trait RateLimitedRequest {
-    fn estimated_resource_usage(&self) -> Result<RateLimitResourceUsage, Error>;
+    fn estimated_resource_usage(
+        &self,
+        resources: &[RateLimitResource],
+    ) -> Result<EstimatedRateLimitResourceUsage, Error>;
 }
 
 pub trait RateLimitedInputContent {

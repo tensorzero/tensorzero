@@ -46,7 +46,7 @@ use crate::providers::helpers::peek_first_chunk;
 use crate::providers::hyperbolic::HyperbolicProvider;
 use crate::providers::sglang::SGLangProvider;
 use crate::providers::tgi::TGIProvider;
-use crate::rate_limiting::{RateLimitResource, ScopeInfo, TicketBorrows};
+use crate::rate_limiting::{ScopeInfo, TicketBorrows};
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -1310,17 +1310,6 @@ impl ModelProvider {
     ) -> Result<ProviderInferenceResponse, Error> {
         let span = Span::current();
         self.apply_otlp_span_fields_input(request.otlp_config, &span);
-        // Check if max_tokens is required for token-based rate limiting
-        let rate_limited_resources = clients
-            .rate_limiting_config
-            .get_rate_limited_resources(scope_info);
-
-        if rate_limited_resources.contains(&RateLimitResource::Token)
-            && request.request.max_tokens.is_none()
-        {
-            return Err(Error::new(ErrorDetails::RateLimitMissingMaxTokens));
-        }
-
         let ticket_borrow = clients
             .rate_limiting_config
             .consume_tickets(
@@ -1456,17 +1445,6 @@ impl ModelProvider {
         scope_info: &ScopeInfo<'_>,
     ) -> Result<StreamAndRawRequest, Error> {
         self.apply_otlp_span_fields_input(request.otlp_config, &Span::current());
-        // Check if max_tokens is required for token-based rate limiting
-        let rate_limited_resources = clients
-            .rate_limiting_config
-            .get_rate_limited_resources(scope_info);
-
-        if rate_limited_resources.contains(&RateLimitResource::Token)
-            && request.request.max_tokens.is_none()
-        {
-            return Err(Error::new(ErrorDetails::RateLimitMissingMaxTokens));
-        }
-
         let ticket_borrow = clients
             .rate_limiting_config
             .consume_tickets(

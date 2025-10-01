@@ -927,7 +927,12 @@ impl<'a> ModelInferenceRequest<'a> {
 }
 
 impl RateLimitedRequest for ModelInferenceRequest<'_> {
-    fn estimated_resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
+    fn estimated_resource_usage(
+        &self,
+        resources: &[crate::rate_limiting::RateLimitResource],
+    ) -> Result<crate::rate_limiting::EstimatedRateLimitResourceUsage, Error> {
+        use crate::rate_limiting::RateLimitResource;
+
         let ModelInferenceRequest {
             inference_id: _,
             messages,
@@ -949,20 +954,30 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
             extra_cache_key: _,
         } = self;
 
-        let system_tokens = system
-            .as_ref()
-            .map(|s| get_estimated_tokens(s))
-            .unwrap_or(0);
-        let messages_tokens: u64 = messages
-            .iter()
-            .map(RateLimitedInputContent::estimated_input_token_usage)
-            .sum();
+        let tokens = if resources.contains(&RateLimitResource::Token) {
+            let system_tokens = system
+                .as_ref()
+                .map(|s| get_estimated_tokens(s))
+                .unwrap_or(0);
+            let messages_tokens: u64 = messages
+                .iter()
+                .map(RateLimitedInputContent::estimated_input_token_usage)
+                .sum();
+            let output_tokens = max_tokens.map(|t| t as u64);
+            output_tokens.map(|out| system_tokens + messages_tokens + out)
+        } else {
+            None
+        };
 
-        let output_tokens = max_tokens.unwrap_or(0) as u64;
+        let model_inferences = if resources.contains(&RateLimitResource::ModelInference) {
+            Some(1)
+        } else {
+            None
+        };
 
-        Ok(RateLimitResourceUsage {
-            tokens: system_tokens + messages_tokens + output_tokens,
-            model_inferences: 1,
+        Ok(crate::rate_limiting::EstimatedRateLimitResourceUsage {
+            tokens,
+            model_inferences,
         })
     }
 }
