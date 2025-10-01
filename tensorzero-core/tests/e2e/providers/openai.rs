@@ -11,7 +11,6 @@ use tensorzero::{
 };
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_core::config::ProviderTypesConfig;
-use tensorzero_core::config::TimeoutsConfig;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::embeddings::{
     Embedding, EmbeddingEncodingFormat, EmbeddingModelConfig, EmbeddingProviderConfig,
@@ -1128,7 +1127,7 @@ async fn test_embedding_request() {
         providers: [(model_name.as_str().into(), provider_config)]
             .into_iter()
             .collect(),
-        timeouts: TimeoutsConfig::default(),
+        timeout_ms: None,
     };
 
     let request = EmbeddingRequest {
