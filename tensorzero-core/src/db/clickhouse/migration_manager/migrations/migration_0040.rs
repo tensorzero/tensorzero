@@ -1,7 +1,7 @@
-use super::check_column_exists;
+use super::{check_column_exists, check_table_exists};
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
 
 /// Adds an optional `name` column to datapoint tables for a human-readable label/name. This doesn't have to be
@@ -15,6 +15,19 @@ const MIGRATION_ID: &str = "0040";
 #[async_trait]
 impl Migration for Migration0040<'_> {
     async fn can_apply(&self) -> Result<(), Error> {
+        let tables_to_check = [
+            "ChatInferenceDatapoint",
+            "JsonInferenceDatapoint",
+        ];
+
+        for table_name in tables_to_check {
+            if !check_table_exists(self.clickhouse, table_name, MIGRATION_ID).await? {
+                return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                    id: MIGRATION_ID.to_string(),
+                    message: format!("{table_name} table does not exist"),
+                }));
+            }
+        }
         Ok(())
     }
 
