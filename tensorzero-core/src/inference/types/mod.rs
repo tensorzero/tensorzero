@@ -81,8 +81,6 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 use serde_untagged::UntaggedEnumVisitor;
 use std::borrow::Borrow;
-#[cfg(test)]
-use std::collections::HashSet;
 use std::ops::Add;
 use std::{
     borrow::Cow,
@@ -968,6 +966,10 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
                 .iter()
                 .map(RateLimitedInputContent::estimated_input_token_usage)
                 .sum();
+            // VALIDATION: Token resource requires max_tokens to estimate output token usage.
+            // Failing fast here establishes the contract that downstream code (e.g.,
+            // ActiveRateLimit::get_consume_tickets_request) can rely on: if Token resource
+            // is in the active rate limits, it will be present in the returned struct.
             let output_tokens =
                 max_tokens.ok_or_else(|| Error::new(RateLimitMissingMaxTokens))? as u64;
             Some(system_tokens + messages_tokens + output_tokens)
@@ -2510,6 +2512,7 @@ mod tests {
     use crate::tool::ToolConfig;
     use crate::tool::{DynamicToolConfig, ToolChoice};
     use serde_json::json;
+    use std::collections::HashSet;
     use tokio::time::Instant;
 
     #[tokio::test]

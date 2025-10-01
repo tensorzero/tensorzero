@@ -202,6 +202,10 @@ impl ActiveRateLimit {
         &self,
         requests: &EstimatedRateLimitResourceUsage,
     ) -> Result<ConsumeTicketsRequest, Error> {
+        // INVARIANT: All resources in active rate limits must be present in EstimatedRateLimitResourceUsage.
+        // This is validated earlier in `estimated_resource_usage()`, which returns an error if a required
+        // resource cannot be provided (e.g., Token resource requested but max_tokens is None).
+        // This check documents that contract. In normal operation, this should never fail.
         let request_amount = requests.get_usage(self.limit.resource).ok_or_else(|| {
             Error::new(ErrorDetails::Inference {
                 message: format!(
