@@ -966,21 +966,18 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
                 .iter()
                 .map(RateLimitedInputContent::estimated_input_token_usage)
                 .sum();
-            // VALIDATION: Token resource requires max_tokens to estimate output token usage.
-            // Failing fast here establishes the contract that downstream code (e.g.,
-            // ActiveRateLimit::get_consume_tickets_request) can rely on: if Token resource
-            // is in the active rate limits, it will be present in the returned struct.
+            // Token resource requires max_tokens to estimate output usage
             let output_tokens =
                 max_tokens.ok_or_else(|| Error::new(RateLimitMissingMaxTokens))? as u64;
-            Some(system_tokens + messages_tokens + output_tokens)
+            system_tokens + messages_tokens + output_tokens
         } else {
-            None
+            0 // Not requested
         };
 
         let model_inferences = if resources.contains(&RateLimitResource::ModelInference) {
-            Some(1)
+            1
         } else {
-            None
+            0 // Not requested
         };
 
         Ok(EstimatedRateLimitResourceUsage {
