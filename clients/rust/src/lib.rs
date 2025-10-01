@@ -1189,7 +1189,6 @@ impl Client {
             // Try to parse the response as JSON and extract `error`; fallback to raw body if it fails
             let message = resp.text().await.ok().map(|body| {
                 #[derive(serde::Deserialize)]
-                #[serde(deny_unknown_fields)]
                 struct ErrorResponse {
                     error: String,
                 }
