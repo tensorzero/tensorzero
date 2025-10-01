@@ -1070,7 +1070,6 @@ impl UninitializedProviderConfig {
                 }
 
                 let self_hosted: Box<dyn WrappedProvider + Send + Sync + 'static> =
-                    // TODO( blocks merge): what should the default behavior be for Sagemaker?
                     match hosted_provider {
                         HostedProviderKind::OpenAI => Box::new(OpenAIProvider::new(
                             model_name,

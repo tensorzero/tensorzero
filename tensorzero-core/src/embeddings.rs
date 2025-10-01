@@ -13,8 +13,8 @@ use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::RequestMessagesOrBatch;
 use crate::inference::types::{ContentBlock, Text};
 use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
-use crate::model_table::ShorthandModelConfig;
 use crate::model_table::{BaseModelTable, ProviderKind, ProviderTypeDefaultCredentials};
+use crate::model_table::{OpenAIKind, ShorthandModelConfig};
 use crate::providers::azure::AzureProvider;
 use crate::rate_limiting::{
     get_estimated_tokens, RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
@@ -54,7 +54,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
             "openai" => EmbeddingProviderConfig::OpenAI(OpenAIProvider::new(
                 model_name,
                 None,
-                crate::model_table::OpenAIKind
+                OpenAIKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
             )),
