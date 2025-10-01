@@ -1,7 +1,7 @@
 services:
   # We're using ngrok as an easy way to test OTLP exporting over TLS
   ngrok:
-    image: ngrok/ngrok:latest
+    image: ngrok/ngrok:3.30.0-alpine
     command:
       - "http"
       - "--app-protocol=http2"
@@ -10,3 +10,5 @@ services:
       NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
     ports:
       - 4040:4040
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
