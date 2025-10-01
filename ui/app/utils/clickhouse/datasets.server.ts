@@ -445,6 +445,7 @@ export async function getDatasetRows(
           id,
           'chat' as type,
           function_name,
+          name,
           episode_id,
           formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
         FROM ChatInferenceDatapoint
@@ -455,6 +456,7 @@ export async function getDatasetRows(
           id,
           'json' as type,
           function_name,
+          name,
           episode_id,
           formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
         FROM JsonInferenceDatapoint
@@ -489,6 +491,7 @@ export async function getDatapoint(
       dataset_name,
       function_name,
       id,
+      name,
       episode_id,
       input,
       output,
@@ -512,6 +515,7 @@ export async function getDatapoint(
       dataset_name,
       function_name,
       id,
+      name,
       episode_id,
       input,
       output,
@@ -557,6 +561,7 @@ export async function getDatapoint(
       `Expected exactly one result for dataset ${dataset_name} and id ${id}, but found ${allResults.length}`,
     );
   }
+
   const row = DatapointRowSchema.parse(allResults[0]);
   const parsedRow = await parseDatapointRow(row);
 
@@ -618,6 +623,7 @@ export async function staleDatapoint(
       dataset_name,
       function_name,
       id,
+      name,
       episode_id,
       input,
       output,
@@ -634,6 +640,7 @@ export async function staleDatapoint(
       dataset_name,
       function_name,
       id,
+      name,
       episode_id,
       input,
       output,
@@ -678,6 +685,7 @@ export async function insertDatapoint(
       dataset_name: datapoint.dataset_name,
       function_name: datapoint.function_name,
       id: datapoint.id,
+      name: datapoint.name,
       episode_id: datapoint.episode_id,
       input: input,
       output: datapoint.output,
