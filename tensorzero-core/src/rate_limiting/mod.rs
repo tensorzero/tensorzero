@@ -109,9 +109,9 @@ impl RateLimitingConfig {
         limits
             .iter()
             .map(|limit| limit.limit.resource)
-            .collect::<std::collections::HashSet<_>>()
+            .collect::<HashSet<_>>()
             .into_iter()
-            .collect()
+            .collect::<Vec<_>>()
     }
 
     pub async fn consume_tickets<'a>(
