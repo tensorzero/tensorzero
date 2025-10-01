@@ -150,10 +150,10 @@ pub struct ClientBuilder {
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum TensorZeroError {
-    #[error("HTTP Error (status code {status_code}){}", message.as_deref().map(|m| format!(": {m}")).unwrap_or_default())]
+    #[error("HTTP Error (status code {status_code}){}", text.as_deref().map(|m| format!(": {m}")).unwrap_or_default())]
     Http {
         status_code: u16,
-        message: Option<String>,
+        text: Option<String>,
         #[source]
         source: TensorZeroInternalError,
     },
@@ -1187,7 +1187,7 @@ impl Client {
             let status_code = resp.status().as_u16();
 
             // Try to parse the response as JSON and extract `error`; fallback to raw body if it fails
-            let message = resp.text().await.ok().map(|body| {
+            let text = resp.text().await.ok().map(|body| {
                 #[derive(serde::Deserialize)]
                 struct ErrorResponse {
                     error: String,
@@ -1200,7 +1200,7 @@ impl Client {
 
             return Err(TensorZeroError::Http {
                 status_code,
-                message,
+                text,
                 source: tensorzero_core::error::Error::new(ErrorDetails::JsonRequest {
                     message: format!(
                         "Request failed: {}",
@@ -1258,10 +1258,23 @@ impl Client {
                     ErrorDetails::Serialization { message: err_str },
                 )),
             });
+
             if let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = e {
+                // Try to parse the response as JSON and extract `error`; fallback to raw body if it fails
+                let text = resp.text().await.ok().map(|body| {
+                    #[derive(serde::Deserialize)]
+                    struct ErrorResponse {
+                        error: String,
+                    }
+
+                    serde_json::from_str::<ErrorResponse>(&body)
+                        .map(|e| e.error)
+                        .unwrap_or(body)
+                });
+
                 return Err(TensorZeroError::Http {
                     status_code: code.as_u16(),
-                    message: resp.text().await.ok(),
+                    text,
                     source: inner_err.into(),
                 });
             }
@@ -1490,7 +1503,7 @@ fn try_adjust_tool_call_arguments(
 pub fn err_to_http(e: tensorzero_core::error::Error) -> TensorZeroError {
     TensorZeroError::Http {
         status_code: e.status_code().as_u16(),
-        message: Some(serde_json::json!({"error": e.to_string()}).to_string()),
+        text: Some(e.to_string()),
         source: e.into(),
     }
 }
