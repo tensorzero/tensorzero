@@ -42,40 +42,38 @@ impl EvaluationStats {
         evaluation_update: EvaluationUpdate,
         writer: &mut impl Write,
     ) -> Result<()> {
-        match evaluation_update {
-            EvaluationUpdate::RunInfo(run_info) => match self.output_format {
-                OutputFormat::Jsonl => {
-                    writeln!(writer, "{}", serde_json::to_string(&run_info)?)?;
-                }
-                OutputFormat::Pretty => {
+        match self.output_format {
+            OutputFormat::Jsonl => {
+                let json = match &evaluation_update {
+                    EvaluationUpdate::RunInfo(run_info) => serde_json::to_string(run_info)?,
+                    other => serde_json::to_string(other)?,
+                };
+                writeln!(writer, "{json}")?;
+            }
+            OutputFormat::Pretty => match &evaluation_update {
+                EvaluationUpdate::RunInfo(run_info) => {
                     writeln!(writer, "Run ID: {}", run_info.evaluation_run_id)?;
                     writeln!(writer, "Number of datapoints: {}", run_info.num_datapoints)?;
                 }
+                EvaluationUpdate::Success(_) | EvaluationUpdate::Error(_) => {
+                    if let Some(progress_bar) = &mut self.progress_bar {
+                        progress_bar.inc(1);
+                    }
+                }
             },
-            _ => {
-                match self.output_format {
-                    OutputFormat::Jsonl => {
-                        writeln!(writer, "{}", serde_json::to_string(&evaluation_update)?)?;
-                    }
-                    OutputFormat::Pretty => {
-                        if let Some(progress_bar) = &mut self.progress_bar {
-                            progress_bar.inc(1);
-                        }
-                    }
-                }
-                match evaluation_update {
-                    EvaluationUpdate::Success(evaluation_info) => {
-                        self.evaluation_infos.push(evaluation_info);
-                    }
-                    EvaluationUpdate::Error(evaluation_error) => {
-                        self.evaluation_errors.push(evaluation_error);
-                    }
-                    EvaluationUpdate::RunInfo(_) => {
-                        // Already handled above
-                    }
-                }
+        }
+        match evaluation_update {
+            EvaluationUpdate::Success(evaluation_info) => {
+                self.evaluation_infos.push(evaluation_info);
+            }
+            EvaluationUpdate::Error(evaluation_error) => {
+                self.evaluation_errors.push(evaluation_error);
+            }
+            EvaluationUpdate::RunInfo(_) => {
+                // No data to store
             }
         }
+
         Ok(())
     }
 
@@ -147,7 +145,6 @@ impl EvaluationStats {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum EvaluationUpdate {
-    #[serde(skip)]
     RunInfo(crate::RunInfo),
     Success(EvaluationInfo),
     Error(EvaluationError),
