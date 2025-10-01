@@ -3,13 +3,11 @@
 #![expect(async_fn_in_trait)]
 
 pub mod cache;
-pub mod check_stopping;
 pub mod config; // TensorZero config file
 pub mod db;
 pub mod embeddings; // embedding inference
 pub mod endpoints; // API endpoints
 pub mod error; // error handling
-pub mod estimate_optimal_probabilities; // optimal sampling probabilities for bandits
 pub mod evaluations; // evaluation
 pub mod experimentation;
 pub mod function; // types and methods for working with TensorZero functions

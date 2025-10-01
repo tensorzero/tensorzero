@@ -1,4 +1,5 @@
 #![allow(non_snake_case)]
+#![expect(dead_code)]
 // use argminmax::ArgMinMax;
 use clarabel::algebra::CscMatrix;
 use clarabel::solver::{
@@ -6,7 +7,8 @@ use clarabel::solver::{
     ZeroConeT,
 };
 use thiserror::Error;
-use typed_builder::TypedBuilder;
+
+use crate::db::FeedbackByVariant;
 
 pub fn argmax<T: PartialOrd>(slice: &[T]) -> Option<usize> {
     slice
@@ -33,7 +35,7 @@ pub enum OptimalProbsError {
     NotFinite { field: String, index: usize },
     #[error("{field} has a negative value at position {index}")]
     Negative { field: String, index: usize },
-    #[error("{field} has a an out-of-range value at position {index}")]
+    #[error("{field} has an out-of-range value at position {index}")]
     OutOfRange { field: String, index: usize },
     #[error("The `min_prob` value of {prob} is too large for the number of arms")]
     MinProbTooLarge { prob: f64 },
@@ -43,54 +45,33 @@ pub enum OptimalProbsError {
     CouldntBuildSolver,
 }
 
-// impl Default for OptimalProbsArgs
-#[derive(TypedBuilder)]
-pub struct OptimalProbsArgs {
-    // required arguments (no defaults)
-    #[builder(setter(into))]
-    pull_counts: Vec<usize>,
-    #[builder(setter(into))]
-    means: Vec<f64>,
-    #[builder(setter(into))]
-    variances: Vec<f64>,
-
-    // optional arguments with defaults
-    #[builder(default = 0.0)]
-    epsilon: f64,
-    #[builder(default = 1e-12)]
-    ridge_variance: f64,
-    #[builder(default = 1e-6)]
-    min_prob: f64,
-    #[builder(default = 1e-2)]
-    reg0: f64,
-}
-
 /// Compute ε-aware optimal sampling proportions for sub-Gaussian rewards
 pub fn estimate_optimal_probabilities(
-    args: OptimalProbsArgs,
+    feedback: Vec<FeedbackByVariant>,
+    epsilon: Option<f64>,
+    ridge_variance: Option<f64>,
+    min_prob: Option<f64>,
+    reg0: Option<f64>,
 ) -> Result<Vec<f64>, OptimalProbsError> {
-    let OptimalProbsArgs {
-        pull_counts,
-        means,
-        mut variances,
-        epsilon,
-        ridge_variance,
-        min_prob,
-        reg0,
-    } = args;
+    let epsilon: f64 = epsilon.unwrap_or(0.0);
+    let ridge_variance: f64 = ridge_variance.unwrap_or(1e-12);
+    let min_prob: f64 = min_prob.unwrap_or(1e-6);
+    let reg0: f64 = reg0.unwrap_or(0.01);
 
-    // Lower bound the variances at `ridge_variance`
-    for v in &mut variances {
-        *v = v.max(ridge_variance);
-    }
+    let pull_counts: Vec<u64> = feedback.iter().map(|x| x.count).collect();
+    let means: Vec<f64> = feedback.iter().map(|x| x.mean as f64).collect();
+    let variances: Vec<f64> = feedback
+        .iter()
+        .map(|x| (x.variance as f64).max(ridge_variance))
+        .collect();
 
     // Gather the quantities required for the optimization
-    let num_arms = means.len();
-    let num_decision_vars = 2 * num_arms + 1;
-    let total_pulls: usize = pull_counts.iter().sum();
+    let num_arms: usize = means.len();
+    let num_decision_vars: usize = 2 * num_arms + 1;
+    let total_pulls: u64 = pull_counts.iter().sum();
     let alpha_t: f64 = reg0 / (total_pulls as f64).sqrt(); // regularization coefficient
-    let leader_arm = argmax(&means).ok_or(OptimalProbsError::CouldntComputeArgmax)?;
-    let leader_mean = means[leader_arm];
+    let leader_arm: usize = argmax(&means).ok_or(OptimalProbsError::CouldntComputeArgmax)?;
+    let leader_mean: f64 = means[leader_arm];
 
     // ε-margins: gap_i = μ_L - μ_i + ε  (strictly > 0 for ε > 0)
     let gaps: Vec<f64> = means.iter().map(|&x| leader_mean - x + epsilon).collect();
@@ -122,16 +103,25 @@ pub fn estimate_optimal_probabilities(
             *val = -2.0 * alpha_t * u_val;
         }
     }
-    // Build P, the quadratic coefficients, as diagonal on the w block: P_ii = 2α_t for i in [0..K-1]
-    // TODO: Build this directly as a sparse matrix. See CscMatrix::new_from_triplets()
-    let mut P_dense = vec![vec![0.0; num_decision_vars]; num_decision_vars];
-    if alpha_t > 0.0 {
-        for (i, row) in P_dense[..num_arms].iter_mut().enumerate() {
-            row[i] = 2.0 * alpha_t;
+
+    // P, the quadratic coefficients, is a diagonal matrix with 2α_t on the first K diagonal entries and 0 elsewhere
+    let P = if alpha_t > 0.0 {
+        // Create sparse matrix in triplet format (row, col, value)
+        let mut rows = Vec::with_capacity(num_arms);
+        let mut cols = Vec::with_capacity(num_arms);
+        let mut vals = Vec::with_capacity(num_arms);
+
+        for i in 0..num_arms {
+            rows.push(i);
+            cols.push(i);
+            vals.push(2.0 * alpha_t);
         }
-    }
-    // Convert dense matrix to compressed sparse column matrix expected by Clarabel
-    let P = CscMatrix::from(&P_dense);
+
+        CscMatrix::new_from_triplets(num_decision_vars, num_decision_vars, rows, cols, vals)
+    } else {
+        // Zero matrix (no regularization)
+        CscMatrix::new_from_triplets(num_decision_vars, num_decision_vars, vec![], vec![], vec![])
+    };
 
     // ---------- Constraints Ax + s = b, s ∈ K ----------
     let mut A_rows: Vec<Vec<f64>> = Vec::new();
@@ -234,6 +224,26 @@ pub fn estimate_optimal_probabilities(
 mod tests {
     use super::*;
 
+    // Helper function to create FeedbackByVariant for tests
+    fn make_feedback(
+        pull_counts: Vec<u64>,
+        means: Vec<f64>,
+        variances: Vec<f64>,
+    ) -> Vec<FeedbackByVariant> {
+        pull_counts
+            .into_iter()
+            .zip(means)
+            .zip(variances)
+            .enumerate()
+            .map(|(i, ((count, mean), variance))| FeedbackByVariant {
+                variant_name: format!("variant_{i}"),
+                mean: mean as f32,
+                variance: variance as f32,
+                count,
+            })
+            .collect()
+    }
+
     fn assert_vecs_almost_equal(slice1: &[f64], slice2: &[f64], tol: Option<f64>) {
         assert_eq!(
             slice1.len(),
@@ -256,15 +266,10 @@ mod tests {
 
     #[test]
     fn test_two_arms_different_variances() {
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![10, 10])
-            .means(vec![0.3, 0.7])
-            .variances(vec![1.1, 1.0])
-            .epsilon(0.1)
-            .min_prob(0.05)
-            .reg0(1.0)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(vec![10, 10], vec![0.3, 0.7], vec![1.1, 1.0]);
+        let probs =
+            estimate_optimal_probabilities(feedback, Some(0.1), None, Some(0.05), Some(1.0))
+                .unwrap();
 
         assert!(
             probs[0] > probs[1],
@@ -274,14 +279,9 @@ mod tests {
     }
     #[test]
     fn test_two_arms_equal_variances() {
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![10, 10])
-            .means(vec![0.5, 0.5])
-            .variances(vec![0.1, 0.1])
-            .epsilon(0.01)
-            .reg0(0.0)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(vec![10, 10], vec![0.5, 0.5], vec![0.1, 0.1]);
+        let probs =
+            estimate_optimal_probabilities(feedback, Some(0.01), None, None, Some(0.0)).unwrap();
 
         assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
         // With equal variances and only two arms, probabilities should be roughly equal
@@ -292,15 +292,10 @@ mod tests {
     fn test_min_prob_constraint() {
         // All arms should respect minimum probability
         let min_prob = 0.1;
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![10, 10, 10])
-            .means(vec![0.2, 0.3, 0.9])
-            .variances(vec![0.1, 0.1, 10.0])
-            .epsilon(0.01)
-            .min_prob(min_prob)
-            .reg0(0.0)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(vec![10, 10, 10], vec![0.2, 0.3, 0.9], vec![0.1, 0.1, 10.0]);
+        let probs =
+            estimate_optimal_probabilities(feedback, Some(0.01), None, Some(min_prob), Some(0.0))
+                .unwrap();
 
         for &p in &probs {
             assert!(
@@ -314,14 +309,15 @@ mod tests {
     #[test]
     fn test_high_variance_arm() {
         // Higher variance means more sampling needed for accurate mean estimate
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![10, 10])
-            .means(vec![0.5, 0.5])
-            .variances(vec![0.01, 0.5])
-            .epsilon(0.01)
-            .reg0(1.0)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(vec![10, 10], vec![0.5, 0.5], vec![0.01, 0.5]);
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(0.01), // epsilon
+            None,       // ridge_variance
+            None,       // min_prob
+            Some(1.0),  // reg0
+        )
+        .unwrap();
 
         assert!(probs[1] > probs[0], "High variance arm needs more samples");
         assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
@@ -330,23 +326,25 @@ mod tests {
     #[test]
     fn test_regularization_effect() {
         // Higher reg0 should pull probabilities toward uniform
-        let args_no_reg = OptimalProbsArgs::builder()
-            .pull_counts(vec![100, 100])
-            .means(vec![0.3, 0.7])
-            .variances(vec![0.3, 0.1])
-            .epsilon(0.0)
-            .reg0(0.0)
-            .build();
-        let probs_no_reg = estimate_optimal_probabilities(args_no_reg).unwrap();
+        let feedback_no_reg = make_feedback(vec![100, 100], vec![0.3, 0.7], vec![0.3, 0.1]);
+        let probs_no_reg = estimate_optimal_probabilities(
+            feedback_no_reg,
+            Some(0.0), // epsilon
+            None,      // ridge_variance
+            None,      // min_prob
+            Some(0.0), // reg0
+        )
+        .unwrap();
 
-        let args_with_reg = OptimalProbsArgs::builder()
-            .pull_counts(vec![100, 100])
-            .means(vec![0.3, 0.7])
-            .variances(vec![0.3, 0.1])
-            .epsilon(0.0)
-            .reg0(10.0)
-            .build();
-        let probs_with_reg = estimate_optimal_probabilities(args_with_reg).unwrap();
+        let feedback_with_reg = make_feedback(vec![100, 100], vec![0.3, 0.7], vec![0.3, 0.1]);
+        let probs_with_reg = estimate_optimal_probabilities(
+            feedback_with_reg,
+            Some(0.0),  // epsilon
+            None,       // ridge_variance
+            None,       // min_prob
+            Some(10.0), // reg0
+        )
+        .unwrap();
 
         // With regularization, probabilities should be closer to 0.5
         let diff_no_reg = (probs_no_reg[0] - 0.5).abs();
@@ -358,16 +356,19 @@ mod tests {
     fn test_many_arms() {
         // Test with 10 arms - spread out means
         let min_prob = 0.05;
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![10; 10])
-            .means(vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
-            .variances(vec![0.1; 10])
-            .epsilon(0.0)
-            .reg0(0.0)
-            .min_prob(min_prob)
-            .build();
-
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(
+            vec![10; 10],
+            vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+            vec![0.1; 10],
+        );
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(0.0),      // epsilon
+            None,           // ridge_variance
+            Some(min_prob), // min_prob
+            Some(0.0),      // reg0
+        )
+        .unwrap();
 
         // All probabilities should be non-negative
         for &p in &probs {
@@ -382,14 +383,15 @@ mod tests {
     #[test]
     fn test_close_competition() {
         // Two arms very close in mean - both need substantial sampling
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![10, 10, 10])
-            .means(vec![0.50, 0.51, 0.3])
-            .variances(vec![0.1, 0.1, 0.1])
-            .epsilon(0.0)
-            .reg0(0.0)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(vec![10, 10, 10], vec![0.50, 0.51, 0.3], vec![0.1, 0.1, 0.1]);
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(0.0), // epsilon
+            None,      // ridge_variance
+            None,      // min_prob
+            Some(0.0), // reg0
+        )
+        .unwrap();
 
         assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
         // The close competitors (arms 0 and 1) should together get most probability
@@ -399,16 +401,15 @@ mod tests {
     #[test]
     fn test_ridge_variance_applied() {
         // Ridge variance should lower bound all variances
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![10, 10])
-            .means(vec![0.5, 0.5])
-            .variances(vec![1e-20, 1e-20])
-            .epsilon(0.0)
-            // .ridge_variance(1e-12)
-            .ridge_variance(0.01)
-            .reg0(0.0)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(vec![10, 10], vec![0.5, 0.5], vec![1e-20, 1e-20]);
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(0.0),  // epsilon
+            Some(0.01), // ridge_variance
+            None,       // min_prob
+            Some(0.0),  // reg0
+        )
+        .unwrap();
 
         // Should not fail and should return valid probabilities
         assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
@@ -418,15 +419,15 @@ mod tests {
     #[test]
     fn test_zero_variance_with_ridge() {
         // Zero variance should be handled by ridge
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![10, 10])
-            .means(vec![0.3, 0.7])
-            .variances(vec![0.0001, 0.0])
-            .epsilon(0.0)
-            .ridge_variance(0.001)
-            .reg0(0.0)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(vec![10, 10], vec![0.3, 0.7], vec![0.0001, 0.0]);
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(0.0),   // epsilon
+            Some(0.001), // ridge_variance
+            None,        // min_prob
+            Some(0.0),   // reg0
+        )
+        .unwrap();
 
         assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
         // Arm with higher mean and variance needs more sampling
@@ -436,16 +437,19 @@ mod tests {
     #[test]
     fn test_basic_constraints() {
         // Test that basic constraints are always satisfied
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![15, 30, 20, 35])
-            .means(vec![0.25, 0.55, 0.40, 0.60])
-            .variances(vec![0.05, 0.15, 0.10, 0.20])
-            .epsilon(0.05)
-            .ridge_variance(1e-8)
-            .min_prob(0.05)
-            .reg0(2.0)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(
+            vec![15, 30, 20, 35],
+            vec![0.25, 0.55, 0.40, 0.60],
+            vec![0.05, 0.15, 0.10, 0.20],
+        );
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(0.05), // epsilon
+            Some(1e-8), // ridge_variance
+            Some(0.05), // min_prob
+            Some(2.0),  // reg0
+        )
+        .unwrap();
 
         // Verify basic constraints
         assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
@@ -458,15 +462,19 @@ mod tests {
     // Tests with reference solutions from cvxpy (using CLARABEL solver) or scipy.minimize
     #[test]
     fn test_three_arms_varied_cvxpy() {
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![10, 10, 10])
-            .means(vec![0.20, 0.60, 0.40])
-            .variances(vec![0.10, 0.20, 0.15])
-            .epsilon(0.02)
-            .min_prob(0.05)
-            .reg0(0.5)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(
+            vec![10, 10, 10],
+            vec![0.20, 0.60, 0.40],
+            vec![0.10, 0.20, 0.15],
+        );
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(0.02), // epsilon
+            None,       // ridge_variance
+            Some(0.05), // min_prob
+            Some(0.5),  // reg0
+        )
+        .unwrap();
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![0.050000000981238, 0.509054656289642, 0.440945342729120];
@@ -476,15 +484,19 @@ mod tests {
 
     #[test]
     fn test_four_arms_with_reg_cvxpy() {
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![15, 30, 20, 35])
-            .means(vec![0.25, 0.55, 0.40, 0.60])
-            .variances(vec![0.05, 0.15, 0.10, 0.20])
-            .epsilon(0.05)
-            .min_prob(0.05)
-            .reg0(2.0)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(
+            vec![15, 30, 20, 35],
+            vec![0.25, 0.55, 0.40, 0.60],
+            vec![0.05, 0.15, 0.10, 0.20],
+        );
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(0.05), // epsilon
+            None,       // ridge_variance
+            Some(0.05), // min_prob
+            Some(2.0),  // reg0
+        )
+        .unwrap();
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![
@@ -499,15 +511,19 @@ mod tests {
 
     #[test]
     fn test_close_competition_cvxpy() {
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![10, 10, 10])
-            .means(vec![0.50, 0.51, 0.30])
-            .variances(vec![0.10, 0.10, 0.10])
-            .epsilon(0.01)
-            .min_prob(0.01)
-            .reg0(0.0)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(
+            vec![10, 10, 10],
+            vec![0.50, 0.51, 0.30],
+            vec![0.10, 0.10, 0.10],
+        );
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(0.01), // epsilon
+            None,       // ridge_variance
+            Some(0.01), // min_prob
+            Some(0.0),  // reg0
+        )
+        .unwrap();
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![0.494996029290799, 0.495003970556052, 0.010000000211085];
@@ -517,19 +533,19 @@ mod tests {
 
     #[test]
     fn test_ten_arms_cvxpy() {
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![10, 10, 10, 10, 10, 10, 10, 10, 10, 10])
-            .means(vec![
-                0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 1.00,
-            ])
-            .variances(vec![
-                0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10,
-            ])
-            .epsilon(0.02)
-            .min_prob(0.01)
-            .reg0(0.1)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(
+            vec![10, 10, 10, 10, 10, 10, 10, 10, 10, 10],
+            vec![0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 1.00],
+            vec![0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10],
+        );
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(0.02), // epsilon
+            None,       // ridge_variance
+            Some(0.01), // min_prob
+            Some(0.1),  // reg0
+        )
+        .unwrap();
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![
@@ -551,15 +567,19 @@ mod tests {
     // Tests with high variance (variance > 1) representing different reward scales
     #[test]
     fn test_high_variance_gaussians_cvxpy() {
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![20, 20, 20])
-            .means(vec![10.00, 12.00, 11.00])
-            .variances(vec![2.00, 3.50, 2.50])
-            .epsilon(0.5)
-            .min_prob(0.05)
-            .reg0(0.1)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(
+            vec![20, 20, 20],
+            vec![10.00, 12.00, 11.00],
+            vec![2.00, 3.50, 2.50],
+        );
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(0.5),  // epsilon
+            None,       // ridge_variance
+            Some(0.05), // min_prob
+            Some(0.1),  // reg0
+        )
+        .unwrap();
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![0.069702913270257, 0.508019009489254, 0.422278077240489];
@@ -569,15 +589,15 @@ mod tests {
 
     #[test]
     fn test_very_high_variance_cvxpy() {
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![30, 30])
-            .means(vec![50.00, 55.00])
-            .variances(vec![10.00, 15.00])
-            .epsilon(1.0)
-            .min_prob(0.01)
-            .reg0(0.5)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(vec![30, 30], vec![50.00, 55.00], vec![10.00, 15.00]);
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(1.0),  // epsilon
+            None,       // ridge_variance
+            Some(0.01), // min_prob
+            Some(0.5),  // reg0
+        )
+        .unwrap();
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![0.450083389074646, 0.549916610924264];
@@ -587,15 +607,19 @@ mod tests {
 
     #[test]
     fn test_mixed_variance_scales_cvxpy() {
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![15, 15, 15, 15])
-            .means(vec![1.00, 5.00, 3.00, 7.00])
-            .variances(vec![0.10, 2.00, 0.50, 4.00])
-            .epsilon(0.2)
-            .min_prob(0.05)
-            .reg0(1.0)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(
+            vec![15, 15, 15, 15],
+            vec![1.00, 5.00, 3.00, 7.00],
+            vec![0.10, 2.00, 0.50, 4.00],
+        );
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(0.2),  // epsilon
+            None,       // ridge_variance
+            Some(0.05), // min_prob
+            Some(1.0),  // reg0
+        )
+        .unwrap();
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![
@@ -610,15 +634,19 @@ mod tests {
 
     #[test]
     fn test_small_means_large_variance_cvxpy() {
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![25, 25, 25])
-            .means(vec![0.10, 0.30, 0.20])
-            .variances(vec![5.00, 8.00, 6.00])
-            .epsilon(0.05)
-            .min_prob(0.1)
-            .reg0(0.2)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(
+            vec![25, 25, 25],
+            vec![0.10, 0.30, 0.20],
+            vec![5.00, 8.00, 6.00],
+        );
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(0.05), // epsilon
+            None,       // ridge_variance
+            Some(0.1),  // min_prob
+            Some(0.2),  // reg0
+        )
+        .unwrap();
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![0.099999996666504, 0.482302162018304, 0.417697840883230];
@@ -628,15 +656,19 @@ mod tests {
 
     #[test]
     fn test_five_arms_high_variance_cvxpy() {
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![10, 10, 10, 10, 10])
-            .means(vec![20.00, 25.00, 22.00, 28.00, 24.00])
-            .variances(vec![3.00, 4.00, 2.50, 5.00, 3.50])
-            .epsilon(1.0)
-            .min_prob(0.05)
-            .reg0(0.5)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(
+            vec![10, 10, 10, 10, 10],
+            vec![20.00, 25.00, 22.00, 28.00, 24.00],
+            vec![3.00, 4.00, 2.50, 5.00, 3.50],
+        );
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(1.0),  // epsilon
+            None,       // ridge_variance
+            Some(0.05), // min_prob
+            Some(0.5),  // reg0
+        )
+        .unwrap();
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![
@@ -652,15 +684,15 @@ mod tests {
 
     #[test]
     fn test_asymmetric_high_variance_cvxpy() {
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![50, 50])
-            .means(vec![100.00, 105.00])
-            .variances(vec![1.00, 20.00])
-            .epsilon(2.0)
-            .min_prob(0.01)
-            .reg0(0.0)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(vec![50, 50], vec![100.00, 105.00], vec![1.00, 20.00]);
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(2.0),  // epsilon
+            None,       // ridge_variance
+            Some(0.01), // min_prob
+            Some(0.0),  // reg0
+        )
+        .unwrap();
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![0.182752086850448, 0.817247913149552];
@@ -672,15 +704,15 @@ mod tests {
 
     #[test]
     fn test_two_arms_simple_scipy() {
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![20, 20])
-            .means(vec![0.50, 0.70])
-            .variances(vec![0.10, 0.15])
-            .epsilon(0.1)
-            .min_prob(0.05)
-            .reg0(0.1)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(vec![20, 20], vec![0.50, 0.70], vec![0.10, 0.15]);
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(0.1),  // epsilon
+            None,       // ridge_variance
+            Some(0.05), // min_prob
+            Some(0.1),  // reg0
+        )
+        .unwrap();
 
         // Expected solution from scipy (trust-constr with SLSQP fallback)
         let expected = vec![0.449525654401765, 0.550474345598233];
@@ -690,15 +722,19 @@ mod tests {
 
     #[test]
     fn test_three_arms_moderate_scipy() {
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![15, 15, 15])
-            .means(vec![1.00, 1.50, 1.20])
-            .variances(vec![0.20, 0.30, 0.25])
-            .epsilon(0.2)
-            .min_prob(0.05)
-            .reg0(0.2)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(
+            vec![15, 15, 15],
+            vec![1.00, 1.50, 1.20],
+            vec![0.20, 0.30, 0.25],
+        );
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(0.2),  // epsilon
+            None,       // ridge_variance
+            Some(0.05), // min_prob
+            Some(0.2),  // reg0
+        )
+        .unwrap();
 
         // Expected solution from scipy (trust-constr with SLSQP fallback)
         let expected = vec![0.111715272862871, 0.473942231288105, 0.414342495849023];
@@ -708,15 +744,15 @@ mod tests {
 
     #[test]
     fn test_very_high_variance_scipy() {
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![30, 30])
-            .means(vec![50.00, 55.00])
-            .variances(vec![10.00, 15.00])
-            .epsilon(1.0)
-            .min_prob(0.01)
-            .reg0(0.5)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(vec![30, 30], vec![50.00, 55.00], vec![10.00, 15.00]);
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(1.0),  // epsilon
+            None,       // ridge_variance
+            Some(0.01), // min_prob
+            Some(0.5),  // reg0
+        )
+        .unwrap();
 
         // Expected solution from scipy (trust-constr with SLSQP fallback)
         let expected = vec![0.450070015802657, 0.549929984197342];
@@ -726,15 +762,19 @@ mod tests {
 
     #[test]
     fn test_four_arms_different_scales_scipy() {
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![20, 20, 20, 20])
-            .means(vec![2.00, 3.00, 2.50, 3.50])
-            .variances(vec![0.50, 1.00, 0.75, 1.50])
-            .epsilon(0.3)
-            .min_prob(0.05)
-            .reg0(0.3)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(
+            vec![20, 20, 20, 20],
+            vec![2.00, 3.00, 2.50, 3.50],
+            vec![0.50, 1.00, 0.75, 1.50],
+        );
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(0.3),  // epsilon
+            None,       // ridge_variance
+            Some(0.05), // min_prob
+            Some(0.3),  // reg0
+        )
+        .unwrap();
 
         // Expected solution from scipy (trust-constr with SLSQP fallback)
         let expected = vec![
@@ -749,15 +789,15 @@ mod tests {
 
     #[test]
     fn test_small_epsilon_scipy() {
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![50, 50])
-            .means(vec![10.00, 10.50])
-            .variances(vec![1.00, 1.20])
-            .epsilon(0.05)
-            .min_prob(0.1)
-            .reg0(0.1)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
+        let feedback = make_feedback(vec![50, 50], vec![10.00, 10.50], vec![1.00, 1.20]);
+        let probs = estimate_optimal_probabilities(
+            feedback,
+            Some(0.05), // epsilon
+            None,       // ridge_variance
+            Some(0.1),  // min_prob
+            Some(0.1),  // reg0
+        )
+        .unwrap();
 
         // Expected solution from scipy (trust-constr with SLSQP fallback)
         let expected = vec![0.477229489718064, 0.522770510281936];

@@ -9,6 +9,7 @@ use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::variant::VariantInfo;
 
 mod static_weights;
+mod track_and_stop;
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]

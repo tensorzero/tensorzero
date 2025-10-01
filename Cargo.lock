@@ -3107,12 +3107,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "linalg"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28de350d80ab0c7063176fe3157c5844c71aa307a1e170f7c2f64ad666ab8c45"
-
-[[package]]
 name = "linux-raw-sys"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5797,7 +5791,6 @@ dependencies = [
  "jsonschema",
  "jsonwebtoken",
  "lazy_static",
- "linalg",
  "log",
  "metrics",
  "metrics-exporter-prometheus",
