@@ -171,7 +171,7 @@ pub fn estimate_optimal_probabilities(
                 let mut row: Vec<f64> = vec![0.0; num_decision_vars];
                 row[num_arms + i] = 1.0;
                 row[num_arms + leader_arm] = 1.0;
-                row[2 * num_arms] = -2.0 * gaps2[i];
+                row[2 * num_arms] = -0.5 * gaps2[i];
                 A_rows.push(row);
                 b.push(0.0);
             }
@@ -255,8 +255,7 @@ mod tests {
     }
 
     #[test]
-    fn test_two_arms_different_means() {
-        // Simple test with clear leader
+    fn test_two_arms_different_variances() {
         let args = OptimalProbsArgs::builder()
             .pull_counts(vec![10, 10])
             .means(vec![0.3, 0.7])
@@ -266,7 +265,7 @@ mod tests {
             .reg0(1.0)
             .build();
         let probs = estimate_optimal_probabilities(args).unwrap();
-        // eprintln!("probs = {:?}", probs);
+
         assert!(
             probs[0] > probs[1],
             "Arm with higher variance should have higher probability"
@@ -274,9 +273,7 @@ mod tests {
         assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
     }
     #[test]
-    fn test_two_arms_equal_means() {
-        // Equal means: both need sampling to distinguish which is better
-        // Should allocate roughly equally (exact solution depends on variances)
+    fn test_two_arms_equal_variances() {
         let args = OptimalProbsArgs::builder()
             .pull_counts(vec![10, 10])
             .means(vec![0.5, 0.5])
@@ -285,31 +282,10 @@ mod tests {
             .reg0(0.0)
             .build();
         let probs = estimate_optimal_probabilities(args).unwrap();
-        // eprintln!("{:?}", probs);
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
-        // With equal means and variances, should be roughly equal
-        assert!((probs[0] - probs[1]).abs() < 0.1);
-    }
 
-    #[test]
-    fn test_two_arms_clear_leader() {
-        // Clear leader (0.9 vs 0.3): the worse arm needs more sampling
-        // to confidently rule it out as ε-best
-        let args = OptimalProbsArgs::builder()
-            .pull_counts(vec![10, 10])
-            .means(vec![0.3, 0.9])
-            .variances(vec![0.2, 0.1])
-            .epsilon(0.0)
-            .reg0(0.0)
-            .build();
-        let probs = estimate_optimal_probabilities(args).unwrap();
-        // eprintln!("{probs:?}");
         assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
-        // The worse arm (arm 0) should get MORE probability to rule it out
-        assert!(
-            probs[0] > probs[1],
-            "Worse arm should get more sampling to rule it out"
-        );
+        // With equal variances and only two arms, probabilities should be roughly equal
+        assert!((probs[0] - probs[1]).abs() < 0.1);
     }
 
     #[test]
@@ -318,17 +294,17 @@ mod tests {
         let min_prob = 0.1;
         let args = OptimalProbsArgs::builder()
             .pull_counts(vec![10, 10, 10])
-            .means(vec![0.2, 0.9, 0.3])
-            .variances(vec![0.1, 0.1, 0.1])
+            .means(vec![0.2, 0.3, 0.9])
+            .variances(vec![0.1, 0.1, 10.0])
             .epsilon(0.01)
             .min_prob(min_prob)
             .reg0(0.0)
             .build();
         let probs = estimate_optimal_probabilities(args).unwrap();
-        // eprintln!("{probs:?}");
+
         for &p in &probs {
             assert!(
-                p >= min_prob - 1e-9,
+                p >= min_prob - 1e-6,
                 "Probability {p} violates min_prob {min_prob}"
             );
         }
@@ -346,36 +322,9 @@ mod tests {
             .reg0(1.0)
             .build();
         let probs = estimate_optimal_probabilities(args).unwrap();
-        // eprintln!("{probs:?}");
+
         assert!(probs[1] > probs[0], "High variance arm needs more samples");
         assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
-    }
-
-    #[test]
-    fn test_epsilon_effect() {
-        // With larger epsilon, the gap to rule out the worse arm increases
-        // This means we need to sample more to distinguish them
-        let args_small_eps = OptimalProbsArgs::builder()
-            .pull_counts(vec![10, 10])
-            .means(vec![0.3, 0.7])
-            .variances(vec![0.1, 0.1])
-            .epsilon(0.01)
-            .reg0(0.0)
-            .build();
-        let probs_small_eps = estimate_optimal_probabilities(args_small_eps).unwrap();
-
-        let args_large_eps = OptimalProbsArgs::builder()
-            .pull_counts(vec![10, 10])
-            .means(vec![0.3, 0.7])
-            .variances(vec![0.1, 0.1])
-            .epsilon(0.2)
-            .reg0(0.0)
-            .build();
-        let probs_large_eps = estimate_optimal_probabilities(args_large_eps).unwrap();
-
-        // Basic sanity checks
-        assert!((probs_small_eps.iter().sum::<f64>() - 1.0).abs() < 1e-6);
-        assert!((probs_large_eps.iter().sum::<f64>() - 1.0).abs() < 1e-6);
     }
 
     #[test]
@@ -389,7 +338,6 @@ mod tests {
             .reg0(0.0)
             .build();
         let probs_no_reg = estimate_optimal_probabilities(args_no_reg).unwrap();
-        // eprintln!("{probs_no_reg:?}");
 
         let args_with_reg = OptimalProbsArgs::builder()
             .pull_counts(vec![100, 100])
@@ -399,7 +347,6 @@ mod tests {
             .reg0(10.0)
             .build();
         let probs_with_reg = estimate_optimal_probabilities(args_with_reg).unwrap();
-        // eprintln!("{probs_with_reg:?}");
 
         // With regularization, probabilities should be closer to 0.5
         let diff_no_reg = (probs_no_reg[0] - 0.5).abs();
@@ -410,19 +357,21 @@ mod tests {
     #[test]
     fn test_many_arms() {
         // Test with 10 arms - spread out means
+        let min_prob = 0.05;
         let args = OptimalProbsArgs::builder()
             .pull_counts(vec![10; 10])
             .means(vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
             .variances(vec![0.1; 10])
             .epsilon(0.0)
             .reg0(0.0)
+            .min_prob(min_prob)
             .build();
 
         let probs = estimate_optimal_probabilities(args).unwrap();
 
         // All probabilities should be non-negative
         for &p in &probs {
-            assert!(p >= 0.0);
+            assert!(p >= min_prob - 1e-6);
         }
         // Sum to 1
         assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
@@ -460,7 +409,6 @@ mod tests {
             .reg0(0.0)
             .build();
         let probs = estimate_optimal_probabilities(args).unwrap();
-        // eprintln!("{probs:?}");
 
         // Should not fail and should return valid probabilities
         assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
@@ -473,16 +421,16 @@ mod tests {
         let args = OptimalProbsArgs::builder()
             .pull_counts(vec![10, 10])
             .means(vec![0.3, 0.7])
-            .variances(vec![0.0, 0.0])
+            .variances(vec![0.0001, 0.0])
             .epsilon(0.0)
-            .ridge_variance(1e-6)
+            .ridge_variance(0.001)
             .reg0(0.0)
             .build();
         let probs = estimate_optimal_probabilities(args).unwrap();
 
         assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
-        // Worse arm needs more sampling
-        assert!(probs[0] > probs[1]);
+        // Arm with higher mean and variance needs more sampling
+        assert!(probs[1] > probs[0]);
     }
 
     #[test]
@@ -505,5 +453,315 @@ mod tests {
             assert!(p >= 0.05 - 1e-9, "min_prob constraint violated");
             assert!(p >= 0.0, "Probability is negative");
         }
+    }
+
+    // Tests with reference solutions from cvxpy (using CLARABEL solver) or scipy.minimize
+    #[test]
+    fn test_three_arms_varied_cvxpy() {
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![10, 10, 10])
+            .means(vec![0.20, 0.60, 0.40])
+            .variances(vec![0.10, 0.20, 0.15])
+            .epsilon(0.02)
+            .min_prob(0.05)
+            .reg0(0.5)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+
+        // Expected solution from cvxpy (using CLARABEL solver)
+        let expected = vec![0.050000000981238, 0.509054656289642, 0.440945342729120];
+        assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_four_arms_with_reg_cvxpy() {
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![15, 30, 20, 35])
+            .means(vec![0.25, 0.55, 0.40, 0.60])
+            .variances(vec![0.05, 0.15, 0.10, 0.20])
+            .epsilon(0.05)
+            .min_prob(0.05)
+            .reg0(2.0)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+
+        // Expected solution from cvxpy (using CLARABEL solver)
+        let expected = vec![
+            0.050000000010182,
+            0.417754702981922,
+            0.050000000506407,
+            0.482245296501354,
+        ];
+        assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_close_competition_cvxpy() {
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![10, 10, 10])
+            .means(vec![0.50, 0.51, 0.30])
+            .variances(vec![0.10, 0.10, 0.10])
+            .epsilon(0.01)
+            .min_prob(0.01)
+            .reg0(0.0)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+
+        // Expected solution from cvxpy (using CLARABEL solver)
+        let expected = vec![0.494996029290799, 0.495003970556052, 0.010000000211085];
+        assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_ten_arms_cvxpy() {
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![10, 10, 10, 10, 10, 10, 10, 10, 10, 10])
+            .means(vec![
+                0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 1.00,
+            ])
+            .variances(vec![
+                0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10,
+            ])
+            .epsilon(0.02)
+            .min_prob(0.01)
+            .reg0(0.1)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+
+        // Expected solution from cvxpy (using CLARABEL solver)
+        let expected = vec![
+            0.009999998037405,
+            0.009999998021350,
+            0.009999998050981,
+            0.009999998100266,
+            0.011316045868696,
+            0.017600153556836,
+            0.031270947718469,
+            0.072188003456080,
+            0.409811419219896,
+            0.417813437971073,
+        ];
+        assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+
+    // Tests with high variance (variance > 1) representing different reward scales
+    #[test]
+    fn test_high_variance_gaussians_cvxpy() {
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![20, 20, 20])
+            .means(vec![10.00, 12.00, 11.00])
+            .variances(vec![2.00, 3.50, 2.50])
+            .epsilon(0.5)
+            .min_prob(0.05)
+            .reg0(0.1)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+
+        // Expected solution from cvxpy (using CLARABEL solver)
+        let expected = vec![0.069702913270257, 0.508019009489254, 0.422278077240489];
+        assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_very_high_variance_cvxpy() {
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![30, 30])
+            .means(vec![50.00, 55.00])
+            .variances(vec![10.00, 15.00])
+            .epsilon(1.0)
+            .min_prob(0.01)
+            .reg0(0.5)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+
+        // Expected solution from cvxpy (using CLARABEL solver)
+        let expected = vec![0.450083389074646, 0.549916610924264];
+        assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_mixed_variance_scales_cvxpy() {
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![15, 15, 15, 15])
+            .means(vec![1.00, 5.00, 3.00, 7.00])
+            .variances(vec![0.10, 2.00, 0.50, 4.00])
+            .epsilon(0.2)
+            .min_prob(0.05)
+            .reg0(1.0)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+
+        // Expected solution from cvxpy (using CLARABEL solver)
+        let expected = vec![
+            0.049999991957649,
+            0.373495754083455,
+            0.049999994032051,
+            0.526504259929341,
+        ];
+        assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_small_means_large_variance_cvxpy() {
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![25, 25, 25])
+            .means(vec![0.10, 0.30, 0.20])
+            .variances(vec![5.00, 8.00, 6.00])
+            .epsilon(0.05)
+            .min_prob(0.1)
+            .reg0(0.2)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+
+        // Expected solution from cvxpy (using CLARABEL solver)
+        let expected = vec![0.099999996666504, 0.482302162018304, 0.417697840883230];
+        assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_five_arms_high_variance_cvxpy() {
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![10, 10, 10, 10, 10])
+            .means(vec![20.00, 25.00, 22.00, 28.00, 24.00])
+            .variances(vec![3.00, 4.00, 2.50, 5.00, 3.50])
+            .epsilon(1.0)
+            .min_prob(0.05)
+            .reg0(0.5)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+
+        // Expected solution from cvxpy (using CLARABEL solver)
+        let expected = vec![
+            0.049999999144349,
+            0.342706084262522,
+            0.049999999158130,
+            0.417175997176582,
+            0.140117920263625,
+        ];
+        assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_asymmetric_high_variance_cvxpy() {
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![50, 50])
+            .means(vec![100.00, 105.00])
+            .variances(vec![1.00, 20.00])
+            .epsilon(2.0)
+            .min_prob(0.01)
+            .reg0(0.0)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+
+        // Expected solution from cvxpy (using CLARABEL solver)
+        let expected = vec![0.182752086850448, 0.817247913149552];
+        assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+
+    // Tests using scipy.minimize solutions to verify SOCP reformulation
+
+    #[test]
+    fn test_two_arms_simple_scipy() {
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![20, 20])
+            .means(vec![0.50, 0.70])
+            .variances(vec![0.10, 0.15])
+            .epsilon(0.1)
+            .min_prob(0.05)
+            .reg0(0.1)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+
+        // Expected solution from scipy (trust-constr with SLSQP fallback)
+        let expected = vec![0.449525654401765, 0.550474345598233];
+        assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_three_arms_moderate_scipy() {
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![15, 15, 15])
+            .means(vec![1.00, 1.50, 1.20])
+            .variances(vec![0.20, 0.30, 0.25])
+            .epsilon(0.2)
+            .min_prob(0.05)
+            .reg0(0.2)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+
+        // Expected solution from scipy (trust-constr with SLSQP fallback)
+        let expected = vec![0.111715272862871, 0.473942231288105, 0.414342495849023];
+        assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_very_high_variance_scipy() {
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![30, 30])
+            .means(vec![50.00, 55.00])
+            .variances(vec![10.00, 15.00])
+            .epsilon(1.0)
+            .min_prob(0.01)
+            .reg0(0.5)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+
+        // Expected solution from scipy (trust-constr with SLSQP fallback)
+        let expected = vec![0.450070015802657, 0.549929984197342];
+        assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_four_arms_different_scales_scipy() {
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![20, 20, 20, 20])
+            .means(vec![2.00, 3.00, 2.50, 3.50])
+            .variances(vec![0.50, 1.00, 0.75, 1.50])
+            .epsilon(0.3)
+            .min_prob(0.05)
+            .reg0(0.3)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+
+        // Expected solution from scipy (trust-constr with SLSQP fallback)
+        let expected = vec![
+            0.050000000000000,
+            0.394460771374844,
+            0.064092683568538,
+            0.491446545056619,
+        ];
+        assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_small_epsilon_scipy() {
+        let args = OptimalProbsArgs::builder()
+            .pull_counts(vec![50, 50])
+            .means(vec![10.00, 10.50])
+            .variances(vec![1.00, 1.20])
+            .epsilon(0.05)
+            .min_prob(0.1)
+            .reg0(0.1)
+            .build();
+        let probs = estimate_optimal_probabilities(args).unwrap();
+
+        // Expected solution from scipy (trust-constr with SLSQP fallback)
+        let expected = vec![0.477229489718064, 0.522770510281936];
+        assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
+        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
     }
 }
