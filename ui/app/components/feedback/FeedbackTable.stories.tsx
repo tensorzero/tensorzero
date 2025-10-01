@@ -23,6 +23,7 @@ const config: Config = {
         flush_interval_ms: 100n,
         max_rows: 1000,
       },
+      disable_automatic_migrations: false,
     },
     export: {
       otlp: {
