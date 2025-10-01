@@ -247,8 +247,9 @@ pub struct FunctionConfigJson {
     pub output_schema: StaticJSONSchema, // schema is mandatory for JSON functions
     pub implicit_tool_call_config: ToolCallConfig,
     pub description: Option<String>,
+    // See `FunctionConfigChat.all_explicit_template_names`.
     #[serde(skip)]
-    pub all_template_names: HashSet<String>,
+    pub all_explicit_template_names: HashSet<String>,
 }
 
 impl FunctionConfig {
@@ -290,7 +291,11 @@ impl FunctionConfig {
                 )?;
             }
             FunctionConfig::Json(params) => {
-                validate_all_text_input(&params.schemas, input, &params.all_template_names)?;
+                validate_all_text_input(
+                    &params.schemas,
+                    input,
+                    &params.all_explicit_template_names,
+                )?;
             }
         }
         Ok(())
@@ -1271,7 +1276,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1350,7 +1355,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1419,7 +1424,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1489,7 +1494,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1563,7 +1568,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1773,7 +1778,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: Some("A JSON function description".to_string()),
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         };
         let function_config = FunctionConfig::Json(json_config);
         assert_eq!(
@@ -1823,7 +1828,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         });
         let raw_request = "raw_request".to_string();
 
@@ -1865,6 +1870,7 @@ mod tests {
             dynamic_output_schema: None,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             extra_cache_key: None,
         };
         let response = function_config
@@ -2176,6 +2182,7 @@ mod tests {
             dynamic_output_schema: Some(&dynamic_output_schema),
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             extra_cache_key: None,
         };
         // Test with a correct content block
@@ -2388,7 +2395,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         });
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"answer": "42"}"#.to_string().into()];

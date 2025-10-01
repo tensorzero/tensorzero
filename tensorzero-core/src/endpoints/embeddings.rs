@@ -97,7 +97,6 @@ pub struct EmbeddingResponse {
 mod tests {
     use super::*;
     use crate::config::Config;
-    use crate::config::TimeoutsConfig;
     use crate::embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo};
     use crate::providers::dummy::DummyProvider;
     use std::collections::HashMap;
@@ -113,14 +112,14 @@ mod tests {
         });
         let provider_info = EmbeddingProviderInfo {
             inner: dummy_provider,
-            timeouts: TimeoutsConfig::default(),
+            timeout_ms: None,
             provider_name: Arc::from("dummy"),
             extra_body: None,
         };
         let embedding_model = EmbeddingModelConfig {
             routing: vec!["dummy".to_string().into()],
             providers: HashMap::from([("dummy".to_string().into(), provider_info)]),
-            timeouts: TimeoutsConfig::default(),
+            timeout_ms: None,
         };
 
         // Create a minimal config with just the embedding model

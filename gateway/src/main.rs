@@ -4,7 +4,7 @@ use axum::middleware::Next;
 use axum::response::Response;
 use axum::routing::{delete, get, post, put};
 use axum::Router;
-use clap::Parser;
+use clap::{Args, Parser};
 use mimalloc::MiMalloc;
 use std::fmt::Display;
 use std::io::ErrorKind;
@@ -18,7 +18,7 @@ use tracing::Level;
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
-use tensorzero_core::db::postgres::manual_run_postgres_migrations;
+use tensorzero_core::db::postgres::{manual_run_postgres_migrations, PostgresConnectionInfo};
 use tensorzero_core::endpoints;
 use tensorzero_core::endpoints::openai_compatible::RouterExt as _;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
@@ -31,7 +31,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
-struct Args {
+struct GatewayArgs {
     /// Use all of the config files matching the specified glob pattern. Incompatible with `--default-config`
     #[arg(long)]
     config_file: Option<PathBuf>,
@@ -51,12 +51,24 @@ struct Args {
     #[clap(default_value_t = LogFormat::default())]
     log_format: LogFormat,
 
-    /// Run database migrations manually then exit.
-    #[arg(long)]
-    run_migrations_only: bool,
+    #[command(flatten)]
+    migration_commands: MigrationCommands,
 
     /// Deprecated: use `--config-file` instead
     tensorzero_toml: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+#[group(multiple = false)]
+struct MigrationCommands {
+    /// Run ClickHouse migrations manually then exit.
+    // TODO: remove
+    #[arg(long, alias = "run-migrations")]
+    run_clickhouse_migrations: bool,
+
+    /// Run PostgreSQL migrations manually then exit.
+    #[arg(long)]
+    run_postgres_migrations: bool,
 }
 
 async fn add_version_header(request: Request, next: Next) -> Response {
@@ -87,7 +99,7 @@ async fn add_version_header(request: Request, next: Next) -> Response {
 
 #[tokio::main]
 async fn main() {
-    let args = Args::parse();
+    let args = GatewayArgs::parse();
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
     let delayed_log_config = observability::setup_observability(args.log_format)
@@ -95,19 +107,19 @@ async fn main() {
         .expect_pretty("Failed to set up logs");
 
     let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
-    if args.run_migrations_only {
+    if args.migration_commands.run_clickhouse_migrations {
         manual_run_clickhouse_migrations()
             .await
             .expect_pretty("Failed to run ClickHouse migrations");
-        // Remove once we are ready for Postgres in prime time.
-        // We also should remove the expect behavior from ClickHouse so this command will warn
-        // if it doesn't have clickhouse or doesn't have postgres and then run migrations for the
-        // databases it does have URLs for
-        if std::env::var("TENSORZERO_POSTGRES_URL").is_ok() {
-            manual_run_postgres_migrations()
-                .await
-                .expect_pretty("Failed to run PostgreSQL migrations");
-        }
+        tracing::info!("ClickHouse is ready.");
+        return;
+    }
+
+    if args.migration_commands.run_postgres_migrations {
+        manual_run_postgres_migrations()
+            .await
+            .expect_pretty("Failed to run PostgreSQL migrations");
+        tracing::info!("Postgres is ready.");
         return;
     }
 
@@ -221,6 +233,14 @@ async fn main() {
         ClickHouseConnectionInfo::Production { database, .. } => {
             format!("enabled (database: {database})")
         }
+    };
+
+    let postgres_enabled_pretty = match &gateway_handle.app_state.postgres_connection_info {
+        PostgresConnectionInfo::Disabled => "disabled".to_string(),
+        PostgresConnectionInfo::Mock { healthy, .. } => {
+            format!("mocked (healthy={healthy})")
+        }
+        PostgresConnectionInfo::Enabled { .. } => "enabled".to_string(),
     };
 
     // Set debug mode
@@ -379,6 +399,9 @@ async fn main() {
     } else {
         tracing::info!("├ Batch Writes: disabled");
     }
+
+    // Print whether postgres is enabled
+    tracing::info!("├ Postgres: {postgres_enabled_pretty}");
 
     // Print whether OpenTelemetry is enabled
     if config.gateway.export.otlp.traces.enabled {

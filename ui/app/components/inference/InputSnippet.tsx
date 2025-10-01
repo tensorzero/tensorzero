@@ -17,14 +17,17 @@ import {
   TextMessage,
   EmptyMessage,
   ParameterizedMessage,
+  TemplateMessage,
 } from "~/components/layout/SnippetContent";
 import type { JsonObject } from "type-fest";
+import { Button } from "~/components/ui/button";
+import { Plus, Trash2 } from "lucide-react";
 
 interface InputSnippetProps {
   messages: DisplayInputMessage[];
   system?: string | JsonObject | null;
   isEditing?: boolean;
-  onSystemChange?: (system: string | object) => void;
+  onSystemChange?: (system: string | object | null) => void;
   onMessagesChange?: (messages: DisplayInputMessage[]) => void;
   maxHeight?: number | "Content";
 }
@@ -178,10 +181,10 @@ function renderContentBlock(
 
     case "template":
       return (
-        <ParameterizedMessage
+        <TemplateMessage
           key={key}
-          parameters={block.arguments}
           templateName={block.name}
+          arguments={block.arguments}
           isEditing={isEditing}
           onChange={(updatedArguments) => {
             onChange?.({ ...block, arguments: updatedArguments });
@@ -215,15 +218,43 @@ export default function InputSnippet({
 
   return (
     <SnippetLayout>
-      {!system && messages.length === 0 && (
+      {system == null && messages.length === 0 && !isEditing && (
         <SnippetContent maxHeight={maxHeight}>
           <EmptyMessage message="Empty input" />
         </SnippetContent>
       )}
 
-      {system && (
+      {system == null && isEditing && (
+        <div className="flex items-center py-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onSystemChange?.("")}
+            className="flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Add System
+          </Button>
+        </div>
+      )}
+
+      {system != null && (
         <SnippetContent maxHeight={maxHeight}>
-          <SnippetMessage role="system">
+          <SnippetMessage
+            role="system"
+            action={
+              isEditing ? (
+                <Button
+                  variant="outline"
+                  size="iconSm"
+                  onClick={() => onSystemChange?.(null)}
+                  aria-label="Delete system message"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              ) : undefined
+            }
+          >
             {typeof system === "object" ? (
               <ParameterizedMessage
                 parameters={system}

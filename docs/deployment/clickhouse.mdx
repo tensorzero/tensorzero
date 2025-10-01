@@ -39,7 +39,11 @@ Other options for managed ClickHouse deployments include [Tinybird](https://www.
 You can alternatively run your own self-managed ClickHouse instance or cluster.
 
 TensorZero supports single-node and replicated deployments.
-It currently does not support sharded deployments.
+
+<Warning>
+  TensorZero does not currently support **sharded** self-hosted ClickHouse
+  deployments.
+</Warning>
 
 See the [ClickHouse documentation](https://clickhouse.com/docs/install) for more details on configuring your ClickHouse deployment.
 
@@ -70,9 +74,14 @@ TENSORZERO_CLICKHOUSE_URL="http://host.docker.internal:8123/tensorzero"
 
 If you're using a self-hosted replicated ClickHouse deployment, you must also provide the ClickHouse cluster name in the `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` environment variable.
 
-### Applying database migrations
+### Applying ClickHouse migrations
 
-The TensorZero Gateway typically applies database migrations automatically when it starts up.
+By default, the TensorZero Gateway applies ClickHouse migrations automatically when it starts up.
+This behavior can be suppressed by setting `observability.disable_automatic_migrations = true` under the `[gateway]` section of `config/tensorzero.toml`.
+See https://www.tensorzero.com/docs/gateway/configuration-reference#gateway.
+If automatic migrations are disabled, then you must apply them manually with
+`docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-clickhouse-migrations`.
+The gateway will error on startup if automatic migrations are disabled and any required migrations are missing.
 
-If you're using a self-hosted replicated ClickHouse deployment, you must apply database migrations manually with `gateway --run-migrations-only`.
-In this case, the gateway will not apply migrations automatically, and will error on startup if migrations are missing.
+If you're using a self-hosted replicated ClickHouse deployment, you must apply database migrations manually;
+they cannot be applied automatically.

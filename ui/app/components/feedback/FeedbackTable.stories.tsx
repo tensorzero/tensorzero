@@ -13,6 +13,7 @@ function makeOrderedUuid(num = 0): string {
 const config: Config = {
   gateway: {
     disable_pseudonymous_usage_analytics: false,
+    fetch_and_encode_input_files_before_inference: false,
     observability: {
       enabled: true,
       async_writes: false,
@@ -22,6 +23,7 @@ const config: Config = {
         flush_interval_ms: 100n,
         max_rows: 1000,
       },
+      disable_automatic_migrations: false,
     },
     export: {
       otlp: {
