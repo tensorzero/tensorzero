@@ -49,6 +49,7 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::time::Duration;
 
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use axum::extract::MatchedPath;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
@@ -75,7 +76,6 @@ use tower_http::trace::{
 use tracing::level_filters::LevelFilter;
 use tracing::{Level, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
-use tracing_opentelemetry::PreSampledTracer;
 use tracing_subscriber::layer::Filter;
 use tracing_subscriber::{filter, EnvFilter, Registry};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
@@ -226,23 +226,6 @@ impl Tracer for TracerWrapper {
         }
 
         self.default_tracer.build_with_context(builder, parent_cx)
-    }
-}
-
-impl PreSampledTracer for TracerWrapper {
-    fn sampled_context(
-        &self,
-        data: &mut tracing_opentelemetry::OtelData,
-    ) -> opentelemetry::Context {
-        self.default_tracer.sampled_context(data)
-    }
-
-    fn new_trace_id(&self) -> opentelemetry::trace::TraceId {
-        self.default_tracer.new_trace_id()
-    }
-
-    fn new_span_id(&self) -> opentelemetry::trace::SpanId {
-        self.default_tracer.new_span_id()
     }
 }
 
@@ -504,9 +487,14 @@ impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
                 tracing_opentelemetry_instrumentation_sdk::http::http_server::make_span_from_request(
                     req,
                 );
-            span.set_parent(
+            match span.set_parent(
                 tracing_opentelemetry_instrumentation_sdk::http::extract_context(req.headers()),
-            );
+            ) {
+                Ok(()) => {}
+                Err(e) => {
+                    tracing::error!("Failed to set parent span: {e:?}. {IMPOSSIBLE_ERROR_MESSAGE}");
+                }
+            }
             // We need our custom context to be active for both the span creation and setting the span parent.
             // This ensures that `tracing-opentelemetry` will record our custom Context (with the `CustomTracerKey`)
             // for the newly created span, and all of its descendants.
@@ -520,10 +508,9 @@ impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
                 span.record("http.route", route);
             }
 
-            let method = tracing_opentelemetry_instrumentation_sdk::http::http_method(req.method());
             span.record(
                 "otel.name",
-                format!("{method} {}", route.unwrap_or_default()).trim(),
+                format!("{} {}", req.method().as_str(), route.unwrap_or_default()).trim(),
             );
             span
         }
