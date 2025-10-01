@@ -236,6 +236,12 @@ pub async fn setup_postgres(
     postgres_url: Option<String>,
 ) -> Result<PostgresConnectionInfo, Error> {
     let Some(postgres_url) = postgres_url else {
+        // Check if rate limiting is configured but Postgres is not available
+        if config.rate_limiting.enabled() && !config.rate_limiting.rules().is_empty() {
+            return Err(Error::new(ErrorDetails::Config {
+                message: "Rate limiting is configured but PostgreSQL is not available. Rate limiting requires PostgreSQL to be configured. Please set the TENSORZERO_POSTGRES_URL environment variable or disable rate limiting.".to_string(),
+            }));
+        }
         return Ok(PostgresConnectionInfo::Disabled);
     };
 
