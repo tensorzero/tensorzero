@@ -300,15 +300,15 @@ impl RateLimitedRequest for EmbeddingRequest {
         } = self;
 
         let tokens = if resources.contains(&RateLimitResource::Token) {
-            input.estimated_input_token_usage()
+            Some(input.estimated_input_token_usage())
         } else {
-            0 // Not requested
+            None
         };
 
         let model_inferences = if resources.contains(&RateLimitResource::ModelInference) {
-            1
+            Some(1)
         } else {
-            0 // Not requested
+            None
         };
 
         Ok(EstimatedRateLimitResourceUsage {

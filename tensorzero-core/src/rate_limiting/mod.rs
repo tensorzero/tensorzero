@@ -202,7 +202,16 @@ impl ActiveRateLimit {
         &self,
         requests: &EstimatedRateLimitResourceUsage,
     ) -> Result<ConsumeTicketsRequest, Error> {
-        let request_amount = requests.get_usage(self.limit.resource);
+        // INVARIANT: All resources in active rate limits are validated in estimated_resource_usage().
+        // This check should never fail in normal operation.
+        let request_amount = requests.get_usage(self.limit.resource).ok_or_else(|| {
+            Error::new(ErrorDetails::Inference {
+                message: format!(
+                    "estimated_resource_usage did not provide {:?} resource. {IMPOSSIBLE_ERROR_MESSAGE}",
+                    self.limit.resource
+                ),
+            })
+        })?;
         self.get_consume_tickets_request_for_return(request_amount)
     }
 
@@ -334,12 +343,12 @@ impl RateLimitResourceUsage {
 
 #[derive(Debug)]
 pub struct EstimatedRateLimitResourceUsage {
-    pub model_inferences: u64,
-    pub tokens: u64,
+    pub model_inferences: Option<u64>,
+    pub tokens: Option<u64>,
 }
 
 impl EstimatedRateLimitResourceUsage {
-    pub fn get_usage(&self, resource: RateLimitResource) -> u64 {
+    pub fn get_usage(&self, resource: RateLimitResource) -> Option<u64> {
         match resource {
             RateLimitResource::ModelInference => self.model_inferences,
             RateLimitResource::Token => self.tokens,
@@ -1405,8 +1414,8 @@ mod tests {
         };
 
         let usage = EstimatedRateLimitResourceUsage {
-            model_inferences: 5,
-            tokens: 50,
+            model_inferences: Some(5),
+            tokens: Some(50),
         };
 
         let consume_request = token_active_limit
@@ -1456,8 +1465,8 @@ mod tests {
         );
 
         // Test resource usage mapping works correctly
-        assert_eq!(usage.get_usage(RateLimitResource::Token), 50);
-        assert_eq!(usage.get_usage(RateLimitResource::ModelInference), 5);
+        assert_eq!(usage.get_usage(RateLimitResource::Token), Some(50));
+        assert_eq!(usage.get_usage(RateLimitResource::ModelInference), Some(5));
     }
 
     #[test]

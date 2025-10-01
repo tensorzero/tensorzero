@@ -966,18 +966,17 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
                 .iter()
                 .map(RateLimitedInputContent::estimated_input_token_usage)
                 .sum();
-            // Token resource requires max_tokens to estimate output usage
             let output_tokens =
                 max_tokens.ok_or_else(|| Error::new(RateLimitMissingMaxTokens))? as u64;
-            system_tokens + messages_tokens + output_tokens
+            Some(system_tokens + messages_tokens + output_tokens)
         } else {
-            0 // Not requested
+            None
         };
 
         let model_inferences = if resources.contains(&RateLimitResource::ModelInference) {
-            1
+            Some(1)
         } else {
-            0 // Not requested
+            None
         };
 
         Ok(EstimatedRateLimitResourceUsage {
