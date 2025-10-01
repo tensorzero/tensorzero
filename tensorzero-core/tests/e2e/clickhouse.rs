@@ -1349,10 +1349,21 @@ async fn test_run_migrations_fake_row() {
     .unwrap();
 
     let migrations = migration_manager::make_all_migrations(&clickhouse);
-    assert_eq!(
-        migration_manager::check_migrations_state(&clickhouse, &migrations).await,
-        Ok(MigrationTableState::TooMany)
-    );
+    // If the ClickHouse cluster is configured, migrations aren't applied, so the only migration
+    // in the table is Migration99999.
+    if clickhouse.is_cluster_configured() {
+        assert_eq!(
+            migration_manager::check_migrations_state(&clickhouse, &migrations).await,
+            Ok(MigrationTableState::Inconsistent)
+        );
+    // If the ClickHouse cluster isn't configured, migrations are applied, so the migrations table
+    // has all the required migrations plus Migration99999.
+    } else {
+        assert_eq!(
+            migration_manager::check_migrations_state(&clickhouse, &migrations).await,
+            Ok(MigrationTableState::TooMany)
+        );
+    }
 
     let migration_manager_result = migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
