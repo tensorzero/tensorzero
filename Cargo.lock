@@ -2115,9 +2115,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-auth"
-version = "0.23.0"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b705b9d51298401841c380fbc56de7904c373ca3f9f1ba277f35de7dc2092c6c"
+checksum = "62d8757f37377c6436b94c6efaf7f9c3c6e48a213bb0790f7a639a9ba0183764"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -2137,9 +2137,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-gax"
-version = "0.25.0"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b5fb2e5de0e18fa5ebd72ccaebe9624f33ff8a646019a57cb881f4d0bc76ba3"
+checksum = "d4e6b1718e2a6965a7fbb282f23645e7adb8e0a012848258bbd6f580307b684f"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -2157,9 +2157,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-rpc"
-version = "0.5.0"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "141a7f4cbd6749c5f8ebbd528ed8980ce25dbbe86409ff16d243d0afb2e7db98"
+checksum = "8eaa87d841e35c69efa61786e7e7462b4ebdb96df7be79775aeb698b4c0cc52e"
 dependencies = [
  "bytes",
  "google-cloud-wkt",
@@ -2170,9 +2170,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-wkt"
-version = "0.5.4"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2c101cb6257433b87908b91b9d16df9288c7dd0fb8c700f2c8e53cfc23ca13e"
+checksum = "cccfa292c272695eb966fe8b08c78cabb35e7775771a1c7f97b58f7dcb7bfb26"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -2875,16 +2875,17 @@ dependencies = [
 
 [[package]]
 name = "jsonwebtoken"
-version = "9.3.1"
+version = "10.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a87cc7a48537badeae96744432de36f4be2b4a34a05a5ef32e9dd8a1c169dde"
+checksum = "f1417155a38e99d7704ddb3ea7445fe57fdbd5d756d727740a9ed8b9ebaed6e1"
 dependencies = [
  "base64 0.22.1",
+ "getrandom 0.2.16",
  "js-sys",
  "pem",
- "ring",
  "serde",
  "serde_json",
+ "signature",
  "simple_asn1",
 ]
 
@@ -6276,9 +6277,9 @@ checksum = "c4013970217383f67b18aef68f6fb2e8d409bc5755227092d32efb0422ba24b8"
 
 [[package]]
 name = "tree-sitter-md"
-version = "0.3.2"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17f968c22a01010b83fc960455ae729db08dbeb6388617d9113897cb9204b030"
+checksum = "2b55ea8733e098490746a07d6f629d1f7820e8953a4aab1341ae39123bcdf93d"
 dependencies = [
  "cc",
  "tree-sitter-language",
@@ -6286,9 +6287,9 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter-python"
-version = "0.23.6"
+version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d065aaa27f3aaceaf60c1f0e0ac09e1cb9eb8ed28e7bcdaa52129cffc7f4b04"
+checksum = "6bf85fd39652e740bf60f46f4cda9492c3a9ad75880575bf14960f775cb74a1c"
 dependencies = [
  "cc",
  "tree-sitter-language",
