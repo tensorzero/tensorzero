@@ -1359,6 +1359,24 @@ routing = ["openai", "alternative-provider"]
 # ...
 ```
 
+### `timeout_ms`
+
+- **Type:** integer
+- **Required:** no
+
+The total time allowed (in milliseconds) for the embedding model to complete the request.
+This timeout applies to the entire request, including all provider attempts in the routing list.
+
+If a provider times out, the next provider in the routing list will be attempted.
+If all providers timeout or the model-level timeout is reached, an error will be returned.
+
+```toml title="tensorzero.toml"
+[embedding_models.model-name]
+routing = ["openai"]
+timeout_ms = 5000  # 5 second timeout
+# ...
+```
+
 ## `[embedding_models.model_name.providers.provider_name]`
 
 The `providers` sub-section defines the behavior of a specific provider for a model.
@@ -1409,6 +1427,22 @@ type = "openai"
 extra_body = [
   { pointer = "/dimensions", value = 1536 }
 ]
+```
+
+### `timeout_ms`
+
+- **Type:** integer
+- **Required:** no
+
+The total time allowed (in milliseconds) for this specific provider to complete the embedding request.
+
+If the provider times out, the next provider in the routing list will be attempted (if any).
+
+```toml title="tensorzero.toml"
+[embedding_models.model-name.providers.openai]
+type = "openai"
+timeout_ms = 3000  # 3 second timeout for this provider
+# ...
 ```
 
 ### `type`
