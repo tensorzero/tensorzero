@@ -394,7 +394,6 @@ export async function insertRowsForDataset(
       subquery.function_name as function_name,
       generateUUIDv7() as id,
       subquery.episode_id as episode_id,
-      subquery.name as name,
       subquery.input as input,
       subquery.output as output,
       ${validatedParams.data.inferenceType === "chat" ? "subquery.tool_params" : "subquery.output_schema"},
@@ -404,7 +403,8 @@ export async function insertRowsForDataset(
       now64() as updated_at,
       null as staled_at,
       subquery.id as source_inference_id,
-      false as is_custom -- if we are using the dataset builder implemented here, the datapoints are not custom
+      false as is_custom, -- if we are using the dataset builder implemented here, the datapoints are not custom,
+      subquery.name as name
     FROM (
       ${sourceQuery}
     ) AS subquery
