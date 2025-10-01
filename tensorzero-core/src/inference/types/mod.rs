@@ -51,8 +51,8 @@ use crate::inference::types::resolved_input::{
 };
 use crate::inference::types::stored_input::StoredFile;
 use crate::rate_limiting::{
-    get_estimated_tokens, RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
-    TicketBorrows,
+    get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
+    RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest, TicketBorrows,
 };
 use crate::serde_util::{
     deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
@@ -930,10 +930,8 @@ impl<'a> ModelInferenceRequest<'a> {
 impl RateLimitedRequest for ModelInferenceRequest<'_> {
     fn estimated_resource_usage(
         &self,
-        resources: &[crate::rate_limiting::RateLimitResource],
-    ) -> Result<crate::rate_limiting::EstimatedRateLimitResourceUsage, Error> {
-        use crate::rate_limiting::RateLimitResource;
-
+        resources: &[RateLimitResource],
+    ) -> Result<EstimatedRateLimitResourceUsage, Error> {
         let ModelInferenceRequest {
             inference_id: _,
             messages,
@@ -977,7 +975,7 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
             None
         };
 
-        Ok(crate::rate_limiting::EstimatedRateLimitResourceUsage {
+        Ok(EstimatedRateLimitResourceUsage {
             model_inferences,
             tokens,
         })
