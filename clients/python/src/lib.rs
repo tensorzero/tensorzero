@@ -1895,9 +1895,9 @@ pub fn convert_error(py: Python<'_>, e: TensorZeroError) -> PyErr {
     match e {
         TensorZeroError::Http {
             status_code,
-            text,
+            message,
             source: _,
-        } => tensorzero_error(py, status_code, text).unwrap_or_else(|e| e),
+        } => tensorzero_error(py, status_code, message).unwrap_or_else(|e| e),
         TensorZeroError::Other { source } => {
             tensorzero_core_error(py, &source.to_string()).unwrap_or_else(|e| e)
         }

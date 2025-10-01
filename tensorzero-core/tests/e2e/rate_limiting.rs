@@ -74,18 +74,20 @@ async fn make_request_with_tags(
 fn assert_rate_limit_exceeded(result: Result<InferenceOutput, TensorZeroError>) {
     match result {
         Err(TensorZeroError::Http {
-            status_code, text, ..
+            status_code,
+            message,
+            ..
         }) => {
             // Rate limit errors can return various status codes (429, 502, etc.)
-            if let Some(text) = text {
-                if text.contains("rate limit exceeded")
-                    || text.contains("Rate limit exceeded")
-                    || text.contains("RateLimitExceeded")
+            if let Some(message) = message {
+                if message.contains("rate limit exceeded")
+                    || message.contains("Rate limit exceeded")
+                    || message.contains("RateLimitExceeded")
                 {
                     // Expected - this is a rate limit error
                 } else {
                     panic!(
-                        "Expected rate limit exceeded error, got status {status_code}: {text:?}",
+                        "Expected rate limit exceeded error, got status {status_code}: {message:?}",
                     );
                 }
             } else {
@@ -519,14 +521,16 @@ scope = [
         if let Err(e) = result {
             match e {
                 TensorZeroError::Http {
-                    status_code, text, ..
+                    status_code,
+                    message,
+                    ..
                 } => {
                     // Rate limit errors can be 429, 502, or other status codes
-                    if let Some(text) = text {
+                    if let Some(message) = message {
                         assert!(
-                            text.contains("rate limit exceeded")
-                                || text.contains("Rate limit exceeded"),
-                            "HTTP failures should be rate limit errors, got status {status_code}: {text:?}",
+                            message.contains("rate limit exceeded")
+                                || message.contains("Rate limit exceeded"),
+                            "HTTP failures should be rate limit errors, got status {status_code}: {message:?}",
                         );
                     }
                 }
