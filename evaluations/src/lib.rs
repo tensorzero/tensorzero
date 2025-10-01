@@ -117,6 +117,44 @@ pub struct EvaluationCoreArgs {
     pub inference_cache: CacheEnabledMode,
 }
 
+/// High-level wrapper function for running evaluations called from the CLI.
+/// It handles all setup and teardown, then delegates to `run_evaluation_core_streaming`
+/// for the actual evaluation logic.
+///
+/// ## What it does
+///
+/// 1. **Setup:**
+///    - Loads environment variables (ClickHouse URL, optional Postgres URL)
+///    - Loads the TensorZero configuration from the config file
+///    - Initializes the TensorZero client (either HTTP gateway or embedded gateway)
+///    - Initializes the ClickHouse client for storing evaluation results
+///
+/// 2. **Execution:**
+///    - Calls `run_evaluation_core_streaming` with the initialized clients and config
+///    - Receives a stream of `EvaluationUpdate` messages via a channel
+///    - Writes each update to the output writer as it arrives
+///
+/// 3. **Results:**
+///    - For `OutputFormat::Jsonl`: Writes each update as a JSON line
+///    - For `OutputFormat::Pretty`: Shows a progress bar and computes statistics at the end
+///    - Computes mean/stderr for each evaluator
+///    - Checks if results meet the configured cutoff thresholds
+///    - Fails if any evaluator's results are below its cutoff
+///
+/// 4. **Cleanup:**
+///    - Waits for the ClickHouse batch writer to finish persisting all results
+///    - This ensures all evaluation data is in the database before returning
+///
+/// ## Parameters
+///
+/// - `args`: CLI arguments containing evaluation name, dataset, variant, concurrency, etc.
+/// - `evaluation_run_id`: Unique identifier for this evaluation run
+/// - `writer`: Output writer (stdout, file, etc.) for writing results
+///
+/// ## Returns
+///
+/// - `Ok(())` if the evaluation completes successfully and meets all cutoffs
+/// - `Err` if setup fails, evaluation fails, or results don't meet cutoffs
 #[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
 pub async fn run_evaluation(
     args: Args,
@@ -252,7 +290,43 @@ pub async fn run_evaluation(
     Ok(())
 }
 
-/// Streaming version of run_evaluation_core that returns a receiver for streaming updates
+/// Core streaming evaluation function.
+///
+/// This function runs an evaluation and streams results as they complete via an mpsc channel.
+///
+/// ## How it works
+///
+/// 1. Creates an mpsc channel for streaming `EvaluationUpdate` messages
+/// 2. Loads the evaluation and function configurations
+/// 3. Queries the dataset to get all datapoints
+/// 4. Sends `RunInfo` as the first message (evaluation_run_id, num_datapoints)
+/// 5. Spawns a concurrent task for each datapoint that:
+///    - Runs inference for the datapoint
+///    - Evaluates the inference response
+///    - Returns (Datapoint, InferenceResponse, EvaluationResult)
+/// 6. Spawns a background collector task that:
+///    - Collects results from the JoinSet as tasks complete
+///    - Converts results to `EvaluationUpdate::Success` or `EvaluationUpdate::Error`
+///    - Sends each update through the channel
+///    - Waits for the ClickHouse batch writer to finish
+///    - Closes the channel when done
+/// 7. Returns immediately with the receiver, run_info, and evaluation_config
+///
+/// ## Return value
+///
+/// Returns `EvaluationStreamResult` containing:
+/// - `receiver`: Channel receiver for consuming `EvaluationUpdate` messages
+/// - `run_info`: Metadata (evaluation_run_id, num_datapoints)
+/// - `evaluation_config`: The evaluation configuration (needed for computing statistics)
+///
+/// The caller receives updates by calling `receiver.recv().await` until the channel closes.
+///
+/// ## Error handling
+///
+/// Errors within evaluation tasks are caught and sent as `EvaluationUpdate::Error` messages
+/// rather than failing the entire evaluation. Error messages include context:
+/// - Inference errors: Include the datapoint_id
+/// - Evaluation errors: Include both the inference_id and datapoint_id
 #[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
 pub async fn run_evaluation_core_streaming(
     args: EvaluationCoreArgs,
