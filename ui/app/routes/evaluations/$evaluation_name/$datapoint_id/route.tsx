@@ -207,14 +207,18 @@ export default function EvaluationDatapointPage({
     );
   }
   const outputsToDisplay = [
-    {
-      id: "Reference",
-      output: consolidatedEvaluationResults[0].reference_output,
-      metrics: [],
-      variant_name: "Reference",
-      inferenceId: null,
-      episodeId: null,
-    },
+    ...(consolidatedEvaluationResults[0].reference_output !== null
+      ? [
+          {
+            id: "Reference",
+            output: consolidatedEvaluationResults[0].reference_output,
+            metrics: [],
+            variant_name: "Reference",
+            inferenceId: null,
+            episodeId: null,
+          },
+        ]
+      : []),
     ...consolidatedEvaluationResults.map((result) => ({
       id: result.evaluation_run_id,
       inferenceId: result.inference_id,

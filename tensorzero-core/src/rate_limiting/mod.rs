@@ -93,12 +93,10 @@ pub struct ScopeInfo<'a> {
 }
 
 impl RateLimitingConfig {
-    #[cfg(test)]
     pub fn rules(&self) -> &Vec<RateLimitingConfigRule> {
         &self.rules
     }
 
-    #[cfg(test)]
     pub fn enabled(&self) -> bool {
         self.enabled
     }

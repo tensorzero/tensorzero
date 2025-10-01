@@ -1522,11 +1522,11 @@ mod tests {
             ..Default::default()
         };
 
-        let openrouter_request = OpenRouterRequest::new("gpt-3.5-turbo", &basic_request)
+        let openrouter_request = OpenRouterRequest::new("gpt-4.1-mini", &basic_request)
             .await
             .unwrap();
 
-        assert_eq!(openrouter_request.model, "gpt-3.5-turbo");
+        assert_eq!(openrouter_request.model, "gpt-4.1-mini");
         assert_eq!(openrouter_request.messages.len(), 2);
         assert_eq!(openrouter_request.temperature, Some(0.7));
         assert_eq!(openrouter_request.max_completion_tokens, Some(100));
@@ -1818,7 +1818,7 @@ mod tests {
 
         let request_body = OpenRouterRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "gpt-4.1-mini",
             temperature: Some(0.5),
             top_p: Some(0.5),
             presence_penalty: Some(0.5),
@@ -1916,7 +1916,7 @@ mod tests {
 
         let request_body = OpenRouterRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "gpt-4.1-mini",
             temperature: Some(0.5),
             top_p: Some(0.5),
             presence_penalty: Some(0.5),
@@ -1984,7 +1984,7 @@ mod tests {
         };
         let request_body = OpenRouterRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "gpt-4.1-mini",
             temperature: Some(0.5),
             top_p: Some(0.9),
             presence_penalty: Some(0.1),
@@ -2042,7 +2042,7 @@ mod tests {
 
         let request_body = OpenRouterRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "gpt-4.1-mini",
             temperature: Some(0.5),
             top_p: Some(0.9),
             presence_penalty: Some(0.1),
@@ -2419,7 +2419,7 @@ mod tests {
             _ => panic!("Expected JsonSchema format"),
         }
 
-        // Test JSON mode Strict with schema but gpt-3.5
+        // Test JSON mode Strict with schema but gpt-3.5-turbo (does not support strict mode)
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let schema = serde_json::json!({
             "type": "object",

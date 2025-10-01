@@ -1,10 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{
-        ExportConfig, ObservabilityConfig, TemplateFilesystemAccess,
-        UninitializedObservabilityConfig,
-    },
+    config::{ExportConfig, ObservabilityConfig, TemplateFilesystemAccess},
     error::{Error, ErrorDetails},
 };
 
@@ -14,7 +11,7 @@ pub struct UninitializedGatewayConfig {
     #[serde(serialize_with = "serialize_optional_socket_addr")]
     pub bind_address: Option<std::net::SocketAddr>,
     #[serde(default)]
-    pub observability: UninitializedObservabilityConfig,
+    pub observability: ObservabilityConfig,
     #[serde(default)]
     pub debug: bool,
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
@@ -86,7 +83,7 @@ impl UninitializedGatewayConfig {
         };
         Ok(GatewayConfig {
             bind_address: self.bind_address,
-            observability: self.observability.load(),
+            observability: self.observability,
             debug: self.debug,
             template_filesystem_access,
             export: self.export,
