@@ -54,6 +54,7 @@ describe("dump_optimizer_output", () => {
             api_key_location: null,
             discard_unknown_chunks: false,
             timeouts: {} as TimeoutsConfig,
+            api_type: "chat_completions",
           },
         },
         timeouts: {
