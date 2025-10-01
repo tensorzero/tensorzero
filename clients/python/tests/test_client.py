@@ -89,7 +89,7 @@ def test_sync_embedded_gateway_no_config():
         client.inference(function_name="my_missing_func", input={})
 
     assert exc_info.value.status_code == 404
-    assert exc_info.value.text == "Unknown function: my_missing_func"
+    assert exc_info.value.text == '{"error":"Unknown function: my_missing_func"}'
 
 
 @pytest.mark.asyncio
@@ -102,7 +102,7 @@ async def test_async_embedded_gateway_no_config():
         await client.inference(function_name="my_missing_func", input={})
 
     assert exc_info.value.status_code == 404
-    assert exc_info.value.text == "Unknown function: my_missing_func"
+    assert exc_info.value.text == '{"error":"Unknown function: my_missing_func"}'
 
 
 @dataclass
@@ -670,7 +670,7 @@ async def test_async_inference_streaming_nonexistent_function(
             pass
 
     assert exc_info.value.status_code == 404
-    assert "Unknown function: does_not_exist" in str(exc_info.value)
+    assert '"error":"Unknown function: does_not_exist"' in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -1055,7 +1055,7 @@ async def test_async_tensorzero_error_http():
 
     assert (
         str(excinfo.value)
-        == "TensorZeroError (status code 404): Unknown function: not_a_function"
+        == 'TensorZeroError (status code 404): {"error":"Unknown function: not_a_function","error_json":{"UnknownFunction":{"name":"not_a_function"}}}'
     )
 
 
@@ -1074,7 +1074,7 @@ async def test_async_tensorzero_error_embedded():
 
     assert (
         str(excinfo.value)
-        == "TensorZeroError (status code 404): Unknown function: not_a_function"
+        == 'TensorZeroError (status code 404): {"error":"Unknown function: not_a_function"}'
     )
 
 
@@ -2110,7 +2110,7 @@ def test_sync_tensorzero_error_http():
 
     assert (
         str(excinfo.value)
-        == "TensorZeroError (status code 404): Unknown function: not_a_function"
+        == 'TensorZeroError (status code 404): {"error":"Unknown function: not_a_function","error_json":{"UnknownFunction":{"name":"not_a_function"}}}'
     )
 
 
@@ -2124,7 +2124,7 @@ def test_sync_tensorzero_error_embedded():
 
     assert (
         str(excinfo.value)
-        == "TensorZeroError (status code 404): Unknown function: not_a_function"
+        == 'TensorZeroError (status code 404): {"error":"Unknown function: not_a_function"}'
     )
 
 
