@@ -1,7 +1,6 @@
-#![expect(dead_code)]
+#![allow(dead_code)]
 
 use thiserror::Error;
-use typed_builder::TypedBuilder;
 
 use super::estimate_optimal_probabilities::argmax;
 use crate::db::FeedbackByVariant;
@@ -20,24 +19,6 @@ pub struct PairwiseGLRArgs {
 pub enum PairwiseGLRError {
     #[error("Error in compute_pairwise+_glr")]
     GLRError,
-}
-
-#[derive(TypedBuilder)]
-pub struct CheckStoppingArgs {
-    #[builder(setter(into))]
-    pull_counts: Vec<u64>,
-    #[builder(setter(into))]
-    means: Vec<f64>,
-    #[builder(setter(into))]
-    variances: Vec<f64>,
-    #[builder(setter(into))]
-    min_pulls: u64,
-    #[builder(default = 1e-6)]
-    ridge_variance: f64,
-    #[builder(default = 0.0)]
-    epsilon: f64,
-    #[builder(default = 0.05)]
-    delta: f64,
 }
 
 #[derive(Debug, Error)]
