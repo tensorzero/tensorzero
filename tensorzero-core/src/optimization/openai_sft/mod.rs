@@ -350,7 +350,7 @@ impl JobHandle for OpenAISFTJobHandle {
         credentials: &InferenceCredentials,
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
-        let openai_credentials: OpenAICredentials = crate::model_table::OpenAIKind
+        let openai_credentials: OpenAICredentials = OpenAIKind
             .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
             .await?;
         let mut request = client.get(self.job_api_url.clone());

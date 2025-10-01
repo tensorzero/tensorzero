@@ -847,7 +847,7 @@ impl JobHandle for TogetherSFTJobHandle {
         credentials: &InferenceCredentials,
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
-        let together_credentials: TogetherCredentials = crate::model_table::TogetherKind
+        let together_credentials: TogetherCredentials = TogetherKind
             .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
             .await?;
 

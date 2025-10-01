@@ -793,7 +793,10 @@ mod tests {
     use super::*;
     use crate::{
         config::provider_types::ProviderTypesConfig,
-        embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo},
+        embeddings::{
+            EmbeddingModelConfig, EmbeddingModelTable, EmbeddingProviderConfig,
+            EmbeddingProviderInfo,
+        },
         endpoints::inference::InferenceCredentials,
     };
     use std::collections::{HashMap, HashSet};
@@ -833,7 +836,7 @@ mod tests {
             };
             let provider_types = ProviderTypesConfig::default();
             Config {
-                embedding_models: crate::embeddings::EmbeddingModelTable::new(
+                embedding_models: EmbeddingModelTable::new(
                     HashMap::from([(Arc::from(model_name), embedding_model_config)]),
                     ProviderTypeDefaultCredentials::new(&provider_types),
                 )

@@ -630,29 +630,6 @@ pub enum GCPVertexCredentials {
     None,
 }
 
-// impl GCPVertexCredentials {
-//     /// Helper method to build credentials for a GCP-based provider
-//     /// You should call either `GCPVertexGeminiProvider::build_credentials` or
-//     /// `GCPVertexAnthropicProvider::build_credentials` rather than calling this directly.
-//     pub async fn new(
-//         cred_location: CredentialLocation,
-//         provider_type: &'static str,
-//     ) -> Result<Self, Error> {
-//         if matches!(cred_location, Some(CredentialLocation::Sdk)) {
-//             make_gcp_sdk_credentials(provider_type).await
-//         } else {
-//             build_gcp_non_sdk_credentials
-//             build_creds_caching_default_with_fn(
-//                 cred_location,
-//                 default_location,
-//                 provider_type,
-//                 cache,
-//                 |creds| build_gcp_non_sdk_credentials(creds, provider_type),
-//             )
-//         }
-//     }
-// }
-
 pub fn build_gcp_non_sdk_credentials(
     credentials: Credential,
     provider_type: &ProviderType,

@@ -49,14 +49,6 @@ pub struct OptimizerInfo {
     inner: OptimizerConfig,
 }
 
-// impl OptimizerInfo {
-//     pub async fn new(uninitialized_info: UninitializedOptimizerInfo) -> Result<Self, Error> {
-//         Ok(Self {
-//             inner: uninitialized_info.inner.load().await?,
-//         })
-//     }
-// }
-
 #[derive(Clone, Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -416,7 +408,6 @@ pub enum UninitializedOptimizerConfig {
 }
 
 impl UninitializedOptimizerConfig {
-    // TODO: add a provider_types argument as needed
     async fn load(
         self,
         default_credentials: &ProviderTypeDefaultCredentials,
