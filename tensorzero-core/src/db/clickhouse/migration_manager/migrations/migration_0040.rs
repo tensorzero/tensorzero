@@ -15,10 +15,7 @@ const MIGRATION_ID: &str = "0040";
 #[async_trait]
 impl Migration for Migration0040<'_> {
     async fn can_apply(&self) -> Result<(), Error> {
-        let tables_to_check = [
-            "ChatInferenceDatapoint",
-            "JsonInferenceDatapoint",
-        ];
+        let tables_to_check = ["ChatInferenceDatapoint", "JsonInferenceDatapoint"];
 
         for table_name in tables_to_check {
             if !check_table_exists(self.clickhouse, table_name, MIGRATION_ID).await? {
