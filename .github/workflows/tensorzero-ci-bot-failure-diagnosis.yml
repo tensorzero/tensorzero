@@ -1,0 +1,87 @@
+name: TensorZero CI Bot Failure Diagnosis
+
+on:
+  workflow_run:
+    workflows: ['General Checks']
+    types:
+      - completed
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+jobs:
+  gather-diff-and-generate-patch:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    name: Gather failure context and generate PR
+    steps:
+      - name: Checkout TensorZero config file
+        uses: actions/checkout@v5
+        with:
+          repository: tensorzero/experimental-ci-bot
+          sparse-checkout: |
+            tensorzero
+
+      - name: Move tensorzero to tensorzero-for-gateway
+        run: |
+          mv ./tensorzero /tmp/tensorzero-for-gateway
+          ls -lR .
+
+      - name: Start TensorZero gateway
+        run: |
+          docker pull tensorzero/gateway:latest
+          docker run -d --rm \
+            --name tensorzero-gateway \
+            -e TENSORZERO_CLICKHOUSE_URL=${{ secrets.CI_BOT_CLICKHOUSE_URL }} \
+            -e OPENAI_API_KEY=${{ secrets.CI_BOT_OPENAI_API_KEY }} \
+            -p 3000:3000 \
+            --volume /tmp/tensorzero-for-gateway:/action-config \
+            tensorzero/gateway:latest --config-file /action-config/tensorzero.toml
+
+          for _i in {1..100}; do
+            curl -fsS http://localhost:3000/health && exit 0
+            sleep 3
+          done
+          echo "Gateway never became ready" >&2
+          exit 1
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          fetch-tags: false
+
+      - name: Debug
+        run: |
+          ls -lR /tmp/tensorzero-for-gateway
+          cat /tmp/tensorzero-for-gateway/tensorzero.toml
+          cat /tmp/tensorzero-for-gateway/prompt.minijinja
+
+      - name: Call LLM to generate PR revision
+        uses: tensorzero/experimental-ci-bot/generate-pr-patch@main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tensorzero-base-url: http://localhost:3000
+          tensorzero-diff-patched-successfully-metric-name: tensorzero_github_ci_bot_diff_patched_successfully
+          output-artifacts-dir: debug-logs
+          clickhouse-url: ${{ secrets.CI_BOT_CLICKHOUSE_URL }}
+          clickhouse-table: GitHubBotPullRequestToInferenceMap
+
+      - name: Upload diagnostics bundle
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-failure-diagnostics
+          path: |
+            debug-logs/
+
+      - name: Stop TensorZero gateway
+        if: always()
+        continue-on-error: true
+        run: docker stop tensorzero-gateway
