@@ -536,7 +536,7 @@ test("should be able to add a system message when none exists", async ({
   await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
     timeout: 10000,
   });
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("networkidle", { timeout: 5000 });
 
   // Wait for ClickHouse to fully commit the data (eventual consistency)
   await page.waitForTimeout(2000);
@@ -549,7 +549,7 @@ test("should be able to add a system message when none exists", async ({
 
   // Reload the page to verify persistence
   await page.reload();
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("networkidle", { timeout: 5000 });
 
   // Verify system message is still present after reload
   await expect(page.getByText(systemMessageText)).toBeVisible();
@@ -622,7 +622,7 @@ test("should be able to delete an existing system message", async ({
   await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
     timeout: 10000,
   });
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("networkidle", { timeout: 5000 });
 
   // Wait for ClickHouse to fully commit the data (eventual consistency)
   await page.waitForTimeout(2000);
@@ -651,7 +651,7 @@ test("should be able to delete an existing system message", async ({
   await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
     timeout: 10000,
   });
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("networkidle", { timeout: 5000 });
 
   // Wait for ClickHouse to fully commit the data (eventual consistency)
   await page.waitForTimeout(2000);
@@ -664,7 +664,7 @@ test("should be able to delete an existing system message", async ({
 
   // Reload the page to verify persistence
   await page.reload();
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("networkidle", { timeout: 5000 });
 
   // Verify system role is still not present after reload
   await expect(page.getByText("system", { exact: true })).not.toBeVisible();
