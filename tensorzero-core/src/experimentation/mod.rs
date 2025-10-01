@@ -71,6 +71,8 @@ impl VariantSampler for ExperimentationConfig {
                 ),
             })),
             1 => {
+                // Note: we may want to check-and-set this variant when using more advanced optimization strategies
+                // for consistency
                 let Some((variant_name, variant)) = active_variants.pop_first() else {
                     return Err(ErrorDetails::Inference {
                         message: format!(
