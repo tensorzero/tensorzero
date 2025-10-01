@@ -81,8 +81,6 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 use serde_untagged::UntaggedEnumVisitor;
 use std::borrow::Borrow;
-#[cfg(test)]
-use std::collections::HashSet;
 use std::ops::Add;
 use std::{
     borrow::Cow,
