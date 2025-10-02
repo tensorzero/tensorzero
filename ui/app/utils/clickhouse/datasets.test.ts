@@ -530,9 +530,9 @@ describe("datapoint operations", () => {
     const chatDatapoint: ParsedChatInferenceDatapointRow = {
       dataset_name: "test_chat_dataset",
       function_name: "write_haiku",
-      name: null,
       id: datapoint_id,
       episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff9",
+      name: null,
       input: {
         messages: [
           {
@@ -620,9 +620,9 @@ describe("datapoint operations", () => {
     const jsonDatapoint: ParsedJsonInferenceDatapointRow = {
       dataset_name: "test_json_dataset",
       function_name: "extract_entities",
-      name: null,
       id: datapoint_id,
       episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff8",
+      name: null,
       input: {
         messages: [
           {
@@ -721,9 +721,9 @@ describe("datapoint operations", () => {
     const chatDatapoint: ParsedChatInferenceDatapointRow = {
       dataset_name: "test_chat_dataset",
       function_name: "write_haiku",
-      name: null,
       id: "01934fc5-ea98-71f0-8191-9fd88f34c31e",
       episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff7",
+      name: null,
       input: {
         messages: [
           {
@@ -915,9 +915,9 @@ describe("insertDatapoint", () => {
       insertDatapoint({
         dataset_name: "builder",
         function_name: "write_haiku",
-        name: null,
         id: uuid(),
         episode_id: null,
+        name: null,
         input: { messages: [] },
         output: [],
         tool_params: {},

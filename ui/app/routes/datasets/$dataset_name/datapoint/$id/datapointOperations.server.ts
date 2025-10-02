@@ -1,5 +1,9 @@
 import { v7 as uuid } from "uuid";
-import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
+import type {
+  ParsedDatasetRow,
+  ParsedChatInferenceDatapointRow,
+  ParsedJsonInferenceDatapointRow,
+} from "~/utils/clickhouse/datasets";
 import {
   getDatasetCounts,
   staleDatapoint,
@@ -42,6 +46,48 @@ function transformOutputForTensorZero(
   }
 }
 
+/**
+ * Transforms a chat datapoint for submission to the TensorZero client.
+ * Generates a new UUID and marks the datapoint as custom.
+ */
+function transformChatDatapoint(datapoint: ParsedChatInferenceDatapointRow): Datapoint {
+  const transformed: Datapoint = {
+    function_name: datapoint.function_name,
+    id: datapoint.id,
+    episode_id: datapoint.episode_id || undefined,  // Bad null handling! We need to fix this.
+    input: resolvedInputToTensorZeroInput(datapoint.input),
+    output: transformOutputForTensorZero(datapoint.output),
+    tags: datapoint.tags || {},
+    auxiliary: datapoint.auxiliary,
+    source_inference_id: datapoint.source_inference_id,
+    is_custom: datapoint.is_custom,
+    name: datapoint.name,
+    tool_params: datapoint.tool_params,
+  };
+  return transformed;
+}
+
+/**
+ * Transforms a JSON datapoint for submission to the TensorZero client.
+ * Generates a new UUID and marks the datapoint as custom.
+ */
+function transformJsonDatapoint(datapoint: ParsedJsonInferenceDatapointRow): Datapoint {
+  const transformed: Datapoint = {
+    function_name: datapoint.function_name,
+    id: datapoint.id,
+    episode_id: datapoint.episode_id || undefined,  // Bad null handling! We need to fix this.
+    input: resolvedInputToTensorZeroInput(datapoint.input),
+    output: transformOutputForTensorZero(datapoint.output),
+    tags: datapoint.tags || {},
+    auxiliary: datapoint.auxiliary,
+    source_inference_id: datapoint.source_inference_id,
+    is_custom: datapoint.is_custom,
+    name: datapoint.name,
+    output_schema: datapoint.output_schema,
+  };
+  return transformed;
+}
+
 // ============================================================================
 // Core Operations
 // ============================================================================
@@ -66,49 +112,38 @@ export async function deleteDatapoint(params: {
   return { redirectTo: toDatasetUrl(dataset_name) };
 }
 
+/**
+ * Saves a datapoint by creating a new version with a new ID and marking the old one as stale.
+ * The function type (chat/json) is automatically determined from the datapoint structure.
+ *
+ * TODO(#3765): remove this logic and use Rust logic instead, either via napi-rs or by calling an API server.
+ */
 export async function saveDatapoint(params: {
   parsedFormData: ParsedDatasetRow;
-  functionType: "chat" | "json";
-}): Promise<{ newId: string }> {
-  const { parsedFormData, functionType } = params;
+}): Promise<{ newId: string; functionType: "chat" | "json" }> {
+  const { parsedFormData } = params;
 
-  // Transform input to match TensorZero client's expected format
-  const transformedInput = resolvedInputToTensorZeroInput(parsedFormData.input);
-  const transformedOutput = transformOutputForTensorZero(parsedFormData.output);
+  // Determine function type from datapoint structure and transform accordingly
+  let datapoint: Datapoint;
+  let functionType: "chat" | "json";
+
+  if ("output_schema" in parsedFormData) {
+    functionType = "json";
+    datapoint = transformJsonDatapoint(parsedFormData);
+  } else {
+    functionType = "chat";
+    datapoint = transformChatDatapoint(parsedFormData);
+  }
+
+  // When saving a datapoint as new, we create a new ID, and mark the data point as "custom".
+  datapoint.id = uuid();
+  datapoint.is_custom = true;
 
   // For future reference:
   // These two calls would be a transaction but ClickHouse isn't transactional.
-  const baseDatapoint = {
-    function_name: parsedFormData.function_name,
-    input: transformedInput,
-    output: transformedOutput,
-    tags: parsedFormData.tags || {},
-    auxiliary: parsedFormData.auxiliary,
-    is_custom: true, // we're saving it after an edit, so it's custom
-    source_inference_id: parsedFormData.source_inference_id,
-    id: uuid(), // We generate a new ID here because we want old evaluation runs to be able to point to the correct data.
-  };
-
-  let datapoint: Datapoint;
-  if (functionType === "json" && "output_schema" in parsedFormData) {
-    datapoint = {
-      ...baseDatapoint,
-      output_schema: parsedFormData.output_schema,
-    };
-  } else if (functionType === "chat") {
-    datapoint = {
-      ...baseDatapoint,
-      tool_params:
-        "tool_params" in parsedFormData
-          ? parsedFormData.tool_params
-          : undefined,
-    };
-  } else {
-    throw new Error(
-      `Unexpected function type "${functionType}" or missing required properties on datapoint`,
-    );
-  }
-
+  //
+  // TODO(shuyangli): this should actually use "createDatapoint" since we're creating a new datapoint. We should reason about the
+  // safety and do it in a follow-up.
   const { id } = await getTensorZeroClient().updateDatapoint(
     parsedFormData.dataset_name,
     datapoint,
@@ -120,5 +155,5 @@ export async function saveDatapoint(params: {
     functionType,
   );
 
-  return { newId: id };
+  return { newId: id, functionType };
 }
