@@ -2207,6 +2207,7 @@ mod tests {
             DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
             DUMMY_STREAMING_RESPONSE,
         },
+        rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig},
     };
     use secrecy::SecretString;
     use tokio_stream::StreamExt;
@@ -2341,6 +2342,105 @@ mod tests {
             }
             .into()
         );
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_model_provider_infer_max_tokens_check() {
+        let provider = ModelProvider {
+            name: "test_provider".into(),
+            config: ProviderConfig::Dummy(DummyProvider {
+                model_name: "good".into(),
+                credentials: DummyCredentials::None,
+            }),
+            extra_body: Default::default(),
+            extra_headers: Default::default(),
+            timeouts: Default::default(),
+            discard_unknown_chunks: false,
+        };
+
+        let http_client = TensorzeroHttpClient::new().unwrap();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let postgres_mock = PostgresConnectionInfo::Disabled;
+        let api_keys = InferenceCredentials::default();
+        let tags = HashMap::new();
+        let scope_info = ScopeInfo { tags: &tags };
+
+        // With token rate limiting enabled and no max_tokens
+        let toml_str = r"
+            [[rules]]
+            tokens_per_second = 10
+            always = true
+        ";
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let rate_limit_config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
+
+        let clients = InferenceClients {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &postgres_mock,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
+            tags: &tags,
+            rate_limiting_config: &rate_limit_config,
+            otlp_config: &Default::default(),
+        };
+
+        let request_no_max_tokens = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![],
+            system: None,
+            tool_config: None,
+            temperature: None,
+            max_tokens: None, // No max_tokens!
+            ..Default::default()
+        };
+
+        let provider_request = ModelProviderRequest {
+            request: &request_no_max_tokens,
+            model_name: "test",
+            provider_name: "test_provider",
+            otlp_config: &Default::default(),
+        };
+
+        // Should fail with RateLimitMissingMaxTokens
+        let result = provider
+            .infer(provider_request, &clients, &scope_info)
+            .await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            Error::new(ErrorDetails::RateLimitMissingMaxTokens)
+        );
+
+        // With token rate limiting enabled and max_tokens provided
+        let request_with_max_tokens = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![],
+            system: None,
+            tool_config: None,
+            temperature: None,
+            max_tokens: Some(100), // max_tokens provided
+            ..Default::default()
+        };
+
+        // This should error because postgres is disabled, but it should not be the RateLimitMissingMaxTokens error
+        let provider_request = ModelProviderRequest {
+            request: &request_with_max_tokens,
+            model_name: "test",
+            provider_name: "test_provider",
+            otlp_config: &Default::default(),
+        };
+
+        let result = provider
+            .infer(provider_request, &clients, &scope_info)
+            .await
+            .unwrap_err();
+        assert_ne!(result, Error::new(ErrorDetails::RateLimitMissingMaxTokens));
     }
 
     #[tokio::test]

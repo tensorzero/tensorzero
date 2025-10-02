@@ -50,7 +50,8 @@ use crate::inference::types::resolved_input::{
 };
 use crate::inference::types::stored_input::StoredFile;
 use crate::rate_limiting::{
-    get_estimated_tokens, RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
+    get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
+    RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
 };
 use crate::serde_util::{
     deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
@@ -91,7 +92,10 @@ use uuid::Uuid;
 
 use crate::cache::NonStreamingCacheData;
 use crate::{cache::CacheData, config::ObjectStoreInfo};
-use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
+use crate::{
+    endpoints::inference::InferenceParams,
+    error::{ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens},
+};
 use crate::{
     endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceIds},
     variant::InferenceConfig,
@@ -926,7 +930,10 @@ impl<'a> ModelInferenceRequest<'a> {
 }
 
 impl RateLimitedRequest for ModelInferenceRequest<'_> {
-    fn estimated_resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
+    fn estimated_resource_usage(
+        &self,
+        resources: &[RateLimitResource],
+    ) -> Result<EstimatedRateLimitResourceUsage, Error> {
         let ModelInferenceRequest {
             inference_id: _,
             messages,
@@ -948,19 +955,32 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
             extra_headers: _,
             extra_cache_key: _,
         } = self;
-        let system_tokens = system
-            .as_ref()
-            .map(|s| get_estimated_tokens(s))
-            .unwrap_or(0);
-        let messages_tokens: u64 = messages
-            .iter()
-            .map(RateLimitedInputContent::estimated_input_token_usage)
-            .sum();
-        let output_tokens =
-            max_tokens.ok_or_else(|| Error::new(ErrorDetails::RateLimitMissingMaxTokens))? as u64;
-        Ok(RateLimitResourceUsage {
-            tokens: system_tokens + messages_tokens + output_tokens,
-            model_inferences: 1,
+
+        let tokens = if resources.contains(&RateLimitResource::Token) {
+            let system_tokens = system
+                .as_ref()
+                .map(|s| get_estimated_tokens(s))
+                .unwrap_or(0);
+            let messages_tokens: u64 = messages
+                .iter()
+                .map(RateLimitedInputContent::estimated_input_token_usage)
+                .sum();
+            let output_tokens =
+                max_tokens.ok_or_else(|| Error::new(RateLimitMissingMaxTokens))? as u64;
+            Some(system_tokens + messages_tokens + output_tokens)
+        } else {
+            None
+        };
+
+        let model_inferences = if resources.contains(&RateLimitResource::ModelInference) {
+            Some(1)
+        } else {
+            None
+        };
+
+        Ok(EstimatedRateLimitResourceUsage {
+            model_inferences,
+            tokens,
         })
     }
 }
@@ -2464,8 +2484,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use super::*;
     use crate::config::SchemaData;
     use crate::experimentation::ExperimentationConfig;
@@ -2476,6 +2494,7 @@ mod tests {
     use crate::tool::ToolConfig;
     use crate::tool::{DynamicToolConfig, ToolChoice};
     use serde_json::json;
+    use std::collections::HashSet;
     use tokio::time::Instant;
 
     #[tokio::test]
