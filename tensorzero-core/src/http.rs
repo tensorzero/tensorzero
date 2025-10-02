@@ -287,7 +287,7 @@ impl Stream for TensorZeroEventSource {
 // Due to connection pooling, these spans can live for a long time -
 // in particular, they can live across multiple TensorZero `POST /inference` requests.
 //
-// A `tracing` span always lives as long as its longest-live descendant span:
+// A `tracing` span always lives as long as its longest-lived descendant span:
 // https://docs.rs/tracing/latest/tracing/span/index.html#span-relationships
 // As a result, the h2 connection span can cause our spans to live for an extremely long time,
 // delaying the reporting of spans to OpenTelemetry.
