@@ -122,7 +122,7 @@ pub struct EvaluationCoreArgs {
 }
 
 #[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
-pub async fn run_evaluation(
+pub async fn run_evaluation_old(
     args: Args,
     evaluation_run_id: Uuid,
     mut writer: impl Write,
@@ -393,7 +393,7 @@ pub async fn run_evaluation(
 /// - `Ok(())` if the evaluation completes successfully and meets all cutoffs
 /// - `Err` if setup fails, evaluation fails, or results don't meet cutoffs
 #[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
-pub async fn run_evaluation_new(
+pub async fn run_evaluation(
     args: Args,
     evaluation_run_id: Uuid,
     mut writer: impl Write,
@@ -517,6 +517,7 @@ pub async fn run_evaluation_new(
     // We explicitly wait here for the batch writer to finish, so that `run_evaluation` can be called
     // from other places in the codebase (e.g. e2e tests), and subsequently query ClickHouse for the evaluation results.
     if let Some(handle) = clickhouse_client.batcher_join_handle() {
+        drop(clickhouse_client);
         tracing::info!("Waiting for evaluations ClickHouse batch writer to finish");
         handle
             .await
