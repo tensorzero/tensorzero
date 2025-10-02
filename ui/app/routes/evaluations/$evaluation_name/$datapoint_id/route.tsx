@@ -55,6 +55,7 @@ import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbac
 import { InferenceButton } from "~/components/utils/InferenceButton";
 import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
 import { handleAddToDatasetAction } from "~/utils/dataset.server";
+import { renameDatapoint } from "~/routes/datasets/$dataset_name/datapoint/$id/datapointOperations.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
@@ -176,6 +177,24 @@ export async function action({ request }: Route.ActionArgs) {
         logger.warn("No judge demonstration response");
       }
       return redirect(url.toString());
+    }
+    case "renameDatapoint": {
+      const datapoint_id = formData.get("datapoint_id") as string;
+      const dataset_name = formData.get("dataset_name") as string;
+      const newName = formData.get("newName") as string;
+
+      // We need to get the datapoint to pass to renameDatapoint
+      if (!datapoint) {
+        return data({ success: false, error: "Datapoint not found" }, { status: 404 });
+      }
+
+      await renameDatapoint({
+        datasetName: dataset_name,
+        datapoint,
+        newName,
+      });
+
+      return data({ success: true });
     }
     case null:
       logger.error("No action provided");

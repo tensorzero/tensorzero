@@ -169,3 +169,29 @@ export async function saveDatapoint(params: {
 
   return { newId: id };
 }
+
+/**
+ * Renames a datapoint by re-inserting the datapoint with the new name.
+ *
+ * TODO(#3765): remove this logic and use Rust logic instead, either via napi-rs or by calling an API server.
+ */
+export async function renameDatapoint(params: {
+  datasetName: string;
+  datapoint: ParsedDatasetRow;
+  newName: string;
+}): Promise<void> {
+  const { datasetName, datapoint, newName} = params;
+
+  // Determine function type and transform datapoint appropriately
+  let transformedDatapoint: Datapoint;
+  if ("output_schema" in datapoint) {
+    transformedDatapoint = transformJsonDatapoint(datapoint);
+  } else {
+    transformedDatapoint = transformChatDatapoint(datapoint);
+  }
+
+  // Update name
+  transformedDatapoint.name = newName;
+
+  await getTensorZeroClient().updateDatapoint(datasetName, transformedDatapoint);
+}

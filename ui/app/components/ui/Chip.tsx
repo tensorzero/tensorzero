@@ -8,7 +8,8 @@ import {
 } from "~/components/ui/tooltip";
 import { cn } from "~/utils/common";
 
-interface ChipProps {
+// Exported for EditableChip.
+export interface ChipProps {
   icon?: React.ReactNode;
   label: string;
   secondaryLabel?: string;
