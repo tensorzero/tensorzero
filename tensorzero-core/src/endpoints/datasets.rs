@@ -356,8 +356,8 @@ pub async fn update_datapoint_handler(
     // to always get a new ID, marked as custom, and lose their episode association). Now this can be used to update metadata like name.
     match **function_config {
         FunctionConfig::Chat(_) => {
-            let chat: UpdateChatInferenceDatapointRequest =
-                serde_json::from_value(params).map_err(|e| {
+            let chat: UpdateChatInferenceDatapointRequest = serde_json::from_value(params)
+                .map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
                         message: format!("Failed to deserialize chat datapoint: {e}"),
                     })
@@ -425,8 +425,8 @@ pub async fn update_datapoint_handler(
             }
         }
         FunctionConfig::Json(_) => {
-            let json: UpdateJsonInferenceDatapointRequest =
-                serde_json::from_value(params).map_err(|e| {
+            let json: UpdateJsonInferenceDatapointRequest = serde_json::from_value(params)
+                .map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
                         message: format!("Failed to deserialize JSON datapoint: {e}"),
                     })
@@ -1478,6 +1478,7 @@ where
 #[serde(deny_unknown_fields)]
 pub struct UpdateChatInferenceDatapointRequest {
     pub function_name: String,
+    #[serde(default)]
     pub episode_id: Option<Uuid>,
     pub input: Input,
     #[serde(default)]
@@ -1489,6 +1490,7 @@ pub struct UpdateChatInferenceDatapointRequest {
     pub tags: Option<HashMap<String, String>>,
     #[serde(default)]
     pub auxiliary: String,
+    #[serde(default)]
     pub is_deleted: bool,
     pub is_custom: bool,
     #[serde(default)]
@@ -1505,6 +1507,7 @@ pub struct UpdateChatInferenceDatapointRequest {
 #[serde(deny_unknown_fields)]
 pub struct UpdateJsonInferenceDatapointRequest {
     pub function_name: String,
+    #[serde(default)]
     pub episode_id: Option<Uuid>,
     pub input: Input,
     #[serde(default)]
@@ -1515,6 +1518,7 @@ pub struct UpdateJsonInferenceDatapointRequest {
     pub tags: Option<HashMap<String, String>>,
     #[serde(skip_serializing, default)] // this will become an object
     pub auxiliary: String,
+    #[serde(default)]
     pub is_deleted: bool,
     pub is_custom: bool,
     #[serde(default)]
@@ -1747,7 +1751,8 @@ mod test {
             "is_custom": false
         }"#;
 
-        let datapoint: UpdateChatInferenceDatapointRequest = serde_json::from_str(json_str).unwrap();
+        let datapoint: UpdateChatInferenceDatapointRequest =
+            serde_json::from_str(json_str).unwrap();
         assert_eq!(datapoint.function_name, "test_function");
         assert_eq!(datapoint.output, None);
         assert_eq!(datapoint.tool_params, None);
@@ -1768,7 +1773,8 @@ mod test {
             "is_custom": true
         }"#;
 
-        let datapoint: UpdateChatInferenceDatapointRequest = serde_json::from_str(json_str).unwrap();
+        let datapoint: UpdateChatInferenceDatapointRequest =
+            serde_json::from_str(json_str).unwrap();
         assert_eq!(datapoint.function_name, "test_function");
         assert!(datapoint.output.is_some());
         assert!(datapoint.tool_params.is_some());
@@ -1792,7 +1798,8 @@ mod test {
             "is_custom": false
         }"#;
 
-        let datapoint: UpdateJsonInferenceDatapointRequest = serde_json::from_str(json_str).unwrap();
+        let datapoint: UpdateJsonInferenceDatapointRequest =
+            serde_json::from_str(json_str).unwrap();
         assert_eq!(datapoint.function_name, "test_json_function");
         assert_eq!(datapoint.output, None);
         assert_eq!(datapoint.output_schema, json!({}));
@@ -1813,7 +1820,8 @@ mod test {
             "is_custom": true
         }"#;
 
-        let datapoint: UpdateJsonInferenceDatapointRequest = serde_json::from_str(json_str).unwrap();
+        let datapoint: UpdateJsonInferenceDatapointRequest =
+            serde_json::from_str(json_str).unwrap();
         assert_eq!(datapoint.function_name, "test_json_function");
         assert!(datapoint.output.is_some());
         assert_eq!(datapoint.output.as_ref().unwrap()["answer"], "Hello");
@@ -1836,7 +1844,8 @@ mod test {
             "is_custom": true
         }"#;
 
-        let datapoint: UpdateJsonInferenceDatapointRequest = serde_json::from_str(json_str).unwrap();
+        let datapoint: UpdateJsonInferenceDatapointRequest =
+            serde_json::from_str(json_str).unwrap();
         assert_eq!(datapoint.function_name, "test_json_function");
         assert_eq!(datapoint.output, None);
         assert_eq!(
