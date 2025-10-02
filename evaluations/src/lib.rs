@@ -212,7 +212,7 @@ pub async fn run_evaluation(
 
     let core_args = EvaluationCoreArgs {
         tensorzero_client,
-        clickhouse_client: clickhouse_client.clone(),
+        clickhouse_client,
         config,
         dataset_name: args.dataset_name,
         variant_name: args.variant_name,
