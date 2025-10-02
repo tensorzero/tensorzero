@@ -179,7 +179,7 @@ export async function renameDatapoint(params: {
   datapoint: ParsedDatasetRow;
   newName: string;
 }): Promise<void> {
-  const { datasetName, datapoint, newName} = params;
+  const { datasetName, datapoint, newName } = params;
 
   // Determine function type and transform datapoint appropriately
   let transformedDatapoint: Datapoint;
@@ -192,5 +192,8 @@ export async function renameDatapoint(params: {
   // Update name
   transformedDatapoint.name = newName;
 
-  await getTensorZeroClient().updateDatapoint(datasetName, transformedDatapoint);
+  await getTensorZeroClient().updateDatapoint(
+    datasetName,
+    transformedDatapoint,
+  );
 }
