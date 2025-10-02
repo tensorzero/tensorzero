@@ -39,7 +39,6 @@ use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::model::StreamResponse;
 use crate::model::StreamResponseAndMessages;
-use crate::rate_limiting::TicketBorrows;
 use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
 use crate::utils::retries::RetryConfig;
 use crate::{inference::types::InferenceResult, model::ModelConfig};
@@ -198,7 +197,6 @@ pub struct ModelUsedInfo {
     pub input_messages: Vec<RequestMessage>,
     pub inference_params: InferenceParams,
     pub cached: bool,
-    pub ticket_borrow: TicketBorrows,
     // These responses will get added into the final inference result (after `collect_chunks` finishes)
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
 }
@@ -748,7 +746,6 @@ async fn infer_model_request_stream<'request>(
                 cached,
             },
         messages: input_messages,
-        ticket_borrow,
     } = retry_config
         .retry(|| async {
             model_config
@@ -767,7 +764,6 @@ async fn infer_model_request_stream<'request>(
         system,
         input_messages,
         cached,
-        ticket_borrow,
     };
     let config_type = function.config_type();
     let stream =
