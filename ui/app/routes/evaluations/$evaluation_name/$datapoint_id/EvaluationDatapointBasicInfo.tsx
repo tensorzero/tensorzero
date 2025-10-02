@@ -35,10 +35,7 @@ export default function BasicInfo({
         <BasicInfoItemTitle>Name</BasicInfoItemTitle>
         <BasicInfoItemContent>
           {/* TODO: support editing names */}
-          <Chip
-            label={datapoint_name || "-"}
-            font="mono"
-            />
+          <Chip label={datapoint_name || "-"} font="mono" />
         </BasicInfoItemContent>
       </BasicInfoItem>
       <BasicInfoItem>
