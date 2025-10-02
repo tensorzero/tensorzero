@@ -283,7 +283,7 @@ impl Stream for TensorZeroEventSource {
 }
 
 // Workaround for https://github.com/hyperium/h2/issues/763
-// The 'h2' crate create a long-lived span for outgoing HTTP connections.
+// The 'h2' crate creates a long-lived span for outgoing HTTP connections.
 // Due to connection pooling, these spans can live for a long time -
 // in particular, they can live across multiple TensorZero `POST /inference` requests.
 //
