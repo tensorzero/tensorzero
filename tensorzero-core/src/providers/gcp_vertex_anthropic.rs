@@ -71,7 +71,7 @@ pub struct GCPVertexAnthropicProvider {
 fn handle_gcp_error(
     // This is only used in test mode
     #[cfg_attr(not(any(test, feature = "e2e_tests")), expect(unused_variables))]
-    provider_type: &ProviderType,
+    provider_type: ProviderType,
     e: impl Display + Debug,
 ) -> Result<GCPVertexCredentials, Error> {
     if skip_credential_validation() {
@@ -93,7 +93,7 @@ fn handle_gcp_error(
 }
 
 pub async fn make_gcp_sdk_credentials(
-    provider_type: &ProviderType,
+    provider_type: ProviderType,
 ) -> Result<GCPVertexCredentials, Error> {
     let creds_result = google_cloud_auth::credentials::Builder::default().build();
 

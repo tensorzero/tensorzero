@@ -78,6 +78,7 @@ pub trait ProviderKind {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum ProviderType {
     Anthropic,
     Azure,
@@ -464,31 +465,11 @@ impl ProviderTypeDefaultCredentials {
             }),
             gcp_vertex_anthropic: LazyAsyncCredential::new(move || {
                 let location = gcp_vertex_anthropic_location.clone();
-                async move {
-                    match location {
-                        CredentialLocation::Sdk => {
-                            make_gcp_sdk_credentials(&ProviderType::GCPVertexAnthropic).await
-                        }
-                        _ => build_gcp_non_sdk_credentials(
-                            load_credential(&location, ProviderType::GCPVertexAnthropic)?,
-                            &ProviderType::GCPVertexAnthropic,
-                        ),
-                    }
-                }
+                async move { make_gcp_credentials(ProviderType::GCPVertexAnthropic, &location).await }
             }),
             gcp_vertex_gemini: LazyAsyncCredential::new(move || {
                 let location = gcp_vertex_gemini_location.clone();
-                async move {
-                    match location {
-                        CredentialLocation::Sdk => {
-                            make_gcp_sdk_credentials(&ProviderType::GCPVertexGemini).await
-                        }
-                        _ => build_gcp_non_sdk_credentials(
-                            load_credential(&location, ProviderType::GCPVertexGemini)?,
-                            &ProviderType::GCPVertexGemini,
-                        ),
-                    }
-                }
+                async move { make_gcp_credentials(ProviderType::GCPVertexGemini, &location).await }
             }),
 
             groq: LazyCredential::new(move || {
@@ -521,6 +502,18 @@ impl ProviderTypeDefaultCredentials {
             xai: LazyCredential::new(move || {
                 load_credential(&xai_location, ProviderType::XAI)?.try_into()
             }),
+        }
+    }
+}
+
+async fn make_gcp_credentials(
+    provider_type: ProviderType,
+    location: &CredentialLocation,
+) -> Result<GCPVertexCredentials, Error> {
+    match location {
+        CredentialLocation::Sdk => make_gcp_sdk_credentials(provider_type).await,
+        _ => {
+            build_gcp_non_sdk_credentials(load_credential(location, provider_type)?, &provider_type)
         }
     }
 }
@@ -738,15 +731,7 @@ impl GCPVertexAnthropicKind {
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<GCPVertexCredentials, Error> {
         if let Some(api_key_location) = api_key_location {
-            return match api_key_location {
-                CredentialLocation::Sdk => {
-                    make_gcp_sdk_credentials(&ProviderType::GCPVertexAnthropic).await
-                }
-                _ => build_gcp_non_sdk_credentials(
-                    load_credential(api_key_location, ProviderType::GCPVertexAnthropic)?,
-                    &ProviderType::GCPVertexAnthropic,
-                ),
-            };
+            return make_gcp_credentials(ProviderType::GCPVertexAnthropic, api_key_location).await;
         }
 
         Ok(self
@@ -779,15 +764,7 @@ impl GCPVertexGeminiKind {
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<GCPVertexCredentials, Error> {
         if let Some(api_key_location) = api_key_location {
-            return match api_key_location {
-                CredentialLocation::Sdk => {
-                    make_gcp_sdk_credentials(&ProviderType::GCPVertexGemini).await
-                }
-                _ => build_gcp_non_sdk_credentials(
-                    load_credential(api_key_location, ProviderType::GCPVertexGemini)?,
-                    &ProviderType::GCPVertexGemini,
-                ),
-            };
+            return make_gcp_credentials(ProviderType::GCPVertexGemini, api_key_location).await;
         }
 
         Ok(self
