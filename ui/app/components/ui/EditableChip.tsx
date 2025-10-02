@@ -63,7 +63,7 @@ export default function EditableChip({
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          className={`h-5 text-sm ${font === "mono" ? "font-mono" : ""}`}
+          className={`h-5 ml-1 text-sm ${font === "mono" ? "font-mono" : ""}`}
           disabled={isLoading}
           autoFocus
         />
