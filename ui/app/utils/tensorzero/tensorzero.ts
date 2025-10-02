@@ -266,6 +266,7 @@ const BaseDatapointSchema = z.object({
   auxiliary: z.string().optional(),
   is_custom: z.boolean(),
   source_inference_id: z.string().uuid().nullable(),
+  name: z.string().nullable(),
 });
 
 /**
