@@ -259,7 +259,7 @@ export type ToolParams = z.infer<typeof ToolParamsSchema>;
 const BaseDatapointSchema = z.object({
   function_name: z.string(),
   id: z.string().uuid(),
-  episode_id: z.string().uuid().nullable(),
+  episode_id: z.string().uuid().optional(),
   input: InputSchema,
   output: JsonValueSchema,
   tags: z.record(z.string()).optional(),
