@@ -1360,7 +1360,7 @@ mod tests {
         let provider_types = ProviderTypesConfig::default();
         let models = ModelTable::new(
             HashMap::from([("invalid_model".into(), text_model_config)]),
-            ProviderTypeDefaultCredentials::new(&provider_types),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -1427,13 +1427,16 @@ mod tests {
         let inference_params = InferenceParams::default();
         let models = HashMap::from([("error".into(), error_model_config)]);
         let provider_types = ProviderTypesConfig::default();
-        let models =
-            ModelTable::new(models, ProviderTypeDefaultCredentials::new(&provider_types)).unwrap();
+        let models = ModelTable::new(
+            models,
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
+        .unwrap();
         let inference_models = InferenceModels {
             models: &models,
             embedding_models: &EmbeddingModelTable::new(
                 HashMap::new(),
-                ProviderTypeDefaultCredentials::new(&provider_types),
+                ProviderTypeDefaultCredentials::new(&provider_types).into(),
             )
             .unwrap(),
         };
@@ -1529,7 +1532,7 @@ mod tests {
         let provider_types = ProviderTypesConfig::default();
         let models = ModelTable::new(
             HashMap::from([("good".into(), text_model_config)]),
-            ProviderTypeDefaultCredentials::new(&provider_types),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -1611,7 +1614,7 @@ mod tests {
         let provider_types = ProviderTypesConfig::default();
         let models = ModelTable::new(
             HashMap::from([("tool".into(), tool_model_config)]),
-            ProviderTypeDefaultCredentials::new(&provider_types),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -1780,7 +1783,7 @@ mod tests {
         let provider_types = ProviderTypesConfig::default();
         let models = ModelTable::new(
             HashMap::from([("json".into(), json_model_config)]),
-            ProviderTypeDefaultCredentials::new(&provider_types),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -2259,14 +2262,14 @@ mod tests {
         let models = Box::leak(Box::new(
             ModelTable::new(
                 HashMap::from([("error".into(), error_model_config)]),
-                ProviderTypeDefaultCredentials::new(provider_types),
+                ProviderTypeDefaultCredentials::new(provider_types).into(),
             )
             .unwrap(),
         ));
         let embedding_models = Box::leak(Box::new(
             EmbeddingModelTable::new(
                 HashMap::new(),
-                ProviderTypeDefaultCredentials::new(provider_types),
+                ProviderTypeDefaultCredentials::new(provider_types).into(),
             )
             .unwrap(),
         ));
@@ -2347,7 +2350,7 @@ mod tests {
         let models = Box::leak(Box::new(
             ModelTable::new(
                 HashMap::from([("good".into(), text_model_config)]),
-                ProviderTypeDefaultCredentials::new(provider_types),
+                ProviderTypeDefaultCredentials::new(provider_types).into(),
             )
             .unwrap(),
         ));

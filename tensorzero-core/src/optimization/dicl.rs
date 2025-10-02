@@ -838,7 +838,7 @@ mod tests {
             Config {
                 embedding_models: EmbeddingModelTable::new(
                     HashMap::from([(Arc::from(model_name), embedding_model_config)]),
-                    ProviderTypeDefaultCredentials::new(&provider_types),
+                    ProviderTypeDefaultCredentials::new(&provider_types).into(),
                 )
                 .unwrap(),
                 ..Default::default()

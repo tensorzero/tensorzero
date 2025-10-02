@@ -1295,7 +1295,7 @@ mod tests {
                     timeouts: Default::default(),
                 },
             )]),
-            ProviderTypeDefaultCredentials::new(&provider_types),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
         )
         .expect("Failed to create model table");
         let client = TensorzeroHttpClient::new().unwrap();
@@ -1405,8 +1405,11 @@ mod tests {
                 },
             );
             let provider_types = ProviderTypesConfig::default();
-            ModelTable::new(map, ProviderTypeDefaultCredentials::new(&provider_types))
-                .expect("Failed to create model table")
+            ModelTable::new(
+                map,
+                ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            )
+            .expect("Failed to create model table")
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1476,8 +1479,11 @@ mod tests {
                 },
             );
             let provider_types = ProviderTypesConfig::default();
-            ModelTable::new(map, ProviderTypeDefaultCredentials::new(&provider_types))
-                .expect("Failed to create model table")
+            ModelTable::new(
+                map,
+                ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            )
+            .expect("Failed to create model table")
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1566,7 +1572,7 @@ mod tests {
         let provider_types = ProviderTypesConfig::default();
         let big_models = ModelTable::new(
             big_models,
-            ProviderTypeDefaultCredentials::new(&provider_types),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
         )
         .expect("Failed to create model table");
 

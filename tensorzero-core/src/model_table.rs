@@ -133,14 +133,14 @@ pub struct BaseModelTable<T> {
     pub table: HashMap<Arc<str>, T>,
     #[serde(skip)]
     #[ts(skip)]
-    pub default_credentials: ProviderTypeDefaultCredentials,
+    pub default_credentials: Arc<ProviderTypeDefaultCredentials>,
 }
 
 impl<T: ShorthandModelConfig> Default for BaseModelTable<T> {
     fn default() -> Self {
         BaseModelTable {
             table: HashMap::new(),
-            default_credentials: ProviderTypeDefaultCredentials::default(),
+            default_credentials: Arc::new(ProviderTypeDefaultCredentials::default()),
         }
     }
 }
@@ -197,7 +197,7 @@ fn check_shorthand<'a>(prefixes: &[&'a str], key: &'a str) -> Option<Shorthand<'
 impl<T: ShorthandModelConfig> BaseModelTable<T> {
     pub fn new(
         models: HashMap<Arc<str>, T>,
-        provider_type_default_credentials: ProviderTypeDefaultCredentials,
+        provider_type_default_credentials: Arc<ProviderTypeDefaultCredentials>,
     ) -> Result<Self, String> {
         for key in models.keys() {
             if RESERVED_MODEL_PREFIXES

@@ -3031,7 +3031,7 @@ mod tests {
         let provider_types = ProviderTypesConfig::default();
         let model_table: ModelTable = ModelTable::new(
             HashMap::from([("claude".into(), anthropic_model_config)]),
-            ProviderTypeDefaultCredentials::new(&provider_types),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
         )
         .unwrap();
 

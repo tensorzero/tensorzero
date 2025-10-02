@@ -132,7 +132,7 @@ mod tests {
         let config = Config {
             embedding_models: crate::embeddings::EmbeddingModelTable::new(
                 embedding_models,
-                ProviderTypeDefaultCredentials::new(&provider_types),
+                Arc::new(ProviderTypeDefaultCredentials::new(&provider_types)),
             )
             .unwrap(),
             ..Default::default()

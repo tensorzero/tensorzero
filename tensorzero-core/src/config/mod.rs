@@ -627,8 +627,9 @@ impl Config {
             .into_iter()
             .map(|(name, config)| config.load(name.clone()).map(|c| (name, Arc::new(c))))
             .collect::<Result<HashMap<String, Arc<StaticToolConfig>>, Error>>()?;
-        let provider_type_default_credentials =
-            ProviderTypeDefaultCredentials::new(&uninitialized_config.provider_types);
+        let provider_type_default_credentials = Arc::new(ProviderTypeDefaultCredentials::new(
+            &uninitialized_config.provider_types,
+        ));
 
         let models = try_join_all(uninitialized_config.models.into_iter().map(
             |(name, config)| async {
@@ -673,15 +674,14 @@ impl Config {
         .await?
         .into_iter()
         .collect::<HashMap<_, _>>();
-        let models = ModelTable::new(models, provider_type_default_credentials).map_err(|e| {
-            Error::new(ErrorDetails::Config {
-                message: format!("Failed to load models: {e}"),
-            })
-        })?;
-        let embedding_default_credentials =
-            ProviderTypeDefaultCredentials::new(&uninitialized_config.provider_types);
+        let models =
+            ModelTable::new(models, provider_type_default_credentials.clone()).map_err(|e| {
+                Error::new(ErrorDetails::Config {
+                    message: format!("Failed to load models: {e}"),
+                })
+            })?;
         let embedding_models =
-            EmbeddingModelTable::new(embedding_models, embedding_default_credentials).map_err(
+            EmbeddingModelTable::new(embedding_models, provider_type_default_credentials).map_err(
                 |e| {
                     Error::new(ErrorDetails::Config {
                         message: format!("Failed to load embedding models: {e}"),
