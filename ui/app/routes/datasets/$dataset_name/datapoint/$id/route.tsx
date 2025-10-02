@@ -41,7 +41,11 @@ import type {
   JsonInferenceOutput,
   ContentBlockChatOutput,
 } from "tensorzero-node";
-import { deleteDatapoint, saveDatapoint } from "./datapointOperations.server";
+import {
+  deleteDatapoint,
+  renameDatapoint,
+  saveDatapoint,
+} from "./datapointOperations.server";
 import {
   parseDatapointFormData,
   serializeDatapointToFormData,
@@ -372,7 +376,10 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
       <SectionsGroup>
         <SectionLayout>
-          <DatapointBasicInfo datapoint={datapoint} onRenameDatapoint={handleRenameDatapoint} />
+          <DatapointBasicInfo
+            datapoint={datapoint}
+            onRenameDatapoint={handleRenameDatapoint}
+          />
         </SectionLayout>
 
         <SectionLayout>

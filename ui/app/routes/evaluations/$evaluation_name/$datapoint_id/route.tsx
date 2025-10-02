@@ -185,7 +185,10 @@ export async function action({ request }: Route.ActionArgs) {
 
       // We need to get the datapoint to pass to renameDatapoint
       if (!datapoint) {
-        return data({ success: false, error: "Datapoint not found" }, { status: 404 });
+        return data(
+          { success: false, error: "Datapoint not found" },
+          { status: 404 },
+        );
       }
 
       await renameDatapoint({

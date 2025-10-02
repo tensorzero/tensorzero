@@ -37,7 +37,10 @@ const createTimestampTooltip = (timestamp: string | number | Date) => {
   );
 };
 
-export default function DatapointBasicInfo({ datapoint, onRenameDatapoint }: BasicInfoProps) {
+export default function DatapointBasicInfo({
+  datapoint,
+  onRenameDatapoint,
+}: BasicInfoProps) {
   const function_config = useFunctionConfig(datapoint.function_name);
   const type = function_config?.type || "unknown";
 
