@@ -277,20 +277,6 @@ pub async fn run_evaluation(
         }
     }
 
-    // Since we construct our own `ClickHouseConnectionInfo` outside of our `TensorZeroClient`,
-    // we need to wait for the batch writer to finish.
-    // This happens automatically when `run_evaluation` is called from the standalone `evaluations` binary
-    // (since Tokio will wait for the `spawn_blocking` task to finish before shutting down the runtime).
-    // We explicitly wait here for the batch writer to finish, so that `run_evaluation` can be called
-    // from other places in the codebase (e.g. e2e tests), and subsequently query ClickHouse for the evaluation results.
-    if let Some(handle) = clickhouse_client.batcher_join_handle() {
-        tracing::info!("Waiting for evaluations ClickHouse batch writer to finish");
-        handle
-            .await
-            .map_err(|e| anyhow!("Error waiting for ClickHouse batch writer: {e}"))?;
-        tracing::info!("Evaluations ClickHouse batch writer finished");
-    }
-
     Ok(())
 }
 
@@ -487,7 +473,12 @@ pub async fn run_evaluation_core_streaming(
             }
         }
 
-        // Wait for batch writer to finish
+        // Since we construct our own `ClickHouseConnectionInfo` outside of our `TensorZeroClient`,
+        // we need to wait for the batch writer to finish.
+        // This happens automatically when `run_evaluation` is called from the standalone `evaluations` binary
+        // (since Tokio will wait for the `spawn_blocking` task to finish before shutting down the runtime).
+        // We explicitly wait here for the batch writer to finish, so that `run_evaluation` can be called
+        // from other places in the codebase (e.g. e2e tests), and subsequently query ClickHouse for the evaluation results.
         if let Some(handle) = clients_clone.clickhouse_client.batcher_join_handle() {
             drop(clients_clone);
             tracing::info!("Waiting for evaluations ClickHouse batch writer to finish");
