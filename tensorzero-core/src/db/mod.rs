@@ -51,6 +51,15 @@ pub trait SelectQueries {
         function_name: &str,
         variant_names: Option<&Vec<String>>,
     ) -> Result<Vec<FeedbackByVariant>, Error>;
+
+    /// Retrieves boolean metric feedback by target_id with pagination support.
+    async fn query_boolean_metrics_by_target_id(
+        &self,
+        target_id: Uuid,
+        page_size: u32,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+    ) -> Result<Vec<BooleanMetricFeedbackRow>, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -107,6 +116,46 @@ pub struct TableBoundsWithCount {
     #[serde(deserialize_with = "deserialize_u64")]
     pub count: u64,
 }
+
+#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
+#[ts(export)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum FeedbackRow {
+    Boolean {
+        id: Uuid,
+        target_id: Uuid,
+        metric_name: String,
+        value: bool,
+        tags: std::collections::HashMap<String, String>,
+        timestamp: DateTime<Utc>,
+    },
+    Float {
+        id: Uuid,
+        target_id: Uuid,
+        metric_name: String,
+        value: f64,
+        tags: std::collections::HashMap<String, String>,
+        timestamp: DateTime<Utc>,
+    },
+    Comment {
+        id: Uuid,
+        target_id: Uuid,
+        target_type: String,
+        value: String,
+        tags: std::collections::HashMap<String, String>,
+        timestamp: DateTime<Utc>,
+    },
+    Demonstration {
+        id: Uuid,
+        inference_id: Uuid,
+        value: String,
+        tags: std::collections::HashMap<String, String>,
+        timestamp: DateTime<Utc>,
+    },
+}
+
+// Type alias for backwards compatibility with existing code
+pub type BooleanMetricFeedbackRow = FeedbackRow;
 
 impl<T: SelectQueries + HealthCheckable + Send + Sync> ClickHouseConnection for T {}
 

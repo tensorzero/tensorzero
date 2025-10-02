@@ -9,6 +9,7 @@ import {
   InferenceResponse,
   EpisodeByIdRow,
   TableBoundsWithCount,
+  FeedbackRow,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
@@ -178,5 +179,25 @@ export class DatabaseClient {
   async queryEpisodeTableBounds(): Promise<TableBoundsWithCount> {
     const bounds = await this.nativeDatabaseClient.queryEpisodeTableBounds();
     return JSON.parse(bounds) as TableBoundsWithCount;
+  }
+
+  async queryBooleanMetricsByTargetId(
+    targetId: string,
+    pageSize: number,
+    before?: string,
+    after?: string,
+  ): Promise<Extract<FeedbackRow, { type: "boolean" }>[]> {
+    const params = safeStringify({
+      target_id: targetId,
+      page_size: pageSize,
+      before: before,
+      after: after,
+    });
+    const booleanMetricsString =
+      await this.nativeDatabaseClient.queryBooleanMetricsByTargetId(params);
+    return JSON.parse(booleanMetricsString) as Extract<
+      FeedbackRow,
+      { type: "boolean" }
+    >[];
   }
 }

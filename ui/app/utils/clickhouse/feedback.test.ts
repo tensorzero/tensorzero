@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
+import type { FeedbackRow } from "tensorzero-node";
 import {
   countCommentFeedbackByTargetId,
   pollForFeedbackItem,
@@ -8,7 +9,6 @@ import {
   queryMetricsWithFeedback,
   type BooleanMetricFeedbackRow,
   type CommentFeedbackRow,
-  type FeedbackRow,
 } from "./feedback";
 
 test("queryCommentFeedbackByTargetId", async () => {

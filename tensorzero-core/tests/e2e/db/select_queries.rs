@@ -4,7 +4,7 @@ use tensorzero_core::db::{
     clickhouse::{
         migration_manager::migrations::migration_0037::QUANTILES, test_helpers::get_clickhouse,
     },
-    SelectQueries,
+    FeedbackRow, SelectQueries,
 };
 
 #[tokio::test]
@@ -716,4 +716,117 @@ async fn test_clickhouse_query_episode_table_bounds() {
     //     "019926fd-1a06-7fe2-b7f4-23220893d62c"
     // );
     // assert_eq!(bounds.count, 20002095);
+}
+
+#[tokio::test]
+async fn test_clickhouse_query_boolean_metrics_by_target_id() {
+    let clickhouse = get_clickhouse().await;
+    let target_id = uuid::Uuid::parse_str("01942e26-4693-7e80-8591-47b98e25d721").unwrap();
+    let page_size = 10;
+
+    // Get first page
+    let first_page = clickhouse
+        .query_boolean_metrics_by_target_id(target_id, page_size, None, None)
+        .await
+        .unwrap();
+    println!("First page length: {}", first_page.len());
+
+    // Helper to extract id from FeedbackRow
+    let get_id = |row: &FeedbackRow| match row {
+        FeedbackRow::Boolean { id, .. } => *id,
+        _ => panic!("Expected Boolean variant"),
+    };
+
+    // Get second page
+    let second_page = clickhouse
+        .query_boolean_metrics_by_target_id(
+            target_id,
+            page_size,
+            Some(get_id(&first_page[first_page.len() - 1])),
+            None,
+        )
+        .await
+        .unwrap();
+    println!("Second page length: {}", second_page.len());
+
+    // Get third page
+    let third_page = clickhouse
+        .query_boolean_metrics_by_target_id(
+            target_id,
+            page_size,
+            Some(get_id(&second_page[second_page.len() - 1])),
+            None,
+        )
+        .await
+        .unwrap();
+    println!("Third page length: {}", third_page.len());
+
+    // Check that all pages are sorted by id in descending order
+    for page in [&first_page, &second_page, &third_page] {
+        for i in 1..page.len() {
+            assert!(
+                get_id(&page[i - 1]) > get_id(&page[i]),
+                "Boolean metrics should be sorted by id in descending order"
+            );
+        }
+    }
+
+    // Test empty result for non-existent target_id
+    let empty_feedback = clickhouse
+        .query_boolean_metrics_by_target_id(
+            uuid::Uuid::parse_str("01942e26-4693-7e80-8591-47b98e25d711").unwrap(),
+            10,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(empty_feedback.len(), 0);
+
+    // Test paging backwards from a specific ID
+    if !first_page.is_empty() {
+        let start_id = get_id(&first_page[0]);
+        let first_backward_page = clickhouse
+            .query_boolean_metrics_by_target_id(target_id, page_size, Some(start_id), None)
+            .await
+            .unwrap();
+
+        // Check that backward pages are sorted by id in descending order
+        for i in 1..first_backward_page.len() {
+            assert!(
+                get_id(&first_backward_page[i - 1]) > get_id(&first_backward_page[i]),
+                "Backward pages should be sorted by id in descending order"
+            );
+        }
+    }
+
+    // Test that specifying both before and after throws error
+    let result = clickhouse
+        .query_boolean_metrics_by_target_id(
+            target_id,
+            page_size,
+            Some(get_id(&first_page[0])),
+            Some(get_id(&first_page[0])),
+        )
+        .await;
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Cannot specify both"));
+
+    // Verify each feedback has valid data
+    for feedback in &first_page {
+        match feedback {
+            FeedbackRow::Boolean {
+                target_id: row_target_id,
+                metric_name,
+                ..
+            } => {
+                assert_eq!(*row_target_id, target_id);
+                assert!(!metric_name.is_empty());
+            }
+            _ => panic!("Expected Boolean variant"),
+        }
+    }
 }

@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tensorzero::{setup_clickhouse_without_config, ClickHouseConnection, TimeWindow};
 use uuid::Uuid;
 
@@ -78,6 +78,25 @@ impl DatabaseClient {
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         serde_json::to_string(&bounds).map_err(|e| napi::Error::from_reason(e.to_string()))
     }
+
+    #[napi]
+    pub async fn query_boolean_metrics_by_target_id(
+        &self,
+        params: String,
+    ) -> Result<String, napi::Error> {
+        let QueryBooleanMetricsByTargetIdParams {
+            target_id,
+            page_size,
+            before,
+            after,
+        } = serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let result = self
+            .0
+            .query_boolean_metrics_by_target_id(target_id, page_size, before, after)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
+    }
 }
 
 #[derive(Deserialize)]
@@ -96,4 +115,12 @@ struct QueryEpisodeTableParams {
     page_size: u32,
     before: Option<Uuid>,
     after: Option<Uuid>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct QueryBooleanMetricsByTargetIdParams {
+    pub target_id: Uuid,
+    pub page_size: u32,
+    pub before: Option<Uuid>,
+    pub after: Option<Uuid>,
 }

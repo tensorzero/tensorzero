@@ -1,6 +1,6 @@
 use crate::db::{
-    clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args, EpisodeByIdRow,
-    FeedbackByVariant, TableBoundsWithCount,
+    clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args,
+    BooleanMetricFeedbackRow, EpisodeByIdRow, FeedbackByVariant, TableBoundsWithCount,
 };
 use async_trait::async_trait;
 use uuid::Uuid;
@@ -336,5 +336,110 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     message: format!("Failed to deserialize FeedbackByVariant: {e}"),
                 })
             })
+    }
+
+    async fn query_boolean_metrics_by_target_id(
+        &self,
+        target_id: Uuid,
+        page_size: u32,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+    ) -> Result<Vec<BooleanMetricFeedbackRow>, Error> {
+        let (where_clause, params, is_after) = match (before, after) {
+            (Some(before_id), None) => (
+                "target_id = {target_id:String} AND toUInt128(id) < toUInt128(toUUID({before:String}))",
+                vec![
+                    ("target_id", target_id.to_string()),
+                    ("before", before_id.to_string()),
+                ],
+                false,
+            ),
+            (None, Some(after_id)) => (
+                "target_id = {target_id:String} AND toUInt128(id) > toUInt128(toUUID({after:String}))",
+                vec![
+                    ("target_id", target_id.to_string()),
+                    ("after", after_id.to_string()),
+                ],
+                true,
+            ),
+            (None, None) => (
+                "target_id = {target_id:String}",
+                vec![("target_id", target_id.to_string())],
+                false,
+            ),
+            (Some(_), Some(_)) => {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "Cannot specify both 'before' and 'after' parameters".to_string(),
+                }));
+            }
+        };
+
+        let query = if is_after {
+            format!(
+                r"
+                SELECT
+                    'boolean' AS type,
+                    id,
+                    target_id,
+                    metric_name,
+                    value,
+                    tags,
+                    timestamp
+                FROM (
+                    SELECT
+                        id,
+                        target_id,
+                        metric_name,
+                        value,
+                        tags,
+                        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+                    FROM BooleanMetricFeedbackByTargetId
+                    WHERE {where_clause}
+                    ORDER BY toUInt128(id) ASC
+                    LIMIT {{page_size:UInt32}}
+                )
+                ORDER BY toUInt128(id) DESC
+                FORMAT JSONEachRow
+                "
+            )
+        } else {
+            format!(
+                r"
+                SELECT
+                    'boolean' AS type,
+                    id,
+                    target_id,
+                    metric_name,
+                    value,
+                    tags,
+                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+                FROM BooleanMetricFeedbackByTargetId
+                WHERE {where_clause}
+                ORDER BY toUInt128(id) DESC
+                LIMIT {{page_size:UInt32}}
+                FORMAT JSONEachRow
+                "
+            )
+        };
+
+        let page_size_str = page_size.to_string();
+        let mut params_map: std::collections::HashMap<&str, &str> =
+            params.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        params_map.insert("page_size", &page_size_str);
+
+        let response = self.run_query_synchronous(query, &params_map).await?;
+
+        response
+            .response
+            .trim()
+            .lines()
+            .map(|row| {
+                serde_json::from_str(row).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseDeserialization {
+                        message: format!("Failed to deserialize BooleanMetricFeedbackRow: {e}"),
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
     }
 }

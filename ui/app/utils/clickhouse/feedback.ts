@@ -6,116 +6,15 @@ import {
 } from "./common";
 import { data } from "react-router";
 import { getClickhouseClient } from "./client.server";
+import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import { z } from "zod";
 import { logger } from "~/utils/logger";
+import type { FeedbackRow } from "tensorzero-node";
 
-export const booleanMetricFeedbackRowSchema = z.object({
-  type: z.literal("boolean"),
-  id: z.string().uuid(),
-  target_id: z.string().uuid(),
-  metric_name: z.string(),
-  value: z.boolean(),
-  tags: z.record(z.string(), z.string()),
-  timestamp: z.string().datetime(),
-});
-
-export type BooleanMetricFeedbackRow = z.infer<
-  typeof booleanMetricFeedbackRowSchema
+export type BooleanMetricFeedbackRow = Extract<
+  FeedbackRow,
+  { type: "boolean" }
 >;
-
-export async function queryBooleanMetricsByTargetId(params: {
-  target_id: string;
-  before?: string;
-  after?: string;
-  page_size?: number;
-}): Promise<BooleanMetricFeedbackRow[]> {
-  const { target_id, before, after, page_size } = params;
-
-  if (before && after) {
-    throw new Error("Cannot specify both 'before' and 'after' parameters");
-  }
-
-  let query = "";
-  const query_params: Record<string, string | number> = {
-    target_id,
-    page_size: page_size || 100,
-  };
-
-  if (!before && !after) {
-    query = `
-        SELECT
-          'boolean' AS type,
-          id,
-          target_id,
-          metric_name,
-          value,
-          tags,
-          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-        FROM BooleanMetricFeedbackByTargetId
-        WHERE target_id = {target_id:String}
-        ORDER BY toUInt128(id) DESC
-        LIMIT {page_size:UInt32}
-      `;
-  } else if (before) {
-    query = `
-        SELECT
-          'boolean' AS type,
-          id,
-          target_id,
-          metric_name,
-          value,
-          tags,
-          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-        FROM BooleanMetricFeedbackByTargetId
-        WHERE target_id = {target_id:String}
-          AND toUInt128(id) < toUInt128(toUUID({before:String}))
-        ORDER BY toUInt128(id) DESC
-        LIMIT {page_size:UInt32}
-      `;
-    query_params.before = before;
-  } else if (after) {
-    query = `
-        SELECT
-          'boolean' AS type,
-          id,
-          target_id,
-          metric_name,
-          value,
-          tags,
-          timestamp
-        FROM
-        (
-          SELECT
-            id,
-            target_id,
-            metric_name,
-            value,
-            tags,
-            formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-          FROM BooleanMetricFeedbackByTargetId
-          WHERE target_id = {target_id:String}
-            AND toUInt128(id) > toUInt128(toUUID({after:String}))
-          ORDER BY toUInt128(id) ASC
-          LIMIT {page_size:UInt32}
-        )
-        ORDER BY toUInt128(id) DESC
-      `;
-    query_params.after = after;
-  }
-
-  try {
-    const resultSet = await getClickhouseClient().query({
-      query,
-      format: "JSONEachRow",
-      query_params,
-    });
-    const rows = await resultSet.json();
-    return z.array(booleanMetricFeedbackRowSchema).parse(rows);
-  } catch (error) {
-    logger.error(error);
-    throw data("Error querying boolean metrics", { status: 500 });
-  }
-}
 
 export async function queryBooleanMetricFeedbackBoundsByTargetId(params: {
   target_id: string;
@@ -179,17 +78,7 @@ export async function countBooleanMetricFeedbackByTargetId(
   }
 }
 
-export const commentFeedbackRowSchema = z.object({
-  type: z.literal("comment"),
-  id: z.string().uuid(),
-  target_id: z.string().uuid(),
-  target_type: z.enum(["inference", "episode"]),
-  value: z.string(),
-  timestamp: z.string().datetime(),
-  tags: z.record(z.string(), z.string()),
-});
-
-export type CommentFeedbackRow = z.infer<typeof commentFeedbackRowSchema>;
+export type CommentFeedbackRow = Extract<FeedbackRow, { type: "comment" }>;
 
 export async function queryCommentFeedbackByTargetId(params: {
   target_id: string;
@@ -278,7 +167,7 @@ export async function queryCommentFeedbackByTargetId(params: {
       query_params,
     });
     const rows = await resultSet.json();
-    return z.array(commentFeedbackRowSchema).parse(rows);
+    return rows as CommentFeedbackRow[];
   } catch (error) {
     logger.error(error);
     throw data("Error querying comment feedback", { status: 500 });
@@ -347,17 +236,9 @@ export async function countCommentFeedbackByTargetId(
   }
 }
 
-export const demonstrationFeedbackRowSchema = z.object({
-  type: z.literal("demonstration"),
-  id: z.string().uuid(),
-  inference_id: z.string().uuid(),
-  value: z.string(),
-  timestamp: z.string().datetime(),
-  tags: z.record(z.string(), z.string()),
-});
-
-export type DemonstrationFeedbackRow = z.infer<
-  typeof demonstrationFeedbackRowSchema
+export type DemonstrationFeedbackRow = Extract<
+  FeedbackRow,
+  { type: "demonstration" }
 >;
 
 export async function queryDemonstrationFeedbackByInferenceId(params: {
@@ -443,7 +324,7 @@ export async function queryDemonstrationFeedbackByInferenceId(params: {
       query_params,
     });
     const rows = await resultSet.json();
-    return z.array(demonstrationFeedbackRowSchema).parse(rows);
+    return rows as DemonstrationFeedbackRow[];
   } catch (error) {
     logger.error(error);
     throw data("Error querying demonstration feedback", { status: 500 });
@@ -514,21 +395,7 @@ export async function countDemonstrationFeedbackByInferenceId(
   }
 }
 
-export const floatMetricFeedbackRowSchema = z
-  .object({
-    type: z.literal("float"),
-    id: z.string().uuid(),
-    target_id: z.string().uuid(),
-    metric_name: z.string(),
-    value: z.number(),
-    tags: z.record(z.string(), z.string()),
-    timestamp: z.string().datetime(),
-  })
-  .strict();
-
-export type FloatMetricFeedbackRow = z.infer<
-  typeof floatMetricFeedbackRowSchema
->;
+export type FloatMetricFeedbackRow = Extract<FeedbackRow, { type: "float" }>;
 
 export async function queryFloatMetricsByTargetId(params: {
   target_id: string;
@@ -617,7 +484,7 @@ export async function queryFloatMetricsByTargetId(params: {
       query_params,
     });
     const rows = await resultSet.json();
-    return z.array(floatMetricFeedbackRowSchema).parse(rows);
+    return rows as FloatMetricFeedbackRow[];
   } catch (error) {
     logger.error(error);
     throw data("Error querying float metric feedback", { status: 500 });
@@ -685,14 +552,7 @@ export async function countFloatMetricFeedbackByTargetId(
     throw data("Error counting float metric feedback", { status: 500 });
   }
 }
-export const feedbackRowSchema = z.discriminatedUnion("type", [
-  booleanMetricFeedbackRowSchema,
-  floatMetricFeedbackRowSchema,
-  commentFeedbackRowSchema,
-  demonstrationFeedbackRowSchema,
-]);
-
-export type FeedbackRow = z.infer<typeof feedbackRowSchema>;
+// FeedbackRow is now imported from tensorzero-node (generated from Rust enum)
 
 export async function queryFeedbackByTargetId(params: {
   target_id: string;
@@ -702,14 +562,16 @@ export async function queryFeedbackByTargetId(params: {
 }): Promise<FeedbackRow[]> {
   const { target_id, before, after, page_size } = params;
 
+  const dbClient = await getNativeDatabaseClient();
+
   const [booleanMetrics, commentFeedback, demonstrationFeedback, floatMetrics] =
     await Promise.all([
-      queryBooleanMetricsByTargetId({
+      dbClient.queryBooleanMetricsByTargetId(
         target_id,
+        page_size || 100,
         before,
         after,
-        page_size,
-      }),
+      ) as Promise<BooleanMetricFeedbackRow[]>,
       queryCommentFeedbackByTargetId({
         target_id,
         before,

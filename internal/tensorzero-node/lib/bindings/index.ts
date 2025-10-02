@@ -44,6 +44,7 @@ export * from "./EvaluatorConfig";
 export * from "./ExactMatchConfig";
 export * from "./ExportConfig";
 export * from "./ExtraHeaderKind";
+export * from "./FeedbackRow";
 export * from "./File";
 export * from "./FileWithPath";
 export * from "./FinishReason";
