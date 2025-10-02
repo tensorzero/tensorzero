@@ -54,7 +54,7 @@ function transformChatDatapoint(datapoint: ParsedChatInferenceDatapointRow): Dat
   const transformed: Datapoint = {
     function_name: datapoint.function_name,
     id: datapoint.id,
-    episode_id: datapoint.episode_id || undefined,  // Bad null handling! We need to fix this.
+    episode_id: datapoint.episode_id,
     input: resolvedInputToTensorZeroInput(datapoint.input),
     output: transformOutputForTensorZero(datapoint.output),
     tags: datapoint.tags || {},
@@ -63,6 +63,7 @@ function transformChatDatapoint(datapoint: ParsedChatInferenceDatapointRow): Dat
     is_custom: datapoint.is_custom,
     name: datapoint.name,
     tool_params: datapoint.tool_params,
+    staled_at: datapoint.staled_at,
   };
   return transformed;
 }
@@ -75,7 +76,7 @@ function transformJsonDatapoint(datapoint: ParsedJsonInferenceDatapointRow): Dat
   const transformed: Datapoint = {
     function_name: datapoint.function_name,
     id: datapoint.id,
-    episode_id: datapoint.episode_id || undefined,  // Bad null handling! We need to fix this.
+    episode_id: datapoint.episode_id,
     input: resolvedInputToTensorZeroInput(datapoint.input),
     output: transformOutputForTensorZero(datapoint.output),
     tags: datapoint.tags || {},
@@ -84,6 +85,7 @@ function transformJsonDatapoint(datapoint: ParsedJsonInferenceDatapointRow): Dat
     is_custom: datapoint.is_custom,
     name: datapoint.name,
     output_schema: datapoint.output_schema,
+    staled_at: datapoint.staled_at,
   };
   return transformed;
 }
@@ -120,24 +122,28 @@ export async function deleteDatapoint(params: {
  */
 export async function saveDatapoint(params: {
   parsedFormData: ParsedDatasetRow;
-}): Promise<{ newId: string; functionType: "chat" | "json" }> {
-  const { parsedFormData } = params;
+  functionType: "chat" | "json";
+}): Promise<{ newId: string; }> {
+  const { parsedFormData, functionType } = params;
 
   // Determine function type from datapoint structure and transform accordingly
   let datapoint: Datapoint;
-  let functionType: "chat" | "json";
-
-  if ("output_schema" in parsedFormData) {
-    functionType = "json";
-    datapoint = transformJsonDatapoint(parsedFormData);
+  if (functionType === "json") {
+    if (!("output_schema" in parsedFormData)) {
+      throw new Error(`Json datapoint is missing output_schema`);
+    }
+    datapoint = transformJsonDatapoint(parsedFormData as ParsedJsonInferenceDatapointRow);
+  } else if (functionType === "chat") {
+    datapoint = transformChatDatapoint(parsedFormData as ParsedChatInferenceDatapointRow);
   } else {
-    functionType = "chat";
-    datapoint = transformChatDatapoint(parsedFormData);
+    throw new Error(`Invalid function type: ${functionType}`);
   }
 
   // When saving a datapoint as new, we create a new ID, and mark the data point as "custom".
   datapoint.id = uuid();
   datapoint.is_custom = true;
+  datapoint.episode_id = null;
+  datapoint.staled_at = null;
 
   // For future reference:
   // These two calls would be a transaction but ClickHouse isn't transactional.
@@ -155,5 +161,5 @@ export async function saveDatapoint(params: {
     functionType,
   );
 
-  return { newId: id, functionType };
+  return { newId: id };
 }

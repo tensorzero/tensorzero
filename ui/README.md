@@ -26,3 +26,7 @@ The instructions below assume you're using the provided setup with fixture data.
    - Run `pnpm install` to install the dependencies.
    - Run `pnpm ui:dev` to start the development server.
    - You can also run tests with `pnpm ui:test` and Storybook with `pnpm ui:storybook`.
+
+## Things to note
+
+1. For any new code, prefer `null` over `undefined`, because `napi-rs` uses `null` to represent an `Option<T>`. Existing code uses both, but we will clean things up.

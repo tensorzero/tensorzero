@@ -131,6 +131,7 @@ export async function action({ request }: ActionFunctionArgs) {
       try {
         const { newId } = await saveDatapoint({
           parsedFormData,
+          functionType,
         });
         return redirect(toDatapointUrl(parsedFormData.dataset_name, newId));
       } catch (error) {
