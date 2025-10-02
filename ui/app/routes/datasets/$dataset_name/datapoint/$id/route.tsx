@@ -145,6 +145,13 @@ export async function action({ request }: ActionFunctionArgs) {
           error: error instanceof Error ? error.message : String(error),
         };
       }
+    } else if (action === "rename") {
+      await renameDatapoint({
+        datasetName: parsedFormData.dataset_name,
+        datapoint: parsedFormData,
+        newName: parsedFormData.name || "",
+      });
+      return data({ success: true });
     }
 
     return data(
@@ -342,6 +349,13 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setSelectedVariant(null);
   };
 
+  const handleRenameDatapoint = async (newName: string) => {
+    const dataToSubmit = { ...datapoint, name: newName };
+    const formData = serializeDatapointToFormData(dataToSubmit);
+    formData.append("action", "rename");
+    await fetcher.submit(formData, { method: "post", action: "." });
+  };
+
   return (
     <PageLayout>
       <PageHeader
@@ -359,7 +373,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
       <SectionsGroup>
         <SectionLayout>
-          <DatapointBasicInfo datapoint={datapoint} />
+          <DatapointBasicInfo datapoint={datapoint} onRenameDatapoint={handleRenameDatapoint} />
         </SectionLayout>
 
         <SectionLayout>
