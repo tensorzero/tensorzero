@@ -86,6 +86,10 @@ impl DummyProvider {
                 input_tokens: 0,
                 output_tokens: 0,
             },
+            "input_five_output_six" => Usage {
+                input_tokens: 5,
+                output_tokens: 6,
+            },
             _ => Usage {
                 input_tokens: 10,
                 output_tokens,
