@@ -130,6 +130,7 @@ export async function action({ request }: ActionFunctionArgs) {
       try {
         const { newId } = await saveDatapoint({
           parsedFormData,
+          functionType,
         });
         return redirect(
           `/datasets/${parsedFormData.dataset_name}/datapoint/${newId}`,

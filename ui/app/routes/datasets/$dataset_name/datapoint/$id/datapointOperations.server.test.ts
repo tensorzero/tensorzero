@@ -145,15 +145,21 @@ describe("datapointOperations", () => {
       // Verify new ID is different from original
       expect(newId).not.toBe(originalId);
 
-      // Verify updateDatapoint was called
+      // Verify updateDatapoint was called with relevant customizations.
       expect(mockUpdateDatapoint).toHaveBeenCalledWith(
         datasetName,
         expect.objectContaining({
+          id: newId,
           function_name: "write_haiku",
+          episode_id: null,
+          // TODO: should assert on input and output
           tags: { environment: "test" },
           is_custom: true,
           source_inference_id: sourceInferenceId,
           tool_params: { temperature: 0.7 },
+          auxiliary: "",
+          name: "test_datapoint",
+          staled_at: null,
         }),
       );
 
@@ -162,80 +168,6 @@ describe("datapointOperations", () => {
         datasetName,
         originalId,
         "chat",
-      );
-    });
-
-    test("should handle chat datapoint with null episode_id", async () => {
-      const parsedFormData: ParsedChatInferenceDatapointRow = {
-        dataset_name: "test_dataset",
-        function_name: "write_haiku",
-        name: null,
-        id: uuid(),
-        episode_id: null,
-        input: {
-          messages: [
-            {
-              role: "user",
-              content: [{ type: "unstructured_text", text: "Test" }],
-            },
-          ],
-        },
-        output: [{ type: "text", text: "Output" }],
-        tool_params: {},
-        tags: {},
-        auxiliary: "",
-        is_deleted: false,
-        updated_at: new Date().toISOString(),
-        staled_at: null,
-        source_inference_id: null,
-        is_custom: false,
-      };
-
-      await saveDatapoint({
-        parsedFormData,
-        functionType: "chat",
-      });
-
-      expect(mockUpdateDatapoint).toHaveBeenCalled();
-      expect(mockStaleDatapoint).toHaveBeenCalled();
-    });
-
-    test("should handle chat datapoint with auxiliary data", async () => {
-      const parsedFormData: ParsedChatInferenceDatapointRow = {
-        dataset_name: "test_dataset",
-        function_name: "write_haiku",
-        name: null,
-        id: uuid(),
-        episode_id: null,
-        input: {
-          messages: [
-            {
-              role: "user",
-              content: [{ type: "unstructured_text", text: "Test" }],
-            },
-          ],
-        },
-        output: [{ type: "text", text: "Output" }],
-        tool_params: {},
-        tags: {},
-        auxiliary: "some auxiliary data",
-        is_deleted: false,
-        updated_at: new Date().toISOString(),
-        staled_at: null,
-        source_inference_id: null,
-        is_custom: false,
-      };
-
-      await saveDatapoint({
-        parsedFormData,
-        functionType: "chat",
-      });
-
-      expect(mockUpdateDatapoint).toHaveBeenCalledWith(
-        "test_dataset",
-        expect.objectContaining({
-          auxiliary: "some auxiliary data",
-        }),
       );
     });
   });
@@ -302,15 +234,23 @@ describe("datapointOperations", () => {
       // Verify new ID is different from original
       expect(newId).not.toBe(originalId);
 
-      // Verify updateDatapoint was called with output_schema
+      // Verify updateDatapoint was called with relevant customizations.
       expect(mockUpdateDatapoint).toHaveBeenCalledWith(
         datasetName,
         expect.objectContaining({
+          id: newId,
+          episode_id: null,
           function_name: "extract_entities",
           tags: { source: "test" },
+          // TODO: should assert on input and output.
+          input: expect.any(Object),
+          output: expect.any(Object),
           is_custom: true,
           source_inference_id: sourceInferenceId,
           output_schema: parsedFormData.output_schema,
+          auxiliary: "",
+          name: "test_json_datapoint",
+          staled_at: null,
         }),
       );
 
