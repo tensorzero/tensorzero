@@ -557,6 +557,7 @@ export async function getEvaluationsForDatapoint(
     ),
     filtered_datapoint AS (
       SELECT * FROM {datapoint_table_name:Identifier}
+      FINAL
       WHERE id = {datapoint_id:UUID}
       AND function_name = {function_name:String}
     )
