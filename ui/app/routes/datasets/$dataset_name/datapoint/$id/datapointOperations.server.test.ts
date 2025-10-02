@@ -1,31 +1,48 @@
 import { describe, expect, test, beforeEach, vi } from "vitest";
 import { v7 as uuid } from "uuid";
-import {
-  deleteDatapoint,
-  saveDatapoint,
-} from "./datapointOperations.server";
+import { deleteDatapoint, saveDatapoint } from "./datapointOperations.server";
 import type {
+  DatasetCountInfo,
   ParsedChatInferenceDatapointRow,
   ParsedJsonInferenceDatapointRow,
 } from "~/utils/clickhouse/datasets";
 
-// Mock the TensorZero client
-vi.mock("~/utils/tensorzero.server", () => {
-  const mockUpdateDatapoint = vi.fn(async (datasetName: string, datapoint: any) => ({
-    id: datapoint.id,
-  }));
+// TODO(shuyangli): Once we remove all custom logic from the Node client, make mocking more ergonomic by providing a mock client at the tensorzero-node level.
 
-  return {
-    getTensorZeroClient: vi.fn(() => ({
-      updateDatapoint: mockUpdateDatapoint,
-    })),
-  };
-});
+// Mock TensorZero client at the module boundary
+const mockUpdateDatapoint = vi.fn(
+  async (_datasetName: string, datapoint: any) => ({
+    id: datapoint.id,
+  }),
+);
+vi.mock("~/utils/tensorzero.server", () => ({
+  getTensorZeroClient: vi.fn(() => ({
+    updateDatapoint: mockUpdateDatapoint,
+  })),
+}));
 
 // Mock the datasets server functions
+const mockGetDatasetCounts = vi.hoisted(() =>
+  vi.fn<
+    (arg: {
+      function_name?: string;
+      page_size?: number;
+      offset?: number;
+    }) => Promise<DatasetCountInfo[]>
+  >(async () => []),
+);
+const mockStaleDatapoint = vi.hoisted(() =>
+  vi.fn<
+    (
+      dataset_name: string,
+      datapoint_id: string,
+      function_type: "chat" | "json",
+    ) => Promise<void>
+  >(async () => {}),
+);
 vi.mock("~/utils/clickhouse/datasets.server", () => ({
-  staleDatapoint: vi.fn(async () => {}),
-  getDatasetCounts: vi.fn(async () => []),
+  staleDatapoint: mockStaleDatapoint,
+  getDatasetCounts: mockGetDatasetCounts,
 }));
 
 describe("datapointOperations", () => {
@@ -35,12 +52,8 @@ describe("datapointOperations", () => {
 
   describe("deleteDatapoint", () => {
     test("should call staleDatapoint and redirect to /datasets when dataset is empty", async () => {
-      const { getDatasetCounts, staleDatapoint } = await import(
-        "~/utils/clickhouse/datasets.server"
-      );
-
       // Mock getDatasetCounts to return empty array (no datasets)
-      vi.mocked(getDatasetCounts).mockResolvedValueOnce([]);
+      vi.mocked(mockGetDatasetCounts).mockResolvedValueOnce([]);
 
       const datasetName = "nonexistent_dataset";
       const datapointId = uuid();
@@ -51,7 +64,7 @@ describe("datapointOperations", () => {
         functionType: "chat",
       });
 
-      expect(staleDatapoint).toHaveBeenCalledWith(
+      expect(mockStaleDatapoint).toHaveBeenCalledWith(
         datasetName,
         datapointId,
         "chat",
@@ -60,15 +73,11 @@ describe("datapointOperations", () => {
     });
 
     test("should redirect to dataset page when dataset still has datapoints", async () => {
-      const { getDatasetCounts, staleDatapoint } = await import(
-        "~/utils/clickhouse/datasets.server"
-      );
-
       const datasetName = "foo";
       const datapointId = uuid();
 
-      // Mock getDatasetCounts to return a dataset with count
-      vi.mocked(getDatasetCounts).mockResolvedValueOnce([
+      // Mock mockGetDatasetCounts to return a dataset with count
+      vi.mocked(mockGetDatasetCounts).mockResolvedValueOnce([
         {
           dataset_name: datasetName,
           count: 10,
@@ -82,7 +91,7 @@ describe("datapointOperations", () => {
         functionType: "json",
       });
 
-      expect(staleDatapoint).toHaveBeenCalledWith(
+      expect(mockStaleDatapoint).toHaveBeenCalledWith(
         datasetName,
         datapointId,
         "json",
@@ -93,9 +102,6 @@ describe("datapointOperations", () => {
 
   describe("saveDatapoint - chat", () => {
     test("should generate new ID, call updateDatapoint, and stale old datapoint", async () => {
-      const { getTensorZeroClient } = await import("~/utils/tensorzero.server");
-      const { staleDatapoint } = await import("~/utils/clickhouse/datasets.server");
-
       const datasetName = "test_dataset";
       const originalId = uuid();
       const sourceInferenceId = uuid();
@@ -112,7 +118,10 @@ describe("datapointOperations", () => {
             {
               role: "user",
               content: [
-                { type: "unstructured_text", text: "Write a haiku about coding" },
+                {
+                  type: "unstructured_text",
+                  text: "Write a haiku about coding",
+                },
               ],
             },
           ],
@@ -137,8 +146,7 @@ describe("datapointOperations", () => {
       expect(newId).not.toBe(originalId);
 
       // Verify updateDatapoint was called
-      const client = getTensorZeroClient();
-      expect(client.updateDatapoint).toHaveBeenCalledWith(
+      expect(mockUpdateDatapoint).toHaveBeenCalledWith(
         datasetName,
         expect.objectContaining({
           function_name: "write_haiku",
@@ -150,7 +158,7 @@ describe("datapointOperations", () => {
       );
 
       // Verify staleDatapoint was called with original ID
-      expect(staleDatapoint).toHaveBeenCalledWith(
+      expect(mockStaleDatapoint).toHaveBeenCalledWith(
         datasetName,
         originalId,
         "chat",
@@ -158,8 +166,6 @@ describe("datapointOperations", () => {
     });
 
     test("should handle chat datapoint with null episode_id", async () => {
-      const { getTensorZeroClient } = await import("~/utils/tensorzero.server");
-
       const parsedFormData: ParsedChatInferenceDatapointRow = {
         dataset_name: "test_dataset",
         function_name: "write_haiku",
@@ -190,13 +196,11 @@ describe("datapointOperations", () => {
         functionType: "chat",
       });
 
-      const client = getTensorZeroClient();
-      expect(client.updateDatapoint).toHaveBeenCalled();
+      expect(mockUpdateDatapoint).toHaveBeenCalled();
+      expect(mockStaleDatapoint).toHaveBeenCalled();
     });
 
     test("should handle chat datapoint with auxiliary data", async () => {
-      const { getTensorZeroClient } = await import("~/utils/tensorzero.server");
-
       const parsedFormData: ParsedChatInferenceDatapointRow = {
         dataset_name: "test_dataset",
         function_name: "write_haiku",
@@ -227,8 +231,7 @@ describe("datapointOperations", () => {
         functionType: "chat",
       });
 
-      const client = getTensorZeroClient();
-      expect(client.updateDatapoint).toHaveBeenCalledWith(
+      expect(mockUpdateDatapoint).toHaveBeenCalledWith(
         "test_dataset",
         expect.objectContaining({
           auxiliary: "some auxiliary data",
@@ -239,9 +242,6 @@ describe("datapointOperations", () => {
 
   describe("saveDatapoint - json", () => {
     test("should generate new ID, call updateDatapoint with output_schema, and stale old datapoint", async () => {
-      const { getTensorZeroClient } = await import("~/utils/tensorzero.server");
-      const { staleDatapoint } = await import("~/utils/clickhouse/datasets.server");
-
       const datasetName = "test_dataset";
       const originalId = uuid();
       const sourceInferenceId = uuid();
@@ -303,8 +303,7 @@ describe("datapointOperations", () => {
       expect(newId).not.toBe(originalId);
 
       // Verify updateDatapoint was called with output_schema
-      const client = getTensorZeroClient();
-      expect(client.updateDatapoint).toHaveBeenCalledWith(
+      expect(mockUpdateDatapoint).toHaveBeenCalledWith(
         datasetName,
         expect.objectContaining({
           function_name: "extract_entities",
@@ -315,8 +314,8 @@ describe("datapointOperations", () => {
         }),
       );
 
-      // Verify staleDatapoint was called with original ID
-      expect(staleDatapoint).toHaveBeenCalledWith(
+      // Verify mockStaleDatapoint was called with original ID
+      expect(mockStaleDatapoint).toHaveBeenCalledWith(
         datasetName,
         originalId,
         "json",
@@ -324,8 +323,6 @@ describe("datapointOperations", () => {
     });
 
     test("should handle json datapoint with null output", async () => {
-      const { getTensorZeroClient } = await import("~/utils/tensorzero.server");
-
       const parsedFormData: ParsedJsonInferenceDatapointRow = {
         dataset_name: "test_dataset",
         function_name: "extract_entities",
@@ -359,8 +356,7 @@ describe("datapointOperations", () => {
         functionType: "json",
       });
 
-      const client = getTensorZeroClient();
-      expect(client.updateDatapoint).toHaveBeenCalledWith(
+      expect(mockUpdateDatapoint).toHaveBeenCalledWith(
         "test_dataset",
         expect.objectContaining({
           output: null,
@@ -369,9 +365,6 @@ describe("datapointOperations", () => {
     });
 
     test("should handle mismatched function type by treating as chat datapoint", async () => {
-      const { getTensorZeroClient } = await import("~/utils/tensorzero.server");
-      const { staleDatapoint } = await import("~/utils/clickhouse/datasets.server");
-
       const parsedFormData: ParsedJsonInferenceDatapointRow = {
         dataset_name: "test_dataset",
         function_name: "extract_entities",
@@ -408,9 +401,9 @@ describe("datapointOperations", () => {
       });
 
       expect(result.newId).toBeDefined();
-      const client = getTensorZeroClient();
+
       // Verify it was called without output_schema (treated as chat)
-      expect(client.updateDatapoint).toHaveBeenCalledWith(
+      expect(mockUpdateDatapoint).toHaveBeenCalledWith(
         "test_dataset",
         expect.not.objectContaining({
           output_schema: expect.anything(),
