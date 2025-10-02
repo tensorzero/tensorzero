@@ -79,7 +79,7 @@ async fn test_dicl_reject_unknown_content_block() {
         .unwrap();
 
     // Check that the API response is correct
-    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let response_json = response.json::<Value>().await.unwrap();
     assert!(
         response_json
@@ -87,7 +87,7 @@ async fn test_dicl_reject_unknown_content_block() {
             .unwrap()
             .as_str()
             .unwrap()
-            .contains(" Unsupported content block type `unknown` for provider `dicl`"),
+            .contains("Unsupported content block type `unknown` for provider `dicl`"),
         "Unexpected error message: {response_json:#?}"
     );
 
@@ -124,8 +124,8 @@ async fn test_dicl_reject_image_content_block() {
         .await
         .unwrap();
 
-    // Check that the API response is ok
-    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    // Check that the API response is as expected
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let response_json = response.json::<Value>().await.unwrap();
     assert!(
         response_json
@@ -133,7 +133,7 @@ async fn test_dicl_reject_image_content_block() {
             .unwrap()
             .as_str()
             .unwrap()
-            .contains(" Unsupported content block type `image` for provider `dicl`"),
+            .contains("Unsupported content block type `image` for provider `dicl`"),
         "Unexpected error message: {response_json:#?}"
     );
 
