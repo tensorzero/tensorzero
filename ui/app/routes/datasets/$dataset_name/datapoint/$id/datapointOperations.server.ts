@@ -6,6 +6,7 @@ import {
 } from "~/utils/clickhouse/datasets.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference.utils";
+import type { Datapoint } from "~/utils/tensorzero";
 
 // ============================================================================
 // Transformation Functions
@@ -87,7 +88,7 @@ export async function saveDatapoint(params: {
     id: uuid(), // We generate a new ID here because we want old evaluation runs to be able to point to the correct data.
   };
 
-  let datapoint;
+  let datapoint: Datapoint;
   if (functionType === "json" && "output_schema" in parsedFormData) {
     datapoint = {
       ...baseDatapoint,
