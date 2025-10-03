@@ -48,7 +48,9 @@ function transformOutputForTensorZero(
 /**
  * Transforms a chat datapoint for submission to the TensorZero client.
  */
-function transformChatDatapointForUpdateRequest(datapoint: ParsedChatInferenceDatapointRow): Datapoint {
+function transformChatDatapointForUpdateRequest(
+  datapoint: ParsedChatInferenceDatapointRow,
+): Datapoint {
   const transformed: Datapoint = {
     function_name: datapoint.function_name,
     id: datapoint.id,
@@ -69,7 +71,9 @@ function transformChatDatapointForUpdateRequest(datapoint: ParsedChatInferenceDa
 /**
  * Transforms a JSON datapoint for submission to the TensorZero client.
  */
-function transformJsonDatapointForUpdateRequest(datapoint: ParsedJsonInferenceDatapointRow): Datapoint {
+function transformJsonDatapointForUpdateRequest(
+  datapoint: ParsedJsonInferenceDatapointRow,
+): Datapoint {
   const transformed: Datapoint = {
     function_name: datapoint.function_name,
     id: datapoint.id,
@@ -120,7 +124,7 @@ export async function deleteDatapoint(params: {
 export async function saveDatapoint(params: {
   parsedFormData: ParsedDatasetRow;
   functionType: "chat" | "json";
-}): Promise<{ newId: string; }> {
+}): Promise<{ newId: string }> {
   const { parsedFormData, functionType } = params;
 
   // Determine function type from datapoint structure and transform accordingly
@@ -129,9 +133,13 @@ export async function saveDatapoint(params: {
     if (!("output_schema" in parsedFormData)) {
       throw new Error(`Json datapoint is missing output_schema`);
     }
-    datapoint = transformJsonDatapointForUpdateRequest(parsedFormData as ParsedJsonInferenceDatapointRow);
+    datapoint = transformJsonDatapointForUpdateRequest(
+      parsedFormData as ParsedJsonInferenceDatapointRow,
+    );
   } else if (functionType === "chat") {
-    datapoint = transformChatDatapointForUpdateRequest(parsedFormData as ParsedChatInferenceDatapointRow);
+    datapoint = transformChatDatapointForUpdateRequest(
+      parsedFormData as ParsedChatInferenceDatapointRow,
+    );
   } else {
     throw new Error(`Invalid function type: ${functionType}`);
   }
