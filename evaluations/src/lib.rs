@@ -284,6 +284,7 @@ pub async fn run_evaluation(
     // We explicitly wait here for the batch writer to finish, so that `run_evaluation` can be called
     // from other places in the codebase (e.g. e2e tests), and subsequently query ClickHouse for the evaluation results.
     if let Some(handle) = clickhouse_client.batcher_join_handle() {
+        drop(clickhouse_client);
         tracing::info!("Waiting for evaluations ClickHouse batch writer to finish");
         handle
             .await
@@ -457,7 +458,6 @@ pub async fn run_evaluation_core_streaming(
 
     // Spawn a task to collect results and stream them
     let sender_clone = sender.clone();
-    let clients_clone = clients.clone();
     tokio::spawn(async move {
         while let Some(result) = join_set.join_next_with_id().await {
             let update = match result {
@@ -485,16 +485,6 @@ pub async fn run_evaluation_core_streaming(
                 // Receiver dropped, stop sending
                 break;
             }
-        }
-
-        // Wait for batch writer to finish
-        if let Some(handle) = clients_clone.clickhouse_client.batcher_join_handle() {
-            drop(clients_clone);
-            tracing::info!("Waiting for evaluations ClickHouse batch writer to finish");
-            if let Err(e) = handle.await {
-                tracing::error!("Error waiting for ClickHouse batch writer: {e}");
-            }
-            tracing::info!("Evaluations ClickHouse batch writer finished");
         }
     });
 
