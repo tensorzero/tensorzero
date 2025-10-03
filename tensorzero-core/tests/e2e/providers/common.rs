@@ -1814,7 +1814,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
         }
     }
 
-    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
 }
 
 #[traced_test]
@@ -2856,7 +2856,7 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
         let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = err else {
             panic!("Unexpected error: {err:?}")
         };
-        assert_eq!(code, StatusCode::BAD_GATEWAY);
+        assert_eq!(code, StatusCode::INTERNAL_SERVER_ERROR);
         let resp: Value = resp.json().await.unwrap();
         let err_msg = resp.get("error").unwrap().as_str().unwrap();
         assert!(

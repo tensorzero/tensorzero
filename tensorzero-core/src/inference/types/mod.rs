@@ -44,15 +44,14 @@
 //!
 //! The upper branch (constructing a `RequestMessage`) is used when invoking a chat completion variant.
 //! The lower branch (constructing a `StoredInput`) is used when we to write to `ChatInference`/`JsonInference` in ClickHouse.
-use crate::db::postgres::PostgresConnectionInfo;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::resolved_input::{
     FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage, LazyResolvedInputMessageContent,
 };
 use crate::inference::types::stored_input::StoredFile;
 use crate::rate_limiting::{
-    get_estimated_tokens, RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
-    TicketBorrows,
+    get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
+    RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
 };
 use crate::serde_util::{
     deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
@@ -93,7 +92,10 @@ use uuid::Uuid;
 
 use crate::cache::NonStreamingCacheData;
 use crate::{cache::CacheData, config::ObjectStoreInfo};
-use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
+use crate::{
+    endpoints::inference::InferenceParams,
+    error::{ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens},
+};
 use crate::{
     endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceIds},
     variant::InferenceConfig,
@@ -928,7 +930,10 @@ impl<'a> ModelInferenceRequest<'a> {
 }
 
 impl RateLimitedRequest for ModelInferenceRequest<'_> {
-    fn estimated_resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
+    fn estimated_resource_usage(
+        &self,
+        resources: &[RateLimitResource],
+    ) -> Result<EstimatedRateLimitResourceUsage, Error> {
         let ModelInferenceRequest {
             inference_id: _,
             messages,
@@ -950,19 +955,32 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
             extra_headers: _,
             extra_cache_key: _,
         } = self;
-        let system_tokens = system
-            .as_ref()
-            .map(|s| get_estimated_tokens(s))
-            .unwrap_or(0);
-        let messages_tokens: u64 = messages
-            .iter()
-            .map(RateLimitedInputContent::estimated_input_token_usage)
-            .sum();
-        let output_tokens =
-            max_tokens.ok_or_else(|| Error::new(ErrorDetails::RateLimitMissingMaxTokens))? as u64;
-        Ok(RateLimitResourceUsage {
-            tokens: system_tokens + messages_tokens + output_tokens,
-            model_inferences: 1,
+
+        let tokens = if resources.contains(&RateLimitResource::Token) {
+            let system_tokens = system
+                .as_ref()
+                .map(|s| get_estimated_tokens(s))
+                .unwrap_or(0);
+            let messages_tokens: u64 = messages
+                .iter()
+                .map(RateLimitedInputContent::estimated_input_token_usage)
+                .sum();
+            let output_tokens =
+                max_tokens.ok_or_else(|| Error::new(RateLimitMissingMaxTokens))? as u64;
+            Some(system_tokens + messages_tokens + output_tokens)
+        } else {
+            None
+        };
+
+        let model_inferences = if resources.contains(&RateLimitResource::ModelInference) {
+            Some(1)
+        } else {
+            None
+        };
+
+        Ok(EstimatedRateLimitResourceUsage {
+            model_inferences,
+            tokens,
         })
     }
 }
@@ -2027,8 +2045,6 @@ pub struct CollectChunksArgs<'a, 'b> {
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub fetch_and_encode_input_files_before_inference: bool,
-    pub ticket_borrow: TicketBorrows,
-    pub postgres_connection_info: PostgresConnectionInfo,
 }
 
 // Modify the collect_chunks function to accept CollectChunksArgs
@@ -2055,8 +2071,6 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         fetch_and_encode_input_files_before_inference,
         extra_body,
         extra_headers,
-        ticket_borrow,
-        postgres_connection_info,
     } = args;
 
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
@@ -2284,16 +2298,6 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         latency: latency.clone(),
         finish_reason,
     });
-    if let Ok(actual_resource_usage) = model_response.resource_usage() {
-        tokio::spawn(async move {
-            if let Err(e) = ticket_borrow
-                .return_tickets(&postgres_connection_info, actual_resource_usage)
-                .await
-            {
-                tracing::error!("Failed to return rate limit tickets: {}", e);
-            }
-        });
-    }
     let model_inference_response =
         ModelInferenceResponse::new(model_response, model_provider_name, cached);
     let original_response = model_inference_response.raw_response.clone();
@@ -2480,8 +2484,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use super::*;
     use crate::config::SchemaData;
     use crate::experimentation::ExperimentationConfig;
@@ -2492,6 +2494,7 @@ mod tests {
     use crate::tool::ToolConfig;
     use crate::tool::{DynamicToolConfig, ToolChoice};
     use serde_json::json;
+    use std::collections::HashSet;
     use tokio::time::Instant;
 
     #[tokio::test]
@@ -3145,8 +3148,6 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
-            ticket_borrow: TicketBorrows::empty(),
         };
         let result = collect_chunks(collect_chunks_args).await;
         assert_eq!(
@@ -3213,8 +3214,6 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
-            ticket_borrow: TicketBorrows::empty(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
@@ -3313,8 +3312,6 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
-            ticket_borrow: TicketBorrows::empty(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -3396,8 +3393,6 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
-            ticket_borrow: TicketBorrows::empty(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(result.usage_considering_cached(), usage);
@@ -3487,8 +3482,6 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
-            ticket_borrow: TicketBorrows::empty(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(result.usage_considering_cached(), usage);
@@ -3604,8 +3597,6 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
-            ticket_borrow: TicketBorrows::empty(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -3716,8 +3707,6 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
-            ticket_borrow: TicketBorrows::empty(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -3855,8 +3844,6 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
-            ticket_borrow: TicketBorrows::empty(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         assert_eq!(
@@ -3979,8 +3966,6 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
-            ticket_borrow: TicketBorrows::empty(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -4068,8 +4053,6 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
-            ticket_borrow: TicketBorrows::empty(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -4148,8 +4131,6 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
-            ticket_borrow: TicketBorrows::empty(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -4232,8 +4213,6 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
-            ticket_borrow: TicketBorrows::empty(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -4300,8 +4279,6 @@ mod tests {
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
-            ticket_borrow: TicketBorrows::empty(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();
@@ -4419,9 +4396,7 @@ mod tests {
             cached: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
             fetch_and_encode_input_files_before_inference: false,
-            ticket_borrow: TicketBorrows::empty(),
         };
 
         let result = collect_chunks(collect_chunks_args).await.unwrap();

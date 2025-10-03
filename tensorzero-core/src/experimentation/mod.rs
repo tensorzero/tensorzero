@@ -65,33 +65,13 @@ impl VariantSampler for ExperimentationConfig {
         episode_id: Uuid,
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     ) -> Result<(String, Arc<VariantInfo>), Error> {
-        match active_variants.len() {
-            0 => Err(Error::new(ErrorDetails::Inference {
-                message: format!(
-                    "VariantSampler::sample called with no active variants. {IMPOSSIBLE_ERROR_MESSAGE}"
-                ),
-            })),
-            1 => {
-                // Note: we may want to check-and-set this variant when using more advanced optimization strategies
-                // for consistency
-                let Some((variant_name, variant)) = active_variants.pop_first() else {
-                    return Err(ErrorDetails::Inference {
-                        message: format!(
-                            "`pop_first` returned None in the 1 case in sampling. {IMPOSSIBLE_ERROR_MESSAGE}"
-                        ),
-                    }
-                    .into());
-                };
-                Ok((variant_name, variant))
+        match self {
+            Self::StaticWeights(config) => {
+                config
+                    .sample(function_name, episode_id, active_variants)
+                    .await
             }
-            _ => match self {
-                Self::StaticWeights(config) => {
-                    config
-                        .sample(function_name, episode_id, active_variants)
-                        .await
-                }
-                Self::Uniform => sample_uniform(function_name, &episode_id, active_variants),
-            },
+            Self::Uniform => sample_uniform(function_name, &episode_id, active_variants),
         }
     }
 }
