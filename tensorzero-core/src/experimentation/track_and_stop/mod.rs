@@ -50,7 +50,12 @@ impl VariantSampler for TrackAndStopConfig {
                 .insert(variant.clone(), 1.0 / self.candidate_variants.len() as f64);
         }
         // Next, let's spawn a task to estimate the optimal probabilities
-        todo!()
+        tokio::spawn(probability_update_task(
+            clickhouse.clone(),
+            self.metric.clone(),
+            function_name.to_string(),
+            self.sampling_probabilities.clone(),
+        ));
     }
     async fn sample(
         &self,
