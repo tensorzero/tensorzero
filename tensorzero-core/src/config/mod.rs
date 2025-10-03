@@ -1,3 +1,4 @@
+use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
 ///            IT IS MEANT FOR INTERNAL USE ONLY.
@@ -911,6 +912,7 @@ impl Config {
                     parallel_tool_calls: None,
                     description: None,
                     all_explicit_templates_names: HashSet::new(),
+                    experimentation: ExperimentationConfig::default(),
                 },
             ))))
         } else {
@@ -1160,6 +1162,7 @@ pub struct UninitializedFunctionConfigChat {
     parallel_tool_calls: Option<bool>,
     #[serde(default)]
     description: Option<String>,
+    experimentation: Option<UninitializedExperimentationConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1174,6 +1177,7 @@ pub struct UninitializedFunctionConfigJson {
     output_schema: Option<ResolvedTomlPath>, // schema will default to {} if not specified
     #[serde(default)]
     description: Option<String>,
+    experimentation: Option<UninitializedExperimentationConfig>,
 }
 
 /// Holds all of the schemas used by a chat completion function.
@@ -1285,6 +1289,10 @@ impl UninitializedFunctionConfig {
                         }
                     }
                 }
+                let experimentation = params
+                    .experimentation
+                    .map(UninitializedExperimentationConfig::load)
+                    .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
                 Ok(FunctionConfig::Chat(FunctionConfigChat {
                     variants,
                     schemas: schema_data,
@@ -1293,6 +1301,7 @@ impl UninitializedFunctionConfig {
                     parallel_tool_calls: params.parallel_tool_calls,
                     description: params.description,
                     all_explicit_templates_names: all_template_names,
+                    experimentation,
                 }))
             }
             UninitializedFunctionConfig::Json(params) => {
@@ -1375,6 +1384,10 @@ impl UninitializedFunctionConfig {
                         .into());
                     }
                 }
+                let experimentation = params
+                    .experimentation
+                    .map(UninitializedExperimentationConfig::load)
+                    .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
                 Ok(FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     schemas: schema_data,
@@ -1382,6 +1395,7 @@ impl UninitializedFunctionConfig {
                     implicit_tool_call_config,
                     description: params.description,
                     all_explicit_template_names: all_template_names,
+                    experimentation,
                 }))
             }
         }

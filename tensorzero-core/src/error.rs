@@ -440,6 +440,7 @@ pub enum ErrorDetails {
     ModelValidation {
         message: String,
     },
+    NoFallbackVariantsRemaining,
     Observability {
         message: String,
     },
@@ -637,6 +638,7 @@ impl ErrorDetails {
             ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
             ErrorDetails::ModelNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
+            ErrorDetails::NoFallbackVariantsRemaining => tracing::Level::WARN,
             ErrorDetails::Observability { .. } => tracing::Level::WARN,
             ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
             ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
@@ -757,6 +759,7 @@ impl ErrorDetails {
             ErrorDetails::ModelNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::NoFallbackVariantsRemaining => StatusCode::BAD_GATEWAY,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OptimizationResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OutputParsing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -1226,6 +1229,9 @@ impl std::fmt::Display for ErrorDetails {
                         .collect::<Vec<_>>()
                         .join(", ")
                 )
+            }
+            ErrorDetails::NoFallbackVariantsRemaining => {
+                write!(f, "No fallback variants remaining.")
             }
             ErrorDetails::ModelValidation { message } => {
                 write!(f, "Failed to validate model: {message}")
