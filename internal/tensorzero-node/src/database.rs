@@ -63,20 +63,23 @@ impl DatabaseClient {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 struct GetModelUsageTimeseriesParams {
-    time_window: TimeWindow,
-    max_periods: u32,
+    pub time_window: TimeWindow,
+    pub max_periods: u32,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 struct GetModelLatencyQuantilesParams {
-    time_window: TimeWindow,
+    pub time_window: TimeWindow,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 struct QueryEpisodeTableParams {
-    page_size: u32,
-    before: Option<Uuid>,
-    after: Option<Uuid>,
+    pub page_size: u32,
+    pub before: Option<Uuid>,
+    pub after: Option<Uuid>,
 }
