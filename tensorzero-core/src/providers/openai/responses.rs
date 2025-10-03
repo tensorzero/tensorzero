@@ -612,6 +612,8 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
                 data,
                 model_provider_name: _,
             } => {
+                // The user included an 'unknown' content block inside of the user message,
+                // so push a new user message that includes their custom JSON valuei
                 messages.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
                     id: None,
                     role: "user",
