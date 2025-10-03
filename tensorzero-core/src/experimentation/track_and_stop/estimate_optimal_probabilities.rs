@@ -58,13 +58,13 @@ pub fn estimate_optimal_probabilities(
     let min_prob: f64 = min_prob.unwrap_or(1e-6);
     let reg0: f64 = reg0.unwrap_or(0.01);
 
-    let variant_names: Vec<String> = feedback.iter().map(|x| x.variant_name.clone()).collect();
     let pull_counts: Vec<u64> = feedback.iter().map(|x| x.count).collect();
     let means: Vec<f64> = feedback.iter().map(|x| x.mean as f64).collect();
     let variances: Vec<f64> = feedback
         .iter()
         .map(|x| (x.variance as f64).max(ridge_variance))
         .collect();
+    let variant_names: Vec<String> = feedback.into_iter().map(|x| x.variant_name).collect();
 
     // Gather the quantities required for the optimization
     let num_arms: usize = means.len();
