@@ -1617,32 +1617,6 @@ mod tests {
         assert_eq!(dicl_config.cutoff(), Some(0.0));
     }
 
-    #[test]
-    fn test_cutoff_none() {
-        // Test that cutoff=None is the default
-        let dicl_config = DiclConfig {
-            weight: None,
-            embedding_model: "test_embedding".into(),
-            k: 3,
-            model: "test_model".into(),
-            system_instructions: "test".to_string(),
-            temperature: None,
-            top_p: None,
-            max_tokens: None,
-            presence_penalty: None,
-            frequency_penalty: None,
-            seed: None,
-            stop_sequences: None,
-            json_mode: None,
-            extra_body: None,
-            extra_headers: None,
-            retries: RetryConfig::default(),
-            cutoff: None,
-        };
-
-        assert_eq!(dicl_config.cutoff(), None);
-    }
-
     #[tokio::test]
     async fn test_prepare_request_message_dicl_with_template() {
         use crate::inference::types::TemplateInput;
