@@ -1,11 +1,11 @@
 #![allow(non_snake_case)]
 #![expect(dead_code)]
-// use argminmax::ArgMinMax;
 use clarabel::algebra::CscMatrix;
 use clarabel::solver::{
     DefaultSettings, DefaultSolver, IPSolver, NonnegativeConeT, SecondOrderConeT, SupportedConeT,
     ZeroConeT,
 };
+use std::collections::HashMap;
 use thiserror::Error;
 
 use crate::db::FeedbackByVariant;
@@ -52,12 +52,13 @@ pub fn estimate_optimal_probabilities(
     ridge_variance: Option<f64>,
     min_prob: Option<f64>,
     reg0: Option<f64>,
-) -> Result<Vec<f64>, OptimalProbsError> {
+) -> Result<HashMap<String, f64>, OptimalProbsError> {
     let epsilon: f64 = epsilon.unwrap_or(0.0);
     let ridge_variance: f64 = ridge_variance.unwrap_or(1e-12);
     let min_prob: f64 = min_prob.unwrap_or(1e-6);
     let reg0: f64 = reg0.unwrap_or(0.01);
 
+    let variant_names: Vec<String> = feedback.iter().map(|x| x.variant_name.clone()).collect();
     let pull_counts: Vec<u64> = feedback.iter().map(|x| x.count).collect();
     let means: Vec<f64> = feedback.iter().map(|x| x.mean as f64).collect();
     let variances: Vec<f64> = feedback
@@ -87,7 +88,9 @@ pub fn estimate_optimal_probabilities(
         });
     let variance_range = max_var - min_var;
     if all_gaps_tiny && variance_range < 1e-10 {
-        return Ok(vec![1.0 / num_arms as f64; num_arms]);
+        let probs = vec![1.0 / num_arms as f64; num_arms];
+        let out: HashMap<String, f64> = variant_names.into_iter().zip(probs).collect();
+        return Ok(out);
     }
 
     // ---------- Objective: (1/2) x^T P x + q^T x ----------
@@ -217,7 +220,8 @@ pub fn estimate_optimal_probabilities(
     let x = solver.solution.x.as_slice();
     let w_star = x[0..num_arms].to_vec();
 
-    Ok(w_star)
+    let out: HashMap<String, f64> = variant_names.into_iter().zip(w_star).collect();
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -241,6 +245,13 @@ mod tests {
                 variance: variance as f32,
                 count,
             })
+            .collect()
+    }
+
+    // Helper to extract probabilities in variant order
+    fn hashmap_to_vec(map: &HashMap<String, f64>, num_variants: usize) -> Vec<f64> {
+        (0..num_variants)
+            .map(|i| *map.get(&format!("variant_{i}")).unwrap())
             .collect()
     }
 
@@ -272,10 +283,11 @@ mod tests {
                 .unwrap();
 
         assert!(
-            probs[0] > probs[1],
+            probs.get("variant_0") > probs.get("variant_1"),
+            // probs[0] > probs[1],
             "Arm with higher variance should have higher probability"
         );
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs.values().sum::<f64>() - 1.0).abs() < 1e-6);
     }
     #[test]
     fn test_two_arms_equal_variances() {
@@ -283,9 +295,9 @@ mod tests {
         let probs =
             estimate_optimal_probabilities(feedback, Some(0.01), None, None, Some(0.0)).unwrap();
 
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs.values().sum::<f64>() - 1.0).abs() < 1e-6);
         // With equal variances and only two arms, probabilities should be roughly equal
-        assert!((probs[0] - probs[1]).abs() < 0.1);
+        assert!((probs.get("variant_0").unwrap() - probs.get("variant_1").unwrap()).abs() < 0.1);
     }
 
     #[test]
@@ -297,20 +309,20 @@ mod tests {
             estimate_optimal_probabilities(feedback, Some(0.01), None, Some(min_prob), Some(0.0))
                 .unwrap();
 
-        for &p in &probs {
+        for &p in probs.values() {
             assert!(
                 p >= min_prob - 1e-6,
                 "Probability {p} violates min_prob {min_prob}"
             );
         }
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs.values().sum::<f64>() - 1.0).abs() < 1e-6);
     }
 
     #[test]
     fn test_high_variance_arm() {
         // Higher variance means more sampling needed for accurate mean estimate
         let feedback = make_feedback(vec![10, 10], vec![0.5, 0.5], vec![0.01, 0.5]);
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(0.01), // epsilon
             None,       // ridge_variance
@@ -319,8 +331,9 @@ mod tests {
         )
         .unwrap();
 
+        let probs = hashmap_to_vec(&probs_map, 2);
         assert!(probs[1] > probs[0], "High variance arm needs more samples");
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
     }
 
     #[test]
@@ -347,8 +360,8 @@ mod tests {
         .unwrap();
 
         // With regularization, probabilities should be closer to 0.5
-        let diff_no_reg = (probs_no_reg[0] - 0.5).abs();
-        let diff_with_reg = (probs_with_reg[0] - 0.5).abs();
+        let diff_no_reg = (*probs_no_reg.get("variant_0").unwrap() - 0.5).abs();
+        let diff_with_reg = (*probs_with_reg.get("variant_0").unwrap() - 0.5).abs();
         assert!(diff_with_reg < diff_no_reg);
     }
 
@@ -361,7 +374,7 @@ mod tests {
             vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
             vec![0.1; 10],
         );
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(0.0),      // epsilon
             None,           // ridge_variance
@@ -371,20 +384,21 @@ mod tests {
         .unwrap();
 
         // All probabilities should be non-negative
-        for &p in &probs {
+        for &p in probs_map.values() {
             assert!(p >= min_prob - 1e-6);
         }
         // Sum to 1
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
         // The highest should get most sampling
-        assert!(probs[9] >= probs[0]);
+        let probs_vec = hashmap_to_vec(&probs_map, 10);
+        assert!(probs_vec[9] >= probs_vec[0]);
     }
 
     #[test]
     fn test_close_competition() {
         // Two arms very close in mean - both need substantial sampling
         let feedback = make_feedback(vec![10, 10, 10], vec![0.50, 0.51, 0.3], vec![0.1, 0.1, 0.1]);
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(0.0), // epsilon
             None,      // ridge_variance
@@ -393,8 +407,9 @@ mod tests {
         )
         .unwrap();
 
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
         // The close competitors (arms 0 and 1) should together get most probability
+        let probs = hashmap_to_vec(&probs_map, 3);
         assert!(probs[0] + probs[1] > probs[2]);
     }
 
@@ -402,7 +417,7 @@ mod tests {
     fn test_ridge_variance_applied() {
         // Ridge variance should lower bound all variances
         let feedback = make_feedback(vec![10, 10], vec![0.5, 0.5], vec![1e-20, 1e-20]);
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(0.0),  // epsilon
             Some(0.01), // ridge_variance
@@ -412,7 +427,8 @@ mod tests {
         .unwrap();
 
         // Should not fail and should return valid probabilities
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        let probs = hashmap_to_vec(&probs_map, 2);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
         assert_vecs_almost_equal(&probs, &[0.5, 0.5], Some(1e-4));
     }
 
@@ -420,7 +436,7 @@ mod tests {
     fn test_zero_variance_with_ridge() {
         // Zero variance should be handled by ridge
         let feedback = make_feedback(vec![10, 10], vec![0.3, 0.7], vec![0.0001, 0.0]);
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(0.0),   // epsilon
             Some(0.001), // ridge_variance
@@ -429,8 +445,9 @@ mod tests {
         )
         .unwrap();
 
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
         // Arm with higher mean and variance needs more sampling
+        let probs = hashmap_to_vec(&probs_map, 2);
         assert!(probs[1] > probs[0]);
     }
 
@@ -442,7 +459,7 @@ mod tests {
             vec![0.25, 0.55, 0.40, 0.60],
             vec![0.05, 0.15, 0.10, 0.20],
         );
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(0.05), // epsilon
             Some(1e-8), // ridge_variance
@@ -452,8 +469,8 @@ mod tests {
         .unwrap();
 
         // Verify basic constraints
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
-        for &p in &probs {
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
+        for &p in probs_map.values() {
             assert!(p >= 0.05 - 1e-9, "min_prob constraint violated");
             assert!(p >= 0.0, "Probability is negative");
         }
@@ -467,7 +484,7 @@ mod tests {
             vec![0.20, 0.60, 0.40],
             vec![0.10, 0.20, 0.15],
         );
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(0.02), // epsilon
             None,       // ridge_variance
@@ -478,8 +495,9 @@ mod tests {
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![0.050000000981238, 0.509054656289642, 0.440945342729120];
+        let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
     }
 
     #[test]
@@ -489,7 +507,7 @@ mod tests {
             vec![0.25, 0.55, 0.40, 0.60],
             vec![0.05, 0.15, 0.10, 0.20],
         );
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(0.05), // epsilon
             None,       // ridge_variance
@@ -505,8 +523,9 @@ mod tests {
             0.050000000506407,
             0.482245296501354,
         ];
+        let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
     }
 
     #[test]
@@ -516,7 +535,7 @@ mod tests {
             vec![0.50, 0.51, 0.30],
             vec![0.10, 0.10, 0.10],
         );
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(0.01), // epsilon
             None,       // ridge_variance
@@ -527,8 +546,9 @@ mod tests {
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![0.494996029290799, 0.495003970556052, 0.010000000211085];
+        let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
     }
 
     #[test]
@@ -538,7 +558,7 @@ mod tests {
             vec![0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 1.00],
             vec![0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10],
         );
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(0.02), // epsilon
             None,       // ridge_variance
@@ -560,8 +580,9 @@ mod tests {
             0.409811419219896,
             0.417813437971073,
         ];
+        let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
     }
 
     // Tests with high variance (variance > 1) representing different reward scales
@@ -572,7 +593,7 @@ mod tests {
             vec![10.00, 12.00, 11.00],
             vec![2.00, 3.50, 2.50],
         );
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(0.5),  // epsilon
             None,       // ridge_variance
@@ -583,14 +604,15 @@ mod tests {
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![0.069702913270257, 0.508019009489254, 0.422278077240489];
+        let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
     }
 
     #[test]
     fn test_very_high_variance_cvxpy() {
         let feedback = make_feedback(vec![30, 30], vec![50.00, 55.00], vec![10.00, 15.00]);
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(1.0),  // epsilon
             None,       // ridge_variance
@@ -601,8 +623,9 @@ mod tests {
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![0.450083389074646, 0.549916610924264];
+        let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
     }
 
     #[test]
@@ -612,7 +635,7 @@ mod tests {
             vec![1.00, 5.00, 3.00, 7.00],
             vec![0.10, 2.00, 0.50, 4.00],
         );
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(0.2),  // epsilon
             None,       // ridge_variance
@@ -628,8 +651,9 @@ mod tests {
             0.049999994032051,
             0.526504259929341,
         ];
+        let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
     }
 
     #[test]
@@ -639,7 +663,7 @@ mod tests {
             vec![0.10, 0.30, 0.20],
             vec![5.00, 8.00, 6.00],
         );
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(0.05), // epsilon
             None,       // ridge_variance
@@ -650,8 +674,9 @@ mod tests {
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![0.099999996666504, 0.482302162018304, 0.417697840883230];
+        let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
     }
 
     #[test]
@@ -661,7 +686,7 @@ mod tests {
             vec![20.00, 25.00, 22.00, 28.00, 24.00],
             vec![3.00, 4.00, 2.50, 5.00, 3.50],
         );
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(1.0),  // epsilon
             None,       // ridge_variance
@@ -678,14 +703,15 @@ mod tests {
             0.417175997176582,
             0.140117920263625,
         ];
+        let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
     }
 
     #[test]
     fn test_asymmetric_high_variance_cvxpy() {
         let feedback = make_feedback(vec![50, 50], vec![100.00, 105.00], vec![1.00, 20.00]);
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(2.0),  // epsilon
             None,       // ridge_variance
@@ -696,8 +722,9 @@ mod tests {
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![0.182752086850448, 0.817247913149552];
+        let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
     }
 
     // Tests using scipy.minimize solutions to verify SOCP reformulation
@@ -705,7 +732,7 @@ mod tests {
     #[test]
     fn test_two_arms_simple_scipy() {
         let feedback = make_feedback(vec![20, 20], vec![0.50, 0.70], vec![0.10, 0.15]);
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(0.1),  // epsilon
             None,       // ridge_variance
@@ -716,8 +743,9 @@ mod tests {
 
         // Expected solution from scipy (trust-constr with SLSQP fallback)
         let expected = vec![0.449525654401765, 0.550474345598233];
+        let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
     }
 
     #[test]
@@ -727,7 +755,7 @@ mod tests {
             vec![1.00, 1.50, 1.20],
             vec![0.20, 0.30, 0.25],
         );
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(0.2),  // epsilon
             None,       // ridge_variance
@@ -738,14 +766,15 @@ mod tests {
 
         // Expected solution from scipy (trust-constr with SLSQP fallback)
         let expected = vec![0.111715272862871, 0.473942231288105, 0.414342495849023];
+        let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
     }
 
     #[test]
     fn test_very_high_variance_scipy() {
         let feedback = make_feedback(vec![30, 30], vec![50.00, 55.00], vec![10.00, 15.00]);
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(1.0),  // epsilon
             None,       // ridge_variance
@@ -756,8 +785,9 @@ mod tests {
 
         // Expected solution from scipy (trust-constr with SLSQP fallback)
         let expected = vec![0.450070015802657, 0.549929984197342];
+        let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
     }
 
     #[test]
@@ -767,7 +797,7 @@ mod tests {
             vec![2.00, 3.00, 2.50, 3.50],
             vec![0.50, 1.00, 0.75, 1.50],
         );
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(0.3),  // epsilon
             None,       // ridge_variance
@@ -783,14 +813,15 @@ mod tests {
             0.064092683568538,
             0.491446545056619,
         ];
+        let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
     }
 
     #[test]
     fn test_small_epsilon_scipy() {
         let feedback = make_feedback(vec![50, 50], vec![10.00, 10.50], vec![1.00, 1.20]);
-        let probs = estimate_optimal_probabilities(
+        let probs_map = estimate_optimal_probabilities(
             feedback,
             Some(0.05), // epsilon
             None,       // ridge_variance
@@ -801,7 +832,8 @@ mod tests {
 
         // Expected solution from scipy (trust-constr with SLSQP fallback)
         let expected = vec![0.477229489718064, 0.522770510281936];
+        let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
-        assert!((probs.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
     }
 }
