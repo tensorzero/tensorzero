@@ -58,8 +58,12 @@ describe("serializeDatapointToFormData", () => {
     expect(formData.get("function_name")).toBe(datapoint.function_name);
     expect(formData.get("id")).toBe(datapoint.id);
     expect(formData.get("episode_id")).toBe(datapoint.episode_id);
-    expect(JSON.parse(formData.get("input") as string)).toEqual(datapoint.input);
-    expect(JSON.parse(formData.get("output") as string)).toEqual(datapoint.output);
+    expect(JSON.parse(formData.get("input") as string)).toEqual(
+      datapoint.input,
+    );
+    expect(JSON.parse(formData.get("output") as string)).toEqual(
+      datapoint.output,
+    );
     expect(JSON.parse(formData.get("tool_params") as string)).toEqual(
       // @ts-expect-error tool_params is not in the DatapointFormData type because it's a union. We should fix this when moving to use napi-rs types.
       datapoint.tool_params,

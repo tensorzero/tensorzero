@@ -1,12 +1,15 @@
 import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import { ParsedDatasetRowSchema } from "~/utils/clickhouse/datasets";
-import type { ContentBlockChatOutput, JsonInferenceOutput } from "tensorzero-node";
+import type {
+  ContentBlockChatOutput,
+  JsonInferenceOutput,
+} from "tensorzero-node";
 
 /**
  * Type for a datapoint with editable fields that can be modified in the UI.
  * This allows output to be null (when editing) while preserving all other fields.
  */
-export type DatapointFormData = Omit<ParsedDatasetRow, 'output'> & {
+export type DatapointFormData = Omit<ParsedDatasetRow, "output"> & {
   output?: ContentBlockChatOutput[] | JsonInferenceOutput | null;
 };
 
