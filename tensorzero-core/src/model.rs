@@ -2096,7 +2096,7 @@ impl ShorthandModelConfig for ModelConfig {
             "groq" => ProviderConfig::Groq(GroqProvider::new(model_name, None)?),
             "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
             "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
-            // TODO - decide how to handle the responses api for shorthand models
+            // TODO(https://github.com/tensorzero/tensorzero/issues/3803) - decide how to handle the responses api for shorthand models
             "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None, false)?),
             "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(model_name, None)?),
             "together" => ProviderConfig::Together(TogetherProvider::new(

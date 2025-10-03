@@ -605,7 +605,6 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
                 }
             }
             ContentBlock::Thought(thought) => {
-                // TODO - figure out how to handle this correctly
                 warn_discarded_thought_block(messages_config.provider_type, thought);
             }
             ContentBlock::Unknown {

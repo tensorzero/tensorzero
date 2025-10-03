@@ -48,7 +48,6 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
         let model_name = model_name.to_string();
         let provider_config = match provider_type {
             "openai" => {
-                // TODO - decide how to handle the responses api for shorthand models
                 EmbeddingProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None, false)?)
             }
             #[cfg(any(test, feature = "e2e_tests"))]
