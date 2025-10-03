@@ -125,14 +125,9 @@ export function VariantEditor({
               </CardHeader>
               <CardContent className="space-y-4">
                 {initialTemplateNames.current.map((templateName) => {
-                  // Capitalize first letter and replace underscores with spaces for label
-                  const label = templateName
-                    .split("_")
-                    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-                    .join(" ");
                   return (
                     <div key={templateName} className="space-y-4">
-                      <Label>{label}</Label>
+                      <Label>{templateName}</Label>
                       <CodeEditor
                         value={
                           editedConfig?.templates[templateName]?.template
