@@ -209,7 +209,7 @@ export function SnippetTabs({
               key={tab.id}
               value={tab.id}
               className={clsx(
-                "flex items-center text-xs",
+                "flex cursor-pointer items-center text-xs",
                 tab.indicator && "gap-2",
               )}
             >

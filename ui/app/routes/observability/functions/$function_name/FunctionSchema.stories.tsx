@@ -23,37 +23,46 @@ export const CustomNamedSchemas: Story = {
       parallel_tool_calls: null,
       schemas: {
         greeting_template: {
-          value: {
-            type: "object",
-            properties: {
-              name: { type: "string" },
-              place: { type: "string" },
-              day_of_week: { type: "string" },
+          schema: {
+            value: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                place: { type: "string" },
+                day_of_week: { type: "string" },
+              },
+              required: ["name", "place", "day_of_week"],
             },
-            required: ["name", "place", "day_of_week"],
           },
+          legacy_definition: false,
         },
         analysis_prompt: {
-          value: {
-            type: "object",
-            properties: {
-              data: { type: "string" },
-              aspects: {
-                type: "array",
-                items: { type: "string" },
+          schema: {
+            value: {
+              type: "object",
+              properties: {
+                data: { type: "string" },
+                aspects: {
+                  type: "array",
+                  items: { type: "string" },
+                },
               },
+              required: ["data", "aspects"],
             },
-            required: ["data", "aspects"],
           },
+          legacy_definition: false,
         },
         fun_fact_topic: {
-          value: {
-            type: "object",
-            properties: {
-              topic: { type: "string" },
+          schema: {
+            value: {
+              type: "object",
+              properties: {
+                topic: { type: "string" },
+              },
+              required: ["topic"],
             },
-            required: ["topic"],
           },
+          legacy_definition: false,
         },
       },
       variants: {},
@@ -66,37 +75,46 @@ export const LegacySchemas: Story = {
     functionConfig: {
       type: "chat",
       description:
-        "Test function with legacy schema names (system/user/assistant)",
+        "Test function with legacy schema definitions (marked with legacy_definition: true)",
       schemas: {
         system: {
-          value: {
-            type: "object",
-            properties: {
-              context: { type: "string" },
-              language: { type: "string" },
+          schema: {
+            value: {
+              type: "object",
+              properties: {
+                context: { type: "string" },
+                language: { type: "string" },
+              },
+              required: ["context"],
             },
-            required: ["context"],
           },
+          legacy_definition: true,
         },
         user: {
-          value: {
-            type: "object",
-            properties: {
-              query: { type: "string" },
-              max_results: { type: "number" },
+          schema: {
+            value: {
+              type: "object",
+              properties: {
+                query: { type: "string" },
+                max_results: { type: "number" },
+              },
+              required: ["query"],
             },
-            required: ["query"],
           },
+          legacy_definition: true,
         },
         assistant: {
-          value: {
-            type: "object",
-            properties: {
-              response: { type: "string" },
-              confidence: { type: "number" },
+          schema: {
+            value: {
+              type: "object",
+              properties: {
+                response: { type: "string" },
+                confidence: { type: "number" },
+              },
+              required: ["response"],
             },
-            required: ["response"],
           },
+          legacy_definition: true,
         },
       },
       variants: {},
@@ -115,12 +133,15 @@ export const JsonFunctionWithOutput: Story = {
       implicit_tool_call_config: null,
       schemas: {
         system: {
-          value: {
-            type: "object",
-            properties: {
-              instructions: { type: "string" },
+          schema: {
+            value: {
+              type: "object",
+              properties: {
+                instructions: { type: "string" },
+              },
             },
           },
+          legacy_definition: false,
         },
       },
       output_schema: {
@@ -141,6 +162,98 @@ export const JsonFunctionWithOutput: Story = {
             },
           },
           required: ["entities"],
+        },
+      },
+      variants: {},
+    } as unknown as FunctionConfig,
+  },
+};
+
+export const NonLegacySchemas: Story = {
+  args: {
+    functionConfig: {
+      type: "chat",
+      description:
+        "Test function with system/user/assistant names but NOT legacy (legacy_definition: false)",
+      schemas: {
+        system: {
+          schema: {
+            value: {
+              type: "object",
+              properties: {
+                context: { type: "string" },
+              },
+            },
+          },
+          legacy_definition: false,
+        },
+        user: {
+          schema: {
+            value: {
+              type: "object",
+              properties: {
+                query: { type: "string" },
+              },
+            },
+          },
+          legacy_definition: false,
+        },
+        assistant: {
+          schema: {
+            value: {
+              type: "object",
+              properties: {
+                response: { type: "string" },
+              },
+            },
+          },
+          legacy_definition: false,
+        },
+      },
+      variants: {},
+    } as unknown as FunctionConfig,
+  },
+};
+
+export const MixedLegacyAndCustom: Story = {
+  args: {
+    functionConfig: {
+      type: "chat",
+      description:
+        "Test function with both legacy and custom schemas to show badges only on legacy",
+      schemas: {
+        system: {
+          schema: {
+            value: {
+              type: "object",
+              properties: {
+                instructions: { type: "string" },
+              },
+            },
+          },
+          legacy_definition: true,
+        },
+        greeting_template: {
+          schema: {
+            value: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+              },
+            },
+          },
+          legacy_definition: false,
+        },
+        analysis_prompt: {
+          schema: {
+            value: {
+              type: "object",
+              properties: {
+                data: { type: "string" },
+              },
+            },
+          },
+          legacy_definition: false,
         },
       },
       variants: {},

@@ -6,6 +6,7 @@ import {
 } from "~/components/layout/SnippetLayout";
 import { EmptyMessage } from "~/components/layout/SnippetContent";
 import { CodeEditor } from "~/components/ui/code-editor";
+import { Badge } from "~/components/ui/badge";
 
 interface FunctionSchemaProps {
   functionConfig: FunctionConfig;
@@ -15,15 +16,26 @@ export default function FunctionSchema({
   functionConfig,
 }: FunctionSchemaProps) {
   // Build schemas object dynamically from all available schemas
-  const schemas: Record<string, JsonValue | undefined> = {
+  const schemas: Record<
+    string,
+    { value: JsonValue | undefined; legacy_definition: boolean }
+  > = {
     ...Object.fromEntries(
       Object.entries(functionConfig.schemas).map(([name, schemaData]) => [
         name,
-        schemaData?.value,
+        {
+          value: schemaData?.schema?.value,
+          legacy_definition: schemaData?.legacy_definition ?? false,
+        },
       ]),
     ),
     ...(functionConfig.type === "json"
-      ? { output: functionConfig.output_schema?.value }
+      ? {
+          output: {
+            value: functionConfig.output_schema?.value,
+            legacy_definition: false,
+          },
+        }
       : {}),
   };
 
@@ -42,10 +54,20 @@ export default function FunctionSchema({
   }
 
   // Create tabs for each schema
-  const tabs = schemaEntries.map(([name]) => {
+  const tabs = schemaEntries.map(([name, schemaData]) => {
+    const isLegacy = schemaData.legacy_definition;
     return {
       id: name,
-      label: name,
+      label: (
+        <div className="flex items-center gap-2">
+          <span>{name}</span>
+          {isLegacy && (
+            <Badge className="bg-yellow-600 px-1 py-0 text-[10px] text-white">
+              Legacy
+            </Badge>
+          )}
+        </div>
+      ),
       emptyMessage: "No schema defined.",
     };
   });
@@ -59,8 +81,8 @@ export default function FunctionSchema({
         {(activeTab) => {
           const tab = tabs.find((tab) => tab.id === activeTab);
           const schema = schemas[activeTab];
-          const formattedContent = schema
-            ? JSON.stringify(schema, null, 2)
+          const formattedContent = schema.value
+            ? JSON.stringify(schema.value, null, 2)
             : undefined;
 
           return (
