@@ -27,7 +27,7 @@ mod estimate_optimal_probabilities;
 const SLEEP_DURATION: Duration = Duration::from_secs(15 * 60);
 const NURSERY_PROBABILITY: f64 = 0.1; // placeholder, can decide later
 
-// #[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct TrackAndStopConfig {
@@ -52,7 +52,32 @@ pub struct TrackAndStopConfig {
     // and from the sampling probabilities with probability 1 - NURSERY_PROBABILITY
     // if it is empty we should sample using the sampling probabilities always
     // if the sampling probabilities are empty we should sample using the nursery always
+    #[serde(skip)]
     state: Arc<ArcSwap<HashMap<String, f64>>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UninitializedTrackAndStopConfig {
+    metric: String,
+    candidate_variants: Vec<String>,
+    fallback_variants: Vec<String>,
+    min_samples_per_variant: usize,
+    delta: f64,
+    epsilon: f64,
+}
+
+impl UninitializedTrackAndStopConfig {
+    pub fn load(self) -> TrackAndStopConfig {
+        TrackAndStopConfig {
+            metric: self.metric,
+            candidate_variants: self.candidate_variants,
+            fallback_variants: self.fallback_variants,
+            min_samples_per_variant: self.min_samples_per_variant,
+            delta: self.delta,
+            epsilon: self.epsilon,
+            state: Arc::new(ArcSwap::new(Arc::new(HashMap::new()))),
+        }
+    }
 }
 
 impl VariantSampler for TrackAndStopConfig {

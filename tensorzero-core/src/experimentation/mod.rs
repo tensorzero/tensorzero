@@ -32,6 +32,7 @@ pub enum ExperimentationConfig {
 pub enum UninitializedExperimentationConfig {
     StaticWeights(static_weights::StaticWeightsConfig),
     Uniform,
+    TrackAndStop(track_and_stop::UninitializedTrackAndStopConfig),
 }
 
 impl UninitializedExperimentationConfig {
@@ -41,6 +42,9 @@ impl UninitializedExperimentationConfig {
                 ExperimentationConfig::StaticWeights(config)
             }
             UninitializedExperimentationConfig::Uniform => ExperimentationConfig::Uniform,
+            UninitializedExperimentationConfig::TrackAndStop(config) => {
+                ExperimentationConfig::TrackAndStop(config.load())
+            }
         }
     }
 }
