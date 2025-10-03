@@ -176,18 +176,27 @@ export async function saveDatapoint(params: {
  * TODO(#3765): remove this logic and use Rust logic instead, either via napi-rs or by calling an API server.
  */
 export async function renameDatapoint(params: {
+  functionType: "chat" | "json";
   datasetName: string;
   datapoint: ParsedDatasetRow;
   newName: string;
 }): Promise<void> {
-  const { datasetName, datapoint, newName } = params;
+  const { functionType, datasetName, datapoint, newName } = params;
 
-  // Determine function type and transform datapoint appropriately
   let transformedDatapoint: Datapoint;
-  if ("output_schema" in datapoint) {
-    transformedDatapoint = transformJsonDatapoint(datapoint);
+  if (functionType === "json") {
+    if (!("output_schema" in datapoint)) {
+      throw new Error(`Json datapoint is missing output_schema`);
+    }
+    transformedDatapoint = transformJsonDatapointForUpdateRequest(
+      datapoint as ParsedJsonInferenceDatapointRow,
+    );
+  } else if (functionType === "chat") {
+    transformedDatapoint = transformChatDatapointForUpdateRequest(
+      datapoint as ParsedChatInferenceDatapointRow,
+    );
   } else {
-    transformedDatapoint = transformChatDatapoint(datapoint);
+    throw new Error(`Invalid function type: ${functionType}`);
   }
 
   // Update name
