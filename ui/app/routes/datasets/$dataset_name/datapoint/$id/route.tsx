@@ -51,6 +51,7 @@ function parseDatapointFormData(formData: FormData): ParsedDatasetRow {
     function_name: formData.get("function_name"),
     id: formData.get("id"),
     episode_id: formData.get("episode_id"),
+    name: formData.get("name") || null,
     input: JSON.parse(formData.get("input") as string),
     output: formData.get("output")
       ? JSON.parse(formData.get("output") as string)
