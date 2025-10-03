@@ -11,6 +11,8 @@ mod check_stopping;
 mod estimate_optimal_probabilities;
 
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct TrackAndStopConfig {
     // TODO: validate all of these fields
     metric: String,
