@@ -9,6 +9,7 @@ use std::{env, fs};
 use strum::VariantNames;
 use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::error::Elapsed;
+use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::{span, Level, Span};
 use tracing_futures::{Instrument, Instrumented};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -46,7 +47,7 @@ use crate::providers::helpers::peek_first_chunk;
 use crate::providers::hyperbolic::HyperbolicProvider;
 use crate::providers::sglang::SGLangProvider;
 use crate::providers::tgi::TGIProvider;
-use crate::rate_limiting::{ScopeInfo, TicketBorrows};
+use crate::rate_limiting::{RateLimitResourceUsage, ScopeInfo, TicketBorrows};
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -325,7 +326,6 @@ impl ModelConfig {
                 return Ok(StreamResponseAndMessages {
                     response: cache_lookup,
                     messages: model_provider_request.request.messages.clone(),
-                    ticket_borrow: TicketBorrows::empty(),
                 });
             }
         }
@@ -347,6 +347,7 @@ impl ModelConfig {
         let mut stream = wrap_provider_stream(
             raw_request.clone(),
             model_provider_request,
+            ticket_borrow,
             clients,
             stream,
             write_to_cache,
@@ -369,7 +370,6 @@ impl ModelConfig {
                 cached: false,
             },
             messages: model_provider_request.request.messages.clone(),
-            ticket_borrow,
         })
     }
 
@@ -595,6 +595,7 @@ impl ModelConfig {
 async fn wrap_provider_stream(
     raw_request: String,
     model_request: ModelProviderRequest<'_>,
+    ticket_borrow: TicketBorrows,
     clients: &InferenceClients<'_>,
     stream: Instrumented<PeekableProviderInferenceResponseStream>,
     write_to_cache: bool,
@@ -611,7 +612,8 @@ async fn wrap_provider_stream(
         .clone()
         .map(std::borrow::Cow::into_owned);
     let otlp_config = clients.otlp_config.clone();
-    Ok((Box::pin(async_stream::stream! {
+    let postgres_connection_info = clients.postgres_connection_info.clone();
+    let base_stream = async_stream::stream! {
         let mut buffer = vec![];
         let mut errored = false;
         let mut total_usage = Usage {
@@ -639,6 +641,18 @@ async fn wrap_provider_stream(
             yield chunk;
         }
         otlp_config.apply_usage_to_model_provider_span(&span, &total_usage);
+        tokio::spawn(async move {
+            if let Err(e) = ticket_borrow
+                .return_tickets(&postgres_connection_info, RateLimitResourceUsage {
+                    model_inferences: 1,
+                    tokens: total_usage.total_tokens() as u64,
+                })
+                .await
+            {
+                tracing::error!("Failed to return rate limit tickets: {}", e);
+            }
+        });
+
 
         if write_to_cache && !errored {
             let _ = start_cache_write_streaming(
@@ -650,7 +664,23 @@ async fn wrap_provider_stream(
                 tool_config
             );
         }
-    }) as ProviderInferenceResponseStreamInner).peekable())
+    };
+    // We unconditionally create a stream, and forward items into it from a separate task
+    // This ensures that we keep processing chunks (and call `return_tickets` to update rate-limiting information)
+    // even if the top-level HTTP request is later dropped.
+    let (send, recv) = tokio::sync::mpsc::unbounded_channel();
+    tokio::spawn(async move {
+        futures::pin_mut!(base_stream);
+        while let Some(chunk) = base_stream.next().await {
+            // Intentionally ignore errors - the receiver might be dropped, but we want to keep polling
+            // `base_stream` anyway (so that we compute the final usage and call `return_tickets`)
+            let _ = send.send(chunk);
+        }
+    });
+    Ok(
+        (UnboundedReceiverStream::new(recv).boxed() as ProviderInferenceResponseStreamInner)
+            .peekable(),
+    )
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1191,7 +1221,6 @@ struct StreamAndRawRequest {
 pub struct StreamResponseAndMessages {
     pub response: StreamResponse,
     pub messages: Vec<RequestMessage>,
-    pub ticket_borrow: TicketBorrows,
 }
 
 impl ModelProvider {
@@ -2178,6 +2207,7 @@ mod tests {
             DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
             DUMMY_STREAMING_RESPONSE,
         },
+        rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig},
     };
     use secrecy::SecretString;
     use tokio_stream::StreamExt;
@@ -2312,6 +2342,105 @@ mod tests {
             }
             .into()
         );
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_model_provider_infer_max_tokens_check() {
+        let provider = ModelProvider {
+            name: "test_provider".into(),
+            config: ProviderConfig::Dummy(DummyProvider {
+                model_name: "good".into(),
+                credentials: DummyCredentials::None,
+            }),
+            extra_body: Default::default(),
+            extra_headers: Default::default(),
+            timeouts: Default::default(),
+            discard_unknown_chunks: false,
+        };
+
+        let http_client = TensorzeroHttpClient::new().unwrap();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let postgres_mock = PostgresConnectionInfo::Disabled;
+        let api_keys = InferenceCredentials::default();
+        let tags = HashMap::new();
+        let scope_info = ScopeInfo { tags: &tags };
+
+        // With token rate limiting enabled and no max_tokens
+        let toml_str = r"
+            [[rules]]
+            tokens_per_second = 10
+            always = true
+        ";
+        let uninitialized_config: UninitializedRateLimitingConfig =
+            toml::from_str(toml_str).unwrap();
+        let rate_limit_config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
+
+        let clients = InferenceClients {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &postgres_mock,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
+            tags: &tags,
+            rate_limiting_config: &rate_limit_config,
+            otlp_config: &Default::default(),
+        };
+
+        let request_no_max_tokens = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![],
+            system: None,
+            tool_config: None,
+            temperature: None,
+            max_tokens: None, // No max_tokens!
+            ..Default::default()
+        };
+
+        let provider_request = ModelProviderRequest {
+            request: &request_no_max_tokens,
+            model_name: "test",
+            provider_name: "test_provider",
+            otlp_config: &Default::default(),
+        };
+
+        // Should fail with RateLimitMissingMaxTokens
+        let result = provider
+            .infer(provider_request, &clients, &scope_info)
+            .await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            Error::new(ErrorDetails::RateLimitMissingMaxTokens)
+        );
+
+        // With token rate limiting enabled and max_tokens provided
+        let request_with_max_tokens = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![],
+            system: None,
+            tool_config: None,
+            temperature: None,
+            max_tokens: Some(100), // max_tokens provided
+            ..Default::default()
+        };
+
+        // This should error because postgres is disabled, but it should not be the RateLimitMissingMaxTokens error
+        let provider_request = ModelProviderRequest {
+            request: &request_with_max_tokens,
+            model_name: "test",
+            provider_name: "test_provider",
+            otlp_config: &Default::default(),
+        };
+
+        let result = provider
+            .infer(provider_request, &clients, &scope_info)
+            .await
+            .unwrap_err();
+        assert_ne!(result, Error::new(ErrorDetails::RateLimitMissingMaxTokens));
     }
 
     #[tokio::test]
@@ -2477,7 +2606,6 @@ mod tests {
                     cached: _,
                 },
             messages: _input,
-            ticket_borrow: _,
         } = model_config
             .infer_stream(
                 &request,
@@ -2661,7 +2789,6 @@ mod tests {
                     cached: _,
                 },
             messages: _,
-            ticket_borrow: _,
         } = model_config
             .infer_stream(
                 &request,

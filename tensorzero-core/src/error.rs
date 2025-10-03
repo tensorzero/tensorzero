@@ -1382,14 +1382,19 @@ impl std::fmt::Display for ErrorDetails {
 impl IntoResponse for Error {
     /// Log the error and convert it into an Axum response
     fn into_response(self) -> Response {
+        let message = self.to_string();
         let mut body = json!({
-            "error": self.to_string(),
+            "error": message,
         });
         if *UNSTABLE_ERROR_JSON.get().unwrap_or(&false) {
             body["error_json"] =
                 serde_json::to_value(self.get_details()).unwrap_or_else(|e| json!(e.to_string()));
         }
-        (self.status_code(), Json(body)).into_response()
+        let mut response = (self.status_code(), Json(body)).into_response();
+        // Attach the error to the response, so that we can set a nice message in our
+        // `apply_otel_http_trace_layer` middleware
+        response.extensions_mut().insert(self);
+        response
     }
 }
 
