@@ -89,12 +89,8 @@ pub fn estimate_optimal_probabilities(
     let variance_range = max_var - min_var;
     if all_gaps_tiny && variance_range < 1e-10 {
         let probs = vec![1.0 / num_arms as f64; num_arms];
-<<<<<<< HEAD
-        return Ok(convert_probabilities_to_map(&feedback, &probs));
-=======
         let out: HashMap<String, f64> = variant_names.into_iter().zip(probs).collect();
         return Ok(out);
->>>>>>> 44a5326edf5e18986480ee41e8cfb7ed4b8fac38
     }
 
     // ---------- Objective: (1/2) x^T P x + q^T x ----------
