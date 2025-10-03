@@ -6,6 +6,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::postgres::PostgresConnectionInfo;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::variant::VariantInfo;
 
@@ -38,6 +39,7 @@ pub trait VariantSampler {
         function_name: &str,
         episode_id: Uuid,
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
+        postgres: &PostgresConnectionInfo,
     ) -> Result<(String, Arc<VariantInfo>), Error>;
 }
 
@@ -78,17 +80,18 @@ impl VariantSampler for ExperimentationConfig {
         function_name: &str,
         episode_id: Uuid,
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
+        postgres: &PostgresConnectionInfo,
     ) -> Result<(String, Arc<VariantInfo>), Error> {
         match self {
             Self::StaticWeights(config) => {
                 config
-                    .sample(function_name, episode_id, active_variants)
+                    .sample(function_name, episode_id, active_variants, postgres)
                     .await
             }
             Self::Uniform => sample_uniform(function_name, &episode_id, active_variants),
             Self::TrackAndStop(config) => {
                 config
-                    .sample(function_name, episode_id, active_variants)
+                    .sample(function_name, episode_id, active_variants, postgres)
                     .await
             }
         }

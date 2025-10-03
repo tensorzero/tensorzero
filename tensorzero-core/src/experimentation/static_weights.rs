@@ -6,7 +6,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-    db::clickhouse::ClickHouseConnectionInfo,
+    db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     experimentation::get_uniform_value,
     variant::VariantInfo,
@@ -73,6 +73,7 @@ impl VariantSampler for StaticWeightsConfig {
         function_name: &str,
         episode_id: Uuid,
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
+        _postgres: &PostgresConnectionInfo,
     ) -> Result<(String, Arc<VariantInfo>), Error> {
         // Compute the total weight of variants present in variant_names
         let total_weight = active_variants
