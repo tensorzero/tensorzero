@@ -798,6 +798,7 @@ mod tests {
             EmbeddingProviderInfo,
         },
         endpoints::inference::InferenceCredentials,
+        experimentation::ExperimentationConfig,
     };
     use std::collections::{HashMap, HashSet};
     use std::sync::Arc;
@@ -1235,6 +1236,7 @@ mod tests {
             description: None,
 
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })
     }
 
@@ -1250,6 +1252,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })
     }
 
@@ -1279,6 +1282,7 @@ mod tests {
             implicit_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })
     }
 
@@ -1315,6 +1319,7 @@ mod tests {
             implicit_tool_call_config: invalid_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })
     }
 
