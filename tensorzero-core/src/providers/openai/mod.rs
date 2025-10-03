@@ -412,6 +412,7 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
+        // TODO(https://github.com/tensorzero/tensorzero/issues/3802) - support this
         if self.use_responses {
             return Err(
                 ErrorDetails::UnsupportedModelProviderForStreamingInference {
@@ -1246,25 +1247,25 @@ impl OpenAIRequestMessage<'_> {
     }
 }
 
-impl<'a> SystemOrDeveloperMessage<'a> {
+impl<'a> SystemOrDeveloper<'a> {
     pub fn into_openai_request_message(self) -> OpenAIRequestMessage<'a> {
         match self {
-            SystemOrDeveloperMessage::System(msg) => {
+            SystemOrDeveloper::System(msg) => {
                 OpenAIRequestMessage::System(OpenAISystemRequestMessage { content: msg })
             }
-            SystemOrDeveloperMessage::Developer(msg) => {
+            SystemOrDeveloper::Developer(msg) => {
                 OpenAIRequestMessage::Developer(OpenAISystemRequestMessage { content: msg })
             }
         }
     }
     pub fn into_openai_responses_input(self) -> OpenAIResponsesInput<'a> {
         let role = match self {
-            SystemOrDeveloperMessage::System(_) => "system",
-            SystemOrDeveloperMessage::Developer(_) => "developer",
+            SystemOrDeveloper::System(_) => "system",
+            SystemOrDeveloper::Developer(_) => "developer",
         };
         let text = match self {
-            SystemOrDeveloperMessage::System(msg) => msg,
-            SystemOrDeveloperMessage::Developer(msg) => msg,
+            SystemOrDeveloper::System(msg) => msg,
+            SystemOrDeveloper::Developer(msg) => msg,
         };
         OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
             role,
@@ -1329,11 +1330,6 @@ pub(super) fn prepare_openai_tools<'a>(
 }
 
 pub enum SystemOrDeveloper<'a> {
-    System(&'a str),
-    Developer(&'a str),
-}
-
-pub enum SystemOrDeveloperMessage<'a> {
     System(Cow<'a, str>),
     Developer(Cow<'a, str>),
 }
@@ -1360,7 +1356,7 @@ pub enum SystemOrDeveloperMessage<'a> {
 /// # Example
 /// ```rust,ignore
 /// let system_msg = prepare_system_or_developer_message(
-///     Some(SystemOrDeveloper::System("You are a helpful assistant")),
+///     Some(SystemOrDeveloper::System("You are a helpful assistant".into())),
 ///     Some(&ModelInferenceRequestJsonMode::On),
 ///     &messages
 /// );
@@ -1374,14 +1370,14 @@ pub(super) fn prepare_system_or_developer_message<'a>(
     prepare_system_or_developer_message_helper(system_or_developer, json_mode, |content| {
         should_add_json_instruction_chat_completion(content, messages)
     })
-    .map(SystemOrDeveloperMessage::into_openai_request_message)
+    .map(SystemOrDeveloper::into_openai_request_message)
 }
 
 pub(super) fn prepare_system_or_developer_message_helper<'a>(
     system_or_developer: Option<SystemOrDeveloper<'a>>,
     json_mode: Option<&'_ ModelInferenceRequestJsonMode>,
     contains_content: impl FnOnce(&str) -> bool,
-) -> Option<SystemOrDeveloperMessage<'a>> {
+) -> Option<SystemOrDeveloper<'a>> {
     let (content, is_system) = match system_or_developer {
         Some(SystemOrDeveloper::System(content)) => (Some(content), true),
         Some(SystemOrDeveloper::Developer(content)) => (Some(content), false),
@@ -1402,21 +1398,21 @@ pub(super) fn prepare_system_or_developer_message_helper<'a>(
 
         // Has content and JSON mode is on - conditionally add JSON instruction
         (Some(content), Some(ModelInferenceRequestJsonMode::On)) => {
-            if contains_content(content) {
+            if contains_content(&content) {
                 Cow::Owned(format!("Respond using JSON.\n\n{content}"))
             } else {
-                Cow::Borrowed(content)
+                content
             }
         }
 
         // Has content, no JSON mode or JSON mode off/strict - use as-is
-        (Some(content), _) => Cow::Borrowed(content),
+        (Some(content), _) => content,
     };
 
     Some(if is_system {
-        SystemOrDeveloperMessage::System(final_content)
+        SystemOrDeveloper::System(final_content)
     } else {
-        SystemOrDeveloperMessage::Developer(final_content)
+        SystemOrDeveloper::Developer(final_content)
     })
 }
 
@@ -1938,7 +1934,10 @@ impl<'a> OpenAIRequest<'a> {
             None
         };
         let mut messages = prepare_openai_messages(
-            request.system.as_deref().map(SystemOrDeveloper::System),
+            request
+                .system
+                .as_deref()
+                .map(|m| SystemOrDeveloper::System(Cow::Borrowed(m))),
             &request.messages,
             OpenAIMessagesConfig {
                 json_mode: Some(&request.json_mode),
@@ -3691,7 +3690,7 @@ mod tests {
         assert_eq!(result, None);
 
         // Test Case 2: system is Some, json_mode is On, messages contain "json"
-        let system_or_developer = Some(SystemOrDeveloper::System("System instructions"));
+        let system_or_developer = Some(SystemOrDeveloper::System("System instructions".into()));
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
@@ -3714,7 +3713,7 @@ mod tests {
         assert_eq!(result, expected);
 
         // Test Case 3: system is Some, json_mode is On, messages do not contain "json"
-        let system_or_developer = Some(SystemOrDeveloper::System("System instructions"));
+        let system_or_developer = Some(SystemOrDeveloper::System("System instructions".into()));
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
@@ -3738,7 +3737,9 @@ mod tests {
         assert_eq!(result, expected);
 
         // Test Case 4: developer is Some, json_mode is Off
-        let system_or_developer = Some(SystemOrDeveloper::Developer("Developer instructions"));
+        let system_or_developer = Some(SystemOrDeveloper::Developer(
+            "Developer instructions".into(),
+        ));
         let json_mode = ModelInferenceRequestJsonMode::Off;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
@@ -3763,7 +3764,9 @@ mod tests {
         assert_eq!(result, expected);
 
         // Test Case 5: developer is Some, json_mode is On, messages do not contain "json"
-        let system_or_developer = Some(SystemOrDeveloper::Developer("Developer instructions"));
+        let system_or_developer = Some(SystemOrDeveloper::Developer(
+            "Developer instructions".into(),
+        ));
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![OpenAIRequestMessage::User(OpenAIUserRequestMessage {
             content: vec![OpenAIContentBlock::Text {

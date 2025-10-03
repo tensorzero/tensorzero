@@ -348,7 +348,7 @@ impl<'a> OpenAISupervisedRow<'a> {
             inference
                 .system_input
                 .as_deref()
-                .map(super::SystemOrDeveloper::System),
+                .map(|m| super::SystemOrDeveloper::System(Cow::Borrowed(m))),
             &inference.messages,
             OpenAIMessagesConfig {
                 json_mode: None,
@@ -422,7 +422,7 @@ impl<'a> OpenAIReinforcementRow<'a> {
             inference
                 .system_input
                 .as_deref()
-                .map(super::SystemOrDeveloper::Developer),
+                .map(|m| super::SystemOrDeveloper::Developer(Cow::Borrowed(m))),
             &inference.messages,
             OpenAIMessagesConfig {
                 json_mode: None,
