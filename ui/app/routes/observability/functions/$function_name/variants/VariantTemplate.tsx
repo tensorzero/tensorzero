@@ -22,7 +22,6 @@ function createTemplateTab(
   return {
     id,
     label,
-    indicator: content ? "content" : "empty",
     emptyMessage,
   };
 }
@@ -39,52 +38,46 @@ export default function VariantTemplate({
   }
 
   if (variantConfig.type === "chat_completion") {
-    const templates = {
-      system:
-        variantConfig.templates.system?.template?.contents ??
-        variantConfig.templates.system?.template?.path ??
-        "",
-      user:
-        variantConfig.templates.user?.template?.contents ??
-        variantConfig.templates.user?.template?.path ??
-        "",
-      assistant:
-        variantConfig.templates.assistant?.template?.contents ??
-        variantConfig.templates.assistant?.template?.path ??
-        "",
-    };
+    // Dynamically get all template names from the config
+    const templateEntries = Object.entries(variantConfig.templates);
 
-    const tabs = [
-      createTemplateTab(
-        "system",
-        "System Template",
-        templates.system,
-        "No system template defined.",
-      ),
-      createTemplateTab(
-        "user",
-        "User Template",
-        templates.user,
-        "No user template defined.",
-      ),
-      createTemplateTab(
-        "assistant",
-        "Assistant Template",
-        templates.assistant,
-        "No assistant template defined.",
-      ),
-    ];
+    // If no templates exist, show an empty state
+    if (templateEntries.length === 0) {
+      return (
+        <SnippetLayout>
+          <SnippetContent maxHeight={240}>
+            <SnippetMessage>
+              <TextMessage emptyMessage="No templates defined." />
+            </SnippetMessage>
+          </SnippetContent>
+        </SnippetLayout>
+      );
+    }
 
-    // Find the first tab with content, or default to "system"
-    const defaultTab =
-      tabs.find((tab) => tab.indicator === "content")?.id || "system";
+    // Build templates object with all available templates
+    const templates: Record<string, string> = {};
+    for (const [name, templateData] of Object.entries(
+      variantConfig.templates,
+    )) {
+      if (!templateData) continue;
+      templates[name] = templateData.template.contents;
+    }
+
+    // Create tabs for each template
+    const tabs = Object.keys(templates).map((name) => {
+      return {
+        id: name,
+        label: name,
+        emptyMessage: "The template is empty.",
+      };
+    });
 
     return (
       <SnippetLayout>
-        <SnippetTabs tabs={tabs} defaultTab={defaultTab}>
+        <SnippetTabs tabs={tabs} defaultTab={tabs[0]?.id}>
           {(activeTab) => {
             const tab = tabs.find((tab) => tab.id === activeTab);
-            const template = templates[activeTab as keyof typeof templates];
+            const template = templates[activeTab];
 
             return (
               <SnippetContent maxHeight={240}>
