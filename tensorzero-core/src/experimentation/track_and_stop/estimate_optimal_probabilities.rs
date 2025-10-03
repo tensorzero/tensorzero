@@ -1,5 +1,8 @@
 #![allow(non_snake_case)]
 #![expect(dead_code)]
+use std::collections::HashMap;
+use std::convert;
+
 // use argminmax::ArgMinMax;
 use clarabel::algebra::CscMatrix;
 use clarabel::solver::{
@@ -52,7 +55,7 @@ pub fn estimate_optimal_probabilities(
     ridge_variance: Option<f64>,
     min_prob: Option<f64>,
     reg0: Option<f64>,
-) -> Result<Vec<f64>, OptimalProbsError> {
+) -> Result<HashMap<String, f64>, OptimalProbsError> {
     let epsilon: f64 = epsilon.unwrap_or(0.0);
     let ridge_variance: f64 = ridge_variance.unwrap_or(1e-12);
     let min_prob: f64 = min_prob.unwrap_or(1e-6);
@@ -87,7 +90,8 @@ pub fn estimate_optimal_probabilities(
         });
     let variance_range = max_var - min_var;
     if all_gaps_tiny && variance_range < 1e-10 {
-        return Ok(vec![1.0 / num_arms as f64; num_arms]);
+        let probs = vec![1.0 / num_arms as f64; num_arms];
+        return Ok(convert_probabilities_to_map(&feedback, &probs));
     }
 
     // ---------- Objective: (1/2) x^T P x + q^T x ----------
@@ -217,7 +221,14 @@ pub fn estimate_optimal_probabilities(
     let x = solver.solution.x.as_slice();
     let w_star = x[0..num_arms].to_vec();
 
-    Ok(w_star)
+    Ok(convert_probabilities_to_map(&feedback, &w_star))
+}
+
+fn convert_probabilities_to_map(
+    _variant_performances: &Vec<FeedbackByVariant>,
+    _updated_probabilies: &Vec<f64>,
+) -> HashMap<String, f64> {
+    todo!()
 }
 
 #[cfg(test)]

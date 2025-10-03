@@ -6,6 +6,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
+    db::clickhouse::ClickHouseConnectionInfo,
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     experimentation::get_uniform_value,
     variant::VariantInfo,
@@ -47,7 +48,11 @@ impl StaticWeightsConfig {
 }
 
 impl VariantSampler for StaticWeightsConfig {
-    async fn setup(&self) -> Result<(), Error> {
+    async fn setup(
+        &self,
+        _clickhouse: &ClickHouseConnectionInfo,
+        _function_name: &str,
+    ) -> Result<(), Error> {
         // We just assert that all weights are non-negative
         for weight in self.candidate_variants.values() {
             if *weight < 0.0 {
@@ -314,7 +319,10 @@ mod tests {
         .unwrap();
         let experiment = config.functions.get("test").unwrap().experimentation();
         // no-op but we call it for completeness
-        experiment.setup().await.unwrap();
+        experiment
+            .setup(&ClickHouseConnectionInfo::Disabled, "test")
+            .await
+            .unwrap();
 
         // Test sampling distribution with many samples
         let sample_size = 10_000;
