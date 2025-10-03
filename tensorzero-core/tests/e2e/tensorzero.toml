@@ -1695,6 +1695,22 @@ embedding_model = "openai::text-embedding-3-small"
 k = 3
 max_tokens = 100
 
+[functions.basic_test.variants.dicl_cutoff_strict]
+type = "experimental_dynamic_in_context_learning"
+model = "gpt-4o-mini-2024-07-18"
+embedding_model = "text-embedding-3-small"
+k = 3
+cutoff = 0.15
+max_tokens = 100
+
+[functions.basic_test.variants.dicl_cutoff_moderate]
+type = "experimental_dynamic_in_context_learning"
+model = "gpt-4o-mini-2024-07-18"
+embedding_model = "text-embedding-3-small"
+k = 3
+cutoff = 0.6
+max_tokens = 100
+
 [functions.model_fallback_test]
 type = "chat"
 system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"

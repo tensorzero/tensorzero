@@ -1355,3 +1355,338 @@ async fn test_dicl_json_request() {
         assert!(model_inference.get("ttft_ms").unwrap().is_null());
     }
 }
+
+/// Test that cutoff filters out all irrelevant examples, falling back to vanilla chat completion
+#[tokio::test]
+pub async fn test_dicl_cutoff_filters_all_examples() {
+    let clickhouse = get_clickhouse().await;
+    let episode_id = Uuid::now_v7();
+    let variant_name = "dicl_cutoff_strict";
+    let function_name = "basic_test";
+
+    // Delete any existing examples for this function and variant
+    let delete_query = format!(
+        "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
+    );
+    clickhouse
+        .run_query_synchronous_no_params(delete_query)
+        .await
+        .unwrap();
+
+    // Insert geography examples (countries and capitals)
+    let mut tasks = Vec::new();
+
+    let input = ResolvedInput {
+        system: Some(json!({"assistant_name": "Dr. Mehta"})),
+        messages: vec![ResolvedInputMessage {
+            role: Role::User,
+            content: vec![ResolvedInputMessageContent::Text {
+                text: "What is the capital of France?".to_string(),
+            }],
+        }],
+    };
+    let output: Vec<ContentBlockChatOutput> = vec!["Paris".to_string().into()];
+    let output_string = serde_json::to_string(&output).unwrap();
+    tasks.push(embed_insert_example(
+        &clickhouse,
+        input,
+        output_string,
+        function_name,
+        variant_name,
+    ));
+
+    let input = ResolvedInput {
+        system: Some(json!({"assistant_name": "Dr. Mehta"})),
+        messages: vec![ResolvedInputMessage {
+            role: Role::User,
+            content: vec![ResolvedInputMessageContent::Text {
+                text: "What is the capital of Germany?".to_string(),
+            }],
+        }],
+    };
+    let output: Vec<ContentBlockChatOutput> = vec!["Berlin".to_string().into()];
+    let output_string = serde_json::to_string(&output).unwrap();
+    tasks.push(embed_insert_example(
+        &clickhouse,
+        input,
+        output_string,
+        function_name,
+        variant_name,
+    ));
+
+    let input = ResolvedInput {
+        system: Some(json!({"assistant_name": "Dr. Mehta"})),
+        messages: vec![ResolvedInputMessage {
+            role: Role::User,
+            content: vec![ResolvedInputMessageContent::Text {
+                text: "What is the capital of Italy?".to_string(),
+            }],
+        }],
+    };
+    let output: Vec<ContentBlockChatOutput> = vec!["Rome".to_string().into()];
+    let output_string = serde_json::to_string(&output).unwrap();
+    tasks.push(embed_insert_example(
+        &clickhouse,
+        input,
+        output_string,
+        function_name,
+        variant_name,
+    ));
+
+    // Join all tasks and wait for them to complete
+    futures::future::join_all(tasks).await;
+
+    // Wait for 1 second for ClickHouse to process
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Query about a completely unrelated topic (programming/software)
+    // The cutoff should filter out all geography examples due to high cosine distance
+    let payload = json!({
+        "function_name": function_name,
+        "variant_name": variant_name,
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "Dr. Mehta"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What programming language is used for web development?"
+                }
+            ]
+        },
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Sleep to allow time for data to be inserted into ClickHouse
+    sleep(Duration::from_secs(1)).await;
+
+    // Check the ModelInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+    assert_eq!(result.len(), 2); // embedding + chat completion
+
+    for model_inference in result {
+        let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
+        let input_messages = model_inference
+            .get("input_messages")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
+
+        match model_name {
+            "gpt-4o-mini-2024-07-18" => {
+                // When all examples are filtered, should behave like vanilla chat completion
+                // This means short input_messages (1-2 messages, not 7+ with examples)
+                assert!(
+                    input_messages.len() <= 2,
+                    "Expected short input_messages for vanilla chat completion, got {}",
+                    input_messages.len()
+                );
+
+                // System should always contain DICL system instructions
+                let system = model_inference.get("system").unwrap().as_str().unwrap();
+                assert!(system.contains("learning by induction"));
+            }
+            "text-embedding-3-small" => {
+                // The embedding call should have 1 input message
+                assert_eq!(input_messages.len(), 1);
+            }
+            _ => {
+                panic!("Unexpected model: {model_name}");
+            }
+        }
+    }
+}
+
+/// Test that cutoff keeps relevant examples when cosine distance is below threshold
+#[tokio::test]
+pub async fn test_dicl_cutoff_keeps_relevant_examples() {
+    let clickhouse = get_clickhouse().await;
+    let episode_id = Uuid::now_v7();
+    let variant_name = "dicl_cutoff_moderate";
+    let function_name = "basic_test";
+
+    // Delete any existing examples for this function and variant
+    let delete_query = format!(
+        "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
+    );
+    clickhouse
+        .run_query_synchronous_no_params(delete_query)
+        .await
+        .unwrap();
+
+    // Insert Pinocchio lying examples (similar to test_dicl_inference_request_simple)
+    let mut tasks = Vec::new();
+
+    let input = ResolvedInput {
+        system: Some(json!({"assistant_name": "Pinocchio"})),
+        messages: vec![ResolvedInputMessage {
+            role: Role::User,
+            content: vec![ResolvedInputMessageContent::Text {
+                text: "What the capital city of India?".to_string(),
+            }],
+        }],
+    };
+    let output: Vec<ContentBlockChatOutput> =
+        vec!["Ahmedabad (nose grows 3 inches)".to_string().into()];
+    let output_string = serde_json::to_string(&output).unwrap();
+    tasks.push(embed_insert_example(
+        &clickhouse,
+        input,
+        output_string,
+        function_name,
+        variant_name,
+    ));
+
+    let input = ResolvedInput {
+        system: Some(json!({"assistant_name": "Pinocchio"})),
+        messages: vec![ResolvedInputMessage {
+            role: Role::User,
+            content: vec![ResolvedInputMessageContent::Text {
+                text: "What is an example of a computationally hard problem?".to_string(),
+            }],
+        }],
+    };
+    let output: Vec<ContentBlockChatOutput> = vec![
+        "Finding the median of an unsorted list of numbers (nose grows 4 inches)"
+            .to_string()
+            .into(),
+    ];
+    let output_string = serde_json::to_string(&output).unwrap();
+    tasks.push(embed_insert_example(
+        &clickhouse,
+        input,
+        output_string,
+        function_name,
+        variant_name,
+    ));
+
+    let input = ResolvedInput {
+        system: Some(json!({"assistant_name": "Pinocchio"})),
+        messages: vec![ResolvedInputMessage {
+            role: Role::User,
+            content: vec![ResolvedInputMessageContent::Text {
+                text: "Who wrote Lord of the Rings?".to_string(),
+            }],
+        }],
+    };
+    let output: Vec<ContentBlockChatOutput> =
+        vec!["J.K. Rowling (nose grows 5 inches)".to_string().into()];
+    let output_string = serde_json::to_string(&output).unwrap();
+    tasks.push(embed_insert_example(
+        &clickhouse,
+        input,
+        output_string,
+        function_name,
+        variant_name,
+    ));
+
+    // Join all tasks and wait for them to complete
+    futures::future::join_all(tasks).await;
+
+    // Wait for 1 second for ClickHouse to process
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Query about a similar topic (Harry Potter author, similar to Lord of the Rings question)
+    // The cutoff=0.6 should keep relevant examples
+    let payload = json!({
+        "function_name": function_name,
+        "variant_name": variant_name,
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "Pinocchio"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Who was the author of the Harry Potter series?"
+                }
+            ]
+        },
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Sleep to allow time for data to be inserted into ClickHouse
+    sleep(Duration::from_secs(1)).await;
+
+    // Check the ModelInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+    assert_eq!(result.len(), 2); // embedding + chat completion
+
+    for model_inference in result {
+        let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
+        let input_messages = model_inference
+            .get("input_messages")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
+
+        match model_name {
+            "gpt-4o-mini-2024-07-18" => {
+                // When relevant examples are kept, should have DICL behavior with examples
+                // This means long input_messages (7 messages: 3 examples * 2 + 1 query)
+                assert_eq!(
+                    input_messages.len(),
+                    7,
+                    "Expected 7 input_messages with DICL examples, got {}",
+                    input_messages.len()
+                );
+
+                // System should contain DICL instructions
+                let system = model_inference.get("system").unwrap().as_str().unwrap();
+                assert!(system.contains("learning by induction"));
+            }
+            "text-embedding-3-small" => {
+                // The embedding call should have 1 input message
+                assert_eq!(input_messages.len(), 1);
+            }
+            _ => {
+                panic!("Unexpected model: {model_name}");
+            }
+        }
+    }
+}
