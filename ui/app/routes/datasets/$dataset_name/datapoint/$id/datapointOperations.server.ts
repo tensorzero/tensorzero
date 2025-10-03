@@ -48,9 +48,8 @@ function transformOutputForTensorZero(
 
 /**
  * Transforms a chat datapoint for submission to the TensorZero client.
- * Generates a new UUID and marks the datapoint as custom.
  */
-function transformChatDatapoint(datapoint: ParsedChatInferenceDatapointRow): Datapoint {
+function transformChatDatapointForUpdateRequest(datapoint: ParsedChatInferenceDatapointRow): Datapoint {
   const transformed: Datapoint = {
     function_name: datapoint.function_name,
     id: datapoint.id,
@@ -70,9 +69,8 @@ function transformChatDatapoint(datapoint: ParsedChatInferenceDatapointRow): Dat
 
 /**
  * Transforms a JSON datapoint for submission to the TensorZero client.
- * Generates a new UUID and marks the datapoint as custom.
  */
-function transformJsonDatapoint(datapoint: ParsedJsonInferenceDatapointRow): Datapoint {
+function transformJsonDatapointForUpdateRequest(datapoint: ParsedJsonInferenceDatapointRow): Datapoint {
   const transformed: Datapoint = {
     function_name: datapoint.function_name,
     id: datapoint.id,
@@ -132,9 +130,9 @@ export async function saveDatapoint(params: {
     if (!("output_schema" in parsedFormData)) {
       throw new Error(`Json datapoint is missing output_schema`);
     }
-    datapoint = transformJsonDatapoint(parsedFormData as ParsedJsonInferenceDatapointRow);
+    datapoint = transformJsonDatapointForUpdateRequest(parsedFormData as ParsedJsonInferenceDatapointRow);
   } else if (functionType === "chat") {
-    datapoint = transformChatDatapoint(parsedFormData as ParsedChatInferenceDatapointRow);
+    datapoint = transformChatDatapointForUpdateRequest(parsedFormData as ParsedChatInferenceDatapointRow);
   } else {
     throw new Error(`Invalid function type: ${functionType}`);
   }
