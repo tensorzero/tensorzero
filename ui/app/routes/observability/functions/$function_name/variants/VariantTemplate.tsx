@@ -3,27 +3,13 @@ import {
   SnippetLayout,
   SnippetContent,
   SnippetTabs,
-  type SnippetTab,
   SnippetMessage,
 } from "~/components/layout/SnippetLayout";
 import { TextMessage } from "~/components/layout/SnippetContent";
+import { Badge } from "~/components/ui/badge";
 
 interface VariantTemplateProps {
   variantConfig: VariantConfig;
-}
-
-// Create a template tab with appropriate indicator based on content
-function createTemplateTab(
-  id: string,
-  label: string,
-  content?: string,
-  emptyMessage?: string,
-): SnippetTab & { emptyMessage?: string } {
-  return {
-    id,
-    label,
-    emptyMessage,
-  };
 }
 
 export default function VariantTemplate({
@@ -64,13 +50,25 @@ export default function VariantTemplate({
     }
 
     // Create tabs for each template
-    const tabs = Object.keys(templates).map((name) => {
-      return {
-        id: name,
-        label: name,
-        emptyMessage: "The template is empty.",
-      };
-    });
+    const tabs = Object.entries(variantConfig.templates).map(
+      ([name, templateData]) => {
+        const isLegacy = templateData?.legacy_definition === true;
+        return {
+          id: name,
+          label: (
+            <div className="flex items-center gap-2">
+              <span>{name}</span>
+              {isLegacy && (
+                <Badge className="bg-yellow-600 px-1 py-0 text-[10px] text-white">
+                  Legacy
+                </Badge>
+              )}
+            </div>
+          ),
+          emptyMessage: "The template is empty.",
+        };
+      },
+    );
 
     return (
       <SnippetLayout>
@@ -99,12 +97,11 @@ export default function VariantTemplate({
     const content = variantConfig.system_instructions;
 
     const tabs = [
-      createTemplateTab(
-        "system_instructions",
-        "System Instructions",
-        content,
-        "No system instructions defined.",
-      ),
+      {
+        id: "system_instructions",
+        label: "System Instructions",
+        emptyMessage: "No system instructions defined.",
+      },
     ];
 
     return (

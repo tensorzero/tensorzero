@@ -221,6 +221,54 @@ export const MixedPopulatedAndEmpty: Story = {
   },
 };
 
+export const MixedLegacyAndCustom: Story = {
+  args: {
+    variantConfig: {
+      type: "chat_completion",
+      weight: 1.0,
+      model: "gpt-4o-mini",
+      templates: {
+        system: {
+          template: {
+            path: "system.minijinja",
+            contents: "You are a helpful AI assistant.",
+          },
+          schema: null,
+          legacy_definition: true,
+        },
+        greeting_template: {
+          template: {
+            path: "greeting.minijinja",
+            contents: "Hello {{ name }}!",
+          },
+          schema: null,
+          legacy_definition: false,
+        },
+        analysis_prompt: {
+          template: {
+            path: "analysis.minijinja",
+            contents: "Analyze: {{ data }}",
+          },
+          schema: null,
+          legacy_definition: false,
+        },
+      },
+      temperature: 0.7,
+      top_p: null,
+      max_tokens: 1024,
+      presence_penalty: null,
+      frequency_penalty: null,
+      seed: null,
+      stop_sequences: null,
+      json_mode: null,
+      retries: {
+        num_retries: 3,
+        max_delay_s: 10,
+      },
+    } as VariantConfig,
+  },
+};
+
 export const DiclVariant: Story = {
   args: {
     variantConfig: {

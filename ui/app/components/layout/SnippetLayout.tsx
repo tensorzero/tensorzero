@@ -150,7 +150,7 @@ export function SnippetMessage({
 
 export interface SnippetTab {
   id: string;
-  label: string;
+  label: string | ReactNode;
   content?: ReactNode;
   indicator?: "none" | "empty" | "content" | "fail" | "warning";
 }

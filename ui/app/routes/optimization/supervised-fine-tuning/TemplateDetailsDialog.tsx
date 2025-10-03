@@ -7,6 +7,7 @@ import {
   DialogTrigger,
 } from "~/components/ui/dialog";
 import { CodeEditor } from "~/components/ui/code-editor";
+import { Badge } from "~/components/ui/badge";
 import type { ChatCompletionConfig } from "tensorzero-node";
 
 interface TemplateDetailsDialogProps {
@@ -41,11 +42,19 @@ export function TemplateDetailsDialog({
                     Object.entries(
                       chatCompletionVariants[variant].templates,
                     ).map(([templateName, templateData]) => {
+                      const isLegacy = templateData?.legacy_definition === true;
                       return (
                         <div key={templateName} className="space-y-2">
-                          <h4 className="font-mono leading-none font-medium">
-                            {templateName}
-                          </h4>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-mono leading-none font-medium">
+                              {templateName}
+                            </h4>
+                            {isLegacy && (
+                              <Badge className="bg-yellow-600 px-1 py-0 text-[10px] text-white">
+                                Legacy
+                              </Badge>
+                            )}
+                          </div>
                           {templateData?.template ? (
                             <CodeEditor
                               value={templateData.template.contents}
