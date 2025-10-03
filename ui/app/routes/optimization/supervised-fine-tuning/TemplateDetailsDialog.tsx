@@ -8,6 +8,12 @@ import {
 } from "~/components/ui/dialog";
 import { CodeEditor } from "~/components/ui/code-editor";
 import { Badge } from "~/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 import type { ChatCompletionConfig } from "tensorzero-node";
 
 interface TemplateDetailsDialogProps {
@@ -50,9 +56,34 @@ export function TemplateDetailsDialog({
                               {templateName}
                             </h4>
                             {isLegacy && (
-                              <Badge className="bg-yellow-600 px-1 py-0 text-[10px] text-white">
-                                Legacy
-                              </Badge>
+                              <TooltipProvider delayDuration={200}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge className="bg-yellow-600 px-1 py-0 text-[10px] text-white">
+                                      Legacy
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent
+                                    side="top"
+                                    className="max-w-xs p-2"
+                                  >
+                                    <div className="text-xs">
+                                      Please migrate from{" "}
+                                      <code>{templateName}_template</code> to{" "}
+                                      <code>templates.{templateName}.path</code>
+                                      .{" "}
+                                      <a
+                                        href="https://www.tensorzero.com/docs/gateway/create-a-prompt-template#migrate-from-legacy-prompt-templates"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="underline hover:text-gray-300"
+                                      >
+                                        Read more
+                                      </a>
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             )}
                           </div>
                           {templateData?.template ? (
