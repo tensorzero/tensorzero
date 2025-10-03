@@ -1,17 +1,29 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Chip, { type ChipProps } from "~/components/ui/Chip";
 import { Input } from "~/components/ui/input";
 import { EditButton } from "../utils/EditButton";
 import { CancelButton } from "../utils/CancelButton";
 import { SaveButton } from "../utils/SaveButton";
 
-interface EditableChipProps extends ChipProps {
-  // EditableChip-specific prop
+/**
+ * EditableChipProps extends ChipProps and adds EditableChip-specific props.
+ *
+ * @extends ChipProps
+ * @property {string} defaultLabel - The label to render if the label is nullish. If not provided, renders an empty string if label is empty.
+ * @property {function} onConfirm - The callback function for confirmation.
+ */
+interface EditableChipProps extends Omit<ChipProps, "label"> {
+  label: string | null | undefined;
+  defaultLabel?: string;
   onConfirm?: (newValue: string) => void | Promise<void>;
 }
 
+/**
+ * EditableChip is a component that allows the user to edit the label of a Chip.
+ */
 export default function EditableChip({
   onConfirm,
+  defaultLabel,
   ...chipProps
 }: EditableChipProps) {
   const { label, font = "sans" } = chipProps;
@@ -19,11 +31,18 @@ export default function EditableChip({
   const [editValue, setEditValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  const labelToRender = useMemo(() => {
+    if (label !== null && label !== undefined) {
+      return label;
+    }
+    if (defaultLabel !== null && defaultLabel !== undefined) {
+      return defaultLabel;
+    }
+    return "";
+  }, [label, defaultLabel]);
+
   const handleEditClick = () => {
-    // TODO: distinguish between empty and default label.
-    // Callsite is <EditableChip label={datapoint.name || "-"} />, and if datapoint.name is empty,
-    // we don't want to start with "-" as the edit value.
-    setEditValue(label);
+    setEditValue(label || "");
     setIsEditing(true);
   };
 
@@ -79,7 +98,7 @@ export default function EditableChip({
 
   return (
     <div className="flex items-center gap-2">
-      <Chip {...chipProps} />
+      <Chip {...chipProps} label={labelToRender} />
       {onConfirm && (
         <EditButton
           className="size-5"
