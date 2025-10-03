@@ -42,6 +42,14 @@ export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
   return (
     <BasicInfoLayout>
       <BasicInfoItem>
+        <BasicInfoItemTitle>Name</BasicInfoItemTitle>
+        <BasicInfoItemContent>
+          {/* TODO: support editing names */}
+          <Chip label={datapoint.name || "-"} font="mono" />
+        </BasicInfoItemContent>
+      </BasicInfoItem>
+
+      <BasicInfoItem>
         <BasicInfoItemTitle>Dataset</BasicInfoItemTitle>
         <BasicInfoItemContent>
           <Chip
