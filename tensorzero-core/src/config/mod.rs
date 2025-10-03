@@ -1,4 +1,4 @@
-use crate::experimentation::ExperimentationConfig;
+use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
 ///            IT IS MEANT FOR INTERNAL USE ONLY.
@@ -1183,7 +1183,7 @@ pub struct UninitializedFunctionConfigChat {
     parallel_tool_calls: Option<bool>,
     #[serde(default)]
     description: Option<String>,
-    experimentation: Option<ExperimentationConfig>,
+    experimentation: Option<UninitializedExperimentationConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1198,7 +1198,7 @@ pub struct UninitializedFunctionConfigJson {
     output_schema: Option<ResolvedTomlPath>, // schema will default to {} if not specified
     #[serde(default)]
     description: Option<String>,
-    experimentation: Option<ExperimentationConfig>,
+    experimentation: Option<UninitializedExperimentationConfig>,
 }
 
 /// Holds all of the schemas used by a chat completion function.
@@ -1312,6 +1312,7 @@ impl UninitializedFunctionConfig {
                 }
                 let experimentation = params
                     .experimentation
+                    .map(UninitializedExperimentationConfig::load)
                     .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
                 Ok(FunctionConfig::Chat(FunctionConfigChat {
                     variants,
@@ -1406,6 +1407,7 @@ impl UninitializedFunctionConfig {
                 }
                 let experimentation = params
                     .experimentation
+                    .map(UninitializedExperimentationConfig::load)
                     .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
                 Ok(FunctionConfig::Json(FunctionConfigJson {
                     variants,
