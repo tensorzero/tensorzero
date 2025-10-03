@@ -7,12 +7,14 @@ import {
   BasicInfoItemContent,
 } from "~/components/layout/BasicInfoLayout";
 import Chip from "~/components/ui/Chip";
+import EditableChip from "~/components/ui/EditableChip";
 import { Calendar, Dataset } from "~/components/icons/Icons";
 import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
 import { getFunctionTypeIcon } from "~/utils/icon";
 
 interface BasicInfoProps {
   datapoint: ParsedDatasetRow;
+  onRenameDatapoint?: (newName: string) => void | Promise<void>;
 }
 
 // Create timestamp tooltip component
@@ -29,7 +31,10 @@ const createTimestampTooltip = (timestamp: string | number | Date) => {
   );
 };
 
-export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
+export default function DatapointBasicInfo({
+  datapoint,
+  onRenameDatapoint,
+}: BasicInfoProps) {
   const function_config = useFunctionConfig(datapoint.function_name);
   const type = function_config?.type || "unknown";
 
@@ -44,8 +49,12 @@ export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
       <BasicInfoItem>
         <BasicInfoItemTitle>Name</BasicInfoItemTitle>
         <BasicInfoItemContent>
-          {/* TODO: support editing names */}
-          <Chip label={datapoint.name || "-"} font="mono" />
+          <EditableChip
+            label={datapoint.name}
+            defaultLabel="—"
+            font="mono"
+            onConfirm={onRenameDatapoint}
+          />
         </BasicInfoItemContent>
       </BasicInfoItem>
 
