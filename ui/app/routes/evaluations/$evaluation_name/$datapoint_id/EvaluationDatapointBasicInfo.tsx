@@ -39,7 +39,8 @@ export default function BasicInfo({
         <BasicInfoItemTitle>Name</BasicInfoItemTitle>
         <BasicInfoItemContent>
           <EditableChip
-            label={task_name || "-"}
+            label={task_name}
+            defaultLabel="—"
             font="mono"
             onConfirm={onRenameTask}
           />

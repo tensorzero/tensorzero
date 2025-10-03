@@ -56,7 +56,8 @@ export default function DatapointBasicInfo({
         <BasicInfoItemTitle>Name</BasicInfoItemTitle>
         <BasicInfoItemContent>
           <EditableChip
-            label={datapoint.name || "-"}
+            label={datapoint.name}
+            defaultLabel="—"
             font="mono"
             onConfirm={onRenameDatapoint}
           />
