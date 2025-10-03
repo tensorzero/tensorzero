@@ -97,6 +97,7 @@ mod tests {
             },
             dataset_name: "test".to_string(),
             function_name: "test".to_string(),
+            name: None,
             episode_id: Some(Uuid::now_v7()),
             output: Some(vec![ContentBlockChatOutput::Text(Text {
                 text: "hello world".to_string(),
@@ -156,6 +157,7 @@ mod tests {
                     }],
                 }],
             },
+            name: None,
             dataset_name: "test".to_string(),
             function_name: "test".to_string(),
             episode_id: Some(Uuid::now_v7()),
@@ -188,6 +190,7 @@ mod tests {
             },
             dataset_name: "test".to_string(),
             function_name: "test".to_string(),
+            name: None,
             output_schema: json!({
                 "type": "object",
                 "properties": {
@@ -259,6 +262,7 @@ mod tests {
             },
             dataset_name: "test".to_string(),
             function_name: "test".to_string(),
+            name: None,
             episode_id: Some(Uuid::now_v7()),
             output: None,
             output_schema: json!({
@@ -293,6 +297,7 @@ mod tests {
             },
             dataset_name: "test".to_string(),
             function_name: "test".to_string(),
+            name: None,
             episode_id: Some(Uuid::now_v7()),
             output: Some(JsonInferenceOutput {
                 parsed: None,

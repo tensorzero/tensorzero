@@ -12,7 +12,6 @@ use serde_json::{json, Value};
 use std::borrow::Cow;
 use std::io::Write;
 use std::pin::Pin;
-use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
 use tracing::instrument;
@@ -72,10 +71,6 @@ lazy_static! {
     };
 }
 
-pub fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("OPENAI_API_KEY".to_string())
-}
-
 const PROVIDER_NAME: &str = "OpenAI";
 pub const PROVIDER_TYPE: &str = "openai";
 
@@ -90,33 +85,24 @@ pub struct OpenAIProvider {
     use_responses: bool,
 }
 
-pub static DEFAULT_CREDENTIALS: OnceLock<OpenAICredentials> = OnceLock::new();
-
 impl OpenAIProvider {
     pub fn new(
         model_name: String,
         api_base: Option<Url>,
-        api_key_location: Option<CredentialLocation>,
+        credentials: OpenAICredentials,
         use_responses: bool,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-
+    ) -> Self {
         // Check if the api_base has the `/chat/completions` suffix and warn if it does
         if let Some(api_base) = &api_base {
             check_api_base_suffix(api_base);
         }
 
-        Ok(OpenAIProvider {
+        OpenAIProvider {
             model_name,
             api_base,
             credentials,
             use_responses,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {
@@ -4226,34 +4212,30 @@ mod tests {
     #[traced_test]
     fn test_openai_provider_new_api_base_check() {
         let model_name = "test-model".to_string();
-        let api_key_location = Some(CredentialLocation::None);
 
         // Valid cases (should not warn)
         let _ = OpenAIProvider::new(
             model_name.clone(),
             Some(Url::parse("http://localhost:1234/v1/").unwrap()),
-            api_key_location.clone(),
+            OpenAICredentials::None,
             false,
-        )
-        .unwrap();
+        );
 
         let _ = OpenAIProvider::new(
             model_name.clone(),
             Some(Url::parse("http://localhost:1234/v1").unwrap()),
-            api_key_location.clone(),
+            OpenAICredentials::None,
             false,
-        )
-        .unwrap();
+        );
 
         // Invalid cases (should warn)
         let invalid_url_1 = Url::parse("http://localhost:1234/chat/completions").unwrap();
         let _ = OpenAIProvider::new(
             model_name.clone(),
             Some(invalid_url_1.clone()),
-            api_key_location.clone(),
+            OpenAICredentials::None,
             false,
-        )
-        .unwrap();
+        );
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_1.as_ref()));
 
@@ -4261,10 +4243,9 @@ mod tests {
         let _ = OpenAIProvider::new(
             model_name.clone(),
             Some(invalid_url_2.clone()),
-            api_key_location.clone(),
+            OpenAICredentials::None,
             false,
-        )
-        .unwrap();
+        );
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_2.as_ref()));
     }

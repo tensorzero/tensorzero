@@ -513,19 +513,19 @@ model_name = "deepseek-ai/DeepSeek-R1"
 
 ## OpenRouter
 
-[models.gpt_4_1_mini_openrouter]
+[models.gpt_4_o_mini_openrouter]
 routing = ["openrouter"]
 
-[models.gpt_4_1_mini_openrouter.providers.openrouter]
+[models.gpt_4_o_mini_openrouter.providers.openrouter]
 type = "openrouter"
-model_name = "openai/gpt-4.1-mini"
+model_name = "openai/gpt-4o-mini"
 
-[models.gpt_4_1_mini_openrouter_dynamic]
+[models.gpt_4_o_mini_openrouter_dynamic]
 routing = ["openrouter"]
 
-[models.gpt_4_1_mini_openrouter_dynamic.providers.openrouter]
+[models.gpt_4_o_mini_openrouter_dynamic.providers.openrouter]
 type = "openrouter"
-model_name = "openai/gpt-4.1-mini"
+model_name = "openai/gpt-4o-mini"
 api_key_location = "dynamic::openrouter_api_key"
 
 [functions.inference_ttft_chat]
@@ -780,9 +780,7 @@ routing = ["slow", "openai"]
 [embedding_models.fallback.providers.slow]
 type = "dummy"
 model_name = "slow"
-
-[embedding_models.fallback.providers.slow.timeouts]
-non_streaming = { total_ms = 1000 }
+timeout_ms = 1000
 
 [embedding_models.fallback.providers.openai]
 type = "openai"
@@ -790,9 +788,7 @@ model_name = "text-embedding-3-small"
 
 [embedding_models.timeout]
 routing = ["slow"]
-
-[embedding_models.timeout.timeouts]
-non_streaming = { total_ms = 1000 }
+timeout_ms = 1000
 
 [embedding_models.timeout.providers.slow]
 type = "dummy"
@@ -1414,20 +1410,20 @@ extra_body = [{ pointer = "/reasoning_effort", value = "low" }]
 
 [functions.basic_test.variants.openrouter]
 type = "chat_completion"
-model = "gpt_4_1_mini_openrouter"
+model = "gpt_4_o_mini_openrouter"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.openrouter-extra-body]
 type = "chat_completion"
-model = "gpt_4_1_mini_openrouter"
+model = "gpt_4_o_mini_openrouter"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.openrouter-extra-headers]
 type = "chat_completion"
-model = "gpt_4_1_mini_openrouter"
+model = "gpt_4_o_mini_openrouter"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_headers = [
@@ -1436,13 +1432,13 @@ extra_headers = [
 
 [functions.basic_test.variants.openrouter-dynamic]
 type = "chat_completion"
-model = "gpt_4_1_mini_openrouter_dynamic"
+model = "gpt_4_o_mini_openrouter_dynamic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.openrouter-shorthand]
 type = "chat_completion"
-model = "openrouter::openai/gpt-4.1"
+model = "openrouter::openai/gpt-4o-mini"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -2156,7 +2152,7 @@ json_mode = "strict"
 
 [functions.json_success.variants.openrouter]
 type = "chat_completion"
-model = "gpt_4_1_mini_openrouter"
+model = "gpt_4_o_mini_openrouter"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
@@ -2164,7 +2160,7 @@ max_tokens = 100
 
 [functions.json_success.variants.openrouter-implicit]
 type = "chat_completion"
-model = "gpt_4_1_mini_openrouter"
+model = "gpt_4_o_mini_openrouter"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
@@ -2172,7 +2168,7 @@ max_tokens = 100
 
 [functions.json_success.variants.openrouter-strict]
 type = "chat_completion"
-model = "gpt_4_1_mini_openrouter"
+model = "gpt_4_o_mini_openrouter"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "strict"
@@ -2848,7 +2844,7 @@ json_mode = "strict"
 
 [functions.dynamic_json.variants.openrouter]
 type = "chat_completion"
-model = "gpt_4_1_mini_openrouter"
+model = "gpt_4_o_mini_openrouter"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
@@ -2856,7 +2852,7 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.openrouter-strict]
 type = "chat_completion"
-model = "gpt_4_1_mini_openrouter"
+model = "gpt_4_o_mini_openrouter"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 max_tokens = 100
@@ -2864,7 +2860,7 @@ json_mode = "strict"
 
 [functions.dynamic_json.variants.openrouter-implicit]
 type = "chat_completion"
-model = "gpt_4_1_mini_openrouter"
+model = "gpt_4_o_mini_openrouter"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
@@ -3223,7 +3219,7 @@ max_tokens = 1000
 
 [functions.weather_helper.variants.openrouter]
 type = "chat_completion"
-model = "gpt_4_1_mini_openrouter"
+model = "gpt_4_o_mini_openrouter"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -3282,7 +3278,7 @@ max_tokens = 1000
 [functions.weather_helper_parallel.variants.openrouter]
 type = "chat_completion"
 weight = 1
-model = "gpt_4_1_mini_openrouter"
+model = "gpt_4_o_mini_openrouter"
 system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 
 [functions.weather_helper_parallel.variants.anthropic]

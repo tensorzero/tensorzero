@@ -23,6 +23,7 @@ const config: Config = {
         flush_interval_ms: 100n,
         max_rows: 1000,
       },
+      disable_automatic_migrations: false,
     },
     export: {
       otlp: {
@@ -44,11 +45,30 @@ const config: Config = {
   },
   object_store_info: { kind: { type: "disabled" } },
   provider_types: {
-    gcp_vertex_gemini: null,
+    anthropic: { defaults: { credential_location: "" } },
+    azure: { defaults: { credential_location: "" } },
+    deepseek: { defaults: { credential_location: "" } },
+    fireworks: { defaults: { credential_location: "" } },
+    gcp_vertex_gemini: { batch: null, defaults: { credential_location: "" } },
+    gcp_vertex_anthropic: {
+      batch: null,
+      defaults: { credential_location: "" },
+    },
+    google_ai_studio_gemini: { defaults: { credential_location: "" } },
+    groq: { defaults: { credential_location: "" } },
+    hyperbolic: { defaults: { credential_location: "" } },
+    mistral: { defaults: { credential_location: "" } },
+    openai: { defaults: { credential_location: "" } },
+    openrouter: { defaults: { credential_location: "" } },
+    sglang: { defaults: { credential_location: "" } },
+    tgi: { defaults: { credential_location: "" } },
+    together: { defaults: { credential_location: "" } },
+    vllm: { defaults: { credential_location: "" } },
+    xai: { defaults: { credential_location: "" } },
   },
   optimizers: {},
-  models: {},
-  embedding_models: {},
+  models: { table: {} },
+  embedding_models: { table: {} },
   functions: {},
   metrics: {
     accuracy: {

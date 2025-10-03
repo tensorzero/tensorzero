@@ -207,14 +207,18 @@ export default function EvaluationDatapointPage({
     );
   }
   const outputsToDisplay = [
-    {
-      id: "Reference",
-      output: consolidatedEvaluationResults[0].reference_output,
-      metrics: [],
-      variant_name: "Reference",
-      inferenceId: null,
-      episodeId: null,
-    },
+    ...(consolidatedEvaluationResults[0].reference_output !== null
+      ? [
+          {
+            id: "Reference",
+            output: consolidatedEvaluationResults[0].reference_output,
+            metrics: [],
+            variant_name: "Reference",
+            inferenceId: null,
+            episodeId: null,
+          },
+        ]
+      : []),
     ...consolidatedEvaluationResults.map((result) => ({
       id: result.evaluation_run_id,
       inferenceId: result.inference_id,
@@ -242,6 +246,7 @@ export default function EvaluationDatapointPage({
             evaluation_name={evaluation_name}
             evaluation_config={evaluation_config}
             dataset_name={consolidatedEvaluationResults[0].dataset_name}
+            datapoint_name={consolidatedEvaluationResults[0].name}
           />
           <EvalRunSelector
             evaluationName={evaluation_name}

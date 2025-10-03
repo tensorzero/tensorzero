@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::sync::OnceLock;
 
 use futures::{StreamExt, TryStreamExt};
 use secrecy::{ExposeSecret, SecretString};
@@ -25,9 +24,7 @@ use crate::inference::types::{
     ProviderInferenceResponse,
 };
 use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
-use crate::model::{
-    build_creds_caching_default, Credential, CredentialLocation, EndpointLocation, ModelProvider,
-};
+use crate::model::{Credential, EndpointLocation, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
@@ -84,21 +81,12 @@ impl AzureEndpoint {
     }
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<AzureCredentials> = OnceLock::new();
-
 impl AzureProvider {
     pub fn new(
         deployment_id: String,
         endpoint_location: EndpointLocation,
-        api_key_location: Option<CredentialLocation>,
+        credentials: AzureCredentials,
     ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-
         let endpoint = match endpoint_location {
             EndpointLocation::Static(url_str) => {
                 let url = Url::parse(&url_str).map_err(|e| {
@@ -183,10 +171,6 @@ impl AzureCredentials {
             .into()),
         }
     }
-}
-
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("AZURE_OPENAI_API_KEY".to_string())
 }
 
 impl InferenceProvider for AzureProvider {
@@ -1035,7 +1019,7 @@ mod tests {
                 AzureProvider::new(
                     "gpt-4.1-mini".to_string(),
                     EndpointLocation::Static("https://test.openai.azure.com".to_string()),
-                    None,
+                    AzureCredentials::None,
                 )
             })
             .await
@@ -1058,7 +1042,7 @@ mod tests {
                 AzureProvider::new(
                     "gpt-4.1-mini".to_string(),
                     EndpointLocation::Dynamic("azure_endpoint".to_string()),
-                    None,
+                    AzureCredentials::None,
                 )
             })
             .await

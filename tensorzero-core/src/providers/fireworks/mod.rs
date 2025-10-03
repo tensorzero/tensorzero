@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::OnceLock};
+use std::borrow::Cow;
 
 use crate::http::TensorzeroHttpClient;
 use crate::providers::openai::OpenAIMessagesConfig;
@@ -35,7 +35,7 @@ use crate::{
         },
         InferenceProvider,
     },
-    model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider},
+    model::{Credential, ModelProvider},
     tool::{ToolCall, ToolCallChunk},
 };
 
@@ -73,25 +73,17 @@ pub struct FireworksProvider {
     parse_think_blocks: bool,
 }
 
-pub static DEFAULT_CREDENTIALS: OnceLock<FireworksCredentials> = OnceLock::new();
-
 impl FireworksProvider {
     pub fn new(
         model_name: String,
-        api_key_location: Option<CredentialLocation>,
+        credentials: FireworksCredentials,
         parse_think_blocks: bool,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-        Ok(FireworksProvider {
+    ) -> Self {
+        FireworksProvider {
             model_name,
             credentials,
             parse_think_blocks,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {
@@ -148,10 +140,6 @@ impl FireworksCredentials {
             .into()),
         }
     }
-}
-
-pub fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("FIREWORKS_API_KEY".to_string())
 }
 
 /// Key differences between Fireworks and OpenAI inference:
