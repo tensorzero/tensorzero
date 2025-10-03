@@ -199,7 +199,9 @@ export class DatabaseClient {
     return JSON.parse(feedbackString) as FeedbackRow[];
   }
 
-  async queryFeedbackBoundsByTargetId(targetId: string): Promise<FeedbackBounds> {
+  async queryFeedbackBoundsByTargetId(
+    targetId: string,
+  ): Promise<FeedbackBounds> {
     const params = safeStringify({
       target_id: targetId,
     });
