@@ -1115,6 +1115,7 @@ impl Client {
                     tensorzero_core::endpoints::optimization::poll_optimization(
                         &gateway.handle.app_state.http_client,
                         job_handle,
+                        &gateway.handle.app_state.config.models.default_credentials,
                     )
                     .await
                     .map_err(err_to_http)

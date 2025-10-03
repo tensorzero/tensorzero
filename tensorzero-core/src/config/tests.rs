@@ -112,7 +112,7 @@ async fn test_config_from_toml_table_valid() {
         FunctionConfig::Chat(_) => panic!("Expected a JSON function"),
     }
 
-    assert_eq!(config.embedding_models.len(), 1);
+    assert_eq!(config.embedding_models.table.len(), 1);
 
     let embedding_model = config
         .embedding_models
