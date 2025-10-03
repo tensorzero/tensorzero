@@ -1470,7 +1470,7 @@ where
     }
 }
 
-// UpdateChatInferenceDatapointsReques is used in `update_datapoint_handler` to update an existing ChatInferenceDatapoint
+// UpdateChatInferenceDatapointRequest is used in `update_datapoint_handler` to update an existing ChatInferenceDatapoint
 // in place. It's not a partial update - the entire request is written to the database.
 //
 // TODO(shuyangli): this is currently being manually kept in sync with `ChatInferenceDatapoint`. Can we fix this?
@@ -1501,8 +1501,10 @@ pub struct UpdateChatInferenceDatapointRequest {
     pub name: Option<String>,
 }
 
-// UpdateJsonInferenceDatapointsRequest is used in `update_datapoint_handler` to update an existing ChatInferenceDatapoint
+// UpdateJsonInferenceDatapointRequest is used in `update_datapoint_handler` to update an existing JsonInferenceDatapoint
 // in place. It's not a partial update - the entire request is written to the database.
+//
+// TODO(shuyangli): this is currently being manually kept in sync with `JsonInferenceDatapoint`. Can we fix this?
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UpdateJsonInferenceDatapointRequest {
