@@ -4,12 +4,10 @@ import {
   pollForFeedbackItem,
   queryCommentFeedbackBoundsByTargetId,
   queryCommentFeedbackByTargetId,
-  queryFeedbackByTargetId,
   queryMetricsWithFeedback,
-  type BooleanMetricFeedbackRow,
   type CommentFeedbackRow,
-  type FeedbackRow,
 } from "./feedback";
+import { getDatabaseClient } from "./client.server";
 
 test("queryCommentFeedbackByTargetId", async () => {
   const target_id = "01942e26-4693-7e80-8591-47b98e25d721";
@@ -125,101 +123,6 @@ test("queryFeedbackBoundsByTargetId", async () => {
   });
 });
 
-test("queryFeedbackByTargetId", async () => {
-  const target_id = "01942e26-4693-7e80-8591-47b98e25d721";
-  const page_size = 10;
-
-  // Get first page
-  const firstPage = await queryFeedbackByTargetId({
-    target_id,
-    page_size,
-  });
-  expect(firstPage).toHaveLength(10);
-
-  // Get second page
-  const secondPage = await queryFeedbackByTargetId({
-    target_id,
-    before: firstPage[firstPage.length - 1].id,
-    page_size,
-  });
-  expect(secondPage).toHaveLength(10);
-
-  // Get third page
-  const thirdPage = await queryFeedbackByTargetId({
-    target_id,
-    before: secondPage[secondPage.length - 1].id,
-    page_size,
-  });
-  expect(thirdPage).toHaveLength(9);
-
-  // Check that all pages are sorted by id in descending order
-  const checkSorting = (feedback: FeedbackRow[]) => {
-    for (let i = 1; i < feedback.length; i++) {
-      expect(feedback[i - 1].id > feedback[i].id).toBe(true);
-    }
-  };
-
-  checkSorting(firstPage);
-  checkSorting(secondPage);
-  checkSorting(thirdPage);
-
-  // The last element should be a boolean metric (as it is the one that was overwritten)
-  const lastElement = thirdPage[
-    thirdPage.length - 1
-  ] as BooleanMetricFeedbackRow;
-  expect(lastElement.metric_name).toBe("solved");
-  expect(lastElement.value).toBe(false);
-
-  // The first element should be a boolean metric
-  const firstElement = firstPage[0] as BooleanMetricFeedbackRow;
-  expect(firstElement.metric_name).toBe("solved");
-  expect(firstElement.value).toBe(true);
-
-  // Check total number of items
-  expect(firstPage.length + secondPage.length + thirdPage.length).toBe(29);
-
-  const emptyFeedback = await queryFeedbackByTargetId({
-    target_id: "01942e26-4693-7e80-8591-47b98e25d711",
-    page_size: 10,
-  });
-  expect(emptyFeedback).toHaveLength(0);
-
-  // Test paging backwards from a specific ID
-  const startId = firstPage[0].id;
-  const firstBackwardPage = await queryFeedbackByTargetId({
-    target_id,
-    before: startId,
-    page_size,
-  });
-  expect(firstBackwardPage).toHaveLength(10);
-
-  const secondBackwardPage = await queryFeedbackByTargetId({
-    target_id,
-    before: firstBackwardPage[firstBackwardPage.length - 1].id,
-    page_size,
-  });
-  expect(secondBackwardPage).toHaveLength(10);
-
-  const thirdBackwardPage = await queryFeedbackByTargetId({
-    target_id,
-    before: secondBackwardPage[secondBackwardPage.length - 1].id,
-    page_size,
-  });
-  expect(thirdBackwardPage).toHaveLength(8);
-
-  // Check that backward pages are sorted by id in descending order
-  checkSorting(firstBackwardPage);
-  checkSorting(secondBackwardPage);
-  checkSorting(thirdBackwardPage);
-
-  // Check total number of items matches
-  expect(
-    firstBackwardPage.length +
-      secondBackwardPage.length +
-      thirdBackwardPage.length,
-  ).toBe(28);
-});
-
 describe("queryMetricsWithFeedback", () => {
   test("returns correct feedback counts for different metric types", async () => {
     // Test json function with multiple metric types
@@ -320,11 +223,14 @@ test("pollForFeedbackItem should find feedback when it exists", async () => {
   const targetId = "01942e26-4693-7e80-8591-47b98e25d721";
   const pageSize = 10;
 
+  const dbClient = await getDatabaseClient();
   // RUn the queryFeedbackByTargetId function to return feedback with the target ID
-  const originalQueryFeedback = await queryFeedbackByTargetId({
-    target_id: targetId,
-    page_size: pageSize,
-  });
+  const originalQueryFeedback = await dbClient.queryFeedbackByTargetId(
+    targetId,
+    undefined,
+    undefined,
+    pageSize,
+  );
 
   // Ensure we have feedback to test with
   expect(originalQueryFeedback.length).toBeGreaterThan(0);

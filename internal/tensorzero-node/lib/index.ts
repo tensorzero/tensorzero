@@ -9,6 +9,8 @@ import {
   InferenceResponse,
   EpisodeByIdRow,
   TableBoundsWithCount,
+  FeedbackRow,
+  FeedbackBounds,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
@@ -178,5 +180,40 @@ export class DatabaseClient {
   async queryEpisodeTableBounds(): Promise<TableBoundsWithCount> {
     const bounds = await this.nativeDatabaseClient.queryEpisodeTableBounds();
     return JSON.parse(bounds) as TableBoundsWithCount;
+  }
+
+  async queryFeedbackByTargetId(
+    targetId: string,
+    before?: string,
+    after?: string,
+    pageSize?: number,
+  ): Promise<FeedbackRow[]> {
+    const params = safeStringify({
+      target_id: targetId,
+      before,
+      after,
+      page_size: pageSize,
+    });
+    const feedbackString =
+      await this.nativeDatabaseClient.queryFeedbackByTargetId(params);
+    return JSON.parse(feedbackString) as FeedbackRow[];
+  }
+
+  async queryFeedbackBoundsByTargetId(targetId: string): Promise<FeedbackBounds> {
+    const params = safeStringify({
+      target_id: targetId,
+    });
+    const boundsString =
+      await this.nativeDatabaseClient.queryFeedbackBoundsByTargetId(params);
+    return JSON.parse(boundsString) as FeedbackBounds;
+  }
+
+  async countFeedbackByTargetId(targetId: string): Promise<number> {
+    const params = safeStringify({
+      target_id: targetId,
+    });
+    const countString =
+      await this.nativeDatabaseClient.countFeedbackByTargetId(params);
+    return JSON.parse(countString) as number;
   }
 }

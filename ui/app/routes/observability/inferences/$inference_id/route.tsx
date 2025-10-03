@@ -5,10 +5,9 @@ import {
 import {
   pollForFeedbackItem,
   queryDemonstrationFeedbackByInferenceId,
-  queryFeedbackBoundsByTargetId,
-  queryFeedbackByTargetId,
   queryLatestFeedbackIdByMetric,
 } from "~/utils/clickhouse/feedback";
+import { getDatabaseClient } from "~/utils/clickhouse/client.server";
 import type { Route } from "./+types/route";
 import {
   data,
@@ -78,6 +77,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   // --- Define all promises, conditionally choosing the feedback promise ---
 
+  const dbClient = await getDatabaseClient();
+
   const inferencePromise = queryInferenceById(inference_id);
   const modelInferencesPromise =
     queryModelInferencesByInferenceId(inference_id);
@@ -85,21 +86,20 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     inference_id,
     page_size: 1, // Only need to know if *any* exist
   });
-  const feedbackBoundsPromise = queryFeedbackBoundsByTargetId({
-    target_id: inference_id,
-  });
+  const feedbackBoundsPromise =
+    dbClient.queryFeedbackBoundsByTargetId(inference_id);
 
   // If there is a freshly inserted feedback, ClickHouse may take some time to
   // update the feedback table as it is eventually consistent.
   // In this case, we poll for the feedback item until it is found but eventually time out and log a warning.
   const feedbackDataPromise = newFeedbackId
     ? pollForFeedbackItem(inference_id, newFeedbackId, pageSize)
-    : queryFeedbackByTargetId({
-        target_id: inference_id,
-        before: beforeFeedback || undefined,
-        after: afterFeedback || undefined,
-        page_size: pageSize,
-      });
+    : dbClient.queryFeedbackByTargetId(
+        inference_id,
+        beforeFeedback || undefined,
+        afterFeedback || undefined,
+        pageSize,
+      );
 
   // --- Execute all promises concurrently ---
 

@@ -1,8 +1,11 @@
 use crate::db::{
-    clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args, EpisodeByIdRow,
-    FeedbackByVariant, TableBoundsWithCount,
+    clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args,
+    BooleanMetricFeedbackRow, CommentFeedbackRow, DemonstrationFeedbackRow, EpisodeByIdRow,
+    FeedbackBounds, FeedbackBoundsByType, FeedbackByVariant, FeedbackRow,
+    FloatMetricFeedbackRow, TableBounds, TableBoundsWithCount,
 };
 use async_trait::async_trait;
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
@@ -337,4 +340,617 @@ impl SelectQueries for ClickHouseConnectionInfo {
                 })
             })
     }
+
+    async fn query_feedback_by_target_id(
+        &self,
+        target_id: Uuid,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+        page_size: Option<u32>,
+    ) -> Result<Vec<FeedbackRow>, Error> {
+        if before.is_some() && after.is_some() {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: "Cannot specify both before and after in query_feedback_by_target_id"
+                    .to_string(),
+            }));
+        }
+
+        let page_size = page_size.unwrap_or(100).min(100);
+
+        // Query all 4 feedback tables in parallel
+        let (boolean_metrics, float_metrics, comment_feedback, demonstration_feedback) = tokio::join!(
+            self.query_boolean_metrics_by_target_id(target_id, before, after, page_size),
+            self.query_float_metrics_by_target_id(target_id, before, after, page_size),
+            self.query_comment_feedback_by_target_id(target_id, before, after, page_size),
+            self.query_demonstration_feedback_by_inference_id(target_id, before, after, page_size)
+        );
+
+        // Combine all feedback types into a single vector
+        let mut all_feedback: Vec<FeedbackRow> = Vec::new();
+        all_feedback.extend(boolean_metrics?.into_iter().map(FeedbackRow::Boolean));
+        all_feedback.extend(float_metrics?.into_iter().map(FeedbackRow::Float));
+        all_feedback.extend(comment_feedback?.into_iter().map(FeedbackRow::Comment));
+        all_feedback.extend(
+            demonstration_feedback?
+                .into_iter()
+                .map(FeedbackRow::Demonstration),
+        );
+
+        // Sort by id in descending order (UUIDv7 comparison)
+        all_feedback.sort_by(|a, b| {
+            let id_a = match a {
+                FeedbackRow::Boolean(f) => f.id,
+                FeedbackRow::Float(f) => f.id,
+                FeedbackRow::Comment(f) => f.id,
+                FeedbackRow::Demonstration(f) => f.id,
+            };
+            let id_b = match b {
+                FeedbackRow::Boolean(f) => f.id,
+                FeedbackRow::Float(f) => f.id,
+                FeedbackRow::Comment(f) => f.id,
+                FeedbackRow::Demonstration(f) => f.id,
+            };
+            id_b.cmp(&id_a)
+        });
+
+        // Apply pagination
+        let result = if after.is_some() {
+            // If 'after' is specified, take earliest elements (reverse order from sorted)
+            let start = all_feedback.len().saturating_sub(page_size as usize);
+            all_feedback.drain(start..).collect()
+        } else {
+            // If 'before' is specified or no pagination params, take latest elements
+            all_feedback.truncate(page_size as usize);
+            all_feedback
+        };
+
+        Ok(result)
+    }
+
+    async fn query_feedback_bounds_by_target_id(
+        &self,
+        target_id: Uuid,
+    ) -> Result<FeedbackBounds, Error> {
+        let (boolean_bounds, float_bounds, comment_bounds, demonstration_bounds) = tokio::join!(
+            self.query_boolean_metric_bounds_by_target_id(target_id),
+            self.query_float_metric_bounds_by_target_id(target_id),
+            self.query_comment_feedback_bounds_by_target_id(target_id),
+            self.query_demonstration_feedback_bounds_by_inference_id(target_id)
+        );
+
+        let boolean_bounds = boolean_bounds?;
+        let float_bounds = float_bounds?;
+        let comment_bounds = comment_bounds?;
+        let demonstration_bounds = demonstration_bounds?;
+
+        // Find the earliest first_id and latest last_id across all feedback types
+        let all_first_ids: Vec<Uuid> = [
+            boolean_bounds.first_id,
+            float_bounds.first_id,
+            comment_bounds.first_id,
+            demonstration_bounds.first_id,
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+
+        let all_last_ids: Vec<Uuid> = [
+            boolean_bounds.last_id,
+            float_bounds.last_id,
+            comment_bounds.last_id,
+            demonstration_bounds.last_id,
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+
+        let first_id = all_first_ids.into_iter().min();
+        let last_id = all_last_ids.into_iter().max();
+
+        Ok(FeedbackBounds {
+            first_id,
+            last_id,
+            by_type: FeedbackBoundsByType {
+                boolean: boolean_bounds,
+                float: float_bounds,
+                comment: comment_bounds,
+                demonstration: demonstration_bounds,
+            },
+        })
+    }
+
+    async fn count_feedback_by_target_id(&self, target_id: Uuid) -> Result<u64, Error> {
+        let (boolean_count, float_count, comment_count, demonstration_count) = tokio::join!(
+            self.count_boolean_metrics_by_target_id(target_id),
+            self.count_float_metrics_by_target_id(target_id),
+            self.count_comment_feedback_by_target_id(target_id),
+            self.count_demonstration_feedback_by_inference_id(target_id)
+        );
+
+        Ok(boolean_count? + float_count? + comment_count? + demonstration_count?)
+    }
 }
+
+// Helper implementations for individual feedback table queries
+impl ClickHouseConnectionInfo {
+    async fn query_boolean_metrics_by_target_id(
+        &self,
+        target_id: Uuid,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+        page_size: u32,
+    ) -> Result<Vec<BooleanMetricFeedbackRow>, Error> {
+        let (where_clause, params) = build_pagination_clause(before, after, "target_id");
+        let order_clause = if after.is_some() { "ASC" } else { "DESC" };
+
+        let query = if after.is_some() {
+            format!(
+                r"
+                SELECT
+                    'boolean' AS type,
+                    id,
+                    target_id,
+                    metric_name,
+                    value,
+                    tags,
+                    timestamp
+                FROM (
+                    SELECT
+                        id,
+                        target_id,
+                        metric_name,
+                        value,
+                        tags,
+                        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%%H:%%i:%%SZ') AS timestamp
+                    FROM BooleanMetricFeedbackByTargetId
+                    WHERE target_id = {{target_id:UUID}} {where_clause}
+                    ORDER BY toUInt128(id) {order_clause}
+                    LIMIT {{page_size:UInt32}}
+                )
+                ORDER BY toUInt128(id) DESC
+                FORMAT JSONEachRow
+                "
+            )
+        } else {
+            format!(
+                r"
+                SELECT
+                    id,
+                    target_id,
+                    metric_name,
+                    value,
+                    tags,
+                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%%H:%%i:%%SZ') AS timestamp
+                FROM BooleanMetricFeedbackByTargetId
+                WHERE target_id = {{target_id:UUID}} {where_clause}
+                ORDER BY toUInt128(id) {order_clause}
+                LIMIT {{page_size:UInt32}}
+                FORMAT JSONEachRow
+                "
+            )
+        };
+
+        let mut params_vec: Vec<(&str, String)> = params.iter().map(|(k, v)| (*k, v.clone())).collect();
+        params_vec.push(("target_id", target_id.to_string()));
+        params_vec.push(("page_size", page_size.to_string()));
+
+        let query_params: std::collections::HashMap<&str, &str> =
+            params_vec.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+        let response = self.run_query_synchronous(query, &query_params).await?;
+
+        parse_feedback_rows(response.response.as_str())
+    }
+
+    async fn query_float_metrics_by_target_id(
+        &self,
+        target_id: Uuid,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+        page_size: u32,
+    ) -> Result<Vec<FloatMetricFeedbackRow>, Error> {
+        let (where_clause, params) = build_pagination_clause(before, after, "target_id");
+        let order_clause = if after.is_some() { "ASC" } else { "DESC" };
+
+        let query = if after.is_some() {
+            format!(
+                r"
+                SELECT
+                    'float' AS type,
+                    id,
+                    target_id,
+                    metric_name,
+                    value,
+                    tags,
+                    timestamp
+                FROM (
+                    SELECT
+                        id,
+                        target_id,
+                        metric_name,
+                        value,
+                        tags,
+                        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%%H:%%i:%%SZ') AS timestamp
+                    FROM FloatMetricFeedbackByTargetId
+                    WHERE target_id = {{target_id:UUID}} {where_clause}
+                    ORDER BY toUInt128(id) {order_clause}
+                    LIMIT {{page_size:UInt32}}
+                )
+                ORDER BY toUInt128(id) DESC
+                FORMAT JSONEachRow
+                "
+            )
+        } else {
+            format!(
+                r"
+                SELECT
+                    id,
+                    target_id,
+                    metric_name,
+                    value,
+                    tags,
+                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%%H:%%i:%%SZ') AS timestamp
+                FROM FloatMetricFeedbackByTargetId
+                WHERE target_id = {{target_id:UUID}} {where_clause}
+                ORDER BY toUInt128(id) {order_clause}
+                LIMIT {{page_size:UInt32}}
+                FORMAT JSONEachRow
+                "
+            )
+        };
+
+        let mut params_vec: Vec<(&str, String)> = params.iter().map(|(k, v)| (*k, v.clone())).collect();
+        params_vec.push(("target_id", target_id.to_string()));
+        params_vec.push(("page_size", page_size.to_string()));
+
+        let query_params: std::collections::HashMap<&str, &str> =
+            params_vec.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+        let response = self.run_query_synchronous(query, &query_params).await?;
+
+        parse_feedback_rows(response.response.as_str())
+    }
+
+    async fn query_comment_feedback_by_target_id(
+        &self,
+        target_id: Uuid,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+        page_size: u32,
+    ) -> Result<Vec<CommentFeedbackRow>, Error> {
+        let (where_clause, params) = build_pagination_clause(before, after, "target_id");
+        let order_clause = if after.is_some() { "ASC" } else { "DESC" };
+
+        let query = if after.is_some() {
+            format!(
+                r"
+                SELECT
+                    'comment' AS type,
+                    id,
+                    target_id,
+                    target_type,
+                    value,
+                    tags,
+                    timestamp
+                FROM (
+                    SELECT
+                        id,
+                        target_id,
+                        target_type,
+                        value,
+                        tags,
+                        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%%H:%%i:%%SZ') AS timestamp
+                    FROM CommentFeedbackByTargetId
+                    WHERE target_id = {{target_id:UUID}} {where_clause}
+                    ORDER BY toUInt128(id) {order_clause}
+                    LIMIT {{page_size:UInt32}}
+                )
+                ORDER BY toUInt128(id) DESC
+                FORMAT JSONEachRow
+                "
+            )
+        } else {
+            format!(
+                r"
+                SELECT
+                    id,
+                    target_id,
+                    target_type,
+                    value,
+                    tags,
+                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%%H:%%i:%%SZ') AS timestamp
+                FROM CommentFeedbackByTargetId
+                WHERE target_id = {{target_id:UUID}} {where_clause}
+                ORDER BY toUInt128(id) {order_clause}
+                LIMIT {{page_size:UInt32}}
+                FORMAT JSONEachRow
+                "
+            )
+        };
+
+        let mut params_vec: Vec<(&str, String)> = params.iter().map(|(k, v)| (*k, v.clone())).collect();
+        params_vec.push(("target_id", target_id.to_string()));
+        params_vec.push(("page_size", page_size.to_string()));
+
+        let query_params: std::collections::HashMap<&str, &str> =
+            params_vec.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+        let response = self.run_query_synchronous(query, &query_params).await?;
+
+        parse_feedback_rows(response.response.as_str())
+    }
+
+    async fn query_demonstration_feedback_by_inference_id(
+        &self,
+        inference_id: Uuid,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+        page_size: u32,
+    ) -> Result<Vec<DemonstrationFeedbackRow>, Error> {
+        let (where_clause, params) = build_pagination_clause(before, after, "inference_id");
+        let order_clause = if after.is_some() { "ASC" } else { "DESC" };
+
+        let query = if after.is_some() {
+            format!(
+                r"
+                SELECT
+                    'demonstration' AS type,
+                    id,
+                    inference_id,
+                    value,
+                    tags,
+                    timestamp
+                FROM (
+                    SELECT
+                        id,
+                        inference_id,
+                        value,
+                        tags,
+                        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%%H:%%i:%%SZ') AS timestamp
+                    FROM DemonstrationFeedbackByInferenceId
+                    WHERE inference_id = {{inference_id:UUID}} {where_clause}
+                    ORDER BY toUInt128(id) {order_clause}
+                    LIMIT {{page_size:UInt32}}
+                )
+                ORDER BY toUInt128(id) DESC
+                FORMAT JSONEachRow
+                "
+            )
+        } else {
+            format!(
+                r"
+                SELECT
+                    id,
+                    inference_id,
+                    value,
+                    tags,
+                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%%H:%%i:%%SZ') AS timestamp
+                FROM DemonstrationFeedbackByInferenceId
+                WHERE inference_id = {{inference_id:UUID}} {where_clause}
+                ORDER BY toUInt128(id) {order_clause}
+                LIMIT {{page_size:UInt32}}
+                FORMAT JSONEachRow
+                "
+            )
+        };
+
+        let mut params_vec: Vec<(&str, String)> = params.iter().map(|(k, v)| (*k, v.clone())).collect();
+        params_vec.push(("inference_id", inference_id.to_string()));
+        params_vec.push(("page_size", page_size.to_string()));
+
+        let query_params: std::collections::HashMap<&str, &str> =
+            params_vec.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+        let response = self.run_query_synchronous(query, &query_params).await?;
+
+        parse_feedback_rows(response.response.as_str())
+    }
+
+    async fn query_boolean_metric_bounds_by_target_id(
+        &self,
+        target_id: Uuid,
+    ) -> Result<TableBounds, Error> {
+        let query = r"
+            SELECT
+                (SELECT id FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:UUID} ORDER BY toUInt128(id) ASC LIMIT 1) AS first_id,
+                (SELECT id FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:UUID} ORDER BY toUInt128(id) DESC LIMIT 1) AS last_id
+            FORMAT JSONEachRow
+        ".to_string();
+
+        let target_id_str = target_id.to_string();
+        let params_vec = [("target_id", target_id_str)];
+        let params: std::collections::HashMap<&str, &str> =
+            params_vec.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+        let response = self.run_query_synchronous(query, &params).await?;
+        parse_table_bounds(&response.response)
+    }
+
+    async fn query_float_metric_bounds_by_target_id(
+        &self,
+        target_id: Uuid,
+    ) -> Result<TableBounds, Error> {
+        let query = r"
+            SELECT
+                (SELECT id FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:UUID} ORDER BY toUInt128(id) ASC LIMIT 1) AS first_id,
+                (SELECT id FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:UUID} ORDER BY toUInt128(id) DESC LIMIT 1) AS last_id
+            FORMAT JSONEachRow
+        ".to_string();
+
+        let target_id_str = target_id.to_string();
+        let params_vec = [("target_id", target_id_str)];
+        let params: std::collections::HashMap<&str, &str> =
+            params_vec.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+        let response = self.run_query_synchronous(query, &params).await?;
+        parse_table_bounds(&response.response)
+    }
+
+    async fn query_comment_feedback_bounds_by_target_id(
+        &self,
+        target_id: Uuid,
+    ) -> Result<TableBounds, Error> {
+        let query = r"
+            SELECT
+                (SELECT id FROM CommentFeedbackByTargetId WHERE target_id = {target_id:UUID} ORDER BY toUInt128(id) ASC LIMIT 1) AS first_id,
+                (SELECT id FROM CommentFeedbackByTargetId WHERE target_id = {target_id:UUID} ORDER BY toUInt128(id) DESC LIMIT 1) AS last_id
+            FORMAT JSONEachRow
+        ".to_string();
+
+        let target_id_str = target_id.to_string();
+        let params_vec = [("target_id", target_id_str)];
+        let params: std::collections::HashMap<&str, &str> =
+            params_vec.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+        let response = self.run_query_synchronous(query, &params).await?;
+        parse_table_bounds(&response.response)
+    }
+
+    async fn query_demonstration_feedback_bounds_by_inference_id(
+        &self,
+        inference_id: Uuid,
+    ) -> Result<TableBounds, Error> {
+        let query = r"
+            SELECT
+                (SELECT id FROM DemonstrationFeedbackByInferenceId WHERE inference_id = {inference_id:UUID} ORDER BY toUInt128(id) ASC LIMIT 1) AS first_id,
+                (SELECT id FROM DemonstrationFeedbackByInferenceId WHERE inference_id = {inference_id:UUID} ORDER BY toUInt128(id) DESC LIMIT 1) AS last_id
+            FORMAT JSONEachRow
+        ".to_string();
+
+        let inference_id_str = inference_id.to_string();
+        let params_vec = [("inference_id", inference_id_str)];
+        let params: std::collections::HashMap<&str, &str> =
+            params_vec.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+        let response = self.run_query_synchronous(query, &params).await?;
+        parse_table_bounds(&response.response)
+    }
+
+    async fn count_boolean_metrics_by_target_id(&self, target_id: Uuid) -> Result<u64, Error> {
+        let query =
+            "SELECT toUInt64(COUNT()) AS count FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:UUID}".to_string();
+
+        let target_id_str = target_id.to_string();
+        let params_vec = [("target_id", target_id_str)];
+        let params: std::collections::HashMap<&str, &str> =
+            params_vec.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+        let response = self.run_query_synchronous(query, &params).await?;
+        parse_count(&response.response)
+    }
+
+    async fn count_float_metrics_by_target_id(&self, target_id: Uuid) -> Result<u64, Error> {
+        let query =
+            "SELECT toUInt64(COUNT()) AS count FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:UUID}".to_string();
+
+        let target_id_str = target_id.to_string();
+        let params_vec = [("target_id", target_id_str)];
+        let params: std::collections::HashMap<&str, &str> =
+            params_vec.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+        let response = self.run_query_synchronous(query, &params).await?;
+        parse_count(&response.response)
+    }
+
+    async fn count_comment_feedback_by_target_id(&self, target_id: Uuid) -> Result<u64, Error> {
+        let query =
+            "SELECT toUInt64(COUNT()) AS count FROM CommentFeedbackByTargetId WHERE target_id = {target_id:UUID}".to_string();
+
+        let target_id_str = target_id.to_string();
+        let params_vec = [("target_id", target_id_str)];
+        let params: std::collections::HashMap<&str, &str> =
+            params_vec.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+        let response = self.run_query_synchronous(query, &params).await?;
+        parse_count(&response.response)
+    }
+
+    async fn count_demonstration_feedback_by_inference_id(
+        &self,
+        inference_id: Uuid,
+    ) -> Result<u64, Error> {
+        let query =
+            "SELECT toUInt64(COUNT()) AS count FROM DemonstrationFeedbackByInferenceId WHERE inference_id = {inference_id:UUID}".to_string();
+
+        let inference_id_str = inference_id.to_string();
+        let params_vec = [("inference_id", inference_id_str)];
+        let params: std::collections::HashMap<&str, &str> =
+            params_vec.iter().map(|(k, v)| (*k, v.as_str())).collect();
+
+        let response = self.run_query_synchronous(query, &params).await?;
+        parse_count(&response.response)
+    }
+}
+
+// Helper functions for parsing responses
+fn build_pagination_clause(
+    before: Option<Uuid>,
+    after: Option<Uuid>,
+    _id_column: &str,
+) -> (String, Vec<(&'static str, String)>) {
+    match (before, after) {
+        (Some(before), None) => (
+            "AND toUInt128(id) < toUInt128(toUUID({before:UUID}))".to_string(),
+            vec![("before", before.to_string())],
+        ),
+        (None, Some(after)) => (
+            "AND toUInt128(id) > toUInt128(toUUID({after:UUID}))".to_string(),
+            vec![("after", after.to_string())],
+        ),
+        _ => (String::new(), vec![]),
+    }
+}
+
+fn parse_feedback_rows<T: serde::de::DeserializeOwned>(response: &str) -> Result<Vec<T>, Error> {
+    response
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|row| {
+            serde_json::from_str(row).map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseDeserialization {
+                    message: format!("Failed to deserialize feedback row: {e}"),
+                })
+            })
+        })
+        .collect()
+}
+
+fn parse_table_bounds(response: &str) -> Result<TableBounds, Error> {
+    let line = response.trim();
+    if line.is_empty() {
+        return Ok(TableBounds {
+            first_id: None,
+            last_id: None,
+        });
+    }
+
+    serde_json::from_str(line).map_err(|e| {
+        Error::new(ErrorDetails::ClickHouseDeserialization {
+            message: format!("Failed to deserialize table bounds: {e}"),
+        })
+    })
+}
+
+fn parse_count(response: &str) -> Result<u64, Error> {
+    #[derive(Deserialize)]
+    struct CountResult {
+        count: u64,
+    }
+
+    let line = response
+        .trim()
+        .lines()
+        .next()
+        .ok_or_else(|| Error::new(ErrorDetails::ClickHouseDeserialization {
+            message: "No count result returned from database".to_string(),
+        }))?;
+
+    let result: CountResult = serde_json::from_str(line).map_err(|e| {
+        Error::new(ErrorDetails::ClickHouseDeserialization {
+            message: format!("Failed to deserialize count: {e}"),
+        })
+    })?;
+
+    Ok(result.count)
+}
+

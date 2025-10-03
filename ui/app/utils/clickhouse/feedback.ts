@@ -1,13 +1,9 @@
-import {
-  type TableBounds,
-  TableBoundsSchema,
-  CountSchema,
-  type FeedbackBounds,
-} from "./common";
+import { type TableBounds, TableBoundsSchema, CountSchema } from "./common";
 import { data } from "react-router";
-import { getClickhouseClient } from "./client.server";
+import { getClickhouseClient, getDatabaseClient } from "./client.server";
 import { z } from "zod";
 import { logger } from "~/utils/logger";
+import type { FeedbackRow } from "tensorzero-node";
 
 export const booleanMetricFeedbackRowSchema = z.object({
   type: z.literal("boolean"),
@@ -685,137 +681,6 @@ export async function countFloatMetricFeedbackByTargetId(
     throw data("Error counting float metric feedback", { status: 500 });
   }
 }
-export const feedbackRowSchema = z.discriminatedUnion("type", [
-  booleanMetricFeedbackRowSchema,
-  floatMetricFeedbackRowSchema,
-  commentFeedbackRowSchema,
-  demonstrationFeedbackRowSchema,
-]);
-
-export type FeedbackRow = z.infer<typeof feedbackRowSchema>;
-
-export async function queryFeedbackByTargetId(params: {
-  target_id: string;
-  before?: string;
-  after?: string;
-  page_size?: number;
-}): Promise<FeedbackRow[]> {
-  const { target_id, before, after, page_size } = params;
-
-  const [booleanMetrics, commentFeedback, demonstrationFeedback, floatMetrics] =
-    await Promise.all([
-      queryBooleanMetricsByTargetId({
-        target_id,
-        before,
-        after,
-        page_size,
-      }),
-      queryCommentFeedbackByTargetId({
-        target_id,
-        before,
-        after,
-        page_size,
-      }),
-      queryDemonstrationFeedbackByInferenceId({
-        inference_id: target_id,
-        before,
-        after,
-        page_size,
-      }),
-      queryFloatMetricsByTargetId({
-        target_id,
-        before,
-        after,
-        page_size,
-      }),
-    ]);
-
-  // Combine all feedback types into a single array
-  const allFeedback: FeedbackRow[] = [
-    ...booleanMetrics,
-    ...commentFeedback,
-    ...demonstrationFeedback,
-    ...floatMetrics,
-  ];
-
-  // Sort by id (which is a UUID v7 timestamp) in descending order
-  allFeedback.sort((a, b) => (b.id > a.id ? 1 : -1));
-
-  // Take either earliest or latest elements based on pagination params
-  if (after) {
-    // If 'after' is specified, take earliest elements
-    return allFeedback.slice(-Math.min(allFeedback.length, page_size || 100));
-  } else {
-    // If 'before' is specified or no pagination params, take latest elements
-    return allFeedback.slice(0, page_size || 100);
-  }
-}
-
-export async function queryFeedbackBoundsByTargetId(params: {
-  target_id: string;
-}): Promise<FeedbackBounds> {
-  const { target_id } = params;
-  const [
-    booleanMetricFeedbackBounds,
-    commentFeedbackBounds,
-    demonstrationFeedbackBounds,
-    floatMetricFeedbackBounds,
-  ] = await Promise.all([
-    queryBooleanMetricFeedbackBoundsByTargetId({
-      target_id,
-    }),
-    queryCommentFeedbackBoundsByTargetId({
-      target_id,
-    }),
-    queryDemonstrationFeedbackBoundsByInferenceId({
-      inference_id: target_id,
-    }),
-    queryFloatMetricFeedbackBoundsByTargetId({
-      target_id,
-    }),
-  ]);
-
-  // Find the earliest first_id and latest last_id across all feedback types
-  const allFirstIds = [
-    booleanMetricFeedbackBounds?.first_id,
-    commentFeedbackBounds?.first_id,
-    demonstrationFeedbackBounds?.first_id,
-    floatMetricFeedbackBounds?.first_id,
-  ].filter((id) => typeof id === "string");
-
-  const allLastIds = [
-    booleanMetricFeedbackBounds?.last_id,
-    commentFeedbackBounds?.last_id,
-    demonstrationFeedbackBounds?.last_id,
-    floatMetricFeedbackBounds?.last_id,
-  ].filter((id) => typeof id === "string");
-
-  return {
-    first_id: allFirstIds.sort()[0],
-    last_id: allLastIds.sort().reverse()[0],
-    by_type: {
-      boolean: booleanMetricFeedbackBounds,
-      float: floatMetricFeedbackBounds,
-      comment: commentFeedbackBounds,
-      demonstration: demonstrationFeedbackBounds,
-    },
-  };
-}
-
-export async function countFeedbackByTargetId(
-  target_id: string,
-): Promise<number> {
-  const [booleanMetrics, commentFeedback, demonstrationFeedback, floatMetrics] =
-    await Promise.all([
-      countBooleanMetricFeedbackByTargetId(target_id),
-      countCommentFeedbackByTargetId(target_id),
-      countDemonstrationFeedbackByInferenceId(target_id),
-      countFloatMetricFeedbackByTargetId(target_id),
-    ]);
-  return (
-    booleanMetrics + commentFeedback + demonstrationFeedback + floatMetrics
-  );
-}
 
 export const metricsWithFeedbackRowSchema = z
   .object({
@@ -983,14 +848,17 @@ export async function pollForFeedbackItem(
   maxRetries: number = 10,
   retryDelay: number = 200,
 ): Promise<FeedbackRow[]> {
+  const dbClient = await getDatabaseClient();
+
   let feedback: FeedbackRow[] = [];
   let found = false;
   for (let i = 0; i < maxRetries; i++) {
-    feedback = await queryFeedbackByTargetId({
-      target_id: targetId,
-      page_size: pageSize,
-      // Only fetch the first page
-    });
+    feedback = await dbClient.queryFeedbackByTargetId(
+      targetId,
+      undefined,
+      undefined,
+      pageSize,
+    );
     if (feedback.some((f) => f.id === feedbackId)) {
       found = true;
       break;
