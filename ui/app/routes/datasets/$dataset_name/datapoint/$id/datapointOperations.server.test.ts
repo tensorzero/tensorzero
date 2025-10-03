@@ -6,12 +6,13 @@ import type {
   ParsedChatInferenceDatapointRow,
   ParsedJsonInferenceDatapointRow,
 } from "~/utils/clickhouse/datasets";
+import type { Datapoint } from "~/utils/tensorzero";
 
 // TODO(shuyangli): Once we remove all custom logic from the Node client, make mocking more ergonomic by providing a mock client at the tensorzero-node level.
 
 // Mock TensorZero client at the module boundary
 const mockUpdateDatapoint = vi.fn(
-  async (_datasetName: string, datapoint: any) => ({
+  async (_datasetName: string, datapoint: Datapoint) => ({
     id: datapoint.id,
   }),
 );
