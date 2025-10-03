@@ -110,6 +110,52 @@ const legacyTemplateVariants: Record<string, ChatCompletionConfig> = {
   },
 };
 
+const nonLegacyTemplateVariants: Record<string, ChatCompletionConfig> = {
+  baseline: {
+    weight: 1.0,
+    model: "gpt-4o-mini",
+    templates: {
+      system: {
+        template: {
+          path: "system.minijinja",
+          contents:
+            "You are a helpful AI assistant. Today's date is {{ date }}.",
+        },
+        schema: null,
+        legacy_definition: false,
+      },
+      user: {
+        template: {
+          path: "user.minijinja",
+          contents: "User query: {{ query }}\n\nContext: {{ context }}",
+        },
+        schema: null,
+        legacy_definition: false,
+      },
+      assistant: {
+        template: {
+          path: "assistant.minijinja",
+          contents: "Based on the context, here's my response: {{ response }}",
+        },
+        schema: null,
+        legacy_definition: false,
+      },
+    },
+    temperature: 0.7,
+    top_p: null,
+    max_tokens: 2048,
+    presence_penalty: null,
+    frequency_penalty: null,
+    seed: null,
+    stop_sequences: null,
+    json_mode: null,
+    retries: {
+      num_retries: 3,
+      max_delay_s: 10,
+    },
+  },
+};
+
 const emptyTemplateVariants: Record<string, ChatCompletionConfig> = {
   baseline: {
     weight: 1.0,
@@ -146,6 +192,14 @@ export const LegacyTemplates: Story = {
   },
 };
 
+export const NonLegacyTemplates: Story = {
+  args: {
+    variant: "baseline",
+    disabled: false,
+    chatCompletionVariants: nonLegacyTemplateVariants,
+  },
+};
+
 export const EmptyState: Story = {
   args: {
     variant: "baseline",
@@ -159,42 +213,6 @@ export const Disabled: Story = {
     variant: "baseline",
     disabled: true,
     chatCompletionVariants: customTemplateVariants,
-  },
-};
-
-export const SingleTemplate: Story = {
-  args: {
-    variant: "baseline",
-    disabled: false,
-    chatCompletionVariants: {
-      baseline: {
-        weight: 1.0,
-        model: "gpt-4o-mini",
-        templates: {
-          system: {
-            template: {
-              path: "system.minijinja",
-              contents:
-                "You are a JSON API that always responds with valid JSON.",
-            },
-            schema: null,
-            legacy_definition: false,
-          },
-        },
-        temperature: 0.3,
-        top_p: null,
-        max_tokens: null,
-        presence_penalty: null,
-        frequency_penalty: null,
-        seed: null,
-        stop_sequences: null,
-        json_mode: "strict",
-        retries: {
-          num_retries: 2,
-          max_delay_s: 10,
-        },
-      },
-    },
   },
 };
 

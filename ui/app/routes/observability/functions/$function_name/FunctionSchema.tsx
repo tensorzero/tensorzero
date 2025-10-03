@@ -6,7 +6,6 @@ import {
 } from "~/components/layout/SnippetLayout";
 import { EmptyMessage } from "~/components/layout/SnippetContent";
 import { CodeEditor } from "~/components/ui/code-editor";
-import { Badge } from "~/components/ui/badge";
 
 interface FunctionSchemaProps {
   functionConfig: FunctionConfig;
@@ -44,19 +43,9 @@ export default function FunctionSchema({
 
   // Create tabs for each schema
   const tabs = schemaEntries.map(([name]) => {
-    const isLegacy = ["system", "user", "assistant"].includes(name);
     return {
       id: name,
-      label: (
-        <div className="flex items-center gap-2">
-          <span>{name}</span>
-          {isLegacy && (
-            <Badge className="bg-yellow-600 px-1 py-0 text-[10px] text-white">
-              Legacy
-            </Badge>
-          )}
-        </div>
-      ),
+      label: name,
       emptyMessage: "No schema defined.",
     };
   });

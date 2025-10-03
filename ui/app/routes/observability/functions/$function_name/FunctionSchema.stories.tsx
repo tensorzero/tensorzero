@@ -65,7 +65,8 @@ export const LegacySchemas: Story = {
   args: {
     functionConfig: {
       type: "chat",
-      description: "Test function with legacy schema names",
+      description:
+        "Test function with legacy schema names (system/user/assistant)",
       schemas: {
         system: {
           value: {

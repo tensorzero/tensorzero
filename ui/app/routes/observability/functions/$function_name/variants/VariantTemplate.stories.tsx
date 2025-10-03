@@ -117,6 +117,56 @@ export const LegacyTemplates: Story = {
   },
 };
 
+export const NonLegacyTemplates: Story = {
+  args: {
+    variantConfig: {
+      type: "chat_completion",
+      weight: 1.0,
+      model: "gpt-4o-mini",
+      templates: {
+        system: {
+          template: {
+            path: "system.minijinja",
+            contents:
+              "You are a helpful AI assistant. Today's date is {{ date }}.",
+          },
+          schema: null,
+          legacy_definition: false,
+        },
+        user: {
+          template: {
+            path: "user.minijinja",
+            contents: "User query: {{ query }}\n\nContext: {{ context }}",
+          },
+          schema: null,
+          legacy_definition: false,
+        },
+        assistant: {
+          template: {
+            path: "assistant.minijinja",
+            contents:
+              "Based on the context, here's my response: {{ response }}",
+          },
+          schema: null,
+          legacy_definition: false,
+        },
+      },
+      temperature: 0.7,
+      top_p: null,
+      max_tokens: 2048,
+      presence_penalty: null,
+      frequency_penalty: null,
+      seed: null,
+      stop_sequences: null,
+      json_mode: null,
+      retries: {
+        num_retries: 3,
+        max_delay_s: 10,
+      },
+    } as VariantConfig,
+  },
+};
+
 export const EmptyState: Story = {
   args: {
     variantConfig: {
@@ -134,39 +184,6 @@ export const EmptyState: Story = {
       json_mode: null,
       retries: {
         num_retries: 1,
-        max_delay_s: 10,
-      },
-    } as VariantConfig,
-  },
-};
-
-export const SingleTemplate: Story = {
-  args: {
-    variantConfig: {
-      type: "chat_completion",
-      weight: 1.0,
-      model: "gpt-4o-mini",
-      templates: {
-        system: {
-          template: {
-            path: "system.minijinja",
-            contents:
-              "You are a JSON API that always responds with valid JSON.",
-          },
-          schema: null,
-          legacy_definition: false,
-        },
-      },
-      temperature: 0.3,
-      top_p: null,
-      max_tokens: null,
-      presence_penalty: null,
-      frequency_penalty: null,
-      seed: null,
-      stop_sequences: null,
-      json_mode: "strict",
-      retries: {
-        num_retries: 2,
         max_delay_s: 10,
       },
     } as VariantConfig,
@@ -269,7 +286,7 @@ export const MixedLegacyAndCustom: Story = {
   },
 };
 
-export const DiclVariant: Story = {
+export const DICLVariant: Story = {
   args: {
     variantConfig: {
       type: "dicl",
