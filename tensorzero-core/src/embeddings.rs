@@ -58,7 +58,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
                 OpenAIKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
-                falsee,
+                false,
             )),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),

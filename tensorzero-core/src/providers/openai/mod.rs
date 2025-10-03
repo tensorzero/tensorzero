@@ -46,7 +46,7 @@ use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, ThoughtChunk,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::providers::openai::responses::{
     get_responses_url, OpenAIResponsesInput, OpenAIResponsesInputMessage,
     OpenAIResponsesInputMessageContent, OpenAIResponsesRequest, OpenAIResponsesResponse,

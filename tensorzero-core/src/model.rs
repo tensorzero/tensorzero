@@ -1256,6 +1256,7 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_base,
                 api_key_location,
+                api_type,
             } => ProviderConfig::OpenAI(OpenAIProvider::new(
                 model_name,
                 api_base,
