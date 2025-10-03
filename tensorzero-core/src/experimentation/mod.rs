@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use track_and_stop::TrackAndStopConfig;
 use uuid::Uuid;
 
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
@@ -19,6 +20,10 @@ pub enum ExperimentationConfig {
     StaticWeights(static_weights::StaticWeightsConfig),
     #[default]
     Uniform,
+    #[serde(flatten)]
+    BestVariantIdentification {
+        config: BestVariantIdentificationConfig,
+    },
 }
 
 pub trait VariantSampler {
@@ -56,6 +61,7 @@ impl VariantSampler for ExperimentationConfig {
         match self {
             Self::StaticWeights(config) => config.setup().await,
             Self::Uniform => Ok(()),
+            Self::BestVariantIdentification { config } => config.setup().await,
         }
     }
 
@@ -72,6 +78,40 @@ impl VariantSampler for ExperimentationConfig {
                     .await
             }
             Self::Uniform => sample_uniform(function_name, &episode_id, active_variants),
+            Self::BestVariantIdentification { config } => {
+                config
+                    .sample(function_name, episode_id, active_variants)
+                    .await
+            }
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "algorithm", rename_all = "snake_case")]
+enum BestVariantIdentificationConfig {
+    TrackAndStop(TrackAndStopConfig),
+}
+
+impl VariantSampler for BestVariantIdentificationConfig {
+    async fn setup(&self) -> Result<(), Error> {
+        match self {
+            Self::TrackAndStop(config) => config.setup().await,
+        }
+    }
+
+    async fn sample(
+        &self,
+        function_name: &str,
+        episode_id: Uuid,
+        active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
+    ) -> Result<(String, Arc<VariantInfo>), Error> {
+        match self {
+            Self::TrackAndStop(config) => {
+                config
+                    .sample(function_name, episode_id, active_variants)
+                    .await
+            }
         }
     }
 }
