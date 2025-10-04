@@ -713,6 +713,28 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         """
         ...
 
+    def experimental_run_evaluation(
+        self,
+        *,
+        evaluation_name: str,
+        dataset_name: str,
+        variant_name: str,
+        concurrency: int = 1,
+        output_format: str = "pretty",
+        inference_cache: str = "on",
+    ) -> None:
+        """
+        Run an evaluation for a specific variant on a dataset.
+        This function is only available in EmbeddedGateway mode.
+
+        :param evaluation_name: The name of the evaluation to run
+        :param dataset_name: The name of the dataset to use for evaluation
+        :param variant_name: The name of the variant to evaluate
+        :param concurrency: The number of concurrent evaluations to run
+        :param output_format: Output format for results ("jsonl" or "pretty")
+        :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
+        """
+
     def close(self) -> None:
         """
         Close the connection to the TensorZero gateway.
@@ -1056,6 +1078,28 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: An `OptimizerStatus` object.
         """
         ...
+
+    async def experimental_run_evaluation(
+        self,
+        *,
+        evaluation_name: str,
+        dataset_name: str,
+        variant_name: str,
+        concurrency: int = 1,
+        output_format: str = "pretty",
+        inference_cache: str = "on",
+    ) -> None:
+        """
+        Run an evaluation for a specific variant on a dataset.
+        This function is only available in EmbeddedGateway mode.
+
+        :param evaluation_name: The name of the evaluation to run
+        :param dataset_name: The name of the dataset to use for evaluation
+        :param variant_name: The name of the variant to evaluate
+        :param concurrency: The number of concurrent evaluations to run
+        :param output_format: Output format for results ("jsonl" or "pretty")
+        :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
+        """
 
     async def close(self) -> None:
         """

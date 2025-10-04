@@ -89,7 +89,7 @@ async fn run_evaluations_json() {
     clickhouse_flush_async_insert(&clickhouse).await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
-    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    let output_lines: Vec<&str> = output_str.lines().collect();
     let mut parsed_output = Vec::new();
     let mut total_sports = 0;
     let mut evaluator_inference_ids = HashMap::new();
@@ -101,6 +101,7 @@ async fn run_evaluations_json() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert_eq!(parsed.evaluator_errors.len(), 1);
         let error = parsed.evaluator_errors.get("error").unwrap();
@@ -286,7 +287,7 @@ async fn run_evaluations_json() {
     clickhouse_flush_async_insert(&clickhouse).await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
-    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    let output_lines: Vec<&str> = output_str.lines().collect();
     let mut total_sports = 0;
     for line in output_lines {
         let parsed: EvaluationUpdate =
@@ -296,6 +297,7 @@ async fn run_evaluations_json() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         let inference_id = parsed.response.inference_id();
         // We only check the total_topic_fs for the second run
@@ -361,7 +363,7 @@ async fn run_exact_match_evaluation_chat() {
     clickhouse_flush_async_insert(&clickhouse).await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
-    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    let output_lines: Vec<&str> = output_str.lines().collect();
     let mut parsed_output = Vec::new();
     for line in output_lines {
         let parsed: EvaluationUpdate =
@@ -371,6 +373,7 @@ async fn run_exact_match_evaluation_chat() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
@@ -498,7 +501,7 @@ async fn run_llm_judge_evaluation_chat() {
     clickhouse_flush_async_insert(&clickhouse).await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
-    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    let output_lines: Vec<&str> = output_str.lines().collect();
     let mut parsed_output = Vec::new();
     let mut total_topic_fs = 0;
     for line in output_lines {
@@ -509,6 +512,7 @@ async fn run_llm_judge_evaluation_chat() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
@@ -657,7 +661,7 @@ async fn run_llm_judge_evaluation_chat() {
     clickhouse_flush_async_insert(&clickhouse).await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
-    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    let output_lines: Vec<&str> = output_str.lines().collect();
     let mut total_topic_fs = 0;
     for line in output_lines {
         let parsed: EvaluationUpdate =
@@ -667,6 +671,7 @@ async fn run_llm_judge_evaluation_chat() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         let inference_id = parsed.response.inference_id();
         // We only check the total_topic_fs for the second run
@@ -731,7 +736,7 @@ async fn run_image_evaluation() {
     clickhouse_flush_async_insert(&clickhouse).await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
-    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    let output_lines: Vec<&str> = output_str.lines().collect();
     let mut parsed_output = Vec::new();
     let mut total_honest_answers = 0;
     let mut total_matches_reference = 0;
@@ -743,6 +748,7 @@ async fn run_image_evaluation() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
@@ -945,7 +951,7 @@ async fn check_invalid_image_evaluation() {
     clickhouse_flush_async_insert(&clickhouse).await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
-    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    let output_lines: Vec<&str> = output_str.lines().collect();
     for line in output_lines {
         let parsed: EvaluationUpdate =
             serde_json::from_str(line).expect("Each line should be valid JSON");
@@ -954,6 +960,7 @@ async fn check_invalid_image_evaluation() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert_eq!(parsed.evaluator_errors.len(), 1);
         let honest_answer_error = &parsed.evaluator_errors["honest_answer"];
@@ -1245,7 +1252,7 @@ async fn run_evaluations_errors() {
     clickhouse_flush_async_insert(&clickhouse).await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
-    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    let output_lines: Vec<&str> = output_str.lines().collect();
     for line in output_lines {
         let parsed: EvaluationUpdate =
             serde_json::from_str(line).expect("Each line should be valid JSON");
@@ -1255,6 +1262,7 @@ async fn run_evaluations_errors() {
                 serde_json::to_string_pretty(&evaluation_info).unwrap()
             ),
             EvaluationUpdate::Error(evaluation_error) => evaluation_error,
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(error
             .message
@@ -1657,7 +1665,7 @@ async fn run_evaluations_best_of_3() {
     clickhouse_flush_async_insert(&clickhouse).await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
-    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    let output_lines: Vec<&str> = output_str.lines().collect();
     let mut parsed_output = Vec::new();
     for line in output_lines {
         let parsed: EvaluationUpdate =
@@ -1667,6 +1675,7 @@ async fn run_evaluations_best_of_3() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
@@ -1844,7 +1853,7 @@ async fn run_evaluations_mixture_of_3() {
     clickhouse_flush_async_insert(&clickhouse).await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
-    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    let output_lines: Vec<&str> = output_str.lines().collect();
     let mut parsed_output = Vec::new();
     for line in output_lines {
         let parsed: EvaluationUpdate =
@@ -1854,6 +1863,7 @@ async fn run_evaluations_mixture_of_3() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
@@ -2034,7 +2044,7 @@ async fn run_evaluations_dicl() {
     clickhouse_flush_async_insert(&clickhouse).await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
-    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    let output_lines: Vec<&str> = output_str.lines().collect();
     let mut parsed_output = Vec::new();
     for line in output_lines {
         let parsed: EvaluationUpdate =
@@ -2044,6 +2054,7 @@ async fn run_evaluations_dicl() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
