@@ -455,9 +455,6 @@ pub struct RunMigrationArgs<'a, T: Migration + ?Sized> {
 
 pub async fn manual_run_clickhouse_migrations() -> Result<(), Error> {
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
-    if clickhouse_url.as_ref().is_none() && std::env::var("CLICKHOUSE_URL").is_ok() {
-        return Err(ErrorDetails::ClickHouseConfiguration { message: "`CLICKHOUSE_URL` is deprecated and no longer accepted. Please set `TENSORZERO_CLICKHOUSE_URL`".to_string() }.into());
-    }
     let Some(clickhouse_url) = clickhouse_url else {
         return Err(ErrorDetails::ClickHouseConfiguration {
             message: "`TENSORZERO_CLICKHOUSE_URL` was not found.".to_string(),
