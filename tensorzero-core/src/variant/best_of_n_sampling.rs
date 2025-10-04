@@ -793,7 +793,7 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        config::UninitializedSchemas,
+        config::{provider_types::ProviderTypesConfig, UninitializedSchemas},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
         http::TensorzeroHttpClient,
@@ -805,6 +805,7 @@ mod tests {
             get_system_filled_template, get_system_template, get_test_template_config,
         },
         model::{ModelConfig, ModelProvider, ProviderConfig},
+        model_table::ProviderTypeDefaultCredentials,
         providers::dummy::DummyProvider,
     };
 
@@ -1271,27 +1272,31 @@ mod tests {
             .await,
         );
         let candidates = vec![candidate0, candidate1];
-        let models = ModelTable::try_from(HashMap::from([(
-            "best_of_n_1".into(),
-            ModelConfig {
-                routing: vec!["best_of_n_1".into()],
-                providers: HashMap::from([(
-                    "best_of_n_1".into(),
-                    ModelProvider {
-                        name: "best_of_n_1".into(),
-                        config: ProviderConfig::Dummy(DummyProvider {
-                            model_name: "best_of_n_1".into(),
-                            ..Default::default()
-                        }),
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        timeouts: Default::default(),
-                        discard_unknown_chunks: false,
-                    },
-                )]),
-                timeouts: Default::default(),
-            },
-        )]))
+        let provider_types = ProviderTypesConfig::default();
+        let models = ModelTable::new(
+            HashMap::from([(
+                "best_of_n_1".into(),
+                ModelConfig {
+                    routing: vec!["best_of_n_1".into()],
+                    providers: HashMap::from([(
+                        "best_of_n_1".into(),
+                        ModelProvider {
+                            name: "best_of_n_1".into(),
+                            config: ProviderConfig::Dummy(DummyProvider {
+                                model_name: "best_of_n_1".into(),
+                                ..Default::default()
+                            }),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            timeouts: Default::default(),
+                            discard_unknown_chunks: false,
+                        },
+                    )]),
+                    timeouts: Default::default(),
+                },
+            )]),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
         .expect("Failed to create model table");
         let client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
@@ -1399,7 +1404,12 @@ mod tests {
                     timeouts: Default::default(),
                 },
             );
-            ModelTable::try_from(map).expect("Failed to create model table")
+            let provider_types = ProviderTypesConfig::default();
+            ModelTable::new(
+                map,
+                ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            )
+            .expect("Failed to create model table")
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1468,7 +1478,12 @@ mod tests {
                     timeouts: Default::default(),
                 },
             );
-            ModelTable::try_from(map).expect("Failed to create model table")
+            let provider_types = ProviderTypesConfig::default();
+            ModelTable::new(
+                map,
+                ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            )
+            .expect("Failed to create model table")
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1554,7 +1569,12 @@ mod tests {
                 timeouts: Default::default(),
             },
         );
-        let big_models = ModelTable::try_from(big_models).expect("Failed to create model table");
+        let provider_types = ProviderTypesConfig::default();
+        let big_models = ModelTable::new(
+            big_models,
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
+        .expect("Failed to create model table");
 
         let result_big = best_of_n_big_variant
             .select_best_candidate(

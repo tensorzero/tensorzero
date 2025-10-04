@@ -12,6 +12,7 @@ import {
   TableItemTime,
   TableItemFunction,
   TableItemShortUuid,
+  TableItemText,
 } from "~/components/ui/TableItems";
 import { Button } from "~/components/ui/button";
 import { Trash } from "lucide-react";
@@ -56,6 +57,7 @@ export default function DatasetRowTable({
           <TableRow>
             <TableHead>ID</TableHead>
             <TableHead>Episode ID</TableHead>
+            <TableHead>Name</TableHead>
             <TableHead>Function</TableHead>
             <TableHead>Updated</TableHead>
             <TableHead className="w-[50px]"></TableHead>
@@ -78,6 +80,9 @@ export default function DatasetRowTable({
                     id={row.episode_id}
                     link={`/observability/episodes/${row.episode_id}`}
                   />
+                </TableCell>
+                <TableCell>
+                  <TableItemText text={row.name} />
                 </TableCell>
                 <TableCell>
                   <TableItemFunction

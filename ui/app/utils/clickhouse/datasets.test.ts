@@ -325,6 +325,7 @@ describe("getDatasetRows", () => {
         expect.objectContaining({
           id: expect.any(String),
           type: expect.stringMatching(/^(chat|json)$/),
+          name: expect.toBeOneOf([expect.any(String), null]),
           function_name: expect.any(String),
           episode_id: expect.any(String),
           updated_at: expect.any(String),
@@ -350,6 +351,7 @@ describe("getDatasetRows", () => {
         expect.objectContaining({
           id: expect.any(String),
           type: "json",
+          name: expect.toBeOneOf([expect.any(String), null]),
           function_name: expect.any(String),
           episode_id: expect.any(String),
           updated_at: expect.any(String),
@@ -372,6 +374,7 @@ describe("getDatapoint", () => {
       dataset_name: "bar",
       episode_id: "01942e26-4693-7e80-8591-47b98e25d721",
       function_name: "ask_question",
+      name: null,
       id: "01942e26-c48c-7720-b971-a1f7a3a9ac98",
       input: {
         messages: [
@@ -477,6 +480,7 @@ describe("getDatapoint", () => {
       dataset_name: "foo",
       episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff9",
       function_name: "write_haiku",
+      name: null,
       id: "01934fc5-ea98-71f0-8191-9fd88f34c28b",
       input: {
         messages: [
@@ -525,6 +529,7 @@ describe("datapoint operations", () => {
     const chatDatapoint: ParsedChatInferenceDatapointRow = {
       dataset_name: "test_chat_dataset",
       function_name: "write_haiku",
+      name: null,
       id: datapoint_id,
       episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff9",
       input: {
@@ -613,6 +618,7 @@ describe("datapoint operations", () => {
     const jsonDatapoint: ParsedJsonInferenceDatapointRow = {
       dataset_name: "test_json_dataset",
       function_name: "extract_entities",
+      name: null,
       id: datapoint_id,
       episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff8",
       input: {
@@ -713,6 +719,7 @@ describe("datapoint operations", () => {
     const chatDatapoint: ParsedChatInferenceDatapointRow = {
       dataset_name: "test_chat_dataset",
       function_name: "write_haiku",
+      name: null,
       id: "01934fc5-ea98-71f0-8191-9fd88f34c31e",
       episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff7",
       input: {
@@ -906,6 +913,7 @@ describe("insertDatapoint", () => {
       insertDatapoint({
         dataset_name: "builder",
         function_name: "write_haiku",
+        name: null,
         id: uuid(),
         episode_id: null,
         input: { messages: [] },

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::endpoints::openai_compatible::RouterExt;
 use crate::experimentation::VariantSampler;
-use axum::extract::{rejection::JsonRejection, FromRequest, Json, Request};
+use axum::extract::{rejection::JsonRejection, DefaultBodyLimit, FromRequest, Json, Request};
 use axum::Router;
 use serde::de::DeserializeOwned;
 use sqlx::postgres::PgPoolOptions;
@@ -378,6 +378,7 @@ pub async fn start_openai_compatible_gateway(
     let router = Router::new()
         .register_openai_compatible_routes()
         .fallback(endpoints::fallback::handle_404)
+        .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
         .with_state(gateway_handle.app_state.clone());
 
     let (sender, recv) = tokio::sync::oneshot::channel::<()>();
