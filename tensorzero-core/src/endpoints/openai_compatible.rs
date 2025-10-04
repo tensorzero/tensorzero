@@ -1411,7 +1411,7 @@ mod tests {
         let tensorzero_tags = HashMap::from([("test".to_string(), "test".to_string())]);
         let params = Params::try_from_openai(OpenAICompatibleParams {
             messages,
-            model: "tensorzero::test_function".into(),
+            model: "tensorzero::function_name::test_function".into(),
             frequency_penalty: Some(0.5),
             max_tokens: Some(100),
             max_completion_tokens: Some(50),
