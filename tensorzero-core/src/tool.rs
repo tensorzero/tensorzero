@@ -150,7 +150,6 @@ impl ToolCallConfig {
             .allowed_tools
             .as_deref()
             .unwrap_or(function_tools);
-        let mut tool_display_names = HashSet::new();
 
         // Get each tool from the static tool config.
         let tools_available: Result<Vec<ToolConfig>, Error> = allowed_tools
@@ -171,20 +170,30 @@ impl ToolCallConfig {
         // Throw an error if any tool was not found in the previous step.
         let mut tools_available = tools_available?;
 
-        // Adds the additional tools to the list of available tools
-        // (this kicks off async compilation in another thread for each)
-        tools_available.extend(dynamic_tool_params.additional_tools.into_iter().flat_map(
-            |tools| {
-                tools.into_iter().map(|tool| {
-                    ToolConfig::Dynamic(DynamicToolConfig {
-                        description: tool.description,
-                        parameters: DynamicJSONSchema::new(tool.parameters),
-                        name: tool.name,
-                        strict: tool.strict,
-                    })
-                })
-            },
-        ));
+        let allowed_tools_set: HashSet<&str> = allowed_tools.iter().map(String::as_str).collect();
+
+        if let Some(additional_tools) = dynamic_tool_params.additional_tools {
+            for tool in additional_tools {
+                if !allowed_tools_set.contains(tool.name.as_str()) {
+                    tracing::info!(
+                        tool_name = %tool.name,
+                        "Currently, the gateway automatically includes all dynamic tools in the list of allowed tools. \
+                         In a near-future release, dynamic tools will no longer be included automatically. \
+                         If you intend for your dynamic tools to be allowed, please allow them explicitly; \
+                         otherwise, disregard this warning."
+                    );
+                }
+                tools_available.push(ToolConfig::Dynamic(DynamicToolConfig {
+                    description: tool.description,
+                    parameters: DynamicJSONSchema::new(tool.parameters),
+                    name: tool.name,
+                    strict: tool.strict,
+                }));
+            }
+        }
+
+        let mut tool_display_names = HashSet::new();
+
         // Check for duplicate tool names.
         for tool in &tools_available {
             let duplicate = !tool_display_names.insert(tool.name());
