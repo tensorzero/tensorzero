@@ -36,21 +36,20 @@ pub enum UninitializedExperimentationConfig {
 }
 
 impl UninitializedExperimentationConfig {
-    pub fn load(self) -> ExperimentationConfig {
+    pub fn load(self, variants: &HashMap<String, Arc<VariantInfo>>) -> ExperimentationConfig {
         match self {
             UninitializedExperimentationConfig::StaticWeights(config) => {
                 ExperimentationConfig::StaticWeights(config)
             }
             UninitializedExperimentationConfig::Uniform => ExperimentationConfig::Uniform,
             UninitializedExperimentationConfig::TrackAndStop(config) => {
-                ExperimentationConfig::TrackAndStop(config.load())
+                ExperimentationConfig::TrackAndStop(config.load(variant_names))
             }
         }
     }
 }
 
 pub trait VariantSampler {
-    // TODO, when we add bandits: pass CH and PG clients here (but use opaque trait types)
     async fn setup(
         &self,
         clickhouse: &ClickHouseConnectionInfo,
@@ -60,6 +59,7 @@ pub trait VariantSampler {
         &self,
         function_name: &str,
         episode_id: Uuid,
+        // This gets "popped from"
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
         postgres: &PostgresConnectionInfo,
     ) -> Result<(String, Arc<VariantInfo>), Error>;

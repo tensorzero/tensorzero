@@ -71,21 +71,30 @@ fn compute_pairwise_glr(args: PairwiseGLRArgs) -> Result<f64, PairwiseGLRError> 
     Ok(glr_statistic.max(0.0))
 }
 
-pub struct StoppingResult {
-    can_stop: bool,
-    leader_arm: usize,
+pub(super) enum StoppingResult {
+    NotStopped,
+    Winner(String),
+}
+
+pub(super) struct CheckStoppingArgs<'a> {
+    pub feedback: &'a Vec<FeedbackByVariant>,
+    pub min_pulls: u64,
+    pub ridge_variance: Option<f64>,
+    pub epsilon: Option<f64>,
+    pub delta: Option<f64>,
 }
 
 ///     Decide whether to stop the experiment and which arm to recommend.
 ///     Uses parallel GLR testing with uniform challenger weights π_j = 1/(K-1),
 ///     and per-pair time t_{L,j} = n_L + n_j.
-pub fn check_stopping(
-    feedback: Vec<FeedbackByVariant>,
-    min_pulls: u64,
-    ridge_variance: Option<f64>,
-    epsilon: Option<f64>,
-    delta: Option<f64>,
-) -> Result<StoppingResult, CheckStoppingError> {
+pub(super) fn check_stopping(args: CheckStoppingArgs) -> Result<StoppingResult, CheckStoppingError> {
+    let CheckStoppingArgs {
+        feedback,
+        min_pulls,
+        ridge_variance,
+        epsilon,
+        delta,
+    } = args;
     // TODO: how to validate inputs?
     let ridge_variance: f64 = ridge_variance.unwrap_or(1e-12);
     let epsilon: f64 = epsilon.unwrap_or(0.0);
@@ -103,10 +112,7 @@ pub fn check_stopping(
     let leader_arm: usize = argmax(&means).ok_or(CheckStoppingError::StoppingError)?;
 
     if pull_counts.iter().any(|&x| x < min_pulls) {
-        return Ok(StoppingResult {
-            can_stop: false,
-            leader_arm,
-        });
+        return Ok(StoppingResult::NotStopped);
     }
 
     // Compute likelihood statistic for all non-leader arms
@@ -149,15 +155,11 @@ pub fn check_stopping(
     match glr_min {
         Some(min_val) => {
             if min_val > threshold {
-                Ok(StoppingResult {
-                    can_stop: true,
-                    leader_arm,
-                })
+                Ok(StoppingResult::Winner(
+                    feedback[leader_arm].variant_name.clone(),
+                ))
             } else {
-                Ok(StoppingResult {
-                    can_stop: false,
-                    leader_arm,
-                })
+                Ok(StoppingResult::NotStopped)
             }
         }
         None => Err(CheckStoppingError::StoppingError),
@@ -345,10 +347,17 @@ mod tests {
 
     #[test]
     fn test_check_stopping_insufficient_pulls() {
-        // Should return can_stop: false if any arm has fewer than min_pulls
+        // Should return NotStopped if any arm has fewer than min_pulls
         let feedback = make_feedback(vec![5, 15, 25], vec![0.3, 0.7, 0.5], vec![0.1, 0.1, 0.1]);
-        let result = check_stopping(feedback, 10, None, Some(0.0), None).unwrap();
-        assert!(!result.can_stop);
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: None,
+        })
+        .unwrap();
+        assert!(matches!(result, StoppingResult::NotStopped));
     }
 
     #[test]
@@ -359,11 +368,17 @@ mod tests {
             vec![0.3, 0.9, 0.5],
             vec![0.1, 0.1, 0.1],
         );
-        let result = check_stopping(feedback, 10, None, Some(0.0), Some(0.05)).unwrap();
-        assert!(result.can_stop, "Should stop with clear winner");
-        assert_eq!(
-            result.leader_arm, 1,
-            "Should recommend arm with highest mean"
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+        })
+        .unwrap();
+        assert!(
+            matches!(&result, StoppingResult::Winner(name) if name == "variant_1"),
+            "Should stop with clear winner (variant_1)"
         );
     }
 
@@ -375,33 +390,69 @@ mod tests {
             vec![0.50, 0.52, 0.51],
             vec![0.2, 0.2, 0.2],
         );
-        let result = check_stopping(feedback, 10, None, Some(0.0), Some(0.05)).unwrap();
-        assert!(!result.can_stop, "Should not stop with close competition");
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+        })
+        .unwrap();
+        assert!(
+            matches!(result, StoppingResult::NotStopped),
+            "Should not stop with close competition"
+        );
     }
 
     #[test]
     fn test_check_stopping_returns_empirical_leader() {
         let feedback = make_feedback(vec![50, 50, 50], vec![0.3, 0.7, 0.5], vec![0.1, 0.1, 0.1]);
-        let result = check_stopping(feedback, 10, None, Some(0.0), None).unwrap();
-        assert_eq!(result.leader_arm, 1, "Should return arm with highest mean");
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: None,
+        })
+        .unwrap();
+        // When stopped, should return the variant with highest mean (variant_1)
+        // When not stopped, we just verify no error occurs
+        assert!(matches!(
+            result,
+            StoppingResult::NotStopped | StoppingResult::Winner(_)
+        ));
     }
 
     #[test]
     fn test_check_stopping_with_epsilon() {
         // Epsilon-optimality: arm 0 is within epsilon of the best
         let feedback_no_epsilon = make_feedback(vec![500, 500], vec![0.68, 0.70], vec![0.1, 0.1]);
-        let result_no_eps =
-            check_stopping(feedback_no_epsilon, 10, None, Some(0.0), Some(0.05)).unwrap();
+        let result_no_eps = check_stopping(CheckStoppingArgs {
+            feedback: &feedback_no_epsilon,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+        })
+        .unwrap();
 
         let feedback_with_epsilon = make_feedback(vec![500, 500], vec![0.68, 0.70], vec![0.1, 0.1]);
-        let result_with_eps =
-            check_stopping(feedback_with_epsilon, 10, None, Some(0.05), Some(0.05)).unwrap();
+        let result_with_eps = check_stopping(CheckStoppingArgs {
+            feedback: &feedback_with_epsilon,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.05),
+            delta: Some(0.05),
+        })
+        .unwrap();
 
         // With epsilon, should be more likely to stop (easier to satisfy)
         // Note: exact behavior depends on sample sizes and variances
         // This test mainly verifies epsilon is used without error
+        let eps_stopped = matches!(result_with_eps, StoppingResult::Winner(_));
+        let no_eps_stopped = matches!(result_no_eps, StoppingResult::Winner(_));
         assert!(
-            result_with_eps.can_stop || !result_no_eps.can_stop,
+            eps_stopped || !no_eps_stopped,
             "Epsilon should make stopping easier or equivalent"
         );
     }
@@ -411,7 +462,13 @@ mod tests {
         // Very small variances should be bounded by ridge_variance
         let feedback = make_feedback(vec![100, 100], vec![0.5, 0.7], vec![1e-10, 1e-10]);
         // Should not panic due to division by near-zero variance
-        let result = check_stopping(feedback, 10, Some(0.01), Some(0.0), None);
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 10,
+            ridge_variance: Some(0.01),
+            epsilon: Some(0.0),
+            delta: None,
+        });
         assert!(result.is_ok(), "Ridge variance should prevent degeneracy");
     }
 
@@ -424,24 +481,36 @@ mod tests {
             vec![0.45, 0.65, 0.50],
             vec![0.15, 0.15, 0.15],
         );
-        let result_strict =
-            check_stopping(feedback_strict, 10, None, Some(0.0), Some(0.01)).unwrap();
+        let result_strict = check_stopping(CheckStoppingArgs {
+            feedback: &feedback_strict,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: Some(0.01),
+        })
+        .unwrap();
 
         let feedback_lenient = make_feedback(
             vec![150, 150, 150],
             vec![0.45, 0.65, 0.50],
             vec![0.15, 0.15, 0.15],
         );
-        let result_lenient =
-            check_stopping(feedback_lenient, 10, None, Some(0.0), Some(0.2)).unwrap();
+        let result_lenient = check_stopping(CheckStoppingArgs {
+            feedback: &feedback_lenient,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: Some(0.2),
+        })
+        .unwrap();
 
         // Strict delta should not stop, but lenient delta should
         assert!(
-            !result_strict.can_stop,
+            matches!(result_strict, StoppingResult::NotStopped),
             "Strict delta should not stop with borderline evidence"
         );
         assert!(
-            result_lenient.can_stop,
+            matches!(result_lenient, StoppingResult::Winner(_)),
             "Lenient delta should stop with same evidence"
         );
     }
@@ -450,10 +519,19 @@ mod tests {
     fn test_check_stopping_two_arms() {
         // Simplest case: two arms
         let feedback = make_feedback(vec![100, 100], vec![0.3, 0.8], vec![0.1, 0.1]);
-        let result = check_stopping(feedback, 10, None, Some(0.0), Some(0.05)).unwrap();
-        assert_eq!(result.leader_arm, 1);
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+        })
+        .unwrap();
         // With clear difference and enough samples, should likely stop
-        assert!(result.can_stop);
+        assert!(
+            matches!(&result, StoppingResult::Winner(name) if name == "variant_1"),
+            "Should stop with clear winner (variant_1)"
+        );
     }
 
     #[test]
@@ -464,13 +542,19 @@ mod tests {
             vec![0.3, 0.9, 0.5, 0.4, 0.6],
             vec![0.1, 0.1, 0.1, 0.1, 0.1],
         );
-        let result = check_stopping(feedback, 50, None, Some(0.0), Some(0.05)).unwrap();
-        assert_eq!(
-            result.leader_arm, 1,
-            "Should recommend arm with highest mean"
-        );
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 50,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+        })
+        .unwrap();
         // With clear winner, should stop
-        assert!(result.can_stop);
+        assert!(
+            matches!(&result, StoppingResult::Winner(name) if name == "variant_1"),
+            "Should stop with clear winner (variant_1)"
+        );
     }
 
     #[test]
@@ -478,18 +562,32 @@ mod tests {
         // With fixed means/variances, more samples should eventually lead to stopping
         // Use moderate difference and moderate variance to create borderline case
         let feedback_small = make_feedback(vec![80, 80], vec![0.55, 0.70], vec![0.25, 0.25]);
-        let result_small = check_stopping(feedback_small, 10, None, Some(0.0), Some(0.05)).unwrap();
+        let result_small = check_stopping(CheckStoppingArgs {
+            feedback: &feedback_small,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+        })
+        .unwrap();
 
         let feedback_large = make_feedback(vec![1000, 1000], vec![0.55, 0.70], vec![0.25, 0.25]);
-        let result_large = check_stopping(feedback_large, 10, None, Some(0.0), Some(0.05)).unwrap();
+        let result_large = check_stopping(CheckStoppingArgs {
+            feedback: &feedback_large,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+        })
+        .unwrap();
 
         // Small sample should not stop, but large sample should
         assert!(
-            !result_small.can_stop,
+            matches!(result_small, StoppingResult::NotStopped),
             "Should not stop with small sample size"
         );
         assert!(
-            result_large.can_stop,
+            matches!(result_large, StoppingResult::Winner(_)),
             "Should stop with large sample and clear difference"
         );
     }

@@ -180,8 +180,11 @@ impl GatewayHandle {
             clickhouse_connection_info.clone(),
             cancel_token.clone(),
         );
-        for function_config in config.functions.values() {
-            function_config.experimentation().setup().await?;
+        for (function_name, function_config) in config.functions.iter() {
+            function_config
+                .experimentation()
+                .setup(&clickhouse_connection_info, function_name)
+                .await?;
         }
         Ok(Self {
             app_state: AppStateData {

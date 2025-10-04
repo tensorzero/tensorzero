@@ -1407,7 +1407,7 @@ impl UninitializedFunctionConfig {
                 }
                 let experimentation = params
                     .experimentation
-                    .map(UninitializedExperimentationConfig::load)
+                    .map(|config| UninitializedExperimentationConfig::load(config, &variants))
                     .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
                 Ok(FunctionConfig::Json(FunctionConfigJson {
                     variants,
