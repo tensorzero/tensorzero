@@ -184,7 +184,6 @@ pub struct UninitializedChatCompletionConfig {
     pub frequency_penalty: Option<f32>,
     pub seed: Option<u32>,
     pub stop_sequences: Option<Vec<String>>,
-    #[serde(default)]
     pub json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
     #[serde(default)]
     pub retries: RetryConfig,
