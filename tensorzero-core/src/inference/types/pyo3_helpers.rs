@@ -113,6 +113,14 @@ fn import_unknown_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
     })
 }
 
+pub fn import_json_inference_output(py: Python<'_>) -> PyResult<&Py<PyAny>> {
+    static JSON_INFERENCE_OUTPUT: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+    JSON_INFERENCE_OUTPUT.get_or_try_init::<_, PyErr>(py, || {
+        let self_module = PyModule::import(py, "tensorzero")?;
+        Ok(self_module.getattr("JsonInferenceOutput")?.unbind())
+    })
+}
+
 pub fn resolved_content_block_to_python(
     py: Python<'_>,
     content_block: &ResolvedContentBlock,

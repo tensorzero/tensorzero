@@ -247,6 +247,10 @@ Example Response:
         "properties": {"answer": {"type": "string"}},
     }
     assert json_inference.dispreferred_outputs == [[Text(text='{"answer": "Kyoto"}')]]
+    # Test that stored_output is a JsonInferenceOutput instance
+    assert isinstance(json_inference.stored_output, JsonInferenceOutput)
+    assert json_inference.stored_output.raw == '{"answer": "Tokyo"}'
+    assert json_inference.stored_output.parsed == {"answer": "Tokyo"}
 
 
 def test_sync_render_samples_nonexistent_function(
@@ -633,6 +637,10 @@ Example Response:
         "type": "object",
         "properties": {"answer": {"type": "string"}},
     }
+    # Test that stored_output is a JsonInferenceOutput instance
+    assert isinstance(json_inference.stored_output, JsonInferenceOutput)
+    assert json_inference.stored_output.raw == '{"answer": "Tokyo"}'
+    assert json_inference.stored_output.parsed == {"answer": "Tokyo"}
 
 
 @pytest.mark.asyncio

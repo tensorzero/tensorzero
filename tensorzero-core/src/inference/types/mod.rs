@@ -73,7 +73,7 @@ use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::types::PyAny;
 #[cfg(feature = "pyo3")]
-use pyo3_helpers::serialize_to_dict;
+use pyo3_helpers::{deserialize_from_pyobj, serialize_to_dict};
 use resolved_input::FileWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -1210,6 +1210,21 @@ impl std::fmt::Display for JsonInferenceOutput {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl JsonInferenceOutput {
+    #[new]
+    #[pyo3(signature = (*, raw=None, parsed=None))]
+    fn new(
+        py: Python<'_>,
+        raw: Option<String>,
+        parsed: Option<Bound<'_, PyAny>>,
+    ) -> PyResult<Self> {
+        let parsed_value = parsed.map(|x| deserialize_from_pyobj(py, &x)).transpose()?;
+
+        Ok(JsonInferenceOutput {
+            raw,
+            parsed: parsed_value,
+        })
+    }
+
     #[getter]
     fn get_raw(&self) -> Option<String> {
         self.raw.clone()
