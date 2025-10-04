@@ -1427,7 +1427,6 @@ fn prepare_serialized_openai_compatible_events(
 mod tests {
 
     use super::*;
-    use axum::http::header::{HeaderName, HeaderValue};
     use serde_json::json;
     use tracing_test::traced_test;
 

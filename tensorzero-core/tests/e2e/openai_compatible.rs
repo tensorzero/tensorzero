@@ -2,8 +2,7 @@
 
 use std::collections::HashSet;
 
-use axum::{extract::State, http::HeaderMap};
-use http::{HeaderName, HeaderValue};
+use axum::extract::State;
 use http_body_util::BodyExt;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
