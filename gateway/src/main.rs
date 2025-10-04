@@ -119,34 +119,36 @@ async fn main() {
 
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
-    if args.config_file.is_some() && args.default_config {
-        tracing::error!("You must not specify both `--config-file` and `--default-config`.");
-        std::process::exit(1);
-    }
-
-    if !args.default_config && args.config_file.is_none() {
-        tracing::warn!("You must specify either `--config-file` or `--default-config`.");
-    }
-
-    let (config, glob) = if let Some(path) = &args.config_file {
-        let glob =
-            ConfigFileGlob::new_from_path(path).expect_pretty("Failed to process config file glob");
-        (
-            Arc::new(
-                Config::load_and_verify_from_path(&glob)
-                    .await
-                    .ok() // Don't print the error here, since it was already printed when it was constructed
-                    .expect_pretty(&format!(
-                        "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
-                        glob.glob,
-                        glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n")
-                    )),
-            ),
-            Some(glob),
-        )
-    } else {
-        tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
-        (Arc::new(Config::default()), None)
+    let (config, glob) = match (args.default_config, args.config_file) {
+        (true, Some(_)) => {
+            tracing::error!("You must not specify both `--config-file` and `--default-config`.");
+            std::process::exit(1);
+        }
+        (false, None) => {
+            tracing::warn!("You must specify either `--config-file` or `--default-config`.");
+            std::process::exit(1);
+        }
+        (true, None) => {
+            tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
+            (Arc::new(Config::default()), None)
+        }
+        (false, Some(path)) => {
+            let glob = ConfigFileGlob::new_from_path(&path)
+                .expect_pretty("Failed to process config file glob");
+            (
+                Arc::new(
+                    Config::load_and_verify_from_path(&glob)
+                        .await
+                        .ok() // Don't print the error here, since it was already printed when it was constructed
+                        .expect_pretty(&format!(
+                            "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
+                            glob.glob,
+                            glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n")
+                        )),
+                ),
+                Some(glob),
+            )
+        }
     };
 
     if config.gateway.debug {
