@@ -60,6 +60,7 @@ dev = [
     "openai",
     "clickhouse-connect",
     "pandas",
+    "requests",
 ]
 
 [tool.maturin]
