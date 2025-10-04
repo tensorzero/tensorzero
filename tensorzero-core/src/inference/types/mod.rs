@@ -4,13 +4,12 @@
 //! * Input/InputMessage/InputMessageContent:
 //!
 //!   These types hold an input request deserialized directly from the client.
-//!   At this point, we have not fetched any network resources (e.g. file urls),
-//!   and we may have various legacy input types (e.g. `{"type": "text", "value": ...}`).
+//!   At this point, we have not fetched any network resources (e.g. file urls).
 //!   Templates have not yet been applied
 //! * `LazyResolvedInput`/`LazyResolvedInputMessage`/`LazyResolvedInputMessageContent`:
 //!
-//!   These types hold input with legacy input types normalized
-//!   (e.g. a `{"type": "text", "value": ...}` block is converted to a `{"type": "text", "template": <role>, "arguments": {}}` block
+//!   These types hold input with implicit templates normalized
+//!   (e.g. a `{"type": "text", "arguments": ...}` block is converted to a `{"type": "template", "name": "<role>", "arguments": ...}` block
 //!   with the template name chosen based on the message role).
 //!   We also construct (but do not yet `.await`) and store futures to fetch any file urls in the input.
 //!   Templates have not yet been applied
