@@ -13,14 +13,14 @@ interface BasicInfoProps {
   evaluation_name: string;
   evaluation_config: StaticEvaluationConfig;
   dataset_name: string;
-  datapoint_name: string | null;
+  task_name: string | null;
 }
 
 export default function BasicInfo({
   evaluation_name,
   evaluation_config,
   dataset_name,
-  datapoint_name,
+  task_name,
 }: BasicInfoProps) {
   const functionName = evaluation_config.function_name;
   const functionConfig = useFunctionConfig(functionName);
@@ -35,7 +35,7 @@ export default function BasicInfo({
         <BasicInfoItemTitle>Name</BasicInfoItemTitle>
         <BasicInfoItemContent>
           {/* TODO: support editing names */}
-          <Chip label={datapoint_name || "-"} font="mono" />
+          <Chip label={task_name || "-"} font="mono" />
         </BasicInfoItemContent>
       </BasicInfoItem>
       <BasicInfoItem>
