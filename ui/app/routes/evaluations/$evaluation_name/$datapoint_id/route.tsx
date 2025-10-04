@@ -246,7 +246,7 @@ export default function EvaluationDatapointPage({
             evaluation_name={evaluation_name}
             evaluation_config={evaluation_config}
             dataset_name={consolidatedEvaluationResults[0].dataset_name}
-            datapoint_name={consolidatedEvaluationResults[0].name}
+            task_name={consolidatedEvaluationResults[0].name}
           />
           <EvalRunSelector
             evaluationName={evaluation_name}
