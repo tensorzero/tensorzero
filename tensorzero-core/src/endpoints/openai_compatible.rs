@@ -852,7 +852,6 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                     let system_content = convert_openai_message_content(msg.content.clone())?;
                     for content in system_content {
                         system_messages.push(match content {
-                            InputMessageContent::Text(TextKind::LegacyValue { value }) => value,
                             InputMessageContent::Text(TextKind::Text { text }) => {
                                 Value::String(text)
                             }
@@ -1808,39 +1807,6 @@ mod tests {
                     .clone()
             })]
         );
-    }
-
-    #[test]
-    #[traced_test]
-    fn test_deprecated_custom_block() {
-        let content = json!([{
-            "country": "Japan",
-            "city": "Tokyo",
-        }]);
-        let value = convert_openai_message_content(content.clone()).unwrap();
-        assert_eq!(
-            value,
-            vec![InputMessageContent::Text(TextKind::Arguments {
-                arguments: json!({
-                    "country": "Japan",
-                    "city": "Tokyo",
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
-            })]
-        );
-        assert!(logs_contain(
-            r#"Content block `{"country":"Japan","city":"Tokyo"}` was not a valid OpenAI content block."#
-        ));
-
-        let other_content = json!([{
-            "type": "text",
-            "my_custom_arg": 123
-        }]);
-        let err = convert_openai_message_content(other_content.clone())
-            .expect_err("Should not accept invalid block");
-        assert_eq!(err.to_string(), "Invalid request to OpenAI-compatible endpoint: Invalid content block: Either `text` or `tensorzero::arguments` must be set when using `\"type\": \"text\"`");
     }
 
     #[test]

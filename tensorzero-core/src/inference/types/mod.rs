@@ -212,9 +212,9 @@ impl LazyResolvedInputMessage {
 }
 
 impl InputMessageContent {
-    /// The 'role' parameter is only used to handle legacy role-based templates (`{"type": "text", "value": ...}`).
-    /// Once we removed support for these input blocks (and only support `{"type": "template", "name": "...", "arguments": ...}`),
-    /// we can remove the 'role' parameter.
+    /// The 'role' parameter is used to handle implicit templates (`{"type": "text", "arguments": ...}`).
+    /// These are mapped to explicit `{"type": "template", "name": "<role>", "arguments": ...}` format,
+    /// with the template name chosen based on the message role.
     pub fn into_lazy_resolved_input_message(
         self,
         role: Role,
@@ -247,25 +247,6 @@ impl InputMessageContent {
             }
             InputMessageContent::ToolResult(tool_result) => {
                 LazyResolvedInputMessageContent::ToolResult(tool_result)
-            }
-            InputMessageContent::Text(TextKind::LegacyValue { value }) => {
-                tracing::warn!(
-                    r#"Deprecation Warning: `{{"type": "text", "value", ...}}` is deprecated. Please use `{{"type": "text", "text": "String input"}}` or `{{"type": "text", "arguments": {{..}}}} ` instead."#
-                );
-                match value {
-                    Value::String(text) => LazyResolvedInputMessageContent::Text { text },
-                    Value::Object(arguments) => {
-                        LazyResolvedInputMessageContent::Template(TemplateInput {
-                            name: role.implicit_template_name().to_string(),
-                            arguments,
-                        })
-                    }
-                    _ => {
-                        return Err(Error::new(ErrorDetails::InvalidMessage {
-                            message: r#"The 'value' field in a `{"type": "text", "value": ... }` content block must be a string or object"#.to_string(),
-                        }));
-                    }
-                }
             }
             InputMessageContent::File(file) => {
                 let storage_kind = context
@@ -434,7 +415,6 @@ pub enum InputMessageContent {
 pub enum TextKind {
     Text { text: String },
     Arguments { arguments: Map<String, Value> },
-    LegacyValue { value: Value },
 }
 
 impl<'de> Deserialize<'de> for TextKind {
@@ -463,7 +443,6 @@ impl<'de> Deserialize<'de> for TextKind {
                     serde::de::Error::custom(format!("Error deserializing 'arguments': {e}"))
                 })?,
             }),
-            "value" => Ok(TextKind::LegacyValue { value }),
             _ => Err(serde::de::Error::custom(format!(
                 "Unknown key '{key}' in text content"
             ))),
@@ -4464,7 +4443,7 @@ mod tests {
         let input = json!({
             "role": "user",
             "content": [
-                {"type": "text", "value": "Hello"},
+                {"type": "text", "text": "Hello"},
                 {"type": "tool_call", "id": "123", "name": "test_tool", "arguments": "{}"}
             ]
         });
@@ -4472,8 +4451,8 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 2);
         match &message.content[0] {
-            InputMessageContent::Text(TextKind::LegacyValue { value }) => {
-                assert_eq!(value, "Hello");
+            InputMessageContent::Text(TextKind::Text { text }) => {
+                assert_eq!(text, "Hello");
             }
             _ => panic!("Expected Text content"),
         }
