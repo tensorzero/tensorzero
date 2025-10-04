@@ -40,11 +40,6 @@ struct GatewayArgs {
     #[arg(long)]
     default_config: bool,
 
-    // Hidden flag used by our `Dockerfile` to warn users who have not overridden the default CMD
-    #[arg(long)]
-    #[clap(hide = true)]
-    warn_default_cmd: bool,
-
     /// Sets the log format used for all gateway logs.
     #[arg(long)]
     #[arg(value_enum)]
@@ -53,9 +48,6 @@ struct GatewayArgs {
 
     #[command(flatten)]
     migration_commands: MigrationCommands,
-
-    /// Deprecated: use `--config-file` instead
-    tensorzero_toml: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
@@ -127,51 +119,37 @@ async fn main() {
 
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
-    if args.warn_default_cmd {
-        tracing::warn!("Deprecation Warning: Running gateway from Docker container without overriding default CMD. Please override the command to either `--config-file` to specify a custom configuration file (e.g. `--config-file /path/to/tensorzero.toml`) or `--default-config` to use default settings (i.e. no custom functions, metrics, etc.).");
-    }
-
-    if args.tensorzero_toml.is_some() && args.config_file.is_some() {
-        tracing::error!("Cannot specify both `--config-file` and a positional path argument");
-        std::process::exit(1);
-    }
-
-    if args.tensorzero_toml.is_some() {
-        tracing::warn!(
-            "`Specifying a positional path argument is deprecated. Use `--config-file path/to/tensorzero.toml` instead."
-        );
-    }
-
-    let config_path = args.config_file.or(args.tensorzero_toml);
-
-    if config_path.is_some() && args.default_config {
-        tracing::error!("Cannot specify both `--config-file` and `--default-config`");
-        std::process::exit(1);
-    }
-
-    if !args.default_config && config_path.is_none() {
-        tracing::warn!("Running the gateway without any config-related arguments is deprecated. Use `--default-config` to start the gateway with the default config.");
-    }
-
-    let (config, glob) = if let Some(path) = &config_path {
-        let glob =
-            ConfigFileGlob::new_from_path(path).expect_pretty("Failed to process config file glob");
-        (
-            Arc::new(
-                Config::load_and_verify_from_path(&glob)
-                    .await
-                    .ok() // Don't print the error here, since it was already printed when it was constructed
-                    .expect_pretty(&format!(
-                        "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
-                        glob.glob,
-                        glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n")
-                    )),
-            ),
-            Some(glob),
-        )
-    } else {
-        tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
-        (Arc::new(Config::default()), None)
+    // Handle `--config-file` or `--default-config`
+    let (config, glob) = match (args.default_config, args.config_file) {
+        (true, Some(_)) => {
+            tracing::error!("You must not specify both `--config-file` and `--default-config`.");
+            std::process::exit(1);
+        }
+        (false, None) => {
+            tracing::error!("You must specify either `--config-file` or `--default-config`.");
+            std::process::exit(1);
+        }
+        (true, None) => {
+            tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
+            (Arc::new(Config::default()), None)
+        }
+        (false, Some(path)) => {
+            let glob = ConfigFileGlob::new_from_path(&path)
+                .expect_pretty("Failed to process config file glob");
+            (
+                Arc::new(
+                    Config::load_and_verify_from_path(&glob)
+                        .await
+                        .ok() // Don't print the error here, since it was already printed when it was constructed
+                        .expect_pretty(&format!(
+                            "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
+                            glob.glob,
+                            glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n")
+                        )),
+                ),
+                Some(glob),
+            )
+        }
     };
 
     if config.gateway.debug {
