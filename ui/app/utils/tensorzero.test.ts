@@ -10,9 +10,12 @@ describe("update datapoints", () => {
     tensorZeroClient = getTensorZeroClient();
   });
 
-  test("should preserve original source_inference_id and set is_custom when updating datapoint", async () => {
+  test("should preserve original source_inference_id and is_custom when updating datapoint", async () => {
     const datapoint: JsonInferenceDatapoint = {
       function_name: "extract_entities",
+      name: null,
+      episode_id: null,
+      staled_at: null,
       input: {
         messages: [
           {
@@ -67,7 +70,7 @@ describe("update datapoints", () => {
         additionalProperties: false,
       },
       source_inference_id: "01982323-3460-71dd-8cc8-bc4d44a0c88f",
-      is_custom: true,
+      is_custom: false,
       id: "01960832-7028-743c-8c44-a598aa5130fd",
     };
 
@@ -80,7 +83,7 @@ describe("update datapoints", () => {
     expect(retrievedDatapoint?.source_inference_id).toBe(
       datapoint.source_inference_id,
     );
-    expect(retrievedDatapoint?.is_custom).toBe(true);
+    expect(retrievedDatapoint?.is_custom).toBe(false);
   });
 
   test("should list datapoints", async () => {
