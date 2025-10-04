@@ -3,85 +3,113 @@ import {
   SnippetLayout,
   SnippetContent,
   SnippetTabs,
-  type SnippetTab,
 } from "~/components/layout/SnippetLayout";
 import { EmptyMessage } from "~/components/layout/SnippetContent";
 import { CodeEditor } from "~/components/ui/code-editor";
+import { Badge } from "~/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 
 interface FunctionSchemaProps {
   functionConfig: FunctionConfig;
 }
 
-// Create a schema tab with appropriate indicator based on schema content
-function createSchemaTab(
-  id: string,
-  label: string,
-  schema?: JsonValue,
-  emptyMessage?: string,
-): SnippetTab & { emptyMessage?: string } {
-  return {
-    id,
-    label,
-    indicator: schema ? "content" : "empty",
-    emptyMessage,
-  };
-}
-
 export default function FunctionSchema({
   functionConfig,
 }: FunctionSchemaProps) {
-  const schemas = {
-    system: functionConfig.schemas.system?.value,
-    user: functionConfig.schemas.user?.value,
-    assistant: functionConfig.schemas.assistant?.value,
+  // Build schemas object dynamically from all available schemas
+  const schemas: Record<
+    string,
+    { value: JsonValue | undefined; legacy_definition: boolean }
+  > = {
+    ...Object.fromEntries(
+      Object.entries(functionConfig.schemas).map(([name, schemaData]) => [
+        name,
+        {
+          value: schemaData?.schema?.value,
+          legacy_definition: schemaData?.legacy_definition ?? false,
+        },
+      ]),
+    ),
     ...(functionConfig.type === "json"
-      ? { output: functionConfig.output_schema?.value }
+      ? {
+          output: {
+            value: functionConfig.output_schema?.value,
+            legacy_definition: false,
+          },
+        }
       : {}),
   };
 
-  const tabs = [
-    createSchemaTab(
-      "system",
-      "System Schema",
-      schemas.system,
-      "No system schema defined.",
-    ),
-    createSchemaTab(
-      "user",
-      "User Schema",
-      schemas.user,
-      "No user schema defined.",
-    ),
-    createSchemaTab(
-      "assistant",
-      "Assistant Schema",
-      schemas.assistant,
-      "No assistant schema defined.",
-    ),
-    ...(functionConfig.type === "json"
-      ? [
-          createSchemaTab(
-            "output",
-            "Output Schema",
-            schemas.output,
-            "No output schema defined.",
-          ),
-        ]
-      : []),
-  ];
+  // Get all schema entries
+  const schemaEntries = Object.entries(schemas);
 
-  // Find the first tab with content, or default to "system"
-  const defaultTab =
-    tabs.find((tab) => tab.indicator === "content")?.id || "system";
+  // If no schemas exist, show an empty state
+  if (schemaEntries.length === 0) {
+    return (
+      <SnippetLayout>
+        <SnippetContent maxHeight={240}>
+          <EmptyMessage message="No schemas defined." />
+        </SnippetContent>
+      </SnippetLayout>
+    );
+  }
+
+  // Create tabs for each schema
+  const tabs = schemaEntries.map(([name, schemaData]) => {
+    const isLegacy = schemaData.legacy_definition;
+    const isOutputSchema = name === "output";
+    return {
+      id: name,
+      label: (
+        <div className="flex items-center gap-2">
+          <span>{name}</span>
+          {isLegacy && !isOutputSchema && (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge className="bg-yellow-600 px-1 py-0 text-[10px] text-white">
+                    Legacy
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs p-2">
+                  <div className="text-xs">
+                    Please migrate from <code>{name}_schema</code> to{" "}
+                    <code>schemas.{name}.path</code>.{" "}
+                    <a
+                      href="https://www.tensorzero.com/docs/gateway/create-a-prompt-template#migrate-from-legacy-prompt-templates"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-gray-300"
+                    >
+                      Read more
+                    </a>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
+      ),
+      emptyMessage: "No schema defined.",
+    };
+  });
+
+  // Default to the first tab
+  const defaultTab = tabs[0]?.id;
 
   return (
     <SnippetLayout>
       <SnippetTabs tabs={tabs} defaultTab={defaultTab}>
         {(activeTab) => {
           const tab = tabs.find((tab) => tab.id === activeTab);
-          const schema = schemas[activeTab as keyof typeof schemas];
-          const formattedContent = schema
-            ? JSON.stringify(schema, null, 2)
+          const schema = schemas[activeTab];
+          const formattedContent = schema.value
+            ? JSON.stringify(schema.value, null, 2)
             : undefined;
 
           return (

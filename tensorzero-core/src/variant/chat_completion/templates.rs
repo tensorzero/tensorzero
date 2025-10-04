@@ -128,7 +128,9 @@ impl ChatTemplates {
             .map(|x| {
                 Ok::<_, Error>(TemplateWithSchema {
                     template: PathWithContents::from_path(x.clone())?,
-                    schema: schemas.get_implicit_system_schema().cloned(),
+                    schema: schemas
+                        .get_implicit_system_schema()
+                        .map(|s| s.schema.clone()),
                     legacy_definition: true,
                 })
             })
@@ -140,7 +142,7 @@ impl ChatTemplates {
             .map(|x| {
                 Ok::<_, Error>(TemplateWithSchema {
                     template: PathWithContents::from_path(x.clone())?,
-                    schema: schemas.get_implicit_user_schema().cloned(),
+                    schema: schemas.get_implicit_user_schema().map(|s| s.schema.clone()),
                     legacy_definition: true,
                 })
             })
@@ -152,7 +154,9 @@ impl ChatTemplates {
             .map(|x| {
                 Ok::<_, Error>(TemplateWithSchema {
                     template: PathWithContents::from_path(x.clone())?,
-                    schema: schemas.get_implicit_assistant_schema().cloned(),
+                    schema: schemas
+                        .get_implicit_assistant_schema()
+                        .map(|s| s.schema.clone()),
                     legacy_definition: true,
                 })
             })
@@ -166,7 +170,7 @@ impl ChatTemplates {
 
         let system = Self::validate_wrapper(
             system,
-            schemas.get_implicit_system_schema(),
+            schemas.get_implicit_system_schema().map(|s| &s.schema),
             system_wrapper,
             &function_and_variant_name,
             "system",
@@ -174,7 +178,7 @@ impl ChatTemplates {
 
         let user = Self::validate_wrapper(
             user,
-            schemas.get_implicit_user_schema(),
+            schemas.get_implicit_user_schema().map(|s| &s.schema),
             user_wrapper,
             &function_and_variant_name,
             "user",
@@ -182,7 +186,7 @@ impl ChatTemplates {
 
         let assistant = Self::validate_wrapper(
             assistant,
-            schemas.get_implicit_assistant_schema(),
+            schemas.get_implicit_assistant_schema().map(|s| &s.schema),
             assistant_wrapper,
             &function_and_variant_name,
             "assistant",
@@ -202,7 +206,9 @@ impl ChatTemplates {
         for (template_name, template_config) in &chat_config.templates.inner {
             let template = TemplateWithSchema {
                 template: PathWithContents::from_path(template_config.path.clone())?,
-                schema: schemas.get_named_schema(template_name).cloned(),
+                schema: schemas
+                    .get_named_schema(template_name)
+                    .map(|s| s.schema.clone()),
                 legacy_definition: false,
             };
             if templates

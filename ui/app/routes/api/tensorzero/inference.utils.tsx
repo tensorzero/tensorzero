@@ -651,13 +651,26 @@ function variantInfoToUninitalizedVariantInfo(
   const inner = variantInfo.inner;
 
   switch (inner.type) {
-    case "chat_completion":
+    case "chat_completion": {
+      // Convert all templates
+      const templates: Record<
+        string,
+        { path: { __tensorzero_remapped_path: string; __data: string } }
+      > = {};
+      for (const [name, templateData] of Object.entries(inner.templates)) {
+        const converted = convertTemplate(templateData?.template || null);
+        if (converted) {
+          templates[name] = { path: converted };
+        }
+      }
+
       return {
         ...baseUninitialized,
         type: "chat_completion" as const,
         weight: inner.weight,
         model: inner.model,
         input_wrappers: null,
+        // Legacy fields for backward compatibility
         system_template: convertTemplate(
           inner.templates.system?.template || null,
         ),
@@ -665,7 +678,8 @@ function variantInfoToUninitalizedVariantInfo(
         assistant_template: convertTemplate(
           inner.templates.assistant?.template || null,
         ),
-        templates: {},
+        // New templates field with all templates
+        templates,
         temperature: inner.temperature,
         max_tokens: inner.max_tokens,
         seed: inner.seed,
@@ -676,8 +690,23 @@ function variantInfoToUninitalizedVariantInfo(
         json_mode: inner.json_mode,
         retries: inner.retries,
       };
+    }
 
-    case "best_of_n_sampling":
+    case "best_of_n_sampling": {
+      // Convert all evaluator templates
+      const evaluatorTemplates: Record<
+        string,
+        { path: { __tensorzero_remapped_path: string; __data: string } }
+      > = {};
+      for (const [name, templateData] of Object.entries(
+        inner.evaluator.templates,
+      )) {
+        const converted = convertTemplate(templateData?.template || null);
+        if (converted) {
+          evaluatorTemplates[name] = { path: converted };
+        }
+      }
+
       return {
         ...baseUninitialized,
         type: "experimental_best_of_n_sampling" as const,
@@ -688,6 +717,7 @@ function variantInfoToUninitalizedVariantInfo(
           weight: inner.evaluator.weight,
           model: inner.evaluator.model,
           input_wrappers: null,
+          // Legacy fields for backward compatibility
           system_template: convertTemplate(
             inner.evaluator.templates.system?.template || null,
           ),
@@ -697,7 +727,8 @@ function variantInfoToUninitalizedVariantInfo(
           assistant_template: convertTemplate(
             inner.evaluator.templates.assistant?.template || null,
           ),
-          templates: {},
+          // New templates field with all templates
+          templates: evaluatorTemplates,
           temperature: inner.evaluator.temperature,
           top_p: inner.evaluator.top_p,
           max_tokens: inner.evaluator.max_tokens,
@@ -709,6 +740,7 @@ function variantInfoToUninitalizedVariantInfo(
           retries: inner.evaluator.retries,
         },
       };
+    }
 
     case "dicl":
       return {
@@ -730,7 +762,21 @@ function variantInfoToUninitalizedVariantInfo(
         retries: inner.retries,
       };
 
-    case "mixture_of_n":
+    case "mixture_of_n": {
+      // Convert all fuser templates
+      const fuserTemplates: Record<
+        string,
+        { path: { __tensorzero_remapped_path: string; __data: string } }
+      > = {};
+      for (const [name, templateData] of Object.entries(
+        inner.fuser.templates,
+      )) {
+        const converted = convertTemplate(templateData?.template || null);
+        if (converted) {
+          fuserTemplates[name] = { path: converted };
+        }
+      }
+
       return {
         ...baseUninitialized,
         type: "experimental_mixture_of_n" as const,
@@ -741,6 +787,7 @@ function variantInfoToUninitalizedVariantInfo(
           weight: inner.fuser.weight,
           model: inner.fuser.model,
           input_wrappers: null,
+          // Legacy fields for backward compatibility
           system_template: convertTemplate(
             inner.fuser.templates.system?.template || null,
           ),
@@ -750,7 +797,8 @@ function variantInfoToUninitalizedVariantInfo(
           assistant_template: convertTemplate(
             inner.fuser.templates.assistant?.template || null,
           ),
-          templates: {},
+          // New templates field with all templates
+          templates: fuserTemplates,
           temperature: inner.fuser.temperature,
           top_p: inner.fuser.top_p,
           max_tokens: inner.fuser.max_tokens,
@@ -762,15 +810,30 @@ function variantInfoToUninitalizedVariantInfo(
           retries: inner.fuser.retries,
         },
       };
+    }
 
-    case "chain_of_thought":
+    case "chain_of_thought": {
+      // Convert all templates
+      const templates: Record<
+        string,
+        { path: { __tensorzero_remapped_path: string; __data: string } }
+      > = {};
+      for (const [name, templateData] of Object.entries(inner.templates)) {
+        const converted = convertTemplate(templateData?.template || null);
+        if (converted) {
+          templates[name] = { path: converted };
+        }
+      }
+
       return {
         ...baseUninitialized,
         type: "experimental_chain_of_thought" as const,
         weight: inner.weight,
         model: inner.model,
         input_wrappers: null,
-        templates: {},
+        // New templates field with all templates
+        templates,
+        // Legacy fields for backward compatibility
         system_template: convertTemplate(
           inner.templates.system?.template || null,
         ),
@@ -788,6 +851,7 @@ function variantInfoToUninitalizedVariantInfo(
         json_mode: inner.json_mode,
         retries: inner.retries,
       };
+    }
 
     default:
       throw new Error(`Unknown variant type`);

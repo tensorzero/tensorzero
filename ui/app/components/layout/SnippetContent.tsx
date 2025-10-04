@@ -60,7 +60,7 @@ export function TextMessage({
 }: TextMessageProps) {
   const formattedContent = useFormattedJson(content || "");
 
-  return !content && !isEditing ? (
+  return content === undefined && !isEditing ? (
     <EmptyMessage message={emptyMessage} />
   ) : (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">

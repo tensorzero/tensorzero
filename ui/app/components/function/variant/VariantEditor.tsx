@@ -7,9 +7,6 @@ import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { CodeEditor } from "~/components/ui/code-editor";
 
-type TemplateType = "system" | "user" | "assistant";
-type TemplateKey = `${TemplateType}`;
-
 interface VariantEditorProps {
   variantInfo: VariantInfo;
   confirmVariantInfo: (info: VariantInfo) => void;
@@ -32,11 +29,9 @@ export function VariantEditor({
   );
 
   // Which templates existed when we opened?
-  const initialHas = useRef({
-    system: !!config?.templates.system?.template,
-    user: !!config?.templates.user?.template,
-    assistant: !!config?.templates.assistant?.template,
-  });
+  const initialTemplateNames = useRef<string[]>(
+    config ? Object.keys(config.templates) : [],
+  );
 
   if (variantInfo.inner.type !== "chat_completion" || !config) {
     return (
@@ -50,20 +45,19 @@ export function VariantEditor({
     );
   }
 
-  const updateTemplate = (type: TemplateType, contents: string) => {
+  const updateTemplate = (templateName: string, contents: string) => {
     setEditedConfig((prev) => {
       if (!prev) return prev;
 
-      const key: TemplateKey = `${type}`;
-      const hadInitially = initialHas.current[type];
+      const hadInitially = initialTemplateNames.current.includes(templateName);
       if (hadInitially) {
         // Keep an object even when empty so the editor stays visible/editable.
-        const prevTemplate = prev.templates[key];
+        const prevTemplate = prev.templates[templateName];
         const templates = {
           ...prev.templates,
         };
         if (prevTemplate) {
-          templates[key] = {
+          templates[templateName] = {
             ...prevTemplate,
             template: { contents, path: prevTemplate.template.path },
           };
@@ -124,73 +118,33 @@ export function VariantEditor({
           </Card>
 
           {/* Templates Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Templates</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-4">
-                <Label>System Template</Label>
-                {initialHas.current.system ? (
-                  <CodeEditor
-                    value={
-                      editedConfig?.templates.system?.template?.contents ?? ""
-                    }
-                    allowedLanguages={["jinja2", "text"]}
-                    onChange={(value) => updateTemplate("system", value)}
-                    className="min-h-[200px]"
-                  />
-                ) : (
-                  <div className="rounded-md border border-dashed p-8 text-center">
-                    <p className="text-muted-foreground text-sm">
-                      No system template defined
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-4">
-                <Label>User Template</Label>
-                {initialHas.current.user ? (
-                  <CodeEditor
-                    value={
-                      editedConfig?.templates.user?.template?.contents ?? ""
-                    }
-                    allowedLanguages={["jinja2", "text"]}
-                    onChange={(value) => updateTemplate("user", value)}
-                    className="min-h-[200px]"
-                  />
-                ) : (
-                  <div className="rounded-md border border-dashed p-8 text-center">
-                    <p className="text-muted-foreground text-sm">
-                      No user template defined
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-8">
-                <Label>Assistant Template</Label>
-                {initialHas.current.assistant ? (
-                  <CodeEditor
-                    value={
-                      editedConfig?.templates.assistant?.template?.contents ??
-                      ""
-                    }
-                    allowedLanguages={["jinja2", "text"]}
-                    onChange={(value) => updateTemplate("assistant", value)}
-                    className="min-h-[200px]"
-                  />
-                ) : (
-                  <div className="rounded-md border border-dashed p-8 text-center">
-                    <p className="text-muted-foreground text-sm">
-                      No assistant template defined
-                    </p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          {initialTemplateNames.current.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Templates</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {initialTemplateNames.current.map((templateName) => {
+                  return (
+                    <div key={templateName} className="space-y-4">
+                      <Label>{templateName}</Label>
+                      <CodeEditor
+                        value={
+                          editedConfig?.templates[templateName]?.template
+                            ?.contents ?? ""
+                        }
+                        allowedLanguages={["jinja2", "text"]}
+                        onChange={(value) =>
+                          updateTemplate(templateName, value)
+                        }
+                        className="min-h-[200px]"
+                      />
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Response Format */}
           <Card>
