@@ -615,7 +615,10 @@ pub(super) async fn prepare_deepseek_messages<'a>(
             );
         }
     } else if let Some(system_msg) = prepare_system_or_developer_message(
-        request.system.as_deref().map(SystemOrDeveloper::System),
+        request
+            .system
+            .as_deref()
+            .map(|m| SystemOrDeveloper::System(Cow::Borrowed(m))),
         Some(&request.json_mode),
         &messages,
     ) {

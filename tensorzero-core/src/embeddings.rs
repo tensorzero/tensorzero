@@ -58,6 +58,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
                 OpenAIKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
+                false,
             )),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
@@ -848,6 +849,7 @@ mod tests {
                 model_name: "text-embedding-ada-002".to_string(),
                 api_base: None,
                 api_key_location: Some(crate::model::CredentialLocation::None),
+                api_type: Default::default(),
             },
             timeout_ms: None,
             timeouts: TimeoutsConfig::default(),
