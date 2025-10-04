@@ -69,71 +69,23 @@ impl VariantSampler for StaticWeightsConfig {
         episode_id: Uuid,
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     ) -> Result<(String, Arc<VariantInfo>), Error> {
-        // Compute the total weight of variants present in variant_names
-        let total_weight = active_variants
-            .keys()
-            .map(|variant_name| self.candidate_variants.get(variant_name).unwrap_or(&0.0))
-            .sum::<f64>();
-        if total_weight <= 0.0 {
-            // Assume that there are no active variants in the candidate set so
-            // we will try the fallback variants
-            // First, we take the intersection of active_variants and fallback_variants
-            let intersection = active_variants
-                .keys()
-                .filter(|variant_name| self.fallback_variants.contains(variant_name))
-                .collect::<Vec<_>>();
-            if intersection.is_empty() {
-                Err(ErrorDetails::NoFallbackVariantsRemaining.into())
-            } else {
-                // Use deterministic selection based on episode_id for consistent behavior
-                let random_index = (get_uniform_value(function_name, &episode_id)
-                    * intersection.len() as f64)
-                    .floor() as usize;
-                let selected_variant = intersection.get(random_index).ok_or_else(|| Error::new(ErrorDetails::Inference {
-                    message: format!("Failed to sample variant from nonempty intersection. {IMPOSSIBLE_ERROR_MESSAGE}")
-                }))?.to_string();
-                let variant_data = active_variants.remove(&selected_variant).ok_or_else(|| Error::new(ErrorDetails::Inference {
-                    message: format!("Failed to remove variant from active variants. {IMPOSSIBLE_ERROR_MESSAGE}")
-                }))?;
-                Ok((selected_variant, variant_data))
-            }
-        } else {
-            // Sample a random threshold between 0 and the total weight using the deterministic hashing trick
-            let random_threshold = get_uniform_value(function_name, &episode_id) * total_weight;
-            // Iterate over the variants to find the one that corresponds to the sampled threshold
-            let variant_to_remove = {
-                let mut cumulative_weight = 0.0;
-                active_variants
-                    .iter()
-                    .find(|(variant_name, _)| {
-                        cumulative_weight += self
-                            .candidate_variants
-                            .get(variant_name.as_str())
-                            .unwrap_or(&0.0);
-                        cumulative_weight > random_threshold
-                    })
-                    .map(|(name, _)| name.clone()) // Clone the key
-            };
+        let uniform_sample = get_uniform_value(function_name, &episode_id);
+        let selected_variant_name = super::sample_static_weights(
+            active_variants,
+            &self.candidate_variants,
+            &self.fallback_variants,
+            uniform_sample,
+        )?;
 
-            if let Some(variant_name) = variant_to_remove {
-                return active_variants.remove_entry(&variant_name).ok_or_else(|| {
-                    Error::new(ErrorDetails::InvalidFunctionVariants {
-                        message: format!(
-                            "Function `{function_name}` has no variant for the sampled variant `{variant_name}`. {IMPOSSIBLE_ERROR_MESSAGE}"
-                        )
-                    })
-                });
-            }
-            // If we didn't find a variant (which should only happen due to rare numerical precision issues),
-            // pop an arbitrary variant as a fallback
-            active_variants.pop_first().ok_or_else(|| {
+        active_variants
+            .remove_entry(&selected_variant_name)
+            .ok_or_else(|| {
                 Error::new(ErrorDetails::InvalidFunctionVariants {
                     message: format!(
-                        "Function `{function_name}` has no variants. {IMPOSSIBLE_ERROR_MESSAGE}"
+                        "Function `{function_name}` has no variant for the sampled variant `{selected_variant_name}`. {IMPOSSIBLE_ERROR_MESSAGE}"
                     ),
                 })
             })
-        }
     }
 }
 
