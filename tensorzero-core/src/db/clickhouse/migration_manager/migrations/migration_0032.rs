@@ -42,16 +42,15 @@ impl Migration for Migration0032<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
         self.clickhouse
             .run_query_synchronous_no_params(
-                r"ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS is_custom Bool DEFAULT false;"
-                    .to_string(),
+                format!(r"ALTER TABLE ChatInferenceDatapoint{on_cluster_name} ADD COLUMN IF NOT EXISTS is_custom Bool DEFAULT false;"),
             )
             .await?;
         self.clickhouse
             .run_query_synchronous_no_params(
-                r"ALTER TABLE JsonInferenceDatapoint ADD COLUMN IF NOT EXISTS is_custom Bool DEFAULT false;"
-                    .to_string(),
+                format!(r"ALTER TABLE JsonInferenceDatapoint{on_cluster_name} ADD COLUMN IF NOT EXISTS is_custom Bool DEFAULT false;"),
             )
             .await?;
 
@@ -59,9 +58,9 @@ impl Migration for Migration0032<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r"ALTER TABLE ChatInferenceDatapoint DROP COLUMN is_custom;
-        ALTER TABLE JsonInferenceDatapoint DROP COLUMN is_custom;"
-            .to_string()
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        format!(r"ALTER TABLE ChatInferenceDatapoint{on_cluster_name} DROP COLUMN is_custom;
+        ALTER TABLE JsonInferenceDatapoint{on_cluster_name} DROP COLUMN is_custom;")
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

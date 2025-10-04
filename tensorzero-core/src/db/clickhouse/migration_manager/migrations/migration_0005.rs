@@ -96,22 +96,22 @@ impl Migration for Migration0005<'_> {
             .run_query_synchronous_no_params(query.to_string())
             .await?;
 
-        // Add a column `tags` to the `BooleanMetricFeedback` table
-        let query = r"
-            ALTER TABLE ChatInference
-            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
+        // Add a column `tags` to the `ChatInference` table
+        let query = format!(r"
+            ALTER TABLE ChatInference{on_cluster_name}
+            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();");
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Add a column `tags` to the `JsonInference` table
-        let query = r"
-            ALTER TABLE JsonInference
-            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
+        let query = format!(r"
+            ALTER TABLE JsonInference{on_cluster_name}
+            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();");
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // In the following few queries we create the materialized views that map the tags from the original tables to the new `InferenceTag` table
@@ -168,8 +168,8 @@ impl Migration for Migration0005<'_> {
             /* Drop the `InferenceTag` table */\
             DROP TABLE IF EXISTS InferenceTag{on_cluster_name} SYNC;
             /* Drop the `tags` column from the original inference tables */\
-            ALTER TABLE ChatInference DROP COLUMN tags;
-            ALTER TABLE JsonInference DROP COLUMN tags;
+            ALTER TABLE ChatInference{on_cluster_name} DROP COLUMN tags;
+            ALTER TABLE JsonInference{on_cluster_name} DROP COLUMN tags;
         "
         )
     }

@@ -145,37 +145,37 @@ impl Migration for Migration0021<'_> {
             .await?;
 
         // Add the staled_at column to both datapoint tables
-        let query = r"
-            ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS staled_at Nullable(DateTime64(6, 'UTC'));
-        ";
+        let query = format!(r"
+            ALTER TABLE ChatInferenceDatapoint{on_cluster_name} ADD COLUMN IF NOT EXISTS staled_at Nullable(DateTime64(6, 'UTC'));
+        ");
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
-        let query = r"
-            ALTER TABLE JsonInferenceDatapoint ADD COLUMN IF NOT EXISTS staled_at Nullable(DateTime64(6, 'UTC'));
-        ";
+        let query = format!(r"
+            ALTER TABLE JsonInferenceDatapoint{on_cluster_name} ADD COLUMN IF NOT EXISTS staled_at Nullable(DateTime64(6, 'UTC'));
+        ");
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Update the defaults of updated_at for the Datapoint tables to be now64
-        let query = r"
-            ALTER TABLE ChatInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now64();
-        ";
+        let query = format!(r"
+            ALTER TABLE ChatInferenceDatapoint{on_cluster_name} MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now64();
+        ");
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
-        let query = r"
-            ALTER TABLE JsonInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now64();
-        ";
+        let query = format!(r"
+            ALTER TABLE JsonInferenceDatapoint{on_cluster_name} MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now64();
+        ");
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
@@ -294,11 +294,11 @@ impl Migration for Migration0021<'_> {
         /* Drop the `TagInference` table */\
         DROP TABLE IF EXISTS TagInference{on_cluster_name} SYNC;
         /* Drop the `staled_at` column in the datapoint tables */\
-        ALTER TABLE ChatInferenceDatapoint DROP COLUMN staled_at;
-        ALTER TABLE JsonInferenceDatapoint DROP COLUMN staled_at;
+        ALTER TABLE ChatInferenceDatapoint{on_cluster_name} DROP COLUMN staled_at;
+        ALTER TABLE JsonInferenceDatapoint{on_cluster_name} DROP COLUMN staled_at;
         /* Revert the change to the default of `updated_at` in the datapoint tables */\
-        ALTER TABLE ChatInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now();
-        ALTER TABLE JsonInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now();
+        ALTER TABLE ChatInferenceDatapoint{on_cluster_name} MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now();
+        ALTER TABLE JsonInferenceDatapoint{on_cluster_name} MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now();
     ")
     }
 
