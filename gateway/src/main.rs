@@ -48,9 +48,6 @@ struct GatewayArgs {
 
     #[command(flatten)]
     migration_commands: MigrationCommands,
-
-    /// Deprecated: use `--config-file` instead
-    tensorzero_toml: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
@@ -122,29 +119,16 @@ async fn main() {
 
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
-    if args.tensorzero_toml.is_some() && args.config_file.is_some() {
-        tracing::error!("Cannot specify both `--config-file` and a positional path argument");
+    if args.config_file.is_some() && args.default_config {
+        tracing::error!("You must not specify both `--config-file` and `--default-config`.");
         std::process::exit(1);
     }
 
-    if args.tensorzero_toml.is_some() {
-        tracing::warn!(
-            "`Specifying a positional path argument is deprecated. Use `--config-file path/to/tensorzero.toml` instead."
-        );
+    if !args.default_config && args.config_file.is_none() {
+        tracing::warn!("You must specify either `--config-file` or `--default-config`.");
     }
 
-    let config_path = args.config_file.or(args.tensorzero_toml);
-
-    if config_path.is_some() && args.default_config {
-        tracing::error!("Cannot specify both `--config-file` and `--default-config`");
-        std::process::exit(1);
-    }
-
-    if !args.default_config && config_path.is_none() {
-        tracing::warn!("Running the gateway without any config-related arguments is deprecated. Use `--default-config` to start the gateway with the default config.");
-    }
-
-    let (config, glob) = if let Some(path) = &config_path {
+    let (config, glob) = if let Some(path) = &args.config_file {
         let glob =
             ConfigFileGlob::new_from_path(path).expect_pretty("Failed to process config file glob");
         (
