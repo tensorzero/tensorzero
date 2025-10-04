@@ -1,0 +1,27 @@
+# [[rate_limiting.rules]]
+# priority = 0
+# model_inferences_per_minute = 10
+# scope = [
+#     { tag_key = "application_id", tag_value = "1" }
+# ]
+
+# [[rate_limiting.rules]]
+# priority = 0
+# model_inferences_per_minute = 1
+# scope = [
+#     { tag_key = "user_id", tag_value = "tensorzero::should_not_be_allowed" }
+# ]
+
+[[rate_limiting.rules]]
+priority = 0
+model_inferences_per_minute = 1
+scope = [
+    { tag_key = "x_id", tag_value = "tensorzero::total" }
+]
+
+[[rate_limiting.rules]]
+priority = 1
+model_inferences_per_minute = 10
+scope = [
+    { tag_key = "x_id", tag_value = "1" }
+]
