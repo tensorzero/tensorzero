@@ -1982,11 +1982,9 @@ frequency_penalty = 0.2
 ##### `json_mode`
 
 - **Type:** string
-- **Required:** no (default: `strict`)
+- **Required:** yes for `json` functions, forbidden for `chat` functions
 
 Defines the strategy for generating JSON outputs.
-
-This parameter is only supported for variants of functions with `type = "json"`.
 
 The supported modes are:
 
@@ -2280,8 +2278,10 @@ candidates = ["promptA", "promptA", "promptB"] # 3 candidate generations
 
 The `evaluator` parameter specifies the configuration for the model that will evaluate and select the best response from the generated candidates.
 
-The evaluator is configured similarly to a `chat_completion` variant, but without the `type` field.
+The evaluator is configured similarly to a `chat_completion` variant for a JSON function, but without the `type` field.
 The prompts here should be prompts that you would use to solve the original problem, as the gateway has special-purpose handling and templates to convert them to an evaluator.
+
+The evaluator can optionally include a `json_mode` parameter (see the `json_mode` documentation under `chat_completion` variants). If not specified, it defaults to `strict`.
 
 ```toml
 [functions.draft-email.variants.best-of-n]
@@ -2399,11 +2399,11 @@ candidates = ["promptA", "promptA", "promptB"] # 3 candidate generations
 ##### `fuser`
 
 - **Type:** object
-- **Required:** yes
+- **Required:** yes for `json` functions, forbidden for `chat` functions
 
 The `fuser` parameter specifies the configuration for the model that will evaluate and combine the elements.
 
-The evaluator is configured similarly to a `chat_completion` variant, but without the `type` field.
+The fuser is configured similarly to a `chat_completion` variant, but without the `type` field.
 The prompts here should be prompts that you would use to solve the original problem, as the gateway has special-purpose handling and templates to convert them to a fuser.
 
 ```toml
@@ -2670,11 +2670,9 @@ Intelligence-Level: AGI
 ##### `json_mode`
 
 - **Type:** string
-- **Required:** no (default: `strict`)
+- **Required:** yes for `json` functions, forbidden for `chat` functions
 
 Defines the strategy for generating JSON outputs.
-
-This parameter is only supported for variants of functions with `type = "json"`.
 
 The supported modes are:
 

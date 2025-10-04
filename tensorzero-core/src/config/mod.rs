@@ -1345,10 +1345,8 @@ impl UninitializedFunctionConfig {
                                 variant_missing_mode = Some(name.clone());
                             }
                         }
-                        VariantConfig::BestOfNSampling(best_of_n_config) => {
-                            if best_of_n_config.evaluator().inner.json_mode().is_none() {
-                                variant_missing_mode = Some(format!("{name}.evaluator"));
-                            }
+                        VariantConfig::BestOfNSampling(_best_of_n_config) => {
+                            // Evaluator json_mode is optional - it defaults to `strict` at runtime
                         }
                         VariantConfig::MixtureOfN(mixture_of_n_config) => {
                             if mixture_of_n_config.fuser().inner.json_mode().is_none() {
