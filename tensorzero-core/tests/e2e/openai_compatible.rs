@@ -46,7 +46,6 @@ async fn test_openai_compatible_route_with_function_name_as_model(model: &str) {
 
     let response = tensorzero_core::endpoints::openai_compatible::inference_handler(
         State(state),
-        HeaderMap::default(),
         StructuredJson(
             serde_json::from_value(serde_json::json!({
                 "model": model,
@@ -881,26 +880,11 @@ async fn test_openai_compatible_streaming_tool_call() {
 
 #[tokio::test]
 #[traced_test]
-async fn test_openai_compatible_warn_headers() {
+async fn test_openai_compatible_headers_ignored() {
     let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     let state = client.get_app_state_data().unwrap().clone();
-    let episode_id = Uuid::now_v7();
-    let _ = tensorzero_core::endpoints::openai_compatible::inference_handler(
+    let response = tensorzero_core::endpoints::openai_compatible::inference_handler(
         State(state),
-        HeaderMap::from_iter(vec![
-            (
-                HeaderName::from_static("episode_id"),
-                HeaderValue::from_str(&episode_id.to_string()).unwrap(),
-            ),
-            (
-                HeaderName::from_static("variant_name"),
-                HeaderValue::from_str("test").unwrap(),
-            ),
-            (
-                HeaderName::from_static("dryrun"),
-                HeaderValue::from_str("true").unwrap(),
-            ),
-        ]),
         StructuredJson(
             serde_json::from_value(serde_json::json!({
                 "messages": [],
@@ -909,17 +893,22 @@ async fn test_openai_compatible_warn_headers() {
             .unwrap(),
         ),
     )
-    .await;
+    .await
+    .unwrap();
 
-    assert!(logs_contain(
+    // Headers should be ignored, so no warnings should be logged
+    assert!(!logs_contain(
         "Deprecation Warning: Please use the `tensorzero::episode_id` field instead of the `episode_id` header."
     ));
-    assert!(logs_contain(
+    assert!(!logs_contain(
         "Deprecation Warning: Please use the `tensorzero::variant_name` field instead of the `variant_name` header."
     ));
-    assert!(logs_contain(
+    assert!(!logs_contain(
         "Deprecation Warning: Please use the `tensorzero::dryrun` field instead of the `dryrun` header."
     ));
+
+    // Verify the response is successful (headers didn't break anything)
+    assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
@@ -929,7 +918,6 @@ async fn test_openai_compatible_warn_unknown_fields() {
     let state = client.get_app_state_data().unwrap().clone();
     tensorzero_core::endpoints::openai_compatible::inference_handler(
         State(state),
-        HeaderMap::default(),
         StructuredJson(
             serde_json::from_value(serde_json::json!({
                 "messages": [],
@@ -953,7 +941,6 @@ async fn test_openai_compatible_deny_unknown_fields() {
     let state = client.get_app_state_data().unwrap().clone();
     let err = tensorzero_core::endpoints::openai_compatible::inference_handler(
         State(state),
-        HeaderMap::default(),
         StructuredJson(
             serde_json::from_value(serde_json::json!({
                 "messages": [],

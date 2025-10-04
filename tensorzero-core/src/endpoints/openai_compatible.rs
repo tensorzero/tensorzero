@@ -13,7 +13,6 @@ use std::collections::HashMap;
 use axum::body::Body;
 use axum::debug_handler;
 use axum::extract::State;
-use axum::http::HeaderMap;
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -80,7 +79,6 @@ pub async fn inference_handler(
         postgres_connection_info,
         ..
     }): AppState,
-    headers: HeaderMap,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
 ) -> Result<Response<Body>, Error> {
     if !openai_compatible_params.unknown_fields.is_empty() {
@@ -107,7 +105,7 @@ pub async fn inference_handler(
         );
     }
     let stream_options = openai_compatible_params.stream_options;
-    let params = Params::try_from_openai(headers, openai_compatible_params)?;
+    let params = Params::try_from_openai(openai_compatible_params)?;
 
     // The prefix for the response's `model` field depends on the inference target
     // (We run this disambiguation deep in the `inference` call below but we don't get the decision out, so we duplicate it here)
@@ -643,7 +641,6 @@ const TENSORZERO_EMBEDDING_MODEL_NAME_PREFIX: &str = "tensorzero::embedding_mode
 
 impl Params {
     fn try_from_openai(
-        headers: HeaderMap,
         openai_compatible_params: OpenAICompatibleParams,
     ) -> Result<Self, Error> {
         let (function_name, model_name) = if let Some(function_name) = openai_compatible_params
@@ -690,26 +687,7 @@ impl Params {
             }
         }
 
-        let header_episode_id = headers
-            .get("episode_id")
-            .map(|h| {
-                tracing::warn!("Deprecation Warning: Please use the `tensorzero::episode_id` field instead of the `episode_id` header. The header will be removed in a future release.");
-                h.to_str()
-                    .map_err(|_| {
-                        Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                            message: "episode_id header is not valid UTF-8".to_string(),
-                        })
-                    })
-                    .and_then(|s| {
-                        Uuid::parse_str(s).map_err(|_| {
-                            Error::new(ErrorDetails::InvalidTensorzeroUuid {
-                                kind: "Episode".to_string(),
-                                message: "episode_id header is not a valid UUID".to_string(),
-                            })
-                        })
-                    })
-            })
-            .transpose()?;
+
         // If both max_tokens and max_completion_tokens are provided, we use the minimum of the two.
         // Otherwise, we use the provided value, or None if neither is provided.
         let max_tokens = match (
@@ -745,38 +723,8 @@ impl Params {
         let inference_params = InferenceParams {
             chat_completion: chat_completion_inference_params,
         };
-        let header_variant_name = headers
-            .get("variant_name")
-            .map(|h| {
-                tracing::warn!("Deprecation Warning: Please use the `tensorzero::variant_name` field instead of the `variant_name` header. The header will be removed in a future release.");
-                h.to_str()
-                    .map_err(|_| {
-                        Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                            message: "variant_name header is not valid UTF-8".to_string(),
-                        })
-                    })
-                    .map(str::to_string)
-            })
-            .transpose()?;
-        let header_dryrun = headers
-            .get("dryrun")
-            .map(|h| {
-                tracing::warn!("Deprecation Warning: Please use the `tensorzero::dryrun` field instead of the `dryrun` header. The header will be removed in a future release.");
-                h.to_str()
-                    .map_err(|_| {
-                        Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                            message: "dryrun header is not valid UTF-8".to_string(),
-                        })
-                    })
-                    .and_then(|s| {
-                        s.parse::<bool>().map_err(|_| {
-                            Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                                message: "dryrun header is not a valid boolean".to_string(),
-                            })
-                        })
-                    })
-            })
-            .transpose()?;
+
+
         let OpenAICompatibleToolChoiceParams {
             allowed_tools,
             tool_choice,
@@ -805,16 +753,12 @@ impl Params {
         Ok(Params {
             function_name,
             model_name,
-            episode_id: openai_compatible_params
-                .tensorzero_episode_id
-                .or(header_episode_id),
+            episode_id: openai_compatible_params.tensorzero_episode_id,
             input,
             stream: openai_compatible_params.stream,
             params: inference_params,
-            variant_name: openai_compatible_params
-                .tensorzero_variant_name
-                .or(header_variant_name),
-            dryrun: openai_compatible_params.tensorzero_dryrun.or(header_dryrun),
+            variant_name: openai_compatible_params.tensorzero_variant_name,
+            dryrun: openai_compatible_params.tensorzero_dryrun,
             dynamic_tool_params,
             output_schema,
             credentials: openai_compatible_params.tensorzero_credentials,
@@ -1494,22 +1438,11 @@ mod tests {
     #[test]
     fn test_try_from_openai_compatible_params() {
         let episode_id = Uuid::now_v7();
-        let headers = HeaderMap::from_iter(vec![
-            (
-                HeaderName::from_static("episode_id"),
-                HeaderValue::from_str(&episode_id.to_string()).unwrap(),
-            ),
-            (
-                HeaderName::from_static("variant_name"),
-                HeaderValue::from_static("test_variant"),
-            ),
-        ]);
         let messages = vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
             content: Value::String("Hello, world!".to_string()),
         })];
         let tensorzero_tags = HashMap::from([("test".to_string(), "test".to_string())]);
         let params = Params::try_from_openai(
-            headers,
             OpenAICompatibleParams {
                 messages,
                 model: "tensorzero::test_function".into(),
@@ -1525,8 +1458,8 @@ mod tests {
                 tool_choice: None,
                 top_p: Some(0.5),
                 parallel_tool_calls: None,
-                tensorzero_episode_id: None,
-                tensorzero_variant_name: None,
+                tensorzero_episode_id: Some(episode_id),
+                tensorzero_variant_name: Some("test_variant".to_string()),
                 tensorzero_dryrun: None,
                 tensorzero_cache_options: None,
                 tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
@@ -2001,11 +1934,8 @@ mod tests {
 
     #[test]
     fn test_cache_options() {
-        let headers = HeaderMap::new();
-
         // Test default cache options (should be write-only)
         let params = Params::try_from_openai(
-            headers.clone(),
             OpenAICompatibleParams {
                 messages: vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
                     content: Value::String("test".to_string()),
@@ -2043,7 +1973,6 @@ mod tests {
 
         // Test explicit cache options
         let params = Params::try_from_openai(
-            headers.clone(),
             OpenAICompatibleParams {
                 messages: vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
                     content: Value::String("test".to_string()),
@@ -2090,7 +2019,6 @@ mod tests {
 
         // Test interaction with dryrun
         let params = Params::try_from_openai(
-            headers.clone(),
             OpenAICompatibleParams {
                 messages: vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
                     content: Value::String("test".to_string()),
@@ -2137,7 +2065,6 @@ mod tests {
 
         // Test write-only with dryrun (should become Off)
         let params = Params::try_from_openai(
-            headers,
             OpenAICompatibleParams {
                 messages: vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
                     content: Value::String("test".to_string()),
