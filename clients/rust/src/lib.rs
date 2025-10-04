@@ -767,7 +767,7 @@ impl Client {
         }
     }
 
-    pub async fn bulk_insert_datapoints(
+    pub async fn insert_datapoints(
         &self,
         dataset_name: String,
         params: InsertDatapointParams,
@@ -798,6 +798,15 @@ impl Client {
                 .await?)
             }
         }
+    }
+
+    /// DEPRECATED: Use `insert_datapoints` instead.
+    pub async fn bulk_insert_datapoints(
+        &self,
+        dataset_name: String,
+        params: InsertDatapointParams,
+    ) -> Result<Vec<Uuid>, TensorZeroError> {
+        self.insert_datapoints(dataset_name, params).await
     }
 
     pub async fn delete_datapoint(

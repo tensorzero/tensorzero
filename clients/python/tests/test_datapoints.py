@@ -139,7 +139,7 @@ def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
             tags=None,
         ),
     ]
-    datapoint_ids = sync_client.bulk_insert_datapoints(
+    datapoint_ids = sync_client.insert_datapoints(
         dataset_name=dataset_name, datapoints=datapoints
     )
     assert len(datapoint_ids) == 4
@@ -264,7 +264,7 @@ async def test_async_bulk_insert_delete_datapoints(
         ),
     ]
     dataset_name = f"test_{uuid7()}"
-    datapoint_ids = await async_client.bulk_insert_datapoints(
+    datapoint_ids = await async_client.insert_datapoints(
         dataset_name=dataset_name, datapoints=datapoints
     )
     assert len(datapoint_ids) == 4
@@ -397,7 +397,7 @@ def test_sync_render_datapoints(embedded_sync_client: TensorZeroGateway):
         ),
     ]
 
-    datapoint_ids = embedded_sync_client.bulk_insert_datapoints(
+    datapoint_ids = embedded_sync_client.insert_datapoints(
         dataset_name=dataset_name, datapoints=datapoints
     )
     assert len(datapoint_ids) == 2
@@ -499,7 +499,7 @@ async def test_async_render_datapoints(embedded_async_client: AsyncTensorZeroGat
         ),
     ]
 
-    datapoint_ids = await embedded_async_client.bulk_insert_datapoints(
+    datapoint_ids = await embedded_async_client.insert_datapoints(
         dataset_name=dataset_name, datapoints=datapoints
     )
     assert len(datapoint_ids) == 2
@@ -604,7 +604,7 @@ def test_sync_render_filtered_datapoints(embedded_sync_client: TensorZeroGateway
         ),
     ]
 
-    datapoint_ids = embedded_sync_client.bulk_insert_datapoints(
+    datapoint_ids = embedded_sync_client.insert_datapoints(
         dataset_name=dataset_name, datapoints=datapoints
     )
     assert len(datapoint_ids) == 3
