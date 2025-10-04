@@ -28,15 +28,43 @@ async fn test_openai_compatible_route_new_format() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[traced_test]
-async fn test_openai_compatible_route_old_format() {
-    test_openai_compatible_route_with_function_name_as_model(
-        "tensorzero::basic_test_no_system_schema",
+async fn test_openai_compatible_route_old_format_rejected() {
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let state = client.get_app_state_data().unwrap().clone();
+    let episode_id = Uuid::now_v7();
+
+    let result = tensorzero_core::endpoints::openai_compatible::inference_handler(
+        State(state),
+        HeaderMap::default(),
+        StructuredJson(
+            serde_json::from_value(serde_json::json!({
+                "model": "tensorzero::basic_test_no_system_schema",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "TensorBot"
+                    },
+                    {
+                        "role": "user",
+                        "content": "What is the capital of Japan?"
+                    }
+                ],
+                "stream": false,
+                "tensorzero::tags": {
+                    "foo": "bar"
+                },
+                "tensorzero::episode_id": episode_id.to_string(),
+            }))
+            .unwrap(),
+        ),
     )
     .await;
-    assert!(logs_contain(
-        "Please set the `model` parameter to `tensorzero::function_name::your_function` instead of `tensorzero::your_function.`"
-    ));
+
+    // Should return an error now
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    let error_message = error.to_string();
+    assert!(error_message.contains("tensorzero::xxx") || error_message.contains("no longer supported"));
 }
 
 async fn test_openai_compatible_route_with_function_name_as_model(model: &str) {

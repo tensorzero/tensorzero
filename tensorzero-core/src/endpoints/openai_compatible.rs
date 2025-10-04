@@ -656,14 +656,10 @@ impl Params {
             .strip_prefix(TENSORZERO_MODEL_NAME_PREFIX)
         {
             (None, Some(model_name.to_string()))
-        } else if let Some(function_name) =
-            openai_compatible_params.model.strip_prefix("tensorzero::")
-        {
-            tracing::warn!(
-                function_name = function_name,
-                "Deprecation Warning: Please set the `model` parameter to `tensorzero::function_name::your_function` instead of `tensorzero::your_function.` The latter will be removed in a future release."
-            );
-            (Some(function_name.to_string()), None)
+        } else if openai_compatible_params.model.starts_with("tensorzero::") {
+            return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                message: "The `tensorzero::xxx` format is no longer supported. Please use `tensorzero::function_name::your_function` or `tensorzero::model_name::your_model` instead. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, or `tensorzero::model_name::openai::gpt-4o-mini` for a model.".to_string(),
+            }));
         } else {
             return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                 message: "`model` field must start with `tensorzero::function_name::` or `tensorzero::model_name::`. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, `tensorzero::model_name::my_model` for a model `my_model` defined in your config, or default functions like `tensorzero::model_name::openai::gpt-4o-mini`.".to_string(),
@@ -1512,7 +1508,7 @@ mod tests {
             headers,
             OpenAICompatibleParams {
                 messages,
-                model: "tensorzero::test_function".into(),
+                model: "tensorzero::function_name::test_function".into(),
                 frequency_penalty: Some(0.5),
                 max_tokens: Some(100),
                 max_completion_tokens: Some(50),
@@ -1559,6 +1555,56 @@ mod tests {
         assert_eq!(params.params.chat_completion.presence_penalty, Some(0.5));
         assert_eq!(params.params.chat_completion.frequency_penalty, Some(0.5));
         assert_eq!(params.tags, tensorzero_tags);
+    }
+
+    #[test]
+    fn test_try_from_openai_compatible_params_old_format_rejected() {
+        let episode_id = Uuid::now_v7();
+        let headers = HeaderMap::new();
+        let messages = vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
+            content: Value::String("Hello, world!".to_string()),
+        })];
+        
+        let result = Params::try_from_openai(
+            headers,
+            OpenAICompatibleParams {
+                messages,
+                model: "tensorzero::test_function".into(),
+                frequency_penalty: None,
+                max_tokens: None,
+                max_completion_tokens: None,
+                presence_penalty: None,
+                response_format: None,
+                seed: None,
+                stream: None,
+                temperature: None,
+                tools: None,
+                tool_choice: None,
+                top_p: None,
+                parallel_tool_calls: None,
+                tensorzero_episode_id: Some(episode_id),
+                tensorzero_variant_name: None,
+                tensorzero_dryrun: None,
+                tensorzero_cache_options: None,
+                tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
+                tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
+                tensorzero_tags: HashMap::new(),
+                tensorzero_deny_unknown_fields: false,
+                tensorzero_credentials: InferenceCredentials::default(),
+                unknown_fields: Default::default(),
+                stream_options: None,
+                stop: None,
+                tensorzero_internal_dynamic_variant_config: None,
+            },
+        );
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        let error_message = error.to_string();
+        assert!(
+            error_message.contains("no longer supported") || error_message.contains("tensorzero::xxx"),
+            "Expected error message to mention deprecation, got: {error_message}"
+        );
     }
 
     #[test]
