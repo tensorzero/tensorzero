@@ -463,7 +463,7 @@ async fn inner_select_best_candidate<'a, 'request>(
 ) -> Result<(Option<usize>, Option<ModelInferenceResponseWithMetadata>), Error> {
     let mut inference_params = InferenceParams::default();
     let (inference_request, skipped_indices) = evaluator
-        .prepare_request(input, inference_config, candidates, &mut inference_params)
+        .prepare_evaluator_request(input, inference_config, candidates, &mut inference_params)
         .await?;
     if skipped_indices.len() == candidates.len() {
         return Err(ErrorDetails::Inference {
@@ -669,7 +669,7 @@ impl BestOfNEvaluatorConfig {
     /// # Errors
     ///
     /// Returns an `Error` if any of the candidate outputs fail to serialize or if templating fails.
-    async fn prepare_request<'a>(
+    async fn prepare_evaluator_request<'a>(
         &self,
         input: &LazyResolvedInput,
         inference_config: &InferenceConfig<'_>,
