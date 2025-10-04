@@ -186,7 +186,9 @@ async fn e2e_test_comment_feedback_validation_disabled() {
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
         TensorzeroHttpClient::new().unwrap(),
-    );
+    )
+    .await
+    .unwrap();
     let inference_id = Uuid::now_v7();
     let params = Params {
         inference_id: Some(inference_id),
@@ -1218,7 +1220,9 @@ async fn e2e_test_float_feedback_validation_disabled() {
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
         TensorzeroHttpClient::new().unwrap(),
-    );
+    )
+    .await
+    .unwrap();
     let inference_id = Uuid::now_v7();
     let params = Params {
         inference_id: Some(inference_id),
@@ -1453,7 +1457,9 @@ async fn e2e_test_boolean_feedback_validation_disabled() {
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
         TensorzeroHttpClient::new().unwrap(),
-    );
+    )
+    .await
+    .unwrap();
     let inference_id = Uuid::now_v7();
     let params = Params {
         inference_id: Some(inference_id),

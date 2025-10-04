@@ -38,6 +38,7 @@ test("countInferencesForFunction returns correct counts", async () => {
       tool_choice: "none",
       parallel_tool_calls: false,
     },
+    experimentation: { type: "uniform" },
   });
   expect(jsonCount).toBe(604);
 
@@ -49,6 +50,7 @@ test("countInferencesForFunction returns correct counts", async () => {
     parallel_tool_calls: false,
     schemas: {},
     description: "",
+    experimentation: { type: "uniform" },
   });
   expect(chatCount).toBe(804);
 });
@@ -68,6 +70,7 @@ test("countInferencesForVariant returns correct counts", async () => {
         tool_choice: "none",
         parallel_tool_calls: false,
       },
+      experimentation: { type: "uniform" },
     },
     "gpt4o_initial_prompt",
   );
@@ -83,6 +86,7 @@ test("countInferencesForVariant returns correct counts", async () => {
       parallel_tool_calls: false,
       schemas: {},
       description: "",
+      experimentation: { type: "uniform" },
     },
     "initial_prompt_gpt4o_mini",
   );

@@ -2486,6 +2486,7 @@ where
 mod tests {
     use super::*;
     use crate::config::SchemaData;
+    use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::minijinja_util::TemplateConfig;
@@ -3260,6 +3261,7 @@ mod tests {
             output_schema,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -3544,6 +3546,7 @@ mod tests {
             output_schema,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -3644,6 +3647,7 @@ mod tests {
             output_schema,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
