@@ -40,11 +40,6 @@ struct GatewayArgs {
     #[arg(long)]
     default_config: bool,
 
-    // Hidden flag used by our `Dockerfile` to warn users who have not overridden the default CMD
-    #[arg(long)]
-    #[clap(hide = true)]
-    warn_default_cmd: bool,
-
     /// Sets the log format used for all gateway logs.
     #[arg(long)]
     #[arg(value_enum)]
@@ -126,10 +121,6 @@ async fn main() {
     tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION} (commit: {git_sha})");
 
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
-
-    if args.warn_default_cmd {
-        tracing::warn!("Deprecation Warning: Running gateway from Docker container without overriding default CMD. Please override the command to either `--config-file` to specify a custom configuration file (e.g. `--config-file /path/to/tensorzero.toml`) or `--default-config` to use default settings (i.e. no custom functions, metrics, etc.).");
-    }
 
     if args.tensorzero_toml.is_some() && args.config_file.is_some() {
         tracing::error!("Cannot specify both `--config-file` and a positional path argument");
