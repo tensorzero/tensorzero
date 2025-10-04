@@ -728,6 +728,7 @@ function variantInfoToUninitalizedVariantInfo(
         seed: inner.seed,
         json_mode: inner.json_mode,
         retries: inner.retries,
+        cutoff: inner.cutoff,
       };
 
     case "mixture_of_n":

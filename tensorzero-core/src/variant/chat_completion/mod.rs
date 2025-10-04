@@ -350,7 +350,7 @@ pub async fn prepare_model_input(
     })
 }
 
-fn prepare_system_message(
+pub fn prepare_system_message(
     system: Option<&Value>,
     templates: &TemplateConfig,
     template: Option<&TemplateWithSchema>,
@@ -396,7 +396,7 @@ fn prepare_system_message(
     }})
 }
 
-async fn prepare_request_message(
+pub async fn prepare_request_message(
     message: &LazyResolvedInputMessage,
     templates_config: &TemplateConfig<'_>,
     chat_templates: &ChatTemplates,

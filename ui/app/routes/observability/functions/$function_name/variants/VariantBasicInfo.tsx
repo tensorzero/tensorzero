@@ -246,6 +246,17 @@ export default function BasicInfo({
                 </BasicInfoItemContent>
               </BasicInfoItem>
 
+              <BasicInfoItem>
+                <BasicInfoItemTitle>Cutoff</BasicInfoItemTitle>
+                <BasicInfoItemContent>
+                  <Chip
+                    label={
+                      config.cutoff !== null ? config.cutoff.toString() : "-"
+                    }
+                  />
+                </BasicInfoItemContent>
+              </BasicInfoItem>
+
               {config.temperature && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Temperature</BasicInfoItemTitle>
