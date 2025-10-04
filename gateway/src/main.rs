@@ -119,6 +119,7 @@ async fn main() {
 
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
+    // Handle `--config-file` or `--default-config`
     let (config, glob) = match (args.default_config, args.config_file) {
         (true, Some(_)) => {
             tracing::error!("You must not specify both `--config-file` and `--default-config`.");
