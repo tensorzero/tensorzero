@@ -126,7 +126,7 @@ async fn main() {
             std::process::exit(1);
         }
         (false, None) => {
-            tracing::warn!("You must specify either `--config-file` or `--default-config`.");
+            tracing::error!("You must specify either `--config-file` or `--default-config`.");
             std::process::exit(1);
         }
         (true, None) => {
