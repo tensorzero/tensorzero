@@ -7,6 +7,9 @@ test("ensure word wrap persists between pages", async ({ page }) => {
 
   await expect(page.getByText("Input")).toBeVisible();
 
+  // Clear localStorage to ensure clean state
+  await page.evaluate(() => localStorage.removeItem("word-wrap"));
+
   const getWordWrapToggle = () => page.getByTitle("Toggle word wrap").first();
   const getWordWrap = async () =>
     await page.evaluate(() => localStorage.getItem("word-wrap"));

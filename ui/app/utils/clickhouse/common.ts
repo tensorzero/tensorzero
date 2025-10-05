@@ -39,21 +39,20 @@ export type TemplateInput = z.infer<typeof templateInputSchema>;
 // The three display text types below handle the scenario
 // where the function 1) does not use schemas
 export const displayUnstructuredTextInputSchema = z.object({
-  type: z.literal("unstructured_text"),
+  type: z.literal("text"),
   text: z.string(),
 });
 export type DisplayUnstructuredTextInput = z.infer<
   typeof displayUnstructuredTextInputSchema
 >;
 
-// 2) uses schemas
-export const displayStructuredTextInputSchema = z.object({
-  type: z.literal("structured_text"),
-  arguments: z.any(),
+// 2) uses templates
+export const displayTemplateSchema = z.object({
+  type: z.literal("template"),
+  name: z.string(),
+  arguments: z.record(JsonValueSchema.optional()),
 });
-export type DisplayStructuredTextInput = z.infer<
-  typeof displayStructuredTextInputSchema
->;
+export type DisplayTemplate = z.infer<typeof displayTemplateSchema>;
 
 // 3) is missing from the config so we don't know
 export const displayMissingFunctionTextInputSchema = z.object({
@@ -63,13 +62,6 @@ export const displayMissingFunctionTextInputSchema = z.object({
 export type DisplayMissingFunctionTextInput = z.infer<
   typeof displayMissingFunctionTextInputSchema
 >;
-
-export const displayTemplateSchema = z.object({
-  type: z.literal("template"),
-  name: z.string(),
-  arguments: z.record(JsonValueSchema.optional()),
-});
-export type DisplayTemplate = z.infer<typeof displayTemplateSchema>;
 
 export const modelInferenceTextInputSchema = z.object({
   type: z.literal("text"),
@@ -255,7 +247,6 @@ export type ModelInferenceInputMessageContent = z.infer<
 
 export const displayInputMessageContentSchema = z.discriminatedUnion("type", [
   displayUnstructuredTextInputSchema,
-  displayStructuredTextInputSchema,
   displayTemplateSchema,
   displayMissingFunctionTextInputSchema,
   toolCallContentSchema,
@@ -452,10 +443,8 @@ function displayInputMessageContentToInputMessageContent(
   content: DisplayInputMessageContent,
 ): InputMessageContent {
   switch (content.type) {
-    case "unstructured_text":
+    case "text":
       return { type: "text", value: content.text };
-    case "structured_text":
-      return { type: "text", value: content.arguments };
     case "missing_function_text":
       return { type: "text", value: content.value };
     case "tool_call":

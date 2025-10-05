@@ -495,12 +495,7 @@ function resolvedInputMessageContentToTensorZeroContent(
   content: DisplayInputMessageContent,
 ): TensorZeroContent {
   switch (content.type) {
-    case "structured_text":
-      return {
-        type: "text",
-        arguments: content.arguments,
-      };
-    case "unstructured_text":
+    case "text":
       return {
         type: "text",
         text: content.text,
@@ -550,14 +545,9 @@ function resolvedInputMessageContentToClientInputMessageContent(
   content: DisplayInputMessageContent,
 ): ClientInputMessageContent {
   switch (content.type) {
-    case "structured_text":
-      return {
-        type: "text",
-        arguments: content.arguments,
-      };
     case "template":
       return content;
-    case "unstructured_text":
+    case "text":
       return {
         type: "text",
         text: content.text,

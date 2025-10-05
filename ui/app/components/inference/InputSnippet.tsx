@@ -39,20 +39,8 @@ function renderContentBlock(
   onChange?: (updatedContentBlock: DisplayInputMessageContent) => void,
 ) {
   switch (block.type) {
-    case "structured_text":
-      return (
-        <ParameterizedMessage
-          key={key}
-          parameters={block.arguments}
-          isEditing={isEditing}
-          onChange={(updatedArguments) => {
-            onChange?.({ ...block, arguments: updatedArguments });
-          }}
-        />
-      );
-
     // Unstructured text is a function/variant with no schema
-    case "unstructured_text":
+    case "text":
       return (
         <TextMessage
           key={key}

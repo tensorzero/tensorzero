@@ -2,9 +2,6 @@ import type {
   DisplayInput,
   DisplayInputMessage,
   DisplayInputMessageContent,
-  DisplayMissingFunctionTextInput,
-  DisplayUnstructuredTextInput,
-  DisplayStructuredTextInput,
   FileContent,
   Input,
   InputMessage,
@@ -142,7 +139,7 @@ async function resolveModelInferenceContent(
       // Do not use prepareDisplayText here because these are model inferences and should be post-templating
       // and will always be unstructured text.
       return {
-        type: "unstructured_text",
+        type: "text",
         text: content.text,
       };
     case "tool_call":
@@ -206,10 +203,7 @@ function prepareDisplayText(
   textBlock: TextInput,
   role: Role,
   functionConfig: FunctionConfig | null,
-):
-  | DisplayUnstructuredTextInput
-  | DisplayStructuredTextInput
-  | DisplayMissingFunctionTextInput {
+): DisplayInputMessageContent {
   if (!functionConfig) {
     return {
       type: "missing_function_text",
@@ -217,22 +211,24 @@ function prepareDisplayText(
     };
   }
 
-  // True if the function has a schema for the role (user or assistant)
-  // Check if there's a schema with the role name (for backward compatibility with legacy system)
-  const hasSchemaForRole =
-    role === "user"
-      ? !!functionConfig.schemas["user"]
-      : role === "assistant"
-        ? !!functionConfig.schemas["assistant"]
-        : false;
-  if (hasSchemaForRole) {
+  // Handle the legacy structured prompts that were stored as text content blocks
+  if (role === "user" && !!functionConfig.schemas["user"]) {
     return {
-      type: "structured_text",
+      type: "template",
+      name: "user",
       arguments: textBlock.value,
     };
   }
+  if (role === "assistant" && !!functionConfig.schemas["assistant"]) {
+    return {
+      type: "template",
+      name: "assistant",
+      arguments: textBlock.value,
+    };
+  }
+
   return {
-    type: "unstructured_text",
+    type: "text",
     text: textBlock.value,
   };
 }
