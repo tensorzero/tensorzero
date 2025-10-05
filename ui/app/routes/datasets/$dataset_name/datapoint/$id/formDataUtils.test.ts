@@ -18,7 +18,7 @@ function createChatDatapoint(): DatapointFormData {
           role: "user",
           content: [
             {
-              type: "unstructured_text",
+              type: "text",
               text: "How are you?",
             },
           ],
