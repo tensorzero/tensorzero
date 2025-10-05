@@ -1,10 +1,19 @@
+use std::collections::HashMap;
+
+use chrono::Utc;
+use http::StatusCode;
+use serde_json::{json, Value};
+use uuid::Uuid;
+
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent, Role,
 };
 use tensorzero_core::inference::types::TextKind;
 
+use crate::common::get_gateway_endpoint;
 use crate::otel::install_capturing_otel_exporter;
+use crate::otel_export::get_tempo_spans;
 
 /// Test that static headers from config are applied
 /// This verifies that the config parses correctly and the system works end-to-end
@@ -233,4 +242,78 @@ extra_headers."x-lowercase" = "lowercase-value"
 
     let spans = exporter.take_spans();
     assert!(!spans.is_empty(), "Should work with various header formats");
+}
+
+/// Test that dynamic headers override config headers
+/// This test uses the external gateway (via HTTP) and queries Tempo to verify headers
+#[tokio::test]
+async fn test_otel_config_and_dynamic_header_override() {
+    let client = reqwest::Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "Dr. Mehta"},
+            "messages": [{
+                "role": "user",
+                "content": "What is the name of the capital city of Japan?"
+            }]
+        },
+        "stream": false,
+        "tags": {"test": "config_override"},
+    });
+
+    let start_time = Utc::now();
+
+    // Send request with dynamic header that overrides the config header
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .header(
+            "TensorZero-OTLP-Traces-Extra-Header-x-config-override-header",
+            "dynamic-override-value",
+        )
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let _response_json = response.json::<Value>().await.unwrap();
+
+    // Query Tempo to get the spans and verify the headers
+    let tempo_semaphore = tokio::sync::Semaphore::new(1);
+    let (function_inference_span, span_by_id) =
+        get_tempo_spans(episode_id, start_time, &tempo_semaphore).await;
+
+    // Get the HTTP span (parent of function_inference)
+    let parent_id = function_inference_span["parentSpanId"].as_str().unwrap();
+    let http_span = span_by_id.get(parent_id).unwrap();
+
+    // Extract attributes from the HTTP span
+    let attrs: HashMap<&str, serde_json::Value> = http_span["attributes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| (a["key"].as_str().unwrap(), a["value"].clone()))
+        .collect();
+
+    // Verify the static config header that wasn't overridden is present
+    assert_eq!(
+        attrs["tensorzero.config_static_header"]["stringValue"]
+            .as_str()
+            .unwrap(),
+        "config-static-value",
+        "Static config header should be present with config value"
+    );
+
+    // Verify the overridden header has the dynamic value (not the config value)
+    assert_eq!(
+        attrs["tensorzero.config_override_header"]["stringValue"]
+            .as_str()
+            .unwrap(),
+        "dynamic-override-value",
+        "Override header should have dynamic value, not config value"
+    );
 }

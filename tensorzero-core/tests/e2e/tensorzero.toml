@@ -12,6 +12,8 @@ debug = true
 template_filesystem_access.enabled = true
 template_filesystem_access.base_path = "."
 export.otlp.traces.enabled = true
+export.otlp.traces.extra_headers."x-config-static-header" = "config-static-value"
+export.otlp.traces.extra_headers."x-config-override-header" = "config-original-value"
 unstable_error_json = true
 
 [object_storage]
