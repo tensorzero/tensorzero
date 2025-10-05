@@ -1,6 +1,6 @@
 # ========== builder ==========
 
-FROM lukemathwalker/cargo-chef:latest-rust-1.88.0 AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.90-bookworm AS chef
 
 WORKDIR /src
 

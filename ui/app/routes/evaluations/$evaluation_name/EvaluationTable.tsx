@@ -47,6 +47,7 @@ import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbac
 import { InferenceButton } from "~/components/utils/InferenceButton";
 import InputSnippet from "~/components/inference/InputSnippet";
 import { logger } from "~/utils/logger";
+import { TableItemText } from "~/components/ui/TableItems";
 
 type TruncatedContentProps = (
   | {
@@ -266,6 +267,7 @@ export function EvaluationTable({
       string,
       {
         id: string;
+        name: string | null;
         input: DisplayInput;
         reference_output: JsonInferenceOutput | ContentBlockChatOutput[] | null;
       }
@@ -275,6 +277,7 @@ export function EvaluationTable({
       if (!datapoints.has(result.datapoint_id)) {
         datapoints.set(result.datapoint_id, {
           id: result.datapoint_id,
+          name: result.name,
           input: result.input,
           reference_output: result.reference_output,
         });
@@ -399,6 +402,9 @@ export function EvaluationTable({
                       {/* Checkbox column */}
                     </TableHead>
                     <TableHead className="py-2 text-center align-top">
+                      Name
+                    </TableHead>
+                    <TableHead className="py-2 text-center align-top">
                       Input
                     </TableHead>
                     <TableHead className="py-2 text-center align-top">
@@ -503,6 +509,16 @@ export function EvaluationTable({
                                   />
                                 )}
                               </TableCell>
+
+                              {/* Name cell - only for the first variant row */}
+                              {index === 0 && (
+                                <TableCell
+                                  rowSpan={filteredVariants.length}
+                                  className="max-w-[150px] align-middle"
+                                >
+                                  <TableItemText text={datapoint.name} />
+                                </TableCell>
+                              )}
 
                               {/* Input cell - only for the first variant row */}
                               {index === 0 && (

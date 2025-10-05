@@ -592,6 +592,7 @@ mod tests {
             &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
+                name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
                 input: StoredInput {
@@ -660,6 +661,7 @@ mod tests {
             &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
+                name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
                 input: StoredInput {
@@ -891,6 +893,7 @@ mod tests {
         let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
@@ -922,6 +925,7 @@ mod tests {
         let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
@@ -947,6 +951,7 @@ mod tests {
         let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
@@ -973,6 +978,7 @@ mod tests {
         let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
@@ -1077,6 +1083,7 @@ mod tests {
             &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
+                name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
                 input: StoredInput {
@@ -1190,6 +1197,7 @@ mod tests {
             &Datapoint::Json(JsonInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
+                name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
                 input: StoredInput {
