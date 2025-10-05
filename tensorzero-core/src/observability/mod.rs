@@ -224,8 +224,14 @@ impl Tracer for TracerWrapper {
                 .unwrap_or_default();
             if let Some(key) = dynamic_key {
                 for key_value_ref in key.extra_headers.iter() {
-                    if let tonic::metadata::KeyAndValueRef::Ascii(k, v) = key_value_ref {
-                        merged_headers.insert(k.clone(), v.clone());
+                    match key_value_ref {
+                        tonic::metadata::KeyAndValueRef::Ascii(k, v) => {
+                            merged_headers.insert(k.clone(), v.clone());
+                        }
+                        other => {
+                            // Non-ASCII header encountered; log a warning and skip.
+                            tracing::warn!("Non-ASCII header encountered in extra_headers and ignored: {:?}", other);
+                        }
                     }
                 }
             }
