@@ -6,13 +6,7 @@ import {
   SnippetMessage,
 } from "~/components/layout/SnippetLayout";
 import { TextMessage } from "~/components/layout/SnippetContent";
-import { Badge } from "~/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "~/components/ui/tooltip";
+import { LegacyStructuredPromptBadge } from "~/components/ui/LegacyStructuredPromptBadge";
 
 interface VariantTemplateProps {
   variantConfig: VariantConfig;
@@ -65,29 +59,7 @@ export default function VariantTemplate({
             <div className="flex items-center gap-2">
               <span>{name}</span>
               {isLegacy && (
-                <TooltipProvider delayDuration={200}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Badge className="bg-yellow-600 px-1 py-0 text-[10px] text-white">
-                        Legacy
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-xs p-2">
-                      <div className="text-xs">
-                        Please migrate from <code>{name}_template</code> to{" "}
-                        <code>templates.{name}.path</code>.{" "}
-                        <a
-                          href="https://www.tensorzero.com/docs/gateway/create-a-prompt-template#migrate-from-legacy-prompt-templates"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline hover:text-gray-300"
-                        >
-                          Read more
-                        </a>
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <LegacyStructuredPromptBadge name={name} type="template" />
               )}
             </div>
           ),
