@@ -271,7 +271,7 @@ export default function EvaluationDatapointPage({
     }
   }, [newFeedbackId, newJudgeDemonstrationId, toast]);
 
-  const handleRenameTask = async (newName: string) => {
+  const handleRenameDatapoint = async (newName: string) => {
     const formData = new FormData();
     formData.append("_action", "renameDatapoint");
     formData.append("datapoint_id", datapoint_id);
@@ -292,8 +292,8 @@ export default function EvaluationDatapointPage({
             evaluation_name={evaluation_name}
             evaluation_config={evaluation_config}
             dataset_name={consolidatedEvaluationResults[0].dataset_name}
-            task_name={consolidatedEvaluationResults[0].name}
-            onRenameTask={handleRenameTask}
+            datapoint_name={consolidatedEvaluationResults[0].name}
+            onRenameDatapoint={handleRenameDatapoint}
           />
           <EvalRunSelector
             evaluationName={evaluation_name}

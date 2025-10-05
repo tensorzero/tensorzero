@@ -15,16 +15,16 @@ interface BasicInfoProps {
   evaluation_name: string;
   evaluation_config: StaticEvaluationConfig;
   dataset_name: string;
-  task_name: string | null;
-  onRenameTask?: (newName: string) => void | Promise<void>;
+  datapoint_name: string | null;
+  onRenameDatapoint?: (newName: string) => void | Promise<void>;
 }
 
 export default function BasicInfo({
   evaluation_name,
   evaluation_config,
   dataset_name,
-  task_name,
-  onRenameTask,
+  datapoint_name,
+  onRenameDatapoint,
 }: BasicInfoProps) {
   const functionName = evaluation_config.function_name;
   const functionConfig = useFunctionConfig(functionName);
@@ -39,10 +39,10 @@ export default function BasicInfo({
         <BasicInfoItemTitle>Name</BasicInfoItemTitle>
         <BasicInfoItemContent>
           <EditableChip
-            label={task_name}
+            label={datapoint_name}
             defaultLabel="—"
             font="mono"
-            onConfirm={onRenameTask}
+            onConfirm={onRenameDatapoint}
           />
         </BasicInfoItemContent>
       </BasicInfoItem>
