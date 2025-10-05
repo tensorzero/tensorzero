@@ -98,12 +98,6 @@ pub type AppState = axum::extract::State<AppStateData>;
 impl GatewayHandle {
     pub async fn new(config: Arc<Config>) -> Result<Self, Error> {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
-        if clickhouse_url.is_none()
-            && std::env::var("CLICKHOUSE_URL").is_ok()
-            && config.gateway.observability.enabled.is_none()
-        {
-            return Err(ErrorDetails::ClickHouseConfiguration { message: "`CLICKHOUSE_URL` is deprecated and no longer accepted. Please set `TENSORZERO_CLICKHOUSE_URL`".to_string() }.into());
-        }
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
         Self::new_with_databases(config, clickhouse_url, postgres_url).await
     }
