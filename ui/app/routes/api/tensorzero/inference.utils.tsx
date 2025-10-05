@@ -670,14 +670,10 @@ function variantInfoToUninitalizedVariantInfo(
         weight: inner.weight,
         model: inner.model,
         input_wrappers: null,
-        // Legacy fields for backward compatibility
-        system_template: convertTemplate(
-          inner.templates.system?.template || null,
-        ),
-        user_template: convertTemplate(inner.templates.user?.template || null),
-        assistant_template: convertTemplate(
-          inner.templates.assistant?.template || null,
-        ),
+        // Set legacy fields to null when using new templates format
+        system_template: null,
+        user_template: null,
+        assistant_template: null,
         // New templates field with all templates
         templates,
         temperature: inner.temperature,
@@ -717,16 +713,10 @@ function variantInfoToUninitalizedVariantInfo(
           weight: inner.evaluator.weight,
           model: inner.evaluator.model,
           input_wrappers: null,
-          // Legacy fields for backward compatibility
-          system_template: convertTemplate(
-            inner.evaluator.templates.system?.template || null,
-          ),
-          user_template: convertTemplate(
-            inner.evaluator.templates.user?.template || null,
-          ),
-          assistant_template: convertTemplate(
-            inner.evaluator.templates.assistant?.template || null,
-          ),
+          // Set legacy fields to null when using new templates format
+          system_template: null,
+          user_template: null,
+          assistant_template: null,
           // New templates field with all templates
           templates: evaluatorTemplates,
           temperature: inner.evaluator.temperature,
@@ -787,16 +777,10 @@ function variantInfoToUninitalizedVariantInfo(
           weight: inner.fuser.weight,
           model: inner.fuser.model,
           input_wrappers: null,
-          // Legacy fields for backward compatibility
-          system_template: convertTemplate(
-            inner.fuser.templates.system?.template || null,
-          ),
-          user_template: convertTemplate(
-            inner.fuser.templates.user?.template || null,
-          ),
-          assistant_template: convertTemplate(
-            inner.fuser.templates.assistant?.template || null,
-          ),
+          // Set legacy fields to null when using new templates format
+          system_template: null,
+          user_template: null,
+          assistant_template: null,
           // New templates field with all templates
           templates: fuserTemplates,
           temperature: inner.fuser.temperature,
@@ -831,16 +815,12 @@ function variantInfoToUninitalizedVariantInfo(
         weight: inner.weight,
         model: inner.model,
         input_wrappers: null,
+        // Set legacy fields to null when using new templates format
+        system_template: null,
+        user_template: null,
+        assistant_template: null,
         // New templates field with all templates
         templates,
-        // Legacy fields for backward compatibility
-        system_template: convertTemplate(
-          inner.templates.system?.template || null,
-        ),
-        user_template: convertTemplate(inner.templates.user?.template || null),
-        assistant_template: convertTemplate(
-          inner.templates.assistant?.template || null,
-        ),
         temperature: inner.temperature,
         top_p: inner.top_p,
         max_tokens: inner.max_tokens,
