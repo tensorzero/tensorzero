@@ -45,10 +45,10 @@
 //!   to our `make_span` function.
 //! * The OpenTelemetry `Context`, which is captured by the `tracing-opentelemetry` library when we create a new span,
 //!   and passed along to `TracerWrapper::build_with_context` when the span is closed and exported.
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
-use std::borrow::Cow;
 use std::time::Duration;
 
 use once_cell::sync::OnceCell;
