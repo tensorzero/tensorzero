@@ -331,36 +331,49 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
     .filter({ has: page.getByRole("heading", { name: "Tags" }) });
   await expect(tagsSection.locator("table")).toBeVisible();
 
+  // Wait for the input fields to be visible and ready
+  await tagsSection.getByPlaceholder("Key").waitFor({ state: "visible" });
+  await tagsSection.getByPlaceholder("Value").waitFor({ state: "visible" });
+
   // Test 1: Add a new tag
   const testKey1 = "environment";
   const testValue1 = "test";
 
-  await page.getByPlaceholder("Key").fill(testKey1);
-  await page.getByPlaceholder("Value").fill(testValue1);
+  await tagsSection.getByPlaceholder("Key").fill(testKey1);
+  await tagsSection.getByPlaceholder("Value").fill(testValue1);
   await page.getByRole("button", { name: "Add" }).click();
 
-  // Verify the tag appears in the table
+  // Wait for the tag to appear in the table before proceeding
   await expect(tagsSection.locator("table")).toContainText(testKey1);
   await expect(tagsSection.locator("table")).toContainText(testValue1);
+
+  // Wait for inputs to be cleared after adding
+  await expect(tagsSection.getByPlaceholder("Key")).toHaveValue("");
 
   // Test 2: Add another tag to test sorting
   const testKey2 = "author";
   const testValue2 = "e2e-test";
 
-  await page.getByPlaceholder("Key").fill(testKey2);
-  await page.getByPlaceholder("Value").fill(testValue2);
+  await tagsSection.getByPlaceholder("Key").fill(testKey2);
+  await tagsSection.getByPlaceholder("Value").fill(testValue2);
   await page.getByRole("button", { name: "Add" }).click();
 
-  // Verify both tags appear in the table (should be sorted alphabetically)
+  // Wait for the tag to appear in the table before proceeding
   await expect(tagsSection.locator("table")).toContainText(testKey2);
   await expect(tagsSection.locator("table")).toContainText(testValue2);
+
+  // Wait for inputs to be cleared after adding
+  await expect(tagsSection.getByPlaceholder("Key")).toHaveValue("");
 
   // Test 3: Try to add a system tag (should be prevented)
   const systemKey = "tensorzero::blocked";
   const systemValue = "should_not_work";
 
-  await page.getByPlaceholder("Key").fill(systemKey);
-  await page.getByPlaceholder("Value").fill(systemValue);
+  await tagsSection.getByPlaceholder("Key").fill(systemKey);
+  await tagsSection.getByPlaceholder("Value").fill(systemValue);
+
+  // Wait for the button state to update based on input validation
+  await page.waitForTimeout(100);
 
   // The Add button should be disabled
   await expect(page.getByRole("button", { name: "Add" })).toBeDisabled();
@@ -373,8 +386,8 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   ).toBeVisible();
 
   // Clear the system tag input
-  await page.getByPlaceholder("Key").clear();
-  await page.getByPlaceholder("Value").clear();
+  await tagsSection.getByPlaceholder("Key").clear();
+  await tagsSection.getByPlaceholder("Value").clear();
 
   // Test 4: Save the datapoint and verify tags persist
   await page.getByRole("button", { name: "Save" }).click();
@@ -415,11 +428,11 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   // Test 6: Edit an existing tag by overwriting it
   const newTestValue1 = "production"; // New value for environment tag
 
-  await page.getByPlaceholder("Key").fill(testKey1); // Use same key "environment"
-  await page.getByPlaceholder("Value").fill(newTestValue1);
+  await tagsSection3.getByPlaceholder("Key").fill(testKey1); // Use same key "environment"
+  await tagsSection3.getByPlaceholder("Value").fill(newTestValue1);
   await page.getByRole("button", { name: "Add" }).click();
 
-  // Verify the tag value was overwritten (old value gone, new value present)
+  // Wait for the tag to be updated in the table
   await expect(tagsSection3.locator("table")).toContainText(testKey1);
   await expect(tagsSection3.locator("table")).toContainText(newTestValue1);
   await expect(tagsSection3.locator("table")).not.toContainText(testValue1); // Old value should be gone
