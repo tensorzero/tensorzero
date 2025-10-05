@@ -826,7 +826,7 @@ impl UninitializedLLMJudgeVariantInfo {
                     extra_headers: params.extra_headers,
                     retries: params.retries,
                     stop_sequences: params.stop_sequences,
-                    cutoff: None,
+                    max_distance: None,
                 };
                 VariantConfig::Dicl(uninitialized_config.load()?)
             }

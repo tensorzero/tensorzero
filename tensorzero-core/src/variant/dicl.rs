@@ -70,7 +70,7 @@ pub struct DiclConfig {
     #[cfg_attr(test, ts(skip))]
     extra_headers: Option<ExtraHeadersConfig>,
     retries: RetryConfig,
-    cutoff: Option<f32>,
+    max_distance: Option<f32>,
 }
 
 impl DiclConfig {
@@ -142,8 +142,8 @@ impl DiclConfig {
         &self.retries
     }
 
-    pub fn cutoff(&self) -> Option<f32> {
-        self.cutoff
+    pub fn max_distance(&self) -> Option<f32> {
+        self.max_distance
     }
 }
 
@@ -174,7 +174,7 @@ pub struct UninitializedDiclConfig {
     #[ts(skip)]
     pub extra_headers: Option<ExtraHeadersConfig>,
     #[serde(default)]
-    pub cutoff: Option<f32>,
+    pub max_distance: Option<f32>,
 }
 
 impl Variant for DiclConfig {
@@ -348,12 +348,12 @@ impl Variant for DiclConfig {
                 })
             })?;
 
-        // Validate that cutoff is non-negative if specified
-        if let Some(cutoff) = self.cutoff() {
-            if cutoff < 0.0 {
+        // Validate that max_distance is non-negative if specified
+        if let Some(max_distance) = self.max_distance() {
+            if max_distance < 0.0 {
                 return Err(ErrorDetails::Config {
                     message: format!(
-                        "`functions.{function_name}.variants.{variant_name}`: `cutoff` must be non-negative (got {cutoff})"
+                        "`functions.{function_name}.variants.{variant_name}`: `max_distance` must be non-negative (got {max_distance})"
                     ),
                 }
                 .into());
@@ -592,25 +592,25 @@ impl DiclConfig {
             );
         }
 
-        // Apply cutoff filter if specified
-        let (raw_examples, cutoff_value) = if let Some(cutoff) = self.cutoff() {
+        // Apply max_distance filter if specified
+        let (raw_examples, max_distance_value) = if let Some(max_distance) = self.max_distance() {
             let filtered: Vec<RawExample> = raw_examples
                 .into_iter()
-                .filter(|ex| ex.cosine_distance <= cutoff)
+                .filter(|ex| ex.cosine_distance <= max_distance)
                 .collect();
-            (filtered, Some(cutoff))
+            (filtered, Some(max_distance))
         } else {
             (raw_examples, None)
         };
 
         let filtered_count = raw_examples.len();
 
-        // Debug log if cutoff reduced examples below k
-        if let Some(cutoff) = cutoff_value {
+        // Debug log if max_distance reduced examples below k
+        if let Some(max_distance) = max_distance_value {
             if initial_count >= self.k() as usize && filtered_count < self.k() as usize {
                 tracing::debug!(
-                    "Dynamic in-context learning: cutoff={} filtered examples from {} to {}",
-                    cutoff,
+                    "Dynamic in-context learning: max_distance={} filtered examples from {} to {}",
+                    max_distance,
                     initial_count,
                     filtered_count
                 );
@@ -897,7 +897,7 @@ impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
             stop_sequences: self.stop_sequences,
             extra_body: self.extra_body,
             extra_headers: self.extra_headers,
-            cutoff: self.cutoff,
+            max_distance: self.max_distance,
         })
     }
 }
@@ -1319,7 +1319,7 @@ mod tests {
             extra_body: None,
             extra_headers: None,
             retries: RetryConfig::default(),
-            cutoff: None,
+            max_distance: None,
         };
 
         // Create input with custom system prompt and messages
@@ -1432,7 +1432,7 @@ mod tests {
             extra_body: None,
             extra_headers: None,
             retries: RetryConfig::default(),
-            cutoff: None,
+            max_distance: None,
         };
 
         // Create input
@@ -1539,8 +1539,8 @@ mod tests {
     }
 
     #[test]
-    fn test_cutoff_validation_negative() {
-        // Test that validation rejects negative cutoff
+    fn test_max_distance_validation_negative() {
+        // Test that validation rejects negative max_distance
         let dicl_config = DiclConfig {
             weight: None,
             embedding_model: "test_embedding".into(),
@@ -1558,16 +1558,16 @@ mod tests {
             extra_body: None,
             extra_headers: None,
             retries: RetryConfig::default(),
-            cutoff: Some(-0.5),
+            max_distance: Some(-0.5),
         };
 
         // Validation should fail
-        assert_eq!(dicl_config.cutoff(), Some(-0.5));
+        assert_eq!(dicl_config.max_distance(), Some(-0.5));
     }
 
     #[test]
-    fn test_cutoff_validation_positive() {
-        // Test that validation accepts positive cutoff
+    fn test_max_distance_validation_positive() {
+        // Test that validation accepts positive max_distance
         let dicl_config = DiclConfig {
             weight: None,
             embedding_model: "test_embedding".into(),
@@ -1585,15 +1585,15 @@ mod tests {
             extra_body: None,
             extra_headers: None,
             retries: RetryConfig::default(),
-            cutoff: Some(0.5),
+            max_distance: Some(0.5),
         };
 
-        assert_eq!(dicl_config.cutoff(), Some(0.5));
+        assert_eq!(dicl_config.max_distance(), Some(0.5));
     }
 
     #[test]
-    fn test_cutoff_validation_zero() {
-        // Test that validation accepts zero cutoff (for exact matches only)
+    fn test_max_distance_validation_zero() {
+        // Test that validation accepts zero max_distance (for exact matches only)
         let dicl_config = DiclConfig {
             weight: None,
             embedding_model: "test_embedding".into(),
@@ -1611,10 +1611,10 @@ mod tests {
             extra_body: None,
             extra_headers: None,
             retries: RetryConfig::default(),
-            cutoff: Some(0.0),
+            max_distance: Some(0.0),
         };
 
-        assert_eq!(dicl_config.cutoff(), Some(0.0));
+        assert_eq!(dicl_config.max_distance(), Some(0.0));
     }
 
     #[tokio::test]

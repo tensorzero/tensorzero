@@ -18,5 +18,5 @@ export type UninitializedDiclConfig = {
   seed: number | null;
   json_mode: JsonMode | null;
   retries: RetryConfig;
-  cutoff: number | null;
+  max_distance: number | null;
 };

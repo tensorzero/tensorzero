@@ -401,7 +401,7 @@ impl JobHandle for DiclOptimizationJobHandle {
                     extra_body: None,
                     extra_headers: None,
                     retries: RetryConfig::default(),
-                    cutoff: None,
+                    max_distance: None,
                 },
             ))),
         })

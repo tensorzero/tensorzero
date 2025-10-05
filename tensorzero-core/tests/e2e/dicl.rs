@@ -1356,12 +1356,12 @@ async fn test_dicl_json_request() {
     }
 }
 
-/// Test that cutoff filters out all irrelevant examples, falling back to vanilla chat completion
+/// Test that max_distance filters out all irrelevant examples, falling back to vanilla chat completion
 #[tokio::test]
-pub async fn test_dicl_cutoff_filters_all_examples() {
+pub async fn test_dicl_max_distance_filters_all_examples() {
     let clickhouse = get_clickhouse().await;
     let episode_id = Uuid::now_v7();
-    let variant_name = "dicl_cutoff_strict";
+    let variant_name = "dicl_max_distance_strict";
     let function_name = "basic_test";
 
     // Delete any existing examples for this function and variant
@@ -1440,7 +1440,7 @@ pub async fn test_dicl_cutoff_filters_all_examples() {
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Query about a completely unrelated topic (programming/software)
-    // The cutoff should filter out all geography examples due to high cosine distance
+    // The max_distance should filter out all geography examples due to high cosine distance
     let payload = json!({
         "function_name": function_name,
         "variant_name": variant_name,
@@ -1520,12 +1520,12 @@ pub async fn test_dicl_cutoff_filters_all_examples() {
     }
 }
 
-/// Test that cutoff keeps relevant examples when cosine distance is below threshold
+/// Test that max_distance keeps relevant examples when cosine distance is below threshold
 #[tokio::test]
-pub async fn test_dicl_cutoff_keeps_relevant_examples() {
+pub async fn test_dicl_max_distance_keeps_relevant_examples() {
     let clickhouse = get_clickhouse().await;
     let episode_id = Uuid::now_v7();
-    let variant_name = "dicl_cutoff_moderate";
+    let variant_name = "dicl_max_distance_moderate";
     let function_name = "basic_test";
 
     // Delete any existing examples for this function and variant
@@ -1610,7 +1610,7 @@ pub async fn test_dicl_cutoff_keeps_relevant_examples() {
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Query about a similar topic (Harry Potter author, similar to Lord of the Rings question)
-    // The cutoff=0.6 should keep relevant examples
+    // The max_distance=0.6 should keep relevant examples
     let payload = json!({
         "function_name": function_name,
         "variant_name": variant_name,

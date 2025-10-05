@@ -7,7 +7,7 @@ test("should show the DICL variant detail page", async ({ page }) => {
 
   // Verify DICL-specific fields
   await expect(page.getByText("k (Neighbors)")).toBeVisible();
-  await expect(page.getByText("Cutoff")).toBeVisible();
+  await expect(page.getByText("Max Distance")).toBeVisible();
   await expect(page.getByText("0.5")).toBeVisible();
 
   // Assert that "error" is not in the page

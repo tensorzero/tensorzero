@@ -247,11 +247,13 @@ export default function BasicInfo({
               </BasicInfoItem>
 
               <BasicInfoItem>
-                <BasicInfoItemTitle>Cutoff</BasicInfoItemTitle>
+                <BasicInfoItemTitle>Max Distance</BasicInfoItemTitle>
                 <BasicInfoItemContent>
                   <Chip
                     label={
-                      config.cutoff !== null ? config.cutoff.toString() : "-"
+                      config.max_distance !== null
+                        ? config.max_distance.toString()
+                        : "-"
                     }
                   />
                 </BasicInfoItemContent>
