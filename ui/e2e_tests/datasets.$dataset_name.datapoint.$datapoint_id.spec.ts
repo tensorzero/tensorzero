@@ -343,12 +343,12 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   await tagsSection.getByPlaceholder("Value").fill(testValue1);
   await page.getByRole("button", { name: "Add" }).click();
 
+  // Wait for inputs to be cleared after adding (indicates operation completed)
+  await expect(tagsSection.getByPlaceholder("Key")).toHaveValue("");
+
   // Wait for the tag to appear in the table before proceeding
   await expect(tagsSection.locator("table")).toContainText(testKey1);
   await expect(tagsSection.locator("table")).toContainText(testValue1);
-
-  // Wait for inputs to be cleared after adding
-  await expect(tagsSection.getByPlaceholder("Key")).toHaveValue("");
 
   // Test 2: Add another tag to test sorting
   const testKey2 = "author";
@@ -358,12 +358,12 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   await tagsSection.getByPlaceholder("Value").fill(testValue2);
   await page.getByRole("button", { name: "Add" }).click();
 
+  // Wait for inputs to be cleared after adding (indicates operation completed)
+  await expect(tagsSection.getByPlaceholder("Key")).toHaveValue("");
+
   // Wait for the tag to appear in the table before proceeding
   await expect(tagsSection.locator("table")).toContainText(testKey2);
   await expect(tagsSection.locator("table")).toContainText(testValue2);
-
-  // Wait for inputs to be cleared after adding
-  await expect(tagsSection.getByPlaceholder("Key")).toHaveValue("");
 
   // Test 3: Try to add a system tag (should be prevented)
   const systemKey = "tensorzero::blocked";
@@ -431,6 +431,9 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   await tagsSection3.getByPlaceholder("Key").fill(testKey1); // Use same key "environment"
   await tagsSection3.getByPlaceholder("Value").fill(newTestValue1);
   await page.getByRole("button", { name: "Add" }).click();
+
+  // Wait for inputs to be cleared after adding (indicates operation completed)
+  await expect(tagsSection3.getByPlaceholder("Key")).toHaveValue("");
 
   // Wait for the tag to be updated in the table
   await expect(tagsSection3.locator("table")).toContainText(testKey1);

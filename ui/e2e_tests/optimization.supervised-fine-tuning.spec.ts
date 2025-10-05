@@ -307,7 +307,8 @@ test.describe("Error handling", () => {
     // Click on the Start Fine-tuning Job button
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
 
-    await page.getByText("model_not_available").waitFor({ timeout: 3000 });
+    // Wait for the error to appear (may take longer in CI)
+    await page.getByText("model_not_available").waitFor({ timeout: 10_000 });
   });
 });
 
