@@ -38,7 +38,7 @@ from tensorzero import (
 from uuid_utils import uuid7
 
 
-def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
+def test_sync_insert_delete_datapoints(sync_client: TensorZeroGateway):
     dataset_name = f"test_{uuid7()}"
     datapoints = [
         ChatDatapointInsert(
@@ -172,7 +172,7 @@ def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
 
 
 @pytest.mark.asyncio
-async def test_async_bulk_insert_delete_datapoints(
+async def test_async_insert_delete_datapoints(
     async_client: AsyncTensorZeroGateway,
 ):
     datapoints = [
@@ -634,3 +634,70 @@ def test_sync_render_filtered_datapoints(embedded_sync_client: TensorZeroGateway
         embedded_sync_client.delete_datapoint(
             dataset_name=dataset_name, datapoint_id=datapoint_id
         )
+
+
+def test_sync_bulk_insert_datapoints_deprecated(sync_client: TensorZeroGateway):
+    dataset_name = f"test_{uuid7()}"
+    datapoints = [
+        ChatDatapointInsert(
+            function_name="basic_test",
+            input={
+                "system": {"assistant_name": "foo"},
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "bar"}]}
+                ],
+            },
+            output=[{"type": "text", "text": "foobar"}],
+        ),
+    ]
+
+    # Test that the deprecated function still works
+    with pytest.warns(
+        DeprecationWarning, match="Please use `insert_datapoints` instead"
+    ):
+        datapoint_ids = sync_client.bulk_insert_datapoints(
+            dataset_name=dataset_name, datapoints=datapoints
+        )
+
+    assert len(datapoint_ids) == 1
+    assert isinstance(datapoint_ids[0], UUID)
+
+    # Clean up
+    sync_client.delete_datapoint(
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[0]
+    )
+
+
+@pytest.mark.asyncio
+async def test_async_bulk_insert_datapoints_deprecated(
+    async_client: AsyncTensorZeroGateway,
+):
+    dataset_name = f"test_{uuid7()}"
+    datapoints = [
+        ChatDatapointInsert(
+            function_name="basic_test",
+            input={
+                "system": {"assistant_name": "foo"},
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "bar"}]}
+                ],
+            },
+            output=[{"type": "text", "text": "foobar"}],
+        ),
+    ]
+
+    # Test that the deprecated function still works
+    with pytest.warns(
+        DeprecationWarning, match="Please use `insert_datapoints` instead"
+    ):
+        datapoint_ids = await async_client.bulk_insert_datapoints(
+            dataset_name=dataset_name, datapoints=datapoints
+        )
+
+    assert len(datapoint_ids) == 1
+    assert isinstance(datapoint_ids[0], UUID)
+
+    # Clean up
+    await async_client.delete_datapoint(
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[0]
+    )

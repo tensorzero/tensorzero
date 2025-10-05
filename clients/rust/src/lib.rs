@@ -774,9 +774,9 @@ impl Client {
     ) -> Result<Vec<Uuid>, TensorZeroError> {
         match &*self.mode {
             ClientMode::HTTPGateway(client) => {
-                let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints/bulk")).map_err(|e| TensorZeroError::Other {
+                let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints")).map_err(|e| TensorZeroError::Other {
                     source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
-                        message: format!("Failed to join base URL with /datasets/{dataset_name}/datapoints/bulk endpoint: {e}"),
+                        message: format!("Failed to join base URL with /datasets/{dataset_name}/datapoints endpoint: {e}"),
                     })
                     .into(),
                 })?;
@@ -806,6 +806,7 @@ impl Client {
         dataset_name: String,
         params: InsertDatapointParams,
     ) -> Result<Vec<Uuid>, TensorZeroError> {
+        tracing::warn!("`Client::bulk_insert_datapoints` is deprecated. Use `Client::insert_datapoints` instead.");
         self.insert_datapoints(dataset_name, params).await
     }
 

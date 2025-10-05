@@ -270,8 +270,12 @@ async fn main() {
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))
         .route(
-            "/datasets/{dataset_name}/datapoints/bulk",
+            "/datasets/{dataset_name}/datapoints",
             post(endpoints::datasets::insert_datapoints_handler),
+        )
+        .route(
+            "/datasets/{dataset_name}/datapoints/bulk",
+            post(endpoints::datasets::bulk_insert_datapoints_handler),
         )
         .route(
             "/datasets/{dataset_name}/datapoints/{datapoint_id}",
