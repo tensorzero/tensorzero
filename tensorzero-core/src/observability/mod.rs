@@ -48,6 +48,7 @@
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+use std::borrow::Cow;
 use std::time::Duration;
 
 use once_cell::sync::OnceCell;
@@ -61,6 +62,7 @@ use http::HeaderMap;
 use metrics::{describe_counter, Unit};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use moka::sync::Cache;
+use opentelemetry::trace::Status;
 use opentelemetry::trace::{Tracer, TracerProvider as _};
 use opentelemetry::{Context, KeyValue};
 use opentelemetry_otlp::tonic_types::metadata::MetadataMap;
@@ -72,9 +74,7 @@ use std::str::FromStr;
 use tokio_util::task::TaskTracker;
 use tonic::metadata::AsciiMetadataKey;
 use tonic::metadata::MetadataValue;
-use tower_http::trace::{
-    DefaultOnEos, DefaultOnFailure, DefaultOnRequest, DefaultOnResponse, TraceLayer,
-};
+use tower_http::trace::{DefaultOnEos, DefaultOnFailure, DefaultOnRequest, TraceLayer};
 use tracing::level_filters::LevelFilter;
 use tracing::{Level, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -592,6 +592,27 @@ impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
             );
             span
         }
+
+        // This cannot be a closure due to an annoying closure lifetime inference issue
+        fn handle_response<B>(res: &Response<B>, _duration: Duration, span: &Span) {
+            // We cast this to an i64, so that tracing-opentelemetry will record it as an integer
+            // rather than a string
+            span.record("http.response.status_code", res.status().as_u16() as i64);
+            if res.status().is_server_error() {
+                if let Some(error) = res.extensions().get::<Error>() {
+                    span.set_status(Status::Error {
+                        description: Cow::Owned(error.to_string()),
+                    });
+                } else {
+                    // Don't set a description for non-TensorZero errors,
+                    // since we don't know what a nice description should look like
+                    span.set_status(Status::Error {
+                        description: Cow::Owned(String::new()),
+                    });
+                }
+            }
+        }
+
         self.layer(
             TraceLayer::new_for_http()
                 .make_span_with(make_span)
@@ -600,9 +621,13 @@ impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
                 // (this will also suppress them from OTEL in production, which is fine)
                 .on_request(DefaultOnRequest::new().level(Level::TRACE))
                 .on_failure(DefaultOnFailure::new().level(Level::TRACE))
-                .on_response(DefaultOnResponse::new().level(Level::TRACE))
+                .on_response(handle_response)
                 .on_eos(DefaultOnEos::new().level(Level::TRACE)),
         )
+        // Note - we intentionally apply this layer *after* the `TraceLayer`
+        // As a result, if we reject a request due to a failure to parse custom OTLP headers,
+        // we will *not* create an OpenTelemetry span. Custom headers can be required to correctly
+        // process an OpenTelemetry span (e.g. to set the Arize API key), so this is correct behavior.
         .layer(middleware::from_fn(tensorzero_otlp_headers_middleware))
     }
 }

@@ -4,6 +4,7 @@ import {
   getEvaluationsForDatapoint,
   pollForEvaluations,
 } from "~/utils/clickhouse/evaluations.server";
+import { toEvaluationUrl, toInferenceUrl } from "~/utils/urls";
 import type { Route } from "./+types/route";
 import {
   PageHeader,
@@ -86,7 +87,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ? selected_evaluation_run_ids.split(",")
     : [];
   if (selectedRunIds.length === 0) {
-    return redirect(`/evaluations/${evaluation_name}`);
+    return redirect(toEvaluationUrl(evaluation_name));
   }
 
   // Define all promises
@@ -207,14 +208,18 @@ export default function EvaluationDatapointPage({
     );
   }
   const outputsToDisplay = [
-    {
-      id: "Reference",
-      output: consolidatedEvaluationResults[0].reference_output,
-      metrics: [],
-      variant_name: "Reference",
-      inferenceId: null,
-      episodeId: null,
-    },
+    ...(consolidatedEvaluationResults[0].reference_output !== null
+      ? [
+          {
+            id: "Reference",
+            output: consolidatedEvaluationResults[0].reference_output,
+            metrics: [],
+            variant_name: "Reference",
+            inferenceId: null,
+            episodeId: null,
+          },
+        ]
+      : []),
     ...consolidatedEvaluationResults.map((result) => ({
       id: result.evaluation_run_id,
       inferenceId: result.inference_id,
@@ -242,6 +247,7 @@ export default function EvaluationDatapointPage({
             evaluation_name={evaluation_name}
             evaluation_config={evaluation_config}
             dataset_name={consolidatedEvaluationResults[0].dataset_name}
+            task_name={consolidatedEvaluationResults[0].name}
           />
           <EvalRunSelector
             evaluationName={evaluation_name}
@@ -501,7 +507,7 @@ function OutputsSection({
                       <span>
                         Inference:{" "}
                         <Link
-                          to={`/observability/inferences/${result.inferenceId}`}
+                          to={toInferenceUrl(result.inferenceId)}
                           className="text-blue-600 hover:text-blue-800 hover:underline"
                         >
                           {result.inferenceId}

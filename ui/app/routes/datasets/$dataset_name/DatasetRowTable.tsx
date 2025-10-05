@@ -12,11 +12,13 @@ import {
   TableItemTime,
   TableItemFunction,
   TableItemShortUuid,
+  TableItemText,
 } from "~/components/ui/TableItems";
 import { Button } from "~/components/ui/button";
 import { Trash } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useFetcher } from "react-router";
+import { toFunctionUrl, toDatapointUrl, toEpisodeUrl } from "~/utils/urls";
 import {
   Dialog,
   DialogContent,
@@ -56,6 +58,7 @@ export default function DatasetRowTable({
           <TableRow>
             <TableHead>ID</TableHead>
             <TableHead>Episode ID</TableHead>
+            <TableHead>Name</TableHead>
             <TableHead>Function</TableHead>
             <TableHead>Updated</TableHead>
             <TableHead className="w-[50px]"></TableHead>
@@ -70,20 +73,25 @@ export default function DatasetRowTable({
                 <TableCell className="max-w-[200px]">
                   <TableItemShortUuid
                     id={row.id}
-                    link={`/datasets/${dataset_name}/datapoint/${row.id}`}
+                    link={toDatapointUrl(dataset_name, row.id)}
                   />
                 </TableCell>
                 <TableCell>
-                  <TableItemShortUuid
-                    id={row.episode_id}
-                    link={`/observability/episodes/${row.episode_id}`}
-                  />
+                  {row.episode_id && (
+                    <TableItemShortUuid
+                      id={row.episode_id}
+                      link={toEpisodeUrl(row.episode_id)}
+                    />
+                  )}
+                </TableCell>
+                <TableCell>
+                  <TableItemText text={row.name} />
                 </TableCell>
                 <TableCell>
                   <TableItemFunction
                     functionName={row.function_name}
                     functionType={row.type}
-                    link={`/observability/functions/${row.function_name}`}
+                    link={toFunctionUrl(row.function_name)}
                   />
                 </TableCell>
                 <TableCell>

@@ -12,7 +12,6 @@ use serde_json::{json, Value};
 use std::borrow::Cow;
 use std::io::Write;
 use std::pin::Pin;
-use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
 use tracing::instrument;
@@ -46,7 +45,7 @@ use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, ThoughtChunk,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::providers::helpers::{
@@ -66,10 +65,6 @@ lazy_static! {
     };
 }
 
-pub fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("OPENAI_API_KEY".to_string())
-}
-
 const PROVIDER_NAME: &str = "OpenAI";
 pub const PROVIDER_TYPE: &str = "openai";
 
@@ -83,31 +78,18 @@ pub struct OpenAIProvider {
     credentials: OpenAICredentials,
 }
 
-pub static DEFAULT_CREDENTIALS: OnceLock<OpenAICredentials> = OnceLock::new();
-
 impl OpenAIProvider {
-    pub fn new(
-        model_name: String,
-        api_base: Option<Url>,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-
+    pub fn new(model_name: String, api_base: Option<Url>, credentials: OpenAICredentials) -> Self {
         // Check if the api_base has the `/chat/completions` suffix and warn if it does
         if let Some(api_base) = &api_base {
             check_api_base_suffix(api_base);
         }
 
-        Ok(OpenAIProvider {
+        OpenAIProvider {
             model_name,
             api_base,
             credentials,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {
@@ -2621,11 +2603,11 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-3.5-turbo", &basic_request)
+        let openai_request = OpenAIRequest::new("gpt-4.1-mini", &basic_request)
             .await
             .unwrap();
 
-        assert_eq!(openai_request.model, "gpt-3.5-turbo");
+        assert_eq!(openai_request.model, "gpt-4.1-mini");
         assert_eq!(openai_request.messages.len(), 2);
         assert_eq!(openai_request.temperature, Some(0.7));
         assert_eq!(openai_request.max_completion_tokens, Some(100));
@@ -2912,7 +2894,7 @@ mod tests {
 
         let request_body = OpenAIRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "gpt-4.1-mini",
             temperature: Some(0.5),
             top_p: Some(0.5),
             presence_penalty: Some(0.5),
@@ -3011,7 +2993,7 @@ mod tests {
 
         let request_body = OpenAIRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "gpt-4.1-mini",
             temperature: Some(0.5),
             top_p: Some(0.5),
             presence_penalty: Some(0.5),
@@ -3079,7 +3061,7 @@ mod tests {
         };
         let request_body = OpenAIRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "gpt-4.1-mini",
             temperature: Some(0.5),
             top_p: Some(0.9),
             presence_penalty: Some(0.1),
@@ -3139,7 +3121,7 @@ mod tests {
 
         let request_body = OpenAIRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "gpt-4.1-mini",
             temperature: Some(0.5),
             top_p: Some(0.9),
             presence_penalty: Some(0.1),
@@ -3539,7 +3521,7 @@ mod tests {
             _ => panic!("Expected JsonSchema format"),
         }
 
-        // Test JSON mode Strict with schema but gpt-3.5
+        // Test JSON mode Strict with schema but gpt-3.5-turbo (does not support strict mode)
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let schema = serde_json::json!({
             "type": "object",
@@ -4103,31 +4085,27 @@ mod tests {
     #[traced_test]
     fn test_openai_provider_new_api_base_check() {
         let model_name = "test-model".to_string();
-        let api_key_location = Some(CredentialLocation::None);
 
         // Valid cases (should not warn)
         let _ = OpenAIProvider::new(
             model_name.clone(),
             Some(Url::parse("http://localhost:1234/v1/").unwrap()),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            OpenAICredentials::None,
+        );
 
         let _ = OpenAIProvider::new(
             model_name.clone(),
             Some(Url::parse("http://localhost:1234/v1").unwrap()),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            OpenAICredentials::None,
+        );
 
         // Invalid cases (should warn)
         let invalid_url_1 = Url::parse("http://localhost:1234/chat/completions").unwrap();
         let _ = OpenAIProvider::new(
             model_name.clone(),
             Some(invalid_url_1.clone()),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            OpenAICredentials::None,
+        );
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_1.as_ref()));
 
@@ -4135,9 +4113,8 @@ mod tests {
         let _ = OpenAIProvider::new(
             model_name.clone(),
             Some(invalid_url_2.clone()),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            OpenAICredentials::None,
+        );
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_2.as_ref()));
     }

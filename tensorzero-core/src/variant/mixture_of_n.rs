@@ -22,7 +22,6 @@ use crate::inference::types::{
     JsonInferenceResultChunk, RequestMessagesOrBatch, TextChunk, ThoughtChunk, Usage,
 };
 use crate::model::ModelTable;
-use crate::rate_limiting::TicketBorrows;
 use crate::tool::ToolCallChunk;
 use crate::{
     endpoints::inference::InferenceParams,
@@ -232,7 +231,7 @@ impl Variant for MixtureOfNConfig {
                 })
             })?;
         }
-        // Validate the evaluator variant
+        // Validate the fuser variant
         self.fuser
             .inner
             .validate(
@@ -249,7 +248,7 @@ impl Variant for MixtureOfNConfig {
 
     // We do not return templates for the candidates, as they are required to be variants in the same function
     // and will therefore also have the same templates.
-    // We only return templates for the evaluator variant.
+    // We only return templates for the fuser variant.
     fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
         self.fuser.inner.get_all_template_paths()
     }
@@ -331,7 +330,6 @@ pub fn stream_inference_from_non_stream(
             }
         },
         cached: model_inference_result.cached,
-        ticket_borrow: TicketBorrows::empty(),
     };
     let stream = make_stream_from_non_stream(inference_result, Some(usage))?;
     Ok((stream, model_used_info))
@@ -615,7 +613,7 @@ async fn inner_fuse_candidates<'a, 'request>(
 ) -> Result<InferenceResult, Error> {
     let mut inference_params = InferenceParams::default();
     let (inference_request, included_indices) = fuser
-        .prepare_request(
+        .prepare_fuser_request(
             input,
             function,
             inference_config,
@@ -668,7 +666,7 @@ async fn inner_fuse_candidates_stream<'a, 'request>(
 ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
     let mut params = InferenceParams::default();
     let (inference_request, included_indices) = fuser
-        .prepare_request(
+        .prepare_fuser_request(
             input,
             function,
             inference_config,
@@ -742,7 +740,7 @@ impl FuserConfig {
     /// # Returns
     ///
     /// On success, returns a tuple containing:
-    /// - `RequestMessage`: The templated message to be sent to the evaluator.
+    /// - `RequestMessage`: The templated message to be sent to the fuser.
     /// - `Vec<usize>`: A sorted vector of indices indicating which candidates were successfully included in the fuser message.
     ///
     /// # Errors
@@ -790,9 +788,9 @@ impl FuserConfig {
         ))
     }
 
-    /// Prepares the request for the evaluator variant.
+    /// Prepares the request for the fuser variant.
     /// We use the `prepare_system_message` and `prepare_candidate_message` functions to generate
-    /// the system and candidate messages for the evaluator, which take candidate selection into account.
+    /// the system and candidate messages for the fuser, which take candidate selection into account.
     ///
     /// Additionally, this function returns the indices of candidates that were successfully included in the fuser message.
     ///
@@ -805,7 +803,7 @@ impl FuserConfig {
     /// # Errors
     ///
     /// Returns an `Error` if any of the candidate outputs fail to serialize or if templating fails.
-    async fn prepare_request<'a, 'request>(
+    async fn prepare_fuser_request<'a, 'request>(
         &'a self,
         input: &'request LazyResolvedInput,
         function: &'a FunctionConfig,
@@ -889,7 +887,7 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        config::{SchemaData, UninitializedSchemas},
+        config::{provider_types::ProviderTypesConfig, SchemaData, UninitializedSchemas},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
         function::{FunctionConfigChat, FunctionConfigJson},
@@ -904,6 +902,7 @@ mod tests {
             test_system_template_schema,
         },
         model::{ModelConfig, ModelProvider, ProviderConfig},
+        model_table::ProviderTypeDefaultCredentials,
         providers::dummy::DummyProvider,
         tool::{ToolCallConfig, ToolCallOutput, ToolChoice},
     };
@@ -1346,27 +1345,31 @@ mod tests {
             .await,
         );
         let candidates = vec![candidate0, candidate1];
-        let models = ModelTable::try_from(HashMap::from([(
-            "json".into(),
-            ModelConfig {
-                routing: vec!["json".into()],
-                providers: HashMap::from([(
-                    "json".into(),
-                    ModelProvider {
-                        name: "json".into(),
-                        config: ProviderConfig::Dummy(DummyProvider {
-                            model_name: "json".into(),
-                            ..Default::default()
-                        }),
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        timeouts: Default::default(),
-                        discard_unknown_chunks: false,
-                    },
-                )]),
-                timeouts: Default::default(),
-            },
-        )]))
+        let provider_types = ProviderTypesConfig::default();
+        let models = ModelTable::new(
+            HashMap::from([(
+                "json".into(),
+                ModelConfig {
+                    routing: vec!["json".into()],
+                    providers: HashMap::from([(
+                        "json".into(),
+                        ModelProvider {
+                            name: "json".into(),
+                            config: ProviderConfig::Dummy(DummyProvider {
+                                model_name: "json".into(),
+                                ..Default::default()
+                            }),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            timeouts: Default::default(),
+                            discard_unknown_chunks: false,
+                        },
+                    )]),
+                    timeouts: Default::default(),
+                },
+            )]),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
         .expect("Failed to create model table");
         let client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
@@ -1479,7 +1482,12 @@ mod tests {
                     timeouts: Default::default(),
                 },
             );
-            ModelTable::try_from(map).expect("Failed to create model table")
+            let provider_types = ProviderTypesConfig::default();
+            ModelTable::new(
+                map,
+                ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            )
+            .expect("Failed to create model table")
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1515,7 +1523,7 @@ mod tests {
         }
         // Depending on implementation, you might check which candidate was selected
 
-        // Set up evaluator with a provider that returns invalid JSON
+        // Set up fuser with a provider that returns invalid JSON
         let fuser_config = FuserConfig {
             inner: UninitializedChatCompletionConfig {
                 model: "regular".into(),
@@ -1554,7 +1562,12 @@ mod tests {
                     timeouts: Default::default(),
                 },
             );
-            ModelTable::try_from(map).expect("Failed to create model table")
+            let provider_types = ProviderTypesConfig::default();
+            ModelTable::new(
+                map,
+                ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            )
+            .expect("Failed to create model table")
         };
         let input = LazyResolvedInput {
             system: None,
