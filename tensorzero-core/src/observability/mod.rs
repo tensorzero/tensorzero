@@ -301,7 +301,7 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
     opentelemetry::global::set_tracer_provider(provider.clone());
     let shutdown_tasks = TaskTracker::new();
     let shutdown_tasks_clone = shutdown_tasks.clone();
-    // Initialize empty - will be set once later via set_static_otlp_traces_extra_headers()
+    // Initialize empty - will be set once later via set_static_otlp_traces_extra_headers
     let config_headers = Arc::new(OnceCell::new());
     let wrapper = TracerWrapper {
         default_tracer: tracer,
