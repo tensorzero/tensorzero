@@ -402,7 +402,7 @@ impl UninitializedEvaluatorConfig {
                             variant.inner.set_weight(Some(1.0));
                         }
                         VariantConfig::FirstOfN(variant) => {
-                            variant.weight = Some(1.0);
+                            variant.set_weight(Some(1.0));
                         }
                     };
                 }
@@ -858,11 +858,14 @@ impl UninitializedLLMJudgeVariantInfo {
                 })
             }
             UninitializedLLMJudgeVariantConfig::FirstOfN(params) => {
-                VariantConfig::FirstOfN(UninitializedFirstOfNConfig {
-                    weight: get_weight(params.active),
-                    timeout_s: params.timeout_s,
-                    candidates: params.candidates,
-                })
+                VariantConfig::FirstOfN(
+                    UninitializedFirstOfNConfig {
+                        weight: get_weight(params.active),
+                        timeout_s: params.timeout_s,
+                        candidates: params.candidates,
+                    }
+                    .load()?,
+                )
             }
         };
         Ok(VariantInfo {
@@ -1009,8 +1012,8 @@ fn check_convert_variant_to_llm_judge_variant(
         VariantConfig::FirstOfN(variant) => Ok(UninitializedLLMJudgeVariantConfig::FirstOfN(
             UninitializedLLMJudgeFirstOfNVariantConfig {
                 active: Some(false),
-                timeout_s: variant.timeout_s,
-                candidates: variant.candidates,
+                timeout_s: variant.timeout_s(),
+                candidates: variant.candidates().clone(),
             },
         )),
     }

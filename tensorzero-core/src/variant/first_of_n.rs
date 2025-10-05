@@ -11,7 +11,6 @@ use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
 use crate::inference::types::resolved_input::LazyResolvedInput;
-use crate::inference::types::ResolvedInput;
 use crate::model::ModelTable;
 use crate::variant::mixture_of_n::stream_inference_from_non_stream;
 use crate::{
@@ -28,15 +27,32 @@ use super::{InferenceConfig, ModelUsedInfo, Variant};
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct FirstOfNConfig {
-    pub weight: Option<f64>,
-    pub timeout_s: f64,
-    pub candidates: Vec<String>,
+    weight: Option<f64>,
+    timeout_s: f64,
+    candidates: Vec<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+impl FirstOfNConfig {
+    pub fn weight(&self) -> Option<f64> {
+        self.weight
+    }
+
+    pub fn set_weight(&mut self, weight: Option<f64>) {
+        self.weight = weight;
+    }
+
+    pub fn timeout_s(&self) -> f64 {
+        self.timeout_s
+    }
+
+    pub fn candidates(&self) -> &Vec<String> {
+        &self.candidates
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 pub struct UninitializedFirstOfNConfig {
     #[serde(default)]
     pub weight: Option<f64>,
@@ -204,16 +220,22 @@ impl Variant for FirstOfNConfig {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, sync::Arc};
+    use std::collections::HashMap;
+    use std::sync::Arc;
 
-    use reqwest::Client;
     use uuid::Uuid;
 
+    use crate::config::provider_types::ProviderTypesConfig;
+    use crate::config::{ErrorContext, OtlpConfig, SchemaData};
+    use crate::db::clickhouse::ClickHouseConnectionInfo;
+    use crate::db::postgres::PostgresConnectionInfo;
     use crate::embeddings::EmbeddingModelTable;
-    use crate::variant::chat_completion::ChatCompletionConfig;
+    use crate::http::TensorzeroHttpClient;
+    use crate::model_table::ProviderTypeDefaultCredentials;
+    use crate::rate_limiting::RateLimitingConfig;
+    use crate::variant::chat_completion::UninitializedChatCompletionConfig;
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::{InferenceCredentials, InferenceIds},
         function::FunctionConfigChat,
         minijinja_util::tests::get_test_template_config,
@@ -228,12 +250,16 @@ mod tests {
         models: ModelTable,
         embedding_models: EmbeddingModelTable,
         function: FunctionConfig,
-        input: ResolvedInput,
-        templates: Arc<TemplateConfig<'static>>,
-        client: Arc<Client>,
-        clickhouse_connection_info: Arc<ClickHouseConnectionInfo>,
-        api_keys: Arc<InferenceCredentials>,
-        cache_options: Arc<CacheOptions>,
+        input: LazyResolvedInput,
+        templates: TemplateConfig<'static>,
+        client: TensorzeroHttpClient,
+        clickhouse_connection_info: ClickHouseConnectionInfo,
+        postgres_connection_info: PostgresConnectionInfo,
+        api_keys: InferenceCredentials,
+        cache_options: CacheOptions,
+        tags: HashMap<String, String>,
+        rate_limiting_config: RateLimitingConfig,
+        otlp_config: OtlpConfig,
     }
 
     impl TestSetup {
@@ -248,6 +274,7 @@ mod tests {
                 dynamic_output_schema: None,
                 function_name: "test_function",
                 variant_name: "first_of_n_variant",
+                fetch_and_encode_input_files_before_inference: false,
                 extra_body: Default::default(),
                 extra_headers: Default::default(),
                 extra_cache_key: None,
@@ -257,110 +284,133 @@ mod tests {
             InferenceClients {
                 http_client: &self.client,
                 clickhouse_connection_info: &self.clickhouse_connection_info,
+                postgres_connection_info: &self.postgres_connection_info,
                 credentials: &self.api_keys,
                 cache_options: &self.cache_options,
+                tags: &self.tags,
+                rate_limiting_config: &self.rate_limiting_config,
+                otlp_config: &self.otlp_config,
             }
         }
     }
 
     async fn create_test_setup() -> TestSetup {
-        let templates = Arc::new(get_test_template_config());
+        let templates = get_test_template_config();
+        let provider_types = ProviderTypesConfig::default();
 
-        let models = ModelTable::try_from(HashMap::from([
-            (
-                "fast".into(),
-                ModelConfig {
-                    routing: vec!["fast".into()],
-                    providers: HashMap::from([(
-                        "fast".into(),
-                        ModelProvider {
-                            name: "fast".into(),
-                            config: ProviderConfig::Dummy(DummyProvider {
-                                model_name: "fast".into(),
-                                ..Default::default()
-                            }),
-                            extra_body: Default::default(),
-                            extra_headers: Default::default(),
-                            timeouts: Default::default(),
-                            discard_unknown_chunks: false,
-                        },
-                    )]),
-                    timeouts: Default::default(),
-                },
-            ),
-            (
-                "slow".into(),
-                ModelConfig {
-                    routing: vec!["slow".into()],
-                    providers: HashMap::from([(
-                        "slow".into(),
-                        ModelProvider {
-                            name: "slow".into(),
-                            config: ProviderConfig::Dummy(DummyProvider {
-                                model_name: "slow".into(),
-                                ..Default::default()
-                            }),
-                            extra_body: Default::default(),
-                            extra_headers: Default::default(),
-                            timeouts: Default::default(),
-                            discard_unknown_chunks: false,
-                        },
-                    )]),
-                    timeouts: Default::default(),
-                },
-            ),
-            (
-                "error".into(),
-                ModelConfig {
-                    routing: vec!["error".into()],
-                    providers: HashMap::from([(
-                        "error_model".into(),
-                        ModelProvider {
-                            name: "error_model".into(),
-                            config: ProviderConfig::Dummy(DummyProvider {
-                                model_name: "error".into(),
-                                ..Default::default()
-                            }),
-                            extra_body: Default::default(),
-                            extra_headers: Default::default(),
-                            timeouts: Default::default(),
-                            discard_unknown_chunks: false,
-                        },
-                    )]),
-                    timeouts: Default::default(),
-                },
-            ),
-        ]))
+        let models = ModelTable::new(
+            HashMap::from([
+                (
+                    "fast".into(),
+                    ModelConfig {
+                        routing: vec!["fast".into()],
+                        providers: HashMap::from([(
+                            "fast".into(),
+                            ModelProvider {
+                                name: "fast".into(),
+                                config: ProviderConfig::Dummy(DummyProvider {
+                                    model_name: "fast".into(),
+                                    ..Default::default()
+                                }),
+                                extra_body: Default::default(),
+                                extra_headers: Default::default(),
+                                timeouts: Default::default(),
+                                discard_unknown_chunks: false,
+                            },
+                        )]),
+                        timeouts: Default::default(),
+                    },
+                ),
+                (
+                    "slow".into(),
+                    ModelConfig {
+                        routing: vec!["slow".into()],
+                        providers: HashMap::from([(
+                            "slow".into(),
+                            ModelProvider {
+                                name: "slow".into(),
+                                config: ProviderConfig::Dummy(DummyProvider {
+                                    model_name: "slow".into(),
+                                    ..Default::default()
+                                }),
+                                extra_body: Default::default(),
+                                extra_headers: Default::default(),
+                                timeouts: Default::default(),
+                                discard_unknown_chunks: false,
+                            },
+                        )]),
+                        timeouts: Default::default(),
+                    },
+                ),
+                (
+                    "error".into(),
+                    ModelConfig {
+                        routing: vec!["error".into()],
+                        providers: HashMap::from([(
+                            "error_model".into(),
+                            ModelProvider {
+                                name: "error_model".into(),
+                                config: ProviderConfig::Dummy(DummyProvider {
+                                    model_name: "error".into(),
+                                    ..Default::default()
+                                }),
+                                extra_body: Default::default(),
+                                extra_headers: Default::default(),
+                                timeouts: Default::default(),
+                                discard_unknown_chunks: false,
+                            },
+                        )]),
+                        timeouts: Default::default(),
+                    },
+                ),
+            ]),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
         .expect("Failed to create model table");
 
         let mut variants = HashMap::new();
         variants.insert(
             "fast_candidate".to_string(),
             Arc::new(VariantInfo {
-                inner: VariantConfig::ChatCompletion(ChatCompletionConfig {
-                    model: "fast".into(),
-                    ..Default::default()
-                }),
+                inner: VariantConfig::ChatCompletion(
+                    UninitializedChatCompletionConfig {
+                        model: "fast".into(),
+                        weight: None,
+                        ..Default::default()
+                    }
+                    .load(&SchemaData::default(), &ErrorContext::new_test())
+                    .unwrap(),
+                ),
                 timeouts: Default::default(),
             }),
         );
         variants.insert(
             "slow_candidate".to_string(),
             Arc::new(VariantInfo {
-                inner: VariantConfig::ChatCompletion(ChatCompletionConfig {
-                    model: "slow".into(),
-                    ..Default::default()
-                }),
+                inner: VariantConfig::ChatCompletion(
+                    UninitializedChatCompletionConfig {
+                        model: "slow".into(),
+                        weight: None,
+                        ..Default::default()
+                    }
+                    .load(&SchemaData::default(), &ErrorContext::new_test())
+                    .unwrap(),
+                ),
                 timeouts: Default::default(),
             }),
         );
         variants.insert(
             "error_candidate".to_string(),
             Arc::new(VariantInfo {
-                inner: VariantConfig::ChatCompletion(ChatCompletionConfig {
-                    model: "error".into(),
-                    ..Default::default()
-                }),
+                inner: VariantConfig::ChatCompletion(
+                    UninitializedChatCompletionConfig {
+                        model: "error".into(),
+                        weight: None,
+                        ..Default::default()
+                    }
+                    .load(&SchemaData::default(), &ErrorContext::new_test())
+                    .unwrap(),
+                ),
                 timeouts: Default::default(),
             }),
         );
@@ -372,18 +422,19 @@ mod tests {
 
         let embedding_models = EmbeddingModelTable::default();
 
-        let input = ResolvedInput {
+        let input = LazyResolvedInput {
             system: None,
             messages: vec![],
         };
 
-        let client = Arc::new(Client::new());
-        let clickhouse_connection_info = Arc::new(ClickHouseConnectionInfo::Disabled);
-        let api_keys = Arc::new(InferenceCredentials::default());
-        let cache_options = Arc::new(CacheOptions {
+        let client = TensorzeroHttpClient::new().unwrap();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let postgres_connection_info = PostgresConnectionInfo::Disabled;
+        let api_keys = InferenceCredentials::default();
+        let cache_options = CacheOptions {
             max_age_s: None,
             enabled: CacheEnabledMode::WriteOnly,
-        });
+        };
 
         TestSetup {
             models,
@@ -393,8 +444,12 @@ mod tests {
             templates,
             client,
             clickhouse_connection_info,
+            postgres_connection_info,
             api_keys,
             cache_options,
+            tags: Default::default(),
+            rate_limiting_config: Default::default(),
+            otlp_config: Default::default(),
         }
     }
 
@@ -600,39 +655,48 @@ mod tests {
             candidates: vec!["candidate1".to_string()],
         };
 
-        let templates = Arc::new(get_test_template_config());
+        let templates = get_test_template_config();
+        let provider_types = ProviderTypesConfig::default();
 
-        let models = ModelTable::try_from(HashMap::from([(
-            "model1".into(),
-            ModelConfig {
-                routing: vec!["model1".into()],
-                providers: HashMap::from([(
-                    "model1".into(),
-                    ModelProvider {
-                        name: "model1".into(),
-                        config: ProviderConfig::Dummy(DummyProvider {
-                            model_name: "model1".into(),
-                            ..Default::default()
-                        }),
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        timeouts: Default::default(),
-                        discard_unknown_chunks: false,
-                    },
-                )]),
-                timeouts: Default::default(),
-            },
-        )]))
+        let models = ModelTable::new(
+            HashMap::from([(
+                "model1".into(),
+                ModelConfig {
+                    routing: vec!["model1".into()],
+                    providers: HashMap::from([(
+                        "model1".into(),
+                        ModelProvider {
+                            name: "model1".into(),
+                            config: ProviderConfig::Dummy(DummyProvider {
+                                model_name: "model1".into(),
+                                ..Default::default()
+                            }),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            timeouts: Default::default(),
+                            discard_unknown_chunks: false,
+                        },
+                    )]),
+                    timeouts: Default::default(),
+                },
+            )]),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
         .expect("Failed to create model table");
 
         let mut variants = HashMap::new();
         variants.insert(
             "candidate1".to_string(),
             Arc::new(VariantInfo {
-                inner: VariantConfig::ChatCompletion(ChatCompletionConfig {
-                    model: "model1".into(),
-                    ..Default::default()
-                }),
+                inner: VariantConfig::ChatCompletion(
+                    UninitializedChatCompletionConfig {
+                        model: "model1".into(),
+                        weight: None,
+                        ..Default::default()
+                    }
+                    .load(&SchemaData::default(), &ErrorContext::new_test())
+                    .unwrap(),
+                ),
                 timeouts: Default::default(),
             }),
         );
@@ -647,7 +711,7 @@ mod tests {
             models: &models,
             embedding_models: &embedding_models,
         };
-        let input = ResolvedInput {
+        let input = LazyResolvedInput {
             system: None,
             messages: vec![],
         };
@@ -662,22 +726,28 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "test_function",
             variant_name: "first_of_n_variant",
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
         };
 
-        let client = Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let postgres_connection_info = PostgresConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
         let inference_clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &postgres_connection_info,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
+            otlp_config: &Default::default(),
         };
 
         let result = first_of_n_config
