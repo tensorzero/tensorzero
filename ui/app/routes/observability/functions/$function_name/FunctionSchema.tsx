@@ -1,4 +1,4 @@
-import type { FunctionConfig, JsonValue } from "tensorzero-node";
+import type { FunctionConfig, SchemaData } from "tensorzero-node";
 import {
   SnippetLayout,
   SnippetContent,
@@ -16,15 +16,12 @@ export default function FunctionSchema({
   functionConfig,
 }: FunctionSchemaProps) {
   // Build schemas object dynamically from all available schemas
-  const schemas: Record<
-    string,
-    { value: JsonValue | undefined; legacy_definition: boolean }
-  > = {
+  const schemas: SchemaData = {
     ...functionConfig.schemas,
     ...(functionConfig.type === "json"
       ? {
           output: {
-            value: functionConfig.output_schema.value,
+            schema: { value: functionConfig.output_schema?.value },
             legacy_definition: false,
           },
         }
@@ -47,7 +44,7 @@ export default function FunctionSchema({
 
   // Create tabs for each schema
   const tabs = schemaEntries.map(([name, schemaData]) => {
-    const isLegacy = schemaData.legacy_definition;
+    const isLegacy = schemaData?.legacy_definition ?? false;
     const isOutputSchema = name === "output";
     return {
       id: name,
@@ -69,8 +66,8 @@ export default function FunctionSchema({
         {(activeTab) => {
           const tab = tabs.find((tab) => tab.id === activeTab);
           const schema = schemas[activeTab];
-          const formattedContent = schema.value
-            ? JSON.stringify(schema.value, null, 2)
+          const formattedContent = schema?.schema?.value
+            ? JSON.stringify(schema.schema.value, null, 2)
             : undefined;
 
           return (

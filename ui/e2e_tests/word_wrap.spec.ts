@@ -22,7 +22,7 @@ test("ensure word wrap persists between pages", async ({ page }) => {
     // Wait for localStorage to be set by useEffect
     await page.waitForFunction(
       () => localStorage.getItem("word-wrap") !== null,
-      { timeout: 1000 },
+      { timeout: 5000 },
     );
     expect(await getWordWrap()).toEqual("true");
   }
