@@ -768,7 +768,7 @@ impl TensorZeroGateway {
     ///                                   Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-header-".
     ///                                   Example: {"My-Header": "My-Value"} becomes header "tensorzero-otlp-traces-extra-header-My-Header: My-Value"
     /// :return: If stream is false, returns an InferenceResponse.
-    ///          If stream is true, returns a geerator that yields InferenceChunks as they come in.
+    ///          If stream is true, returns a generator that yields InferenceChunks as they come in.
     fn inference(
         this: PyRef<'_, Self>,
         py: Python<'_>,
