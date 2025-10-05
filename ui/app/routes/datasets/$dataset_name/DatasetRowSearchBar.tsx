@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router";
 import { z } from "zod";
+import { toDatapointUrl } from "~/utils/urls";
 import { Button } from "~/components/ui/button";
 import {
   Form,
@@ -33,7 +34,7 @@ export default function DatasetRowSearchBar({
   });
 
   const onSubmit = (data: FormValues) => {
-    navigate(`/datasets/${dataset_name}/datapoint/${data.datasetRowId}`);
+    navigate(toDatapointUrl(dataset_name, data.datasetRowId));
     form.reset();
   };
 

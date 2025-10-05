@@ -16,6 +16,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+import { toEvaluationDatapointUrl } from "~/utils/urls";
 
 import { EvalRunSelector } from "~/components/evaluations/EvalRunSelector";
 import type {
@@ -428,7 +429,11 @@ export function EvaluationTable({
                                 .map(([runId]) => runId)
                                 .join(",");
                               navigate(
-                                `/evaluations/${evaluation_name}/${datapoint.id}?evaluation_run_ids=${evaluation_run_ids}`,
+                                toEvaluationDatapointUrl(
+                                  evaluation_name,
+                                  datapoint.id,
+                                  { evaluation_run_ids },
+                                ),
                               );
                             }}
                           >
