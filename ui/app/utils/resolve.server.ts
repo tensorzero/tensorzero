@@ -204,6 +204,7 @@ function prepareDisplayText(
   role: Role,
   functionConfig: FunctionConfig | null,
 ): DisplayInputMessageContent {
+  // If there's no function config, we can't do any templating because of legacy templates...
   if (!functionConfig) {
     return {
       type: "missing_function_text",
@@ -219,6 +220,7 @@ function prepareDisplayText(
       arguments: textBlock.value,
     };
   }
+
   if (
     role === "assistant" &&
     functionConfig.schemas["assistant"] !== undefined
@@ -230,6 +232,7 @@ function prepareDisplayText(
     };
   }
 
+  // Otherwise it's just unstructured text
   return {
     type: "text",
     text: textBlock.value,
