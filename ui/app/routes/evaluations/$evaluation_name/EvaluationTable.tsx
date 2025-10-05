@@ -429,7 +429,11 @@ export function EvaluationTable({
                                 .map(([runId]) => runId)
                                 .join(",");
                               navigate(
-                                toEvaluationDatapointUrl(evaluation_name, datapoint.id, { evaluation_run_ids }),
+                                toEvaluationDatapointUrl(
+                                  evaluation_name,
+                                  datapoint.id,
+                                  { evaluation_run_ids },
+                                ),
                               );
                             }}
                           >

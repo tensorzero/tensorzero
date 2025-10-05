@@ -166,9 +166,7 @@ export async function action({ request }: ActionFunctionArgs) {
           parsedFormData,
           functionType,
         });
-        return redirect(
-          toDatapointUrl(parsedFormData.dataset_name, newId),
-        );
+        return redirect(toDatapointUrl(parsedFormData.dataset_name, newId));
       } catch (error) {
         logger.error("Error updating datapoint:", error);
         return {

@@ -10,7 +10,10 @@ import {
 } from "~/components/ui/table";
 import { formatDate } from "~/utils/date";
 import type { DynamicEvaluationRunWithEpisodeCount } from "~/utils/clickhouse/dynamic_evaluations";
-import { toDynamicEvaluationRunUrl, toDynamicEvaluationProjectUrl } from "~/utils/urls";
+import {
+  toDynamicEvaluationRunUrl,
+  toDynamicEvaluationProjectUrl,
+} from "~/utils/urls";
 
 export default function DynamicEvaluationRunsTable({
   dynamicEvaluationRuns,

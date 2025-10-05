@@ -75,7 +75,9 @@ export async function action({ request }: Route.ActionArgs) {
     });
   }
   return redirect(
-    toEvaluationUrl(evaluation_name, { evaluation_run_ids: evaluation_start_info.evaluation_run_id }),
+    toEvaluationUrl(evaluation_name, {
+      evaluation_run_ids: evaluation_start_info.evaluation_run_id,
+    }),
   );
 }
 
