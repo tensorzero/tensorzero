@@ -16,7 +16,6 @@ import {
   AudioMessage,
   TextMessage,
   EmptyMessage,
-  ParameterizedMessage,
   TemplateMessage,
 } from "~/components/layout/SnippetContent";
 import type { JsonObject } from "type-fest";
@@ -244,8 +243,9 @@ export default function InputSnippet({
             }
           >
             {typeof system === "object" ? (
-              <ParameterizedMessage
-                parameters={system}
+              <TemplateMessage
+                arguments={system}
+                templateName="system"
                 isEditing={isEditing}
                 onChange={onSystemChange}
               />
