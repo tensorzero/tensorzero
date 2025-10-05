@@ -35,6 +35,10 @@ export async function action({ request }: ActionFunctionArgs) {
     ]);
     const skippedRows = totalRows - writtenRows;
 
+    if (!queryParams.dataset_name) {
+      throw new Error("Dataset name is required");
+    }
+
     return redirect(
       `${toDatasetUrl(queryParams.dataset_name)}?rowsAdded=${writtenRows}&rowsSkipped=${skippedRows}`,
     );

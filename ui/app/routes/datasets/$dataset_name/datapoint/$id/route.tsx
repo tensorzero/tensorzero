@@ -523,12 +523,14 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       <div className="mt-8 flex flex-col items-center justify-center gap-2 rounded-xl bg-red-50 p-6 md:mt-0">
         <h1 className="text-2xl font-bold">{heading}</h1>
         {typeof message === "string" ? <p>{message}</p> : message}
-        <Link
-          to={toDatasetUrl(datasetName)}
-          className="font-bold text-red-800 hover:text-red-600"
-        >
-          Go back &rarr;
-        </Link>
+        {datasetName && (
+          <Link
+            to={toDatasetUrl(datasetName)}
+            className="font-bold text-red-800 hover:text-red-600"
+          >
+            Go back &rarr;
+          </Link>
+        )}
       </div>
     </div>
   );

@@ -87,3 +87,11 @@ export function toDynamicEvaluationRunUrl(runId: string): string {
 export function toDynamicEvaluationProjectUrl(projectName: string): string {
   return `/dynamic_evaluations/projects/${encodeURIComponent(projectName)}`;
 }
+
+// ============================================================================
+// Optimization
+// ============================================================================
+
+export function toSupervisedFineTuningJobUrl(jobId: string): string {
+  return `/optimization/supervised-fine-tuning/${encodeURIComponent(jobId)}`;
+}

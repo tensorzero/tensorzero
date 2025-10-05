@@ -77,10 +77,12 @@ export default function DatasetRowTable({
                   />
                 </TableCell>
                 <TableCell>
-                  <TableItemShortUuid
-                    id={row.episode_id}
-                    link={toEpisodeUrl(row.episode_id)}
-                  />
+                  {row.episode_id && (
+                    <TableItemShortUuid
+                      id={row.episode_id}
+                      link={toEpisodeUrl(row.episode_id)}
+                    />
+                  )}
                 </TableCell>
                 <TableCell>
                   <TableItemText text={row.name} />
