@@ -14,7 +14,7 @@ import { useFunctionConfig, useAllFunctionConfigs } from "~/context/config";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import type { Route } from "./+types/route";
 import { listDatapoints } from "~/utils/tensorzero.server";
-import { tensorZeroResolvedInputToInput } from "~/routes/api/tensorzero/inference.utils";
+import { tensorZeroStoredInputToInput } from "~/routes/api/tensorzero/inference.utils";
 import { resolveInput } from "~/utils/resolve.server";
 import { X } from "lucide-react";
 import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
@@ -61,6 +61,7 @@ function getCleanVariantName(variant: PlaygroundVariantInfo) {
     );
     return originalVariantName;
   }
+  throw new Error(`Unknown variant type: ${JSON.stringify(variant)}`);
 }
 
 function getDisplayVariantName(variant: PlaygroundVariantInfo) {
@@ -76,6 +77,7 @@ function getDisplayVariantName(variant: PlaygroundVariantInfo) {
       </span>
     );
   }
+  throw new Error(`Unknown variant type: ${JSON.stringify(variant)}`);
 }
 
 export function shouldRevalidate(arg: ShouldRevalidateFunctionArgs) {
@@ -168,7 +170,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     inputs = datapoints
       ? await Promise.all(
           datapoints.map(async (datapoint) => {
-            const inputData = tensorZeroResolvedInputToInput(datapoint.input);
+            const inputData = tensorZeroStoredInputToInput(datapoint.input);
             return await resolveInput(inputData, functionConfig ?? null);
           }),
         )
@@ -441,6 +443,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                             <InputSnippet
                               messages={inputs[index].messages}
                               system={inputs[index].system}
+                              maxHeight={150}
                             />
                           </div>
                           <div>

@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::sync::OnceLock;
 
 use futures::{StreamExt, TryStreamExt};
 use secrecy::{ExposeSecret, SecretString};
@@ -15,6 +14,7 @@ use crate::embeddings::{
 };
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
@@ -24,15 +24,16 @@ use crate::inference::types::{
     ProviderInferenceResponse,
 };
 use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, EndpointLocation, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
+use crate::providers::openai::OpenAIMessagesConfig;
 
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
-    OpenAIToolChoiceString, OpenAIUsage, SpecificToolChoice,
+    OpenAIToolChoiceString, OpenAIUsage, SpecificToolChoice, SystemOrDeveloper,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 
@@ -45,25 +46,74 @@ const AZURE_INFERENCE_API_VERSION: &str = "2025-04-01-preview";
 #[cfg_attr(test, ts(export))]
 pub struct AzureProvider {
     deployment_id: String,
-    endpoint: Url,
+    #[serde(skip)]
+    endpoint: AzureEndpoint,
     #[serde(skip)]
     credentials: AzureCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<AzureCredentials> = OnceLock::new();
+#[derive(Clone, Debug)]
+pub enum AzureEndpoint {
+    Static(Url),
+    Dynamic(String),
+}
+
+impl AzureEndpoint {
+    fn get_endpoint<'a>(
+        &'a self,
+        dynamic_endpoints: &'a InferenceCredentials,
+    ) -> Result<Url, Error> {
+        match self {
+            AzureEndpoint::Static(url) => Ok(url.clone()),
+            AzureEndpoint::Dynamic(key_name) => {
+                let endpoint_str = dynamic_endpoints.get(key_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::DynamicEndpointNotFound {
+                        key_name: key_name.clone(),
+                    })
+                })?;
+                Url::parse(endpoint_str.expose_secret()).map_err(|_| {
+                    Error::new(ErrorDetails::InvalidDynamicEndpoint {
+                        url: endpoint_str.expose_secret().to_string(),
+                    })
+                })
+            }
+        }
+    }
+}
 
 impl AzureProvider {
     pub fn new(
         deployment_id: String,
-        endpoint: Url,
-        api_key_location: Option<CredentialLocation>,
+        endpoint_location: EndpointLocation,
+        credentials: AzureCredentials,
     ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
+        let endpoint = match endpoint_location {
+            EndpointLocation::Static(url_str) => {
+                let url = Url::parse(&url_str).map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Invalid endpoint URL '{url_str}': {e}"),
+                    })
+                })?;
+                AzureEndpoint::Static(url)
+            }
+            EndpointLocation::Env(env_var) => {
+                let url_str = std::env::var(&env_var).map_err(|_| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "Environment variable '{env_var}' not found for Azure endpoint"
+                        ),
+                    })
+                })?;
+                let url = Url::parse(&url_str).map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Invalid endpoint URL from env var '{env_var}': {e}"),
+                    })
+                })?;
+                AzureEndpoint::Static(url)
+            }
+            EndpointLocation::Dynamic(key_name) => AzureEndpoint::Dynamic(key_name),
+        };
+
         Ok(AzureProvider {
             deployment_id,
             endpoint,
@@ -109,20 +159,18 @@ impl AzureCredentials {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
+                        message: format!("Dynamic api key `{key_name}` is missing"),
                     }
                     .into()
                 })
             }
             AzureCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
+                message: "No credentials are set".to_string(),
             }
             .into()),
         }
     }
-}
-
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("AZURE_OPENAI_API_KEY".to_string())
 }
 
 impl InferenceProvider for AzureProvider {
@@ -132,20 +180,23 @@ impl InferenceProvider for AzureProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         api_key: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = serde_json::to_value(AzureRequest::new(request)?).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing Azure request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
+        let request_body =
+            serde_json::to_value(AzureRequest::new(request).await?).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error serializing Azure request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
+        let endpoint = self.endpoint.get_endpoint(api_key)?;
+        let request_url = get_azure_chat_url(&endpoint, &self.deployment_id)?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key)?;
         let builder = http_client
@@ -224,20 +275,23 @@ impl InferenceProvider for AzureProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(AzureRequest::new(request)?).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing Azure request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
+        let request_body =
+            serde_json::to_value(AzureRequest::new(request).await?).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error serializing Azure request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
+        let endpoint = self.endpoint.get_endpoint(dynamic_api_keys)?;
+        let request_url = get_azure_chat_url(&endpoint, &self.deployment_id)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let builder = http_client
@@ -265,7 +319,7 @@ impl InferenceProvider for AzureProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
+        _client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -277,7 +331,7 @@ impl InferenceProvider for AzureProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -291,12 +345,13 @@ impl EmbeddingProvider for AzureProvider {
     async fn embed(
         &self,
         request: &EmbeddingRequest,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let request_url = get_azure_embedding_url(&self.endpoint, &self.deployment_id)?;
+        let endpoint = self.endpoint.get_endpoint(dynamic_api_keys)?;
+        let request_url = get_azure_embedding_url(&endpoint, &self.deployment_id)?;
         let request_body = AzureEmbeddingRequest::new(request);
 
         let request_builder = client
@@ -533,14 +588,19 @@ struct AzureRequest<'a> {
 }
 
 impl<'a> AzureRequest<'a> {
-    pub fn new(request: &'a ModelInferenceRequest<'_>) -> Result<AzureRequest<'a>, Error> {
+    pub async fn new(request: &'a ModelInferenceRequest<'_>) -> Result<AzureRequest<'a>, Error> {
         let response_format = AzureResponseFormat::new(request.json_mode, request.output_schema);
         let messages = prepare_openai_messages(
-            request.system.as_deref(),
+            request.system.as_deref().map(SystemOrDeveloper::System),
             &request.messages,
-            Some(&request.json_mode),
-            PROVIDER_TYPE,
-        )?;
+            OpenAIMessagesConfig {
+                json_mode: Some(&request.json_mode),
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: request
+                    .fetch_and_encode_input_files_before_inference,
+            },
+        )
+        .await?;
         let (tools, tool_choice, _) = prepare_openai_tools(request);
         Ok(AzureRequest {
             messages,
@@ -686,24 +746,28 @@ impl<'a> AzureEmbeddingRequest<'a> {
 
 #[cfg(test)]
 mod tests {
+    use secrecy::SecretString;
     use std::borrow::Cow;
+    use std::collections::HashMap;
     use std::time::Duration;
 
     use uuid::Uuid;
 
     use super::*;
 
+    use crate::config::SKIP_CREDENTIAL_VALIDATION;
     use crate::inference::types::{
         FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
+    use crate::model::EndpointLocation;
     use crate::providers::openai::{
         OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolType,
         OpenAIUsage, SpecificToolFunction,
     };
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
-    #[test]
-    fn test_azure_request_new() {
+    #[tokio::test]
+    async fn test_azure_request_new() {
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -726,7 +790,7 @@ mod tests {
             ..Default::default()
         };
 
-        let azure_request = AzureRequest::new(&request_with_tools).unwrap();
+        let azure_request = AzureRequest::new(&request_with_tools).await.unwrap();
 
         assert_eq!(azure_request.messages.len(), 1);
         assert_eq!(azure_request.temperature, Some(0.5));
@@ -772,7 +836,7 @@ mod tests {
             ..Default::default()
         };
 
-        let azure_request = AzureRequest::new(&request_with_tools).unwrap();
+        let azure_request = AzureRequest::new(&request_with_tools).await.unwrap();
 
         assert_eq!(azure_request.messages.len(), 2);
         assert_eq!(azure_request.temperature, Some(0.5));
@@ -870,13 +934,13 @@ mod tests {
         let result = AzureCredentials::try_from(generic);
         assert!(result.is_err());
         assert!(matches!(
-            result.unwrap_err().get_owned_details(),
+            result.unwrap_err().get_details(),
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }
 
-    #[test]
-    fn test_azure_response_with_metadata_try_into() {
+    #[tokio::test]
+    async fn test_azure_response_with_metadata_try_into() {
         let valid_response = OpenAIResponse {
             choices: vec![OpenAIResponseChoice {
                 index: 0,
@@ -920,7 +984,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            raw_request: serde_json::to_string(&AzureRequest::new(&generic_request).unwrap())
+            raw_request: serde_json::to_string(&AzureRequest::new(&generic_request).await.unwrap())
                 .unwrap(),
             generic_request: &generic_request,
         };
@@ -942,5 +1006,77 @@ mod tests {
                 response_time: Duration::from_secs(0)
             }
         );
+    }
+
+    #[tokio::test]
+    async fn test_azure_provider_with_static_endpoint() {
+        // Run in credential validation skip context to avoid API key requirement
+        let provider = SKIP_CREDENTIAL_VALIDATION
+            .scope((), async {
+                AzureProvider::new(
+                    "gpt-4.1-mini".to_string(),
+                    EndpointLocation::Static("https://test.openai.azure.com".to_string()),
+                    AzureCredentials::None,
+                )
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(provider.deployment_id(), "gpt-4.1-mini");
+        match provider.endpoint {
+            AzureEndpoint::Static(url) => {
+                assert_eq!(url.as_str(), "https://test.openai.azure.com/");
+            }
+            AzureEndpoint::Dynamic(_) => panic!("Expected static endpoint"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_azure_provider_with_dynamic_endpoint() {
+        // Run in credential validation skip context to avoid API key requirement
+        let provider = SKIP_CREDENTIAL_VALIDATION
+            .scope((), async {
+                AzureProvider::new(
+                    "gpt-4.1-mini".to_string(),
+                    EndpointLocation::Dynamic("azure_endpoint".to_string()),
+                    AzureCredentials::None,
+                )
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(provider.deployment_id(), "gpt-4.1-mini");
+        match provider.endpoint {
+            AzureEndpoint::Dynamic(key) => {
+                assert_eq!(key, "azure_endpoint");
+            }
+            AzureEndpoint::Static(_) => panic!("Expected dynamic endpoint"),
+        }
+    }
+
+    #[test]
+    fn test_azure_endpoint_resolution() {
+        let endpoint = AzureEndpoint::Dynamic("test_endpoint".to_string());
+        let mut credentials = HashMap::new();
+        credentials.insert(
+            "test_endpoint".to_string(),
+            SecretString::from("https://dynamic.openai.azure.com"),
+        );
+
+        let resolved = endpoint.get_endpoint(&credentials).unwrap();
+        assert_eq!(resolved.as_str(), "https://dynamic.openai.azure.com/");
+    }
+
+    #[test]
+    fn test_azure_endpoint_resolution_missing_key() {
+        let endpoint = AzureEndpoint::Dynamic("missing_endpoint".to_string());
+        let credentials = HashMap::new();
+
+        let result = endpoint.get_endpoint(&credentials);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Dynamic endpoint 'missing_endpoint' not found"));
     }
 }

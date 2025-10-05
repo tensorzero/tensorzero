@@ -28,6 +28,13 @@ class ContentBlock(ABC, HasTypeField):
 
 
 @dataclass
+class Template(ContentBlock):
+    name: str
+    arguments: Any
+    type: str = "template"
+
+
+@dataclass
 class Text(ContentBlock):
     text: Optional[str] = None
     arguments: Optional[Any] = None
@@ -70,14 +77,14 @@ class RawText(ContentBlock):
 
 @dataclass
 class ImageBase64(ContentBlock):
-    data: str
+    data: Optional[str]
     mime_type: str
     type: str = "image"
 
 
 @dataclass
 class FileBase64(ContentBlock):
-    data: str
+    data: Optional[str]
     mime_type: str
     type: str = "file"
 

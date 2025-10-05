@@ -1,3 +1,10 @@
 allow-expect-in-tests = true
 allow-panic-in-tests = true
 allow-unwrap-in-tests = true
+doc-valid-idents = ["TensorZero", "ClickHouse", ".."]
+disallowed-types = [
+    { path = "backon::Retryable", reason = "Use the retry functionality in tensorzero-core/src/utils/retries.rs instead" },
+]
+disallowed-methods = [
+    { path = "tracing_subscriber::layer::Layer::with_filter", reason = "Call `apply_filter_fixing_tracing_bug` instead" },
+]

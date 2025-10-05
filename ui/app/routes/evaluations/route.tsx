@@ -15,10 +15,11 @@ import { useState } from "react";
 import { EvaluationsActions } from "./EvaluationsActions";
 import LaunchEvaluationModal from "./LaunchEvaluationModal";
 import {
+  parseEvaluationFormData,
   runEvaluation,
-  type InferenceCacheSetting,
 } from "~/utils/evaluations.server";
 import { logger } from "~/utils/logger";
+import { toEvaluationUrl } from "~/utils/urls";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const totalEvaluationRuns = await countTotalEvaluationRuns();
@@ -38,19 +39,34 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
-  const evaluation_name = formData.get("evaluation_name");
-  const dataset_name = formData.get("dataset_name");
-  const variant_name = formData.get("variant_name");
-  const concurrency_limit = formData.get("concurrency_limit");
-  const inference_cache = formData.get("inference_cache");
+  const evaluationFormData = parseEvaluationFormData({
+    evaluation_name: formData.get("evaluation_name"),
+    dataset_name: formData.get("dataset_name"),
+    variant_name: formData.get("variant_name"),
+    concurrency_limit: formData.get("concurrency_limit"),
+    inference_cache: formData.get("inference_cache"),
+  });
+
+  if (!evaluationFormData) {
+    throw new Response("Invalid form data", { status: 400 });
+  }
+
+  const {
+    evaluation_name,
+    dataset_name,
+    variant_name,
+    concurrency_limit,
+    inference_cache,
+  } = evaluationFormData;
+
   let evaluation_start_info;
   try {
     evaluation_start_info = await runEvaluation(
-      evaluation_name as string,
-      dataset_name as string,
-      variant_name as string,
-      parseInt(concurrency_limit as string),
-      inference_cache as InferenceCacheSetting,
+      evaluation_name,
+      dataset_name,
+      variant_name,
+      concurrency_limit,
+      inference_cache,
     );
   } catch (error) {
     logger.error("Error starting evaluation:", error);
@@ -59,7 +75,9 @@ export async function action({ request }: Route.ActionArgs) {
     });
   }
   return redirect(
-    `/evaluations/${evaluation_name}?evaluation_run_ids=${evaluation_start_info.evaluation_run_id}`,
+    toEvaluationUrl(evaluation_name, {
+      evaluation_run_ids: evaluation_start_info.evaluation_run_id,
+    }),
   );
 }
 

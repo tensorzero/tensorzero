@@ -1,13 +1,16 @@
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 
 use futures::stream::{FuturesUnordered, StreamExt};
 use tokio::time::{timeout, Duration};
 
-use crate::config_parser::{LoadableConfig, PathWithContents};
+use crate::config::{LoadableConfig, PathWithContents};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
+use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::ResolvedInput;
 use crate::model::ModelTable;
 use crate::variant::mixture_of_n::stream_inference_from_non_stream;
@@ -59,7 +62,7 @@ impl LoadableConfig<FirstOfNConfig> for UninitializedFirstOfNConfig {
 impl Variant for FirstOfNConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -123,7 +126,7 @@ impl Variant for FirstOfNConfig {
 
     async fn infer_stream<'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -182,9 +185,13 @@ impl Variant for FirstOfNConfig {
         Vec::new()
     }
 
+    fn get_all_explicit_template_names(&self) -> HashSet<String> {
+        HashSet::new()
+    }
+
     async fn start_batch_inference<'a>(
         &'a self,
-        _input: &[ResolvedInput],
+        _input: &[LazyResolvedInput],
         _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
         _inference_configs: &'a [InferenceConfig<'a>],

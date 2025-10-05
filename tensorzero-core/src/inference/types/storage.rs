@@ -23,6 +23,7 @@ pub enum StorageKind {
         /// An extra prefix to prepend to the object key.
         /// This is only enabled in e2e tests, to prevent clashes between concurrent test runs.
         #[cfg(feature = "e2e_tests")]
+        #[cfg_attr(test, ts(skip))]
         #[serde(default)]
         prefix: String,
     },
@@ -52,18 +53,7 @@ impl StorageKind {
         ""
     }
     pub fn file_path(self, image: &Base64File) -> Result<StoragePath, Error> {
-        let hash = blake3::hash(
-            image
-                .data
-                .as_ref()
-                .ok_or_else(|| {
-                    Error::new(ErrorDetails::InternalError {
-                        message: "Image data should have been present in `StorageKind.file_path`"
-                            .to_string(),
-                    })
-                })?
-                .as_bytes(),
-        );
+        let hash = blake3::hash(image.data.as_bytes());
         // This is a best-effort attempt to get a suffix in the object-store path, to make things
         // nicer for people browsing the object store.
         // None of our code depends on this file extension being correct, as we store the original

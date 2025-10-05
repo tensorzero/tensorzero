@@ -5,12 +5,13 @@
     "ui:test": "pnpm --filter=tensorzero-ui test",
     "ui:test:e2e": "pnpm --filter=tensorzero-ui test-e2e",
     "ui:test:e2e-base-path": "pnpm --filter=tensorzero-ui test-e2e-base-path",
+    "tensorzero-node:test": "cd internal/tensorzero-node && pnpm test",
     "clean:node": "find . -name 'node_modules' -type d -prune -exec rm -rf '{}' +"
   },
   "devDependencies": {
-    "typescript": "^5.8.2"
+    "typescript": "^5.9.2"
   },
-  "packageManager": "pnpm@10.12.4",
+  "packageManager": "pnpm@10.15.0",
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",

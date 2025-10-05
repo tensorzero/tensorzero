@@ -1,9 +1,10 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::config::path::TomlRelativePath;
+use crate::config::path::ResolvedTomlPath;
 use crate::config::LoadableConfig;
 use crate::config::PathWithContents;
 use crate::embeddings::EmbeddingEncodingFormat;
@@ -11,14 +12,20 @@ use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
 use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeadersConfig};
+use crate::inference::types::resolved_input::LazyResolvedInput;
+use crate::inference::types::resolved_input::LazyResolvedInputMessageContent;
 use crate::inference::types::ContentBlock;
 use crate::inference::types::ResolvedInput;
+use crate::inference::types::ResolvedInputMessage;
 use crate::inference::types::ResolvedInputMessageContent;
+use crate::inference::types::StoredInput;
+use crate::inference::types::StoredInputMessageContent;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
 };
 use crate::model::ModelTable;
 use crate::model_table::ShorthandModelConfig;
+use crate::utils::retries::RetryConfig;
 use crate::{
     embeddings::EmbeddingRequest,
     endpoints::inference::{InferenceClients, InferenceParams},
@@ -32,35 +39,105 @@ use crate::{
 
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
-    InferModelRequestArgs, InferenceConfig, JsonMode, ModelUsedInfo, RetryConfig, Variant,
+    InferModelRequestArgs, InferenceConfig, JsonMode, ModelUsedInfo, Variant,
 };
 
 /// The primary configuration for the Dicl variant
 /// We need a helper to deserialize the config because it relies on
 /// a path to a file for system instructions and we need to use the
 /// load() step to get the fully qualified path.
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct DiclConfig {
-    pub weight: Option<f64>,
-    pub embedding_model: Arc<str>,
-    pub k: u32, // k as in k-nearest neighbors
-    pub model: Arc<str>,
-    pub system_instructions: String,
-    pub temperature: Option<f32>,
-    pub top_p: Option<f32>,
-    pub stop_sequences: Option<Vec<String>>,
-    pub presence_penalty: Option<f32>,
-    pub frequency_penalty: Option<f32>,
-    pub max_tokens: Option<u32>,
-    pub seed: Option<u32>,
-    pub json_mode: Option<JsonMode>,
+    weight: Option<f64>,
+    embedding_model: Arc<str>,
+    k: u32, // k as in k-nearest neighbors
+    model: Arc<str>,
+    system_instructions: String,
+    temperature: Option<f32>,
+    top_p: Option<f32>,
+    stop_sequences: Option<Vec<String>>,
+    presence_penalty: Option<f32>,
+    frequency_penalty: Option<f32>,
+    max_tokens: Option<u32>,
+    seed: Option<u32>,
+    json_mode: Option<JsonMode>,
     #[cfg_attr(test, ts(skip))]
-    pub extra_body: Option<ExtraBodyConfig>,
+    extra_body: Option<ExtraBodyConfig>,
     #[cfg_attr(test, ts(skip))]
-    pub extra_headers: Option<ExtraHeadersConfig>,
-    pub retries: RetryConfig,
+    extra_headers: Option<ExtraHeadersConfig>,
+    retries: RetryConfig,
+}
+
+impl DiclConfig {
+    pub fn weight(&self) -> Option<f64> {
+        self.weight
+    }
+
+    pub fn set_weight(&mut self, weight: Option<f64>) {
+        self.weight = weight;
+    }
+
+    pub fn embedding_model(&self) -> &Arc<str> {
+        &self.embedding_model
+    }
+
+    pub fn k(&self) -> u32 {
+        self.k
+    }
+
+    pub fn model(&self) -> &Arc<str> {
+        &self.model
+    }
+
+    pub fn system_instructions(&self) -> &str {
+        &self.system_instructions
+    }
+
+    pub fn temperature(&self) -> Option<f32> {
+        self.temperature
+    }
+
+    pub fn top_p(&self) -> Option<f32> {
+        self.top_p
+    }
+
+    pub fn stop_sequences(&self) -> Option<&Vec<String>> {
+        self.stop_sequences.as_ref()
+    }
+
+    pub fn presence_penalty(&self) -> Option<f32> {
+        self.presence_penalty
+    }
+
+    pub fn frequency_penalty(&self) -> Option<f32> {
+        self.frequency_penalty
+    }
+
+    pub fn max_tokens(&self) -> Option<u32> {
+        self.max_tokens
+    }
+
+    pub fn seed(&self) -> Option<u32> {
+        self.seed
+    }
+
+    pub fn json_mode(&self) -> Option<&JsonMode> {
+        self.json_mode.as_ref()
+    }
+
+    pub fn extra_body(&self) -> Option<&ExtraBodyConfig> {
+        self.extra_body.as_ref()
+    }
+
+    pub fn extra_headers(&self) -> Option<&ExtraHeadersConfig> {
+        self.extra_headers.as_ref()
+    }
+
+    pub fn retries(&self) -> &RetryConfig {
+        &self.retries
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
@@ -72,7 +149,7 @@ pub struct UninitializedDiclConfig {
     pub embedding_model: String,
     pub k: u32, // k as in k-nearest neighbors
     pub model: String,
-    pub system_instructions: Option<TomlRelativePath>,
+    pub system_instructions: Option<ResolvedTomlPath>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub stop_sequences: Option<Vec<String>>,
@@ -94,7 +171,7 @@ pub struct UninitializedDiclConfig {
 impl Variant for DiclConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -126,22 +203,22 @@ impl Variant for DiclConfig {
             &mut inference_params,
         )?;
 
-        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
+        let model_config = models.models.get(self.model()).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
-                name: self.model.to_string(),
+                name: self.model().to_string(),
             })
         })?;
 
         // Instantiate the InferModelRequestArgs struct
         let args = InferModelRequestArgs {
             request: model_inference_request,
-            model_name: self.model.clone(),
+            model_name: self.model().clone(),
             model_config: &model_config,
             function,
             inference_config,
             clients,
             inference_params,
-            retry_config: &self.retries,
+            retry_config: self.retries(),
         };
 
         // Refactored function call using the struct
@@ -158,7 +235,7 @@ impl Variant for DiclConfig {
 
     async fn infer_stream<'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -189,21 +266,21 @@ impl Variant for DiclConfig {
             &mut inference_params,
         )?;
 
-        let model_config = models.models.get(&self.model).await?.ok_or_else(|| {
+        let model_config = models.models.get(self.model()).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
-                name: self.model.to_string(),
+                name: self.model().to_string(),
             })
         })?;
 
         // Actually run the inference
         let (inference_result_stream, mut model_used_info) = infer_model_request_stream(
             request,
-            self.model.clone(),
+            self.model().clone(),
             &model_config,
             function,
             clients,
             inference_params,
-            self.retries,
+            *self.retries(),
         )
         .await?;
 
@@ -229,7 +306,7 @@ impl Variant for DiclConfig {
         // Make sure that the count is positive
 
         // Validate that weight is non-negative
-        if self.weight.is_some_and(|w| w < 0.0) {
+        if self.weight().is_some_and(|w| w < 0.0) {
             return Err(ErrorDetails::Config {
                 message: format!(
                 "`functions.{function_name}.variants.{variant_name}`: `weight` must be non-negative"
@@ -238,9 +315,9 @@ impl Variant for DiclConfig {
             .into());
         }
         // Validate that the generation model and embedding model are valid
-        models.validate(&self.model)?;
+        models.validate(self.model())?;
         let embedding_model = embedding_models
-            .get(&self.embedding_model).await?
+            .get(self.embedding_model()).await?
             .ok_or_else(|| Error::new(ErrorDetails::Config {
                 message: format!(
                     "`functions.{function_name}.variants.{variant_name}`: `embedding_model` must be a valid embedding model name"
@@ -248,12 +325,12 @@ impl Variant for DiclConfig {
             }))?;
 
         embedding_model
-            .validate(&self.embedding_model)
+            .validate(self.embedding_model())
             .map_err(|e| {
                 Error::new(ErrorDetails::Config {
                     message: format!(
                 "`functions.{function_name}.variants.{variant_name}` and embedding model `{}`: {e}",
-                self.embedding_model
+                self.embedding_model()
                 ),
                 })
             })?;
@@ -264,9 +341,13 @@ impl Variant for DiclConfig {
         vec![]
     }
 
+    fn get_all_explicit_template_names(&self) -> HashSet<String> {
+        HashSet::new()
+    }
+
     async fn start_batch_inference<'a>(
         &'a self,
-        _input: &[ResolvedInput],
+        _input: &[LazyResolvedInput],
         _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
         _inference_configs: &'a [InferenceConfig<'a>],
@@ -278,15 +359,76 @@ impl Variant for DiclConfig {
     }
 }
 
+fn lazy_content_to_resolved_discarding_incompatible(
+    content: LazyResolvedInputMessageContent,
+) -> Result<ResolvedInputMessageContent, Error> {
+    Ok(match content {
+        LazyResolvedInputMessageContent::Text { text } => {
+            ResolvedInputMessageContent::Text { text }
+        }
+        LazyResolvedInputMessageContent::Template(template) => {
+            ResolvedInputMessageContent::Template(template)
+        }
+        LazyResolvedInputMessageContent::ToolCall(tool_call) => {
+            ResolvedInputMessageContent::ToolCall(tool_call)
+        }
+        LazyResolvedInputMessageContent::ToolResult(tool_result) => {
+            ResolvedInputMessageContent::ToolResult(tool_result)
+        }
+        LazyResolvedInputMessageContent::RawText { value } => {
+            ResolvedInputMessageContent::RawText { value }
+        }
+        LazyResolvedInputMessageContent::Thought(thought) => {
+            ResolvedInputMessageContent::Thought(thought)
+        }
+        // We cannot meaningfully embed images into dicl inputs, so reject the request.
+        LazyResolvedInputMessageContent::File(..) => {
+            return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+                content_block_type: "image".to_string(),
+                provider_type: "dicl".to_string(),
+            }));
+        }
+        // 'Unknown' blocks will need special handling (we don't want the literal string "unknown")
+        // to show up in the LLM input, so reject the request for now.
+        LazyResolvedInputMessageContent::Unknown { .. } => {
+            return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+                content_block_type: "unknown".to_string(),
+                provider_type: "dicl".to_string(),
+            }));
+        }
+    })
+}
+fn lazy_input_to_input_rejecting_incompatible(
+    input: LazyResolvedInput,
+) -> Result<ResolvedInput, Error> {
+    Ok(ResolvedInput {
+        system: input.system,
+        messages: input
+            .messages
+            .into_iter()
+            .map(|message| {
+                Ok::<_, Error>(ResolvedInputMessage {
+                    role: message.role,
+                    content: message
+                        .content
+                        .into_iter()
+                        .map(lazy_content_to_resolved_discarding_incompatible)
+                        .collect::<Result<Vec<_>, _>>()?,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    })
+}
+
 #[derive(Debug, Deserialize, PartialEq)]
 struct ChatExample {
-    input: ResolvedInput,
+    input: StoredInput,
     output: Vec<ContentBlockChatOutput>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
 struct JsonExample {
-    input: ResolvedInput,
+    input: StoredInput,
     output: JsonInferenceOutput,
 }
 
@@ -306,7 +448,7 @@ struct RawExample {
 impl DiclConfig {
     async fn retrieve_relevant_examples<'a>(
         &'a self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         embedding_models: &'a EmbeddingModelTable,
         clients: &InferenceClients<'_>,
         function_name: &str,
@@ -314,7 +456,10 @@ impl DiclConfig {
         function: &FunctionConfig,
     ) -> Result<(Vec<Example>, EmbeddingResponseWithMetadata), Error> {
         // Serialize the input so that it can be embedded
-        let serialized_input = serde_json::to_string(&input).map_err(|e| {
+        let serialized_input = serde_json::to_string(
+            &lazy_input_to_input_rejecting_incompatible(input.clone())?.into_stored_input(),
+        )
+        .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
                     "Error in serializing Input in dynamic in-context learning variant: {e}"
@@ -323,11 +468,11 @@ impl DiclConfig {
         })?;
 
         let embedding_model = embedding_models
-            .get(&self.embedding_model)
+            .get(self.embedding_model())
             .await?
             .ok_or_else(|| {
                 Error::new(ErrorDetails::Inference {
-                    message: format!("Embedding model {} not found", self.embedding_model),
+                    message: format!("Embedding model {} not found", self.embedding_model()),
                 })
             })?;
 
@@ -339,12 +484,12 @@ impl DiclConfig {
 
         // Embed the input via an API request
         let embedding_response = embedding_model
-            .embed(&embedding_request, &self.embedding_model, clients)
+            .embed(&embedding_request, self.embedding_model(), clients)
             .await?;
 
         // Wrap the embedding in a response with metadata
         let embedding_response_with_metadata =
-            EmbeddingResponseWithMetadata::new(embedding_response, self.embedding_model.clone());
+            EmbeddingResponseWithMetadata::new(embedding_response, self.embedding_model().clone());
         let [embedding_vector] = embedding_response_with_metadata.embeddings.as_slice() else {
             return Err(ErrorDetails::InternalError {
                 message: format!(
@@ -374,7 +519,10 @@ impl DiclConfig {
                    ORDER BY distance ASC
                    LIMIT {}
                    FORMAT JSONEachRow",
-            formatted_embedding, function_name, variant_name, self.k
+            formatted_embedding,
+            function_name,
+            variant_name,
+            self.k()
         );
 
         // Run the query on the ClickHouse database to find nearest neighbors
@@ -398,11 +546,11 @@ impl DiclConfig {
         // Convert RawExamples into Examples (parses those serialized JSON strings)
         let examples = parse_raw_examples(raw_examples, function)?;
 
-        if examples.len() != self.k as usize {
+        if examples.len() != self.k() as usize {
             tracing::warn!(
                 "Dynamic in-context learning retrieved {} examples, expected {}",
                 examples.len(),
-                self.k
+                self.k()
             );
         }
 
@@ -457,7 +605,7 @@ impl DiclConfig {
     }
 
     fn prepare_input_message(input: &ResolvedInput) -> Result<RequestMessage, Error> {
-        let content = vec![serde_json::to_string(&input)
+        let content = vec![serde_json::to_string(&input.clone().into_stored_input())
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
@@ -474,7 +622,7 @@ impl DiclConfig {
 
     fn prepare_request<'a, 'request>(
         &'a self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         examples: &[Example],
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -484,49 +632,28 @@ impl DiclConfig {
     where
         'a: 'request,
     {
-        for message in &input.messages {
-            for content in &message.content {
-                match content {
-                    // We cannot meaningfully embed images into dicl inputs, so reject the request.
-                    ResolvedInputMessageContent::File(..) => {
-                        return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
-                            content_block_type: "image".to_string(),
-                            provider_type: "dicl".to_string(),
-                        }));
-                    }
-                    // 'Unknown' blocks will need special handling (we don't want the literal string "unknown")
-                    // to show up in the LLM input, so reject the request for now.
-                    ResolvedInputMessageContent::Unknown { .. } => {
-                        return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
-                            content_block_type: "unknown".to_string(),
-                            provider_type: "dicl".to_string(),
-                        }));
-                    }
-                    _ => {}
-                }
-            }
-        }
+        let input = lazy_input_to_input_rejecting_incompatible(input.clone())?;
         let messages = examples
             .iter()
             .map(Self::prepare_message)
             .collect::<Result<Vec<Vec<RequestMessage>>, _>>()?
             .into_iter()
             .flatten()
-            .chain(std::iter::once(Self::prepare_input_message(input)?))
+            .chain(std::iter::once(Self::prepare_input_message(&input)?))
             .collect::<Vec<_>>();
 
-        let system = Some(self.system_instructions.clone());
+        let system = Some(self.system_instructions().to_string());
 
         inference_params
             .chat_completion
             .backfill_with_variant_params(
-                self.temperature,
-                self.max_tokens,
-                self.seed,
-                self.top_p,
-                self.presence_penalty,
-                self.frequency_penalty,
-                self.stop_sequences.clone(),
+                self.temperature(),
+                self.max_tokens(),
+                self.seed(),
+                self.top_p(),
+                self.presence_penalty(),
+                self.frequency_penalty(),
+                self.stop_sequences().cloned(),
             );
         if !inference_config.extra_body.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
@@ -536,11 +663,11 @@ impl DiclConfig {
             .into());
         }
         let extra_body = FullExtraBodyConfig {
-            extra_body: self.extra_body.clone(),
+            extra_body: self.extra_body().cloned(),
             inference_extra_body: Default::default(),
         };
         let extra_headers = FullExtraHeadersConfig {
-            variant_extra_headers: self.extra_headers.clone(),
+            variant_extra_headers: self.extra_headers().cloned(),
             inference_extra_headers: inference_config
                 .extra_headers
                 .clone()
@@ -554,7 +681,7 @@ impl DiclConfig {
             inference_config,
             stream,
             inference_params,
-            self.json_mode,
+            self.json_mode().cloned(),
             extra_body,
             extra_headers,
         )
@@ -570,8 +697,11 @@ fn parse_raw_examples(
 ) -> Result<Vec<Example>, Error> {
     let mut examples = Vec::new();
     for raw_example in raw_examples {
-        // Parse the `input` string into `Input`
-        let input: ResolvedInput = serde_json::from_str(&raw_example.input).map_err(|e| {
+        if raw_example.output.is_empty() {
+            return Err(ErrorDetails::DiclMissingOutput.into());
+        }
+        // Parse the `input` string into `StoredInput`
+        let input: StoredInput = serde_json::from_str(&raw_example.input).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to parse `input`: {e}"),
             })
@@ -579,7 +709,7 @@ fn parse_raw_examples(
 
         for messages in &input.messages {
             for content in &messages.content {
-                if let ResolvedInputMessageContent::File(_) = content {
+                if let StoredInputMessageContent::File(_) = content {
                     return Err(Error::new(ErrorDetails::Serialization {
                         message: "Failed to deserialize raw_example - images are not supported in dynamic in-context learning".to_string(),
                     }));
@@ -654,12 +784,14 @@ impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::inference::types::stored_input::StoredFile;
+    use crate::inference::types::StoredInputMessage;
     use crate::{
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
-            resolved_input::FileWithPath,
+            file::Base64FileMetadata,
             storage::{StorageKind, StoragePath},
-            Base64File, ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
+            ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
         },
         tool::{ToolCall, ToolCallOutput},
     };
@@ -670,18 +802,18 @@ mod tests {
         // ---------- Test with ChatExample ----------
 
         // Mock Input data
-        let input_data = ResolvedInput {
+        let input_data = StoredInput {
             system: Some(json!({"type": "system", "content": "System message"})),
             messages: vec![
-                ResolvedInputMessage {
+                StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("Hello, assistant!"),
                     }],
                 },
-                ResolvedInputMessage {
+                StoredInputMessage {
                     role: Role::Assistant,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("Hello, user!"),
                     }],
                 },
@@ -776,7 +908,7 @@ mod tests {
                     role: Role::User,
                     content: vec![
                         ResolvedInputMessageContent::Text {
-                            value: json!("Hello, assistant!"),
+                            text: "Hello, assistant!".to_string(),
                         },
                         ResolvedInputMessageContent::ToolCall(ToolCall {
                             id: "tool_call_1".to_string(),
@@ -788,7 +920,7 @@ mod tests {
                 ResolvedInputMessage {
                     role: Role::Assistant,
                     content: vec![ResolvedInputMessageContent::Text {
-                        value: json!("Here are the search results for rust programming."),
+                        text: "Here are the search results for rust programming.".to_string(),
                     }],
                 },
             ],
@@ -801,7 +933,8 @@ mod tests {
         assert_eq!(request_message.role, Role::User);
 
         // The content should contain the serialized Input as a Text ContentBlock
-        let expected_serialized_input = serde_json::to_string(&input_data).unwrap();
+        let expected_serialized_input =
+            serde_json::to_string(&input_data.clone().into_stored_input()).unwrap();
         let expected_content = vec![ContentBlock::Text(Text {
             text: expected_serialized_input.clone(),
         })];
@@ -813,12 +946,12 @@ mod tests {
         // Define sample raw examples with serialized Input and Output
         let raw_examples = vec![
             RawExample {
-                input: serde_json::to_string(&ResolvedInput {
+                input: serde_json::to_string(&StoredInput {
                     system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                    messages: vec![ResolvedInputMessage {
+                    messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![ResolvedInputMessageContent::Text {
-                            value: json!("What is the boiling point of water?"),
+                        content: vec![StoredInputMessageContent::Text {
+                            value: "What is the boiling point of water?".into(),
                         }],
                     }],
                 })
@@ -829,19 +962,18 @@ mod tests {
                 .unwrap(),
             },
             RawExample {
-                input: serde_json::to_string(&ResolvedInput {
+                input: serde_json::to_string(&StoredInput {
                     system: Some(json!({"assistant_name": "Pinocchio"})),
-                    messages: vec![ResolvedInputMessage {
+                    messages: vec![StoredInputMessage {
                         role: Role::User,
                         content: vec![
-                            ResolvedInputMessageContent::Text {
+                            StoredInputMessageContent::Text {
                                 value: json!("What is the name of the capital city of Japan?"),
                             },
-                            ResolvedInputMessageContent::File(Box::new(FileWithPath {
-                                file: Base64File {
+                            StoredInputMessageContent::File(Box::new(StoredFile {
+                                file: Base64FileMetadata {
                                     url: None,
                                     mime_type: mime::IMAGE_PNG,
-                                    data: Some("ABC".to_string()),
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,
@@ -873,16 +1005,53 @@ mod tests {
     }
 
     #[test]
+    fn test_dicl_missing_output_error() {
+        // Create a raw example with missing output
+        let raw_examples = vec![RawExample {
+            input: serde_json::to_string(&StoredInput {
+                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                messages: vec![StoredInputMessage {
+                    role: Role::User,
+                    content: vec![StoredInputMessageContent::Text {
+                        value: "What is the boiling point of water?".into(),
+                    }],
+                }],
+            })
+            .unwrap(),
+            output: String::new(),
+        }];
+
+        let function = FunctionConfig::Chat(FunctionConfigChat {
+            ..Default::default()
+        });
+
+        // Parse the raw examples and expect DiclMissingOutput error
+        let result = parse_raw_examples(raw_examples, &function);
+
+        assert!(
+            result.is_err(),
+            "Expected DiclMissingOutput error but got success"
+        );
+
+        let error = result.unwrap_err();
+        let error_string = error.to_string();
+        assert!(
+            error_string.contains("DICL example missing output"),
+            "Expected DiclMissingOutput error, got: {error_string}"
+        );
+    }
+
+    #[test]
     fn test_parse_raw_examples() {
         // Define sample raw examples with serialized Input and Output
         let raw_examples = vec![
             RawExample {
-                input: serde_json::to_string(&ResolvedInput {
+                input: serde_json::to_string(&StoredInput {
                     system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                    messages: vec![ResolvedInputMessage {
+                    messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![ResolvedInputMessageContent::Text {
-                            value: json!("What is the boiling point of water?"),
+                        content: vec![StoredInputMessageContent::Text {
+                            value: "What is the boiling point of water?".into(),
                         }],
                     }],
                 })
@@ -893,12 +1062,12 @@ mod tests {
                 .unwrap(),
             },
             RawExample {
-                input: serde_json::to_string(&ResolvedInput {
+                input: serde_json::to_string(&StoredInput {
                     system: Some(json!({"assistant_name": "Pinocchio"})),
-                    messages: vec![ResolvedInputMessage {
+                    messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![ResolvedInputMessageContent::Text {
-                            value: json!("What is the name of the capital city of Japan?"),
+                        content: vec![StoredInputMessageContent::Text {
+                            value: "What is the name of the capital city of Japan?".into(),
                         }],
                     }],
                 })
@@ -935,12 +1104,12 @@ mod tests {
         // Test that we can parse a JSON example too
         let json_raw_examples = vec![
             RawExample {
-                input: serde_json::to_string(&ResolvedInput {
+                input: serde_json::to_string(&StoredInput {
                     system: Some(json!({"assistant_name": "JsonTester"})),
-                    messages: vec![ResolvedInputMessage {
+                    messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![ResolvedInputMessageContent::Text {
-                            value: json!("Provide a sample JSON response."),
+                        content: vec![StoredInputMessageContent::Text {
+                            value: "Provide a sample JSON response.".into(),
                         }],
                     }],
                 })
@@ -957,12 +1126,12 @@ mod tests {
                 .unwrap(),
             },
             RawExample {
-                input: serde_json::to_string(&ResolvedInput {
+                input: serde_json::to_string(&StoredInput {
                     system: Some(json!({"assistant_name": "JsonTester"})),
-                    messages: vec![ResolvedInputMessage {
+                    messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![ResolvedInputMessageContent::Text {
-                            value: json!("Provide another JSON response."),
+                        content: vec![StoredInputMessageContent::Text {
+                            value: "Provide another JSON response.".into(),
                         }],
                     }],
                 })

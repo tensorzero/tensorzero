@@ -4,6 +4,7 @@ import type {
 } from "~/utils/clickhouse/function";
 // import { TrendingUp } from "lucide-react";
 import { Bar, BarChart, ErrorBar, CartesianGrid, XAxis, YAxis } from "recharts";
+import { formatChartNumber, formatDetailedNumber } from "~/utils/chart";
 
 import {
   Card,
@@ -98,7 +99,12 @@ export function VariantPerformance({
                 axisLine={true}
                 tickFormatter={(value) => new Date(value).toLocaleDateString()}
               />
-              <YAxis tickLine={false} tickMargin={10} axisLine={true} />
+              <YAxis
+                tickLine={false}
+                tickMargin={10}
+                axisLine={true}
+                tickFormatter={formatChartNumber}
+              />
               <ChartTooltip
                 content={
                   <ChartTooltipContent
@@ -110,13 +116,15 @@ export function VariantPerformance({
                         entry.payload[`${name}_num_inferences`];
                       return (
                         <div className="flex flex-1 items-center justify-between leading-none">
-                          <span className="text-muted-foreground">{name}</span>
-                          <div className="grid text-right">
+                          <span className="text-muted-foreground font-mono text-xs">
+                            {name}
+                          </span>
+                          <div className="ml-2 grid text-right">
                             <span className="text-foreground font-mono font-medium tabular-nums">
-                              {value.toLocaleString()}
+                              {formatDetailedNumber(value as number)}
                             </span>
                             <span className="text-muted-foreground text-[10px]">
-                              n={numInferences.toLocaleString()}
+                              n={formatDetailedNumber(numInferences)}
                             </span>
                           </div>
                         </div>
@@ -125,7 +133,9 @@ export function VariantPerformance({
                   />
                 }
               />
-              <ChartLegend content={<ChartLegendContent />} />
+              <ChartLegend
+                content={<ChartLegendContent className="font-mono text-xs" />}
+              />
               {singleVariantMode ? (
                 <Bar
                   key={variantNames[0]}

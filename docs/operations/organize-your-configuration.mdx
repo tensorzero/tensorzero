@@ -1,0 +1,68 @@
+---
+title: Organize your configuration
+description: Learn best practices for organizing your configuration as your project grows in complexity.
+---
+
+You can use custom configuration to take full advantage of TensorZero's features.
+See [Configuration Reference](/gateway/configuration-reference) for more details.
+This guide shares best practices for organizing your configuration as your project grows in complexity.
+
+<Tip>
+
+You can find a [complete runnable example](https://github.com/tensorzero/tensorzero/tree/main/examples/guides/organize-your-configuration) of this guide on GitHub.
+
+</Tip>
+
+## Split your configuration into multiple files
+
+As your project grows in complexity, it might be a good idea to split your configuration into multiple files.
+This makes it easier to manage and maintain your configuration.
+
+For example, you can create separate TOML files for different projects, environments, and so on.
+You can also move deprecated entries like functions to a separate file.
+
+You can instruct TensorZero to load multiple configuration files by specifying a glob pattern that matches all the relevant TOML files:
+
+- **TensorZero Gateway:** Set the CLI flag `--config-path path/to/**/*.toml`.
+- **TensorZero UI:** Set the environment variable `TENSORZERO_UI_CONFIG_PATH=path/to/**/*.toml`.
+
+Under the hood, TensorZero will concatenate the configuration files, with special handling for paths.
+For example, you can declare a model in one file and use it in a variant declared in another file.
+If the configuration includes a path (e.g. template, schema), the path will be resolved relative to that configuration file's directory.
+For example:
+
+```toml
+[functions.my_function.variants.my_variant]
+# ...
+templates.my_template.path = "path/to/template.minijinja"  # relative to this TOML file
+# ...
+```
+
+## Enable template file system access to reuse shared snippets
+
+You can decompose your templates into smaller, reusable snippets.
+This makes it easier to maintain and reuse code across multiple templates.
+
+Templates can reference other templates using the MiniJinja directives `{% include %}` and `{% import %}`.
+To use these directives, you need to enable template file system access with `gateway.template_filesystem_access` in your configuration file.
+
+By default, file system access is disabled for security reasons, since template imports are evaluated dynamically and could potentially access sensitive files.
+You should ensure that only trusted templates are allowed access to the file system.
+
+```toml
+[gateway]
+# ...
+template_filesystem_access.enabled = true
+# ...
+```
+
+If you split your configuration into multiple files, you must additionally specify the base path for the template imports.
+Template imports will then be resolved relative to this base path.
+If `base_path` itself is relative, it'll be relative to the configuration file in which it's defined.
+
+```toml
+[gateway]
+# ...
+template_filesystem_access = { enabled = true, base_path = "." }
+# ...
+```

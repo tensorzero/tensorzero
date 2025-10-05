@@ -12,6 +12,22 @@ use axum::{
 use rand::distr::{Alphanumeric, SampleString};
 use serde::{Deserialize, Serialize};
 
+use crate::apply_delay;
+
+// Mirror the TogetherBatchSize enum from tensorzero-core
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum TogetherBatchSize {
+    Number(u32),
+    Description(TogetherBatchSizeDescription),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TogetherBatchSizeDescription {
+    Max,
+}
+
 pub struct TogetherError(anyhow::Error);
 
 impl<E> From<E> for TogetherError
@@ -54,7 +70,7 @@ pub struct TogetherCreateJobRequest {
     pub warmup_ratio: Option<f64>,
     pub max_grad_norm: Option<f64>,
     pub weight_decay: Option<f64>,
-    pub batch_size: u32,
+    pub batch_size: TogetherBatchSize,
     pub lr_scheduler: serde_json::Value,
     pub learning_rate: f64,
     pub training_method: serde_json::Value,
@@ -96,6 +112,7 @@ pub struct TogetherJobResponse {
 
 /// Handler for uploading files to Together
 pub async fn upload_file(mut multipart: Multipart) -> Result<Json<TogetherFileResponse>> {
+    apply_delay().await;
     // Process the multipart form data
     // Together sends three fields: file, purpose, and file_name
     let mut file_content = None;
@@ -136,6 +153,7 @@ pub async fn upload_file(mut multipart: Multipart) -> Result<Json<TogetherFileRe
 pub async fn create_fine_tuning_job(
     Json(_request): Json<TogetherCreateJobRequest>,
 ) -> Result<Json<TogetherCreateJobResponse>> {
+    apply_delay().await;
     // Generate a random job ID
     let job_id = format!("ft-{}", Alphanumeric.sample_string(&mut rand::rng(), 16));
 
@@ -150,6 +168,7 @@ pub async fn create_fine_tuning_job(
 
 /// Handler for getting the status of a fine-tuning job
 pub async fn get_fine_tuning_job(Path(job_id): Path<String>) -> Result<Json<TogetherJobResponse>> {
+    apply_delay().await;
     let mut jobs = TOGETHER_FINE_TUNING_JOBS
         .get_or_init(Default::default)
         .lock()

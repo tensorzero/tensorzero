@@ -1,41 +1,28 @@
-use futures::future::try_join_all;
-use serde_json::Value;
-
-use crate::{Client, ClientInput, ClientInputMessage, ClientInputMessageContent, TensorZeroError};
-use tensorzero_core::tool::{ToolCall, ToolCallInput};
-use tensorzero_core::{
-    error::ErrorDetails,
-    inference::types::{
-        storage::StoragePath, File, ResolvedInput, ResolvedInputMessage,
-        ResolvedInputMessageContent, TextKind,
-    },
+use crate::{ClientInput, ClientInputMessage, ClientInputMessageContent};
+use tensorzero_core::inference::types::{
+    File, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent, TextKind,
 };
+use tensorzero_core::tool::{ToolCall, ToolCallInput};
 
 /// Convert a resolved input to a client input
-pub async fn resolved_input_to_client_input(
-    resolved_input: ResolvedInput,
-    client: &Client,
-) -> Result<ClientInput, TensorZeroError> {
+pub fn resolved_input_to_client_input(resolved_input: ResolvedInput) -> ClientInput {
     let ResolvedInput { system, messages } = resolved_input;
-    let messages = try_join_all(
-        messages
-            .into_iter()
-            .map(|message| resolved_input_message_to_client_input_message(message, client)),
-    )
-    .await?;
-    Ok(ClientInput { system, messages })
+    let messages = messages
+        .into_iter()
+        .map(resolved_input_message_to_client_input_message)
+        .collect::<Vec<_>>();
+    ClientInput { system, messages }
 }
 
-async fn resolved_input_message_to_client_input_message(
+fn resolved_input_message_to_client_input_message(
     resolved_input_message: ResolvedInputMessage,
-    client: &Client,
-) -> Result<ClientInputMessage, TensorZeroError> {
+) -> ClientInputMessage {
     let ResolvedInputMessage { role, content } = resolved_input_message;
-    let content = try_join_all(content.into_iter().map(|content| {
-        resolved_input_message_content_to_client_input_message_content(content, client)
-    }))
-    .await?;
-    Ok(ClientInputMessage { role, content })
+    let content = content
+        .into_iter()
+        .map(resolved_input_message_content_to_client_input_message_content)
+        .collect::<Vec<_>>();
+    ClientInputMessage { role, content }
 }
 
 fn convert_tool_call(tool_call: ToolCall) -> ToolCallInput {
@@ -48,66 +35,42 @@ fn convert_tool_call(tool_call: ToolCall) -> ToolCallInput {
     }
 }
 
-async fn resolved_input_message_content_to_client_input_message_content(
+fn resolved_input_message_content_to_client_input_message_content(
     resolved_input_message_content: ResolvedInputMessageContent,
-    client: &Client,
-) -> Result<ClientInputMessageContent, TensorZeroError> {
+) -> ClientInputMessageContent {
     match resolved_input_message_content {
-        ResolvedInputMessageContent::Text { value } => match value {
-            Value::String(s) => Ok(ClientInputMessageContent::Text(TextKind::Text { text: s })),
-            Value::Object(o) => Ok(ClientInputMessageContent::Text(TextKind::Arguments {
-                arguments: o,
-            })),
-            _ => Err(TensorZeroError::Other {
-                source: tensorzero_core::error::Error::new(ErrorDetails::Serialization {
-                    message: "Text types must be a string or an object".to_string(),
-                })
-                .into(),
-            }),
-        },
-        ResolvedInputMessageContent::ToolCall(tool_call) => Ok(
-            ClientInputMessageContent::ToolCall(convert_tool_call(tool_call)),
-        ),
+        ResolvedInputMessageContent::Text { text } => {
+            ClientInputMessageContent::Text(TextKind::Text { text })
+        }
+        ResolvedInputMessageContent::Template(template) => {
+            ClientInputMessageContent::Template(template)
+        }
+        ResolvedInputMessageContent::ToolCall(tool_call) => {
+            ClientInputMessageContent::ToolCall(convert_tool_call(tool_call))
+        }
         ResolvedInputMessageContent::ToolResult(tool_result) => {
-            Ok(ClientInputMessageContent::ToolResult(tool_result))
+            ClientInputMessageContent::ToolResult(tool_result)
         }
         ResolvedInputMessageContent::RawText { value } => {
-            Ok(ClientInputMessageContent::RawText { value })
+            ClientInputMessageContent::RawText { value }
         }
         ResolvedInputMessageContent::Thought(thought) => {
-            Ok(ClientInputMessageContent::Thought(thought))
+            ClientInputMessageContent::Thought(thought)
         }
         ResolvedInputMessageContent::File(file) => {
             let mime_type = file.file.mime_type;
-            let data = match file.file.data {
-                Some(data) => data,
-                None => {
-                    let storage_path = file.storage_path;
-                    fetch_file_data(storage_path, client).await?
-                }
-            };
+            let data = file.file.data;
 
-            Ok(ClientInputMessageContent::File(File::Base64 {
-                mime_type,
-                data,
-            }))
+            ClientInputMessageContent::File(File::Base64 { mime_type, data })
         }
         ResolvedInputMessageContent::Unknown {
             data,
             model_provider_name,
-        } => Ok(ClientInputMessageContent::Unknown {
+        } => ClientInputMessageContent::Unknown {
             data,
             model_provider_name,
-        }),
+        },
     }
-}
-
-async fn fetch_file_data(
-    storage_path: StoragePath,
-    client: &Client,
-) -> Result<String, TensorZeroError> {
-    let response = client.get_object(storage_path).await?;
-    Ok(response.data)
 }
 
 #[cfg(test)]
@@ -115,11 +78,11 @@ mod tests {
     use object_store::path::Path;
 
     use tensorzero_core::inference::types::{
-        resolved_input::FileWithPath, storage::StorageKind, Base64File,
+        resolved_input::FileWithPath,
+        storage::{StorageKind, StoragePath},
+        Base64File,
     };
     use url::Url;
-
-    use crate::{ClientBuilder, ClientBuilderMode};
 
     use super::*;
 
@@ -149,14 +112,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_resolved_input_message_content_to_client_message_content_with_image() {
-        // Create a mock client that returns a predefined response for get_object
-        let mock_client = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
-            url: Url::parse("http://notaurl.com").unwrap(),
-        })
-        .build()
-        .await
-        .unwrap();
-
         // Set up the image data
         let image_data = "base64_encoded_image_data";
         let path = Path::parse("test-image.jpg").unwrap();
@@ -177,18 +132,14 @@ mod tests {
             file: Base64File {
                 url: Some(Url::parse("http://notaurl.com").unwrap()),
                 mime_type: mime::IMAGE_JPEG,
-                data: Some(image_data.to_string()),
+                data: image_data.to_string(),
             },
             storage_path: storage_path.clone(),
         }));
 
         // Call the function under test
-        let result = resolved_input_message_content_to_client_input_message_content(
-            resolved_content,
-            &mock_client,
-        )
-        .await
-        .unwrap();
+        let result =
+            resolved_input_message_content_to_client_input_message_content(resolved_content);
 
         // Verify the result
         match result {

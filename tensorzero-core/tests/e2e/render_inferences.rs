@@ -6,23 +6,23 @@ use tensorzero::{
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint, Role, StorageKind, StoragePath,
     StoredChatInference, StoredInference, StoredJsonInference, Tool,
 };
+use tensorzero_core::inference::types::file::Base64FileMetadata;
+use tensorzero_core::inference::types::stored_input::StoredFile;
+use tensorzero_core::inference::types::stored_input::{
+    StoredInput, StoredInputMessage, StoredInputMessageContent,
+};
+use tensorzero_core::inference::types::{ResolvedContentBlock, ResolvedRequestMessage};
 use tensorzero_core::{
-    inference::types::{
-        resolved_input::FileWithPath, Base64File, ContentBlock, ContentBlockChatOutput,
-        JsonInferenceOutput, RequestMessage, ResolvedInput, ResolvedInputMessage,
-        ResolvedInputMessageContent, Text,
-    },
+    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Text},
     tool::{ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice},
 };
 use tracing_test::traced_test;
 use uuid::Uuid;
 
-use crate::providers::common::make_embedded_gateway;
-
 /// Test that the render_samples function works when given an empty array of stored inferences.
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_render_samples_empty() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     // Test with an empty stored inferences array.
     let stored_inferences: Vec<StoredInference> = vec![];
@@ -38,16 +38,16 @@ pub async fn test_render_samples_empty() {
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 pub async fn test_render_samples_no_function() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -74,16 +74,16 @@ pub async fn test_render_samples_no_function() {
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 pub async fn test_render_samples_no_variant() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -118,16 +118,16 @@ pub async fn test_render_samples_no_variant() {
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 pub async fn test_render_samples_missing_variable() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
-        input: ResolvedInput {
+        input: StoredInput {
             system: Some(json!({"foo": "bar"})),
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -156,17 +156,17 @@ pub async fn test_render_samples_missing_variable() {
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 pub async fn test_render_samples_normal() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let stored_inferences = vec![
         StoredInference::Chat(StoredChatInference {
             function_name: "basic_test".to_string(),
             variant_name: "dummy".to_string(),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("Hello, world!"),
                     }],
                 }],
@@ -182,11 +182,11 @@ pub async fn test_render_samples_normal() {
         StoredInference::Json(StoredJsonInference {
             function_name: "json_success".to_string(),
             variant_name: "dummy".to_string(),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!({"country": "Japan"}),
                     }],
                 }],
@@ -208,11 +208,11 @@ pub async fn test_render_samples_normal() {
         StoredInference::Chat(StoredChatInference {
             function_name: "weather_helper".to_string(),
             variant_name: "dummy".to_string(),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("Hello, world!"),
                     }],
                 }],
@@ -245,19 +245,18 @@ pub async fn test_render_samples_normal() {
         StoredInference::Chat(StoredChatInference {
             function_name: "basic_test".to_string(),
             variant_name: "gpt-4o-mini-2024-07-18".to_string(),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: json!("What is this a picture of?"),
                         },
-                        ResolvedInputMessageContent::File(Box::new(FileWithPath {
-                            file: Base64File {
+                        StoredInputMessageContent::File(Box::new(StoredFile {
+                            file: Base64FileMetadata {
                                 url: None,
                                 mime_type: mime::IMAGE_PNG,
-                                data: None,
                             },
                             storage_path: StoragePath {
                                 kind: StorageKind::S3Compatible {
@@ -309,7 +308,7 @@ pub async fn test_render_samples_normal() {
     assert_eq!(first_message.role, Role::User);
     assert_eq!(first_message.content.len(), 1);
 
-    let ContentBlock::Text(text) = &first_message.content[0] else {
+    let ResolvedContentBlock::Text(text) = &first_message.content[0] else {
         panic!("Expected text content");
     };
     assert_eq!(text.text, "Hello, world!");
@@ -334,7 +333,7 @@ pub async fn test_render_samples_normal() {
     assert_eq!(second_message.role, Role::User);
     assert_eq!(second_message.content.len(), 1);
 
-    let ContentBlock::Text(text) = &second_message.content[0] else {
+    let ResolvedContentBlock::Text(text) = &second_message.content[0] else {
         panic!("Expected text content");
     };
     assert_eq!(text.text, "What is the name of the capital city of Japan?");
@@ -373,7 +372,7 @@ pub async fn test_render_samples_normal() {
     assert_eq!(third_message.role, Role::User);
     assert_eq!(third_message.content.len(), 1);
 
-    let ContentBlock::Text(text) = &third_message.content[0] else {
+    let ResolvedContentBlock::Text(text) = &third_message.content[0] else {
         panic!("Expected text content");
     };
     assert_eq!(text.text, "Hello, world!");
@@ -415,21 +414,17 @@ pub async fn test_render_samples_normal() {
     assert_eq!(fourth_message.role, Role::User);
     assert_eq!(fourth_message.content.len(), 2);
 
-    let ContentBlock::Text(text) = &fourth_message.content[0] else {
+    let ResolvedContentBlock::Text(text) = &fourth_message.content[0] else {
         panic!("Expected text content");
     };
     assert_eq!(text.text, "What is this a picture of?");
 
-    let ContentBlock::File(file) = &fourth_message.content[1] else {
+    let ResolvedContentBlock::File(file) = &fourth_message.content[1] else {
         panic!("Expected file content");
     };
 
     // Check that the base64 string is > 1000 chars
-    if let Some(data) = &file.file.data {
-        assert!(data.len() > 1000);
-    } else {
-        panic!("Expected base64 data");
-    }
+    assert!(file.file.data.len() > 1000);
 
     // Check the output
     assert_eq!(fourth_inference.output.as_ref().unwrap().len(), 0);
@@ -442,33 +437,33 @@ pub async fn test_render_samples_normal() {
 /// Test that the render_samples function can render a normal chat example, a tool call example, a json example, and an example using images.
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_render_samples_template_no_schema() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
         function_name: "basic_test_template_no_schema".to_string(),
         variant_name: "test".to_string(),
         timestamp: Utc::now(),
-        input: ResolvedInput {
+        input: StoredInput {
             system: Some("My system message".into()),
             messages: vec![
-                ResolvedInputMessage {
+                StoredInputMessage {
                     role: Role::User,
                     content: vec![
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: "First user message".into(),
                         },
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: "Second user message".into(),
                         },
                     ],
                 },
-                ResolvedInputMessage {
+                StoredInputMessage {
                     role: Role::Assistant,
                     content: vec![
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: "First assistant message".into(),
                         },
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: "Second assistant message".into(),
                         },
                     ],
@@ -506,13 +501,13 @@ pub async fn test_render_samples_template_no_schema() {
 
     assert_eq!(
         first_inference.input.messages[0],
-        RequestMessage {
+        ResolvedRequestMessage {
             role: Role::User,
             content: vec![
-                ContentBlock::Text(Text {
+                ResolvedContentBlock::Text(Text {
                     text: "User content: `First user message`".into(),
                 }),
-                ContentBlock::Text(Text {
+                ResolvedContentBlock::Text(Text {
                     text: "User content: `Second user message`".into(),
                 })
             ],
@@ -521,13 +516,13 @@ pub async fn test_render_samples_template_no_schema() {
 
     assert_eq!(
         first_inference.input.messages[1],
-        RequestMessage {
+        ResolvedRequestMessage {
             role: Role::Assistant,
             content: vec![
-                ContentBlock::Text(Text {
+                ResolvedContentBlock::Text(Text {
                     text: "Assistant content: `First assistant message`".into(),
                 }),
-                ContentBlock::Text(Text {
+                ResolvedContentBlock::Text(Text {
                     text: "Assistant content: `Second assistant message`".into(),
                 })
             ],
@@ -546,7 +541,7 @@ pub async fn test_render_samples_template_no_schema() {
 /// Test that the render_samples function works when given an empty array of datapoints.
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_render_datapoints_empty() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     // Test with an empty datapoints array.
     let datapoints: Vec<Datapoint> = vec![];
@@ -562,18 +557,19 @@ pub async fn test_render_datapoints_empty() {
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 pub async fn test_render_datapoints_no_function() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
         function_name: "basic_test".to_string(),
+        name: None,
         id: Uuid::now_v7(),
         episode_id: Some(Uuid::now_v7()),
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -601,18 +597,19 @@ pub async fn test_render_datapoints_no_function() {
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 pub async fn test_render_datapoints_no_variant() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
         function_name: "basic_test".to_string(),
+        name: None,
         id: Uuid::now_v7(),
         episode_id: Some(Uuid::now_v7()),
-        input: ResolvedInput {
+        input: StoredInput {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -648,18 +645,19 @@ pub async fn test_render_datapoints_no_variant() {
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 pub async fn test_render_datapoints_missing_variable() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
         function_name: "basic_test".to_string(),
+        name: None,
         id: Uuid::now_v7(),
         episode_id: Some(Uuid::now_v7()),
-        input: ResolvedInput {
+        input: StoredInput {
             system: Some(json!({"foo": "bar"})),
-            messages: vec![ResolvedInputMessage {
+            messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
+                content: vec![StoredInputMessageContent::Text {
                     value: json!("Hello, world!"),
                 }],
             }],
@@ -689,19 +687,20 @@ pub async fn test_render_datapoints_missing_variable() {
 #[tokio::test(flavor = "multi_thread")]
 #[traced_test]
 pub async fn test_render_datapoints_normal() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let datapoints = vec![
         Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "basic_test".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("Hello, world!"),
                     }],
                 }],
@@ -718,13 +717,14 @@ pub async fn test_render_datapoints_normal() {
         Datapoint::Json(JsonInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "json_success".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!({"country": "Japan"}),
                     }],
                 }],
@@ -744,13 +744,14 @@ pub async fn test_render_datapoints_normal() {
         Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "weather_helper".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![StoredInputMessageContent::Text {
                         value: json!("Hello, world!"),
                     }],
                 }],
@@ -782,21 +783,21 @@ pub async fn test_render_datapoints_normal() {
         Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "basic_test".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: ResolvedInput {
+            input: StoredInput {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                messages: vec![ResolvedInputMessage {
+                messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: json!("What is this a picture of?"),
                         },
-                        ResolvedInputMessageContent::File(Box::new(FileWithPath {
-                            file: Base64File {
+                        StoredInputMessageContent::File(Box::new(StoredFile {
+                            file: Base64FileMetadata {
                                 url: None,
                                 mime_type: mime::IMAGE_PNG,
-                                data: None,
                             },
                             storage_path: StoragePath {
                                 kind: StorageKind::S3Compatible {
@@ -849,7 +850,7 @@ pub async fn test_render_datapoints_normal() {
     assert_eq!(first_message.role, Role::User);
     assert_eq!(first_message.content.len(), 1);
 
-    let ContentBlock::Text(text) = &first_message.content[0] else {
+    let ResolvedContentBlock::Text(text) = &first_message.content[0] else {
         panic!("Expected text content");
     };
     assert_eq!(text.text, "Hello, world!");
@@ -874,7 +875,7 @@ pub async fn test_render_datapoints_normal() {
     assert_eq!(second_message.role, Role::User);
     assert_eq!(second_message.content.len(), 1);
 
-    let ContentBlock::Text(text) = &second_message.content[0] else {
+    let ResolvedContentBlock::Text(text) = &second_message.content[0] else {
         panic!("Expected text content");
     };
     assert_eq!(text.text, "What is the name of the capital city of Japan?");
@@ -906,7 +907,7 @@ pub async fn test_render_datapoints_normal() {
     assert_eq!(third_message.role, Role::User);
     assert_eq!(third_message.content.len(), 1);
 
-    let ContentBlock::Text(text) = &third_message.content[0] else {
+    let ResolvedContentBlock::Text(text) = &third_message.content[0] else {
         panic!("Expected text content");
     };
     assert_eq!(text.text, "Hello, world!");
@@ -941,21 +942,17 @@ pub async fn test_render_datapoints_normal() {
     assert_eq!(fourth_message.role, Role::User);
     assert_eq!(fourth_message.content.len(), 2);
 
-    let ContentBlock::Text(text) = &fourth_message.content[0] else {
+    let ResolvedContentBlock::Text(text) = &fourth_message.content[0] else {
         panic!("Expected text content");
     };
     assert_eq!(text.text, "What is this a picture of?");
 
-    let ContentBlock::File(file) = &fourth_message.content[1] else {
+    let ResolvedContentBlock::File(file) = &fourth_message.content[1] else {
         panic!("Expected file content");
     };
 
     // Check that the base64 string is > 1000 chars
-    if let Some(data) = &file.file.data {
-        assert!(data.len() > 1000);
-    } else {
-        panic!("Expected base64 data");
-    }
+    assert!(file.file.data.len() > 1000);
 
     // Check the output
     assert_eq!(fourth_sample.output.as_ref().unwrap().len(), 0);
@@ -968,34 +965,35 @@ pub async fn test_render_datapoints_normal() {
 /// Test that the render_samples function can render a datapoint with template but no schema.
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_render_datapoints_template_no_schema() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
         function_name: "basic_test_template_no_schema".to_string(),
+        name: None,
         id: Uuid::now_v7(),
         episode_id: Some(Uuid::now_v7()),
-        input: ResolvedInput {
+        input: StoredInput {
             system: Some("My system message".into()),
             messages: vec![
-                ResolvedInputMessage {
+                StoredInputMessage {
                     role: Role::User,
                     content: vec![
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: "First user message".into(),
                         },
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: "Second user message".into(),
                         },
                     ],
                 },
-                ResolvedInputMessage {
+                StoredInputMessage {
                     role: Role::Assistant,
                     content: vec![
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: "First assistant message".into(),
                         },
-                        ResolvedInputMessageContent::Text {
+                        StoredInputMessageContent::Text {
                             value: "Second assistant message".into(),
                         },
                     ],
@@ -1035,13 +1033,13 @@ pub async fn test_render_datapoints_template_no_schema() {
 
     assert_eq!(
         first_sample.input.messages[0],
-        RequestMessage {
+        ResolvedRequestMessage {
             role: Role::User,
             content: vec![
-                ContentBlock::Text(Text {
+                ResolvedContentBlock::Text(Text {
                     text: "User content: `First user message`".into(),
                 }),
-                ContentBlock::Text(Text {
+                ResolvedContentBlock::Text(Text {
                     text: "User content: `Second user message`".into(),
                 })
             ],
@@ -1050,13 +1048,13 @@ pub async fn test_render_datapoints_template_no_schema() {
 
     assert_eq!(
         first_sample.input.messages[1],
-        RequestMessage {
+        ResolvedRequestMessage {
             role: Role::Assistant,
             content: vec![
-                ContentBlock::Text(Text {
+                ResolvedContentBlock::Text(Text {
                     text: "Assistant content: `First assistant message`".into(),
                 }),
-                ContentBlock::Text(Text {
+                ResolvedContentBlock::Text(Text {
                     text: "Assistant content: `Second assistant message`".into(),
                 })
             ],

@@ -6,7 +6,7 @@ services:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: chpassword
     volumes:
-      - ./config.xml:/etc/clickhouse-server/config.xml:ro
+      - ./config.xml:/etc/clickhouse-server/config.d/docker_related_config.xml:ro
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
@@ -23,6 +23,7 @@ services:
   # We set 'OPENAI_BASE_URL=http://localhost:3030/openai' when starting the ui server in ci
   # so that we use the mock server for SFT jobs
   mock-inference-provider:
+    image: tensorzero/mock-inference-provider:${TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG:-latest}
     build:
       context: ../../
       dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
@@ -32,6 +33,7 @@ services:
       - "3030:3030"
     healthcheck:
       test: wget --spider --tries 1 http://localhost:3030/status
+      interval: 1s
       start_period: 30s
       start_interval: 1s
       timeout: 1s
@@ -74,7 +76,8 @@ services:
 
   fixtures:
     build:
-      dockerfile: Dockerfile
+      context: ../../
+      dockerfile: ui/fixtures/Dockerfile
     volumes:
       - .:/fixtures
       - ~/.aws:/root/.aws

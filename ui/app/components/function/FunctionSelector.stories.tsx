@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { FunctionSelector } from "./FunctionSelector";
 import type { FunctionConfig } from "tensorzero-node";
 import { useState } from "react";
+import { DEFAULT_FUNCTION } from "~/utils/constants";
 
 const meta = {
   title: "UI/FunctionSelector",
@@ -19,14 +20,10 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const mockFunctions: Record<string, FunctionConfig> = {
-  "tensorzero::default": {
+  [DEFAULT_FUNCTION]: {
     type: "chat",
     variants: {},
-    schemas: {
-      system: null,
-      user: null,
-      assistant: null,
-    },
+    schemas: {},
     tools: [],
     tool_choice: "auto",
     parallel_tool_calls: null,
@@ -35,11 +32,7 @@ const mockFunctions: Record<string, FunctionConfig> = {
   "chat-function": {
     type: "chat",
     variants: {},
-    schemas: {
-      system: null,
-      user: null,
-      assistant: null,
-    },
+    schemas: {},
     tools: ["calculator", "weather"],
     tool_choice: "auto",
     parallel_tool_calls: true,
@@ -48,11 +41,7 @@ const mockFunctions: Record<string, FunctionConfig> = {
   "json-extractor": {
     type: "json",
     variants: {},
-    schemas: {
-      system: null,
-      user: null,
-      assistant: null,
-    },
+    schemas: {},
     output_schema: {
       value: null,
     },
@@ -66,11 +55,7 @@ const mockFunctions: Record<string, FunctionConfig> = {
   "sentiment-analyzer": {
     type: "json",
     variants: {},
-    schemas: {
-      system: null,
-      user: null,
-      assistant: null,
-    },
+    schemas: {},
     output_schema: {
       value: null,
     },

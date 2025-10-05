@@ -1,11 +1,9 @@
 import { Output } from "./Output";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { withRouter } from "storybook-addon-remix-react-router";
 
 const meta = {
   title: "Output",
   component: Output,
-  decorators: [withRouter],
   render: (args) => (
     <div className="w-[80vw] p-4">
       <Output {...args} />
@@ -244,6 +242,42 @@ export const ChatFunctionWithThinking: Story = {
         _internal_provider_type: null,
       },
       { type: "text", text: "Hello, world!" },
+    ],
+  },
+};
+
+export const ChatFunctionWithThinkingAndSignature: Story = {
+  args: {
+    output: [
+      {
+        type: "thought",
+        text: "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.",
+        signature: "b1e302e1-c3d3-4ed5-950b-1060d005a82d",
+        _internal_provider_type: null,
+      },
+      { type: "text", text: "Hello, world!" },
+    ],
+  },
+};
+
+export const ChatFunctionWithUnknownContent: Story = {
+  args: {
+    output: [
+      {
+        type: "unknown",
+        data: null,
+        model_provider_name: null,
+      },
+      {
+        type: "unknown",
+        data: {
+          some: "arbitrary",
+          data: 123,
+          structure: ["is", "not", "validated"],
+        },
+        model_provider_name: "openai",
+      },
+      { type: "text", text: "This text comes after unknown content." },
     ],
   },
 };

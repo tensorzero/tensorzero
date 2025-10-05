@@ -1,6 +1,7 @@
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::print_stdout)]
 use std::{net::SocketAddr, process::Stdio};
 
+use reqwest::Response;
 use tempfile::NamedTempFile;
 use tokio::{
     io::{AsyncBufReadExt, BufReader, Lines},
@@ -51,7 +52,7 @@ pub async fn start_gateway_on_random_port(
     while let Some(line) = stdout.next_line().await.unwrap() {
         println!("gateway output line: {line}");
         output.push(line.clone());
-        if line.contains("└") {
+        if line.contains("{\"message\":\"└") {
             // We're done logging the startup message
             break;
         }
@@ -90,13 +91,10 @@ pub struct ChildData {
 
 impl ChildData {
     #[allow(dead_code, clippy::allow_attributes)]
-    pub async fn call_health_endpoint(&self) -> String {
+    pub async fn call_health_endpoint(&self) -> Response {
         reqwest::Client::new()
             .get(format!("http://{}/health", self.addr))
             .send()
-            .await
-            .unwrap()
-            .text()
             .await
             .unwrap()
     }

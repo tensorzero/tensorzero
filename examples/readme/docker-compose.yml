@@ -10,6 +10,8 @@ services:
       CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: chpassword
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
     healthcheck:
       test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
       start_period: 30s
@@ -18,7 +20,7 @@ services:
 
   gateway:
     image: tensorzero/gateway
-    command: --default-config  # no `tensorzero.toml` configuration file provided
+    command: --default-config # no `tensorzero.toml` configuration file provided
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
       OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
@@ -45,6 +47,7 @@ services:
 
   ui:
     image: tensorzero/ui
+    command: --default-config
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
@@ -56,3 +59,6 @@ services:
         condition: service_healthy
       gateway:
         condition: service_healthy
+
+volumes:
+  clickhouse-data:

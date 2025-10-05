@@ -1,0 +1,30 @@
+---
+title: Export Prometheus metrics
+description: Learn how the TensorZero Gateway exports Prometheus-compatible metrics for monitoring and debugging.
+---
+
+The TensorZero Gateway exposes runtime metrics through a [Prometheus](https://prometheus.io/)-compatible endpoint.
+This allows you to monitor gateway performance, track usage patterns, and set up alerting using standard Prometheus tooling.
+This endpoint provides operational metrics about the gateway itself.
+It's not meant to replace TensorZero's observability features.
+
+You can access the metrics by scraping the `/metrics` endpoint.
+
+The gateway currently exports the following metrics:
+
+- `tensorzero_requests_total`
+- `tensorzero_inferences_total`
+
+The metrics include relevant labels such as `endpoint`, `function_name`, `model_name`, and `metric_name`.
+For example:
+
+```txt title="GET /metrics"
+# HELP tensorzero_requests_total Requests handled by TensorZero
+# TYPE tensorzero_requests_total counter
+tensorzero_requests_total{endpoint="inference",function_name="tensorzero::default",model_name="gpt-4o-mini-2024-07-18"} 1
+tensorzero_requests_total{endpoint="feedback",metric_name="draft_accepted"} 10
+
+# HELP tensorzero_inferences_total Inferences performed by TensorZero
+# TYPE tensorzero_inferences_total counter
+tensorzero_inferences_total{endpoint="inference",function_name="tensorzero::default",model_name="gpt-4o-mini-2024-07-18"} 1
+```

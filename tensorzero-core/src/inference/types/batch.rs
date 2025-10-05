@@ -7,12 +7,13 @@ use crate::{
     error::{Error, ErrorDetails},
     jsonschema_util::DynamicJSONSchema,
     tool::{ToolCallConfig, ToolCallConfigDatabaseInsert},
-    uuid_util::validate_tensorzero_uuid,
+    utils::uuid::validate_tensorzero_uuid,
 };
 
 use super::{
-    ContentBlockOutput, FinishReason, ModelInferenceRequest, RequestMessage, ResolvedInput, Usage,
+    ContentBlockOutput, FinishReason, ModelInferenceRequest, RequestMessage, StoredInput, Usage,
 };
+use crate::inference::types::StoredRequestMessage;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
@@ -199,9 +200,9 @@ pub struct BatchModelInferenceRow<'a> {
     pub variant_name: Cow<'a, str>,
     pub episode_id: Uuid,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub input_messages: Vec<RequestMessage>,
+    pub input_messages: Vec<StoredRequestMessage>,
     pub system: Option<Cow<'a, str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(deserialize_with = "deserialize_optional_json_string")]

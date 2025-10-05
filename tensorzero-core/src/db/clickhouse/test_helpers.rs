@@ -1,4 +1,9 @@
-#![expect(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
+#![expect(
+    clippy::expect_used,
+    clippy::missing_panics_doc,
+    clippy::print_stdout,
+    clippy::unwrap_used
+)]
 use crate::config::BatchWritesConfig;
 use crate::endpoints::datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint};
 use crate::endpoints::dynamic_evaluation_run::{
@@ -8,7 +13,8 @@ use crate::endpoints::dynamic_evaluation_run::{
 #[cfg(feature = "e2e_tests")]
 use super::escape_string_for_clickhouse_literal;
 use super::ClickHouseConnectionInfo;
-use serde::Deserialize;
+#[cfg(feature = "e2e_tests")]
+use crate::endpoints::feedback::human_feedback::StaticEvaluationHumanFeedback;
 use serde_json::Value;
 #[cfg(feature = "e2e_tests")]
 use std::collections::HashMap;
@@ -419,6 +425,7 @@ pub async fn stale_datapoint_clickhouse(
             dataset_name,
             function_name,
             id,
+            name,
             episode_id,
             input,
             output,
@@ -434,6 +441,7 @@ pub async fn stale_datapoint_clickhouse(
             dataset_name,
             function_name,
             id,
+            name,
             episode_id,
             input,
             output,
@@ -459,6 +467,7 @@ pub async fn stale_datapoint_clickhouse(
             dataset_name,
             function_name,
             id,
+            name,
             episode_id,
             input,
             output,
@@ -474,6 +483,7 @@ pub async fn stale_datapoint_clickhouse(
             dataset_name,
             function_name,
             id,
+            name,
             episode_id,
             input,
             output,
@@ -525,7 +535,7 @@ pub async fn select_dynamic_evaluation_run_episode_clickhouse(
     episode_id: Uuid,
 ) -> Option<DynamicEvaluationRunEpisodeRow> {
     let query = format!(
-        "SELECT run_id, uint_to_uuid(episode_id_uint) as episode_id, variant_pins, datapoint_name, tags FROM DynamicEvaluationRunEpisode WHERE run_id = '{run_id}' AND episode_id_uint = toUInt128(toUUID('{episode_id}')) FORMAT JSONEachRow",
+        "SELECT run_id, uint_to_uuid(episode_id_uint) as episode_id, variant_pins, datapoint_name AS task_name, tags FROM DynamicEvaluationRunEpisode WHERE run_id = '{run_id}' AND episode_id_uint = toUInt128(toUUID('{episode_id}')) FORMAT JSONEachRow",
     );
 
     let text = clickhouse_connection_info
@@ -554,16 +564,6 @@ pub async fn select_feedback_tags_clickhouse(
         .unwrap();
     let json: Value = serde_json::from_str(&text.response).ok()?;
     Some(json)
-}
-
-#[derive(Debug, Deserialize)]
-pub struct StaticEvaluationHumanFeedback {
-    pub metric_name: String,
-    pub datapoint_id: Uuid,
-    pub output: String,
-    pub value: String,
-    pub feedback_id: Uuid,
-    pub evaluator_inference_id: Option<Uuid>,
 }
 
 #[cfg(feature = "e2e_tests")]

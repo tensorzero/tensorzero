@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tokio::sync::OnceCell;
 use tracing::instrument;
 
-use crate::config::path::TomlRelativePath;
+use crate::config::path::ResolvedTomlPath;
 use crate::error::{Error, ErrorDetails};
 
 #[derive(Debug, Serialize)]
@@ -65,7 +65,7 @@ impl Default for StaticJSONSchema {
 impl StaticJSONSchema {
     /// Just instantiates the struct, does not load the schema
     /// You should call `load` to load the schema
-    pub fn from_path(path: TomlRelativePath) -> Result<Self, Error> {
+    pub fn from_path(path: ResolvedTomlPath) -> Result<Self, Error> {
         let content = path.read()?;
 
         let schema: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
@@ -114,6 +114,17 @@ impl StaticJSONSchema {
             })
         })
     }
+}
+
+/// Wraps a schema with metadata indicating whether it was defined using legacy syntax
+/// (e.g., `user_schema`, `assistant_schema`, `system_schema`) or new syntax (e.g., `schemas.<name>`).
+/// This is used to determine whether to show a "Legacy" badge in the UI.
+#[derive(Clone, Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct SchemaWithMetadata {
+    pub schema: StaticJSONSchema,
+    pub legacy_definition: bool,
 }
 
 /// This is a JSONSchema that is compiled on the fly.
@@ -228,7 +239,7 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        let schema = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+        let schema = StaticJSONSchema::from_path(ResolvedTomlPath::new_for_tests(
             temp_file.path().to_owned(),
             None,
         ))
@@ -276,7 +287,7 @@ mod tests {
         write!(temp_file, "{invalid_schema}")
             .expect("Failed to write invalid schema to temporary file");
 
-        let result = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+        let result = StaticJSONSchema::from_path(ResolvedTomlPath::new_for_tests(
             temp_file.path().to_owned(),
             None,
         ));
@@ -291,7 +302,7 @@ mod tests {
 
     #[test]
     fn test_nonexistent_file() {
-        let result = StaticJSONSchema::from_path(TomlRelativePath::new_for_tests(
+        let result = StaticJSONSchema::from_path(ResolvedTomlPath::new_for_tests(
             "nonexistent_file.json".into(),
             None,
         ));

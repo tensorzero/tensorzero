@@ -39,6 +39,7 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+    command: ["--config-file", "/app/config/tensorzero.toml"]
     healthcheck:
       test:
         [
@@ -63,13 +64,15 @@ services:
       - "3030:3030"
     healthcheck:
       test: wget --spider --tries 1 http://localhost:3030/status
+      interval: 1s
       start_period: 30s
       start_interval: 1s
       timeout: 1s
 
   fixtures:
     build:
-      dockerfile: Dockerfile
+      context: ../../
+      dockerfile: ui/fixtures/Dockerfile
     volumes:
       - .:/fixtures
       - ~/.aws:/root/.aws

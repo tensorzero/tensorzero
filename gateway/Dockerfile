@@ -1,20 +1,26 @@
 # ========== builder ==========
 
-FROM rust:1.88.0 AS builder
+FROM lukemathwalker/cargo-chef:latest-rust-1.90-bookworm AS chef
 
 WORKDIR /src
 
-RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
-
+FROM chef AS planner
+WORKDIR /app
 COPY . .
 RUN git rev-parse HEAD
+RUN cargo chef prepare --recipe-path recipe.json
 
 ARG CARGO_BUILD_FLAGS=""
 
-RUN --mount=type=cache,id=tensorzero-gateway-release,sharing=locked,target=/usr/local/cargo/registry \
-    --mount=type=cache,id=tensorzero-gateway-release,sharing=locked,target=/usr/local/cargo/git \
-    cargo build --profile performance -p gateway $CARGO_BUILD_FLAGS && \
-    cp -r /src/target/performance /release
+FROM chef AS builder
+WORKDIR /tensorzero
+RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --profile performance -p gateway $CARGO_BUILD_FLAGS
+COPY . /tensorzero
+
+RUN cargo build --profile performance -p gateway $CARGO_BUILD_FLAGS
+RUN cp -r /tensorzero/target/performance /release
 
 # ========== base ==========
 
@@ -37,5 +43,3 @@ WORKDIR /app
 EXPOSE 3000
 
 ENTRYPOINT ["gateway"]
-
-CMD ["--warn-default-cmd", "--config-file", "config/tensorzero.toml"]

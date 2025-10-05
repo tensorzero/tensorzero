@@ -10,6 +10,8 @@ services:
       CLICKHOUSE_PASSWORD: chpassword
     ports:
       - "8123:8123"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
     healthcheck:
       test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
       start_period: 30s
@@ -39,7 +41,7 @@ services:
 
   # For a production deployment, you can use AWS S3, GCP Cloud Storage, Cloudflare R2, etc.
   minio:
-    image: bitnami/minio:2025.7.23
+    image: bitnamilegacy/minio:2025.7.23
     ports:
       - "9000:9000" # API port
       - "9001:9001" # Console port
@@ -52,3 +54,6 @@ services:
       start_period: 30s
       start_interval: 1s
       timeout: 1s
+
+volumes:
+  clickhouse-data:

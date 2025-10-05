@@ -1,12 +1,12 @@
 import React from "react";
 import { Link } from "react-router";
-import clsx from "clsx";
 import {
   Tooltip,
   TooltipTrigger,
   TooltipContent,
   TooltipProvider,
 } from "~/components/ui/tooltip";
+import { cn } from "~/utils/common";
 
 interface ChipProps {
   icon?: React.ReactNode;
@@ -17,6 +17,7 @@ interface ChipProps {
   font?: "sans" | "mono";
   tooltip?: React.ReactNode;
   iconBg?: string;
+  onClick?: React.MouseEventHandler<HTMLElement>;
 }
 
 const Chip: React.FC<ChipProps> = ({
@@ -28,23 +29,20 @@ const Chip: React.FC<ChipProps> = ({
   font = "sans",
   tooltip,
   iconBg = "bg-none",
+  onClick,
 }) => {
   const baseClasses =
     "inline-flex text-sm text-fg-primary px-0 md:px-2 gap-1.5 rounded-md whitespace-nowrap overflow-hidden";
-  const hoverClasses = link ? "md:hover:bg-bg-hover cursor-pointer" : "";
+  const hoverClasses =
+    link || onClick ? "md:hover:bg-bg-hover cursor-pointer" : "";
   const fontClasses = font === "mono" ? "font-mono" : "font-sans";
-  const combinedClasses = clsx(
-    baseClasses,
-    hoverClasses,
-    fontClasses,
-    className,
-  );
+  const combinedClasses = cn(baseClasses, hoverClasses, fontClasses, className);
 
   const content = (
     <>
       {icon && (
         <div
-          className={clsx(
+          className={cn(
             iconBg,
             "flex size-5 flex-shrink-0 items-center justify-center rounded-sm md:ml-[-2px]",
           )}
@@ -62,11 +60,13 @@ const Chip: React.FC<ChipProps> = ({
   );
 
   const chipContent = link ? (
-    <Link to={link} className={combinedClasses}>
+    <Link to={link} className={combinedClasses} onClick={onClick}>
       {content}
     </Link>
   ) : (
-    <div className={combinedClasses}>{content}</div>
+    <div className={combinedClasses} onClick={onClick}>
+      {content}
+    </div>
   );
 
   return tooltip ? (

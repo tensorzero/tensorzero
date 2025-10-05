@@ -1,0 +1,40 @@
+# ========== builder ==========
+
+FROM rust:1.88.0 AS builder
+
+WORKDIR /src
+
+RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
+
+COPY . .
+RUN git rev-parse HEAD
+
+# Enable the e2e_tests feature by default for the gateway build
+ARG CARGO_BUILD_FLAGS="--features e2e_tests"
+
+RUN --mount=type=cache,id=tensorzero-gateway-release,sharing=locked,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=tensorzero-gateway-release,sharing=locked,target=/usr/local/cargo/git \
+    cargo build --profile performance -p gateway $CARGO_BUILD_FLAGS && \
+    cp -r /src/target/performance /release
+
+# ========== base ==========
+
+FROM debian:bookworm-slim AS base
+
+RUN apt-get update && apt-get install -y ca-certificates openssl wget && rm -rf /var/lib/apt/lists/*
+
+# ========== gateway ==========
+
+FROM base AS gateway
+
+RUN useradd -m -s /bin/bash gateway
+
+USER gateway
+
+COPY --from=builder /release/gateway /usr/local/bin/gateway
+
+WORKDIR /app
+
+EXPOSE 3000
+
+ENTRYPOINT ["gateway"]

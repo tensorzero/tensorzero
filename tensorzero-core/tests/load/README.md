@@ -4,7 +4,7 @@
 - Launch the ClickHouse instance:
 
   ```
-  docker compose -f gateway/tests/load/docker-compose.yml up -d --build --force-recreate --remove-orphans
+  docker compose -f tensorzero-core/tests/load/docker-compose.yml up -d --build --force-recreate --remove-orphans
   ```
 
 - Launch the mock inference provider:
@@ -18,13 +18,13 @@
   - With observability:
 
     ```
-    cargo run --profile performance --bin gateway gateway/tests/load/tensorzero.toml
+    cargo run --profile performance --bin gateway tensorzero-core/tests/load/tensorzero.toml
     ```
 
   - Without observability:
 
     ```
-    cargo run --profile performance --bin gateway gateway/tests/load/tensorzero-without-observability.toml
+    cargo run --profile performance --bin gateway tensorzero-core/tests/load/tensorzero-without-observability.toml
     ```
 
 - Then, you can run a load test with `sh path/to/test/run.sh`.

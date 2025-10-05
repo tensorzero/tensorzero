@@ -4,7 +4,7 @@ use axum::middleware::Next;
 use axum::response::Response;
 use axum::routing::{delete, get, post, put};
 use axum::Router;
-use clap::Parser;
+use clap::{Args, Parser};
 use mimalloc::MiMalloc;
 use std::fmt::Display;
 use std::io::ErrorKind;
@@ -16,20 +16,22 @@ use tower_http::trace::{DefaultOnFailure, TraceLayer};
 use tracing::Level;
 
 use tensorzero_core::config::{Config, ConfigFileGlob};
-use tensorzero_core::db::clickhouse::migration_manager::manual_run_migrations;
+use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::db::postgres::{manual_run_postgres_migrations, PostgresConnectionInfo};
 use tensorzero_core::endpoints;
+use tensorzero_core::endpoints::openai_compatible::RouterExt as _;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error;
-use tensorzero_core::gateway_util;
-use tensorzero_core::observability::{self, LogFormat, RouterExt};
+use tensorzero_core::observability::{self, LogFormat, RouterExt as _};
+use tensorzero_core::utils::gateway;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
-struct Args {
+struct GatewayArgs {
     /// Use all of the config files matching the specified glob pattern. Incompatible with `--default-config`
     #[arg(long)]
     config_file: Option<PathBuf>,
@@ -38,23 +40,27 @@ struct Args {
     #[arg(long)]
     default_config: bool,
 
-    // Hidden flag used by our `Dockerfile` to warn users who have not overridden the default CMD
-    #[arg(long)]
-    #[clap(hide = true)]
-    warn_default_cmd: bool,
-
     /// Sets the log format used for all gateway logs.
     #[arg(long)]
     #[arg(value_enum)]
     #[clap(default_value_t = LogFormat::default())]
     log_format: LogFormat,
 
-    /// Run database migrations manually then exit.
-    #[arg(long)]
-    run_migrations_only: bool,
+    #[command(flatten)]
+    migration_commands: MigrationCommands,
+}
 
-    /// Deprecated: use `--config-file` instead
-    tensorzero_toml: Option<PathBuf>,
+#[derive(Args, Debug)]
+#[group(multiple = false)]
+struct MigrationCommands {
+    /// Run ClickHouse migrations manually then exit.
+    // TODO: remove
+    #[arg(long, alias = "run-migrations")]
+    run_clickhouse_migrations: bool,
+
+    /// Run PostgreSQL migrations manually then exit.
+    #[arg(long)]
+    run_postgres_migrations: bool,
 }
 
 async fn add_version_header(request: Request, next: Next) -> Response {
@@ -85,7 +91,7 @@ async fn add_version_header(request: Request, next: Next) -> Response {
 
 #[tokio::main]
 async fn main() {
-    let args = Args::parse();
+    let args = GatewayArgs::parse();
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
     let delayed_log_config = observability::setup_observability(args.log_format)
@@ -93,10 +99,19 @@ async fn main() {
         .expect_pretty("Failed to set up logs");
 
     let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
-    if args.run_migrations_only {
-        manual_run_migrations()
+    if args.migration_commands.run_clickhouse_migrations {
+        manual_run_clickhouse_migrations()
             .await
-            .expect_pretty("Failed to run migrations");
+            .expect_pretty("Failed to run ClickHouse migrations");
+        tracing::info!("ClickHouse is ready.");
+        return;
+    }
+
+    if args.migration_commands.run_postgres_migrations {
+        manual_run_postgres_migrations()
+            .await
+            .expect_pretty("Failed to run PostgreSQL migrations");
+        tracing::info!("Postgres is ready.");
         return;
     }
 
@@ -104,51 +119,37 @@ async fn main() {
 
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
-    if args.warn_default_cmd {
-        tracing::warn!("Deprecation Warning: Running gateway from Docker container without overriding default CMD. Please override the command to either `--config-file` to specify a custom configuration file (e.g. `--config-file /path/to/tensorzero.toml`) or `--default-config` to use default settings (i.e. no custom functions, metrics, etc.).");
-    }
-
-    if args.tensorzero_toml.is_some() && args.config_file.is_some() {
-        tracing::error!("Cannot specify both `--config-file` and a positional path argument");
-        std::process::exit(1);
-    }
-
-    if args.tensorzero_toml.is_some() {
-        tracing::warn!(
-            "`Specifying a positional path argument is deprecated. Use `--config-file path/to/tensorzero.toml` instead."
-        );
-    }
-
-    let config_path = args.config_file.or(args.tensorzero_toml);
-
-    if config_path.is_some() && args.default_config {
-        tracing::error!("Cannot specify both `--config-file` and `--default-config`");
-        std::process::exit(1);
-    }
-
-    if !args.default_config && config_path.is_none() {
-        tracing::warn!("Running the gateway without any config-related arguments is deprecated. Use `--default-config` to start the gateway with the default config.");
-    }
-
-    let (config, glob) = if let Some(path) = &config_path {
-        let glob =
-            ConfigFileGlob::new_from_path(path).expect_pretty("Failed to process config file glob");
-        (
-            Arc::new(
-                Config::load_and_verify_from_path(&glob)
-                    .await
-                    .ok() // Don't print the error here, since it was already printed when it was constructed
-                    .expect_pretty(&format!(
-                        "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
-                        glob.glob,
-                        glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n")
-                    )),
-            ),
-            Some(glob),
-        )
-    } else {
-        tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
-        (Arc::new(Config::default()), None)
+    // Handle `--config-file` or `--default-config`
+    let (config, glob) = match (args.default_config, args.config_file) {
+        (true, Some(_)) => {
+            tracing::error!("You must not specify both `--config-file` and `--default-config`.");
+            std::process::exit(1);
+        }
+        (false, None) => {
+            tracing::error!("You must specify either `--config-file` or `--default-config`.");
+            std::process::exit(1);
+        }
+        (true, None) => {
+            tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
+            (Arc::new(Config::default()), None)
+        }
+        (false, Some(path)) => {
+            let glob = ConfigFileGlob::new_from_path(&path)
+                .expect_pretty("Failed to process config file glob");
+            (
+                Arc::new(
+                    Config::load_and_verify_from_path(&glob)
+                        .await
+                        .ok() // Don't print the error here, since it was already printed when it was constructed
+                        .expect_pretty(&format!(
+                            "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
+                            glob.glob,
+                            glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n")
+                        )),
+                ),
+                Some(glob),
+            )
+        }
     };
 
     if config.gateway.debug {
@@ -197,7 +198,7 @@ async fn main() {
     }
 
     // Initialize GatewayHandle
-    let gateway_handle = gateway_util::GatewayHandle::new(config.clone())
+    let gateway_handle = gateway::GatewayHandle::new(config.clone())
         .await
         .expect_pretty("Failed to initialize AppState");
 
@@ -210,6 +211,14 @@ async fn main() {
         ClickHouseConnectionInfo::Production { database, .. } => {
             format!("enabled (database: {database})")
         }
+    };
+
+    let postgres_enabled_pretty = match &gateway_handle.app_state.postgres_connection_info {
+        PostgresConnectionInfo::Disabled => "disabled".to_string(),
+        PostgresConnectionInfo::Mock { healthy, .. } => {
+            format!("mocked (healthy={healthy})")
+        }
+        PostgresConnectionInfo::Enabled { .. } => "enabled".to_string(),
     };
 
     // Set debug mode
@@ -231,17 +240,7 @@ async fn main() {
             "/batch_inference/{batch_id}/inference/{inference_id}",
             get(endpoints::batch_inference::poll_batch_inference_handler),
         )
-        // TODO(# 3191): Implement a trait for openai compatible endpoints
-        // so this logic can be centralized to one place and not reimplemented in
-        // our gateway utils.
-        .route(
-            "/openai/v1/chat/completions",
-            post(endpoints::openai_compatible::inference_handler),
-        )
-        .route(
-            "/openai/v1/embeddings",
-            post(endpoints::openai_compatible::embeddings_handler),
-        )
+        .register_openai_compatible_routes()
         .route("/feedback", post(endpoints::feedback::feedback_handler))
         // Everything above this layer has OpenTelemetry tracing enabled
         // Note - we do *not* attach a `OtelInResponseLayer`, as this seems to be incorrect according to the W3C Trace Context spec
@@ -365,14 +364,7 @@ async fn main() {
     }
 
     // Print the configuration being used
-    if let Some(glob) = &glob {
-        tracing::info!("├ Configuration: glob `{}` resolved to:", glob.glob);
-        for path in &glob.paths {
-            tracing::info!("│  ├ {}", path.to_string_lossy());
-        }
-    } else {
-        tracing::info!("├ Configuration: default");
-    }
+    print_configuration_info(glob.as_ref());
 
     // Print whether observability is enabled
     tracing::info!("├ Observability: {observability_enabled_pretty}");
@@ -386,6 +378,9 @@ async fn main() {
         tracing::info!("├ Batch Writes: disabled");
     }
 
+    // Print whether postgres is enabled
+    tracing::info!("├ Postgres: {postgres_enabled_pretty}");
+
     // Print whether OpenTelemetry is enabled
     if config.gateway.export.otlp.traces.enabled {
         tracing::info!("└ OpenTelemetry: enabled");
@@ -398,6 +393,12 @@ async fn main() {
         .with_graceful_shutdown(shutdown_signal())
         .await
         .expect_pretty("Failed to start server");
+
+    if let Some(tracer_wrapper) = delayed_log_config.otel_tracer {
+        tracing::info!("Shutting down OpenTelemetry exporter");
+        tracer_wrapper.shutdown().await;
+        tracing::info!("OpenTelemetry exporter shut down");
+    }
 }
 
 pub async fn shutdown_signal() {
@@ -479,5 +480,133 @@ impl<T> ExpectPretty<T> for Option<T> {
                 std::process::exit(1);
             }
         }
+    }
+}
+
+/// Trait for configuration glob information, so that we can create a mocked version in tests
+trait ConfigGlobInfo {
+    fn glob(&self) -> &str;
+    fn paths(&self) -> &[std::path::PathBuf];
+}
+
+impl ConfigGlobInfo for tensorzero_core::config::ConfigFileGlob {
+    fn glob(&self) -> &str {
+        &self.glob
+    }
+
+    fn paths(&self) -> &[std::path::PathBuf] {
+        &self.paths
+    }
+}
+
+fn print_configuration_info(glob: Option<&impl ConfigGlobInfo>) {
+    if let Some(glob) = glob {
+        match glob.paths().len() {
+            0 => {
+                tracing::warn!(
+                    "├ Configuration: glob `{}` did not match any files.",
+                    glob.glob()
+                );
+            }
+            _ => {
+                tracing::info!("├ Configuration: glob `{}` resolved to:", glob.glob());
+
+                for (i, path) in glob.paths().iter().enumerate() {
+                    if i < glob.paths().len() - 1 {
+                        tracing::info!("│ ├ {}", path.to_string_lossy());
+                    } else {
+                        tracing::info!("│ └ {}", path.to_string_lossy());
+                    }
+                }
+            }
+        }
+    } else {
+        tracing::info!("├ Configuration: default");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use tracing_test::traced_test;
+
+    // Mock implementation for testing
+    struct MockConfigGlob {
+        glob: String,
+        paths: Vec<PathBuf>,
+    }
+
+    impl ConfigGlobInfo for MockConfigGlob {
+        fn glob(&self) -> &str {
+            &self.glob
+        }
+
+        fn paths(&self) -> &[PathBuf] {
+            &self.paths
+        }
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_print_configuration_info_default() {
+        let glob: Option<&MockConfigGlob> = None;
+        print_configuration_info(glob);
+
+        assert!(logs_contain("├ Configuration: default"));
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_print_configuration_info_glob_no_matches() {
+        // Create a mock with no paths for testing
+        let glob = MockConfigGlob {
+            glob: "*.nonexistent".to_string(),
+            paths: vec![],
+        };
+
+        print_configuration_info(Some(&glob));
+
+        assert!(logs_contain(
+            "├ Configuration: glob `*.nonexistent` did not match any files."
+        ));
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_print_configuration_info_glob_single_path() {
+        let glob = MockConfigGlob {
+            glob: "config/*.toml".to_string(),
+            paths: vec![PathBuf::from("config/app.toml")],
+        };
+
+        print_configuration_info(Some(&glob));
+
+        assert!(logs_contain(
+            "├ Configuration: glob `config/*.toml` resolved to:"
+        ));
+        assert!(logs_contain("│ └ config/app.toml"));
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_print_configuration_info_glob_multiple_paths() {
+        let glob = MockConfigGlob {
+            glob: "config/**/*.toml".to_string(),
+            paths: vec![
+                PathBuf::from("config/app.toml"),
+                PathBuf::from("config/database.toml"),
+                PathBuf::from("config/prod/settings.toml"),
+            ],
+        };
+
+        print_configuration_info(Some(&glob));
+
+        assert!(logs_contain(
+            "├ Configuration: glob `config/**/*.toml` resolved to:"
+        ));
+        assert!(logs_contain("│ ├ config/app.toml"));
+        assert!(logs_contain("│ ├ config/database.toml"));
+        assert!(logs_contain("│ └ config/prod/settings.toml"));
     }
 }

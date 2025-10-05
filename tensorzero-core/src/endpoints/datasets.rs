@@ -1,9 +1,11 @@
 use crate::db::clickhouse::TableName;
 use crate::function::FunctionConfigType;
+use crate::http::TensorzeroHttpClient;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
     content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
 };
+use crate::inference::types::stored_input::StoredInput;
 use axum::extract::{Path, Query, State};
 use axum::Json;
 use futures::future;
@@ -12,7 +14,6 @@ use futures::try_join;
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::IntoPyObjectExt;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, future::Future, pin::Pin};
@@ -20,24 +21,24 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::inference::types::Text;
-use crate::stored_inference::{SimpleStoredSampleInfo, StoredSample};
+use crate::stored_inference::{SimpleStoredSampleInfo, StoredOutput, StoredSample};
 use crate::{
     config::Config,
     db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
     error::{Error, ErrorDetails},
     function::FunctionConfig,
-    gateway_util::{AppState, StructuredJson},
     inference::types::{
         ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
-        JsonInferenceDatabaseInsert, JsonInferenceOutput, ResolvedInput,
+        JsonInferenceDatabaseInsert, JsonInferenceOutput,
     },
     serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
     tool::{DynamicToolParams, ToolCallConfigDatabaseInsert},
-    uuid_util::validate_tensorzero_uuid,
+    utils::gateway::{AppState, StructuredJson},
+    utils::uuid::validate_tensorzero_uuid,
 };
 
 #[cfg(debug_assertions)]
-use crate::gateway_util::AppStateData;
+use crate::utils::gateway::AppStateData;
 
 use super::feedback::{
     validate_parse_demonstration, DemonstrationOutput, DynamicDemonstrationInfo,
@@ -232,6 +233,7 @@ async fn insert_from_existing(
             let datapoint = JsonInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: inference.function_name,
+                name: None,
                 id: datapoint_id,
                 episode_id: Some(inference.episode_id),
                 input: inference.input,
@@ -269,6 +271,7 @@ async fn insert_from_existing(
             let datapoint = ChatInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: inference.function_name,
+                name: None,
                 id: datapoint_id,
                 episode_id: Some(inference.episode_id),
                 input: inference.input,
@@ -303,7 +306,7 @@ struct WithFunctionName {
 ///
 /// The inference is mostly copied as-is, except for the 'output' field.
 /// Based on the 'output' parameter, the output is copied, ignored, or fetched from a demonstration.
-#[instrument(name = "insert_datapoint", skip(app_state))]
+#[instrument(name = "insert_datapoint", skip_all)]
 pub async fn insert_from_existing_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<InsertPathParams>,
@@ -326,7 +329,7 @@ pub async fn insert_from_existing_datapoint_handler(
 ///
 /// The input and output are validated against the function schema
 /// (retrieved from the `function_name` argument in the body).
-#[instrument(name = "update_datapoint", skip(app_state))]
+#[instrument(name = "update_datapoint", skip_all)]
 pub async fn update_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<UpdatePathParams>,
@@ -358,7 +361,12 @@ pub async fn update_datapoint_handler(
                     })
                 })?;
 
-            let resolved_input = chat.input.clone().resolve(&fetch_context).await?;
+            let resolved_input = chat
+                .input
+                .clone()
+                .into_lazy_resolved_input(fetch_context)?
+                .resolve()
+                .await?;
             function_config.validate_input(&chat.input)?;
             // If there are no tool params in the SyntheticChatInferenceDatapoint, we use the default tool params (empty tools).
             // This is consistent with how they are serialized at inference time.
@@ -393,9 +401,10 @@ pub async fn update_datapoint_handler(
             let datapoint = ChatInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: chat.function_name,
+                name: chat.name,
                 id: path_params.datapoint_id,
                 episode_id: None,
-                input: resolved_input,
+                input: resolved_input.into_stored_input(),
                 output,
                 tool_params: chat.tool_params,
                 tags: chat.tags,
@@ -420,7 +429,12 @@ pub async fn update_datapoint_handler(
                         message: format!("Failed to deserialize JSON datapoint: {e}"),
                     })
                 })?;
-            let resolved_input = json.input.clone().resolve(&fetch_context).await?;
+            let resolved_input = json
+                .input
+                .clone()
+                .into_lazy_resolved_input(fetch_context)?
+                .resolve()
+                .await?;
             function_config.validate_input(&json.input)?;
             let dynamic_demonstration_info =
                 DynamicDemonstrationInfo::Json(json.output_schema.clone());
@@ -456,9 +470,10 @@ pub async fn update_datapoint_handler(
             let datapoint = JsonInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: json.function_name,
+                name: json.name,
                 id: path_params.datapoint_id,
                 episode_id: None,
-                input: resolved_input,
+                input: resolved_input.into_stored_input(),
                 output,
                 output_schema: json.output_schema,
                 tags: json.tags,
@@ -524,7 +539,7 @@ pub async fn insert_datapoint(
     dataset_name: String,
     params: InsertDatapointParams,
     config: &Config,
-    http_client: &Client,
+    http_client: &TensorzeroHttpClient,
     clickhouse: &ClickHouseConnectionInfo,
 ) -> Result<Vec<Uuid>, Error> {
     validate_dataset_name(&dataset_name)?;
@@ -562,11 +577,23 @@ pub async fn insert_datapoint(
                         message: format!("Failed to validate chat input for datapoint {i}: {e}"),
                     })
                 })?;
-                let resolved_input = chat.input.resolve(&fetch_context).await.map_err(|e| {
-                    Error::new(ErrorDetails::InternalError {
-                        message: format!("Failed to resolve chat input for datapoint {i}: {e}"),
-                    })
-                })?;
+                let resolved_input = chat
+                    .input
+                    .into_lazy_resolved_input(fetch_context)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InternalError {
+                            message: format!(
+                                "Failed to lazily resolve chat input for datapoint {i}: {e}"
+                            ),
+                        })
+                    })?
+                    .resolve()
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InternalError {
+                            message: format!("Failed to resolve chat input for datapoint {i}: {e}"),
+                        })
+                    })?;
                 // Prepare the tool config
                 let tool_config =
                     function_config.prepare_tool_config(chat.dynamic_tool_params, &config.tools)?;
@@ -608,9 +635,10 @@ pub async fn insert_datapoint(
                 chat_datapoints.push(ChatInferenceDatapoint {
                     dataset_name: dataset_name.clone(),
                     function_name: chat.function_name,
+                    name: chat.name,
                     id: datapoint_id,
                     episode_id: None,
-                    input: resolved_input,
+                    input: resolved_input.into_stored_input(),
                     output,
                     tool_params: tool_config.as_ref().map(|x| x.clone().into()),
                     tags: chat.tags,
@@ -633,15 +661,20 @@ pub async fn insert_datapoint(
                         message: format!("Failed to validate input for datapoint {i}: {e}"),
                     })
                 })?;
-                let resolved_input = json.input.resolve(&fetch_context).await.map_err(|e| {
-                    Error::new(ErrorDetails::InternalError {
-                        message: format!("Failed to resolve input for datapoint {i}: {e}"),
-                    })
-                })?;
+                let resolved_input = json
+                    .input
+                    .into_lazy_resolved_input(fetch_context)?
+                    .resolve()
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InternalError {
+                            message: format!("Failed to resolve input for datapoint {i}: {e}"),
+                        })
+                    })?;
                 // Validate the outputs against the output schema
                 let output_schema = json
                     .output_schema
-                    .unwrap_or(json_function_config.output_schema.value.clone());
+                    .unwrap_or_else(|| json_function_config.output_schema.value.clone());
                 let dynamic_demonstration_info =
                     DynamicDemonstrationInfo::Json(output_schema.clone());
                 let output = if let Some(output) = json.output {
@@ -684,9 +717,10 @@ pub async fn insert_datapoint(
                 let datapoint = JsonInferenceDatapoint {
                     dataset_name: dataset_name.clone(),
                     function_name: json.function_name,
+                    name: json.name,
                     id: datapoint_id,
                     episode_id: None,
-                    input: resolved_input,
+                    input: resolved_input.into_stored_input(),
                     output,
                     output_schema,
                     tags: json.tags,
@@ -745,18 +779,18 @@ pub async fn delete_datapoint(
     // The INSERT INTO SELECT FROM will just not write anything if the datapoint doesn't exist.
     let json_delete_query = r"
     INSERT INTO JsonInferenceDatapoint
-    (dataset_name, function_name, id, episode_id, input, output, output_schema,
+    (dataset_name, function_name, name, id, episode_id, input, output, output_schema,
      tags, auxiliary, is_deleted, is_custom, source_inference_id, updated_at, staled_at)
-    SELECT dataset_name, function_name, id, episode_id, input, output, output_schema,
+    SELECT dataset_name, function_name, name, id, episode_id, input, output, output_schema,
            tags, auxiliary, is_deleted, is_custom, source_inference_id, now64(), now64()
     FROM JsonInferenceDatapoint
     WHERE id = {datapoint_id: UUID} AND dataset_name = {dataset_name: String}
 ";
     let chat_delete_query = r"
     INSERT INTO ChatInferenceDatapoint
-    (dataset_name, function_name, id, episode_id, input, output, tool_params,
+    (dataset_name, function_name, name, id, episode_id, input, output, tool_params,
      tags, auxiliary, is_deleted, is_custom, source_inference_id, updated_at, staled_at)
-    SELECT dataset_name, function_name, id, episode_id, input, output, tool_params,
+    SELECT dataset_name, function_name, name, id, episode_id, input, output, tool_params,
            tags, auxiliary, is_deleted, is_custom, source_inference_id, now64(), now64()
     FROM ChatInferenceDatapoint
     WHERE id = {datapoint_id: UUID} AND dataset_name = {dataset_name: String}
@@ -827,6 +861,7 @@ pub async fn list_datapoints(
             'chat' as type,
             dataset_name,
             function_name,
+            name,
             id,
             episode_id,
             input,
@@ -855,6 +890,7 @@ pub async fn list_datapoints(
             'json' as type,
             dataset_name,
             function_name,
+            name,
             id,
             episode_id,
             input,
@@ -988,6 +1024,7 @@ pub async fn get_datapoint(
             'chat' as type,
             dataset_name,
             function_name,
+            name,
             id,
             episode_id,
             input,
@@ -1008,6 +1045,7 @@ pub async fn get_datapoint(
             'json' as type,
             dataset_name,
             function_name,
+            name,
             id,
             episode_id,
             input,
@@ -1120,7 +1158,7 @@ impl Datapoint {
         }
     }
 
-    pub fn input(&self) -> &ResolvedInput {
+    pub fn input(&self) -> &StoredInput {
         match self {
             Datapoint::Chat(datapoint) => &datapoint.input,
             Datapoint::Json(datapoint) => &datapoint.input,
@@ -1233,6 +1271,8 @@ impl std::fmt::Display for Datapoint {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ChatDatapointInsert {
     pub function_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     pub input: Input,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<Value>,
@@ -1245,6 +1285,8 @@ pub struct ChatDatapointInsert {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct JsonDatapointInsert {
     pub function_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     pub input: Input,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<Value>,
@@ -1263,7 +1305,7 @@ pub struct ChatInferenceDatapoint {
     pub id: Uuid,
     pub episode_id: Option<Uuid>,
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
@@ -1286,6 +1328,9 @@ pub struct ChatInferenceDatapoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub staled_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 impl std::fmt::Display for ChatInferenceDatapoint {
@@ -1305,7 +1350,7 @@ pub struct JsonInferenceDatapoint {
     pub id: Uuid,
     pub episode_id: Option<Uuid>,
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
-    pub input: ResolvedInput,
+    pub input: StoredInput,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
@@ -1326,6 +1371,9 @@ pub struct JsonInferenceDatapoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub staled_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 impl std::fmt::Display for JsonInferenceDatapoint {
@@ -1343,17 +1391,24 @@ impl StoredSample for Datapoint {
         }
     }
 
-    fn input(&self) -> &ResolvedInput {
+    fn input(&self) -> &StoredInput {
         match self {
             Datapoint::Chat(datapoint) => &datapoint.input,
             Datapoint::Json(datapoint) => &datapoint.input,
         }
     }
 
-    fn input_mut(&mut self) -> &mut ResolvedInput {
+    fn input_mut(&mut self) -> &mut StoredInput {
         match self {
             Datapoint::Chat(datapoint) => &mut datapoint.input,
             Datapoint::Json(datapoint) => &mut datapoint.input,
+        }
+    }
+
+    fn into_input(self) -> StoredInput {
+        match self {
+            Datapoint::Chat(datapoint) => datapoint.input,
+            Datapoint::Json(datapoint) => datapoint.input,
         }
     }
 
@@ -1362,7 +1417,8 @@ impl StoredSample for Datapoint {
             Datapoint::Chat(datapoint) => SimpleStoredSampleInfo {
                 function_name: datapoint.function_name,
                 input: datapoint.input,
-                output: datapoint.output,
+                output: datapoint.output.clone(),
+                stored_output: datapoint.output.map(StoredOutput::Chat),
                 dispreferred_outputs: Vec::default(),
                 tool_params: datapoint.tool_params,
                 output_schema: None,
@@ -1371,6 +1427,7 @@ impl StoredSample for Datapoint {
                 tags: datapoint.tags.unwrap_or_default(),
             },
             Datapoint::Json(datapoint) => {
+                let stored_output = datapoint.output.clone().map(StoredOutput::Json);
                 let output = datapoint.output.map(|output| match output.raw {
                     Some(raw) => vec![ContentBlockChatOutput::Text(Text { text: raw })],
                     None => vec![],
@@ -1379,6 +1436,7 @@ impl StoredSample for Datapoint {
                     function_name: datapoint.function_name,
                     input: datapoint.input,
                     output,
+                    stored_output,
                     dispreferred_outputs: Vec::default(),
                     tool_params: None,
                     output_schema: Some(datapoint.output_schema),
@@ -1410,6 +1468,7 @@ where
     }
 }
 
+// SyntheticChatInferenceDatapoints are created by `update_datapoint_handler` and represent datapoints not derived from inferences. In storage their `source_inference_id` is null.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SyntheticChatInferenceDatapoint {
@@ -1427,8 +1486,11 @@ pub struct SyntheticChatInferenceDatapoint {
     pub is_custom: bool,
     #[serde(default)]
     pub source_inference_id: Option<Uuid>,
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
+// SyntheticJsonInferenceDatapoints are created by `update_datapoint_handler` and represent datapoints not derived from inferences. In storage their `source_inference_id` is null.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SyntheticJsonInferenceDatapoint {
@@ -1445,6 +1507,8 @@ pub struct SyntheticJsonInferenceDatapoint {
     pub is_custom: bool,
     #[serde(default)]
     pub source_inference_id: Option<Uuid>,
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {
@@ -1479,6 +1543,7 @@ async fn put_chat_datapoints(
         (
             dataset_name,
             function_name,
+            name,
             id,
             episode_id,
             input,
@@ -1493,6 +1558,7 @@ async fn put_chat_datapoints(
         SELECT
             new_data.dataset_name,
             new_data.function_name,
+            new_data.name,
             new_data.id,
             new_data.episode_id,
             new_data.input,
@@ -1508,7 +1574,7 @@ async fn put_chat_datapoints(
 
     let external_data = ExternalDataInfo {
         external_data_name: "new_data".to_string(),
-        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID)".to_string(),
+        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID)".to_string(),
         format: "JSONEachRow".to_string(),
         data: serialized_datapoints.join("\n"),
     };
@@ -1540,6 +1606,7 @@ async fn put_json_datapoints(
         (
             dataset_name,
             function_name,
+            name,
             id,
             episode_id,
             input,
@@ -1554,6 +1621,7 @@ async fn put_json_datapoints(
         SELECT
             new_data.dataset_name,
             new_data.function_name,
+            new_data.name,
             new_data.id,
             new_data.episode_id,
             new_data.input,
@@ -1569,7 +1637,7 @@ async fn put_json_datapoints(
 
     let external_data = ExternalDataInfo {
         external_data_name: "new_data".to_string(),
-        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID)".to_string(),
+        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID)".to_string(),
         format: "JSONEachRow".to_string(),
         data: serialized_datapoints.join("\n"),
     };

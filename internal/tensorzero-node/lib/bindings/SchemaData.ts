@@ -6,7 +6,5 @@ import type { StaticJSONSchema } from "./StaticJSONSchema";
  * These are used by variants to construct a `TemplateWithSchema`
  */
 export type SchemaData = {
-  user: StaticJSONSchema | null;
-  assistant: StaticJSONSchema | null;
-  system: StaticJSONSchema | null;
+  [key in string]?: { schema: StaticJSONSchema; legacy_definition: boolean };
 };

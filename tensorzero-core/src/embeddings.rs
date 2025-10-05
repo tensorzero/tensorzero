@@ -3,16 +3,24 @@ use std::time::Duration;
 use std::{collections::HashMap, sync::Arc};
 
 use crate::cache::{
-    embedding_cache_lookup, start_cache_write, CacheData, EmbeddingCacheData,
+    embedding_cache_lookup, start_cache_write, CacheData, CacheValidationInfo, EmbeddingCacheData,
     EmbeddingModelProviderRequest,
 };
-use crate::config::{ProviderTypesConfig, TimeoutsConfig};
+use crate::config::{provider_types::ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::extra_body::ExtraBodyConfig;
+use crate::inference::types::RequestMessagesOrBatch;
+use crate::inference::types::{ContentBlock, Text};
 use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
-use crate::model_table::BaseModelTable;
-use crate::model_table::ShorthandModelConfig;
+use crate::model_table::{BaseModelTable, ProviderKind, ProviderTypeDefaultCredentials};
+use crate::model_table::{OpenAIKind, ShorthandModelConfig};
 use crate::providers::azure::AzureProvider;
+use crate::rate_limiting::{
+    get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
+    RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest, RateLimitedResponse,
+    ScopeInfo,
+};
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
@@ -23,10 +31,10 @@ use crate::{
     providers::openai::OpenAIProvider,
 };
 use futures::future::try_join_all;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::time::error::Elapsed;
-use tracing::instrument;
+use tracing::{instrument, Span};
+use tracing_futures::Instrument;
 use uuid::Uuid;
 
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -37,12 +45,20 @@ pub type EmbeddingModelTable = BaseModelTable<EmbeddingModelConfig>;
 impl ShorthandModelConfig for EmbeddingModelConfig {
     const SHORTHAND_MODEL_PREFIXES: &[&str] = &["openai::"];
     const MODEL_TYPE: &str = "Embedding model";
-    async fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
+    async fn from_shorthand(
+        provider_type: &str,
+        model_name: &str,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self, Error> {
         let model_name = model_name.to_string();
         let provider_config = match provider_type {
-            "openai" => {
-                EmbeddingProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?)
-            }
+            "openai" => EmbeddingProviderConfig::OpenAI(OpenAIProvider::new(
+                model_name,
+                None,
+                OpenAIKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
+            )),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
             _ => {
@@ -53,14 +69,14 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
         };
         let provider_info = EmbeddingProviderInfo {
             inner: provider_config,
-            timeouts: TimeoutsConfig::default(),
+            timeout_ms: None,
             provider_name: Arc::from(provider_type.to_string()),
             extra_body: Default::default(),
         };
         Ok(EmbeddingModelConfig {
             routing: vec![provider_type.to_string().into()],
             providers: HashMap::from([(provider_type.to_string().into(), provider_info)]),
-            timeouts: TimeoutsConfig::default(),
+            timeout_ms: None,
         })
     }
 
@@ -77,6 +93,8 @@ pub struct UninitializedEmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
     pub providers: HashMap<Arc<str>, UninitializedEmbeddingProviderConfig>,
     #[serde(default)]
+    pub timeout_ms: Option<u64>,
+    #[serde(default)]
     pub timeouts: TimeoutsConfig,
 }
 
@@ -84,9 +102,31 @@ impl UninitializedEmbeddingModelConfig {
     pub async fn load(
         self,
         provider_types: &ProviderTypesConfig,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<EmbeddingModelConfig, Error> {
+        // Handle timeout deprecation
+        let timeout_ms = match (self.timeout_ms, self.timeouts.non_streaming.total_ms) {
+            (Some(timeout_ms), None) => Some(timeout_ms),
+            (None, Some(old_timeout)) => {
+                tracing::warn!(
+                    "Deprecation Warning: `timeouts` is deprecated for embedding models. \
+                    Please use `timeout_ms` instead."
+                );
+                Some(old_timeout)
+            }
+            (None, None) => None,
+            (Some(_), Some(_)) => {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: "`timeout_ms` and `timeouts` cannot both be set for embedding models"
+                        .to_string(),
+                }));
+            }
+        };
+
         let providers = try_join_all(self.providers.into_iter().map(|(name, config)| async {
-            let provider_config = config.load(provider_types, name.clone()).await?;
+            let provider_config = config
+                .load(provider_types, name.clone(), default_credentials)
+                .await?;
             Ok::<_, Error>((name, provider_config))
         }))
         .await?
@@ -95,7 +135,7 @@ impl UninitializedEmbeddingModelConfig {
         Ok(EmbeddingModelConfig {
             routing: self.routing,
             providers,
-            timeouts: self.timeouts,
+            timeout_ms,
         })
     }
 }
@@ -106,7 +146,7 @@ impl UninitializedEmbeddingModelConfig {
 pub struct EmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
     pub providers: HashMap<Arc<str>, EmbeddingProviderInfo>,
-    pub timeouts: TimeoutsConfig,
+    pub timeout_ms: Option<u64>,
 }
 
 impl EmbeddingModelConfig {
@@ -127,8 +167,9 @@ impl EmbeddingModelConfig {
                 })?;
                 let provider_request = EmbeddingModelProviderRequest {
                     request,
-                    provider_name,
                     model_name,
+                    provider_name,
+                    otlp_config: clients.otlp_config,
                 };
                 // TODO: think about how to best handle errors here
                 if clients.cache_options.enabled.read() {
@@ -144,13 +185,11 @@ impl EmbeddingModelConfig {
                         return Ok(cache_lookup);
                     }
                 }
+                let scope_info = ScopeInfo {
+                    tags: &HashMap::default(),
+                };
                 let response = provider_config
-                    .embed(
-                        request,
-                        clients.http_client,
-                        clients.credentials,
-                        &provider_config.into(),
-                    )
+                    .embed(request, clients, &scope_info, &provider_config.into())
                     .await;
 
                 match response {
@@ -162,19 +201,21 @@ impl EmbeddingModelConfig {
                             }
                             .into());
                             };
-                            if let Some(float_data) = first_embedding.as_float() {
-                                let _ = start_cache_write(
-                                    clients.clickhouse_connection_info,
-                                    provider_request.get_cache_key()?,
-                                    EmbeddingCacheData {
-                                        embedding: float_data.clone(),
+                            let _ = start_cache_write(
+                                clients.clickhouse_connection_info,
+                                provider_request.get_cache_key()?,
+                                CacheData {
+                                    output: EmbeddingCacheData {
+                                        embedding: first_embedding.clone(),
                                     },
-                                    &response.raw_request,
-                                    &response.raw_response,
-                                    &response.usage,
-                                    None,
-                                );
-                            }
+                                    raw_request: response.raw_request.clone(),
+                                    raw_response: response.raw_response.clone(),
+                                    input_tokens: response.usage.input_tokens,
+                                    output_tokens: response.usage.output_tokens,
+                                    finish_reason: None,
+                                },
+                                CacheValidationInfo { tool_config: None },
+                            );
                         };
                         let embedding_response =
                             EmbeddingModelResponse::new(response, provider_name.clone());
@@ -191,8 +232,8 @@ impl EmbeddingModelConfig {
         // Some of the providers may themselves have timeouts, which is fine. Provider timeouts
         // are treated as just another kind of provider error - a timeout of N ms is equivalent
         // to a provider taking N ms, and then producing a normal HTTP error.
-        if let Some(timeout) = self.timeouts.non_streaming.total_ms {
-            let timeout = Duration::from_millis(timeout);
+        if let Some(timeout_ms) = self.timeout_ms {
+            let timeout = Duration::from_millis(timeout_ms);
             tokio::time::timeout(timeout, run_all_embedding_models)
                 .await
                 // Convert the outer `Elapsed` error into a TensorZero error,
@@ -233,6 +274,18 @@ impl EmbeddingInput {
     }
 }
 
+impl RateLimitedInputContent for EmbeddingInput {
+    fn estimated_input_token_usage(&self) -> u64 {
+        match self {
+            EmbeddingInput::Single(text) => get_estimated_tokens(text),
+            EmbeddingInput::Batch(texts) => texts
+                .iter()
+                .map(|text| get_estimated_tokens(text))
+                .sum::<u64>(),
+        }
+    }
+}
+
 impl From<String> for EmbeddingInput {
     fn from(text: String) -> Self {
         EmbeddingInput::Single(text)
@@ -244,6 +297,36 @@ pub struct EmbeddingRequest {
     pub input: EmbeddingInput,
     pub dimensions: Option<u32>,
     pub encoding_format: EmbeddingEncodingFormat,
+}
+
+impl RateLimitedRequest for EmbeddingRequest {
+    fn estimated_resource_usage(
+        &self,
+        resources: &[RateLimitResource],
+    ) -> Result<EstimatedRateLimitResourceUsage, Error> {
+        let EmbeddingRequest {
+            input,
+            dimensions: _,
+            encoding_format: _,
+        } = self;
+
+        let tokens = if resources.contains(&RateLimitResource::Token) {
+            Some(input.estimated_input_token_usage())
+        } else {
+            None
+        };
+
+        let model_inferences = if resources.contains(&RateLimitResource::ModelInference) {
+            Some(1)
+        } else {
+            None
+        };
+
+        Ok(EstimatedRateLimitResourceUsage {
+            model_inferences,
+            tokens,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -273,6 +356,15 @@ pub struct EmbeddingProviderResponse {
     pub latency: Latency,
 }
 
+impl RateLimitedResponse for EmbeddingProviderResponse {
+    fn resource_usage(&self) -> RateLimitResourceUsage {
+        RateLimitResourceUsage {
+            model_inferences: 1,
+            tokens: self.usage.total_tokens() as u64,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct EmbeddingModelResponse {
     pub id: Uuid,
@@ -296,7 +388,7 @@ impl EmbeddingModelResponse {
             id: Uuid::now_v7(),
             created: current_timestamp(),
             input: request.request.input.clone(),
-            embeddings: vec![Embedding::Float(cache_lookup.output.embedding)],
+            embeddings: vec![cache_lookup.output.embedding],
             raw_request: cache_lookup.raw_request,
             raw_response: cache_lookup.raw_response,
             usage: Usage {
@@ -308,6 +400,21 @@ impl EmbeddingModelResponse {
             },
             embedding_provider_name: Arc::from(request.provider_name),
             cached: true,
+        }
+    }
+
+    /// We return the actual usage (meaning the number of tokens the user would be billed for)
+    /// in the HTTP response.
+    /// However, we store the number of tokens that would have been used in the database.
+    /// So we need this function to compute the actual usage in order to send it in the HTTP response.
+    pub fn usage_considering_cached(&self) -> Usage {
+        if self.cached {
+            Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+            }
+        } else {
+            self.usage
         }
     }
 }
@@ -377,10 +484,12 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
             output: vec![],
             created: response.created,
             system: None,
-            input_messages: vec![RequestMessage {
+            input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
                 role: Role::User,
-                content: vec![input.clone().into()],
-            }], // TODO (#399): Store this information in a more appropriate way for this kind of request
+                content: vec![ContentBlock::Text(Text {
+                    text: input.clone(),
+                })],
+            }]), // TODO (#399): Store this information in a more appropriate way for this kind of request
             raw_request: response.raw_request,
             raw_response: response.raw_response,
             usage: response.usage,
@@ -392,12 +501,11 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
         })
     }
 }
-
 pub trait EmbeddingProvider {
     fn embed(
         &self,
         request: &EmbeddingRequest,
-        client: &Client,
+        client: &TensorzeroHttpClient,
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> impl Future<Output = Result<EmbeddingProviderResponse, Error>> + Send;
@@ -418,7 +526,7 @@ pub enum EmbeddingProviderConfig {
 #[cfg_attr(test, ts(export))]
 pub struct EmbeddingProviderInfo {
     pub inner: EmbeddingProviderConfig,
-    pub timeouts: TimeoutsConfig,
+    pub timeout_ms: Option<u64>,
     pub provider_name: Arc<str>,
     #[cfg_attr(test, ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
@@ -449,33 +557,52 @@ impl From<&EmbeddingProviderRequestInfo> for ModelProviderRequestInfo {
     }
 }
 
-impl EmbeddingProvider for EmbeddingProviderInfo {
-    async fn embed(
+impl EmbeddingProviderInfo {
+    pub async fn embed(
         &self,
         request: &EmbeddingRequest,
-        client: &Client,
-        dynamic_api_keys: &InferenceCredentials,
+        clients: &InferenceClients<'_>,
+        scope_info: &ScopeInfo<'_>,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
-        let response_fut = self
-            .inner
-            .embed(request, client, dynamic_api_keys, model_provider_data);
-        Ok(
-            if let Some(timeout_ms) = self.timeouts.non_streaming.total_ms {
-                let timeout = Duration::from_millis(timeout_ms);
-                tokio::time::timeout(timeout, response_fut)
+        let ticket_borrow = clients
+            .rate_limiting_config
+            .consume_tickets(clients.postgres_connection_info, scope_info, request)
+            .await?;
+        let response_fut = self.inner.embed(
+            request,
+            clients.http_client,
+            clients.credentials,
+            model_provider_data,
+        );
+        let response = if let Some(timeout_ms) = self.timeout_ms {
+            let timeout = Duration::from_millis(timeout_ms);
+            tokio::time::timeout(timeout, response_fut)
+                .await
+                .unwrap_or_else(|_: Elapsed| {
+                    Err(Error::new(ErrorDetails::ModelProviderTimeout {
+                        provider_name: self.provider_name.to_string(),
+                        timeout,
+                        streaming: false,
+                    }))
+                })?
+        } else {
+            response_fut.await?
+        };
+        let postgres_connection_info = clients.postgres_connection_info.clone();
+        let resource_usage = response.resource_usage();
+        tokio::spawn(
+            async move {
+                if let Err(e) = ticket_borrow
+                    .return_tickets(&postgres_connection_info, resource_usage)
                     .await
-                    .unwrap_or_else(|_: Elapsed| {
-                        Err(Error::new(ErrorDetails::ModelProviderTimeout {
-                            provider_name: self.provider_name.to_string(),
-                            timeout,
-                            streaming: false,
-                        }))
-                    })?
-            } else {
-                response_fut.await?
-            },
-        )
+                {
+                    tracing::error!("Failed to return rate limit tickets: {}", e);
+                }
+            }
+            .instrument(Span::current()),
+        );
+        Ok(response)
     }
 }
 
@@ -483,6 +610,8 @@ impl EmbeddingProvider for EmbeddingProviderInfo {
 pub struct UninitializedEmbeddingProviderConfig {
     #[serde(flatten)]
     config: UninitializedProviderConfig,
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
     #[serde(default)]
     timeouts: TimeoutsConfig,
     #[serde(default)]
@@ -494,27 +623,50 @@ impl UninitializedEmbeddingProviderConfig {
         self,
         provider_types: &ProviderTypesConfig,
         provider_name: Arc<str>,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<EmbeddingProviderInfo, Error> {
-        let provider_config = self.config.load(provider_types).await?;
-        let timeouts = self.timeouts;
+        let provider_config = self
+            .config
+            .load(provider_types, default_credentials)
+            .await?;
+        // Handle timeout deprecation
+        let timeout_ms = match (self.timeout_ms, self.timeouts.non_streaming.total_ms) {
+            (Some(timeout_ms), None) => Some(timeout_ms),
+            (None, Some(old_timeout)) => {
+                tracing::warn!(
+                    "Deprecation Warning: `timeouts` is deprecated for embedding providers. \
+                    Please use `timeout_ms` instead."
+                );
+                Some(old_timeout)
+            }
+            (None, None) => None,
+            (Some(_), Some(_)) => {
+                return Err(Error::new(ErrorDetails::Config {
+                    message:
+                        "`timeout_ms` and `timeouts` cannot both be set for embedding providers"
+                            .to_string(),
+                }));
+            }
+        };
+
         let extra_body = self.extra_body;
         Ok(match provider_config {
             ProviderConfig::OpenAI(provider) => EmbeddingProviderInfo {
                 inner: EmbeddingProviderConfig::OpenAI(provider),
-                timeouts,
+                timeout_ms,
                 provider_name,
                 extra_body,
             },
             ProviderConfig::Azure(provider) => EmbeddingProviderInfo {
                 inner: EmbeddingProviderConfig::Azure(provider),
-                timeouts,
+                timeout_ms,
                 provider_name,
                 extra_body,
             },
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => EmbeddingProviderInfo {
                 inner: EmbeddingProviderConfig::Dummy(provider),
-                timeouts,
+                timeout_ms,
                 provider_name,
                 extra_body,
             },
@@ -533,7 +685,7 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
     async fn embed(
         &self,
         request: &EmbeddingRequest,
-        client: &Client,
+        client: &TensorzeroHttpClient,
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
@@ -609,7 +761,8 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        db::clickhouse::ClickHouseConnectionInfo,
+        db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
+        model_table::ProviderTypeDefaultCredentials,
     };
 
     use super::*;
@@ -623,7 +776,7 @@ mod tests {
         });
         let bad_provider_info = EmbeddingProviderInfo {
             inner: bad_provider,
-            timeouts: Default::default(),
+            timeout_ms: None,
             provider_name: Arc::from("error".to_string()),
             extra_body: None,
         };
@@ -633,7 +786,7 @@ mod tests {
         });
         let good_provider_info = EmbeddingProviderInfo {
             inner: good_provider,
-            timeouts: Default::default(),
+            timeout_ms: None,
             provider_name: Arc::from("good".to_string()),
             extra_body: None,
         };
@@ -643,7 +796,7 @@ mod tests {
                 ("error".to_string().into(), bad_provider_info),
                 ("good".to_string().into(), good_provider_info),
             ]),
-            timeouts: TimeoutsConfig::default(),
+            timeout_ms: None,
         };
         let request = EmbeddingRequest {
             input: "Hello, world!".to_string().into(),
@@ -655,13 +808,17 @@ mod tests {
                 &request,
                 "fallback",
                 &InferenceClients {
-                    http_client: &Client::new(),
+                    http_client: &TensorzeroHttpClient::new().unwrap(),
+                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
+                    postgres_connection_info: &PostgresConnectionInfo::Disabled,
                     credentials: &InferenceCredentials::default(),
                     cache_options: &CacheOptions {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
-                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
+                    tags: &Default::default(),
+                    rate_limiting_config: &Default::default(),
+                    otlp_config: &Default::default(),
                 },
             )
             .await;
@@ -692,12 +849,17 @@ mod tests {
                 api_base: None,
                 api_key_location: Some(crate::model::CredentialLocation::None),
             },
+            timeout_ms: None,
             timeouts: TimeoutsConfig::default(),
             extra_body: Some(extra_body_config.clone()),
         };
 
         let provider_info = uninitialized_config
-            .load(&ProviderTypesConfig::default(), Arc::from("test_provider"))
+            .load(
+                &ProviderTypesConfig::default(),
+                Arc::from("test_provider"),
+                &ProviderTypeDefaultCredentials::default(),
+            )
             .await
             .unwrap();
 

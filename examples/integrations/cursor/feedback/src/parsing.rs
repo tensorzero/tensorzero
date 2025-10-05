@@ -78,15 +78,14 @@ fn get_language_for_extension(ext: &str) -> Result<Language> {
         "ts" => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
         "tsx" => tree_sitter_typescript::LANGUAGE_TSX.into(),
         "md" => tree_sitter_md::LANGUAGE.into(),
-        _ => return Err(anyhow::anyhow!("Unsupported file extension: {}", ext)),
+        _ => return Err(anyhow::anyhow!("Unsupported file extension: {ext}")),
     };
     w.insert(ext.to_string(), lang);
     if let Some(lang) = w.get(ext) {
         Ok(lang.clone())
     } else {
         Err(anyhow::anyhow!(
-            "Failed to insert language for extension: {}",
-            ext
+            "Failed to insert language for extension: {ext}"
         ))
     }
 }
@@ -97,7 +96,7 @@ pub fn parse_hunk(hunk: &str, hunk_file_extension: &str) -> Result<Tree> {
     parser.set_language(&language)?;
     let tree = parser
         .parse(hunk, None)
-        .ok_or_else(|| anyhow::anyhow!("Failed to parse hunk: {}", hunk))?;
+        .ok_or_else(|| anyhow::anyhow!("Failed to parse hunk: {hunk}"))?;
     Ok(tree)
 }
 
@@ -1650,6 +1649,8 @@ fn process_numbers() {
 
     // Tests for InferenceWithTrees struct
     mod inference_with_trees_tests {
+        use tensorzero_core::inference::types::StoredInput;
+
         use super::*;
         use std::path::PathBuf;
 
@@ -1666,7 +1667,10 @@ fn process_numbers() {
             // Rather than construct InferenceInfo manually, let's just test the struct operations
             let inference = Arc::new(InferenceInfo {
                 id: uuid::Uuid::nil(), // Use nil UUID for testing
-                input: serde_json::from_str(r#"{"messages": []}"#).unwrap(),
+                input: StoredInput {
+                    system: None,
+                    messages: vec![],
+                },
                 output: vec![],
             });
 
@@ -1682,7 +1686,10 @@ fn process_numbers() {
             let trees = vec![];
             let inference = Arc::new(InferenceInfo {
                 id: uuid::Uuid::nil(),
-                input: serde_json::from_str(r#"{"messages": []}"#).unwrap(),
+                input: StoredInput {
+                    system: None,
+                    messages: vec![],
+                },
                 output: vec![],
             });
 
@@ -1698,7 +1705,10 @@ fn process_numbers() {
             let trees = vec![];
             let inference = Arc::new(InferenceInfo {
                 id: uuid::Uuid::nil(),
-                input: serde_json::from_str(r#"{"messages": []}"#).unwrap(),
+                input: StoredInput {
+                    system: None,
+                    messages: vec![],
+                },
                 output: vec![],
             });
 

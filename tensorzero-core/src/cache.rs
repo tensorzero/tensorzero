@@ -1,8 +1,10 @@
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::Arc;
 
+use crate::config::OtlpConfig;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
-use crate::embeddings::{EmbeddingModelResponse, EmbeddingRequest};
+use crate::embeddings::{Embedding, EmbeddingModelResponse, EmbeddingRequest};
 use crate::error::{warn_discarded_cache_write, Error, ErrorDetails};
 use crate::inference::types::file::serialize_with_file_data;
 use crate::inference::types::{
@@ -10,7 +12,8 @@ use crate::inference::types::{
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
 use crate::model::StreamResponse;
-use crate::serde_util::deserialize_json_string;
+use crate::serde_util::{deserialize_json_string, serialize_json_string};
+use crate::tool::{ToolCallConfig, ToolCallOutput};
 use blake3::Hash;
 use clap::ValueEnum;
 use serde::de::{DeserializeOwned, IgnoredAny};
@@ -78,6 +81,7 @@ pub struct BaseModelProviderRequest<'request, T> {
     pub request: &'request T,
     pub model_name: &'request str,
     pub provider_name: &'request str,
+    pub otlp_config: &'request OtlpConfig,
 }
 
 // We need a manual impl to avoid adding a 'T: Copy' bound
@@ -123,6 +127,9 @@ impl EmbeddingModelProviderRequest<'_> {
             model_name,
             provider_name,
             request,
+            // The OTLP config is deliberately not included in the cache key,
+            // since it's only used to construct the OTEL span.
+            otlp_config: _,
         } = self;
         let mut hasher = blake3::Hasher::new();
         hasher.update(model_name.as_bytes());
@@ -149,6 +156,9 @@ impl ModelProviderRequest<'_> {
             model_name,
             provider_name,
             request,
+            // The OTLP config is deliberately not included in the cache key,
+            // since it's only used to construct the OTEL span.
+            otlp_config: _,
         } = self;
         let mut hasher = blake3::Hasher::new();
         hasher.update(model_name.as_bytes());
@@ -216,26 +226,39 @@ pub struct CacheData<T: CacheOutput> {
 /// (e.g. `infer_stream` will never try to deserialize a `NonStreamingCacheData`)
 pub trait CacheOutput {
     /// If this return `false`, then we'll log a warning and skip writing this entry to the cache
-    fn should_write_to_cache(&self) -> bool;
+    fn should_write_to_cache(
+        &self,
+        cache_validation_info: CacheValidationInfo,
+    ) -> impl Future<Output = bool> + Send;
 }
 
 impl CacheOutput for StreamingCacheData {
-    fn should_write_to_cache(&self) -> bool {
+    async fn should_write_to_cache(&self, _cache_validation_info: CacheValidationInfo) -> bool {
+        // TODO - getting access to the tool calls would require re-running `collect_chunks`,
+        // or refactoring it to make the parsed content blocks available when performing the cache write.
+        // For now, we'll just always write to the cache.
         true
     }
 }
 impl CacheOutput for NonStreamingCacheData {
-    fn should_write_to_cache(&self) -> bool {
+    async fn should_write_to_cache(&self, cache_validation_info: CacheValidationInfo) -> bool {
         for block in &self.blocks {
             if let ContentBlockOutput::ToolCall(tool_call) = block {
-                // We skip writing to the cache if the tool call arguments are not valid JSON
-                // We're assuming that it's almost never useful to have an invalid tool call cached
-                // (in particular, tensorzero is not being used with a provider/model that only ever
-                // emits invalid json for its tool call arguments).
-                // The invalid tool call will still be returned to the user, but we won't create a
-                // cache entry, even if the user turned on caching.
-                if serde_json::from_str::<IgnoredAny>(&tool_call.arguments).is_err() {
-                    return false;
+                if cache_validation_info.tool_config.is_some() {
+                    // If we have a tool config, validate against the schema
+                    let output = ToolCallOutput::new(
+                        tool_call.clone(),
+                        cache_validation_info.tool_config.as_ref(),
+                    )
+                    .await;
+                    if output.name.is_none() || output.arguments.is_none() {
+                        return false;
+                    }
+                } else {
+                    // If we don't have a tool config, then just check that the arguments are valid JSON
+                    if serde_json::from_str::<IgnoredAny>(&tool_call.arguments).is_err() {
+                        return false;
+                    }
                 }
             }
         }
@@ -243,16 +266,26 @@ impl CacheOutput for NonStreamingCacheData {
     }
 }
 impl CacheOutput for EmbeddingCacheData {
-    fn should_write_to_cache(&self) -> bool {
+    async fn should_write_to_cache(&self, _cache_validation_info: CacheValidationInfo) -> bool {
         true
     }
 }
 
+/// Cache data for embeddings.
+///
+/// Note: Unlike `NonStreamingCacheData` and `StreamingCacheData`, this requires both `serialize_with` and
+/// `deserialize_with` because `Embedding` is an untagged enum. Without `untagged`, OpenAI's API responses wouldn't
+/// deserialize correctly (they send bare arrays/strings). But with `untagged`, the enum serializes as bare JSON
+/// values ([1.0, 2.0] or "abc"), which breaks `deserialize_json_string` (which expects a JSON-encoded string). So we
+/// need `serialize_json_string` to ensure the data is stored in the format that `deserialize_json_string` expects.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct EmbeddingCacheData {
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub embedding: Vec<f32>,
+    #[serde(
+        serialize_with = "serialize_json_string",
+        deserialize_with = "deserialize_json_string"
+    )]
+    pub embedding: Embedding,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -272,9 +305,15 @@ pub struct StreamingCacheData {
 fn spawn_maybe_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
     row: FullCacheRow<T>,
     clickhouse_client: ClickHouseConnectionInfo,
+    cache_validation_info: CacheValidationInfo,
 ) {
     tokio::spawn(async move {
-        if row.data.output.should_write_to_cache() {
+        if row
+            .data
+            .output
+            .should_write_to_cache(cache_validation_info)
+            .await
+        {
             if let Err(e) = clickhouse_client
                 .write_batched(&[row], TableName::ModelInferenceCache)
                 .await
@@ -287,38 +326,38 @@ fn spawn_maybe_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
     });
 }
 
+/// Holds fields used to validate a `CacheData` before writing.
+/// We use this to skip writing certain 'bad' cache entries
+/// (e.g. when a tool call fails validation), while still allowing the
+/// inference itself to succeed and return a response to the user
+///
+/// In the future, we may perform additional checks
+/// (e.g. validating against the `output_schema`).
+pub struct CacheValidationInfo {
+    // The `ToolCallConfig` for the top-level inference request, if present
+    // This is deliberately not part of the cache key - we only use it to
+    // skip writing certain cache entries.
+    pub tool_config: Option<ToolCallConfig>,
+}
+
 // This doesn't block
 pub fn start_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
     clickhouse_client: &ClickHouseConnectionInfo,
     cache_key: CacheKey,
-    output: T,
-    raw_request: &str,
-    raw_response: &str,
-    usage: &Usage,
-    finish_reason: Option<&FinishReason>,
+    cache_data: CacheData<T>,
+    cache_validation_info: CacheValidationInfo,
 ) -> Result<(), Error> {
     let short_cache_key = cache_key.get_short_key()?;
     let long_cache_key = cache_key.get_long_key();
-    let raw_request = raw_request.to_string();
-    let raw_response = raw_response.to_string();
-    let input_tokens = usage.input_tokens;
-    let output_tokens = usage.output_tokens;
     let clickhouse_client = clickhouse_client.clone();
-    let finish_reason = finish_reason.cloned();
     spawn_maybe_cache_write(
         FullCacheRow {
             short_cache_key,
             long_cache_key,
-            data: CacheData {
-                output,
-                raw_request,
-                raw_response,
-                input_tokens,
-                output_tokens,
-                finish_reason,
-            },
+            data: cache_data,
         },
         clickhouse_client,
+        cache_validation_info,
     );
     Ok(())
 }
@@ -341,6 +380,7 @@ pub fn start_cache_write_streaming(
     chunks: Vec<ProviderInferenceResponseChunk>,
     raw_request: &str,
     usage: &Usage,
+    tool_config: Option<ToolCallConfig>,
 ) -> Result<(), Error> {
     let short_cache_key = cache_key.get_short_key()?;
     let long_cache_key = cache_key.get_long_key();
@@ -379,6 +419,7 @@ pub fn start_cache_write_streaming(
             },
         },
         clickhouse_client,
+        CacheValidationInfo { tool_config },
     );
     Ok(())
 }
@@ -524,6 +565,7 @@ mod tests {
             output_schema: None,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             extra_cache_key: None,
             stop_sequences: None,
         };
@@ -531,6 +573,7 @@ mod tests {
             request: &model_inference_request,
             model_name: "test_model",
             provider_name: "test_provider",
+            otlp_config: &Default::default(),
         };
         let cache_key = model_provider_request.get_cache_key().unwrap();
         let model_inference_request = ModelInferenceRequest {
@@ -548,6 +591,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -557,6 +601,7 @@ mod tests {
             request: &model_inference_request,
             model_name: "test_model",
             provider_name: "test_provider",
+            otlp_config: &Default::default(),
         };
         let new_cache_key = model_provider_request.get_cache_key().unwrap();
         // Make sure the first two get the same cache key (and that we ignore the inference_id)
@@ -576,6 +621,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -585,6 +631,7 @@ mod tests {
             request: &streaming_model_inference_request,
             model_name: "test_model",
             provider_name: "test_provider",
+            otlp_config: &Default::default(),
         };
         let streaming_cache_key = model_provider_request.get_cache_key().unwrap();
         assert_ne!(cache_key, streaming_cache_key);

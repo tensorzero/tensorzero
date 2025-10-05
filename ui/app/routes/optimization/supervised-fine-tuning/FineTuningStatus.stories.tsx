@@ -4,12 +4,10 @@ import type {
   OptimizationJobInfo,
   OptimizationJobHandle,
 } from "tensorzero-node";
-import { withRouter } from "storybook-addon-remix-react-router";
 
 const meta = {
   title: "SFT/FineTuningStatus",
   component: FineTuningStatus,
-  decorators: [withRouter],
   render: (args) => (
     <div className="w-[80vw] p-4">
       <FineTuningStatus {...args} />
@@ -33,22 +31,6 @@ const baseFormData = {
   maxSamples: 1000,
   threshold: 0.8,
   jobId: "01234567-89ab-cdef-0123-456789abcdef",
-};
-
-export const Idle: Story = {
-  args: {
-    status: { status: "idle" },
-    formData: baseFormData,
-    result: null,
-    jobHandle: {
-      type: "openai_sft",
-      job_id: "ftjob-abc123xyz789",
-      job_url: "https://platform.openai.com/finetune/ftjob-abc123xyz789",
-      job_api_url:
-        "https://api.openai.com/v1/fine_tuning/jobs/ftjob-abc123xyz789",
-      credential_location: null,
-    } as OptimizationJobHandle,
-  },
 };
 
 export const Running: Story = {
@@ -102,26 +84,29 @@ export const Completed: Story = {
       status: "completed",
       output: {
         type: "model",
-        routing: ["ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123"],
-        providers: {
-          "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123": {
-            type: "openai",
-            model_name: "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
-            api_base: null,
-            timeouts: {
-              non_streaming: { total_ms: null },
-              streaming: { ttft_ms: null },
+        content: {
+          routing: ["ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123"],
+          providers: {
+            "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123": {
+              type: "openai",
+              model_name:
+                "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
+              api_base: null,
+              timeouts: {
+                non_streaming: { total_ms: null },
+                streaming: { ttft_ms: null },
+              },
+              discard_unknown_chunks: false,
+              api_key_location: null,
             },
-            discard_unknown_chunks: false,
-            api_key_location: null,
           },
-        },
-        timeouts: {
-          non_streaming: {
-            total_ms: null,
-          },
-          streaming: {
-            ttft_ms: null,
+          timeouts: {
+            non_streaming: {
+              total_ms: null,
+            },
+            streaming: {
+              ttft_ms: null,
+            },
           },
         },
       },
@@ -166,26 +151,29 @@ export const LongJobId: Story = {
       status: "completed",
       output: {
         type: "model",
-        routing: ["ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123"],
-        providers: {
-          "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123": {
-            type: "openai",
-            model_name: "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
-            api_base: null,
-            timeouts: {
-              non_streaming: { total_ms: null },
-              streaming: { ttft_ms: null },
+        content: {
+          routing: ["ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123"],
+          providers: {
+            "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123": {
+              type: "openai",
+              model_name:
+                "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
+              api_base: null,
+              timeouts: {
+                non_streaming: { total_ms: null },
+                streaming: { ttft_ms: null },
+              },
+              discard_unknown_chunks: false,
+              api_key_location: null,
             },
-            discard_unknown_chunks: false,
-            api_key_location: null,
           },
-        },
-        timeouts: {
-          non_streaming: {
-            total_ms: 300000n,
-          },
-          streaming: {
-            ttft_ms: 300000n,
+          timeouts: {
+            non_streaming: {
+              total_ms: 300000n,
+            },
+            streaming: {
+              ttft_ms: 300000n,
+            },
           },
         },
       },

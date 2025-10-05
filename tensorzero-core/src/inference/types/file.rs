@@ -1,11 +1,18 @@
+use std::borrow::Cow;
+
+use futures::FutureExt;
 use mime::MediaType;
 use scoped_tls::scoped_thread_local;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use url::Url;
 
-use super::{resolved_input::FileWithPath, ContentBlock, RequestMessage};
-use crate::error::{Error, ErrorDetails};
+use super::{ContentBlock, RequestMessage};
+use crate::{
+    error::{Error, ErrorDetails},
+    http::TensorzeroHttpClient,
+    inference::types::resolved_input::LazyFile,
+};
 use aws_smithy_types::base64;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -29,10 +36,6 @@ pub fn require_image(mime_type: &MediaType, provider_type: &str) -> Result<(), E
     Ok(())
 }
 
-fn skip_serialize_file_data(_: &Option<String>) -> bool {
-    !SERIALIZE_FILE_DATA.is_set()
-}
-
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(test, ts(export))]
@@ -43,11 +46,19 @@ pub struct Base64File {
     #[cfg_attr(test, ts(type = "string"))]
     pub mime_type: MediaType,
     // TODO - should we add a wrapper type to enforce base64?
-    #[serde(skip_serializing_if = "skip_serialize_file_data")]
-    #[serde(default)]
-    // This is normally `Some`, unless it was deserialized from ClickHouse
-    // (with the image data stripped out).
-    pub data: Option<String>,
+    pub data: String,
+}
+
+/// Like `Base64File`, but without the data field.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass)]
+pub struct Base64FileMetadata {
+    // The original url we used to download the file
+    pub url: Option<Url>,
+    #[cfg_attr(test, ts(type = "string"))]
+    pub mime_type: MediaType,
 }
 
 impl std::fmt::Display for Base64File {
@@ -59,11 +70,7 @@ impl std::fmt::Display for Base64File {
 
 impl Base64File {
     pub fn data(&self) -> Result<&String, Error> {
-        self.data.as_ref().ok_or_else(|| {
-            Error::new(ErrorDetails::InternalError {
-                message: "Tried to get image data from deserialized Base64File".to_string(),
-            })
-        })
+        Ok(&self.data)
     }
 }
 #[cfg(feature = "pyo3")]
@@ -112,7 +119,7 @@ pub enum File {
 }
 
 impl File {
-    pub async fn take_or_fetch(self, client: &reqwest::Client) -> Result<Base64File, Error> {
+    pub async fn take_or_fetch(self, client: &TensorzeroHttpClient) -> Result<Base64File, Error> {
         match self {
             File::Url { url, mime_type } => {
                 let response = client.get(url.clone()).send().await.map_err(|e| {
@@ -164,13 +171,13 @@ impl File {
                 Ok(Base64File {
                     url: Some(url.clone()),
                     mime_type,
-                    data: Some(data),
+                    data,
                 })
             }
             File::Base64 { mime_type, data } => Ok(Base64File {
                 url: None,
                 mime_type,
-                data: Some(data),
+                data,
             }),
         }
     }
@@ -183,14 +190,31 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
     for message in input_messages {
         for content in &message.content {
             if let ContentBlock::File(file) = content {
-                let FileWithPath {
-                    file,
-                    storage_path: _,
-                } = &**file;
-                if let Some(data) = &file.data {
-                    raw_request = raw_request.replace(data, &format!("<TENSORZERO_FILE_{i}>"));
+                let file_with_path = match &**file {
+                    LazyFile::Url {
+                        future,
+                        file_url: _,
+                    } => {
+                        // If we actually sent the file bytes to some model provider, then the
+                        // Shared future must be ready, so we'll get a file from `now_or_never`.
+                        // Otherwise, the file cannot have been sent to a model provider (since the
+                        // future was never `.await`ed before we constructed `raw_request`), so
+                        // there's nothing to strip from the message.
+                        // We ignore errors here, since an error during file resolution means that
+                        // we cannot have included the file bytes in `raw_request`.
+                        if let Some(Ok(file)) = future.clone().now_or_never() {
+                            Some(Cow::Owned(file))
+                        } else {
+                            None
+                        }
+                    }
+                    LazyFile::FileWithPath(file) => Some(Cow::Borrowed(file)),
+                };
+                if let Some(file) = file_with_path {
+                    raw_request =
+                        raw_request.replace(&file.file.data, &format!("<TENSORZERO_FILE_{i}>"));
+                    i += 1;
                 }
-                i += 1;
             }
         }
     }
@@ -208,6 +232,7 @@ pub fn mime_type_to_ext(mime_type: &MediaType) -> Result<Option<&'static str>, E
         _ if mime_type == &mime::IMAGE_GIF => Some("gif"),
         _ if mime_type == &mime::APPLICATION_PDF => Some("pdf"),
         _ if mime_type == "image/webp" => Some("webp"),
+        _ if mime_type == "text/plain" => Some("txt"),
         _ => {
             let guess = mime_guess::get_mime_extensions_str(mime_type.as_ref())
                 .and_then(|types| types.last());
@@ -265,7 +290,7 @@ mod tests {
 
     use crate::inference::types::{
         file::{filename_to_mime_type, sanitize_raw_request},
-        resolved_input::FileWithPath,
+        resolved_input::{FileWithPath, LazyFile},
         storage::{StorageKind, StoragePath},
         Base64File, ContentBlock, RequestMessage, Role,
     };
@@ -283,71 +308,71 @@ mod tests {
                     RequestMessage {
                         role: Role::User,
                         content: vec![
-                            ContentBlock::File(Box::new(FileWithPath {
+                            ContentBlock::File(Box::new(LazyFile::FileWithPath(FileWithPath {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
-                                    data: Some("my-image-1-data".to_string()),
+                                    data: "my-image-1-data".to_string(),
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,
                                     path: object_store::path::Path::parse("my-image-1-path")
                                         .unwrap(),
                                 },
-                            })),
-                            ContentBlock::File(Box::new(FileWithPath {
+                            }))),
+                            ContentBlock::File(Box::new(LazyFile::FileWithPath(FileWithPath {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
-                                    data: Some("my-image-2-data".to_string()),
+                                    data: "my-image-2-data".to_string(),
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,
                                     path: object_store::path::Path::parse("my-image-2-path")
                                         .unwrap(),
                                 },
-                            })),
-                            ContentBlock::File(Box::new(FileWithPath {
+                            }))),
+                            ContentBlock::File(Box::new(LazyFile::FileWithPath(FileWithPath {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
-                                    data: Some("my-image-1-data".to_string()),
+                                    data: "my-image-1-data".to_string(),
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,
                                     path: object_store::path::Path::parse("my-image-1-path")
                                         .unwrap(),
                                 },
-                            })),
+                            }))),
                         ],
                     },
                     RequestMessage {
                         role: Role::User,
                         content: vec![
-                            ContentBlock::File(Box::new(FileWithPath {
+                            ContentBlock::File(Box::new(LazyFile::FileWithPath(FileWithPath {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
-                                    data: Some("my-image-3-data".to_string()),
+                                    data: "my-image-3-data".to_string(),
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,
                                     path: object_store::path::Path::parse("my-image-3-path")
                                         .unwrap(),
                                 },
-                            })),
-                            ContentBlock::File(Box::new(FileWithPath {
+                            }))),
+                            ContentBlock::File(Box::new(LazyFile::FileWithPath(FileWithPath {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
-                                    data: Some("my-image-1-data".to_string()),
+                                    data: "my-image-1-data".to_string(),
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,
                                     path: object_store::path::Path::parse("my-image-1-path")
                                         .unwrap(),
                                 },
-                            }))
+                            })))
                         ],
                     }
                 ],

@@ -3,7 +3,7 @@ use regex::Regex;
 use serde_json::Value;
 use std::path::PathBuf;
 use tensorzero_core::inference::types::{
-    ContentBlockChatOutput, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent,
+    ContentBlockChatOutput, StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
 /*
 This file handles the outputs of inferences from Cursor. We handle two cases:
@@ -23,7 +23,7 @@ pub struct CursorCodeBlock {
 /// Instead, we use the content of the system message to determine which parser to use.
 /// This will be brittle to Cursor changing their system prompt.
 pub fn parse_cursor_output(
-    input: &ResolvedInput,
+    input: &StoredInput,
     output: &Vec<ContentBlockChatOutput>,
 ) -> Result<Vec<CursorCodeBlock>> {
     let Some(Value::String(system)) = &input.system else {
@@ -54,8 +54,7 @@ pub fn parse_cursor_output(
     Produce nothing else other than the command to run, on a single line. Surround the insertion with the tags <cmd> and</cmd>. For example, if you want to run ls -la, you would write <cmd>ls -la</cmd>.
      */
     Err(anyhow::anyhow!(
-        "System message doesn't fit our expected format: {}",
-        system
+        "System message doesn't fit our expected format: {system}",
     ))
 }
 
@@ -127,7 +126,7 @@ fn parse_cursor_ask_output(output_text: &str) -> Result<Vec<CursorCodeBlock>> {
 /// Therefore, we can simply extract the code block from the output and remove the comments.
 /// This is equivalent to taking the whole string except for the first two lines and the last 2 lines.
 fn parse_cursor_edit_output(
-    messages: &[ResolvedInputMessage],
+    messages: &[StoredInputMessage],
     output_text: &str,
 ) -> Result<Vec<CursorCodeBlock>> {
     // There should be 2 messages in the input:
@@ -139,7 +138,7 @@ fn parse_cursor_edit_output(
     }
     let second_message = &messages[1];
     let second_message_text = match second_message.content.as_slice() {
-        [ResolvedInputMessageContent::Text { value: text }] => {
+        [StoredInputMessageContent::Text { value: text }] => {
             let Value::String(text) = text else {
                 return Err(anyhow::anyhow!("Expected text in second user message"));
             };
@@ -200,7 +199,7 @@ fn parse_cursor_edit_output(
 /// and then the next line is ```path/to/file.ext
 /// We can grab this via a regex.
 fn parse_cursor_insert_output(
-    messages: &[ResolvedInputMessage],
+    messages: &[StoredInputMessage],
     output_text: &str,
 ) -> Result<Vec<CursorCodeBlock>> {
     if messages.is_empty() {
@@ -212,7 +211,7 @@ fn parse_cursor_insert_output(
     // Extract workspace path from the first message
     let first_message = &messages[0];
     let first_message_text = match first_message.content.as_slice() {
-        [ResolvedInputMessageContent::Text { value }] => {
+        [StoredInputMessageContent::Text { value }] => {
             let Value::String(s) = value else {
                 return Err(anyhow::anyhow!("Expected text in first user message"));
             };

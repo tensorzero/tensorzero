@@ -15,7 +15,7 @@ async fn get_providers() -> E2ETestProviders {
     let standard_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "groq".to_string(),
-        model_name: "mixtral-groq".into(),
+        model_name: "groq-qwen".into(),
         model_provider_name: "groq".into(),
         credentials: HashMap::new(),
     }];
@@ -23,7 +23,7 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "groq-extra-body".to_string(),
-        model_name: "mixtral-groq".into(),
+        model_name: "groq-qwen".into(),
         model_provider_name: "groq".into(),
         credentials: HashMap::new(),
     }];
@@ -31,7 +31,7 @@ async fn get_providers() -> E2ETestProviders {
     let bad_auth_extra_headers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "groq-extra-headers".to_string(),
-        model_name: "mixtral-groq".into(),
+        model_name: "groq-qwen".into(),
         model_provider_name: "groq".into(),
         credentials: HashMap::new(),
     }];
@@ -39,7 +39,7 @@ async fn get_providers() -> E2ETestProviders {
     let inference_params_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "groq".to_string(),
-        model_name: "mixtral-groq".into(),
+        model_name: "groq-qwen".into(),
         model_provider_name: "groq".into(),
         credentials: credentials.clone(),
     }];
@@ -47,7 +47,7 @@ async fn get_providers() -> E2ETestProviders {
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "groq-dynamic".to_string(),
-        model_name: "mixtral-groq-dynamic".into(),
+        model_name: "groq-qwen-dynamic".into(),
         model_provider_name: "groq".into(),
         credentials,
     }];
@@ -64,7 +64,7 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "groq".to_string(),
-            model_name: "mixtral-groq".into(),
+            model_name: "groq-qwen".into(),
             model_provider_name: "groq".into(),
             credentials: HashMap::new(),
         },
@@ -74,11 +74,27 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "groq-strict".to_string(),
-            model_name: "mixtral-groq".into(),
+            model_name: "groq-qwen".into(),
             model_provider_name: "groq".into(),
             credentials: HashMap::new(),
         },
     ];
+
+    let provider_type_default_credentials_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "groq".to_string(),
+        model_name: "qwen/qwen3-32b".into(),
+        model_provider_name: "groq".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let provider_type_default_credentials_shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "groq-shorthand".to_string(),
+        model_name: "groq::qwen/qwen3-32b".into(),
+        model_provider_name: "groq".into(),
+        credentials: HashMap::new(),
+    }];
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
@@ -88,6 +104,9 @@ async fn get_providers() -> E2ETestProviders {
         embeddings: vec![],
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
+        provider_type_default_credentials: provider_type_default_credentials_providers,
+        provider_type_default_credentials_shorthand:
+            provider_type_default_credentials_shorthand_providers,
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),

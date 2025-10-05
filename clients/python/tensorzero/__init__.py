@@ -1,7 +1,9 @@
 import typing as t
+import warnings
 from importlib.metadata import version
 
 import httpx
+from typing_extensions import Any, deprecated
 
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import (
@@ -11,13 +13,15 @@ from .tensorzero import (
     ChatCompletionConfig,
     Config,
     Datapoint,
-    DiclConfig,
+    DICLConfig,
+    DICLOptimizationConfig,
     FireworksSFTConfig,
     FunctionConfigChat,
     FunctionConfigJson,
     FunctionsConfig,
     GCPVertexGeminiSFTConfig,
     MixtureOfNConfig,
+    OpenAIRFTConfig,
     OpenAISFTConfig,
     OptimizationJobHandle,
     OptimizationJobInfo,
@@ -69,6 +73,7 @@ from .types import (
     RawText,
     System,
     TagFilter,
+    Template,
     TensorZeroError,
     TensorZeroInternalError,
     Text,
@@ -86,12 +91,35 @@ from .types import (
     Usage,
 )
 
-RenderedStoredInference = RenderedSample  # DEPRECATED: use RenderedSample instead
+# DEPRECATED: use RenderedSample instead
+RenderedStoredInference = RenderedSample
 # Type aliases to preserve backward compatibility with main
 ChatDatapoint = Datapoint.Chat
 JsonDatapoint = Datapoint.Json
 
-OptimizationConfig = t.Union[OpenAISFTConfig, FireworksSFTConfig, TogetherSFTConfig]
+
+# CAREFUL: deprecated
+class DiclOptimizationConfig:
+    def __new__(cls, *args: Any, **kwargs: Any):
+        warnings.warn(
+            "Please use `DICLOptimizationConfig` instead of `DiclOptimizationConfig`. In a future release, `DiclOptimizationConfig` will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return DICLOptimizationConfig(*args, **kwargs)
+
+
+# CAREFUL: deprecated alias
+DiclConfig = deprecated("Use DICLConfig instead")(DICLConfig)
+
+
+OptimizationConfig = t.Union[
+    OpenAISFTConfig,
+    FireworksSFTConfig,
+    TogetherSFTConfig,
+    DICLOptimizationConfig,
+    OpenAIRFTConfig,
+]
 ChatInferenceOutput = t.List[ContentBlock]
 
 
@@ -110,6 +138,8 @@ __all__ = [
     "Config",
     "ContentBlock",
     "Datapoint",
+    "DiclOptimizationConfig",  # DEPRECATED
+    "DICLOptimizationConfig",
     "DynamicEvaluationRunEpisodeResponse",
     "DynamicEvaluationRunResponse",
     "ExtraBody",
@@ -125,7 +155,8 @@ __all__ = [
     "VariantsConfig",
     "ChatCompletionConfig",
     "BestOfNSamplingConfig",
-    "DiclConfig",
+    "DiclConfig",  # DEPRECATED
+    "DICLConfig",
     "MixtureOfNConfig",
     "ChainOfThoughtConfig",
     "FirstOfNConfig",
@@ -154,6 +185,7 @@ __all__ = [
     "FireworksSFTConfig",
     "GCPVertexGeminiSFTConfig",
     "OpenAISFTConfig",
+    "OpenAIRFTConfig",
     "OptimizationConfig",
     "patch_openai_client",
     "RawText",
@@ -161,6 +193,7 @@ __all__ = [
     "RenderedSample",
     "System",
     "TagFilter",
+    "Template",
     "TensorZeroError",
     "TensorZeroGateway",
     "TensorZeroInternalError",
@@ -251,7 +284,10 @@ def patch_openai_client(
         "http://ATTENTION_TENSORZERO_PLEASE_AWAIT_RESULT_OF_PATCH_OPENAI_CLIENT.invalid/"
     )
     gateway = _start_http_gateway(
-        config_file=config_file, clickhouse_url=clickhouse_url, async_setup=async_setup
+        config_file=config_file,
+        clickhouse_url=clickhouse_url,
+        postgres_url=None,
+        async_setup=async_setup,
     )
     if async_setup:
         # In 'async_setup' mode, return a `Future` that sets the needed fields after the gateway has started
