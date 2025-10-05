@@ -20,19 +20,11 @@ export default function FunctionSchema({
     string,
     { value: JsonValue | undefined; legacy_definition: boolean }
   > = {
-    ...Object.fromEntries(
-      Object.entries(functionConfig.schemas).map(([name, schemaData]) => [
-        name,
-        {
-          value: schemaData?.schema?.value,
-          legacy_definition: schemaData?.legacy_definition ?? false,
-        },
-      ]),
-    ),
+    ...functionConfig.schemas,
     ...(functionConfig.type === "json"
       ? {
           output: {
-            value: functionConfig.output_schema?.value,
+            value: functionConfig.output_schema.value,
             legacy_definition: false,
           },
         }
@@ -71,12 +63,9 @@ export default function FunctionSchema({
     };
   });
 
-  // Default to the first tab
-  const defaultTab = tabs[0]?.id;
-
   return (
     <SnippetLayout>
-      <SnippetTabs tabs={tabs} defaultTab={defaultTab}>
+      <SnippetTabs tabs={tabs} defaultTab={tabs[0]?.id}>
         {(activeTab) => {
           const tab = tabs.find((tab) => tab.id === activeTab);
           const schema = schemas[activeTab];

@@ -1241,7 +1241,7 @@ impl SchemaData {
         for (name, schema) in schemas.inner {
             if map
                 .insert(
-                    name.to_string(),
+                    name.clone(),
                     SchemaWithMetadata {
                         schema: StaticJSONSchema::from_path(schema.path)?,
                         legacy_definition: false,
