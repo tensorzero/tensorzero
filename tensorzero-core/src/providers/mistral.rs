@@ -1,6 +1,9 @@
-use std::{borrow::Cow, sync::OnceLock, time::Duration};
+use std::{borrow::Cow, time::Duration};
 
-use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
+use crate::{
+    http::{TensorZeroEventSource, TensorzeroHttpClient},
+    providers::openai::OpenAIMessagesConfig,
+};
 use futures::{future::try_join_all, StreamExt};
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
@@ -26,7 +29,7 @@ use crate::{
         },
         InferenceProvider,
     },
-    model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider},
+    model::{Credential, ModelProvider},
     providers::helpers::{
         check_new_tool_call_name, inject_extra_request_data_and_send,
         inject_extra_request_data_and_send_eventsource,
@@ -46,10 +49,6 @@ lazy_static! {
     };
 }
 
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("MISTRAL_API_KEY".to_string())
-}
-
 const PROVIDER_NAME: &str = "Mistral";
 pub const PROVIDER_TYPE: &str = "mistral";
 
@@ -62,23 +61,12 @@ pub struct MistralProvider {
     credentials: MistralCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<MistralCredentials> = OnceLock::new();
-
 impl MistralProvider {
-    pub fn new(
-        model_name: String,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-        Ok(MistralProvider {
+    pub fn new(model_name: String, credentials: MistralCredentials) -> Self {
+        MistralProvider {
             model_name,
             credentials,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {
@@ -366,12 +354,13 @@ pub fn stream_mistral(
 
 pub(super) async fn prepare_mistral_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
+    config: OpenAIMessagesConfig<'a>,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages: Vec<_> = try_join_all(
         request
             .messages
             .iter()
-            .map(|msg| tensorzero_to_openai_messages(msg, PROVIDER_TYPE)),
+            .map(|msg| tensorzero_to_openai_messages(msg, config)),
     )
     .await?
     .into_iter()
@@ -511,7 +500,16 @@ impl<'a> MistralRequest<'a> {
             }
             ModelInferenceRequestJsonMode::Off => None,
         };
-        let messages = prepare_mistral_messages(request).await?;
+        let messages = prepare_mistral_messages(
+            request,
+            OpenAIMessagesConfig {
+                json_mode: Some(&request.json_mode),
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: request
+                    .fetch_and_encode_input_files_before_inference,
+            },
+        )
+        .await?;
         let (tools, tool_choice) = prepare_mistral_tools(request)?;
 
         Ok(MistralRequest {

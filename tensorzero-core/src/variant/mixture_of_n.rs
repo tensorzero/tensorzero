@@ -22,7 +22,6 @@ use crate::inference::types::{
     JsonInferenceResultChunk, RequestMessagesOrBatch, TextChunk, ThoughtChunk, Usage,
 };
 use crate::model::ModelTable;
-use crate::rate_limiting::TicketBorrows;
 use crate::tool::ToolCallChunk;
 use crate::{
     endpoints::inference::InferenceParams,
@@ -331,7 +330,6 @@ pub fn stream_inference_from_non_stream(
             }
         },
         cached: model_inference_result.cached,
-        ticket_borrow: TicketBorrows::empty(),
     };
     let stream = make_stream_from_non_stream(inference_result, Some(usage))?;
     Ok((stream, model_used_info))
@@ -889,7 +887,7 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        config::{SchemaData, UninitializedSchemas},
+        config::{provider_types::ProviderTypesConfig, SchemaData, UninitializedSchemas},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
         function::{FunctionConfigChat, FunctionConfigJson},
@@ -904,6 +902,7 @@ mod tests {
             test_system_template_schema,
         },
         model::{ModelConfig, ModelProvider, ProviderConfig},
+        model_table::ProviderTypeDefaultCredentials,
         providers::dummy::DummyProvider,
         tool::{ToolCallConfig, ToolCallOutput, ToolChoice},
     };
@@ -1277,7 +1276,7 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
             implicit_tool_call_config: ToolCallConfig::default(),
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
         });
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
@@ -1346,27 +1345,31 @@ mod tests {
             .await,
         );
         let candidates = vec![candidate0, candidate1];
-        let models = ModelTable::try_from(HashMap::from([(
-            "json".into(),
-            ModelConfig {
-                routing: vec!["json".into()],
-                providers: HashMap::from([(
-                    "json".into(),
-                    ModelProvider {
-                        name: "json".into(),
-                        config: ProviderConfig::Dummy(DummyProvider {
-                            model_name: "json".into(),
-                            ..Default::default()
-                        }),
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        timeouts: Default::default(),
-                        discard_unknown_chunks: false,
-                    },
-                )]),
-                timeouts: Default::default(),
-            },
-        )]))
+        let provider_types = ProviderTypesConfig::default();
+        let models = ModelTable::new(
+            HashMap::from([(
+                "json".into(),
+                ModelConfig {
+                    routing: vec!["json".into()],
+                    providers: HashMap::from([(
+                        "json".into(),
+                        ModelProvider {
+                            name: "json".into(),
+                            config: ProviderConfig::Dummy(DummyProvider {
+                                model_name: "json".into(),
+                                ..Default::default()
+                            }),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            timeouts: Default::default(),
+                            discard_unknown_chunks: false,
+                        },
+                    )]),
+                    timeouts: Default::default(),
+                },
+            )]),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
         .expect("Failed to create model table");
         let client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
@@ -1398,6 +1401,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: "",
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -1478,7 +1482,12 @@ mod tests {
                     timeouts: Default::default(),
                 },
             );
-            ModelTable::try_from(map).expect("Failed to create model table")
+            let provider_types = ProviderTypesConfig::default();
+            ModelTable::new(
+                map,
+                ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            )
+            .expect("Failed to create model table")
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1553,7 +1562,12 @@ mod tests {
                     timeouts: Default::default(),
                 },
             );
-            ModelTable::try_from(map).expect("Failed to create model table")
+            let provider_types = ProviderTypesConfig::default();
+            ModelTable::new(
+                map,
+                ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            )
+            .expect("Failed to create model table")
         };
         let input = LazyResolvedInput {
             system: None,

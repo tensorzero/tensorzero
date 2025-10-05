@@ -78,6 +78,9 @@ async fn get_providers() -> E2ETestProviders {
     }];*/
     let reasoning_providers = vec![];
 
+    // vllm requires api_base parameter, so it can't be tested with just default credentials
+    let provider_type_default_credentials_providers = vec![];
+
     E2ETestProviders {
         simple_inference: providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -86,6 +89,8 @@ async fn get_providers() -> E2ETestProviders {
         embeddings: vec![],
         inference_params_inference: providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
+        provider_type_default_credentials: provider_type_default_credentials_providers,
+        provider_type_default_credentials_shorthand: vec![],
         tool_use_inference: tool_providers.clone(),
         tool_multi_turn_inference: tool_providers.clone(),
         dynamic_tool_use_inference: tool_providers.clone(),

@@ -142,7 +142,7 @@ pub async fn run_evaluation(
     }
     .build()
     .await
-    .map_err(|e| anyhow!("Failed to build client: {}", e))?;
+    .map_err(|e| anyhow!("Failed to build client: {e}"))?;
     let clients = Arc::new(Clients {
         tensorzero_client: ThrottledTensorZeroClient::new(tensorzero_client, semaphore),
         clickhouse_client: ClickHouseConnectionInfo::new(
@@ -205,9 +205,10 @@ pub async fn run_evaluation(
                     input: &input,
                     inference_cache: args.inference_cache,
                 })
-                .await?,
+                .await.map_err(|e| anyhow!("Error inferring for datapoint {datapoint_id}: {e}"))?,
             );
 
+            let inference_id = inference_response.inference_id();
             let evaluation_result = evaluate_inference(
                 EvaluateInferenceParams {
                     inference_response: inference_response.clone(),
@@ -219,7 +220,7 @@ pub async fn run_evaluation(
                     evaluation_run_id: evaluation_run_id_clone,
                     inference_cache: args.inference_cache,
                 })
-                .await?;
+                .await.map_err(|e| anyhow!("Error evaluating inference {inference_id} for datapoint {datapoint_id}: {e}"))?;
             debug!(datapoint_id = %datapoint.id(), evaluations_count = evaluation_result.len(), "Evaluations completed");
 
             Ok::<(Datapoint, InferenceResponse, evaluators::EvaluationResult), anyhow::Error>((
@@ -292,7 +293,7 @@ pub async fn run_evaluation(
         // If there are failures, return an error with all failures listed
         if !failures.is_empty() {
             let failure_messages = format_cutoff_failures(&failures);
-            bail!("Failed cutoffs for evaluators: {}", failure_messages);
+            bail!("Failed cutoffs for evaluators: {failure_messages}");
         }
     }
 

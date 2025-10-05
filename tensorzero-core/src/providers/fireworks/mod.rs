@@ -1,6 +1,7 @@
-use std::{borrow::Cow, sync::OnceLock};
+use std::borrow::Cow;
 
 use crate::http::TensorzeroHttpClient;
+use crate::providers::openai::OpenAIMessagesConfig;
 use crate::{
     http::TensorZeroEventSource, providers::helpers_thinking_block::THINK_CHUNK_ID, tool::Tool,
 };
@@ -34,7 +35,7 @@ use crate::{
         },
         InferenceProvider,
     },
-    model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider},
+    model::{Credential, ModelProvider},
     tool::{ToolCall, ToolCallChunk},
 };
 
@@ -72,25 +73,17 @@ pub struct FireworksProvider {
     parse_think_blocks: bool,
 }
 
-pub static DEFAULT_CREDENTIALS: OnceLock<FireworksCredentials> = OnceLock::new();
-
 impl FireworksProvider {
     pub fn new(
         model_name: String,
-        api_key_location: Option<CredentialLocation>,
+        credentials: FireworksCredentials,
         parse_think_blocks: bool,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-        Ok(FireworksProvider {
+    ) -> Self {
+        FireworksProvider {
             model_name,
             credentials,
             parse_think_blocks,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {
@@ -147,10 +140,6 @@ impl FireworksCredentials {
             .into()),
         }
     }
-}
-
-pub fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("FIREWORKS_API_KEY".to_string())
 }
 
 /// Key differences between Fireworks and OpenAI inference:
@@ -380,8 +369,17 @@ impl<'a> FireworksRequest<'a> {
             }
             ModelInferenceRequestJsonMode::Off => None,
         };
-        let messages =
-            prepare_fireworks_messages(request.system.as_deref(), &request.messages).await?;
+        let messages = prepare_fireworks_messages(
+            request.system.as_deref(),
+            &request.messages,
+            OpenAIMessagesConfig {
+                json_mode: Some(&request.json_mode),
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: request
+                    .fetch_and_encode_input_files_before_inference,
+            },
+        )
+        .await?;
         let (tools, tool_choice, _) = prepare_openai_tools(request);
         let tools = tools.map(|t| t.into_iter().map(OpenAITool::into).collect());
 
@@ -405,10 +403,11 @@ impl<'a> FireworksRequest<'a> {
 pub async fn prepare_fireworks_messages<'a>(
     system: Option<&'a str>,
     messages: &'a [RequestMessage],
+    config: OpenAIMessagesConfig<'a>,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut output_messages = Vec::with_capacity(messages.len());
     for message in messages {
-        output_messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE).await?);
+        output_messages.extend(tensorzero_to_openai_messages(message, config).await?);
     }
     if let Some(system_msg) = tensorzero_to_fireworks_system_message(system) {
         output_messages.insert(0, system_msg);

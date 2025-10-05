@@ -35,7 +35,6 @@ use crate::endpoints::inference::{
     inference, ChatCompletionInferenceParams, InferenceParams, Params,
 };
 use crate::error::{Error, ErrorDetails};
-use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::file::filename_to_mime_type;
@@ -44,6 +43,7 @@ use crate::inference::types::{
     InputMessage, InputMessageContent, Role, TemplateInput, TextKind, Usage,
 };
 use crate::tool::{DynamicToolParams, Tool, ToolCallInput, ToolCallOutput, ToolChoice, ToolResult};
+use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::JsonMode;
 use serde::Deserializer;
 
@@ -972,6 +972,8 @@ enum OpenAICompatibleContentBlock {
 #[serde(tag = "type", deny_unknown_fields, rename_all = "snake_case")]
 struct OpenAICompatibleImageUrl {
     url: Url,
+    #[serde(rename = "tensorzero::mime_type")]
+    mime_type: Option<MediaType>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -1062,7 +1064,7 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
                             let (mime_type, data) = parse_base64_image_data_url(&url_str)?;
                             InputMessageContent::File(File::Base64 { mime_type, data: data.to_string() })
                         } else {
-                            InputMessageContent::File(File::Url { url: image_url.url, mime_type: None })
+                            InputMessageContent::File(File::Url { url: image_url.url, mime_type: image_url.mime_type })
                         }
                     }
                     Ok(OpenAICompatibleContentBlock::File { file }) => {

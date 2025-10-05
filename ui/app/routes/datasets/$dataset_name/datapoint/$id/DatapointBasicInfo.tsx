@@ -31,10 +31,7 @@ const createTimestampTooltip = (timestamp: string | number | Date) => {
 
 export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
   const function_config = useFunctionConfig(datapoint.function_name);
-  const type = function_config?.type;
-  if (!type) {
-    throw new Error(`Function ${datapoint.function_name} not found`);
-  }
+  const type = function_config?.type || "unknown";
 
   // Create timestamp tooltip
   const timestampTooltip = createTimestampTooltip(datapoint.updated_at);
@@ -44,6 +41,14 @@ export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
 
   return (
     <BasicInfoLayout>
+      <BasicInfoItem>
+        <BasicInfoItemTitle>Name</BasicInfoItemTitle>
+        <BasicInfoItemContent>
+          {/* TODO: support editing names */}
+          <Chip label={datapoint.name || "-"} font="mono" />
+        </BasicInfoItemContent>
+      </BasicInfoItem>
+
       <BasicInfoItem>
         <BasicInfoItemTitle>Dataset</BasicInfoItemTitle>
         <BasicInfoItemContent>

@@ -27,18 +27,18 @@ use crate::{
     db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
     error::{Error, ErrorDetails},
     function::FunctionConfig,
-    gateway_util::{AppState, StructuredJson},
     inference::types::{
         ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
         JsonInferenceDatabaseInsert, JsonInferenceOutput,
     },
     serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
     tool::{DynamicToolParams, ToolCallConfigDatabaseInsert},
-    uuid_util::validate_tensorzero_uuid,
+    utils::gateway::{AppState, StructuredJson},
+    utils::uuid::validate_tensorzero_uuid,
 };
 
 #[cfg(debug_assertions)]
-use crate::gateway_util::AppStateData;
+use crate::utils::gateway::AppStateData;
 
 use super::feedback::{
     validate_parse_demonstration, DemonstrationOutput, DynamicDemonstrationInfo,
@@ -233,6 +233,7 @@ async fn insert_from_existing(
             let datapoint = JsonInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: inference.function_name,
+                name: None,
                 id: datapoint_id,
                 episode_id: Some(inference.episode_id),
                 input: inference.input,
@@ -270,6 +271,7 @@ async fn insert_from_existing(
             let datapoint = ChatInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: inference.function_name,
+                name: None,
                 id: datapoint_id,
                 episode_id: Some(inference.episode_id),
                 input: inference.input,
@@ -399,6 +401,7 @@ pub async fn update_datapoint_handler(
             let datapoint = ChatInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: chat.function_name,
+                name: chat.name,
                 id: path_params.datapoint_id,
                 episode_id: None,
                 input: resolved_input.into_stored_input(),
@@ -467,6 +470,7 @@ pub async fn update_datapoint_handler(
             let datapoint = JsonInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: json.function_name,
+                name: json.name,
                 id: path_params.datapoint_id,
                 episode_id: None,
                 input: resolved_input.into_stored_input(),
@@ -631,6 +635,7 @@ pub async fn insert_datapoint(
                 chat_datapoints.push(ChatInferenceDatapoint {
                     dataset_name: dataset_name.clone(),
                     function_name: chat.function_name,
+                    name: chat.name,
                     id: datapoint_id,
                     episode_id: None,
                     input: resolved_input.into_stored_input(),
@@ -712,6 +717,7 @@ pub async fn insert_datapoint(
                 let datapoint = JsonInferenceDatapoint {
                     dataset_name: dataset_name.clone(),
                     function_name: json.function_name,
+                    name: json.name,
                     id: datapoint_id,
                     episode_id: None,
                     input: resolved_input.into_stored_input(),
@@ -773,18 +779,18 @@ pub async fn delete_datapoint(
     // The INSERT INTO SELECT FROM will just not write anything if the datapoint doesn't exist.
     let json_delete_query = r"
     INSERT INTO JsonInferenceDatapoint
-    (dataset_name, function_name, id, episode_id, input, output, output_schema,
+    (dataset_name, function_name, name, id, episode_id, input, output, output_schema,
      tags, auxiliary, is_deleted, is_custom, source_inference_id, updated_at, staled_at)
-    SELECT dataset_name, function_name, id, episode_id, input, output, output_schema,
+    SELECT dataset_name, function_name, name, id, episode_id, input, output, output_schema,
            tags, auxiliary, is_deleted, is_custom, source_inference_id, now64(), now64()
     FROM JsonInferenceDatapoint
     WHERE id = {datapoint_id: UUID} AND dataset_name = {dataset_name: String}
 ";
     let chat_delete_query = r"
     INSERT INTO ChatInferenceDatapoint
-    (dataset_name, function_name, id, episode_id, input, output, tool_params,
+    (dataset_name, function_name, name, id, episode_id, input, output, tool_params,
      tags, auxiliary, is_deleted, is_custom, source_inference_id, updated_at, staled_at)
-    SELECT dataset_name, function_name, id, episode_id, input, output, tool_params,
+    SELECT dataset_name, function_name, name, id, episode_id, input, output, tool_params,
            tags, auxiliary, is_deleted, is_custom, source_inference_id, now64(), now64()
     FROM ChatInferenceDatapoint
     WHERE id = {datapoint_id: UUID} AND dataset_name = {dataset_name: String}
@@ -855,6 +861,7 @@ pub async fn list_datapoints(
             'chat' as type,
             dataset_name,
             function_name,
+            name,
             id,
             episode_id,
             input,
@@ -883,6 +890,7 @@ pub async fn list_datapoints(
             'json' as type,
             dataset_name,
             function_name,
+            name,
             id,
             episode_id,
             input,
@@ -1016,6 +1024,7 @@ pub async fn get_datapoint(
             'chat' as type,
             dataset_name,
             function_name,
+            name,
             id,
             episode_id,
             input,
@@ -1036,6 +1045,7 @@ pub async fn get_datapoint(
             'json' as type,
             dataset_name,
             function_name,
+            name,
             id,
             episode_id,
             input,
@@ -1261,6 +1271,8 @@ impl std::fmt::Display for Datapoint {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ChatDatapointInsert {
     pub function_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     pub input: Input,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<Value>,
@@ -1273,6 +1285,8 @@ pub struct ChatDatapointInsert {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct JsonDatapointInsert {
     pub function_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     pub input: Input,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<Value>,
@@ -1314,6 +1328,9 @@ pub struct ChatInferenceDatapoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub staled_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 impl std::fmt::Display for ChatInferenceDatapoint {
@@ -1354,6 +1371,9 @@ pub struct JsonInferenceDatapoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub staled_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 impl std::fmt::Display for JsonInferenceDatapoint {
@@ -1448,6 +1468,7 @@ where
     }
 }
 
+// SyntheticChatInferenceDatapoints are created by `update_datapoint_handler` and represent datapoints not derived from inferences. In storage their `source_inference_id` is null.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SyntheticChatInferenceDatapoint {
@@ -1465,8 +1486,11 @@ pub struct SyntheticChatInferenceDatapoint {
     pub is_custom: bool,
     #[serde(default)]
     pub source_inference_id: Option<Uuid>,
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
+// SyntheticJsonInferenceDatapoints are created by `update_datapoint_handler` and represent datapoints not derived from inferences. In storage their `source_inference_id` is null.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SyntheticJsonInferenceDatapoint {
@@ -1483,6 +1507,8 @@ pub struct SyntheticJsonInferenceDatapoint {
     pub is_custom: bool,
     #[serde(default)]
     pub source_inference_id: Option<Uuid>,
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {
@@ -1517,6 +1543,7 @@ async fn put_chat_datapoints(
         (
             dataset_name,
             function_name,
+            name,
             id,
             episode_id,
             input,
@@ -1531,6 +1558,7 @@ async fn put_chat_datapoints(
         SELECT
             new_data.dataset_name,
             new_data.function_name,
+            new_data.name,
             new_data.id,
             new_data.episode_id,
             new_data.input,
@@ -1546,7 +1574,7 @@ async fn put_chat_datapoints(
 
     let external_data = ExternalDataInfo {
         external_data_name: "new_data".to_string(),
-        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID)".to_string(),
+        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID)".to_string(),
         format: "JSONEachRow".to_string(),
         data: serialized_datapoints.join("\n"),
     };
@@ -1578,6 +1606,7 @@ async fn put_json_datapoints(
         (
             dataset_name,
             function_name,
+            name,
             id,
             episode_id,
             input,
@@ -1592,6 +1621,7 @@ async fn put_json_datapoints(
         SELECT
             new_data.dataset_name,
             new_data.function_name,
+            new_data.name,
             new_data.id,
             new_data.episode_id,
             new_data.input,
@@ -1607,7 +1637,7 @@ async fn put_json_datapoints(
 
     let external_data = ExternalDataInfo {
         external_data_name: "new_data".to_string(),
-        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID)".to_string(),
+        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID)".to_string(),
         format: "JSONEachRow".to_string(),
         data: serialized_datapoints.join("\n"),
     };

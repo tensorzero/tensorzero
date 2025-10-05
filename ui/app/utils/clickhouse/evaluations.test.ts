@@ -164,6 +164,7 @@ describe("getEvaluationResults", () => {
       expect(result).toHaveProperty("datapoint_id");
       expect(result).toHaveProperty("evaluation_run_id");
       expect(result).toHaveProperty("input");
+      expect(result).toHaveProperty("name");
       expect(result).toHaveProperty("generated_output");
       expect(result).toHaveProperty("reference_output");
       expect(result).toHaveProperty("metric_name");
@@ -251,6 +252,7 @@ describe("getEvaluationResults", () => {
       expect(result).toHaveProperty("datapoint_id");
       expect(result).toHaveProperty("evaluation_run_id");
       expect(result).toHaveProperty("input");
+      expect(result).toHaveProperty("name");
       expect(result).toHaveProperty("generated_output");
       expect(result).toHaveProperty("reference_output");
       expect(result).toHaveProperty("metric_name");

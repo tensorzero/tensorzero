@@ -46,6 +46,7 @@ import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbac
 import { InferenceButton } from "~/components/utils/InferenceButton";
 import InputSnippet from "~/components/inference/InputSnippet";
 import { logger } from "~/utils/logger";
+import { TableItemText } from "~/components/ui/TableItems";
 
 type TruncatedContentProps = (
   | {
@@ -152,6 +153,12 @@ function getInputSummary(input: DisplayInput): string {
     return text.length > 30 ? text.substring(0, 30) + "..." : text;
   }
 
+  if (firstContent.type === "template") {
+    const argsText = JSON.stringify(firstContent.arguments, null, 2);
+    const summary = `${firstContent.name}: ${argsText}`;
+    return summary.length > 30 ? summary.substring(0, 30) + "..." : summary;
+  }
+
   return `${firstMessage.role} message (${firstContent.type})`;
 }
 
@@ -242,8 +249,9 @@ export function EvaluationTable({
       string,
       {
         id: string;
+        name: string | null;
         input: DisplayInput;
-        reference_output: JsonInferenceOutput | ContentBlockChatOutput[];
+        reference_output: JsonInferenceOutput | ContentBlockChatOutput[] | null;
       }
     >();
 
@@ -251,6 +259,7 @@ export function EvaluationTable({
       if (!datapoints.has(result.datapoint_id)) {
         datapoints.set(result.datapoint_id, {
           id: result.datapoint_id,
+          name: result.name,
           input: result.input,
           reference_output: result.reference_output,
         });
@@ -336,6 +345,9 @@ export function EvaluationTable({
                 <TableHeader>
                   <TableRow>
                     <TableHead className="py-2 text-center align-top">
+                      Name
+                    </TableHead>
+                    <TableHead className="py-2 text-center align-top">
                       Input
                     </TableHead>
                     <TableHead className="py-2 text-center align-top">
@@ -420,6 +432,16 @@ export function EvaluationTable({
                               );
                             }}
                           >
+                            {/* Name cell - only for the first variant row */}
+                            {index === 0 && (
+                              <TableCell
+                                rowSpan={filteredVariants.length}
+                                className="max-w-[150px] align-middle"
+                              >
+                                <TableItemText text={datapoint.name} />
+                              </TableCell>
+                            )}
+
                             {/* Input cell - only for the first variant row */}
                             {index === 0 && (
                               <TableCell
@@ -437,12 +459,16 @@ export function EvaluationTable({
                             {index === 0 && (
                               <TableCell
                                 rowSpan={filteredVariants.length}
-                                className="max-w-[200px] align-middle"
+                                className="max-w-[200px] text-center align-middle"
                               >
-                                <TruncatedContent
-                                  content={datapoint.reference_output}
-                                  type="output"
-                                />
+                                {datapoint.reference_output ? (
+                                  <TruncatedContent
+                                    content={datapoint.reference_output}
+                                    type="output"
+                                  />
+                                ) : (
+                                  "-"
+                                )}
                               </TableCell>
                             )}
 

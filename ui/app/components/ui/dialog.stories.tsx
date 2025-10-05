@@ -10,12 +10,10 @@ import {
 import { Button } from "./button";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useArgs } from "storybook/preview-api";
-import { withRouter } from "storybook-addon-remix-react-router";
 
 const meta = {
   title: "DS/Dialog",
   component: Dialog,
-  decorators: [withRouter],
 } satisfies Meta<typeof Dialog>;
 
 export default meta;
