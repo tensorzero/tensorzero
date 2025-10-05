@@ -857,16 +857,14 @@ impl UninitializedLLMJudgeVariantInfo {
                     )?,
                 })
             }
-            UninitializedLLMJudgeVariantConfig::FirstOfN(params) => {
-                VariantConfig::FirstOfN(
-                    UninitializedFirstOfNConfig {
-                        weight: get_weight(params.active),
-                        timeout_s: params.timeout_s,
-                        candidates: params.candidates,
-                    }
-                    .load()?,
-                )
-            }
+            UninitializedLLMJudgeVariantConfig::FirstOfN(params) => VariantConfig::FirstOfN(
+                UninitializedFirstOfNConfig {
+                    weight: get_weight(params.active),
+                    timeout_s: params.timeout_s,
+                    candidates: params.candidates,
+                }
+                .load()?,
+            ),
         };
         Ok(VariantInfo {
             inner,

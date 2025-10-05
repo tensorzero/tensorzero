@@ -496,7 +496,7 @@ mod tests {
                     "fast".into()
                 );
             }
-            _ => panic!("Expected Chat inference result"),
+            InferenceResult::Json(..) => panic!("Expected Chat inference result"),
         }
     }
 
@@ -538,7 +538,7 @@ mod tests {
                     "fast".into()
                 );
             }
-            _ => panic!("Expected Chat inference result"),
+            InferenceResult::Json(..) => panic!("Expected Chat inference result"),
         }
     }
 
@@ -610,7 +610,7 @@ mod tests {
                     "fast".into()
                 );
             }
-            _ => panic!("Expected Chat inference result"),
+            InferenceResult::Json(..) => panic!("Expected Chat inference result"),
         }
     }
 
