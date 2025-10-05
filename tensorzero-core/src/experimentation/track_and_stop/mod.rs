@@ -42,26 +42,10 @@ pub struct TrackAndStopConfig {
     // TODO: validate all of these fields
     metric: String,
     candidate_variants: Vec<String>,
-    // Includes candidate and fallback variants
-    all_variants: Vec<String>,
     fallback_variants: Vec<String>,
     min_samples_per_variant: u64,
     delta: f64,
     epsilon: f64,
-    // #[serde(default)]
-    // this is undocumented please don't specify it, it will be overridden
-    // TODO: use an UnitializedTrackAndStopConfig for config parsing
-    // TODO: use an enum instead of HashMap<String, f64>
-    // This enum should contain two states: Stopped and Running
-    // in the Stopped state we should simply sample the winner
-    // in the Running state we should have a Nursery that contains the variants that are below min pull count and an AtomicU64
-    //  or, if there is a single variant with above that pull count, it as well (since we need >= 2 to do the track-and-stop)
-    // we should also have a set of sampling probabilites HashMap<String, f64>
-    // if the both the nursery and the sampling probabilities are nonempty we should sample using
-    // round-robin from the nursery with probability NURSERY_PROBABILITY
-    // and from the sampling probabilities with probability 1 - NURSERY_PROBABILITY
-    // if it is empty we should sample using the sampling probabilities always
-    // if the sampling probabilities are empty we should sample using the nursery always
     #[serde(skip)]
     state: Arc<ArcSwap<TrackAndStopState>>,
 }
@@ -135,12 +119,9 @@ pub struct UninitializedTrackAndStopConfig {
 
 impl UninitializedTrackAndStopConfig {
     pub fn load(self, variants: &HashMap<String, Arc<VariantInfo>>) -> TrackAndStopConfig {
-        let mut all_variants = self.candidate_variants.clone();
-        all_variants.extend(self.fallback_variants.clone());
         TrackAndStopConfig {
             metric: self.metric,
             candidate_variants: self.candidate_variants,
-            all_variants,
             fallback_variants: self.fallback_variants,
             min_samples_per_variant: self.min_samples_per_variant,
             delta: self.delta,
@@ -499,7 +480,10 @@ impl TrackAndStopState {
         }
     }
 
-    // Note: this function does __not__ pop
+    /// Samples an active variant from the current track-and-stop state.
+    /// Returns `Some(..)` if it is possible to sample an active variant from the "happy path"
+    /// of experiment execution, `None` otherwise.
+    /// Note: this function does __not__ pop
     fn sample<'a>(
         &'a self,
         active_variants: &'a BTreeMap<String, Arc<VariantInfo>>,
