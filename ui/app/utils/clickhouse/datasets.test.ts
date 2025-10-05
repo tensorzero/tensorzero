@@ -381,7 +381,7 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "Is it a living thing?",
               },
             ],
@@ -390,7 +390,7 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "no.",
               },
             ],
@@ -399,7 +399,7 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "Is it commonly found indoors?",
               },
             ],
@@ -408,7 +408,7 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "no.",
               },
             ],
@@ -417,7 +417,7 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "Is it a natural object, like a rock or tree?",
               },
             ],
@@ -426,7 +426,7 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "yes.",
               },
             ],
@@ -487,7 +487,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "structured_text",
+                type: "template",
+                name: "user",
                 arguments: {
                   topic: "upward",
                 },
@@ -537,7 +538,8 @@ describe("datapoint operations", () => {
           {
             content: [
               {
-                type: "structured_text",
+                type: "template",
+                name: "user",
                 arguments: {
                   topic: "testing",
                 },
@@ -626,7 +628,7 @@ describe("datapoint operations", () => {
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "Extract entities from: John visited Paris",
               },
             ],
@@ -727,7 +729,7 @@ describe("datapoint operations", () => {
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "Write a haiku about duplicates",
               },
             ],

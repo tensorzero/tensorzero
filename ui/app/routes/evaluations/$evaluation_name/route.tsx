@@ -31,11 +31,11 @@ import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect, useState } from "react";
 import { logger } from "~/utils/logger";
-import { handleAddToDatasetAction } from "~/utils/dataset.server";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
-import { useFetcher, Link } from "react-router";
-import { ToastAction } from "~/components/ui/toast";
+import { useFetcher } from "react-router";
+import { handleBulkAddToDataset } from "./bulkAddToDataset.server";
+import { useBulkAddToDatasetToast } from "./useBulkAddToDatasetToast";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -235,63 +235,11 @@ export async function action({ request }: Route.ActionArgs) {
 
       try {
         const selectedItems = JSON.parse(selectedItemsJson.toString());
-        const config = await getConfig();
-        const evaluation_config =
-          config.evaluations[evaluation_name.toString()];
-
-        if (!evaluation_config) {
-          return data(
-            {
-              error: `Evaluation config not found for ${evaluation_name}`,
-              success: false,
-            },
-            { status: 404 },
-          );
-        }
-
-        const function_name = evaluation_config.function_name;
-        const errors: string[] = [];
-        let successCount = 0;
-
-        // Process each selected item
-        for (const item of selectedItems) {
-          const itemFormData = new FormData();
-          itemFormData.append("dataset", dataset.toString());
-          itemFormData.append("output", "inherit");
-          itemFormData.append("inference_id", item.inference_id);
-          itemFormData.append("function_name", function_name);
-          itemFormData.append("variant_name", item.variant_name);
-          itemFormData.append("episode_id", item.episode_id || "");
-          itemFormData.append("_action", "addToDataset");
-
-          try {
-            await handleAddToDatasetAction(itemFormData);
-            successCount++;
-          } catch (error) {
-            logger.error(
-              `Failed to add inference ${item.inference_id} to dataset:`,
-              error,
-            );
-            errors.push(`Failed to add inference ${item.inference_id}`);
-          }
-        }
-
-        if (errors.length > 0 && successCount === 0) {
-          return data(
-            {
-              error: `Failed to add all inferences: ${errors.join(", ")}`,
-              success: false,
-            },
-            { status: 400 },
-          );
-        }
-
-        return data({
-          success: true,
-          count: successCount,
-          dataset: dataset.toString(),
-          errors: errors.length > 0 ? errors : undefined,
-        });
+        return await handleBulkAddToDataset(
+          dataset.toString(),
+          selectedItems,
+          evaluation_name.toString(),
+        );
       } catch (error) {
         logger.error("Error processing bulk add to dataset:", error);
         return data(
@@ -372,30 +320,12 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   }, [newFeedbackId, newJudgeDemonstrationId, toast]);
 
   // Handle fetcher response for bulk add to dataset
-  useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data) {
-      if (fetcher.data.error) {
-        toast({
-          title: "Failed to add to dataset",
-          description: fetcher.data.error,
-          variant: "destructive",
-        });
-      } else if (fetcher.data.success) {
-        const datasetName = fetcher.data.dataset;
-        toast({
-          title: "Added to Dataset",
-          description: `${fetcher.data.count} ${fetcher.data.count === 1 ? "inference" : "inferences"} added to: ${datasetName}`,
-          action: (
-            <ToastAction altText="View Dataset" asChild>
-              <Link to={`/datasets/${datasetName}`}>View Dataset</Link>
-            </ToastAction>
-          ),
-        });
-        setSelectedRows(new Map());
-        setSelectedDataset("");
-      }
-    }
-  }, [fetcher.state, fetcher.data, toast, selectedDataset]);
+  useBulkAddToDatasetToast({
+    fetcher,
+    toast,
+    setSelectedRows,
+    setSelectedDataset,
+  });
 
   // Handle dataset selection for bulk add
   const handleDatasetSelect = (dataset: string) => {

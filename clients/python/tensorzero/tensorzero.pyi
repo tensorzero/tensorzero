@@ -453,6 +453,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         cache_options: Optional[Dict[str, Any]] = None,
         extra_body: Optional[List[ExtraBody | Dict[str, Any]]] = None,
         extra_headers: Optional[List[Dict[str, Any]]] = None,
+        otlp_traces_extra_headers: Optional[Dict[str, str]] = None,
         include_original_response: Optional[bool] = None,
     ) -> Union[InferenceResponse, Iterator[InferenceChunk]]:
         """
@@ -484,6 +485,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param tags: If set, adds tags to the inference request.
         :param extra_body: If set, injects extra fields into the provider request body.
         :param extra_headers: If set, injects extra headers into the provider request.
+        :param otlp_traces_extra_headers: If set, adds custom headers to OTLP trace exports. Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-header-".
         :param include_original_response: If set, add an `original_response` field to the response, containing the raw string response from the model.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async iterator that yields InferenceChunks as they come in.
@@ -539,7 +541,6 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         *,
         run_id: str | UUID | uuid_utils.UUID,
         task_name: Optional[str] = None,
-        datapoint_name: Optional[str] = None,
         tags: Optional[Dict[str, str]] = None,
     ) -> DynamicEvaluationRunEpisodeResponse:
         """
@@ -547,8 +548,6 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
         :param run_id: The run ID to use for the dynamic evaluation run.
         :param task_name: The name of the task to use for the dynamic evaluation run.
-        :param datapoint_name: The name of the datapoint to use for the dynamic evaluation run.
-                    Deprecated: use `task_name` instead.
         :param tags: A dictionary of tags to add to the dynamic evaluation run.
         :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
         """
@@ -797,6 +796,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         cache_options: Optional[Dict[str, Any]] = None,
         extra_body: Optional[List[ExtraBody | Dict[str, Any]]] = None,
         extra_headers: Optional[List[Dict[str, Any]]] = None,
+        otlp_traces_extra_headers: Optional[Dict[str, str]] = None,
         include_original_response: Optional[bool] = None,
     ) -> Union[InferenceResponse, AsyncIterator[InferenceChunk]]:
         """
@@ -828,6 +828,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param tags: If set, adds tags to the inference request.
         :param extra_body: If set, injects extra fields into the provider request body.
         :param extra_headers: If set, injects extra headers into the provider request.
+        :param otlp_traces_extra_headers: If set, adds custom headers to OTLP trace exports. Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-header-".
         :param include_original_response: If set, add an `original_response` field to the response, containing the raw string response from the model.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async iterator that yields InferenceChunks as they come in.
@@ -883,7 +884,6 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         *,
         run_id: str | UUID | uuid_utils.UUID,
         task_name: Optional[str] = None,
-        datapoint_name: Optional[str] = None,
         tags: Optional[Dict[str, str]] = None,
     ) -> DynamicEvaluationRunEpisodeResponse:
         """
@@ -891,8 +891,6 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
         :param run_id: The run ID to use for the dynamic evaluation run.
         :param task_name: The name of the task to use for the dynamic evaluation run.
-        :param datapoint_name: The name of the datapoint to use for the dynamic evaluation run.
-                    Deprecated: use `task_name` instead.
         :param tags: A dictionary of tags to add to the dynamic evaluation run.
         :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
         """

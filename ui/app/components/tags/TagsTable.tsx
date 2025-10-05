@@ -13,6 +13,13 @@ import {
 } from "~/components/ui/table";
 import { Code } from "~/components/ui/code";
 import { useNavigate } from "react-router";
+import {
+  toEvaluationUrl,
+  toDatapointUrl,
+  toDatasetUrl,
+  toInferenceUrl,
+  toDynamicEvaluationRunUrl,
+} from "~/utils/urls";
 
 interface TagsTableProps {
   tags: Record<string, string>;
@@ -58,7 +65,7 @@ export function TagsTable({ tags, onTagsChange, isEditing }: TagsTableProps) {
             return;
           }
           navigate(
-            `/evaluations/${evaluationName}?evaluation_run_ids=${value}`,
+            toEvaluationUrl(evaluationName, { evaluation_run_ids: value }),
           );
           break;
         }
@@ -67,20 +74,20 @@ export function TagsTable({ tags, onTagsChange, isEditing }: TagsTableProps) {
           if (!datasetName) {
             return;
           }
-          navigate(`/datasets/${datasetName}/datapoint/${value}`);
+          navigate(toDatapointUrl(datasetName, value));
           break;
         }
         case "tensorzero::evaluation_name":
-          navigate(`/evaluations/${value}`);
+          navigate(toEvaluationUrl(value));
           break;
         case "tensorzero::dataset_name":
-          navigate(`/datasets/${value}`);
+          navigate(toDatasetUrl(value));
           break;
         case "tensorzero::evaluator_inference_id":
-          navigate(`/observability/inferences/${value}`);
+          navigate(toInferenceUrl(value));
           break;
         case "tensorzero::dynamic_evaluation_run_id":
-          navigate(`/dynamic_evaluations/runs/${value}`);
+          navigate(toDynamicEvaluationRunUrl(value));
           break;
       }
     }

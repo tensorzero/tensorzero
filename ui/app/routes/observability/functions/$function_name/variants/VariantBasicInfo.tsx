@@ -13,6 +13,7 @@ import {
 } from "~/components/layout/BasicInfoLayout";
 import Chip from "~/components/ui/Chip";
 import { getFunctionTypeIcon } from "~/utils/icon";
+import { toFunctionUrl, toVariantUrl } from "~/utils/urls";
 
 interface BasicInfoProps {
   variantConfig: VariantConfig;
@@ -47,7 +48,7 @@ export default function BasicInfo({
             iconBg={functionIconConfig.iconBg}
             label={function_name}
             secondaryLabel={function_type}
-            link={`/observability/functions/${function_name}`}
+            link={toFunctionUrl(function_name)}
             font="mono"
           />
         </BasicInfoItemContent>
@@ -208,7 +209,7 @@ export default function BasicInfo({
                       <Chip
                         key={candidate}
                         label={candidate}
-                        link={`/observability/functions/${function_name}/variants/${candidate}`}
+                        link={toVariantUrl(function_name, candidate)}
                         font="mono"
                       />
                     ))}
@@ -385,7 +386,7 @@ export default function BasicInfo({
                       <Chip
                         key={candidate}
                         label={candidate}
-                        link={`/observability/functions/${function_name}/variants/${candidate}`}
+                        link={toVariantUrl(function_name, candidate)}
                         font="mono"
                       />
                     ))}
