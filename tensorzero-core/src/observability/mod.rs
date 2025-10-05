@@ -222,15 +222,17 @@ impl Tracer for TracerWrapper {
             let mut merged_headers = static_otlp_traces_extra_headers
                 .cloned()
                 .unwrap_or_default();
+
             if let Some(key) = dynamic_key {
                 for key_value_ref in key.extra_headers.iter() {
                     match key_value_ref {
                         tonic::metadata::KeyAndValueRef::Ascii(k, v) => {
                             merged_headers.insert(k.clone(), v.clone());
                         }
-                        other => {
-                            // Non-ASCII header encountered; log a warning and skip.
-                            tracing::warn!("Non-ASCII header encountered in extra_headers and ignored: {:?}", other);
+                        tonic::metadata::KeyAndValueRef::Binary(k, _) => {
+                            tracing::warn!(
+                                "Non-ASCII header encountered in `extra_headers` and ignored: {k}",
+                            );
                         }
                     }
                 }
@@ -252,15 +254,13 @@ impl Tracer for TracerWrapper {
                     provider,
                 })
             });
-            match tracer {
-                Ok(tracer) => {
-                    return tracer.inner.build_with_context(builder, parent_cx);
-                }
-                Err(e) => {
-                    tracing::error!("Failed to create custom tracer for span {builder:?}: {e}");
-                    return self.default_tracer.build_with_context(builder, parent_cx);
-                }
+
+            if let Ok(tracer) = tracer {
+                return tracer.inner.build_with_context(builder, parent_cx);
+            } else if let Err(e) = tracer {
+                tracing::error!("Failed to create custom tracer for span {builder:?}: {e}");
             }
+            return self.default_tracer.build_with_context(builder, parent_cx);
         }
 
         // No headers at all, use default tracer
