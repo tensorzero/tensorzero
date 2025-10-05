@@ -14,6 +14,7 @@ import type {
   UninitializedVariantInfo,
   VariantInfo,
   Tool,
+  ResolvedTomlPath,
 } from "tensorzero-node";
 import type {
   InputMessageContent as TensorZeroContent,
@@ -619,7 +620,9 @@ function resolvedFileContentToClientFile(
 function variantInfoToUninitalizedVariantInfo(
   variantInfo: VariantInfo,
 ): UninitializedVariantInfo {
-  const convertTemplate = (template: PathWithContents | null) => {
+  const convertTemplate = (
+    template: PathWithContents | null,
+  ): ResolvedTomlPath | null => {
     if (!template) return null;
     return {
       __tensorzero_remapped_path: `template_${Math.random().toString(36).substring(2, 15)}`,
@@ -643,10 +646,7 @@ function variantInfoToUninitalizedVariantInfo(
   switch (inner.type) {
     case "chat_completion": {
       // Convert all templates
-      const templates: Record<
-        string,
-        { path: { __tensorzero_remapped_path: string; __data: string } }
-      > = {};
+      const templates: Record<string, { path: ResolvedTomlPath }> = {};
       for (const [name, templateData] of Object.entries(inner.templates)) {
         const converted = convertTemplate(templateData?.template || null);
         if (converted) {
@@ -680,10 +680,7 @@ function variantInfoToUninitalizedVariantInfo(
 
     case "best_of_n_sampling": {
       // Convert all evaluator templates
-      const evaluatorTemplates: Record<
-        string,
-        { path: { __tensorzero_remapped_path: string; __data: string } }
-      > = {};
+      const evaluatorTemplates: Record<string, { path: ResolvedTomlPath }> = {};
       for (const [name, templateData] of Object.entries(
         inner.evaluator.templates,
       )) {
@@ -744,10 +741,7 @@ function variantInfoToUninitalizedVariantInfo(
 
     case "mixture_of_n": {
       // Convert all fuser templates
-      const fuserTemplates: Record<
-        string,
-        { path: { __tensorzero_remapped_path: string; __data: string } }
-      > = {};
+      const fuserTemplates: Record<string, { path: ResolvedTomlPath }> = {};
       for (const [name, templateData] of Object.entries(
         inner.fuser.templates,
       )) {
@@ -788,10 +782,7 @@ function variantInfoToUninitalizedVariantInfo(
 
     case "chain_of_thought": {
       // Convert all templates
-      const templates: Record<
-        string,
-        { path: { __tensorzero_remapped_path: string; __data: string } }
-      > = {};
+      const templates: Record<string, { path: ResolvedTomlPath }> = {};
       for (const [name, templateData] of Object.entries(inner.templates)) {
         const converted = convertTemplate(templateData?.template || null);
         if (converted) {
