@@ -15,6 +15,7 @@ import type {
   VariantInfo,
   Tool,
   ResolvedTomlPath,
+  ChatTemplates,
 } from "tensorzero-node";
 import type {
   InputMessageContent as TensorZeroContent,
@@ -46,6 +47,7 @@ import type {
   InputMessage,
   InputMessageContent,
 } from "~/utils/clickhouse/common";
+import { v7 } from "uuid";
 
 interface InferenceActionError {
   message: string;
@@ -215,8 +217,8 @@ function tensorZeroStoredContentToInputContent(
 ): InputMessageContent {
   switch (content.type) {
     case "text":
-      return content;
     case "template":
+    case "raw_text":
       return content;
     case "tool_call":
       return {
@@ -232,8 +234,6 @@ function tensorZeroStoredContentToInputContent(
         name: content.name,
         result: content.result,
       };
-    case "raw_text":
-      return content;
     case "thought":
       return {
         type: "thought",
@@ -377,7 +377,7 @@ export function prepareInferenceActionRequest(
     const tool_choice = args.tool_params?.tool_choice;
     const parallel_tool_calls = args.tool_params?.parallel_tool_calls;
     const dynamicVariantInfo = args.editedVariantInfo
-      ? variantInfoToUninitalizedVariantInfo(args.editedVariantInfo)
+      ? variantInfoToUninitializedVariantInfo(args.editedVariantInfo)
       : null;
     const additional_tools = args.tool_params?.tools_available
       ? subtractStaticToolsFromInferenceInput(
@@ -617,26 +617,40 @@ function resolvedFileContentToClientFile(
   };
 }
 
-function variantInfoToUninitalizedVariantInfo(
+function convertTemplate(
+  template: PathWithContents | null,
+): ResolvedTomlPath | null {
+  if (!template) return null;
+  return {
+    __tensorzero_remapped_path: `template_${v7()}`,
+    __data: template.contents,
+  };
+}
+
+function stringToTemplate(template: string | null): ResolvedTomlPath | null {
+  if (!template) return null;
+  return {
+    __tensorzero_remapped_path: `template_${v7()}`,
+    __data: template,
+  };
+}
+
+function convertTemplatesToRecord(
+  templates: ChatTemplates,
+): Record<string, { path: ResolvedTomlPath }> {
+  const result: Record<string, { path: ResolvedTomlPath }> = {};
+  for (const [name, templateData] of Object.entries(templates)) {
+    const converted = convertTemplate(templateData?.template || null);
+    if (converted) {
+      result[name] = { path: converted };
+    }
+  }
+  return result;
+}
+
+function variantInfoToUninitializedVariantInfo(
   variantInfo: VariantInfo,
 ): UninitializedVariantInfo {
-  const convertTemplate = (
-    template: PathWithContents | null,
-  ): ResolvedTomlPath | null => {
-    if (!template) return null;
-    return {
-      __tensorzero_remapped_path: `template_${Math.random().toString(36).substring(2, 15)}`,
-      __data: template.contents,
-    };
-  };
-  const stringToTemplate = (template: string | null) => {
-    if (!template) return null;
-    return {
-      __tensorzero_remapped_path: `template_${Math.random().toString(36).substring(2, 15)}`,
-      __data: template,
-    };
-  };
-
   const baseUninitialized = {
     timeouts: variantInfo.timeouts,
   };
@@ -646,13 +660,7 @@ function variantInfoToUninitalizedVariantInfo(
   switch (inner.type) {
     case "chat_completion": {
       // Convert all templates
-      const templates: Record<string, { path: ResolvedTomlPath }> = {};
-      for (const [name, templateData] of Object.entries(inner.templates)) {
-        const converted = convertTemplate(templateData?.template || null);
-        if (converted) {
-          templates[name] = { path: converted };
-        }
-      }
+      const templates = convertTemplatesToRecord(inner.templates);
 
       return {
         ...baseUninitialized,
@@ -680,15 +688,9 @@ function variantInfoToUninitalizedVariantInfo(
 
     case "best_of_n_sampling": {
       // Convert all evaluator templates
-      const evaluatorTemplates: Record<string, { path: ResolvedTomlPath }> = {};
-      for (const [name, templateData] of Object.entries(
+      const evaluatorTemplates = convertTemplatesToRecord(
         inner.evaluator.templates,
-      )) {
-        const converted = convertTemplate(templateData?.template || null);
-        if (converted) {
-          evaluatorTemplates[name] = { path: converted };
-        }
-      }
+      );
 
       return {
         ...baseUninitialized,
@@ -741,15 +743,7 @@ function variantInfoToUninitalizedVariantInfo(
 
     case "mixture_of_n": {
       // Convert all fuser templates
-      const fuserTemplates: Record<string, { path: ResolvedTomlPath }> = {};
-      for (const [name, templateData] of Object.entries(
-        inner.fuser.templates,
-      )) {
-        const converted = convertTemplate(templateData?.template || null);
-        if (converted) {
-          fuserTemplates[name] = { path: converted };
-        }
-      }
+      const fuserTemplates = convertTemplatesToRecord(inner.fuser.templates);
 
       return {
         ...baseUninitialized,
@@ -782,13 +776,7 @@ function variantInfoToUninitalizedVariantInfo(
 
     case "chain_of_thought": {
       // Convert all templates
-      const templates: Record<string, { path: ResolvedTomlPath }> = {};
-      for (const [name, templateData] of Object.entries(inner.templates)) {
-        const converted = convertTemplate(templateData?.template || null);
-        if (converted) {
-          templates[name] = { path: converted };
-        }
-      }
+      const templates = convertTemplatesToRecord(inner.templates);
 
       return {
         ...baseUninitialized,
@@ -833,11 +821,7 @@ function subtractStaticToolsFromInferenceInput(
   if (functionConfig.type === "json") {
     return datapointTools;
   }
-  const resultTools = [];
-  for (const tool of datapointTools) {
-    if (!functionConfig.tools.some((t) => t === tool.name)) {
-      resultTools.push(tool);
-    }
-  }
-  return resultTools;
+  return datapointTools.filter(
+    (tool) => !functionConfig.tools.some((t) => t === tool.name),
+  );
 }
