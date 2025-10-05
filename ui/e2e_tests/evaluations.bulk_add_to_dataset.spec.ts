@@ -116,3 +116,109 @@ test("should be able to bulk add selected inferences to a new dataset from evalu
   // This confirms that the generated output (inherit mode) was properly saved to the dataset
   await expect(page.locator("body")).toContainText(/person|organization/i);
 });
+
+test("should be able to bulk add selected inferences to a dataset from multi-evaluation view", async ({
+  page,
+}) => {
+  // Navigate to the evaluation page with multiple evaluation runs (multi-variant view)
+  await page.goto(
+    "/evaluations/entity_extraction?evaluation_run_ids=0196367b-c0bb-7f90-b651-f90eb9fba8f3%2C0196367b-1739-7483-b3f4-f3b0a4bda063",
+  );
+
+  // Wait for the page to load completely
+  await page.waitForLoadState("networkidle");
+
+  // Verify the page loaded correctly with both variants visible
+  await expect(page.getByText("llama_8b_initial_prompt")).toBeVisible();
+  await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible();
+
+  // Get all checkboxes in the table body
+  const checkboxes = page.locator('tbody button[role="checkbox"]');
+  await checkboxes.first().waitFor({ state: "visible" });
+
+  // Select the third checkbox (the "Brown" llama variant with empty miscellaneous)
+  await checkboxes.nth(2).click();
+
+  // Wait a moment for the state to update
+  await page.waitForTimeout(300);
+
+  // Generate a unique dataset name
+  const datasetName = `test_multi_eval_${v7()}`;
+
+  // Click the add button to open the dataset selector
+  await page.getByText(/Add.*1.*selected.*inference.*to dataset/i).click();
+
+  // Wait for the dropdown to appear
+  await page.waitForTimeout(500);
+
+  // Find the CommandInput and fill in the dataset name
+  const commandInput = page.getByPlaceholder("Create or find a dataset...");
+  await commandInput.waitFor({ state: "visible" });
+  await commandInput.fill(datasetName);
+
+  // Wait a moment for the filtered results to appear
+  await page.waitForTimeout(500);
+
+  // Click on the create option
+  await page.locator("[cmdk-item]").filter({ hasText: datasetName }).click();
+
+  // Wait for the toast to appear with success message
+  const toastRegion = page.getByRole("region", { name: /notifications/i });
+  await expect(toastRegion.getByText("Added to Dataset")).toBeVisible();
+
+  // Click the View Dataset button and wait for navigation
+  await Promise.all([
+    page.waitForURL(`/datasets/${datasetName}`, { timeout: 5000 }),
+    toastRegion.getByText("View Dataset").click(),
+  ]);
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Verify the dataset table shows 1 datapoint
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+
+  // Click on the first cell (ID column) to navigate to the datapoint detail page
+  const firstRow = page.locator("tbody tr").first();
+  const idCell = firstRow.locator("td").first();
+
+  await Promise.all([
+    page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, { timeout: 5000 }),
+    idCell.click(),
+  ]);
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Verify we're on the datapoint detail page
+  await expect(page.getByText("Datapoint", { exact: true })).toBeVisible();
+
+  // Verify the output contains "Brown" in the person array
+  await expect(page.getByText('"Brown"')).toBeVisible();
+
+  // Verify that "miscellaneous" appears in the output
+  // This confirms we got the llama variant output (with empty miscellaneous array)
+  await expect(page.getByText('"miscellaneous"')).toBeVisible();
+
+  // Find and click the source inference link to verify the variant
+  const inferenceLink = page.locator('a[href^="/observability/inferences/"]');
+  await expect(inferenceLink).toBeVisible();
+
+  await Promise.all([
+    page.waitForURL(/\/observability\/inferences\/[^/]+$/, { timeout: 5000 }),
+    inferenceLink.click(),
+  ]);
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Verify we're on the inference page
+  await expect(page.getByText("Inference", { exact: true })).toBeVisible();
+
+  // Verify the variant name is llama_8b_initial_prompt (the variant we selected from the third row)
+  await expect(page.getByText("llama_8b_initial_prompt")).toBeVisible();
+
+  // Verify the output contains "Brown" and "miscellaneous"
+  await expect(page.getByText('"Brown"')).toBeVisible();
+  await expect(page.getByText('"miscellaneous"')).toBeVisible();
+});
