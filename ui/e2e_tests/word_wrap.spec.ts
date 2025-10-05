@@ -5,10 +5,13 @@ test("ensure word wrap persists between pages", async ({ page }) => {
     "/datasets/foo/datapoint/0196374b-d575-77b3-ac22-91806c67745c",
   );
 
-  await expect(page.getByText("Input")).toBeVisible();
-
   // Clear localStorage to ensure clean state
   await page.evaluate(() => localStorage.removeItem("word-wrap"));
+
+  // Reload the page to avoid any quirks
+  await page.reload();
+
+  await expect(page.getByText("Input")).toBeVisible();
 
   const getWordWrapToggle = () => page.getByTitle("Toggle word wrap").first();
   const getWordWrap = async () =>
