@@ -18,7 +18,7 @@ import {
   Output,
   Cached,
 } from "~/components/icons/Icons";
-import { toFunctionUrl, toVariantUrl } from "~/utils/urls";
+import { toFunctionUrl, toVariantUrl, toEpisodeUrl } from "~/utils/urls";
 import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
 import { getFunctionTypeIcon } from "~/utils/icon";
 
@@ -103,7 +103,7 @@ export default function BasicInfo({
         <BasicInfoItemContent>
           <Chip
             label={inference.episode_id}
-            link={`/observability/episodes/${inference.episode_id}`}
+            link={toEpisodeUrl(inference.episode_id)}
             font="mono"
           />
         </BasicInfoItemContent>

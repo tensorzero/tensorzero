@@ -10,6 +10,7 @@ import {
   useFetcher,
   useParams,
 } from "react-router";
+import { toDatapointUrl, toDatasetUrl } from "~/utils/urls";
 import InputSnippet from "~/components/inference/InputSnippet";
 import { Output } from "~/components/inference/Output";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
@@ -166,7 +167,7 @@ export async function action({ request }: ActionFunctionArgs) {
           functionType,
         });
         return redirect(
-          `/datasets/${parsedFormData.dataset_name}/datapoint/${newId}`,
+          toDatapointUrl(parsedFormData.dataset_name, newId),
         );
       } catch (error) {
         logger.error("Error updating datapoint:", error);
@@ -525,7 +526,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         <h1 className="text-2xl font-bold">{heading}</h1>
         {typeof message === "string" ? <p>{message}</p> : message}
         <Link
-          to={`/datasets/${datasetName}`}
+          to={toDatasetUrl(datasetName)}
           className="font-bold text-red-800 hover:text-red-600"
         >
           Go back &rarr;

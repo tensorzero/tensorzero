@@ -4,6 +4,7 @@ import {
   getEvaluationsForDatapoint,
   pollForEvaluations,
 } from "~/utils/clickhouse/evaluations.server";
+import { toEvaluationUrl, toInferenceUrl } from "~/utils/urls";
 import type { Route } from "./+types/route";
 import {
   PageHeader,
@@ -86,7 +87,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ? selected_evaluation_run_ids.split(",")
     : [];
   if (selectedRunIds.length === 0) {
-    return redirect(`/evaluations/${evaluation_name}`);
+    return redirect(toEvaluationUrl(evaluation_name));
   }
 
   // Define all promises
@@ -506,7 +507,7 @@ function OutputsSection({
                       <span>
                         Inference:{" "}
                         <Link
-                          to={`/observability/inferences/${result.inferenceId}`}
+                          to={toInferenceUrl(result.inferenceId)}
                           className="text-blue-600 hover:text-blue-800 hover:underline"
                         >
                           {result.inferenceId}

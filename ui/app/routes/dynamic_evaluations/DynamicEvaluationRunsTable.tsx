@@ -10,6 +10,7 @@ import {
 } from "~/components/ui/table";
 import { formatDate } from "~/utils/date";
 import type { DynamicEvaluationRunWithEpisodeCount } from "~/utils/clickhouse/dynamic_evaluations";
+import { toDynamicEvaluationRunUrl, toDynamicEvaluationProjectUrl } from "~/utils/urls";
 
 export default function DynamicEvaluationRunsTable({
   dynamicEvaluationRuns,
@@ -36,7 +37,7 @@ export default function DynamicEvaluationRunsTable({
               <TableRow key={run.id}>
                 <TableCell className="max-w-[200px]">
                   <Link
-                    to={`/dynamic_evaluations/runs/${run.id}`}
+                    to={toDynamicEvaluationRunUrl(run.id)}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
@@ -46,7 +47,7 @@ export default function DynamicEvaluationRunsTable({
                 </TableCell>
                 <TableCell className="max-w-[200px]">
                   <Link
-                    to={`/dynamic_evaluations/runs/${run.id}`}
+                    to={toDynamicEvaluationRunUrl(run.id)}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
@@ -56,7 +57,7 @@ export default function DynamicEvaluationRunsTable({
                 </TableCell>
                 <TableCell>
                   <Link
-                    to={`/dynamic_evaluations/projects/${run.project_name}?run_ids=${run.id}`}
+                    to={`${toDynamicEvaluationProjectUrl(run.project_name)}?run_ids=${run.id}`}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">

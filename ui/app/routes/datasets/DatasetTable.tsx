@@ -10,6 +10,7 @@ import {
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import { Link, useFetcher } from "react-router";
 import { TableItemTime } from "~/components/ui/TableItems";
+import { toDatasetUrl } from "~/utils/urls";
 import { Button } from "~/components/ui/button";
 import { Trash, ChevronUp, ChevronDown, Search } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -51,7 +52,7 @@ export default function DatasetTable({
         header: "Dataset Name",
         cell: (info) => (
           <Link
-            to={`/datasets/${info.getValue()}`}
+            to={toDatasetUrl(info.getValue())}
             className="block no-underline"
           >
             <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
