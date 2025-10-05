@@ -286,7 +286,7 @@ struct OtelLayerData<T: Layer<Registry>> {
 
 // Builds the internal OpenTelemetry layer, without any filtering applied.
 // The default tracer is always built with empty headers. Config headers are stored separately
-// and applied when building spans. Use `TracerWrapper::set_static_otlp_traces_extra_headers()` to set headers after initialization.
+// and applied when building spans. Use `TracerWrapper::set_static_otlp_traces_extra_headers` to set headers after initialization.
 fn internal_build_otel_layer<T: SpanExporter + 'static>(
     override_exporter: Option<T>,
 ) -> Result<OtelLayerData<impl Layer<Registry>>, Error> {
