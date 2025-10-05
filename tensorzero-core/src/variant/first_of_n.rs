@@ -1,3 +1,55 @@
+//! # First-of-N Variant
+//!
+//! The first-of-n variant type executes multiple candidate variants concurrently and returns
+//! the result from whichever completes successfully first. This optimizes for **latency**
+//! rather than quality, making it ideal for scenarios where speed is critical.
+//!
+//! ## Use Cases
+//!
+//! - **Latency optimization**: When multiple models can solve the same task but with different
+//!   response times, first-of-n ensures you get the fastest available result.
+//! - **Provider redundancy**: Race the same model across multiple providers for improved
+//!   reliability and faster response times.
+//! - **Fast fallback**: Use a fast but potentially lower-quality model alongside a slower
+//!   higher-quality model, letting the fast one provide immediate results.
+//!
+//! ## Configuration Example
+//!
+//! ```toml
+//! [functions.my_function.variants.racing_variant]
+//! type = "experimental_first_of_n"
+//! timeout_s = 10.0  # Per-candidate timeout in seconds (default: 300s)
+//! candidates = ["primary_variant", "fallback_variant", "backup_variant"]
+//! weight = 0.5      # Optional: for A/B testing with other variants
+//! ```
+//!
+//! ## Behavior
+//!
+//! - **Concurrent execution**: All candidates execute simultaneously using Rust's async runtime
+//! - **First successful wins**: Returns immediately when any candidate completes successfully
+//! - **Cancellation**: Other candidates are cancelled once a winner is found
+//! - **Minimal observability**: Only the winning candidate is logged to the ModelInference table
+//! - **Error handling**: If all candidates fail or timeout, returns an error
+//! - **Independent timeouts**: Each candidate has its own timeout (not cumulative)
+//!
+//! ## Comparison to Other Variants
+//!
+//! - **First-of-N**: Returns immediately when any candidate succeeds (optimizes for latency)
+//! - **Best-of-N**: Waits for all candidates, uses a judge to select the best (optimizes for quality)
+//! - **Mixture-of-N**: Combines outputs from multiple candidates using a fuser model
+//!
+//! ## Streaming Behavior
+//!
+//! Since candidates run in parallel and we don't know which will finish first until runtime,
+//! streaming is not supported during candidate execution. The first successful non-streaming
+//! result is automatically converted to a stream for the client if streaming is requested.
+//!
+//! ## Implementation Details
+//!
+//! The implementation uses `FuturesUnordered` to poll all candidate inference futures concurrently.
+//! As soon as any future completes successfully, that result is returned. Errors from failed
+//! candidates are collected but don't block the return of a successful result.
+
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
@@ -23,6 +75,17 @@ use crate::{
 
 use super::{InferenceConfig, ModelUsedInfo, Variant};
 
+/// Configuration for a first-of-n variant.
+///
+/// This variant races multiple candidate variants concurrently and returns the first successful result.
+/// All candidates are executed in parallel, and whichever completes successfully first provides
+/// the final inference result.
+///
+/// # Fields
+///
+/// * `weight` - Optional weight for A/B testing this variant against others
+/// * `timeout_s` - Timeout in seconds for each individual candidate (default: 300s)
+/// * `candidates` - List of variant names to race concurrently
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -41,10 +104,18 @@ impl FirstOfNConfig {
         self.weight = weight;
     }
 
+    /// Returns the timeout in seconds for each candidate.
+    ///
+    /// Each candidate has an independent timeout. If a candidate doesn't complete within
+    /// this duration, it will be cancelled and treated as a failure. This does not affect
+    /// other candidates that are still running.
     pub fn timeout_s(&self) -> f64 {
         self.timeout_s
     }
 
+    /// Returns the list of candidate variant names that will be raced.
+    ///
+    /// All candidates must be valid variant names defined in the same function.
     pub fn candidates(&self) -> &Vec<String> {
         &self.candidates
     }
@@ -76,6 +147,27 @@ impl LoadableConfig<FirstOfNConfig> for UninitializedFirstOfNConfig {
 }
 
 impl Variant for FirstOfNConfig {
+    /// Executes all candidate variants concurrently and returns the first successful result.
+    ///
+    /// This method starts inference for all candidates in parallel using `FuturesUnordered`.
+    /// As candidates complete, their results are checked in order of completion. The first
+    /// successful result is returned immediately, and remaining candidates are cancelled.
+    ///
+    /// # Behavior
+    ///
+    /// - All candidates start execution simultaneously
+    /// - Each candidate has an independent timeout specified by `timeout_s`
+    /// - First successful completion wins and is returned immediately
+    /// - Remaining candidates are cancelled when a winner is found
+    /// - Failed candidates (errors or timeouts) don't block success
+    /// - If all candidates fail, an error is returned
+    /// - Only the winning candidate is logged to the ModelInference table
+    ///
+    /// # Error Handling
+    ///
+    /// - Individual candidate errors are collected but don't prevent success
+    /// - Timeouts are converted to timeout errors
+    /// - Only returns an error if all candidates fail or timeout
     async fn infer<'a: 'request, 'request>(
         &self,
         input: &LazyResolvedInput,
@@ -140,6 +232,17 @@ impl Variant for FirstOfNConfig {
         first
     }
 
+    /// Executes candidates and returns a streaming response.
+    ///
+    /// Since candidates run in parallel, true streaming during candidate execution is not
+    /// possible. Instead, this method waits for the first successful candidate (using the
+    /// non-streaming `infer` method) and then converts the result to a stream for the client.
+    ///
+    /// # Note
+    ///
+    /// The streaming conversion happens after candidate selection, not during candidate
+    /// execution. This means the latency benefit of streaming is limited compared to variants
+    /// that support native streaming.
     async fn infer_stream<'request>(
         &self,
         input: &LazyResolvedInput,
@@ -162,6 +265,15 @@ impl Variant for FirstOfNConfig {
         stream_inference_from_non_stream(inference_result, InferenceParams::default())
     }
 
+    /// Validates all candidate variants.
+    ///
+    /// This method ensures that:
+    /// - All candidate variant names reference valid variants in the same function
+    /// - Each candidate variant passes its own validation checks
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any candidate is invalid or if any candidate's validation fails.
     async fn validate(
         &self,
         function: &FunctionConfig,
@@ -205,6 +317,10 @@ impl Variant for FirstOfNConfig {
         HashSet::new()
     }
 
+    /// Batch inference is not supported for first-of-n variants.
+    ///
+    /// The concurrent, first-wins nature of first-of-n makes it incompatible with
+    /// batch inference patterns. Always returns an error.
     async fn start_batch_inference<'a>(
         &'a self,
         _input: &[LazyResolvedInput],
