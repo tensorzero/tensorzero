@@ -8,6 +8,7 @@ import {
 import Chip from "~/components/ui/Chip";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import type { StaticEvaluationConfig } from "tensorzero-node";
+import { toEvaluationUrl, toFunctionUrl, toDatasetUrl } from "~/utils/urls";
 
 interface BasicInfoProps {
   evaluation_name: string;
@@ -43,7 +44,7 @@ export default function BasicInfo({
         <BasicInfoItemContent>
           <Chip
             label={evaluation_name}
-            link={`/evaluations/${evaluation_name}`}
+            link={toEvaluationUrl(evaluation_name)}
             font="mono"
           />
         </BasicInfoItemContent>
@@ -57,7 +58,7 @@ export default function BasicInfo({
               iconBg={functionIconConfig.iconBg}
               label={functionName}
               secondaryLabel={`· ${functionType}`}
-              link={`/observability/functions/${functionName}`}
+              link={toFunctionUrl(functionName)}
               font="mono"
             />
           )}
@@ -69,7 +70,7 @@ export default function BasicInfo({
         <BasicInfoItemContent>
           <Chip
             label={dataset_name}
-            link={`/datasets/${dataset_name}`}
+            link={toDatasetUrl(dataset_name)}
             font="mono"
           />
         </BasicInfoItemContent>
