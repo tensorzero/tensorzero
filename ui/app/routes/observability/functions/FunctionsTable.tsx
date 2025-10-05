@@ -10,6 +10,7 @@ import {
 import type { FunctionConfig } from "tensorzero-node";
 import type { FunctionCountInfo } from "~/utils/clickhouse/inference.server";
 import { TableItemTime, TableItemFunction } from "~/components/ui/TableItems";
+import { toFunctionUrl } from "~/utils/urls";
 import {
   useReactTable,
   getCoreRowModel,
@@ -87,7 +88,7 @@ export default function FunctionsTable({
           <TableItemFunction
             functionName={info.getValue()}
             functionType={info.row.original.type}
-            link={`/observability/functions/${info.getValue()}`}
+            link={toFunctionUrl(info.getValue())}
           />
         ),
       }),

@@ -29,6 +29,8 @@ test("ensure word wrap persists between pages", async ({ page }) => {
   // ensure that it is still set to false on page reload...
   {
     await page.reload();
+    // Sleep to try to fix flakiness. TODO - figure out what event we should wait for.
+    await page.waitForTimeout(1000);
 
     const button = getWordWrapToggle();
     expect(await button.getAttribute("aria-pressed")).toBe("false");
