@@ -507,7 +507,7 @@ function OutputsSection({
                         Inference:{" "}
                         <Link
                           to={`/observability/inferences/${result.inferenceId}`}
-                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                          className="font-mono text-xs text-blue-600 hover:text-blue-800 hover:underline"
                         >
                           {result.inferenceId}
                         </Link>

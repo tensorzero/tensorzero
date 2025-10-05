@@ -36,7 +36,7 @@ export default function EvaluationRunBadge({
     return (
       <Badge
         className={cn(
-          "flex w-fit items-center gap-1.5 px-2 py-1",
+          "flex w-fit items-center gap-1.5 px-2 py-1 font-mono",
           variantColor,
         )}
       >
@@ -57,7 +57,7 @@ export default function EvaluationRunBadge({
         <TooltipTrigger asChild>
           <Badge
             className={cn(
-              "flex w-fit cursor-help items-center gap-1.5 px-2 py-1",
+              "flex w-fit cursor-help items-center gap-1.5 px-2 py-1 font-mono",
               variantColor,
             )}
           >

@@ -8,7 +8,7 @@ import {
   pollForEvaluationResults,
 } from "~/utils/clickhouse/evaluations.server";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
-import { EvaluationTable } from "./EvaluationTable";
+import { EvaluationTable, type SelectedRowData } from "./EvaluationTable";
 import {
   PageHeader,
   PageLayout,
@@ -29,8 +29,13 @@ import {
 import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { logger } from "~/utils/logger";
+import { handleAddToDatasetAction } from "~/utils/dataset.server";
+import { ActionBar } from "~/components/layout/ActionBar";
+import { DatasetSelector } from "~/components/dataset/DatasetSelector";
+import { useFetcher, Link } from "react-router";
+import { ToastAction } from "~/components/ui/toast";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -216,6 +221,85 @@ export async function action({ request }: Route.ActionArgs) {
       }
       return redirect(url.toString());
     }
+    case "addMultipleToDataset": {
+      const dataset = formData.get("dataset");
+      const selectedItemsJson = formData.get("selectedItems");
+      const evaluation_name = formData.get("evaluation_name");
+
+      if (!dataset || !selectedItemsJson || !evaluation_name) {
+        return data(
+          { error: "Missing required fields", success: false },
+          { status: 400 },
+        );
+      }
+
+      try {
+        const selectedItems = JSON.parse(selectedItemsJson.toString());
+        const config = await getConfig();
+        const evaluation_config =
+          config.evaluations[evaluation_name.toString()];
+
+        if (!evaluation_config) {
+          return data(
+            {
+              error: `Evaluation config not found for ${evaluation_name}`,
+              success: false,
+            },
+            { status: 404 },
+          );
+        }
+
+        const function_name = evaluation_config.function_name;
+        const errors: string[] = [];
+        let successCount = 0;
+
+        // Process each selected item
+        for (const item of selectedItems) {
+          const itemFormData = new FormData();
+          itemFormData.append("dataset", dataset.toString());
+          itemFormData.append("output", "inherit");
+          itemFormData.append("inference_id", item.inference_id);
+          itemFormData.append("function_name", function_name);
+          itemFormData.append("variant_name", item.variant_name);
+          itemFormData.append("episode_id", item.episode_id || "");
+          itemFormData.append("_action", "addToDataset");
+
+          try {
+            await handleAddToDatasetAction(itemFormData);
+            successCount++;
+          } catch (error) {
+            logger.error(
+              `Failed to add inference ${item.inference_id} to dataset:`,
+              error,
+            );
+            errors.push(`Failed to add inference ${item.inference_id}`);
+          }
+        }
+
+        if (errors.length > 0 && successCount === 0) {
+          return data(
+            {
+              error: `Failed to add all inferences: ${errors.join(", ")}`,
+              success: false,
+            },
+            { status: 400 },
+          );
+        }
+
+        return data({
+          success: true,
+          count: successCount,
+          dataset: dataset.toString(),
+          errors: errors.length > 0 ? errors : undefined,
+        });
+      } catch (error) {
+        logger.error("Error processing bulk add to dataset:", error);
+        return data(
+          { error: "Failed to process request", success: false },
+          { status: 500 },
+        );
+      }
+    }
     case null:
       logger.error("No action provided");
       return data({ error: "No action provided" }, { status: 400 });
@@ -242,6 +326,24 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     newJudgeDemonstrationId,
   } = loaderData;
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const fetcher = useFetcher();
+
+  // State for tracking selected rows
+  const [selectedRows, setSelectedRows] = useState<
+    Map<string, SelectedRowData>
+  >(new Map());
+  const [selectedDataset, setSelectedDataset] = useState<string>("");
+
+  const config = useConfig();
+  const evaluation_config = config.evaluations[evaluation_name];
+  if (!evaluation_config) {
+    throw data(
+      `Evaluation config not found for evaluation ${evaluation_name}`,
+      { status: 404 },
+    );
+  }
+  const function_name = evaluation_config.function_name;
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("offset", String(offset + pageSize));
@@ -256,18 +358,11 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   // Use that time for auto-refreshing
   useAutoRefresh(any_evaluation_is_running);
 
-  const config = useConfig();
-  const evaluation_config = config.evaluations[evaluation_name];
-  if (!evaluation_config) {
-    throw data(
-      `Evaluation config not found for evaluation ${evaluation_name}`,
-      { status: 404 },
-    );
-  }
   const hasErrorsToDisplay = Object.values(errors).some(
     (error) => error.errors.length > 0,
   );
-  const { toast } = useToast();
+
+  // Handle feedback toast
   useEffect(() => {
     if (newFeedbackId) {
       toast({
@@ -276,10 +371,76 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     }
   }, [newFeedbackId, newJudgeDemonstrationId, toast]);
 
+  // Handle fetcher response for bulk add to dataset
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data) {
+      if (fetcher.data.error) {
+        toast({
+          title: "Failed to add to dataset",
+          description: fetcher.data.error,
+          variant: "destructive",
+        });
+      } else if (fetcher.data.success) {
+        const datasetName = fetcher.data.dataset;
+        toast({
+          title: "Added to Dataset",
+          description: `${fetcher.data.count} ${fetcher.data.count === 1 ? "inference" : "inferences"} added to: ${datasetName}`,
+          action: (
+            <ToastAction altText="View Dataset" asChild>
+              <Link to={`/datasets/${datasetName}`}>View Dataset</Link>
+            </ToastAction>
+          ),
+        });
+        setSelectedRows(new Map());
+        setSelectedDataset("");
+      }
+    }
+  }, [fetcher.state, fetcher.data, toast, selectedDataset]);
+
+  // Handle dataset selection for bulk add
+  const handleDatasetSelect = (dataset: string) => {
+    setSelectedDataset(dataset);
+
+    const selectedData = Array.from(selectedRows.values());
+
+    if (selectedData.length === 0) {
+      toast({
+        title: "No rows selected",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Submit the form with all selected items
+    const formData = new FormData();
+    formData.append("_action", "addMultipleToDataset");
+    formData.append("dataset", dataset);
+    formData.append("evaluation_name", evaluation_name);
+    formData.append("selectedItems", JSON.stringify(selectedData));
+
+    fetcher.submit(formData, { method: "post" });
+  };
+
   return (
     <PageLayout>
       <PageHeader label="Evaluation" name={evaluation_name}>
         <BasicInfo evaluation_config={evaluation_config} />
+        <ActionBar>
+          <DatasetSelector
+            selected={selectedDataset}
+            onSelect={handleDatasetSelect}
+            functionName={function_name}
+            placeholder={
+              selectedRows.size > 0
+                ? `Add ${selectedRows.size} selected ${selectedRows.size === 1 ? "inference" : "inferences"} to dataset`
+                : "Add selected inferences to dataset"
+            }
+            buttonProps={{
+              size: "sm",
+            }}
+            disabled={selectedRows.size === 0}
+          />
+        </ActionBar>
       </PageHeader>
 
       <SectionsGroup>
@@ -306,6 +467,8 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
             evaluation_results={evaluation_results}
             evaluation_statistics={evaluation_statistics}
             evaluator_names={evaluator_names}
+            selectedRows={selectedRows}
+            setSelectedRows={setSelectedRows}
           />
           <PageButtons
             onPreviousPage={handlePreviousPage}
