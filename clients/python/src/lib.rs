@@ -871,23 +871,19 @@ impl TensorZeroGateway {
     ///
     /// :param run_id: The run ID to use for the dynamic evaluation run.
     /// :param task_name: The name of the task to use for the dynamic evaluation run.
-    /// :param datapoint_name: The name of the datapoint to use for the dynamic evaluation run.
-    ///                     Deprecated: use `task_name` instead.
     /// :param tags: A dictionary of tags to add to the dynamic evaluation run.
     /// :return: A `DynamicEvaluationRunEpisodeResponse` object.
-    #[pyo3(signature = (*, run_id, task_name=None, datapoint_name=None, tags=None))]
+    #[pyo3(signature = (*, run_id, task_name=None, tags=None))]
     fn dynamic_evaluation_run_episode(
         this: PyRef<'_, Self>,
         run_id: Bound<'_, PyAny>,
         task_name: Option<String>,
-        datapoint_name: Option<String>,
         tags: Option<HashMap<String, String>>,
     ) -> PyResult<Py<PyAny>> {
         let run_id = python_uuid_to_uuid("run_id", run_id)?;
         let client = this.as_super().client.clone();
         let params = DynamicEvaluationRunEpisodeParams {
             task_name,
-            datapoint_name,
             tags: tags.unwrap_or_default(),
         };
         let fut = client.dynamic_evaluation_run_episode(run_id, params);
@@ -1549,23 +1545,19 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param run_id: The run ID to use for the dynamic evaluation run.
     /// :param task_name: The name of the task to use for the dynamic evaluation run.
-    /// :param datapoint_name: The name of the datapoint to use for the dynamic evaluation run.
-    ///                     Deprecated: use `task_name` instead.
     /// :param tags: A dictionary of tags to add to the dynamic evaluation run.
     /// :return: A `DynamicEvaluationRunEpisodeResponse` object.
-    #[pyo3(signature = (*, run_id, task_name=None, datapoint_name=None, tags=None))]
+    #[pyo3(signature = (*, run_id, task_name=None, tags=None))]
     fn dynamic_evaluation_run_episode<'a>(
         this: PyRef<'a, Self>,
         run_id: Bound<'_, PyAny>,
         task_name: Option<String>,
-        datapoint_name: Option<String>,
         tags: Option<HashMap<String, String>>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let run_id = python_uuid_to_uuid("run_id", run_id)?;
         let client = this.as_super().client.clone();
         let params = DynamicEvaluationRunEpisodeParams {
             task_name,
-            datapoint_name,
             tags: tags.unwrap_or_default(),
         };
 

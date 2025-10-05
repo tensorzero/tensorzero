@@ -777,7 +777,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::cache::{CacheEnabledMode, CacheOptions};
-    use crate::config::{SchemaData, UninitializedSchemas};
+    use crate::config::{provider_types::ProviderTypesConfig, SchemaData, UninitializedSchemas};
     use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
     use crate::embeddings::EmbeddingModelTable;
     use crate::endpoints::inference::{
@@ -796,6 +796,7 @@ mod tests {
         test_system_template_schema, test_user_template_schema,
     };
     use crate::model::{ModelConfig, ModelProvider, ProviderConfig};
+    use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
     use crate::providers::test_helpers::get_temperature_tool_config;
     use crate::tool::{ToolCallConfig, ToolChoice};
@@ -1356,9 +1357,12 @@ mod tests {
             system: Some(json!({"assistant_name": "R2-D2"})),
             messages,
         };
-        let models = HashMap::from([("invalid_model".into(), text_model_config)])
-            .try_into()
-            .unwrap();
+        let provider_types = ProviderTypesConfig::default();
+        let models = ModelTable::new(
+            HashMap::from([("invalid_model".into(), text_model_config)]),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
+        .unwrap();
         let inference_models = InferenceModels {
             models: &models,
             embedding_models: &EmbeddingModelTable::default(),
@@ -1422,10 +1426,19 @@ mod tests {
         .unwrap();
         let inference_params = InferenceParams::default();
         let models = HashMap::from([("error".into(), error_model_config)]);
-        let models = models.try_into().unwrap();
+        let provider_types = ProviderTypesConfig::default();
+        let models = ModelTable::new(
+            models,
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
+        .unwrap();
         let inference_models = InferenceModels {
             models: &models,
-            embedding_models: &EmbeddingModelTable::try_from(HashMap::new()).unwrap(),
+            embedding_models: &EmbeddingModelTable::new(
+                HashMap::new(),
+                ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            )
+            .unwrap(),
         };
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -1516,9 +1529,12 @@ mod tests {
             )]),
             timeouts: Default::default(),
         };
-        let models = HashMap::from([("good".into(), text_model_config)])
-            .try_into()
-            .unwrap();
+        let provider_types = ProviderTypesConfig::default();
+        let models = ModelTable::new(
+            HashMap::from([("good".into(), text_model_config)]),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
+        .unwrap();
         let inference_models = InferenceModels {
             models: &models,
             embedding_models: &EmbeddingModelTable::default(),
@@ -1595,9 +1611,12 @@ mod tests {
                 content: vec!["What is the weather in Brooklyn?".to_string().into()],
             }],
         };
-        let models = HashMap::from([("tool".into(), tool_model_config)])
-            .try_into()
-            .unwrap();
+        let provider_types = ProviderTypesConfig::default();
+        let models = ModelTable::new(
+            HashMap::from([("tool".into(), tool_model_config)]),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
+        .unwrap();
         let inference_models = InferenceModels {
             models: &models,
             embedding_models: &EmbeddingModelTable::default(),
@@ -1761,9 +1780,12 @@ mod tests {
         };
         // Test case 6: JSON output was supposed to happen and it did
         let inference_params = InferenceParams::default();
-        let models = HashMap::from([("json".into(), json_model_config)])
-            .try_into()
-            .unwrap();
+        let provider_types = ProviderTypesConfig::default();
+        let models = ModelTable::new(
+            HashMap::from([("json".into(), json_model_config)]),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
+        .unwrap();
         let inference_models = InferenceModels {
             models: &models,
             embedding_models: &EmbeddingModelTable::default(),
@@ -2236,12 +2258,21 @@ mod tests {
             )
             .unwrap(),
         ));
+        let provider_types = Box::leak(Box::new(ProviderTypesConfig::default()));
         let models = Box::leak(Box::new(
-            HashMap::from([("error".into(), error_model_config)])
-                .try_into()
-                .unwrap(),
+            ModelTable::new(
+                HashMap::from([("error".into(), error_model_config)]),
+                ProviderTypeDefaultCredentials::new(provider_types).into(),
+            )
+            .unwrap(),
         ));
-        let embedding_models = &EmbeddingModelTable::try_from(HashMap::new()).unwrap();
+        let embedding_models = Box::leak(Box::new(
+            EmbeddingModelTable::new(
+                HashMap::new(),
+                ProviderTypeDefaultCredentials::new(provider_types).into(),
+            )
+            .unwrap(),
+        ));
         let inference_models = InferenceModels {
             models,
             embedding_models,
@@ -2315,10 +2346,13 @@ mod tests {
             },
         )
         .unwrap();
+        let provider_types = Box::leak(Box::new(ProviderTypesConfig::default()));
         let models = Box::leak(Box::new(
-            HashMap::from([("good".into(), text_model_config)])
-                .try_into()
-                .unwrap(),
+            ModelTable::new(
+                HashMap::from([("good".into(), text_model_config)]),
+                ProviderTypeDefaultCredentials::new(provider_types).into(),
+            )
+            .unwrap(),
         ));
         let inference_models = InferenceModels {
             models,

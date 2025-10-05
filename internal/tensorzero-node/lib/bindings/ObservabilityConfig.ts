@@ -5,4 +5,5 @@ export type ObservabilityConfig = {
   enabled: boolean | null;
   async_writes: boolean;
   batch_writes: BatchWritesConfig;
+  disable_automatic_migrations: boolean;
 };
