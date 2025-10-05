@@ -1,7 +1,6 @@
 use arc_swap::ArcSwap;
 use check_stopping::{check_stopping, CheckStoppingArgs, StoppingResult};
 use error::TrackAndStopError;
-use sha2::digest::Update;
 use std::{
     collections::{BTreeMap, HashMap},
     sync::{
@@ -20,10 +19,10 @@ use uuid::Uuid;
 
 use crate::{
     db::{
-        clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo, FeedbackByVariant,
-        SelectQueries,
+        clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo,
+        ExperimentationQueries, FeedbackByVariant, SelectQueries,
     },
-    error::Error,
+    error::{Error, ErrorDetails},
     variant::VariantInfo,
 };
 
@@ -45,6 +44,7 @@ pub struct TrackAndStopConfig {
     candidate_variants: Vec<String>,
     // Includes candidate and fallback variants
     all_variants: Vec<String>,
+    fallback_variants: Vec<String>,
     min_samples_per_variant: u64,
     delta: f64,
     epsilon: f64,
@@ -100,9 +100,26 @@ impl Nursery {
     }
 
     // increments the index and returns the variant name corresponding to the index
-    pub fn get_variant_round_robin<'a>(&'a self) -> &'a str {
+    fn get_variant_round_robin(&self) -> &str {
         let index = self.index.fetch_add(1, Ordering::Relaxed) % self.variants.len() as u64;
         &self.variants[index as usize]
+    }
+
+    /// Try to sample an active variant from the nursery using round-robin.
+    /// Tries up to N times (where N = number of variants) to find one in active_variants.
+    /// Returns None if no intersection exists.
+    pub fn sample_active<'a>(
+        &'a self,
+        active_variants: &'a BTreeMap<String, Arc<VariantInfo>>,
+    ) -> Option<&'a str> {
+        // Try up to N times to find an active variant
+        for _ in 0..self.variants.len() {
+            let variant = self.get_variant_round_robin();
+            if active_variants.contains_key(variant) {
+                return Some(variant);
+            }
+        }
+        None
     }
 }
 
@@ -118,9 +135,12 @@ pub struct UninitializedTrackAndStopConfig {
 
 impl UninitializedTrackAndStopConfig {
     pub fn load(self, variants: &HashMap<String, Arc<VariantInfo>>) -> TrackAndStopConfig {
+        let mut all_variants = self.candidate_variants.clone();
+        all_variants.extend(self.fallback_variants.clone());
         TrackAndStopConfig {
             metric: self.metric,
             candidate_variants: self.candidate_variants,
+            all_variants,
             fallback_variants: self.fallback_variants,
             min_samples_per_variant: self.min_samples_per_variant,
             delta: self.delta,
@@ -161,30 +181,42 @@ impl VariantSampler for TrackAndStopConfig {
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
         postgres: &PostgresConnectionInfo,
     ) -> Result<(String, Arc<VariantInfo>), Error> {
-        let sampling_probabilities = self.state.load();
-        let mut rng = rand::rng();
-        let total_active_probability = active_variants
-            .keys()
-            .map(|variant_name| sampling_probabilities.get(variant_name).unwrap_or(&0.0))
-            .sum::<f64>();
-        // TODO: handle the case where the total_active_probability is 0
-        // Sample a uniform random value
-        let random_threshold = rng.random::<f64>() * total_active_probability;
-        let variant_to_remove = {
-            let mut cumulative_weight = 0.0;
-            active_variants
-                .iter()
-                .find(|(variant_name, _)| {
-                    cumulative_weight += sampling_probabilities
-                        .get(variant_name.as_str())
-                        .unwrap_or(&0.0);
-                    cumulative_weight > random_threshold
-                })
-                .map(|(name, _)| name.clone()) // Clone the key
+        let state = self.state.load();
+
+        // Generate random value and drop the RNG before any await points
+        let uniform_sample = {
+            let mut rng = rand::rng();
+            rng.random::<f64>()
         };
 
-        //
-        todo!()
+        // Try to sample from the current state
+        let variant_name =
+            if let Some(candidate_name) = state.sample(active_variants, uniform_sample) {
+                // Check and set the variant in Postgres (ensures consistency for the episode)
+                let set_variant = postgres
+                    .check_and_set_variant_by_episode(episode_id, function_name, candidate_name)
+                    .await?;
+
+                // Check if the returned variant is active
+                if active_variants.contains_key(&set_variant) {
+                    set_variant
+                } else {
+                    // The variant that was already set for this episode is not active, fall back
+                    fallback_sample(active_variants, &self.fallback_variants, uniform_sample)?
+                }
+            } else {
+                // State couldn't provide a variant, fall back to uniform sampling from fallback_variants
+                fallback_sample(active_variants, &self.fallback_variants, uniform_sample)?
+            };
+
+        // Remove and return the sampled variant
+        active_variants.remove_entry(&variant_name).ok_or_else(|| {
+            Error::new(ErrorDetails::Inference {
+                message: format!(
+                    "Sampled variant {variant_name} not found in active_variants. This should never happen."
+                ),
+            })
+        })
     }
 }
 
@@ -214,16 +246,16 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
     } = args;
 
     loop {
-        let result = update_probabilities(
-            &clickhouse,
-            &candidate_variants,
-            &metric_name,
-            &function_name,
-            &sampling_probabilities,
+        let result = update_probabilities(UpdateProbabilitiesArgs {
+            clickhouse: &clickhouse,
+            candidate_variants: &candidate_variants,
+            metric_name: &metric_name,
+            function_name: &function_name,
+            sampling_probabilities: &sampling_probabilities,
             min_samples_per_variant,
             epsilon,
             delta,
-        )
+        })
         .await;
 
         match result {
@@ -237,16 +269,29 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
     }
 }
 
-async fn update_probabilities(
-    clickhouse: &ClickHouseConnectionInfo,
-    candidate_variants: &Arc<Vec<String>>,
-    metric_name: &str,
-    function_name: &str,
-    sampling_probabilities: &Arc<ArcSwap<TrackAndStopState>>,
+struct UpdateProbabilitiesArgs<'a> {
+    clickhouse: &'a ClickHouseConnectionInfo,
+    candidate_variants: &'a Arc<Vec<String>>,
+    metric_name: &'a str,
+    function_name: &'a str,
+    sampling_probabilities: &'a Arc<ArcSwap<TrackAndStopState>>,
     min_samples_per_variant: u64,
     epsilon: f64,
     delta: f64,
-) -> Result<(), TrackAndStopError> {
+}
+
+async fn update_probabilities(args: UpdateProbabilitiesArgs<'_>) -> Result<(), TrackAndStopError> {
+    let UpdateProbabilitiesArgs {
+        clickhouse,
+        candidate_variants,
+        metric_name,
+        function_name,
+        sampling_probabilities,
+        min_samples_per_variant,
+        epsilon,
+        delta,
+    } = args;
+
     // Fetch feedback from database
     let variant_performances = clickhouse
         .get_feedback_by_variant(metric_name, function_name, None)
@@ -274,8 +319,8 @@ async fn update_probabilities(
 /// For each variant in `candidate_variants`, get the count from variant_performances if it exists.
 /// If it doesn't exist, return 0.
 fn get_count_by_variant<'a>(
-    candidate_variants: &'a Vec<String>,
-    variant_performances: &Vec<FeedbackByVariant>,
+    candidate_variants: &'a [String],
+    variant_performances: &[FeedbackByVariant],
 ) -> HashMap<&'a str, usize> {
     candidate_variants
         .iter()
@@ -289,6 +334,67 @@ fn get_count_by_variant<'a>(
         .collect()
 }
 
+/// Perform uniform sampling from fallback_variants that are in active_variants.
+/// Returns an error if no fallback variants are active.
+fn fallback_sample(
+    active_variants: &BTreeMap<String, Arc<VariantInfo>>,
+    fallback_variants: &[String],
+    uniform_sample: f64,
+) -> Result<String, Error> {
+    let intersection: Vec<&String> = active_variants
+        .keys()
+        .filter(|variant_name| fallback_variants.contains(variant_name))
+        .collect();
+
+    if intersection.is_empty() {
+        return Err(ErrorDetails::NoFallbackVariantsRemaining.into());
+    }
+
+    let random_index = (uniform_sample * intersection.len() as f64).floor() as usize;
+    intersection
+        .get(random_index)
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::Inference {
+                message:
+                    "Failed to sample variant from nonempty intersection. This should never happen."
+                        .to_string(),
+            })
+        })
+        .map(std::string::ToString::to_string)
+}
+
+/// Sample a variant from active_variants using weighted probabilities.
+/// Returns None if no active variant has positive probability.
+fn sample_with_probabilities<'a>(
+    active_variants: &'a BTreeMap<String, Arc<VariantInfo>>,
+    sampling_probabilities: &HashMap<String, f64>,
+    uniform_sample: f64,
+) -> Option<&'a str> {
+    // Compute the total probability of active variants
+    let total_probability: f64 = active_variants
+        .keys()
+        .map(|variant_name| sampling_probabilities.get(variant_name).unwrap_or(&0.0))
+        .sum();
+
+    if total_probability <= 0.0 {
+        return None;
+    }
+
+    // Use weighted sampling
+    let random_threshold = uniform_sample * total_probability;
+    let mut cumulative_probability = 0.0;
+
+    active_variants
+        .keys()
+        .find(|variant_name| {
+            cumulative_probability += sampling_probabilities
+                .get(variant_name.as_str())
+                .unwrap_or(&0.0);
+            cumulative_probability > random_threshold
+        })
+        .map(std::string::String::as_str)
+}
+
 impl TrackAndStopState {
     /// For a quick initialization of a TrackAndStopState instance with only a nursery.
     /// Should be called on startup.
@@ -300,7 +406,7 @@ impl TrackAndStopState {
     /// and configured parameters.
     /// NOTE: This function may do some CPU-bound work to compute probabilities
     fn new(
-        candidate_variants: &Vec<String>,
+        candidate_variants: &[String],
         variant_performances: Vec<FeedbackByVariant>,
         min_samples_per_variant: u64,
         delta: f64,
@@ -316,7 +422,7 @@ impl TrackAndStopState {
         let need_bandits = num_variants_above_cutoff >= 2;
         match (need_nursery, need_bandits) {
             (true, false) => Ok(TrackAndStopState::NurseryOnly(Nursery::new(
-                candidate_variants.clone(),
+                candidate_variants.to_vec(),
             ))),
             (false, true) => {
                 // Check for stopping using all variants
@@ -395,9 +501,66 @@ impl TrackAndStopState {
 
     // Note: this function does __not__ pop
     fn sample<'a>(
-        &self,
-        &'a active_variants: BTreeMap<String, Arc<VariantInfo>>,
+        &'a self,
+        active_variants: &'a BTreeMap<String, Arc<VariantInfo>>,
+        uniform_sample: f64,
     ) -> Option<&'a str> {
-        todo!()
+        match self {
+            TrackAndStopState::Stopped {
+                winner_variant_name,
+            } => {
+                if active_variants.contains_key(winner_variant_name) {
+                    Some(winner_variant_name)
+                } else {
+                    None
+                }
+            }
+            TrackAndStopState::NurseryOnly(nursery) => {
+                // Do round-robin sampling from the variants until we find one that is active
+                // If there is no intersection, return none
+                nursery.sample_active(active_variants)
+            }
+            TrackAndStopState::NurseryAndBandits {
+                sampling_probabilities,
+                nursery,
+            } => {
+                // With probability `NURSERY_PROBABILITY`, sample from the nursery using
+                // round-robin sampling
+                // Otherwise sample from the bandits using probability sampling
+                if uniform_sample < NURSERY_PROBABILITY {
+                    nursery.sample_active(active_variants)
+                } else {
+                    sample_with_probabilities(
+                        active_variants,
+                        sampling_probabilities,
+                        uniform_sample,
+                    )
+                }
+            }
+            TrackAndStopState::BanditsOnly {
+                sampling_probabilities,
+            } => {
+                // Sample from the active bandits using probability sampling
+                sample_with_probabilities(active_variants, sampling_probabilities, uniform_sample)
+            }
+            TrackAndStopState::NurseryAndStopped {
+                nursery,
+                stopped_variant_name,
+            } => {
+                // with probability `NURSERY_PROBABILITY`, sample from the nursery using
+                // round-robin sampling until we find one that is active
+                // if there is no intersection, return none
+                //
+                // with probability 1 - NURSERY_PROBABILITY,
+                // return the stopped variant name if it's active and None otherwise
+                if uniform_sample < NURSERY_PROBABILITY {
+                    nursery.sample_active(active_variants)
+                } else if active_variants.contains_key(stopped_variant_name) {
+                    Some(stopped_variant_name)
+                } else {
+                    None
+                }
+            }
+        }
     }
 }

@@ -180,7 +180,7 @@ impl GatewayHandle {
             clickhouse_connection_info.clone(),
             cancel_token.clone(),
         );
-        for (function_name, function_config) in config.functions.iter() {
+        for (function_name, function_config) in &config.functions {
             function_config
                 .experimentation()
                 .setup(&clickhouse_connection_info, function_name)

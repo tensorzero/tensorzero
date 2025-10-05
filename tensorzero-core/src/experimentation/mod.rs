@@ -43,7 +43,7 @@ impl UninitializedExperimentationConfig {
             }
             UninitializedExperimentationConfig::Uniform => ExperimentationConfig::Uniform,
             UninitializedExperimentationConfig::TrackAndStop(config) => {
-                ExperimentationConfig::TrackAndStop(config.load(variant_names))
+                ExperimentationConfig::TrackAndStop(config.load(variants))
             }
         }
     }

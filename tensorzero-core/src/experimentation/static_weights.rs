@@ -143,9 +143,10 @@ mod tests {
         );
         let mut active_variants = variants_map;
         let episode_id = Uuid::now_v7();
+        let postgres = PostgresConnectionInfo::new_disabled();
 
         let (variant_name, _) = config
-            .sample("test_function", episode_id, &mut active_variants)
+            .sample("test_function", episode_id, &mut active_variants, &postgres)
             .await
             .unwrap();
         assert!(["A", "B", "C"].contains(&variant_name.as_str()));
@@ -163,9 +164,10 @@ mod tests {
         );
         let mut active_variants = variants_map;
         let episode_id = Uuid::now_v7();
+        let postgres = PostgresConnectionInfo::new_disabled();
 
         let (variant_name, _) = config
-            .sample("test_function", episode_id, &mut active_variants)
+            .sample("test_function", episode_id, &mut active_variants, &postgres)
             .await
             .unwrap();
         assert!(["B", "C"].contains(&variant_name.as_str())); // Should pick from fallback variants
@@ -179,9 +181,10 @@ mod tests {
         };
         let mut active_variants = BTreeMap::new();
         let episode_id = Uuid::now_v7();
+        let postgres = PostgresConnectionInfo::new_disabled();
 
         let result = config
-            .sample("test_function", episode_id, &mut active_variants)
+            .sample("test_function", episode_id, &mut active_variants, &postgres)
             .await;
         assert!(result.is_err());
     }
@@ -199,6 +202,7 @@ mod tests {
 
         let sample_size = 10_000;
         let mut counts = std::collections::HashMap::new();
+        let postgres = PostgresConnectionInfo::new_disabled();
 
         // Sample many times to build distribution
         for i in 0..sample_size {
@@ -206,7 +210,7 @@ mod tests {
             // Use different episode IDs to get different samples
             let episode_id = Uuid::from_u128(i as u128);
             let (variant_name, _) = config
-                .sample("test_function", episode_id, &mut active_variants)
+                .sample("test_function", episode_id, &mut active_variants, &postgres)
                 .await
                 .unwrap();
             *counts.entry(variant_name).or_insert(0) += 1;
@@ -281,6 +285,7 @@ mod tests {
         let sample_size = 10_000;
         let mut first_sample_counts = std::collections::HashMap::new();
         let mut third_sample_counts = std::collections::HashMap::new();
+        let postgres = PostgresConnectionInfo::new_disabled();
 
         for i in 0..sample_size {
             let mut variants = BTreeMap::from([
@@ -312,7 +317,7 @@ mod tests {
 
             // Sample first variant (should be from candidate variants: foo or bar)
             let (first_sample_name, _) = experiment
-                .sample("test", episode_id, &mut variants)
+                .sample("test", episode_id, &mut variants, &postgres)
                 .await
                 .unwrap();
             *first_sample_counts
@@ -321,7 +326,7 @@ mod tests {
 
             // Sample second variant
             let (second_sample_name, _) = experiment
-                .sample("test", episode_id, &mut variants)
+                .sample("test", episode_id, &mut variants, &postgres)
                 .await
                 .unwrap();
 
@@ -329,7 +334,7 @@ mod tests {
 
             // Sample third variant (should always be baz since it's the fallback)
             let (third_sample_name, _) = experiment
-                .sample("test", episode_id, &mut variants)
+                .sample("test", episode_id, &mut variants, &postgres)
                 .await
                 .unwrap();
             *third_sample_counts.entry(third_sample_name).or_insert(0) += 1;

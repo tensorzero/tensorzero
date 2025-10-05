@@ -87,7 +87,9 @@ pub(super) struct CheckStoppingArgs<'a> {
 ///     Decide whether to stop the experiment and which arm to recommend.
 ///     Uses parallel GLR testing with uniform challenger weights π_j = 1/(K-1),
 ///     and per-pair time t_{L,j} = n_L + n_j.
-pub(super) fn check_stopping(args: CheckStoppingArgs) -> Result<StoppingResult, CheckStoppingError> {
+pub(super) fn check_stopping(
+    args: CheckStoppingArgs,
+) -> Result<StoppingResult, CheckStoppingError> {
     let CheckStoppingArgs {
         feedback,
         min_pulls,
