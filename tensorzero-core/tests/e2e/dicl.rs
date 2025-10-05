@@ -1398,7 +1398,7 @@ max_tokens = 100
     let mut tasks = Vec::new();
 
     let input = ResolvedInput {
-        system: Some(json!({"assistant_name": "Dr. Mehta"})),
+        system: None,
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text {
@@ -1417,7 +1417,7 @@ max_tokens = 100
     ));
 
     let input = ResolvedInput {
-        system: Some(json!({"assistant_name": "Dr. Mehta"})),
+        system: None,
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text {
@@ -1436,7 +1436,7 @@ max_tokens = 100
     ));
 
     let input = ResolvedInput {
-        system: Some(json!({"assistant_name": "Dr. Mehta"})),
+        system: None,
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text {
@@ -1467,7 +1467,7 @@ max_tokens = 100
         variant_name: Some(variant_name.to_string()),
         episode_id: Some(episode_id),
         input: ClientInput {
-            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            system: None,
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text {
