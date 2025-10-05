@@ -28,9 +28,14 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use tensorzero::{
+    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    InferenceOutput, InferenceResponse,
+};
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inferences_clickhouse,
 };
+use tensorzero_core::inference::types::TextKind;
 
 #[tokio::test]
 pub async fn test_dicl_inference_request_no_examples_empty_dicl() {
@@ -1364,6 +1369,22 @@ pub async fn test_dicl_max_distance_filters_all_examples() {
     let variant_name = "dicl_max_distance_strict";
     let function_name = "basic_test";
 
+    // Create embedded gateway with DICL variant that has strict max_distance
+    let config = r#"
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.dicl_max_distance_strict]
+type = "experimental_dynamic_in_context_learning"
+model = "openai::gpt-4o-mini-2024-07-18"
+embedding_model = "openai::text-embedding-3-small"
+k = 3
+max_distance = 0.15
+max_tokens = 100
+"#;
+
+    let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(config).await;
+
     // Delete any existing examples for this function and variant
     let delete_query = format!(
         "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
@@ -1441,37 +1462,30 @@ pub async fn test_dicl_max_distance_filters_all_examples() {
 
     // Query about a completely unrelated topic (programming/software)
     // The max_distance should filter out all geography examples due to high cosine distance
-    let payload = json!({
-        "function_name": function_name,
-        "variant_name": variant_name,
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "What programming language is used for web development?"
-                }
-            ]
+    let params = ClientInferenceParams {
+        function_name: Some(function_name.to_string()),
+        variant_name: Some(variant_name.to_string()),
+        episode_id: Some(episode_id),
+        input: ClientInput {
+            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "What programming language is used for web development?".to_string(),
+                })],
+            }],
         },
-        "stream": false,
-    });
+        ..Default::default()
+    };
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
+    let response = gateway.inference(params).await.unwrap();
+    let InferenceOutput::NonStreaming(InferenceResponse::Chat(response)) = response else {
+        panic!("Expected non-streaming chat response");
+    };
 
-    // Check that the API response is ok
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response:#?}");
 
-    println!("API response: {response_json:#?}");
-
-    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let inference_id = response.inference_id;
 
     // Sleep to allow time for data to be inserted into ClickHouse
     sleep(Duration::from_secs(1)).await;
@@ -1527,6 +1541,22 @@ pub async fn test_dicl_max_distance_keeps_relevant_examples() {
     let episode_id = Uuid::now_v7();
     let variant_name = "dicl_max_distance_moderate";
     let function_name = "basic_test";
+
+    // Create embedded gateway with DICL variant that has moderate max_distance
+    let config = r#"
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.dicl_max_distance_moderate]
+type = "experimental_dynamic_in_context_learning"
+model = "openai::gpt-4o-mini-2024-07-18"
+embedding_model = "openai::text-embedding-3-small"
+k = 3
+max_distance = 0.6
+max_tokens = 100
+"#;
+
+    let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(config).await;
 
     // Delete any existing examples for this function and variant
     let delete_query = format!(
@@ -1611,37 +1641,30 @@ pub async fn test_dicl_max_distance_keeps_relevant_examples() {
 
     // Query about a similar topic (Harry Potter author, similar to Lord of the Rings question)
     // The max_distance=0.6 should keep relevant examples
-    let payload = json!({
-        "function_name": function_name,
-        "variant_name": variant_name,
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "Pinocchio"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Who was the author of the Harry Potter series?"
-                }
-            ]
+    let params = ClientInferenceParams {
+        function_name: Some(function_name.to_string()),
+        variant_name: Some(variant_name.to_string()),
+        episode_id: Some(episode_id),
+        input: ClientInput {
+            system: Some(json!({"assistant_name": "Pinocchio"})),
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "Who was the author of the Harry Potter series?".to_string(),
+                })],
+            }],
         },
-        "stream": false,
-    });
+        ..Default::default()
+    };
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
+    let response = gateway.inference(params).await.unwrap();
+    let InferenceOutput::NonStreaming(InferenceResponse::Chat(response)) = response else {
+        panic!("Expected non-streaming chat response");
+    };
 
-    // Check that the API response is ok
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response:#?}");
 
-    println!("API response: {response_json:#?}");
-
-    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let inference_id = response.inference_id;
 
     // Sleep to allow time for data to be inserted into ClickHouse
     sleep(Duration::from_secs(1)).await;

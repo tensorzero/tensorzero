@@ -686,7 +686,9 @@ impl DiclConfig {
         })
     }
 
-    /// Prepare request message for DICL (stringify template content blocks, then delegate to chat_completion)
+    /// Prepare request message for DICL.
+    /// We stringify template content blocks because DICL variants don't have a concept of templates.
+    /// For everything else, we just pass it through unchanged.
     async fn prepare_request_message_dicl(
         message: &LazyResolvedInputMessage,
         templates: &TemplateConfig<'_>,
