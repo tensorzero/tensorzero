@@ -1688,12 +1688,11 @@ k = 3
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
-[functions.basic_test.variants.dicl_max_distance_moderate]
+[functions.basic_test.variants.empty_dicl_shorthand]
 type = "experimental_dynamic_in_context_learning"
 model = "gpt-4o-mini-2024-07-18"
-embedding_model = "text-embedding-3-small"
+embedding_model = "openai::text-embedding-3-small"
 k = 3
-max_distance = 0.6
 max_tokens = 100
 
 [functions.model_fallback_test]
