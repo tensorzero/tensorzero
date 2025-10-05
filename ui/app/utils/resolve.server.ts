@@ -212,14 +212,17 @@ function prepareDisplayText(
   }
 
   // Handle the legacy structured prompts that were stored as text content blocks
-  if (role === "user" && !!functionConfig.schemas["user"]) {
+  if (role === "user" && functionConfig.schemas["user"] !== undefined) {
     return {
       type: "template",
       name: "user",
       arguments: textBlock.value,
     };
   }
-  if (role === "assistant" && !!functionConfig.schemas["assistant"]) {
+  if (
+    role === "assistant" &&
+    functionConfig.schemas["assistant"] !== undefined
+  ) {
     return {
       type: "template",
       name: "assistant",
