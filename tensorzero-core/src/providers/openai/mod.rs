@@ -259,6 +259,7 @@ impl InferenceProvider for OpenAIProvider {
         .await?;
 
         if res.status().is_success() {
+            println!("Received successful response");
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!(
