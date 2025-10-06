@@ -25,7 +25,7 @@ pub struct OptimalProbsArgs {
     epsilon: Option<f64>,
     /// Value used to lower bound empirical variance, for stability. Prevents numerical issues
     /// when observed variances are very small. Default: 1e-12
-    ridge_variance: Option<f64>,
+    variance_floor: Option<f64>,
     /// Lower bound on per-arm sampling probability (must be in (0, 1/K) where K is number of arms).
     /// Ensures all arms receive minimum exploration for numerical stability. Default: 1e-6
     min_prob: Option<f64>,
@@ -70,7 +70,7 @@ pub enum OptimalProbsError {
 /// * `args` - A struct containing:
 ///   * `feedback` - Observed rewards and pull counts for each arm
 ///   * `epsilon` - Sub-optimality tolerance (ε ≥ 0), default 0.0
-///   * `ridge_variance` - Lower bound on variances for stability, default 1e-12
+///   * `variance_floor` - Lower bound on variances for stability, default 1e-12
 ///   * `min_prob` - Minimum probability per arm, default 1e-6
 ///   * `reg0` - Regularization coefficient, default 0.01
 ///
@@ -97,11 +97,11 @@ pub enum OptimalProbsError {
 ///
 /// The function expects (but does not currently validate):
 /// - epsilon ≥ 0
-/// - ridge_variance ≥ 0
+/// - variance_floor ≥ 0
 /// - min_prob ∈ (0, 1/K) where K is the number of arms
 /// - reg0 ≥ 0
 /// - All pull counts > 0
-/// - All variances > 0 (after ridge adjustment)
+/// - All variances > 0 (after variance floor adjustment)
 ///
 /// # Special Cases
 ///
@@ -121,12 +121,12 @@ pub fn estimate_optimal_probabilities(
     let OptimalProbsArgs {
         feedback,
         epsilon,
-        ridge_variance,
+        variance_floor,
         min_prob,
         reg0,
     } = args;
     let epsilon: f64 = epsilon.unwrap_or(0.0);
-    let ridge_variance: f64 = ridge_variance.unwrap_or(1e-12);
+    let variance_floor: f64 = variance_floor.unwrap_or(1e-12);
     let min_prob: f64 = min_prob.unwrap_or(1e-6);
     let reg0: f64 = reg0.unwrap_or(0.01);
 
@@ -134,7 +134,7 @@ pub fn estimate_optimal_probabilities(
     let means: Vec<f64> = feedback.iter().map(|x| x.mean as f64).collect();
     let variances: Vec<f64> = feedback
         .iter()
-        .map(|x| (x.variance as f64).max(ridge_variance))
+        .map(|x| (x.variance as f64).max(variance_floor))
         .collect();
     let variant_names: Vec<String> = feedback.into_iter().map(|x| x.variant_name).collect();
 
@@ -354,7 +354,7 @@ mod tests {
         let probs = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.1),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(1.0),
         })
@@ -373,7 +373,7 @@ mod tests {
         let probs = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.01),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: None,
             reg0: Some(0.0),
         })
@@ -392,7 +392,7 @@ mod tests {
         let probs = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.01),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: Some(min_prob),
             reg0: Some(0.0),
         })
@@ -414,7 +414,7 @@ mod tests {
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.01),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: None,
             reg0: Some(1.0),
         })
@@ -432,7 +432,7 @@ mod tests {
         let probs_no_reg = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback: feedback_no_reg,
             epsilon: Some(0.0),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: None,
             reg0: Some(0.0),
         })
@@ -442,7 +442,7 @@ mod tests {
         let probs_with_reg = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback: feedback_with_reg,
             epsilon: Some(0.0),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: None,
             reg0: Some(10.0),
         })
@@ -466,7 +466,7 @@ mod tests {
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.0),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: Some(min_prob),
             reg0: Some(0.0),
         })
@@ -490,7 +490,7 @@ mod tests {
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.0),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: None,
             reg0: Some(0.0),
         })
@@ -503,13 +503,13 @@ mod tests {
     }
 
     #[test]
-    fn test_ridge_variance_applied() {
-        // Ridge variance should lower bound all variances
+    fn test_variance_floor_applied() {
+        // Variance floor should lower bound all variances
         let feedback = make_feedback(vec![10, 10], vec![0.5, 0.5], vec![1e-20, 1e-20]);
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.0),
-            ridge_variance: Some(0.01),
+            variance_floor: Some(0.01),
             min_prob: None,
             reg0: Some(0.0),
         })
@@ -522,13 +522,13 @@ mod tests {
     }
 
     #[test]
-    fn test_zero_variance_with_ridge() {
-        // Zero variance should be handled by ridge
+    fn test_zero_variance_with_floor() {
+        // Zero variance should be handled by variance floor
         let feedback = make_feedback(vec![10, 10], vec![0.3, 0.7], vec![0.0001, 0.0]);
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.0),
-            ridge_variance: Some(0.001),
+            variance_floor: Some(0.001),
             min_prob: None,
             reg0: Some(0.0),
         })
@@ -551,7 +551,7 @@ mod tests {
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.05),
-            ridge_variance: Some(1e-8),
+            variance_floor: Some(1e-8),
             min_prob: Some(0.05),
             reg0: Some(2.0),
         })
@@ -576,7 +576,7 @@ mod tests {
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.02),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(0.5),
         })
@@ -599,7 +599,7 @@ mod tests {
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.05),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(2.0),
         })
@@ -627,7 +627,7 @@ mod tests {
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.01),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: Some(0.01),
             reg0: Some(0.0),
         })
@@ -650,7 +650,7 @@ mod tests {
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.02),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: Some(0.01),
             reg0: Some(0.1),
         })
@@ -685,7 +685,7 @@ mod tests {
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.5),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(0.1),
         })
@@ -704,7 +704,7 @@ mod tests {
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(1.0),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: Some(0.01),
             reg0: Some(0.5),
         })
@@ -727,7 +727,7 @@ mod tests {
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.2),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(1.0),
         })
@@ -755,7 +755,7 @@ mod tests {
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.05),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: Some(0.1),
             reg0: Some(0.2),
         })
@@ -778,7 +778,7 @@ mod tests {
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(1.0),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(0.5),
         })
@@ -803,7 +803,7 @@ mod tests {
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(2.0),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: Some(0.01),
             reg0: Some(0.0),
         })
@@ -824,7 +824,7 @@ mod tests {
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.1),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(0.1),
         })
@@ -847,7 +847,7 @@ mod tests {
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.2),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(0.2),
         })
@@ -866,7 +866,7 @@ mod tests {
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(1.0),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: Some(0.01),
             reg0: Some(0.5),
         })
@@ -889,7 +889,7 @@ mod tests {
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.3),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(0.3),
         })
@@ -913,7 +913,7 @@ mod tests {
         let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
             feedback,
             epsilon: Some(0.05),
-            ridge_variance: None,
+            variance_floor: None,
             min_prob: Some(0.1),
             reg0: Some(0.1),
         })

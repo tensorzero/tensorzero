@@ -136,7 +136,7 @@ pub(super) struct CheckStoppingArgs<'a> {
     /// Required minimum number of pulls per arm before stopping can be considered
     pub min_pulls: u64,
     /// Value used to lower bound empirical variance, for stability
-    pub ridge_variance: Option<f64>,
+    pub variance_floor: Option<f64>,
     /// Sub-optimality tolerance
     pub epsilon: Option<f64>,
     /// Type 1 error tolerance, aka 1 minus the confidence level
@@ -253,7 +253,7 @@ pub enum StoppingResult {
 /// * `args` - The stopping check arguments, including:
 ///   - `feedback`: Performance data for each variant (must be non-empty)
 ///   - `min_pulls`: Minimum number of pulls required per arm before stopping (must be > 0)
-///   - `ridge_variance`: Lower bound for empirical variances (must be > 0, default: 1e-12)
+///   - `variance_floor`: Lower bound for empirical variances (must be > 0, default: 1e-12)
 ///   - `epsilon`: Epsilon-optimality tolerance (must be ≥ 0, default: 0.0)
 ///   - `delta`: Error tolerance for stopping (must be in (0, 1), default: 0.05)
 ///
@@ -274,7 +274,7 @@ pub enum StoppingResult {
 /// The function expects (but does not currently validate):
 /// - `feedback` is non-empty
 /// - `min_pulls > 0`
-/// - `ridge_variance > 0` (if provided)
+/// - `variance_floor > 0` (if provided)
 /// - `epsilon ≥ 0` (if provided)
 /// - `delta ∈ (0, 1)` (if provided)
 ///
@@ -282,24 +282,24 @@ pub enum StoppingResult {
 ///
 /// - Ties in means are broken by selecting the arm with smallest variance/pull_count
 /// - All arms must have at least `min_pulls` samples before stopping is possible
-/// - Empirical variances are lower bounded at `ridge_variance`
+/// - Empirical variances are lower bounded at `variance_floor`
 pub fn check_stopping(args: CheckStoppingArgs<'_>) -> Result<StoppingResult, CheckStoppingError> {
     let CheckStoppingArgs {
         feedback,
         min_pulls,
-        ridge_variance,
+        variance_floor,
         epsilon,
         delta,
     } = args;
     // TODO: how to validate inputs?
-    let ridge_variance: f64 = ridge_variance.unwrap_or(1e-12);
+    let variance_floor: f64 = variance_floor.unwrap_or(1e-12);
     let epsilon: f64 = epsilon.unwrap_or(0.0);
     let delta: f64 = delta.unwrap_or(0.05);
     let pull_counts: Vec<u64> = feedback.iter().map(|x| x.count).collect();
     let means: Vec<f64> = feedback.iter().map(|x| x.mean as f64).collect();
     let variances: Vec<f64> = feedback
         .iter()
-        .map(|x| (x.variance as f64).max(ridge_variance))
+        .map(|x| (x.variance as f64).max(variance_floor))
         .collect();
     let variant_names: Vec<String> = feedback.iter().map(|x| x.variant_name.clone()).collect();
     let num_arms: usize = pull_counts.len();
@@ -621,7 +621,7 @@ mod tests {
         let result = check_stopping(CheckStoppingArgs {
             feedback: &feedback,
             min_pulls: 10,
-            ridge_variance: None,
+            variance_floor: None,
             epsilon: Some(0.0),
             delta: None,
         })
@@ -640,7 +640,7 @@ mod tests {
         let result = check_stopping(CheckStoppingArgs {
             feedback: &feedback,
             min_pulls: 10,
-            ridge_variance: None,
+            variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
         })
@@ -663,7 +663,7 @@ mod tests {
         let result = check_stopping(CheckStoppingArgs {
             feedback: &feedback,
             min_pulls: 10,
-            ridge_variance: None,
+            variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
         })
@@ -681,7 +681,7 @@ mod tests {
         let result = check_stopping(CheckStoppingArgs {
             feedback: &feedback,
             min_pulls: 10,
-            ridge_variance: None,
+            variance_floor: None,
             epsilon: Some(0.0),
             delta: None,
         })
@@ -700,7 +700,7 @@ mod tests {
         let result_no_eps = check_stopping(CheckStoppingArgs {
             feedback: &feedback_no_epsilon,
             min_pulls: 10,
-            ridge_variance: None,
+            variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
         })
@@ -710,7 +710,7 @@ mod tests {
         let result_with_eps = check_stopping(CheckStoppingArgs {
             feedback: &feedback_with_epsilon,
             min_pulls: 10,
-            ridge_variance: None,
+            variance_floor: None,
             epsilon: Some(0.05),
             delta: Some(0.05),
         })
@@ -727,18 +727,18 @@ mod tests {
     }
 
     #[test]
-    fn test_check_stopping_ridge_variance_applied() {
-        // Very small variances should be bounded by ridge_variance
+    fn test_check_stopping_variance_floor_applied() {
+        // Very small variances should be bounded by variance_floor
         let feedback = make_feedback(vec![100, 100], vec![0.5, 0.7], vec![1e-10, 1e-10]);
         // Should not panic due to division by near-zero variance
         let result = check_stopping(CheckStoppingArgs {
             feedback: &feedback,
             min_pulls: 10,
-            ridge_variance: Some(0.01),
+            variance_floor: Some(0.01),
             epsilon: Some(0.0),
             delta: None,
         });
-        assert!(result.is_ok(), "Ridge variance should prevent degeneracy");
+        assert!(result.is_ok(), "Variance floor should prevent degeneracy");
     }
 
     #[test]
@@ -753,7 +753,7 @@ mod tests {
         let result_strict = check_stopping(CheckStoppingArgs {
             feedback: &feedback_strict,
             min_pulls: 10,
-            ridge_variance: None,
+            variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.01),
         })
@@ -767,7 +767,7 @@ mod tests {
         let result_lenient = check_stopping(CheckStoppingArgs {
             feedback: &feedback_lenient,
             min_pulls: 10,
-            ridge_variance: None,
+            variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.2),
         })
@@ -791,7 +791,7 @@ mod tests {
         let result = check_stopping(CheckStoppingArgs {
             feedback: &feedback,
             min_pulls: 10,
-            ridge_variance: None,
+            variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
         })
@@ -815,7 +815,7 @@ mod tests {
         let result = check_stopping(CheckStoppingArgs {
             feedback: &feedback,
             min_pulls: 50,
-            ridge_variance: None,
+            variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
         })
@@ -840,7 +840,7 @@ mod tests {
         let result = check_stopping(CheckStoppingArgs {
             feedback: &feedback,
             min_pulls: 10,
-            ridge_variance: None,
+            variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
         })
@@ -864,7 +864,7 @@ mod tests {
         let result_small = check_stopping(CheckStoppingArgs {
             feedback: &feedback_small,
             min_pulls: 10,
-            ridge_variance: None,
+            variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
         })
@@ -874,7 +874,7 @@ mod tests {
         let result_large = check_stopping(CheckStoppingArgs {
             feedback: &feedback_large,
             min_pulls: 10,
-            ridge_variance: None,
+            variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
         })
