@@ -860,6 +860,7 @@ pub(super) fn handle_openai_error(
     response_body: &str,
     provider_type: &str,
 ) -> Error {
+    println!("Response body: {}", response_body);
     match response_code {
         StatusCode::BAD_REQUEST
         | StatusCode::UNAUTHORIZED
