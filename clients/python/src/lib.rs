@@ -275,7 +275,7 @@ impl StreamWrapper {
 /// Job handler for streaming evaluation results (synchronous)
 #[pyclass(frozen)]
 struct EvaluationJobHandler {
-    receiver: Arc<Mutex<tokio::sync::mpsc::Receiver<EvaluationUpdate>>>,
+    receiver: Mutex<tokio::sync::mpsc::Receiver<EvaluationUpdate>>,
     run_info: RunInfo,
     evaluation_config: Arc<tensorzero_core::evaluations::EvaluationConfig>,
     evaluation_infos: Arc<Mutex<Vec<EvaluationInfo>>>,
@@ -310,12 +310,11 @@ impl EvaluationJobHandler {
     fn __next__(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         // Loop to skip RunInfo updates instead of using recursion
         loop {
-            let receiver = self.receiver.clone();
             let evaluation_infos = self.evaluation_infos.clone();
             let evaluation_errors = self.evaluation_errors.clone();
 
             let update =
-                tokio_block_on_without_gil(py, async move { receiver.lock().await.recv().await });
+                tokio_block_on_without_gil(py, async { self.receiver.lock().await.recv().await });
 
             match update {
                 Some(EvaluationUpdate::RunInfo(_)) => {
@@ -1292,7 +1291,7 @@ impl TensorZeroGateway {
                 })?;
 
         Ok(EvaluationJobHandler {
-            receiver: Arc::new(Mutex::new(result.receiver)),
+            receiver: Mutex::new(result.receiver),
             run_info: result.run_info,
             evaluation_config: result.evaluation_config,
             evaluation_infos: Arc::new(Mutex::new(Vec::new())),
