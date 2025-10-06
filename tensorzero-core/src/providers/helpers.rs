@@ -120,8 +120,8 @@ pub async fn inject_extra_request_data_and_send(
         &mut body,
     )?;
     let raw_request = body.to_string();
-    println!("Sending request with headers: {headers:?}");
-    println!("Sending request with body: {raw_request}");
+    tracing::debug!(?headers, "Sending request with headers");
+    tracing::debug!(raw_request = %raw_request, "Sending request with body");
     // Apply the headers as the very last step, so that they can overwrite all
     // other headers (including things like `Authorization` and `Content-Type`)
     Ok((

@@ -259,7 +259,7 @@ impl InferenceProvider for OpenAIProvider {
         .await?;
 
         if res.status().is_success() {
-            println!("Received successful response");
+            tracing::debug!("Received successful response");
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!(
@@ -861,7 +861,7 @@ pub(super) fn handle_openai_error(
     response_body: &str,
     provider_type: &str,
 ) -> Error {
-    println!("Response body: {}", response_body);
+    tracing::debug!(response_body = %response_body, "OpenAI error response body");
     match response_code {
         StatusCode::BAD_REQUEST
         | StatusCode::UNAUTHORIZED
