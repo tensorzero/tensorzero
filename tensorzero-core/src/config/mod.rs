@@ -81,10 +81,10 @@ pub fn skip_credential_validation() -> bool {
 #[cfg_attr(test, ts(export))]
 pub struct Config {
     pub gateway: GatewayConfig,
-    pub models: ModelTable,                    // model name => model config
-    pub embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
+    pub models: Arc<ModelTable>, // model name => model config
+    pub embedding_models: Arc<EmbeddingModelTable>, // embedding model name => embedding model config
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
-    pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
+    pub metrics: HashMap<String, MetricConfig>,     // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
     #[serde(skip)]
@@ -691,8 +691,8 @@ impl Config {
 
         let mut config = Config {
             gateway: uninitialized_config.gateway.load()?,
-            models,
-            embedding_models,
+            models: Arc::new(models),
+            embedding_models: Arc::new(embedding_models),
             functions,
             metrics: uninitialized_config.metrics,
             tools,
@@ -774,7 +774,7 @@ impl Config {
                 evaluation_function_config
                     .validate(
                         &config.tools,
-                        &mut config.models,
+                        &config.models,
                         &config.embedding_models,
                         &config.templates,
                         &evaluation_function_name,
@@ -838,7 +838,7 @@ impl Config {
             function
                 .validate(
                     &self.tools,
-                    &mut self.models, // NOTE: in here there might be some models created using shorthand initialization
+                    &self.models,
                     &self.embedding_models,
                     &self.templates,
                     function_name,

@@ -476,7 +476,7 @@ impl FunctionConfig {
     pub async fn validate(
         &self,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
-        models: &mut ModelTable,
+        models: &ModelTable,
         embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig<'_>,
         function_name: &str,

@@ -236,8 +236,8 @@ pub async fn start_batch_inference(
     };
 
     let inference_models = InferenceModels {
-        models: &config.models,
-        embedding_models: &config.embedding_models,
+        models: config.models.clone(),
+        embedding_models: config.embedding_models.clone(),
     };
     let inference_params: Vec<InferenceParams> =
         BatchInferenceParamsWithSize(params.params, num_inferences).try_into()?;
@@ -323,7 +323,7 @@ struct StartVariantBatchInferenceArgs<'a> {
     episode_ids: &'a BatchEpisodeIds,
     inference_ids: &'a [Uuid],
     resolved_inputs: Vec<LazyResolvedInput>,
-    inference_models: &'a InferenceModels<'a>,
+    inference_models: &'a InferenceModels,
     inference_clients: &'a InferenceClients<'a>,
     inference_params: Vec<InferenceParams>,
     tool_configs: &'a Vec<Option<ToolCallConfig>>,
@@ -370,7 +370,7 @@ async fn start_variant_batch_inference(
     let result = variant
         .start_batch_inference(
             &resolved_inputs,
-            inference_models,
+            inference_models.clone(),
             function,
             &inference_configs,
             inference_clients,

@@ -54,7 +54,7 @@ impl Variant for ChainOfThoughtConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
         input: Arc<LazyResolvedInput>,
-        models: &'request InferenceModels<'a>,
+        models: InferenceModels,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
@@ -91,7 +91,7 @@ impl Variant for ChainOfThoughtConfig {
             .inner
             .infer(
                 Arc::clone(&input),
-                models,
+                models.clone(),
                 function,
                 &augmented_inference_config,
                 clients,
@@ -122,7 +122,7 @@ impl Variant for ChainOfThoughtConfig {
     async fn infer_stream<'request>(
         &self,
         _input: Arc<LazyResolvedInput>,
-        _models: &'request InferenceModels<'_>,
+        _models: InferenceModels,
         _function: &FunctionConfig,
         _inference_config: &'request InferenceConfig<'request>,
         _clients: &'request InferenceClients<'request>,
@@ -138,7 +138,7 @@ impl Variant for ChainOfThoughtConfig {
     async fn validate(
         &self,
         function: &FunctionConfig,
-        models: &mut ModelTable,
+        models: &ModelTable,
         embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig<'_>,
         function_name: &str,
@@ -176,7 +176,7 @@ impl Variant for ChainOfThoughtConfig {
     async fn start_batch_inference<'a>(
         &'a self,
         _input: &[LazyResolvedInput],
-        _models: &'a InferenceModels<'a>,
+        _models: InferenceModels,
         _function: &'a FunctionConfig,
         _inference_configs: &'a [InferenceConfig<'a>],
         _clients: &'a InferenceClients<'a>,

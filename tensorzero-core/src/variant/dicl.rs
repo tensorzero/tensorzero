@@ -172,7 +172,7 @@ impl Variant for DiclConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
         input: Arc<LazyResolvedInput>,
-        models: &'request InferenceModels<'a>,
+        models: InferenceModels,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
@@ -185,7 +185,7 @@ impl Variant for DiclConfig {
         let (relevant_examples, embedding_response) = self
             .retrieve_relevant_examples(
                 &input,
-                models.embedding_models,
+                &models.embedding_models,
                 clients,
                 inference_config.function_name,
                 inference_config.variant_name,
@@ -236,7 +236,7 @@ impl Variant for DiclConfig {
     async fn infer_stream<'request>(
         &self,
         input: Arc<LazyResolvedInput>,
-        models: &'request InferenceModels<'_>,
+        models: InferenceModels,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
@@ -249,7 +249,7 @@ impl Variant for DiclConfig {
         let (relevant_examples, embedding_response) = self
             .retrieve_relevant_examples(
                 &input,
-                models.embedding_models,
+                &models.embedding_models,
                 clients,
                 inference_config.function_name,
                 inference_config.variant_name,
@@ -294,7 +294,7 @@ impl Variant for DiclConfig {
     async fn validate(
         &self,
         _function: &FunctionConfig,
-        models: &mut ModelTable,
+        models: &ModelTable,
         embedding_models: &EmbeddingModelTable,
         _templates: &TemplateConfig<'_>,
         function_name: &str,
@@ -348,7 +348,7 @@ impl Variant for DiclConfig {
     async fn start_batch_inference<'a>(
         &'a self,
         _input: &[LazyResolvedInput],
-        _models: &'a InferenceModels<'a>,
+        _models: InferenceModels,
         _function: &'a FunctionConfig,
         _inference_configs: &'a [InferenceConfig<'a>],
         _clients: &'a InferenceClients<'a>,

@@ -478,7 +478,7 @@ impl Variant for ChatCompletionConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
         input: Arc<LazyResolvedInput>,
-        models: &'request InferenceModels<'a>,
+        models: InferenceModels,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
@@ -515,7 +515,7 @@ impl Variant for ChatCompletionConfig {
     async fn infer_stream<'request>(
         &self,
         input: Arc<LazyResolvedInput>,
-        models: &'request InferenceModels<'_>,
+        models: InferenceModels,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
@@ -558,7 +558,7 @@ impl Variant for ChatCompletionConfig {
     async fn validate(
         &self,
         function: &FunctionConfig,
-        models: &mut ModelTable,
+        models: &ModelTable,
         _embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig<'_>,
         function_name: &str,
@@ -645,7 +645,7 @@ impl Variant for ChatCompletionConfig {
     async fn start_batch_inference<'a>(
         &'a self,
         inputs: &[LazyResolvedInput],
-        models: &'a InferenceModels<'a>,
+        models: InferenceModels,
         function: &'a FunctionConfig,
         inference_configs: &'a [InferenceConfig<'a>],
         clients: &'a InferenceClients<'a>,
@@ -1325,13 +1325,13 @@ mod tests {
         };
         let models = ModelTable::default();
         let inference_models = InferenceModels {
-            models: &models,
-            embedding_models: &EmbeddingModelTable::default(),
+            models: Arc::new(models),
+            embedding_models: Arc::new(EmbeddingModelTable::default()),
         };
         let result = chat_completion_config
             .infer(
                 Arc::new(input.clone()),
-                &inference_models,
+                inference_models.clone(),
                 &function_config,
                 &inference_config,
                 &clients,
@@ -1364,8 +1364,8 @@ mod tests {
         )
         .unwrap();
         let inference_models = InferenceModels {
-            models: &models,
-            embedding_models: &EmbeddingModelTable::default(),
+            models: Arc::new(models),
+            embedding_models: Arc::new(EmbeddingModelTable::default()),
         };
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -1385,7 +1385,7 @@ mod tests {
         let result = chat_completion_config
             .infer(
                 Arc::new(input.clone()),
-                &inference_models,
+                inference_models.clone(),
                 &function_config,
                 &inference_config,
                 &clients,
@@ -1433,12 +1433,14 @@ mod tests {
         )
         .unwrap();
         let inference_models = InferenceModels {
-            models: &models,
-            embedding_models: &EmbeddingModelTable::new(
-                HashMap::new(),
-                ProviderTypeDefaultCredentials::new(&provider_types).into(),
-            )
-            .unwrap(),
+            models: Arc::new(models),
+            embedding_models: Arc::new(
+                EmbeddingModelTable::new(
+                    HashMap::new(),
+                    ProviderTypeDefaultCredentials::new(&provider_types).into(),
+                )
+                .unwrap(),
+            ),
         };
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -1458,7 +1460,7 @@ mod tests {
         let err = chat_completion_config
             .infer(
                 Arc::new(input.clone()),
-                &inference_models,
+                inference_models.clone(),
                 &function_config,
                 &inference_config,
                 &clients,
@@ -1536,8 +1538,8 @@ mod tests {
         )
         .unwrap();
         let inference_models = InferenceModels {
-            models: &models,
-            embedding_models: &EmbeddingModelTable::default(),
+            models: Arc::new(models),
+            embedding_models: Arc::new(EmbeddingModelTable::default()),
         };
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -1557,7 +1559,7 @@ mod tests {
         let result = chat_completion_config
             .infer(
                 Arc::new(input.clone()),
-                &inference_models,
+                inference_models.clone(),
                 &function_config,
                 &inference_config,
                 &clients,
@@ -1618,8 +1620,8 @@ mod tests {
         )
         .unwrap();
         let inference_models = InferenceModels {
-            models: &models,
-            embedding_models: &EmbeddingModelTable::default(),
+            models: Arc::new(models),
+            embedding_models: Arc::new(EmbeddingModelTable::default()),
         };
         let weather_tool_config = get_temperature_tool_config();
         let inference_config = InferenceConfig {
@@ -1640,7 +1642,7 @@ mod tests {
         let result = chat_completion_config
             .infer(
                 Arc::new(input.clone()),
-                &inference_models,
+                inference_models.clone(),
                 &function_config,
                 &inference_config,
                 &clients,
@@ -1737,7 +1739,7 @@ mod tests {
         let result = chat_completion_config
             .infer(
                 Arc::new(input.clone()),
-                &inference_models,
+                inference_models.clone(),
                 &json_function_config,
                 &inference_config,
                 &clients,
@@ -1787,8 +1789,8 @@ mod tests {
         )
         .unwrap();
         let inference_models = InferenceModels {
-            models: &models,
-            embedding_models: &EmbeddingModelTable::default(),
+            models: Arc::new(models),
+            embedding_models: Arc::new(EmbeddingModelTable::default()),
         };
         let inference_config = InferenceConfig {
             ids: InferenceIds {
@@ -1833,7 +1835,7 @@ mod tests {
         let result = chat_completion_config
             .infer(
                 Arc::new(input.clone()),
-                &inference_models,
+                inference_models.clone(),
                 &json_function_config,
                 &inference_config,
                 &clients,
@@ -1964,7 +1966,7 @@ mod tests {
         let result = chat_completion_config
             .infer(
                 Arc::new(input.clone()),
-                &inference_models,
+                inference_models.clone(),
                 &json_function_config,
                 &inference_config,
                 &clients,
@@ -2089,7 +2091,7 @@ mod tests {
         let result = chat_completion_config
             .infer(
                 Arc::new(input.clone()),
-                &inference_models,
+                inference_models.clone(),
                 &json_function_config,
                 &inference_config,
                 &clients,
@@ -2259,23 +2261,23 @@ mod tests {
             .unwrap(),
         ));
         let provider_types = Box::leak(Box::new(ProviderTypesConfig::default()));
-        let models = Box::leak(Box::new(
+        let models = Arc::new(
             ModelTable::new(
                 HashMap::from([("error".into(), error_model_config)]),
                 ProviderTypeDefaultCredentials::new(provider_types).into(),
             )
             .unwrap(),
-        ));
-        let embedding_models = Box::leak(Box::new(
+        );
+        let embedding_models = Arc::new(
             EmbeddingModelTable::new(
                 HashMap::new(),
                 ProviderTypeDefaultCredentials::new(provider_types).into(),
             )
             .unwrap(),
-        ));
+        );
         let inference_models = InferenceModels {
             models,
-            embedding_models,
+            embedding_models: embedding_models.clone(),
         };
         let inference_config = InferenceConfig {
             ids: InferenceIds {
@@ -2295,7 +2297,7 @@ mod tests {
         let result = chat_completion_config
             .infer_stream(
                 Arc::new(input.clone()),
-                &inference_models,
+                inference_models.clone(),
                 function_config,
                 &inference_config,
                 &clients,
@@ -2347,16 +2349,16 @@ mod tests {
         )
         .unwrap();
         let provider_types = Box::leak(Box::new(ProviderTypesConfig::default()));
-        let models = Box::leak(Box::new(
+        let models = Arc::new(
             ModelTable::new(
                 HashMap::from([("good".into(), text_model_config)]),
                 ProviderTypeDefaultCredentials::new(provider_types).into(),
             )
             .unwrap(),
-        ));
+        );
         let inference_models = InferenceModels {
             models,
-            embedding_models,
+            embedding_models: embedding_models.clone(),
         };
         let inference_config = InferenceConfig {
             ids: InferenceIds {
@@ -2376,7 +2378,7 @@ mod tests {
         let (mut stream, models_used) = chat_completion_config
             .infer_stream(
                 Arc::new(input.clone()),
-                &inference_models,
+                inference_models.clone(),
                 function_config,
                 &inference_config,
                 &clients,

@@ -153,18 +153,18 @@ impl Variant for BestOfNSamplingConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
         input: Arc<LazyResolvedInput>,
-        models: &'request InferenceModels<'a>,
+        models: InferenceModels,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
         let candidate_inference_results = self
-            .infer_candidates(&input, models, function, inference_config, clients)
+            .infer_candidates(&input, &models, function, inference_config, clients)
             .await?;
         self.select_best_candidate(
             &input,
-            models.models,
+            &models.models,
             inference_config,
             clients,
             candidate_inference_results,
@@ -175,19 +175,19 @@ impl Variant for BestOfNSamplingConfig {
     async fn infer_stream<'request>(
         &self,
         input: Arc<LazyResolvedInput>,
-        models: &'request InferenceModels<'_>,
+        models: InferenceModels,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         let candidate_inference_results = self
-            .infer_candidates(&input, models, function, inference_config, clients)
+            .infer_candidates(&input, &models, function, inference_config, clients)
             .await?;
         let inference_result = self
             .select_best_candidate(
                 &input,
-                models.models,
+                &models.models,
                 inference_config,
                 clients,
                 candidate_inference_results,
@@ -203,7 +203,7 @@ impl Variant for BestOfNSamplingConfig {
     async fn validate(
         &self,
         function: &FunctionConfig,
-        models: &mut ModelTable,
+        models: &ModelTable,
         embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig<'_>,
         function_name: &str,
@@ -263,7 +263,7 @@ impl Variant for BestOfNSamplingConfig {
     async fn start_batch_inference<'a>(
         &'a self,
         _input: &[LazyResolvedInput],
-        _models: &'a InferenceModels<'a>,
+        _models: InferenceModels,
         _function: &'a FunctionConfig,
         _inference_configs: &'a [InferenceConfig<'a>],
         _clients: &'a InferenceClients<'a>,
@@ -275,11 +275,11 @@ impl Variant for BestOfNSamplingConfig {
 
 impl BestOfNSamplingConfig {
     /// Infer each candidate variant concurrently and return the results.
-    async fn infer_candidates<'a, 'request>(
+    async fn infer_candidates<'request>(
         &self,
         input: &LazyResolvedInput,
-        models: &'request InferenceModels<'a>,
-        function: &'a FunctionConfig,
+        models: &'request InferenceModels,
+        function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
     ) -> Result<Vec<InferenceResult>, Error> {
@@ -324,7 +324,7 @@ impl BestOfNSamplingConfig {
                     Duration::from_secs_f64(self.timeout_s),
                     candidate_variant.infer(
                         Arc::new(input.clone()),
-                        models,
+                        models.clone(),
                         function,
                         config,
                         clients,
@@ -370,7 +370,7 @@ impl BestOfNSamplingConfig {
     async fn select_best_candidate<'request>(
         &self,
         input: &LazyResolvedInput,
-        models: &ModelTable,
+        models: &Arc<ModelTable>,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         candidates: Vec<InferenceResult>,
@@ -1338,7 +1338,7 @@ mod tests {
         let selected = best_of_n_variant
             .select_best_candidate(
                 &input,
-                &models,
+                &Arc::new(models),
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
@@ -1420,7 +1420,7 @@ mod tests {
         let result = best_of_n_variant
             .select_best_candidate(
                 &input,
-                &models,
+                &Arc::new(models),
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
@@ -1491,10 +1491,11 @@ mod tests {
             messages: vec![],
         };
 
+        let models_arc = Arc::new(models);
         let result = best_of_n_variant
             .select_best_candidate(
                 &input,
-                &models,
+                &models_arc,
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
@@ -1517,7 +1518,7 @@ mod tests {
         let result = best_of_n_variant
             .select_best_candidate(
                 &input,
-                &models,
+                &models_arc,
                 &inference_config,
                 &inference_clients,
                 empty_candidates.clone(),
@@ -1580,7 +1581,7 @@ mod tests {
         let result_big = best_of_n_big_variant
             .select_best_candidate(
                 &input,
-                &big_models,
+                &Arc::new(big_models),
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),

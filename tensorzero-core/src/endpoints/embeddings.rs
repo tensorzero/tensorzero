@@ -130,11 +130,13 @@ mod tests {
 
         let provider_types = ProviderTypesConfig::default();
         let config = Config {
-            embedding_models: crate::embeddings::EmbeddingModelTable::new(
-                embedding_models,
-                Arc::new(ProviderTypeDefaultCredentials::new(&provider_types)),
-            )
-            .unwrap(),
+            embedding_models: Arc::new(
+                crate::embeddings::EmbeddingModelTable::new(
+                    embedding_models,
+                    Arc::new(ProviderTypeDefaultCredentials::new(&provider_types)),
+                )
+                .unwrap(),
+            ),
             ..Default::default()
         };
 

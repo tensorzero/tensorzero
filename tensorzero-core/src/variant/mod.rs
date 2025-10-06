@@ -205,7 +205,7 @@ pub trait Variant {
     async fn infer<'a: 'request, 'request>(
         &self,
         input: Arc<LazyResolvedInput>,
-        models: &'request InferenceModels<'a>,
+        models: InferenceModels,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
@@ -215,7 +215,7 @@ pub trait Variant {
     async fn infer_stream<'request>(
         &self,
         input: Arc<LazyResolvedInput>,
-        models: &'request InferenceModels<'_>,
+        models: InferenceModels,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
@@ -225,7 +225,7 @@ pub trait Variant {
     async fn validate(
         &self,
         function: &FunctionConfig,
-        models: &mut ModelTable,
+        models: &ModelTable,
         embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig,
         function_name: &str,
@@ -238,7 +238,7 @@ pub trait Variant {
     async fn start_batch_inference<'a>(
         &'a self,
         input: &[LazyResolvedInput],
-        models: &'a InferenceModels<'a>,
+        models: InferenceModels,
         function: &'a FunctionConfig,
         inference_configs: &'a [InferenceConfig<'a>],
         clients: &'a InferenceClients<'a>,
@@ -276,7 +276,7 @@ impl Variant for VariantInfo {
     async fn infer<'a: 'request, 'request>(
         &self,
         input: Arc<LazyResolvedInput>,
-        models: &'request InferenceModels<'a>,
+        models: InferenceModels,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
@@ -372,7 +372,7 @@ impl Variant for VariantInfo {
     async fn infer_stream<'request>(
         &self,
         input: Arc<LazyResolvedInput>,
-        models: &'request InferenceModels<'_>,
+        models: InferenceModels,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
@@ -465,7 +465,7 @@ impl Variant for VariantInfo {
     async fn start_batch_inference<'a>(
         &'a self,
         inputs: &[LazyResolvedInput],
-        models: &'a InferenceModels<'a>,
+        models: InferenceModels,
         function: &'a FunctionConfig,
         inference_configs: &'a [InferenceConfig<'a>],
         clients: &'a InferenceClients<'a>,
@@ -494,7 +494,7 @@ impl Variant for VariantInfo {
     async fn validate(
         &self,
         function: &FunctionConfig,
-        models: &mut ModelTable,
+        models: &ModelTable,
         embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig<'_>,
         function_name: &str,

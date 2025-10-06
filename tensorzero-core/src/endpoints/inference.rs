@@ -334,8 +334,8 @@ pub async fn inference(
     };
 
     let inference_models = InferenceModels {
-        models: &config.models,
-        embedding_models: &config.embedding_models,
+        models: config.models.clone(),
+        embedding_models: config.embedding_models.clone(),
     };
     let resolved_input = Arc::new(params.input.into_lazy_resolved_input(FetchContext {
         client: http_client,
@@ -357,7 +357,7 @@ pub async fn inference(
             start_time,
             stream,
             resolved_input: resolved_input.clone(),
-            inference_models: &inference_models,
+            inference_models: inference_models.clone(),
             inference_clients: &inference_clients,
             inference_params: params.params.clone(),
             templates,
@@ -404,7 +404,7 @@ struct InferVariantArgs<'a> {
     start_time: Instant,
     stream: bool,
     resolved_input: Arc<LazyResolvedInput>,
-    inference_models: &'a InferenceModels<'a>,
+    inference_models: InferenceModels,
     inference_clients: &'a InferenceClients<'a>,
     inference_params: InferenceParams,
     templates: &'a TemplateConfig<'a>,
@@ -1206,10 +1206,10 @@ pub struct InferenceClients<'a> {
 }
 
 // Carryall struct for models used in inference
-#[derive(Debug)]
-pub struct InferenceModels<'a> {
-    pub models: &'a ModelTable,
-    pub embedding_models: &'a EmbeddingModelTable,
+#[derive(Clone, Debug)]
+pub struct InferenceModels {
+    pub models: Arc<ModelTable>,
+    pub embedding_models: Arc<EmbeddingModelTable>,
 }
 
 /// InferenceParams is the top-level struct for inference parameters.

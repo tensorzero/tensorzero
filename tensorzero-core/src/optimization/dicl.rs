@@ -836,11 +836,13 @@ mod tests {
             };
             let provider_types = ProviderTypesConfig::default();
             Config {
-                embedding_models: EmbeddingModelTable::new(
-                    HashMap::from([(Arc::from(model_name), embedding_model_config)]),
-                    ProviderTypeDefaultCredentials::new(&provider_types).into(),
-                )
-                .unwrap(),
+                embedding_models: Arc::new(
+                    EmbeddingModelTable::new(
+                        HashMap::from([(Arc::from(model_name), embedding_model_config)]),
+                        ProviderTypeDefaultCredentials::new(&provider_types).into(),
+                    )
+                    .unwrap(),
+                ),
                 ..Default::default()
             }
         }
