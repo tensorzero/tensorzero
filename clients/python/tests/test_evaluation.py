@@ -8,7 +8,11 @@ sync and async clients in embedded gateway mode.
 import os
 
 import pytest
-from tensorzero import AsyncTensorZeroGateway, TensorZeroGateway
+from tensorzero import (
+    AsyncTensorZeroGateway,
+    TensorZeroGateway,
+    TensorZeroInternalError,
+)
 
 TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
@@ -58,7 +62,7 @@ def test_sync_run_evaluation_invalid_cache_mode():
         config_file=TEST_CONFIG_FILE,
         clickhouse_url=CLICKHOUSE_URL,
     ) as client:
-        with pytest.raises(ValueError, match="Invalid inference_cache"):
+        with pytest.raises(TensorZeroInternalError, match="unknown variant"):
             client.experimental_run_evaluation(
                 evaluation_name="entity_extraction",
                 dataset_name="extract_entities_0.8",
@@ -109,7 +113,7 @@ async def test_async_run_evaluation_invalid_cache_mode():
         config_file=TEST_CONFIG_FILE,
         clickhouse_url=CLICKHOUSE_URL,
     ) as client:
-        with pytest.raises(ValueError, match="Invalid inference_cache"):
+        with pytest.raises(TensorZeroInternalError, match="unknown variant"):
             await client.experimental_run_evaluation(
                 evaluation_name="entity_extraction",
                 dataset_name="extract_entities_0.8",

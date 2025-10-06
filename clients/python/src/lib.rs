@@ -1247,11 +1247,10 @@ impl TensorZeroGateway {
         let evaluation_run_id = uuid::Uuid::now_v7();
 
         let inference_cache_enum: tensorzero_core::cache::CacheEnabledMode =
-            serde_json::from_str(&format!("\"{inference_cache}\"")).map_err(|_| {
-                pyo3::exceptions::PyValueError::new_err(
-                    "Invalid inference_cache. Must be 'on', 'off', 'read_only', or 'write_only'",
-                )
-            })?;
+            deserialize_from_pyobj(
+                this.py(),
+                &inference_cache.into_pyobject(this.py())?.into_any(),
+            )?;
 
         let core_args = EvaluationCoreArgs {
             tensorzero_client: (*client).clone(),
@@ -1998,11 +1997,10 @@ impl AsyncTensorZeroGateway {
         let client = this.as_super().client.clone();
 
         let inference_cache_enum: tensorzero_core::cache::CacheEnabledMode =
-            serde_json::from_str(&format!("\"{inference_cache}\"")).map_err(|_| {
-                pyo3::exceptions::PyValueError::new_err(
-                    "Invalid inference_cache. Must be 'on', 'off', 'read_only', or 'write_only'",
-                )
-            })?;
+            deserialize_from_pyobj(
+                this.py(),
+                &inference_cache.into_pyobject(this.py())?.into_any(),
+            )?;
 
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             // Get app state data
