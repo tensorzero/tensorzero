@@ -223,7 +223,7 @@ impl WrappedProvider for OpenAIProvider {
         latency: Latency,
     ) -> Result<ProviderInferenceResponse, Error> {
         if self.use_responses {
-            // TODO - include 'responses' somewhere in te error message
+            // TODO - include 'responses' somewhere in the error message
             let response: OpenAIResponsesResponse =
                 serde_json::from_str(&raw_response).map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
