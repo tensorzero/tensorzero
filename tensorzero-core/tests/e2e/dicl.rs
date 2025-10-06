@@ -1510,7 +1510,7 @@ max_tokens = 100
             serde_json::from_str(input_messages).unwrap();
 
         match model_name {
-            "gpt-4o-mini-2024-07-18" => {
+            "openai::gpt-4o-mini-2024-07-18" => {
                 // When all examples are filtered, should behave like vanilla chat completion
                 // This means short input_messages (1-2 messages, not 7+ with examples)
                 assert!(
@@ -1523,7 +1523,7 @@ max_tokens = 100
                 let system = model_inference.get("system").unwrap().as_str().unwrap();
                 assert!(system.contains("learning by induction"));
             }
-            "text-embedding-3-small" => {
+            "openai::text-embedding-3-small" => {
                 // The embedding call should have 1 input message
                 assert_eq!(input_messages.len(), 1);
             }
@@ -1688,7 +1688,7 @@ max_tokens = 100
             serde_json::from_str(input_messages).unwrap();
 
         match model_name {
-            "gpt-4o-mini-2024-07-18" => {
+            "openai::gpt-4o-mini-2024-07-18" => {
                 // When relevant examples are kept, should have DICL behavior with examples
                 // This means long input_messages (7 messages: 3 examples * 2 + 1 query)
                 assert_eq!(
@@ -1702,7 +1702,7 @@ max_tokens = 100
                 let system = model_inference.get("system").unwrap().as_str().unwrap();
                 assert!(system.contains("learning by induction"));
             }
-            "text-embedding-3-small" => {
+            "openai::text-embedding-3-small" => {
                 // The embedding call should have 1 input message
                 assert_eq!(input_messages.len(), 1);
             }
