@@ -560,7 +560,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         datapoints: List[Union[ChatDatapointInsert, JsonDatapointInsert]],
     ) -> List[UUID]:
         """
-        Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
+        Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
 
         :param dataset_name: The name of the dataset to insert the datapoints into.
         :param datapoints: A list of datapoints to insert.
@@ -919,7 +919,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         datapoints: List[Union[ChatDatapointInsert, JsonDatapointInsert]],
     ) -> List[UUID]:
         """
-        Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
+        Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
 
         :param dataset_name: The name of the dataset to insert the datapoints into.
         :param datapoints: A list of datapoints to insert.
