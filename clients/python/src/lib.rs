@@ -330,37 +330,12 @@ impl EvaluationJobHandler {
                     // Convert EvaluationInfo to Python dict
                     let dict = pyo3::types::PyDict::new(py);
                     dict.set_item("type", "success")?;
-                    dict.set_item(
-                        "datapoint",
-                        serde_json::to_string(&info.datapoint).map_err(|e| {
-                            pyo3::exceptions::PyRuntimeError::new_err(format!(
-                                "Serialization error: {e}"
-                            ))
-                        })?,
-                    )?;
-                    dict.set_item(
-                        "response",
-                        serde_json::to_string(&info.response).map_err(|e| {
-                            pyo3::exceptions::PyRuntimeError::new_err(format!(
-                                "Serialization error: {e}"
-                            ))
-                        })?,
-                    )?;
-                    dict.set_item(
-                        "evaluations",
-                        serde_json::to_string(&info.evaluations).map_err(|e| {
-                            pyo3::exceptions::PyRuntimeError::new_err(format!(
-                                "Serialization error: {e}"
-                            ))
-                        })?,
-                    )?;
+                    dict.set_item("datapoint", serialize_to_dict(py, &info.datapoint)?)?;
+                    dict.set_item("response", serialize_to_dict(py, &info.response)?)?;
+                    dict.set_item("evaluations", serialize_to_dict(py, &info.evaluations)?)?;
                     dict.set_item(
                         "evaluator_errors",
-                        serde_json::to_string(&info.evaluator_errors).map_err(|e| {
-                            pyo3::exceptions::PyRuntimeError::new_err(format!(
-                                "Serialization error: {e}"
-                            ))
-                        })?,
+                        serialize_to_dict(py, &info.evaluator_errors)?,
                     )?;
                     return Ok(dict.into());
                 }
@@ -469,37 +444,15 @@ impl AsyncEvaluationJobHandler {
                         return Python::attach(|py| -> PyResult<Py<PyAny>> {
                             let dict = pyo3::types::PyDict::new(py);
                             dict.set_item("type", "success")?;
-                            dict.set_item(
-                                "datapoint",
-                                serde_json::to_string(&info.datapoint).map_err(|e| {
-                                    pyo3::exceptions::PyRuntimeError::new_err(format!(
-                                        "Serialization error: {e}"
-                                    ))
-                                })?,
-                            )?;
-                            dict.set_item(
-                                "response",
-                                serde_json::to_string(&info.response).map_err(|e| {
-                                    pyo3::exceptions::PyRuntimeError::new_err(format!(
-                                        "Serialization error: {e}"
-                                    ))
-                                })?,
-                            )?;
+                            dict.set_item("datapoint", serialize_to_dict(py, &info.datapoint)?)?;
+                            dict.set_item("response", serialize_to_dict(py, &info.response)?)?;
                             dict.set_item(
                                 "evaluations",
-                                serde_json::to_string(&info.evaluations).map_err(|e| {
-                                    pyo3::exceptions::PyRuntimeError::new_err(format!(
-                                        "Serialization error: {e}"
-                                    ))
-                                })?,
+                                serialize_to_dict(py, &info.evaluations)?,
                             )?;
                             dict.set_item(
                                 "evaluator_errors",
-                                serde_json::to_string(&info.evaluator_errors).map_err(|e| {
-                                    pyo3::exceptions::PyRuntimeError::new_err(format!(
-                                        "Serialization error: {e}"
-                                    ))
-                                })?,
+                                serialize_to_dict(py, &info.evaluator_errors)?,
                             )?;
                             Ok(dict.into())
                         });
