@@ -70,7 +70,11 @@ fn argmax_with_ties(values: &[f64]) -> Vec<usize> {
 /// // Returns 1 (highest mean, smallest variance per pull among tied)
 /// assert_eq!(choose_leader(&means, &variances, &pull_counts), Some(1));
 /// ```
-fn choose_leader(means: &[f64], variances: &[f64], pull_counts: &[u64]) -> Option<usize> {
+pub(super) fn choose_leader(
+    means: &[f64],
+    variances: &[f64],
+    pull_counts: &[u64],
+) -> Option<usize> {
     let leaders = argmax_with_ties(means);
     let leader = if leaders.len() == 1 {
         leaders[0]
