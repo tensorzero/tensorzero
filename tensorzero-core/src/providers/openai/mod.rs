@@ -259,7 +259,7 @@ impl InferenceProvider for OpenAIProvider {
         .await?;
 
         if res.status().is_success() {
-            println!("Received successful response");
+            tracing::trace!("Received successful response");
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!(
@@ -271,7 +271,7 @@ impl InferenceProvider for OpenAIProvider {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
-            println!("Raw response: {}", raw_response);
+            tracing::trace!("Raw response: {raw_response}");
 
             let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
@@ -862,7 +862,7 @@ pub(super) fn handle_openai_error(
     response_body: &str,
     provider_type: &str,
 ) -> Error {
-    println!("Response body: {}", response_body);
+    tracing::trace!("Response body: {response_body}");
     match response_code {
         StatusCode::BAD_REQUEST
         | StatusCode::UNAUTHORIZED
