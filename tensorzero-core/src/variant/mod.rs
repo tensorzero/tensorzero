@@ -816,7 +816,7 @@ async fn infer_model_request_stream<'request>(
     let config_type = function.config_type();
     let stream =
         stream.map(move |chunk| chunk.map(|chunk| InferenceResultChunk::new(chunk, config_type)));
-    Ok((Box::pin(stream), model_used_info))
+    Ok((StreamExt::peekable(Box::pin(stream)), model_used_info))
 }
 
 impl<'a> BatchInferenceConfig<'a> {
