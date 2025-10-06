@@ -326,29 +326,20 @@ impl EvaluationJobHandler {
                     tokio_block_on_without_gil(py, async move {
                         evaluation_infos.lock().await.push(info_clone);
                     });
-                    // Convert EvaluationInfo to Python dict
-                    let dict = pyo3::types::PyDict::new(py);
-                    dict.set_item("type", "success")?;
-                    dict.set_item("datapoint", serialize_to_dict(py, &info.datapoint)?)?;
-                    dict.set_item("response", serialize_to_dict(py, &info.response)?)?;
-                    dict.set_item("evaluations", serialize_to_dict(py, &info.evaluations)?)?;
-                    dict.set_item(
-                        "evaluator_errors",
-                        serialize_to_dict(py, &info.evaluator_errors)?,
-                    )?;
-                    return Ok(dict.into());
+                    // Serialize entire EvaluationInfo struct to dict and add type field
+                    let info_dict = serialize_to_dict(py, &info)?;
+                    info_dict.bind(py).set_item("type", "success")?;
+                    return Ok(info_dict);
                 }
                 Some(EvaluationUpdate::Error(error)) => {
                     let error_clone = error.clone();
                     tokio_block_on_without_gil(py, async move {
                         evaluation_errors.lock().await.push(error_clone);
                     });
-                    // Convert EvaluationError to Python dict
-                    let dict = pyo3::types::PyDict::new(py);
-                    dict.set_item("type", "error")?;
-                    dict.set_item("datapoint_id", error.datapoint_id.to_string())?;
-                    dict.set_item("message", error.message)?;
-                    return Ok(dict.into());
+                    // Serialize entire EvaluationError struct to dict and add type field
+                    let error_dict = serialize_to_dict(py, &error)?;
+                    error_dict.bind(py).set_item("type", "error")?;
+                    return Ok(error_dict);
                 }
                 None => return Err(PyStopIteration::new_err(())),
             }
@@ -441,30 +432,20 @@ impl AsyncEvaluationJobHandler {
                         let info_clone = info.clone();
                         evaluation_infos.lock().await.push(info_clone);
                         return Python::attach(|py| -> PyResult<Py<PyAny>> {
-                            let dict = pyo3::types::PyDict::new(py);
-                            dict.set_item("type", "success")?;
-                            dict.set_item("datapoint", serialize_to_dict(py, &info.datapoint)?)?;
-                            dict.set_item("response", serialize_to_dict(py, &info.response)?)?;
-                            dict.set_item(
-                                "evaluations",
-                                serialize_to_dict(py, &info.evaluations)?,
-                            )?;
-                            dict.set_item(
-                                "evaluator_errors",
-                                serialize_to_dict(py, &info.evaluator_errors)?,
-                            )?;
-                            Ok(dict.into())
+                            // Serialize entire EvaluationInfo struct to dict and add type field
+                            let info_dict = serialize_to_dict(py, &info)?;
+                            info_dict.bind(py).set_item("type", "success")?;
+                            Ok(info_dict)
                         });
                     }
                     Some(EvaluationUpdate::Error(error)) => {
                         let error_clone = error.clone();
                         evaluation_errors.lock().await.push(error_clone);
                         return Python::attach(|py| -> PyResult<Py<PyAny>> {
-                            let dict = pyo3::types::PyDict::new(py);
-                            dict.set_item("type", "error")?;
-                            dict.set_item("datapoint_id", error.datapoint_id.to_string())?;
-                            dict.set_item("message", error.message)?;
-                            Ok(dict.into())
+                            // Serialize entire EvaluationError struct to dict and add type field
+                            let error_dict = serialize_to_dict(py, &error)?;
+                            error_dict.bind(py).set_item("type", "error")?;
+                            Ok(error_dict)
                         });
                     }
                     None => return Err(PyStopAsyncIteration::new_err(())),
