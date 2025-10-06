@@ -145,6 +145,11 @@ impl EvaluationStats {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum EvaluationUpdate {
+    // RunInfo is used for internal channel communication only and receives special
+    // serialization handling in EvaluationStats::push (serializes the inner RunInfo
+    // directly, not the enum wrapper). The #[serde(skip)] prevents accidental
+    // serialization of the enum variant itself.
+    #[serde(skip)]
     RunInfo(crate::RunInfo),
     Success(EvaluationInfo),
     Error(EvaluationError),

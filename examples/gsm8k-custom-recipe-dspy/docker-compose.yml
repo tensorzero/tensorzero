@@ -8,6 +8,8 @@ services:
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
     ulimits:
       nofile:
         soft: 262144
@@ -66,3 +68,6 @@ services:
         condition: service_healthy
       gateway:
         condition: service_healthy
+
+volumes:
+  clickhouse-data:

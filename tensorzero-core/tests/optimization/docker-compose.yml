@@ -8,6 +8,8 @@ services:
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
     ulimits:
       nofile:
         soft: 262144
@@ -44,3 +46,6 @@ services:
       start_period: 1s
       start_interval: 1s
       timeout: 1s
+
+volumes:
+  clickhouse-data:

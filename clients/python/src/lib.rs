@@ -603,7 +603,7 @@ impl BaseTensorZeroGateway {
         })
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None))]
     #[expect(clippy::too_many_arguments)]
     fn _prepare_inference_request(
         this: PyRef<'_, Self>,
@@ -627,6 +627,7 @@ impl BaseTensorZeroGateway {
         extra_body: Option<&Bound<'_, PyList>>,
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
+        otlp_traces_extra_headers: Option<HashMap<String, String>>,
     ) -> PyResult<Py<PyAny>> {
         let params = BaseTensorZeroGateway::prepare_inference_params(
             this.py(),
@@ -650,6 +651,7 @@ impl BaseTensorZeroGateway {
             extra_body,
             extra_headers,
             include_original_response.unwrap_or(false),
+            otlp_traces_extra_headers,
         )?;
         serialize_to_dict(this.py(), params)
     }
@@ -736,6 +738,7 @@ impl BaseTensorZeroGateway {
         extra_body: Option<&Bound<'_, PyList>>,
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: bool,
+        otlp_traces_extra_headers: Option<HashMap<String, String>>,
     ) -> PyResult<ClientInferenceParams> {
         let episode_id = episode_id
             .map(|id| python_uuid_to_uuid("episode_id", id))
@@ -824,6 +827,7 @@ impl BaseTensorZeroGateway {
             extra_body,
             extra_headers,
             internal_dynamic_variant_config: None,
+            otlp_traces_extra_headers: otlp_traces_extra_headers.unwrap_or_default(),
         })
     }
 }
@@ -1017,7 +1021,7 @@ impl TensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -1050,8 +1054,11 @@ impl TensorZeroGateway {
     /// :param extra_body: If set, injects extra fields into the provider request body.
     /// :param extra_headers: If set, injects extra fields into the provider request headers.
     /// :param include_original_response: If set, add an `original_response` field to the response, containing the raw string response from the model.
+    /// :param otlp_traces_extra_headers: If set, attaches custom HTTP headers to OTLP trace exports for this request.
+    ///                                   Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-header-".
+    ///                                   Example: {"My-Header": "My-Value"} becomes header "tensorzero-otlp-traces-extra-header-My-Header: My-Value"
     /// :return: If stream is false, returns an InferenceResponse.
-    ///          If stream is true, returns a geerator that yields InferenceChunks as they come in.
+    ///          If stream is true, returns a generator that yields InferenceChunks as they come in.
     fn inference(
         this: PyRef<'_, Self>,
         py: Python<'_>,
@@ -1075,6 +1082,7 @@ impl TensorZeroGateway {
         extra_body: Option<&Bound<'_, PyList>>,
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
+        otlp_traces_extra_headers: Option<HashMap<String, String>>,
     ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
         let fut = client.inference(BaseTensorZeroGateway::prepare_inference_params(
@@ -1099,6 +1107,7 @@ impl TensorZeroGateway {
             extra_body,
             extra_headers,
             include_original_response.unwrap_or(false),
+            otlp_traces_extra_headers,
         )?);
 
         // We're in the synchronous `TensorZeroGateway` class, so we need to block on the Rust future,
@@ -1152,23 +1161,19 @@ impl TensorZeroGateway {
     ///
     /// :param run_id: The run ID to use for the dynamic evaluation run.
     /// :param task_name: The name of the task to use for the dynamic evaluation run.
-    /// :param datapoint_name: The name of the datapoint to use for the dynamic evaluation run.
-    ///                     Deprecated: use `task_name` instead.
     /// :param tags: A dictionary of tags to add to the dynamic evaluation run.
     /// :return: A `DynamicEvaluationRunEpisodeResponse` object.
-    #[pyo3(signature = (*, run_id, task_name=None, datapoint_name=None, tags=None))]
+    #[pyo3(signature = (*, run_id, task_name=None, tags=None))]
     fn dynamic_evaluation_run_episode(
         this: PyRef<'_, Self>,
         run_id: Bound<'_, PyAny>,
         task_name: Option<String>,
-        datapoint_name: Option<String>,
         tags: Option<HashMap<String, String>>,
     ) -> PyResult<Py<PyAny>> {
         let run_id = python_uuid_to_uuid("run_id", run_id)?;
         let client = this.as_super().client.clone();
         let params = DynamicEvaluationRunEpisodeParams {
             task_name,
-            datapoint_name,
             tags: tags.unwrap_or_default(),
         };
         let fut = client.dynamic_evaluation_run_episode(run_id, params);
@@ -1706,7 +1711,7 @@ impl AsyncTensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None,tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None,tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -1739,6 +1744,9 @@ impl AsyncTensorZeroGateway {
     /// :param extra_body: If set, injects extra fields into the provider request body.
     /// :param extra_headers: If set, injects extra fields into the provider request headers.
     /// :param include_original_response: If set, add an `original_response` field to the response, containing the raw string response from the model.
+    /// :param otlp_traces_extra_headers: If set, attaches custom HTTP headers to OTLP trace exports for this request.
+    ///                                   Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-header-".
+    ///                                   Example: {"My-Header": "My-Value"} becomes header "tensorzero-otlp-traces-extra-header-My-Header: My-Value"
     /// :return: If stream is false, returns an InferenceResponse.
     ///          If stream is true, returns an async generator that yields InferenceChunks as they come in.
     fn inference<'a>(
@@ -1764,6 +1772,7 @@ impl AsyncTensorZeroGateway {
         extra_body: Option<&Bound<'_, PyList>>,
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
+        otlp_traces_extra_headers: Option<HashMap<String, String>>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let params = BaseTensorZeroGateway::prepare_inference_params(
             py,
@@ -1787,6 +1796,7 @@ impl AsyncTensorZeroGateway {
             extra_body,
             extra_headers,
             include_original_response.unwrap_or(false),
+            otlp_traces_extra_headers,
         )?;
         let client = this.as_super().client.clone();
         let gateway = this.into_pyobject(py)?.into_any().unbind();
@@ -1896,23 +1906,19 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param run_id: The run ID to use for the dynamic evaluation run.
     /// :param task_name: The name of the task to use for the dynamic evaluation run.
-    /// :param datapoint_name: The name of the datapoint to use for the dynamic evaluation run.
-    ///                     Deprecated: use `task_name` instead.
     /// :param tags: A dictionary of tags to add to the dynamic evaluation run.
     /// :return: A `DynamicEvaluationRunEpisodeResponse` object.
-    #[pyo3(signature = (*, run_id, task_name=None, datapoint_name=None, tags=None))]
+    #[pyo3(signature = (*, run_id, task_name=None, tags=None))]
     fn dynamic_evaluation_run_episode<'a>(
         this: PyRef<'a, Self>,
         run_id: Bound<'_, PyAny>,
         task_name: Option<String>,
-        datapoint_name: Option<String>,
         tags: Option<HashMap<String, String>>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let run_id = python_uuid_to_uuid("run_id", run_id)?;
         let client = this.as_super().client.clone();
         let params = DynamicEvaluationRunEpisodeParams {
             task_name,
-            datapoint_name,
             tags: tags.unwrap_or_default(),
         };
 

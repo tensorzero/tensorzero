@@ -16,6 +16,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+import { toEvaluationDatapointUrl } from "~/utils/urls";
 
 import { EvalRunSelector } from "~/components/evaluations/EvalRunSelector";
 import type {
@@ -133,12 +134,7 @@ function getInputSummary(input: DisplayInput): string {
 
   const firstContent = firstMessage.content[0];
 
-  if (firstContent.type === "structured_text") {
-    const text = JSON.stringify(firstContent.arguments, null, 2);
-    return text.length > 30 ? text.substring(0, 30) + "..." : text;
-  }
-
-  if (firstContent.type === "unstructured_text") {
+  if (firstContent.type === "text") {
     const text = firstContent.text;
     return text.length > 30 ? text.substring(0, 30) + "..." : text;
   }
@@ -428,7 +424,11 @@ export function EvaluationTable({
                                 .map(([runId]) => runId)
                                 .join(",");
                               navigate(
-                                `/evaluations/${evaluation_name}/${datapoint.id}?evaluation_run_ids=${evaluation_run_ids}`,
+                                toEvaluationDatapointUrl(
+                                  evaluation_name,
+                                  datapoint.id,
+                                  { evaluation_run_ids },
+                                ),
                               );
                             }}
                           >

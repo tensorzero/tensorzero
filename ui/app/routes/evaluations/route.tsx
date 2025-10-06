@@ -19,6 +19,7 @@ import {
   runEvaluation,
 } from "~/utils/evaluations.server";
 import { logger } from "~/utils/logger";
+import { toEvaluationUrl } from "~/utils/urls";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const totalEvaluationRuns = await countTotalEvaluationRuns();
@@ -74,7 +75,9 @@ export async function action({ request }: Route.ActionArgs) {
     });
   }
   return redirect(
-    `/evaluations/${evaluation_name}?evaluation_run_ids=${evaluation_start_info.evaluation_run_id}`,
+    toEvaluationUrl(evaluation_name, {
+      evaluation_run_ids: evaluation_start_info.evaluation_run_id,
+    }),
   );
 }
 

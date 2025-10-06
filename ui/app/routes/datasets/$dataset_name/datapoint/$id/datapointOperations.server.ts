@@ -6,6 +6,7 @@ import {
 } from "~/utils/clickhouse/datasets.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference.utils";
+import { toDatasetUrl } from "~/utils/urls";
 
 // ============================================================================
 // Transformation Functions
@@ -61,7 +62,7 @@ export async function deleteDatapoint(params: {
   if (datasetCount === undefined) {
     return { redirectTo: "/datasets" };
   }
-  return { redirectTo: `/datasets/${dataset_name}` };
+  return { redirectTo: toDatasetUrl(dataset_name) };
 }
 
 export async function saveDatapoint(params: {
