@@ -931,13 +931,12 @@ impl TensorZeroGateway {
         dataset_name: String,
         datapoints: Vec<Bound<'_, PyAny>>,
     ) -> PyResult<Py<PyList>> {
-        // Issue deprecation warning
-        let warnings = PyModule::import(this.py(), "warnings")?;
-        warnings.call_method1(
+        let builtins = PyModule::import(this.py(), "builtins")?;
+        builtins.call_method1(
             "warn",
             (
                 "Please use `insert_datapoints` instead of `bulk_insert_datapoints`. In a future release, `bulk_insert_datapoints` will be removed.",
-                this.py().get_type::<pyo3::exceptions::PyDeprecationWarning>(),
+                builtins.getattr("DeprecationWarning")?,
                 2_i32, // stacklevel
             ),
         )?;
@@ -1639,13 +1638,12 @@ impl AsyncTensorZeroGateway {
         dataset_name: String,
         datapoints: Vec<Bound<'a, PyAny>>,
     ) -> PyResult<Bound<'a, PyAny>> {
-        // Issue deprecation warning
-        let warnings = PyModule::import(this.py(), "warnings")?;
-        warnings.call_method1(
+        let builtins = this.py().import("builtins")?;
+        builtins.call_method1(
             "warn",
             (
                 "Please use `insert_datapoints` instead of `bulk_insert_datapoints`. In a future release, `bulk_insert_datapoints` will be removed.",
-                this.py().get_type::<pyo3::exceptions::PyDeprecationWarning>(),
+                builtins.getattr("DeprecationWarning")?,
                 2_i32, // stacklevel
             ),
         )?;
