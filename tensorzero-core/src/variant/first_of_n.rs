@@ -177,6 +177,14 @@ impl Variant for FirstOfNConfig {
         clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams, // we ignore and use defaults
     ) -> Result<InferenceResult, Error> {
+        // TODO: for bookkeeping we will have to keep these futures around and wait until they return
+        // without blocking after the first resolves.
+        //
+        // There are two options:
+        // - make all the inputs to `variant.infer` owned or Arced so there aren't lifetimes
+        //   in them
+        // - Figure out how to return a FuturesUnordered and manage the lifetimes all the way through a nonblocking write task
+        // the latter seems quite difficult
         let mut candidate_results: FuturesUnordered<_> = self
             .candidates
             .iter()
