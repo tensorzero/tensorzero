@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, Iterator, List, Optional, Union, cast
 
 import pytest
 import pytest_asyncio
@@ -284,30 +284,30 @@ def _load_json_datapoints_from_fixture(
     fixture_path: Path, dataset_filter: str
 ) -> List[JsonDatapointInsert]:
     """Load JSON datapoints from a JSONL fixture file."""
-    datapoints = []
+    datapoints: List[JsonDatapointInsert] = []
     with open(fixture_path) as f:
         for line in f:
             if not line.strip():
                 continue
-            data = json.loads(line)
+            data: Dict[str, Any] = json.loads(line)
             # Only load datapoints for the specified dataset
             if data.get("dataset_name") != dataset_filter:
                 continue
 
             # Parse the JSON strings in the fixture
-            input_data = json.loads(data["input"])
+            input_data: Any = json.loads(data["input"])
 
             # Handle output - it may be in {"raw": "...", "parsed": {...}} format
-            output_data = None
+            output_data: Optional[Any] = None
             if data.get("output"):
-                parsed_output = json.loads(data["output"])
+                parsed_output: Any = json.loads(data["output"])
                 # If output has "parsed" field, extract it; otherwise use as-is
                 if isinstance(parsed_output, dict) and "parsed" in parsed_output:
-                    output_data = parsed_output["parsed"]
+                    output_data = cast(Any, parsed_output["parsed"])
                 else:
-                    output_data = parsed_output
+                    output_data = cast(Any, parsed_output)
 
-            output_schema = (
+            output_schema: Optional[Any] = (
                 json.loads(data["output_schema"]) if data.get("output_schema") else None
             )
 
@@ -327,19 +327,21 @@ def _load_chat_datapoints_from_fixture(
     fixture_path: Path, dataset_filter: str
 ) -> List[ChatDatapointInsert]:
     """Load Chat datapoints from a JSONL fixture file."""
-    datapoints = []
+    datapoints: List[ChatDatapointInsert] = []
     with open(fixture_path) as f:
         for line in f:
             if not line.strip():
                 continue
-            data = json.loads(line)
+            data: Dict[str, Any] = json.loads(line)
             # Only load datapoints for the specified dataset
             if data.get("dataset_name") != dataset_filter:
                 continue
 
             # Parse the JSON strings in the fixture
-            input_data = json.loads(data["input"])
-            output_data = json.loads(data["output"]) if data.get("output") else None
+            input_data: Any = json.loads(data["input"])
+            output_data: Optional[Any] = (
+                json.loads(data["output"]) if data.get("output") else None
+            )
 
             datapoints.append(
                 ChatDatapointInsert(
@@ -353,7 +355,9 @@ def _load_chat_datapoints_from_fixture(
 
 
 @pytest.fixture
-def evaluation_datasets(embedded_sync_client: TensorZeroGateway) -> Dict[str, str]:
+def evaluation_datasets(
+    embedded_sync_client: TensorZeroGateway,
+) -> Iterator[Dict[str, str]]:
     """
     Seed datasets needed for evaluation tests.
 
@@ -376,7 +380,9 @@ def evaluation_datasets(embedded_sync_client: TensorZeroGateway) -> Dict[str, st
     if json_datapoints:
         embedded_sync_client.bulk_insert_datapoints(
             dataset_name=dataset_mapping["extract_entities_0.8"],
-            datapoints=json_datapoints,
+            datapoints=cast(
+                List[Union[ChatDatapointInsert, JsonDatapointInsert]], json_datapoints
+            ),
         )
 
     # Load and insert Chat datapoints (for haiku evaluation)
@@ -387,7 +393,9 @@ def evaluation_datasets(embedded_sync_client: TensorZeroGateway) -> Dict[str, st
     if chat_datapoints:
         embedded_sync_client.bulk_insert_datapoints(
             dataset_name=dataset_mapping["good-haikus-no-output"],
-            datapoints=chat_datapoints,
+            datapoints=cast(
+                List[Union[ChatDatapointInsert, JsonDatapointInsert]], chat_datapoints
+            ),
         )
 
     yield dataset_mapping
