@@ -16,7 +16,7 @@ use crate::experimentation::track_and_stop::check_stopping::choose_leader;
 /// This struct encapsulates the parameters needed for the ε-aware optimal allocation
 /// algorithm, which computes sampling probabilities to efficiently identify the best arm
 /// while respecting an ε-tolerance for sub-optimality.
-pub struct OptimalProbsArgs {
+pub struct EstimateOptimalProbabilitiesArgs {
     /// Reward observations and pull counts for each arm
     feedback: Vec<FeedbackByVariant>,
     /// Sub-optimality tolerance (ε ≥ 0). Arms within ε of the best arm's mean are considered
@@ -35,7 +35,7 @@ pub struct OptimalProbsArgs {
 }
 /// Errors that can occur when computing optimal sampling probabilities.
 #[derive(Debug, Error)]
-pub enum OptimalProbsError {
+pub enum EstimateOptimalProbabilitiesError {
     #[error("Length mismatch: pull_counts = {pull_counts_len}, means = {means_len}, variances = {variances_len}")]
     MismatchedLengths {
         pull_counts_len: usize,
@@ -116,9 +116,9 @@ pub enum OptimalProbsError {
 /// - For ε = 0, this targets exact best-arm identification
 /// - For ε > 0, arms within ε of the best are considered acceptable
 pub fn estimate_optimal_probabilities(
-    args: OptimalProbsArgs,
-) -> Result<HashMap<String, f64>, OptimalProbsError> {
-    let OptimalProbsArgs {
+    args: EstimateOptimalProbabilitiesArgs,
+) -> Result<HashMap<String, f64>, EstimateOptimalProbabilitiesError> {
+    let EstimateOptimalProbabilitiesArgs {
         feedback,
         epsilon,
         variance_floor,
@@ -145,7 +145,7 @@ pub fn estimate_optimal_probabilities(
     let total_pulls: u64 = pull_counts.iter().sum();
     let alpha_t: f64 = reg0 / (total_pulls as f64).sqrt(); // regularization coefficient
     let leader_arm: usize = choose_leader(&means, &variances, &pull_counts)
-        .ok_or(OptimalProbsError::CouldntComputeArgmax)?;
+        .ok_or(EstimateOptimalProbabilitiesError::CouldntComputeArgmax)?;
     let leader_mean: f64 = means[leader_arm];
 
     // ε-margins: gap_i = μ_L - μ_i + ε  (strictly > 0 for ε > 0)
@@ -288,7 +288,7 @@ pub fn estimate_optimal_probabilities(
         ..Default::default()
     };
     let mut solver = DefaultSolver::new(&P, &q, &A, &b, &cones, settings)
-        .map_err(|_| OptimalProbsError::CouldntBuildSolver)?;
+        .map_err(|_| EstimateOptimalProbabilitiesError::CouldntBuildSolver)?;
     solver.solve();
 
     let x = solver.solution.x.as_slice();
@@ -352,7 +352,7 @@ mod tests {
     #[test]
     fn test_two_arms_different_variances() {
         let feedback = make_feedback(vec![10, 10], vec![0.3, 0.7], vec![1.1, 1.0]);
-        let probs = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.1),
             variance_floor: None,
@@ -371,7 +371,7 @@ mod tests {
     #[test]
     fn test_two_arms_equal_variances() {
         let feedback = make_feedback(vec![10, 10], vec![0.5, 0.5], vec![0.1, 0.1]);
-        let probs = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.01),
             variance_floor: None,
@@ -390,7 +390,7 @@ mod tests {
         // All arms should respect minimum probability
         let min_prob = 0.1;
         let feedback = make_feedback(vec![10, 10, 10], vec![0.2, 0.3, 0.9], vec![0.1, 0.1, 10.0]);
-        let probs = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.01),
             variance_floor: None,
@@ -412,7 +412,7 @@ mod tests {
     fn test_high_variance_arm() {
         // Higher variance means more sampling needed for accurate mean estimate
         let feedback = make_feedback(vec![10, 10], vec![0.5, 0.5], vec![0.01, 0.5]);
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.01),
             variance_floor: None,
@@ -430,7 +430,7 @@ mod tests {
     fn test_regularization_effect() {
         // Higher reg0 should pull probabilities toward uniform
         let feedback_no_reg = make_feedback(vec![100, 100], vec![0.3, 0.7], vec![0.3, 0.1]);
-        let probs_no_reg = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_no_reg = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback: feedback_no_reg,
             epsilon: Some(0.0),
             variance_floor: None,
@@ -440,7 +440,7 @@ mod tests {
         .unwrap();
 
         let feedback_with_reg = make_feedback(vec![100, 100], vec![0.3, 0.7], vec![0.3, 0.1]);
-        let probs_with_reg = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_with_reg = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback: feedback_with_reg,
             epsilon: Some(0.0),
             variance_floor: None,
@@ -464,7 +464,7 @@ mod tests {
             vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
             vec![0.1; 10],
         );
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.0),
             variance_floor: None,
@@ -488,7 +488,7 @@ mod tests {
     fn test_close_competition() {
         // Two arms very close in mean - both need substantial sampling
         let feedback = make_feedback(vec![10, 10, 10], vec![0.50, 0.51, 0.3], vec![0.1, 0.1, 0.1]);
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.0),
             variance_floor: None,
@@ -507,7 +507,7 @@ mod tests {
     fn test_variance_floor_applied() {
         // Variance floor should lower bound all variances
         let feedback = make_feedback(vec![10, 10], vec![0.5, 0.5], vec![1e-20, 1e-20]);
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.0),
             variance_floor: Some(0.01),
@@ -526,7 +526,7 @@ mod tests {
     fn test_zero_variance_with_floor() {
         // Zero variance should be handled by variance floor
         let feedback = make_feedback(vec![10, 10], vec![0.3, 0.7], vec![0.0001, 0.0]);
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.0),
             variance_floor: Some(0.001),
@@ -549,7 +549,7 @@ mod tests {
             vec![0.25, 0.55, 0.40, 0.60],
             vec![0.05, 0.15, 0.10, 0.20],
         );
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.05),
             variance_floor: Some(1e-8),
@@ -574,7 +574,7 @@ mod tests {
             vec![0.20, 0.60, 0.40],
             vec![0.10, 0.20, 0.15],
         );
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.02),
             variance_floor: None,
@@ -597,7 +597,7 @@ mod tests {
             vec![0.25, 0.55, 0.40, 0.60],
             vec![0.05, 0.15, 0.10, 0.20],
         );
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.05),
             variance_floor: None,
@@ -625,7 +625,7 @@ mod tests {
             vec![0.50, 0.51, 0.30],
             vec![0.10, 0.10, 0.10],
         );
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.01),
             variance_floor: None,
@@ -648,7 +648,7 @@ mod tests {
             vec![0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 1.00],
             vec![0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10],
         );
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.02),
             variance_floor: None,
@@ -683,7 +683,7 @@ mod tests {
             vec![10.00, 12.00, 11.00],
             vec![2.00, 3.50, 2.50],
         );
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.5),
             variance_floor: None,
@@ -702,7 +702,7 @@ mod tests {
     #[test]
     fn test_very_high_variance_cvxpy() {
         let feedback = make_feedback(vec![30, 30], vec![50.00, 55.00], vec![10.00, 15.00]);
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(1.0),
             variance_floor: None,
@@ -725,7 +725,7 @@ mod tests {
             vec![1.00, 5.00, 3.00, 7.00],
             vec![0.10, 2.00, 0.50, 4.00],
         );
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.2),
             variance_floor: None,
@@ -753,7 +753,7 @@ mod tests {
             vec![0.10, 0.30, 0.20],
             vec![5.00, 8.00, 6.00],
         );
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.05),
             variance_floor: None,
@@ -776,7 +776,7 @@ mod tests {
             vec![20.00, 25.00, 22.00, 28.00, 24.00],
             vec![3.00, 4.00, 2.50, 5.00, 3.50],
         );
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(1.0),
             variance_floor: None,
@@ -801,7 +801,7 @@ mod tests {
     #[test]
     fn test_asymmetric_high_variance_cvxpy() {
         let feedback = make_feedback(vec![50, 50], vec![100.00, 105.00], vec![1.00, 20.00]);
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(2.0),
             variance_floor: None,
@@ -822,7 +822,7 @@ mod tests {
     #[test]
     fn test_two_arms_simple_scipy() {
         let feedback = make_feedback(vec![20, 20], vec![0.50, 0.70], vec![0.10, 0.15]);
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.1),
             variance_floor: None,
@@ -845,7 +845,7 @@ mod tests {
             vec![1.00, 1.50, 1.20],
             vec![0.20, 0.30, 0.25],
         );
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.2),
             variance_floor: None,
@@ -864,7 +864,7 @@ mod tests {
     #[test]
     fn test_very_high_variance_scipy() {
         let feedback = make_feedback(vec![30, 30], vec![50.00, 55.00], vec![10.00, 15.00]);
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(1.0),
             variance_floor: None,
@@ -887,7 +887,7 @@ mod tests {
             vec![2.00, 3.00, 2.50, 3.50],
             vec![0.50, 1.00, 0.75, 1.50],
         );
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.3),
             variance_floor: None,
@@ -911,7 +911,7 @@ mod tests {
     #[test]
     fn test_small_epsilon_scipy() {
         let feedback = make_feedback(vec![50, 50], vec![10.00, 10.50], vec![1.00, 1.20]);
-        let probs_map = estimate_optimal_probabilities(OptimalProbsArgs {
+        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.05),
             variance_floor: None,
