@@ -12,6 +12,7 @@ mod dynamic_evaluations;
 mod dynamic_variants;
 mod fallback;
 mod feedback;
+mod first_of_n;
 mod health;
 mod howdy;
 mod human_feedback;

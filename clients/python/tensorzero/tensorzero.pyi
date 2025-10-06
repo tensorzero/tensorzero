@@ -331,6 +331,10 @@ class ChainOfThoughtConfig:
     pass
 
 @final
+class FirstOfNConfig:
+    pass
+
+@final
 class VariantsConfig:
     def __len__(self) -> int: ...
     def __getitem__(
@@ -341,6 +345,7 @@ class VariantsConfig:
         DICLConfig,
         MixtureOfNConfig,
         ChainOfThoughtConfig,
+        FirstOfNConfig,
     ]: ...
 
 @final
@@ -1088,6 +1093,7 @@ __all__ = [
     "BestOfNSamplingConfig",
     "ChatCompletionConfig",
     "ChainOfThoughtConfig",
+    "FirstOfNConfig",
     "Config",
     "Datapoint",
     "DICLOptimizationConfig",
