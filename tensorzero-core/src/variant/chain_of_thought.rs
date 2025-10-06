@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -52,7 +53,7 @@ impl UninitializedChainOfThoughtConfig {
 impl Variant for ChainOfThoughtConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &LazyResolvedInput,
+        input: Arc<LazyResolvedInput>,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -89,7 +90,7 @@ impl Variant for ChainOfThoughtConfig {
         let inference_result = self
             .inner
             .infer(
-                input,
+                Arc::clone(&input),
                 models,
                 function,
                 &augmented_inference_config,
@@ -120,7 +121,7 @@ impl Variant for ChainOfThoughtConfig {
 
     async fn infer_stream<'request>(
         &self,
-        _input: &LazyResolvedInput,
+        _input: Arc<LazyResolvedInput>,
         _models: &'request InferenceModels<'_>,
         _function: &FunctionConfig,
         _inference_config: &'request InferenceConfig<'request>,

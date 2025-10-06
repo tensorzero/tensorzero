@@ -121,7 +121,7 @@ struct InferenceMetadata {
     pub variant_name: String,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
-    pub input: LazyResolvedInput,
+    pub input: Arc<LazyResolvedInput>,
     pub dryrun: bool,
     pub start_time: Instant,
     pub inference_params: InferenceParams,
@@ -337,10 +337,10 @@ pub async fn inference(
         models: &config.models,
         embedding_models: &config.embedding_models,
     };
-    let resolved_input = params.input.into_lazy_resolved_input(FetchContext {
+    let resolved_input = Arc::new(params.input.into_lazy_resolved_input(FetchContext {
         client: http_client,
         object_store_info: &config.object_store_info,
-    })?;
+    })?);
     // Keep sampling variants until one succeeds
     while !candidate_variants.is_empty() {
         let (variant_name, variant) =
@@ -356,7 +356,7 @@ pub async fn inference(
             dryrun,
             start_time,
             stream,
-            resolved_input: &resolved_input,
+            resolved_input: resolved_input.clone(),
             inference_models: &inference_models,
             inference_clients: &inference_clients,
             inference_params: params.params.clone(),
@@ -403,7 +403,7 @@ struct InferVariantArgs<'a> {
     dryrun: bool,
     start_time: Instant,
     stream: bool,
-    resolved_input: &'a LazyResolvedInput,
+    resolved_input: Arc<LazyResolvedInput>,
     inference_models: &'a InferenceModels<'a>,
     inference_clients: &'a InferenceClients<'a>,
     inference_params: InferenceParams,
@@ -467,7 +467,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
     if stream {
         let result = variant
             .infer_stream(
-                resolved_input,
+                resolved_input.clone(),
                 inference_models,
                 function.as_ref(),
                 &inference_config,
@@ -488,7 +488,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             variant_name: inference_config.variant_name.to_string(),
             inference_id,
             episode_id,
-            input: resolved_input.clone(),
+            input: resolved_input,
             dryrun,
             start_time,
             inference_params: model_used_info.inference_params,
@@ -523,7 +523,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
     } else {
         let result = variant
             .infer(
-                resolved_input,
+                Arc::clone(&resolved_input),
                 inference_models,
                 function.as_ref(),
                 &inference_config,
@@ -563,7 +563,10 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 let _: () = write_inference(
                     &clickhouse_connection_info,
                     &config,
-                    resolved_input.clone().resolve().await?,
+                    Arc::try_unwrap(resolved_input)
+                        .unwrap_or_else(|arc| (*arc).clone())
+                        .resolve()
+                        .await?,
                     result_to_write,
                     write_metadata,
                 )
@@ -807,7 +810,7 @@ fn create_stream(
                         extra_headers,
                     };
                     let config = config.clone();
-                        match input.resolve().await {
+                        match Arc::try_unwrap(Arc::clone(&input)).unwrap_or_else(|arc| (*arc).clone()).resolve().await {
                             Ok(input) => {
                                 let clickhouse_connection_info = clickhouse_connection_info.clone();
                                 write_inference(
@@ -1383,10 +1386,10 @@ mod tests {
             variant_name: "test_variant".to_string(),
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            input: LazyResolvedInput {
+            input: Arc::new(LazyResolvedInput {
                 messages: vec![],
                 system: None,
-            },
+            }),
             dryrun: false,
             inference_params: InferenceParams::default(),
             start_time: Instant::now(),
@@ -1437,10 +1440,10 @@ mod tests {
             variant_name: "test_variant".to_string(),
             inference_id: Uuid::now_v7(),
             episode_id: Uuid::now_v7(),
-            input: LazyResolvedInput {
+            input: Arc::new(LazyResolvedInput {
                 messages: vec![],
                 system: None,
-            },
+            }),
             dryrun: false,
             inference_params: InferenceParams::default(),
             start_time: Instant::now(),

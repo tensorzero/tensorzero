@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::fmt;
+use std::sync::Arc;
 
 use futures::future::{join_all, try_join_all};
 use rand::Rng;
@@ -131,7 +132,7 @@ impl UninitializedMixtureOfNConfig {
 impl Variant for MixtureOfNConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &LazyResolvedInput,
+        input: Arc<LazyResolvedInput>,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -139,11 +140,11 @@ impl Variant for MixtureOfNConfig {
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
         let candidate_inference_results = self
-            .infer_candidates(input, models, function, inference_config, clients)
+            .infer_candidates(&input, models, function, inference_config, clients)
             .await?;
         match self
             .fuse_candidates(
-                input,
+                &input,
                 function,
                 models.models,
                 inference_config,
@@ -164,7 +165,7 @@ impl Variant for MixtureOfNConfig {
 
     async fn infer_stream<'request>(
         &self,
-        input: &LazyResolvedInput,
+        input: Arc<LazyResolvedInput>,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -173,12 +174,12 @@ impl Variant for MixtureOfNConfig {
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         // We infer the candidates in non-streaming mode, since we need to pass the full candidate results to the fuser
         let candidate_inference_results = self
-            .infer_candidates(input, models, function, inference_config, clients)
+            .infer_candidates(&input, models, function, inference_config, clients)
             .await?;
 
         match self
             .fuse_candidates(
-                input,
+                &input,
                 function,
                 models.models,
                 inference_config,
@@ -462,7 +463,7 @@ impl MixtureOfNConfig {
                 timeout(
                     Duration::from_secs_f64(self.timeout_s),
                     candidate_variant.infer(
-                        input,
+                        Arc::new(input.clone()),
                         models,
                         function,
                         config,

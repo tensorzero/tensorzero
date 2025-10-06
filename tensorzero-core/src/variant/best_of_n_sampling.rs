@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use futures::future::{join_all, try_join_all};
 use lazy_static::lazy_static;
@@ -151,7 +152,7 @@ lazy_static! {
 impl Variant for BestOfNSamplingConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &LazyResolvedInput,
+        input: Arc<LazyResolvedInput>,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -159,10 +160,10 @@ impl Variant for BestOfNSamplingConfig {
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
         let candidate_inference_results = self
-            .infer_candidates(input, models, function, inference_config, clients)
+            .infer_candidates(&input, models, function, inference_config, clients)
             .await?;
         self.select_best_candidate(
-            input,
+            &input,
             models.models,
             inference_config,
             clients,
@@ -173,7 +174,7 @@ impl Variant for BestOfNSamplingConfig {
 
     async fn infer_stream<'request>(
         &self,
-        input: &LazyResolvedInput,
+        input: Arc<LazyResolvedInput>,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -181,11 +182,11 @@ impl Variant for BestOfNSamplingConfig {
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         let candidate_inference_results = self
-            .infer_candidates(input, models, function, inference_config, clients)
+            .infer_candidates(&input, models, function, inference_config, clients)
             .await?;
         let inference_result = self
             .select_best_candidate(
-                input,
+                &input,
                 models.models,
                 inference_config,
                 clients,
@@ -322,7 +323,7 @@ impl BestOfNSamplingConfig {
                 timeout(
                     Duration::from_secs_f64(self.timeout_s),
                     candidate_variant.infer(
-                        input,
+                        Arc::new(input.clone()),
                         models,
                         function,
                         config,

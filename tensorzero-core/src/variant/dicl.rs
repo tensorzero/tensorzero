@@ -171,7 +171,7 @@ pub struct UninitializedDiclConfig {
 impl Variant for DiclConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &LazyResolvedInput,
+        input: Arc<LazyResolvedInput>,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -184,7 +184,7 @@ impl Variant for DiclConfig {
         // Embed the input and grab the relevant examples from the database
         let (relevant_examples, embedding_response) = self
             .retrieve_relevant_examples(
-                input,
+                &input,
                 models.embedding_models,
                 clients,
                 inference_config.function_name,
@@ -195,7 +195,7 @@ impl Variant for DiclConfig {
 
         // Prepare the request for the model
         let model_inference_request = self.prepare_request(
-            input,
+            &input,
             &relevant_examples,
             function,
             inference_config,
@@ -235,7 +235,7 @@ impl Variant for DiclConfig {
 
     async fn infer_stream<'request>(
         &self,
-        input: &LazyResolvedInput,
+        input: Arc<LazyResolvedInput>,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -248,7 +248,7 @@ impl Variant for DiclConfig {
         // Embed the input and grab the relevant examples from the database
         let (relevant_examples, embedding_response) = self
             .retrieve_relevant_examples(
-                input,
+                &input,
                 models.embedding_models,
                 clients,
                 inference_config.function_name,
@@ -258,7 +258,7 @@ impl Variant for DiclConfig {
             .await?;
         // Prepare the request for the model
         let request = self.prepare_request(
-            input,
+            &input,
             &relevant_examples,
             function,
             inference_config,

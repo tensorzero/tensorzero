@@ -204,7 +204,7 @@ pub struct ModelUsedInfo {
 pub trait Variant {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &LazyResolvedInput,
+        input: Arc<LazyResolvedInput>,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -214,7 +214,7 @@ pub trait Variant {
 
     async fn infer_stream<'request>(
         &self,
-        input: &LazyResolvedInput,
+        input: Arc<LazyResolvedInput>,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -275,7 +275,7 @@ impl Variant for VariantInfo {
     )]
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &LazyResolvedInput,
+        input: Arc<LazyResolvedInput>,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -287,7 +287,7 @@ impl Variant for VariantInfo {
                 VariantConfig::ChatCompletion(params) => {
                     params
                         .infer(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,
@@ -299,7 +299,7 @@ impl Variant for VariantInfo {
                 VariantConfig::BestOfNSampling(params) => {
                     params
                         .infer(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,
@@ -312,7 +312,7 @@ impl Variant for VariantInfo {
                 VariantConfig::Dicl(params) => {
                     params
                         .infer(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,
@@ -324,7 +324,7 @@ impl Variant for VariantInfo {
                 VariantConfig::MixtureOfN(params) => {
                     params
                         .infer(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,
@@ -336,7 +336,7 @@ impl Variant for VariantInfo {
                 VariantConfig::ChainOfThought(params) => {
                     params
                         .infer(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,
@@ -371,7 +371,7 @@ impl Variant for VariantInfo {
     )]
     async fn infer_stream<'request>(
         &self,
-        input: &LazyResolvedInput,
+        input: Arc<LazyResolvedInput>,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -383,7 +383,7 @@ impl Variant for VariantInfo {
                 VariantConfig::ChatCompletion(params) => {
                     params
                         .infer_stream(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,
@@ -395,7 +395,7 @@ impl Variant for VariantInfo {
                 VariantConfig::BestOfNSampling(params) => {
                     params
                         .infer_stream(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,
@@ -407,7 +407,7 @@ impl Variant for VariantInfo {
                 VariantConfig::Dicl(params) => {
                     params
                         .infer_stream(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,
@@ -419,7 +419,7 @@ impl Variant for VariantInfo {
                 VariantConfig::MixtureOfN(params) => {
                     params
                         .infer_stream(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,
@@ -431,7 +431,7 @@ impl Variant for VariantInfo {
                 VariantConfig::ChainOfThought(params) => {
                     params
                         .infer_stream(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,

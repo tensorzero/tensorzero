@@ -477,7 +477,7 @@ async fn prepare_request_message(
 impl Variant for ChatCompletionConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &LazyResolvedInput,
+        input: Arc<LazyResolvedInput>,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -487,7 +487,7 @@ impl Variant for ChatCompletionConfig {
         let mut inference_params = inference_params;
         let request = self
             .prepare_request(
-                input,
+                &input,
                 function,
                 inference_config,
                 false,
@@ -514,7 +514,7 @@ impl Variant for ChatCompletionConfig {
 
     async fn infer_stream<'request>(
         &self,
-        input: &LazyResolvedInput,
+        input: Arc<LazyResolvedInput>,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -524,7 +524,7 @@ impl Variant for ChatCompletionConfig {
         let mut inference_params = inference_params;
         let request = self
             .prepare_request(
-                input,
+                &input,
                 function,
                 inference_config,
                 true,
@@ -1330,7 +1330,7 @@ mod tests {
         };
         let result = chat_completion_config
             .infer(
-                &input,
+                Arc::new(input.clone()),
                 &inference_models,
                 &function_config,
                 &inference_config,
@@ -1384,7 +1384,7 @@ mod tests {
         };
         let result = chat_completion_config
             .infer(
-                &input,
+                Arc::new(input.clone()),
                 &inference_models,
                 &function_config,
                 &inference_config,
@@ -1457,7 +1457,7 @@ mod tests {
         };
         let err = chat_completion_config
             .infer(
-                &input,
+                Arc::new(input.clone()),
                 &inference_models,
                 &function_config,
                 &inference_config,
@@ -1556,7 +1556,7 @@ mod tests {
         };
         let result = chat_completion_config
             .infer(
-                &input,
+                Arc::new(input.clone()),
                 &inference_models,
                 &function_config,
                 &inference_config,
@@ -1639,7 +1639,7 @@ mod tests {
         };
         let result = chat_completion_config
             .infer(
-                &input,
+                Arc::new(input.clone()),
                 &inference_models,
                 &function_config,
                 &inference_config,
@@ -1736,7 +1736,7 @@ mod tests {
         let inference_params = InferenceParams::default();
         let result = chat_completion_config
             .infer(
-                &input,
+                Arc::new(input.clone()),
                 &inference_models,
                 &json_function_config,
                 &inference_config,
@@ -1832,7 +1832,7 @@ mod tests {
         .unwrap();
         let result = chat_completion_config
             .infer(
-                &input,
+                Arc::new(input.clone()),
                 &inference_models,
                 &json_function_config,
                 &inference_config,
@@ -1963,7 +1963,7 @@ mod tests {
         .unwrap();
         let result = chat_completion_config
             .infer(
-                &input,
+                Arc::new(input.clone()),
                 &inference_models,
                 &json_function_config,
                 &inference_config,
@@ -2088,7 +2088,7 @@ mod tests {
         .unwrap();
         let result = chat_completion_config
             .infer(
-                &input,
+                Arc::new(input.clone()),
                 &inference_models,
                 &json_function_config,
                 &inference_config,
@@ -2294,7 +2294,7 @@ mod tests {
         };
         let result = chat_completion_config
             .infer_stream(
-                &input,
+                Arc::new(input.clone()),
                 &inference_models,
                 function_config,
                 &inference_config,
@@ -2375,7 +2375,7 @@ mod tests {
         };
         let (mut stream, models_used) = chat_completion_config
             .infer_stream(
-                &input,
+                Arc::new(input.clone()),
                 &inference_models,
                 function_config,
                 &inference_config,
