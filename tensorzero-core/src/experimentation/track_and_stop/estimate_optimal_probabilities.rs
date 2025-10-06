@@ -125,6 +125,7 @@ pub fn estimate_optimal_probabilities(
         min_prob,
         reg0,
     } = args;
+    // TODO: for boolean metrics, set default epsilon to e.g. 0.01. For float metrics, anchor to reward distributions once available.
     let epsilon: f64 = epsilon.unwrap_or(0.0);
     let variance_floor: f64 = variance_floor.unwrap_or(1e-12);
     let min_prob: f64 = min_prob.unwrap_or(1e-6);
