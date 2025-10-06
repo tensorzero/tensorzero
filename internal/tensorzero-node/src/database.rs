@@ -64,7 +64,7 @@ impl DatabaseClient {
 }
 
 #[derive(Deserialize)]
-#[cfg_attr(test, derive(TS))]
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 struct GetModelUsageTimeseriesParams {
     pub time_window: TimeWindow,
@@ -72,14 +72,14 @@ struct GetModelUsageTimeseriesParams {
 }
 
 #[derive(Deserialize)]
-#[cfg_attr(test, derive(TS))]
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 struct GetModelLatencyQuantilesParams {
     pub time_window: TimeWindow,
 }
 
 #[derive(Deserialize)]
-#[cfg_attr(test, derive(TS))]
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 struct QueryEpisodeTableParams {
     pub page_size: u32,
