@@ -46,6 +46,9 @@ fn argmax_with_ties(values: &[f64]) -> Vec<usize> {
 /// selecting the arm with the smallest `variance / pull_count` ratio. If there is
 /// still a tie, it selects the arm with the smallest index, for stability.
 ///
+/// When ties in means are detected, a warning is logged to help identify situations
+/// where arms are performing similarly.
+///
 /// # Arguments
 ///
 /// * `means` - The mean rewards for each arm
@@ -79,6 +82,12 @@ pub(super) fn choose_leader(
     let leader = if leaders.len() == 1 {
         leaders[0]
     } else {
+        // Log warning about tie in means
+        tracing::warn!(
+            "Tie in leader selection: {} arms have approximately equal means. Breaking tie by variance/pull_count ratio.",
+            leaders.len()
+        );
+
         // tie-break by smallest variance_per_pull; then by smallest index
         let variance_per_pull: Vec<f64> = variances
             .iter()
