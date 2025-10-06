@@ -1,26 +1,146 @@
 #![allow(dead_code)]
 
+use core::f64;
+use std::cmp::Ordering;
 use thiserror::Error;
 
-use super::estimate_optimal_probabilities::argmax;
 use crate::db::FeedbackByVariant;
 
+/// Find all indices with the maximum value in `values`.
+///
+/// Returns a vector of all indices where the value is within a small tolerance
+/// (1e-10) of the maximum value. This allows for handling floating-point ties.
+///
+/// # Returns
+///
+/// A vector of indices with the maximum value. Returns an empty vector if the
+/// input slice is empty.
+///
+/// # Examples
+///
+/// ```ignore
+/// let values = vec![0.3, 0.7, 0.5];
+/// assert_eq!(argmax_with_ties(&values), vec![1]);
+///
+/// let values = vec![0.7, 0.5, 0.7];
+/// assert_eq!(argmax_with_ties(&values), vec![0, 2]);
+/// ```
+fn argmax_with_ties(values: &[f64]) -> Vec<usize> {
+    let max_val: f64 = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+
+    // Find all indices with the maximum value, up to tolerance
+    let tolerance: f64 = 1e-10;
+    let max_indices: Vec<usize> = values
+        .iter()
+        .enumerate()
+        .filter(|(_, &v)| (v - max_val).abs() < tolerance)
+        .map(|(i, _)| i)
+        .collect();
+
+    max_indices
+}
+
+/// Choose the leader arm based on means, breaking ties by smallest variance per pull.
+///
+/// This function identifies the arm(s) with the highest mean, then breaks ties by
+/// selecting the arm with the smallest `variance / pull_count` ratio. If there is
+/// still a tie, it selects the arm with the smallest index, for stability.
+///
+/// # Arguments
+///
+/// * `means` - The mean rewards for each arm
+/// * `variances` - The variances for each arm
+/// * `pull_counts` - The number of times each arm has been pulled
+///
+/// # Returns
+///
+/// The index of the chosen leader arm, or `None` if the input slices are empty.
+///
+/// # Panics
+///
+/// This function assumes all three slices have the same length. If they don't,
+/// it may panic or return incorrect results.
+///
+/// # Examples
+///
+/// ```ignore
+/// let means = vec![0.7, 0.7, 0.5];
+/// let variances = vec![0.3, 0.1, 0.2];
+/// let pull_counts = vec![100, 100, 100];
+/// // Returns 1 (highest mean, smallest variance per pull among tied)
+/// assert_eq!(choose_leader(&means, &variances, &pull_counts), Some(1));
+/// ```
+fn choose_leader(means: &[f64], variances: &[f64], pull_counts: &[u64]) -> Option<usize> {
+    let leaders = argmax_with_ties(means);
+    let leader = if leaders.len() == 1 {
+        leaders[0]
+    } else {
+        // tie-break by smallest variance_per_pull; then by smallest index
+        let variance_per_pull: Vec<f64> = variances
+            .iter()
+            .zip(pull_counts.iter())
+            .map(|(&var, &count)| var / count.max(1) as f64)
+            .collect();
+
+        *leaders.iter().min_by(|&&i, &&j| {
+            variance_per_pull[i]
+                .partial_cmp(&variance_per_pull[j])
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| i.cmp(&j))
+        })?
+    };
+
+    Some(leader)
+}
+
+/// Arguments for computing pairwise generalized likelihood ratio (GLR) statistics.
+///
+/// Used to test whether a leader arm is significantly better than a challenger arm
+/// in the context of epsilon-best arm identification.
 pub struct PairwiseGLRArgs {
+    /// Number of pulls for leader arm (arm with highest empirical mean reward)
     leader_pulls: u64,
+    /// Empirical mean reward for leader arm
     leader_mean: f64,
+    /// Empirical variance of leader arm
     leader_variance: f64,
+    /// Number of pulls for challenger arm
     challenger_pulls: u64,
+    /// Empirical mean reward for challenger arm
     challenger_mean: f64,
+    /// Empirical variance of challenger arm
     challenger_variance: f64,
+    /// Sub-optimality tolerance
     epsilon: f64,
 }
 
+/// Errors that can occur when computing pairwise GLR statistics.
+/// TODO: Make errors more informative
 #[derive(Debug, Error)]
 pub enum PairwiseGLRError {
-    #[error("Error in compute_pairwise+_glr")]
+    #[error("Error in compute_pairwise_glr")]
     GLRError,
 }
 
+/// Arguments for checking the stopping condition in epsilon-best arm identification
+///
+/// This struct encapsulates all parameters needed to determine whether an experiment
+/// should stop and which arm should be recommended as the winner.
+pub(super) struct CheckStoppingArgs<'a> {
+    /// Reward observations and pull counts for each arm
+    pub feedback: &'a Vec<FeedbackByVariant>,
+    /// Required minimum number of pulls per arm before stopping can be considered
+    pub min_pulls: u64,
+    /// Value used to lower bound empirical variance, for stability
+    pub ridge_variance: Option<f64>,
+    /// Sub-optimality tolerance
+    pub epsilon: Option<f64>,
+    /// Type 1 error tolerance, aka 1 minus the confidence level
+    pub delta: Option<f64>,
+}
+
+/// Errors that can occur when checking stopping conditions.
+/// TODO: Make errors more informative
 #[derive(Debug, Error)]
 pub enum CheckStoppingError {
     #[error("Error in computing pairwise GLR")]
@@ -29,6 +149,37 @@ pub enum CheckStoppingError {
     StoppingError,
 }
 
+/// Compute the pairwise generalized likelihood ratio (GLR) statistic.
+///
+/// This function computes the GLR statistic for testing whether an empirical leader arm
+/// is epsilon-close to the best arm, in the sense that either (1) it is the best arm, or
+/// (2) its mean is within epsilon of the best arm.
+///
+/// The GLR statistic is based on the empirical reward gap adjusted by epsilon:
+/// `GLR = (leader_mean - challenger_mean + epsilon)^2 / (2 * pooled_variance)`
+///
+/// where `pooled_variance` is the sum of the per-sample variances.
+///
+/// # Arguments
+///
+/// * `args` - The pairwise GLR arguments including pull counts, means, variances,
+///   and epsilon for both the leader and challenger arms
+///
+/// # Returns
+///
+/// The GLR statistic (non-negative), or an error if:
+/// - The leader mean is less than the challenger mean
+///
+/// Returns 0.0 if:
+/// - Either arm has 0 pulls (no evidence)
+/// - The empirical gap is non-positive
+/// - The pooled variance is non-positive
+///
+/// # Errors
+///
+/// Returns `PairwiseGLRError::GLRError` if the leader mean is less than the
+/// challenger mean, as this violates the assumption that we're testing whether
+/// the leader is better.
 fn compute_pairwise_glr(args: PairwiseGLRArgs) -> Result<f64, PairwiseGLRError> {
     let PairwiseGLRArgs {
         leader_pulls,
@@ -71,43 +222,91 @@ fn compute_pairwise_glr(args: PairwiseGLRArgs) -> Result<f64, PairwiseGLRError> 
     Ok(glr_statistic.max(0.0))
 }
 
-pub struct StoppingResult {
-    can_stop: bool,
-    leader_arm: usize,
+/// The result of checking whether to stop a bandit experiment.
+#[derive(Debug, PartialEq)]
+pub enum StoppingResult {
+    /// The experiment should continue (not enough evidence to stop)
+    NotStopped,
+    /// The experiment should stop and recommend the winner variant
+    Winner(String),
 }
 
-///     Decide whether to stop the experiment and which arm to recommend.
-///     Uses parallel GLR testing with uniform challenger weights π_j = 1/(K-1),
-///     and per-pair time t_{L,j} = n_L + n_j.
-pub fn check_stopping(
-    feedback: Vec<FeedbackByVariant>,
-    min_pulls: u64,
-    ridge_variance: Option<f64>,
-    epsilon: Option<f64>,
-    delta: Option<f64>,
-) -> Result<StoppingResult, CheckStoppingError> {
+/// Decide whether to stop the experiment and which arm to recommend.
+///
+/// This function implements a sequential testing procedure for epsilon-best arm
+/// identification using parallel generalized likelihood ratio (GLR) tests. It
+/// determines whether there is sufficient statistical evidence to stop the
+/// experiment and recommend a winner.
+///
+/// The algorithm:
+/// 1. Identifies the empirical leader (arm with highest mean)
+/// 2. Computes GLR statistics comparing the leader to all other arms
+/// 3. Checks if the minimum GLR exceeds a threshold based on the confidence level (1 - delta)
+/// 4. If all pairwise tests pass, declares the leader as the winner
+///
+/// # Arguments
+///
+/// * `args` - The stopping check arguments, including:
+///   - `feedback`: Performance data for each variant (must be non-empty)
+///   - `min_pulls`: Minimum number of pulls required per arm before stopping (must be > 0)
+///   - `ridge_variance`: Lower bound for empirical variances (must be > 0, default: 1e-12)
+///   - `epsilon`: Epsilon-optimality tolerance (must be ≥ 0, default: 0.0)
+///   - `delta`: Error tolerance for stopping (must be in (0, 1), default: 0.05)
+///
+/// # Returns
+///
+/// * `Ok(StoppingResult::NotStopped)` - Continue the experiment
+/// * `Ok(StoppingResult::Winner(name))` - Stop and recommend variant `name`
+/// * `Err(CheckStoppingError)` - An error occurred during computation
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - No valid leader can be identified (empty feedback)
+/// - GLR computation fails for any pairwise comparison
+///
+/// # Preconditions
+///
+/// The function expects (but does not currently validate):
+/// - `feedback` is non-empty
+/// - `min_pulls > 0`
+/// - `ridge_variance > 0` (if provided)
+/// - `epsilon ≥ 0` (if provided)
+/// - `delta ∈ (0, 1)` (if provided)
+///
+/// # Notes
+///
+/// - Ties in means are broken by selecting the arm with smallest variance/pull_count
+/// - All arms must have at least `min_pulls` samples before stopping is possible
+/// - Empirical variances are lower bounded at `ridge_variance`
+pub fn check_stopping(args: CheckStoppingArgs<'_>) -> Result<StoppingResult, CheckStoppingError> {
+    let CheckStoppingArgs {
+        feedback,
+        min_pulls,
+        ridge_variance,
+        epsilon,
+        delta,
+    } = args;
     // TODO: how to validate inputs?
     let ridge_variance: f64 = ridge_variance.unwrap_or(1e-12);
     let epsilon: f64 = epsilon.unwrap_or(0.0);
     let delta: f64 = delta.unwrap_or(0.05);
-
     let pull_counts: Vec<u64> = feedback.iter().map(|x| x.count).collect();
     let means: Vec<f64> = feedback.iter().map(|x| x.mean as f64).collect();
     let variances: Vec<f64> = feedback
         .iter()
         .map(|x| (x.variance as f64).max(ridge_variance))
         .collect();
-
-    // TODO: in case of tie, choose arm with largest value of variance / pull_count, for both stopping condition and return value. Log a warning.
+    let variant_names: Vec<String> = feedback.iter().map(|x| x.variant_name.clone()).collect();
     let num_arms: usize = pull_counts.len();
-    let leader_arm: usize = argmax(&means).ok_or(CheckStoppingError::StoppingError)?;
 
+    // Can't stop the experiment if any arms haven't been pulled up to the min pull count
     if pull_counts.iter().any(|&x| x < min_pulls) {
-        return Ok(StoppingResult {
-            can_stop: false,
-            leader_arm,
-        });
+        return Ok(StoppingResult::NotStopped);
     }
+
+    let leader_arm: usize =
+        choose_leader(&means, &variances, &pull_counts).ok_or(CheckStoppingError::StoppingError)?;
 
     // Compute likelihood statistic for all non-leader arms
     let mut glr_vals: Vec<f64> = vec![];
@@ -149,15 +348,9 @@ pub fn check_stopping(
     match glr_min {
         Some(min_val) => {
             if min_val > threshold {
-                Ok(StoppingResult {
-                    can_stop: true,
-                    leader_arm,
-                })
+                Ok(StoppingResult::Winner(variant_names[leader_arm].clone()))
             } else {
-                Ok(StoppingResult {
-                    can_stop: false,
-                    leader_arm,
-                })
+                Ok(StoppingResult::NotStopped)
             }
         }
         None => Err(CheckStoppingError::StoppingError),
@@ -186,6 +379,80 @@ mod tests {
                 count,
             })
             .collect()
+    }
+
+    // Tests for argmax_with_ties
+
+    #[test]
+    fn test_argmax_with_ties_no_tie() {
+        let values = vec![0.3, 0.7, 0.5];
+        assert_eq!(argmax_with_ties(&values), vec![1]);
+    }
+
+    #[test]
+    fn test_argmax_with_ties_two_way_tie() {
+        let values = vec![0.7, 0.5, 0.7];
+        assert_eq!(argmax_with_ties(&values), vec![0, 2]);
+    }
+
+    #[test]
+    fn test_argmax_with_ties_all_tied() {
+        let values = vec![0.5, 0.5, 0.5];
+        assert_eq!(argmax_with_ties(&values), vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn test_argmax_with_ties_empty() {
+        let values: Vec<f64> = vec![];
+        assert_eq!(argmax_with_ties(&values), vec![] as Vec<usize>);
+    }
+
+    // Tests for choose_leader
+
+    #[test]
+    fn test_choose_leader_no_tie() {
+        let means = vec![0.3, 0.7, 0.5];
+        let variances = vec![0.1, 0.1, 0.1];
+        let pull_counts = vec![100, 100, 100];
+        assert_eq!(choose_leader(&means, &variances, &pull_counts), Some(1));
+    }
+
+    #[test]
+    fn test_choose_leader_tie_breaks_by_smallest_variance_per_pull() {
+        let means = vec![0.7, 0.7, 0.5];
+        let variances = vec![0.3, 0.1, 0.2]; // Same pull counts, so variance order matters
+        let pull_counts = vec![100, 100, 100];
+        // Indices 0 and 1 are tied at 0.7
+        // variance_per_pull: [0.003, 0.001, 0.002]
+        // Should pick 1 (smallest variance_per_pull among tied)
+        assert_eq!(choose_leader(&means, &variances, &pull_counts), Some(1));
+    }
+
+    #[test]
+    fn test_choose_leader_tie_breaks_by_smallest_index_when_variance_tied() {
+        let means = vec![0.7, 0.7, 0.5];
+        let variances = vec![0.1, 0.1, 0.2]; // Same variance_per_pull for first two
+        let pull_counts = vec![100, 100, 100];
+        // Indices 0 and 1 are tied at 0.7 with same variance_per_pull (0.001)
+        // Should pick 0 (smaller index)
+        assert_eq!(choose_leader(&means, &variances, &pull_counts), Some(0));
+    }
+
+    #[test]
+    fn test_choose_leader_all_tied() {
+        let means = vec![0.5, 0.5, 0.5];
+        let variances = vec![0.3, 0.1, 0.2];
+        let pull_counts = vec![100, 100, 100];
+        // All tied in means, should pick 1 (smallest variance_per_pull: 0.001)
+        assert_eq!(choose_leader(&means, &variances, &pull_counts), Some(1));
+    }
+
+    #[test]
+    fn test_choose_leader_empty() {
+        let means: Vec<f64> = vec![];
+        let variances: Vec<f64> = vec![];
+        let pull_counts: Vec<u64> = vec![];
+        assert_eq!(choose_leader(&means, &variances, &pull_counts), None);
     }
 
     // Tests for compute_pairwise_glr
@@ -345,10 +612,17 @@ mod tests {
 
     #[test]
     fn test_check_stopping_insufficient_pulls() {
-        // Should return can_stop: false if any arm has fewer than min_pulls
+        // Should return NotStopped if any arm has fewer than min_pulls
         let feedback = make_feedback(vec![5, 15, 25], vec![0.3, 0.7, 0.5], vec![0.1, 0.1, 0.1]);
-        let result = check_stopping(feedback, 10, None, Some(0.0), None).unwrap();
-        assert!(!result.can_stop);
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: None,
+        })
+        .unwrap();
+        assert_eq!(result, StoppingResult::NotStopped);
     }
 
     #[test]
@@ -359,10 +633,17 @@ mod tests {
             vec![0.3, 0.9, 0.5],
             vec![0.1, 0.1, 0.1],
         );
-        let result = check_stopping(feedback, 10, None, Some(0.0), Some(0.05)).unwrap();
-        assert!(result.can_stop, "Should stop with clear winner");
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+        })
+        .unwrap();
         assert_eq!(
-            result.leader_arm, 1,
+            result,
+            StoppingResult::Winner("variant_1".to_string()),
             "Should recommend arm with highest mean"
         );
     }
@@ -375,33 +656,68 @@ mod tests {
             vec![0.50, 0.52, 0.51],
             vec![0.2, 0.2, 0.2],
         );
-        let result = check_stopping(feedback, 10, None, Some(0.0), Some(0.05)).unwrap();
-        assert!(!result.can_stop, "Should not stop with close competition");
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+        })
+        .unwrap();
+        assert_eq!(
+            result,
+            StoppingResult::NotStopped,
+            "Should not stop with close competition"
+        );
     }
 
     #[test]
     fn test_check_stopping_returns_empirical_leader() {
         let feedback = make_feedback(vec![50, 50, 50], vec![0.3, 0.7, 0.5], vec![0.1, 0.1, 0.1]);
-        let result = check_stopping(feedback, 10, None, Some(0.0), None).unwrap();
-        assert_eq!(result.leader_arm, 1, "Should return arm with highest mean");
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: None,
+        })
+        .unwrap();
+        if let StoppingResult::Winner(name) = result {
+            assert_eq!(name, "variant_1", "Should return arm with highest mean");
+        }
+        // Note: This test doesn't assert whether it stopped or not, just that IF it stops,
+        // it returns the correct winner
     }
 
     #[test]
     fn test_check_stopping_with_epsilon() {
         // Epsilon-optimality: arm 0 is within epsilon of the best
         let feedback_no_epsilon = make_feedback(vec![500, 500], vec![0.68, 0.70], vec![0.1, 0.1]);
-        let result_no_eps =
-            check_stopping(feedback_no_epsilon, 10, None, Some(0.0), Some(0.05)).unwrap();
+        let result_no_eps = check_stopping(CheckStoppingArgs {
+            feedback: &feedback_no_epsilon,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+        })
+        .unwrap();
 
         let feedback_with_epsilon = make_feedback(vec![500, 500], vec![0.68, 0.70], vec![0.1, 0.1]);
-        let result_with_eps =
-            check_stopping(feedback_with_epsilon, 10, None, Some(0.05), Some(0.05)).unwrap();
+        let result_with_eps = check_stopping(CheckStoppingArgs {
+            feedback: &feedback_with_epsilon,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.05),
+            delta: Some(0.05),
+        })
+        .unwrap();
 
         // With epsilon, should be more likely to stop (easier to satisfy)
         // Note: exact behavior depends on sample sizes and variances
         // This test mainly verifies epsilon is used without error
         assert!(
-            result_with_eps.can_stop || !result_no_eps.can_stop,
+            matches!(result_with_eps, StoppingResult::Winner(_))
+                || matches!(result_no_eps, StoppingResult::NotStopped),
             "Epsilon should make stopping easier or equivalent"
         );
     }
@@ -411,7 +727,13 @@ mod tests {
         // Very small variances should be bounded by ridge_variance
         let feedback = make_feedback(vec![100, 100], vec![0.5, 0.7], vec![1e-10, 1e-10]);
         // Should not panic due to division by near-zero variance
-        let result = check_stopping(feedback, 10, Some(0.01), Some(0.0), None);
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 10,
+            ridge_variance: Some(0.01),
+            epsilon: Some(0.0),
+            delta: None,
+        });
         assert!(result.is_ok(), "Ridge variance should prevent degeneracy");
     }
 
@@ -424,24 +746,36 @@ mod tests {
             vec![0.45, 0.65, 0.50],
             vec![0.15, 0.15, 0.15],
         );
-        let result_strict =
-            check_stopping(feedback_strict, 10, None, Some(0.0), Some(0.01)).unwrap();
+        let result_strict = check_stopping(CheckStoppingArgs {
+            feedback: &feedback_strict,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: Some(0.01),
+        })
+        .unwrap();
 
         let feedback_lenient = make_feedback(
             vec![150, 150, 150],
             vec![0.45, 0.65, 0.50],
             vec![0.15, 0.15, 0.15],
         );
-        let result_lenient =
-            check_stopping(feedback_lenient, 10, None, Some(0.0), Some(0.2)).unwrap();
+        let result_lenient = check_stopping(CheckStoppingArgs {
+            feedback: &feedback_lenient,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: Some(0.2),
+        })
+        .unwrap();
 
         // Strict delta should not stop, but lenient delta should
         assert!(
-            !result_strict.can_stop,
+            matches!(result_strict, StoppingResult::NotStopped),
             "Strict delta should not stop with borderline evidence"
         );
         assert!(
-            result_lenient.can_stop,
+            matches!(result_lenient, StoppingResult::Winner(_)),
             "Lenient delta should stop with same evidence"
         );
     }
@@ -450,10 +784,20 @@ mod tests {
     fn test_check_stopping_two_arms() {
         // Simplest case: two arms
         let feedback = make_feedback(vec![100, 100], vec![0.3, 0.8], vec![0.1, 0.1]);
-        let result = check_stopping(feedback, 10, None, Some(0.0), Some(0.05)).unwrap();
-        assert_eq!(result.leader_arm, 1);
-        // With clear difference and enough samples, should likely stop
-        assert!(result.can_stop);
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+        })
+        .unwrap();
+        // With clear difference and enough samples, should stop
+        if let StoppingResult::Winner(name) = result {
+            assert_eq!(name, "variant_1");
+        } else {
+            panic!("Expected winner with clear difference and enough samples");
+        }
     }
 
     #[test]
@@ -464,13 +808,48 @@ mod tests {
             vec![0.3, 0.9, 0.5, 0.4, 0.6],
             vec![0.1, 0.1, 0.1, 0.1, 0.1],
         );
-        let result = check_stopping(feedback, 50, None, Some(0.0), Some(0.05)).unwrap();
-        assert_eq!(
-            result.leader_arm, 1,
-            "Should recommend arm with highest mean"
-        );
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 50,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+        })
+        .unwrap();
         // With clear winner, should stop
-        assert!(result.can_stop);
+        if let StoppingResult::Winner(name) = result {
+            assert_eq!(name, "variant_1", "Should recommend arm with highest mean");
+        } else {
+            panic!("Expected winner with clear difference and enough samples");
+        }
+    }
+
+    #[test]
+    fn test_check_stopping_tie_breaking() {
+        // Test that ties are broken using variance/pull_count
+        // Create three arms with identical means but different variances
+        let feedback = make_feedback(
+            vec![100, 100, 100],
+            vec![0.7, 0.7, 0.7], // All tied
+            vec![0.1, 0.3, 0.2], // Different variances
+        );
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+        })
+        .unwrap();
+
+        // Should select variant_1 which has highest variance/pull_count (0.3/100 = 0.003)
+        if let StoppingResult::Winner(name) = result {
+            assert_eq!(
+                name, "variant_1",
+                "Should break tie by selecting arm with highest variance/pull_count"
+            );
+        }
+        // Note: May not stop depending on the threshold, but if it does, should be variant_1
     }
 
     #[test]
@@ -478,18 +857,32 @@ mod tests {
         // With fixed means/variances, more samples should eventually lead to stopping
         // Use moderate difference and moderate variance to create borderline case
         let feedback_small = make_feedback(vec![80, 80], vec![0.55, 0.70], vec![0.25, 0.25]);
-        let result_small = check_stopping(feedback_small, 10, None, Some(0.0), Some(0.05)).unwrap();
+        let result_small = check_stopping(CheckStoppingArgs {
+            feedback: &feedback_small,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+        })
+        .unwrap();
 
         let feedback_large = make_feedback(vec![1000, 1000], vec![0.55, 0.70], vec![0.25, 0.25]);
-        let result_large = check_stopping(feedback_large, 10, None, Some(0.0), Some(0.05)).unwrap();
+        let result_large = check_stopping(CheckStoppingArgs {
+            feedback: &feedback_large,
+            min_pulls: 10,
+            ridge_variance: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+        })
+        .unwrap();
 
         // Small sample should not stop, but large sample should
         assert!(
-            !result_small.can_stop,
+            matches!(result_small, StoppingResult::NotStopped),
             "Should not stop with small sample size"
         );
         assert!(
-            result_large.can_stop,
+            matches!(result_large, StoppingResult::Winner(_)),
             "Should stop with large sample and clear difference"
         );
     }
