@@ -55,12 +55,12 @@ impl Variant for ChainOfThoughtConfig {
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
-        function: &'a FunctionConfig,
+        function: Arc<FunctionConfig>,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
-        let FunctionConfig::Json(json_config) = function else {
+        let FunctionConfig::Json(json_config) = function.as_ref() else {
             // This should never happen, because we check this in `validate`
             return Err(ErrorDetails::Inference {
                 message: format!(
@@ -92,7 +92,7 @@ impl Variant for ChainOfThoughtConfig {
             .infer(
                 Arc::clone(&input),
                 models.clone(),
-                function,
+                Arc::clone(&function),
                 &augmented_inference_config,
                 clients,
                 inference_params,
@@ -123,7 +123,7 @@ impl Variant for ChainOfThoughtConfig {
         &self,
         _input: Arc<LazyResolvedInput>,
         _models: InferenceModels,
-        _function: &FunctionConfig,
+        _function: Arc<FunctionConfig>,
         _inference_config: &'request InferenceConfig<'request>,
         _clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
@@ -137,14 +137,14 @@ impl Variant for ChainOfThoughtConfig {
 
     async fn validate(
         &self,
-        function: &FunctionConfig,
+        function: Arc<FunctionConfig>,
         models: &ModelTable,
         embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
     ) -> Result<(), Error> {
-        if !matches!(function, FunctionConfig::Json(_)) {
+        if !matches!(function.as_ref(), FunctionConfig::Json(_)) {
             return Err(ErrorDetails::UnsupportedVariantForFunctionType {
                 function_name: function_name.to_string(),
                 variant_name: variant_name.to_string(),
@@ -155,7 +155,7 @@ impl Variant for ChainOfThoughtConfig {
         }
         self.inner
             .validate(
-                function,
+                Arc::clone(&function),
                 models,
                 embedding_models,
                 templates,

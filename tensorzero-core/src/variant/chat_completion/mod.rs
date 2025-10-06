@@ -479,7 +479,7 @@ impl Variant for ChatCompletionConfig {
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
-        function: &'a FunctionConfig,
+        function: Arc<FunctionConfig>,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
@@ -488,7 +488,7 @@ impl Variant for ChatCompletionConfig {
         let request = self
             .prepare_request(
                 &input,
-                function,
+                &function,
                 inference_config,
                 false,
                 &mut inference_params,
@@ -503,7 +503,7 @@ impl Variant for ChatCompletionConfig {
             request,
             model_name: self.model.clone(),
             model_config: &model_config,
-            function,
+            function: &function,
             inference_config,
             clients,
             inference_params,
@@ -516,7 +516,7 @@ impl Variant for ChatCompletionConfig {
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
-        function: &FunctionConfig,
+        function: Arc<FunctionConfig>,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
@@ -525,7 +525,7 @@ impl Variant for ChatCompletionConfig {
         let request = self
             .prepare_request(
                 &input,
-                function,
+                &function,
                 inference_config,
                 true,
                 &mut inference_params,
@@ -540,7 +540,7 @@ impl Variant for ChatCompletionConfig {
             request,
             self.model.clone(),
             &model_config,
-            function,
+            &function,
             clients,
             inference_params,
             self.retries,
@@ -557,7 +557,7 @@ impl Variant for ChatCompletionConfig {
     ///  - That the weight is non-negative
     async fn validate(
         &self,
-        function: &FunctionConfig,
+        function: Arc<FunctionConfig>,
         models: &ModelTable,
         _embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig<'_>,
@@ -623,7 +623,7 @@ impl Variant for ChatCompletionConfig {
             })
         })?;
 
-        validate_all_schemas_have_templates(function, &self.templates).map_err(|e| {
+        validate_all_schemas_have_templates(&function, &self.templates).map_err(|e| {
             let schema_name = e.schema_name;
             Error::new(ErrorDetails::Config {
                 message: format!(
@@ -1206,7 +1206,7 @@ mod tests {
         )
         .unwrap();
         let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
-        let function_config = FunctionConfig::Chat(FunctionConfigChat {
+        let function_config = Arc::new(FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             schemas: SchemaData::load(
                 Some(schema_any.clone()),
@@ -1221,7 +1221,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
-        });
+        }));
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".into(),
             ..Default::default()
@@ -1332,7 +1332,7 @@ mod tests {
             .infer(
                 Arc::new(input.clone()),
                 inference_models.clone(),
-                &function_config,
+                Arc::clone(&function_config),
                 &inference_config,
                 &clients,
                 inference_params,
@@ -1386,7 +1386,7 @@ mod tests {
             .infer(
                 Arc::new(input.clone()),
                 inference_models.clone(),
-                &function_config,
+                Arc::clone(&function_config),
                 &inference_config,
                 &clients,
                 inference_params,
@@ -1461,7 +1461,7 @@ mod tests {
             .infer(
                 Arc::new(input.clone()),
                 inference_models.clone(),
-                &function_config,
+                Arc::clone(&function_config),
                 &inference_config,
                 &clients,
                 inference_params,
@@ -1560,7 +1560,7 @@ mod tests {
             .infer(
                 Arc::new(input.clone()),
                 inference_models.clone(),
-                &function_config,
+                Arc::clone(&function_config),
                 &inference_config,
                 &clients,
                 inference_params.clone(),
@@ -1643,7 +1643,7 @@ mod tests {
             .infer(
                 Arc::new(input.clone()),
                 inference_models.clone(),
-                &function_config,
+                Arc::clone(&function_config),
                 &inference_config,
                 &clients,
                 inference_params.clone(),
@@ -1705,7 +1705,7 @@ mod tests {
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
-        let json_function_config = FunctionConfig::Json(FunctionConfigJson {
+        let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::load(
                 Some(schema_any.clone()),
@@ -1719,7 +1719,7 @@ mod tests {
             implicit_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-        });
+        }));
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
@@ -1740,7 +1740,7 @@ mod tests {
             .infer(
                 Arc::new(input.clone()),
                 inference_models.clone(),
-                &json_function_config,
+                Arc::clone(&json_function_config),
                 &inference_config,
                 &clients,
                 inference_params.clone(),
@@ -1836,7 +1836,7 @@ mod tests {
             .infer(
                 Arc::new(input.clone()),
                 inference_models.clone(),
-                &json_function_config,
+                Arc::clone(&json_function_config),
                 &inference_config,
                 &clients,
                 inference_params.clone(),
@@ -1886,7 +1886,7 @@ mod tests {
         let hardcoded_output_schema =
             StaticJSONSchema::from_value(hardcoded_output_schema).unwrap();
         let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
-        let json_function_config = FunctionConfig::Json(FunctionConfigJson {
+        let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::load(
                 Some(schema_any.clone()),
@@ -1900,7 +1900,7 @@ mod tests {
             implicit_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-        });
+        }));
         let inference_params = InferenceParams {
             chat_completion: ChatCompletionInferenceParams {
                 temperature: Some(0.5),
@@ -1967,7 +1967,7 @@ mod tests {
             .infer(
                 Arc::new(input.clone()),
                 inference_models.clone(),
-                &json_function_config,
+                Arc::clone(&json_function_config),
                 &inference_config,
                 &clients,
                 inference_params.clone(),
@@ -2017,7 +2017,7 @@ mod tests {
         let hardcoded_output_schema =
             StaticJSONSchema::from_value(hardcoded_output_schema).unwrap();
         let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
-        let json_function_config = FunctionConfig::Json(FunctionConfigJson {
+        let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::load(
                 Some(schema_any.clone()),
@@ -2031,7 +2031,7 @@ mod tests {
             implicit_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-        });
+        }));
         let inference_params = InferenceParams::default();
         // Will dynamically set "response" instead of "answer"
         let output_schema = DynamicJSONSchema::new(serde_json::json!({
@@ -2092,7 +2092,7 @@ mod tests {
             .infer(
                 Arc::new(input.clone()),
                 inference_models.clone(),
-                &json_function_config,
+                Arc::clone(&json_function_config),
                 &inference_config,
                 &clients,
                 inference_params.clone(),
@@ -2160,7 +2160,7 @@ mod tests {
         };
         let templates = Box::leak(Box::new(get_test_template_config()));
         let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
-        let function_config = Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
+        let function_config = Arc::new(FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             schemas: SchemaData::load(
                 Some(schema_any.clone()),
@@ -2175,7 +2175,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
-        })));
+        }));
 
         let system_template = get_system_template();
         let user_template = get_greeting_with_age_template();
@@ -2298,7 +2298,7 @@ mod tests {
             .infer_stream(
                 Arc::new(input.clone()),
                 inference_models.clone(),
-                function_config,
+                Arc::clone(&function_config),
                 &inference_config,
                 &clients,
                 inference_params.clone(),
@@ -2379,7 +2379,7 @@ mod tests {
             .infer_stream(
                 Arc::new(input.clone()),
                 inference_models.clone(),
-                function_config,
+                Arc::clone(&function_config),
                 &inference_config,
                 &clients,
                 inference_params.clone(),

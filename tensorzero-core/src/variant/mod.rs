@@ -206,7 +206,7 @@ pub trait Variant {
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
-        function: &'a FunctionConfig,
+        function: Arc<FunctionConfig>,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
@@ -216,7 +216,7 @@ pub trait Variant {
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
-        function: &FunctionConfig,
+        function: Arc<FunctionConfig>,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
@@ -224,7 +224,7 @@ pub trait Variant {
 
     async fn validate(
         &self,
-        function: &FunctionConfig,
+        function: Arc<FunctionConfig>,
         models: &ModelTable,
         embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig,
@@ -277,7 +277,7 @@ impl Variant for VariantInfo {
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
-        function: &'a FunctionConfig,
+        function: Arc<FunctionConfig>,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
@@ -373,7 +373,7 @@ impl Variant for VariantInfo {
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
-        function: &FunctionConfig,
+        function: Arc<FunctionConfig>,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
@@ -493,7 +493,7 @@ impl Variant for VariantInfo {
     #[instrument(skip_all, fields(variant_name = %variant_name))]
     async fn validate(
         &self,
-        function: &FunctionConfig,
+        function: Arc<FunctionConfig>,
         models: &ModelTable,
         embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig<'_>,

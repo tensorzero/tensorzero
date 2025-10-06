@@ -154,13 +154,13 @@ impl Variant for BestOfNSamplingConfig {
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
-        function: &'a FunctionConfig,
+        function: Arc<FunctionConfig>,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
         let candidate_inference_results = self
-            .infer_candidates(&input, &models, function, inference_config, clients)
+            .infer_candidates(&input, &models, &function, inference_config, clients)
             .await?;
         self.select_best_candidate(
             &input,
@@ -176,13 +176,13 @@ impl Variant for BestOfNSamplingConfig {
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
-        function: &FunctionConfig,
+        function: Arc<FunctionConfig>,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         let candidate_inference_results = self
-            .infer_candidates(&input, &models, function, inference_config, clients)
+            .infer_candidates(&input, &models, &function, inference_config, clients)
             .await?;
         let inference_result = self
             .select_best_candidate(
@@ -202,7 +202,7 @@ impl Variant for BestOfNSamplingConfig {
 
     async fn validate(
         &self,
-        function: &FunctionConfig,
+        function: Arc<FunctionConfig>,
         models: &ModelTable,
         embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig<'_>,
@@ -217,7 +217,7 @@ impl Variant for BestOfNSamplingConfig {
                 })
             })?;
             Box::pin(variant.validate(
-                function,
+                Arc::clone(&function),
                 models,
                 embedding_models,
                 templates,
@@ -236,7 +236,7 @@ impl Variant for BestOfNSamplingConfig {
         self.evaluator
             .inner
             .validate(
-                function,
+                Arc::clone(&function),
                 models,
                 embedding_models,
                 templates,
@@ -279,7 +279,7 @@ impl BestOfNSamplingConfig {
         &self,
         input: &LazyResolvedInput,
         models: &'request InferenceModels,
-        function: &FunctionConfig,
+        function: &Arc<FunctionConfig>,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
     ) -> Result<Vec<InferenceResult>, Error> {
@@ -325,7 +325,7 @@ impl BestOfNSamplingConfig {
                     candidate_variant.infer(
                         Arc::new(input.clone()),
                         models.clone(),
-                        function,
+                        Arc::clone(function),
                         config,
                         clients,
                         InferenceParams::default(),

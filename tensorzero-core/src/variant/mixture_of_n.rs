@@ -134,18 +134,18 @@ impl Variant for MixtureOfNConfig {
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
-        function: &'a FunctionConfig,
+        function: Arc<FunctionConfig>,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
         let candidate_inference_results = self
-            .infer_candidates(&input, &models, function, inference_config, clients)
+            .infer_candidates(&input, &models, &function, inference_config, clients)
             .await?;
         match self
             .fuse_candidates(
                 &input,
-                function,
+                &function,
                 &models.models,
                 inference_config,
                 clients,
@@ -167,20 +167,20 @@ impl Variant for MixtureOfNConfig {
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
-        function: &FunctionConfig,
+        function: Arc<FunctionConfig>,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         // We infer the candidates in non-streaming mode, since we need to pass the full candidate results to the fuser
         let candidate_inference_results = self
-            .infer_candidates(&input, &models, function, inference_config, clients)
+            .infer_candidates(&input, &models, &function, inference_config, clients)
             .await?;
 
         match self
             .fuse_candidates(
                 &input,
-                function,
+                &function,
                 &models.models,
                 inference_config,
                 clients,
@@ -201,7 +201,7 @@ impl Variant for MixtureOfNConfig {
 
     async fn validate(
         &self,
-        function: &FunctionConfig,
+        function: Arc<FunctionConfig>,
         models: &ModelTable,
         embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig<'_>,
@@ -217,7 +217,7 @@ impl Variant for MixtureOfNConfig {
             })?;
             // Required by the compiler due to recursion (we call the top-level `validate`)
             Box::pin(variant.validate(
-                function,
+                Arc::clone(&function),
                 models,
                 embedding_models,
                 templates,
@@ -236,7 +236,7 @@ impl Variant for MixtureOfNConfig {
         self.fuser
             .inner
             .validate(
-                function,
+                Arc::clone(&function),
                 models,
                 embedding_models,
                 templates,
@@ -419,7 +419,7 @@ impl MixtureOfNConfig {
         &self,
         input: &LazyResolvedInput,
         models: &'request InferenceModels,
-        function: &FunctionConfig,
+        function: &Arc<FunctionConfig>,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
     ) -> Result<Vec<InferenceResult>, Error> {
@@ -465,7 +465,7 @@ impl MixtureOfNConfig {
                     candidate_variant.infer(
                         Arc::new(input.clone()),
                         models.clone(),
-                        function,
+                        Arc::clone(function),
                         config,
                         clients,
                         InferenceParams::default(),
@@ -510,7 +510,7 @@ impl MixtureOfNConfig {
     async fn fuse_candidates<'a, 'request>(
         &'a self,
         input: &LazyResolvedInput,
-        function: &'a FunctionConfig,
+        function: &Arc<FunctionConfig>,
         models: &'a Arc<ModelTable>,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
@@ -607,7 +607,7 @@ async fn inner_fuse_candidates<'a, 'request>(
     fuser: &'a FuserConfig,
     input: &'request LazyResolvedInput,
     models: &'a ModelTable,
-    function: &'a FunctionConfig,
+    function: &Arc<FunctionConfig>,
     inference_config: &'request InferenceConfig<'request>,
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult],
@@ -638,7 +638,7 @@ async fn inner_fuse_candidates<'a, 'request>(
         request: inference_request,
         model_name: fuser.inner.model().clone(),
         model_config: &model_config,
-        function,
+        function: function.as_ref(),
         inference_config,
         retry_config: fuser.inner.retries(),
         clients,
@@ -660,7 +660,7 @@ async fn inner_fuse_candidates_stream<'a, 'request>(
     fuser: &'a FuserConfig,
     input: &'request LazyResolvedInput,
     models: &'a ModelTable,
-    function: &'a FunctionConfig,
+    function: &Arc<FunctionConfig>,
     inference_config: &'request InferenceConfig<'request>,
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult],
@@ -691,7 +691,7 @@ async fn inner_fuse_candidates_stream<'a, 'request>(
         inference_request,
         fuser.inner.model().clone(),
         &model_config,
-        function,
+        function.as_ref(),
         clients,
         params,
         *fuser.inner.retries(),
@@ -807,7 +807,7 @@ impl FuserConfig {
     async fn prepare_fuser_request<'a, 'request>(
         &'a self,
         input: &'request LazyResolvedInput,
-        function: &'a FunctionConfig,
+        function: &'request Arc<FunctionConfig>,
         inference_config: &'request InferenceConfig<'request>,
         candidates: &[InferenceResult],
         inference_params: &mut InferenceParams,
@@ -867,7 +867,7 @@ impl FuserConfig {
         let model_inference_request = prepare_model_inference_request(
             messages,
             system,
-            function,
+            function.as_ref(),
             inference_config,
             stream,
             inference_params,
@@ -1271,14 +1271,14 @@ mod tests {
         };
 
         let templates = get_test_template_config();
-        let json_function_config = FunctionConfig::Json(FunctionConfigJson {
+        let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
             implicit_tool_call_config: ToolCallConfig::default(),
             description: None,
             all_explicit_template_names: HashSet::new(),
-        });
+        }));
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -1574,7 +1574,7 @@ mod tests {
             system: None,
             messages: vec![],
         };
-        let chat_function_config = FunctionConfig::Chat(FunctionConfigChat {
+        let chat_function_config = Arc::new(FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             tools: vec![],
@@ -1582,7 +1582,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
-        });
+        }));
 
         let models_arc = Arc::new(models);
         let InferenceOrStreamResult::NonStream(result) = mixture_of_n_variant

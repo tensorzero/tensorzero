@@ -469,7 +469,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             .infer_stream(
                 resolved_input.clone(),
                 inference_models,
-                function.as_ref(),
+                function.clone(),
                 &inference_config,
                 inference_clients,
                 variant_inference_params,
@@ -525,7 +525,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             .infer(
                 Arc::clone(&resolved_input),
                 inference_models,
-                function.as_ref(),
+                function.clone(),
                 &inference_config,
                 inference_clients,
                 variant_inference_params,

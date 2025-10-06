@@ -474,7 +474,7 @@ impl FunctionConfig {
     // which may call an async GCP SDK function to fetch credentials from the environment.
     #[instrument(skip_all, fields(function_name = %function_name))]
     pub async fn validate(
-        &self,
+        self: &Arc<Self>,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
         models: &ModelTable,
         embedding_models: &EmbeddingModelTable,
@@ -493,7 +493,7 @@ impl FunctionConfig {
             }
             variant
                 .validate(
-                    self,
+                    Arc::clone(self),
                     models,
                     embedding_models,
                     templates,
@@ -502,7 +502,7 @@ impl FunctionConfig {
                 )
                 .await?;
         }
-        match self {
+        match self.as_ref() {
             FunctionConfig::Chat(params) => {
                 for tool in &params.tools {
                     static_tools.get(tool).ok_or_else(|| Error::new(ErrorDetails::Config {

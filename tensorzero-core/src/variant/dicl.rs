@@ -173,7 +173,7 @@ impl Variant for DiclConfig {
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
-        function: &'a FunctionConfig,
+        function: Arc<FunctionConfig>,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
@@ -189,7 +189,7 @@ impl Variant for DiclConfig {
                 clients,
                 inference_config.function_name,
                 inference_config.variant_name,
-                function,
+                &function,
             )
             .await?;
 
@@ -197,7 +197,7 @@ impl Variant for DiclConfig {
         let model_inference_request = self.prepare_request(
             &input,
             &relevant_examples,
-            function,
+            &function,
             inference_config,
             false,
             &mut inference_params,
@@ -214,7 +214,7 @@ impl Variant for DiclConfig {
             request: model_inference_request,
             model_name: self.model().clone(),
             model_config: &model_config,
-            function,
+            function: function.as_ref(),
             inference_config,
             clients,
             inference_params,
@@ -237,7 +237,7 @@ impl Variant for DiclConfig {
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
-        function: &FunctionConfig,
+        function: Arc<FunctionConfig>,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
@@ -253,14 +253,14 @@ impl Variant for DiclConfig {
                 clients,
                 inference_config.function_name,
                 inference_config.variant_name,
-                function,
+                &function,
             )
             .await?;
         // Prepare the request for the model
         let request = self.prepare_request(
             &input,
             &relevant_examples,
-            function,
+            &function,
             inference_config,
             true,
             &mut inference_params,
@@ -277,7 +277,7 @@ impl Variant for DiclConfig {
             request,
             self.model().clone(),
             &model_config,
-            function,
+            function.as_ref(),
             clients,
             inference_params,
             *self.retries(),
@@ -293,7 +293,7 @@ impl Variant for DiclConfig {
 
     async fn validate(
         &self,
-        _function: &FunctionConfig,
+        _function: Arc<FunctionConfig>,
         models: &ModelTable,
         embedding_models: &EmbeddingModelTable,
         _templates: &TemplateConfig<'_>,
@@ -453,7 +453,7 @@ impl DiclConfig {
         clients: &InferenceClients<'_>,
         function_name: &str,
         variant_name: &str,
-        function: &FunctionConfig,
+        function: &Arc<FunctionConfig>,
     ) -> Result<(Vec<Example>, EmbeddingResponseWithMetadata), Error> {
         // Serialize the input so that it can be embedded
         let serialized_input = serde_json::to_string(
@@ -624,7 +624,7 @@ impl DiclConfig {
         &'a self,
         input: &LazyResolvedInput,
         examples: &[Example],
-        function: &'a FunctionConfig,
+        function: &'request Arc<FunctionConfig>,
         inference_config: &'request InferenceConfig<'request>,
         stream: bool,
         inference_params: &mut InferenceParams,
@@ -677,7 +677,7 @@ impl DiclConfig {
         prepare_model_inference_request(
             messages,
             system,
-            function,
+            function.as_ref(),
             inference_config,
             stream,
             inference_params,
