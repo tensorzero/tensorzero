@@ -271,6 +271,7 @@ impl InferenceProvider for OpenAIProvider {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
+            println!("Raw response: {}", raw_response);
 
             let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
