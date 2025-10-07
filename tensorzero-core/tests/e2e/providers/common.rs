@@ -799,25 +799,29 @@ region = "us-east-1"
 /// This calls the Default implementation directly, ensuring we test the actual defaults.
 fn get_default_credential_location(provider_type: &str) -> CredentialLocation {
     match provider_type {
-        "anthropic" => AnthropicDefaults::default().credential_location,
-        "openai" => OpenAIDefaults::default().credential_location,
-        "azure" => AzureDefaults::default().credential_location,
-        "deepseek" => DeepSeekDefaults::default().credential_location,
-        "fireworks" => FireworksDefaults::default().credential_location,
+        "anthropic" => AnthropicDefaults::default().api_key_location,
+        "openai" => OpenAIDefaults::default().api_key_location,
+        "azure" => AzureDefaults::default().api_key_location,
+        "deepseek" => DeepSeekDefaults::default().api_key_location,
+        "fireworks" => FireworksDefaults::default().api_key_location,
         "gcp_vertex_anthropic" => GCPDefaults::default().credential_location,
         "gcp_vertex_gemini" => GCPDefaults::default().credential_location,
-        "google_ai_studio_gemini" => GoogleAIStudioGeminiDefaults::default().credential_location,
-        "groq" => GroqDefaults::default().credential_location,
-        "hyperbolic" => HyperbolicDefaults::default().credential_location,
-        "mistral" => MistralDefaults::default().credential_location,
-        "openrouter" => OpenRouterDefaults::default().credential_location,
-        "sglang" => SGLangDefaults::default().credential_location,
-        "tgi" => TGIDefaults::default().credential_location,
-        "together" => TogetherDefaults::default().credential_location,
-        "vllm" => VLLMDefaults::default().credential_location,
-        "xai" => XAIDefaults::default().credential_location,
+        "google_ai_studio_gemini" => GoogleAIStudioGeminiDefaults::default().api_key_location,
+        "groq" => GroqDefaults::default().api_key_location,
+        "hyperbolic" => HyperbolicDefaults::default().api_key_location,
+        "mistral" => MistralDefaults::default().api_key_location,
+        "openrouter" => OpenRouterDefaults::default().api_key_location,
+        "sglang" => SGLangDefaults::default().api_key_location,
+        "tgi" => TGIDefaults::default().api_key_location,
+        "together" => TogetherDefaults::default().api_key_location,
+        "vllm" => VLLMDefaults::default().api_key_location,
+        "xai" => XAIDefaults::default().api_key_location,
         _ => panic!("Unknown provider type: {provider_type}"),
     }
+}
+
+fn uses_credential_location(provider_type: &str) -> bool {
+    matches!(provider_type, "gcp_vertex_gemini" | "gcp_vertex_anthropic")
 }
 
 /// Test that provider type default credentials work correctly.
@@ -861,10 +865,16 @@ pub async fn test_provider_type_default_credentials_with_provider(provider: E2ET
     std::env::set_var(&custom_env_var, &credential_value);
 
     // Create the credential location config based on the type
-    let credential_location_config = if is_path_env {
-        format!(r#"credential_location = "path_from_env::{custom_env_var}""#)
+    let default_credential_location_key = if uses_credential_location(&provider.model_provider_name)
+    {
+        "credential_location"
     } else {
-        format!(r#"credential_location = "env::{custom_env_var}""#)
+        "api_key_location"
+    };
+    let credential_location_config = if is_path_env {
+        format!(r#"{default_credential_location_key}= "path_from_env::{custom_env_var}""#)
+    } else {
+        format!(r#"{default_credential_location_key}= "env::{custom_env_var}""#)
     };
 
     // Create a config with the custom credential location
@@ -971,10 +981,16 @@ pub async fn test_provider_type_default_credentials_shorthand_with_provider(
     std::env::set_var(&custom_env_var, &credential_value);
 
     // Create the credential location config based on the type
-    let credential_location_config = if is_path_env {
-        format!(r#"credential_location = "path_from_env::{custom_env_var}""#)
+    let default_credential_location_key = if uses_credential_location(&provider.model_provider_name)
+    {
+        "credential_location"
     } else {
-        format!(r#"credential_location = "env::{custom_env_var}""#)
+        "api_key_location"
+    };
+    let credential_location_config = if is_path_env {
+        format!(r#"{default_credential_location_key}= "path_from_env::{custom_env_var}""#)
+    } else {
+        format!(r#"{default_credential_location_key}= "env::{custom_env_var}""#)
     };
 
     // Create a config with the custom credential location and shorthand model syntax
