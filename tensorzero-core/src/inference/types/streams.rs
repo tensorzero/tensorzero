@@ -526,7 +526,7 @@ pub type ProviderInferenceResponseStreamInner =
 
 pub type PeekableProviderInferenceResponseStream = Peekable<ProviderInferenceResponseStreamInner>;
 
-pub type InferenceResultStreamInner =
+type InferenceResultStreamInner =
     Pin<Box<dyn Stream<Item = Result<InferenceResultChunk, Error>> + Send>>;
 
 pub type InferenceResultStream = Peekable<InferenceResultStreamInner>;
