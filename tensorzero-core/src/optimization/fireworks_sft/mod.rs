@@ -31,6 +31,9 @@ use crate::http::TensorzeroHttpClient;
 use crate::model::UninitializedModelConfig;
 use crate::model::UninitializedModelProvider;
 use crate::model::UninitializedProviderConfig;
+use crate::model_table::FireworksKind;
+use crate::model_table::ProviderKind;
+use crate::model_table::ProviderTypeDefaultCredentials;
 use crate::optimization::JobHandle;
 use crate::optimization::OptimizationJobInfo;
 use crate::optimization::Optimizer;
@@ -47,12 +50,9 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::ContentBlock,
-    model::{build_creds_caching_default, CredentialLocation},
+    model::CredentialLocation,
     providers::{
-        fireworks::{
-            default_api_key_location, FireworksCredentials, FireworksTool, DEFAULT_CREDENTIALS,
-            PROVIDER_TYPE,
-        },
+        fireworks::{FireworksCredentials, FireworksTool, PROVIDER_TYPE},
         openai::OpenAIRequestMessage,
     },
 };
@@ -232,8 +232,7 @@ impl UninitializedFireworksSFTConfig {
         let credentials = credentials
             .map(|s| serde_json::from_str(&s))
             .transpose()
-            .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid credentials JSON: {e}")))?
-            .or_else(|| Some(default_api_key_location()));
+            .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid credentials JSON: {e}")))?;
         let api_base = api_base
             .map(|s| {
                 Url::parse(&s)
@@ -313,7 +312,10 @@ impl UninitializedFireworksSFTConfig {
 }
 
 impl UninitializedFireworksSFTConfig {
-    pub fn load(self) -> Result<FireworksSFTConfig, Error> {
+    pub async fn load(
+        self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<FireworksSFTConfig, Error> {
         Ok(FireworksSFTConfig {
             model: self.model,
             early_stop: self.early_stop,
@@ -333,12 +335,9 @@ impl UninitializedFireworksSFTConfig {
             mtp_freeze_base_model: self.mtp_freeze_base_model,
             api_base: self.api_base.unwrap_or_else(|| FIREWORKS_API_BASE.clone()),
             account_id: self.account_id,
-            credentials: build_creds_caching_default(
-                self.credentials.clone(),
-                default_api_key_location(),
-                PROVIDER_TYPE,
-                &DEFAULT_CREDENTIALS,
-            )?,
+            credentials: FireworksKind
+                .get_defaulted_credential(self.credentials.as_ref(), default_credentials)
+                .await?,
             credential_location: self.credentials,
         })
     }
@@ -967,13 +966,11 @@ impl JobHandle for FireworksSFTJobHandle {
         &self,
         client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
-        let fireworks_credentials = build_creds_caching_default(
-            self.credential_location.clone(),
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
+        let fireworks_credentials: FireworksCredentials = crate::model_table::FireworksKind
+            .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
+            .await?;
         let api_key = fireworks_credentials.get_api_key(credentials)?;
         let job_status = self.poll_job(client, api_key).await?;
         if let FireworksFineTuningJobState::JobStateCompleted = job_status.state {

@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::OnceLock, time::Duration};
+use std::{borrow::Cow, time::Duration};
 
 use crate::inference::types::RequestMessage;
 use crate::providers::openai::{OpenAIMessagesConfig, OpenAIToolChoiceString};
@@ -20,7 +20,7 @@ use crate::inference::types::{
     ProviderInferenceResponseArgs,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
@@ -67,34 +67,22 @@ pub fn default_parse_think_blocks() -> bool {
     true
 }
 
-pub static DEFAULT_CREDENTIALS: OnceLock<TogetherCredentials> = OnceLock::new();
-
 impl TogetherProvider {
     pub fn new(
         model_name: String,
-        api_key_location: Option<CredentialLocation>,
+        credentials: TogetherCredentials,
         parse_think_blocks: bool,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-        Ok(TogetherProvider {
+    ) -> Self {
+        TogetherProvider {
             model_name,
             credentials,
             parse_think_blocks,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {
         &self.model_name
     }
-}
-
-pub fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("TOGETHER_API_KEY".to_string())
 }
 
 #[derive(Clone, Debug)]

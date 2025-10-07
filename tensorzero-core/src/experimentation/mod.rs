@@ -5,13 +5,15 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::postgres::PostgresConnectionInfo;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::variant::VariantInfo;
 
 mod static_weights;
 mod track_and_stop;
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -19,16 +21,47 @@ pub enum ExperimentationConfig {
     StaticWeights(static_weights::StaticWeightsConfig),
     #[default]
     Uniform,
+    // NOTE: this diverges from the spec due to technical limitations with `serde`
+    // (serde enums cannot be #[serde(flatten)])
+    // we can write a custom deserializer for this if we want
+    TrackAndStop(track_and_stop::TrackAndStopConfig),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum UninitializedExperimentationConfig {
+    StaticWeights(static_weights::StaticWeightsConfig),
+    Uniform,
+    TrackAndStop(track_and_stop::UninitializedTrackAndStopConfig),
+}
+
+impl UninitializedExperimentationConfig {
+    pub fn load(self, variants: &HashMap<String, Arc<VariantInfo>>) -> ExperimentationConfig {
+        match self {
+            UninitializedExperimentationConfig::StaticWeights(config) => {
+                ExperimentationConfig::StaticWeights(config)
+            }
+            UninitializedExperimentationConfig::Uniform => ExperimentationConfig::Uniform,
+            UninitializedExperimentationConfig::TrackAndStop(config) => {
+                ExperimentationConfig::TrackAndStop(config.load(variants))
+            }
+        }
+    }
 }
 
 pub trait VariantSampler {
-    // TODO, when we add bandits: pass CH and PG clients here (but use opaque trait types)
-    async fn setup(&self) -> Result<(), Error>;
+    async fn setup(
+        &self,
+        clickhouse: &ClickHouseConnectionInfo,
+        function_name: &str,
+    ) -> Result<(), Error>;
     async fn sample(
         &self,
         function_name: &str,
         episode_id: Uuid,
+        // This gets "popped from"
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
+        postgres: &PostgresConnectionInfo,
     ) -> Result<(String, Arc<VariantInfo>), Error>;
 }
 
@@ -52,10 +85,15 @@ impl ExperimentationConfig {
 }
 
 impl VariantSampler for ExperimentationConfig {
-    async fn setup(&self) -> Result<(), Error> {
+    async fn setup(
+        &self,
+        clickhouse: &ClickHouseConnectionInfo,
+        function_name: &str,
+    ) -> Result<(), Error> {
         match self {
-            Self::StaticWeights(config) => config.setup().await,
+            Self::StaticWeights(config) => config.setup(clickhouse, function_name).await,
             Self::Uniform => Ok(()),
+            Self::TrackAndStop(config) => config.setup(clickhouse, function_name).await,
         }
     }
 
@@ -64,14 +102,20 @@ impl VariantSampler for ExperimentationConfig {
         function_name: &str,
         episode_id: Uuid,
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
+        postgres: &PostgresConnectionInfo,
     ) -> Result<(String, Arc<VariantInfo>), Error> {
         match self {
             Self::StaticWeights(config) => {
                 config
-                    .sample(function_name, episode_id, active_variants)
+                    .sample(function_name, episode_id, active_variants, postgres)
                     .await
             }
             Self::Uniform => sample_uniform(function_name, &episode_id, active_variants),
+            Self::TrackAndStop(config) => {
+                config
+                    .sample(function_name, episode_id, active_variants, postgres)
+                    .await
+            }
         }
     }
 }
@@ -98,6 +142,80 @@ fn sample_uniform(
             )
         })
     })
+}
+
+/// Pure function for static weights sampling logic.
+/// Given a uniform sample in [0, 1), selects a variant from active_variants
+/// using weighted sampling from candidate_variants if their intersection is nonempty,
+/// or uniform sampling from fallback_variants otherwise.
+///
+/// Returns the name of the selected variant, which is guaranteed to be in active_variants.
+pub(crate) fn sample_static_weights(
+    active_variants: &BTreeMap<String, Arc<VariantInfo>>,
+    candidate_variants: &BTreeMap<String, f64>,
+    fallback_variants: &[String],
+    uniform_sample: f64,
+) -> Result<String, Error> {
+    // Compute the total weight of variants present in active_variants
+    let total_weight = active_variants
+        .keys()
+        .map(|variant_name| candidate_variants.get(variant_name).unwrap_or(&0.0))
+        .sum::<f64>();
+
+    if total_weight <= 0.0 {
+        // No active variants in the candidate set, try fallback variants
+        // Take the intersection of active_variants and fallback_variants
+        let intersection: Vec<&String> = active_variants
+            .keys()
+            .filter(|variant_name| fallback_variants.contains(variant_name))
+            .collect();
+
+        if intersection.is_empty() {
+            Err(ErrorDetails::NoFallbackVariantsRemaining.into())
+        } else {
+            // Use uniform sample to select from intersection
+            let random_index = (uniform_sample * intersection.len() as f64).floor() as usize;
+            intersection
+                .get(random_index)
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::Inference {
+                        message: format!(
+                            "Failed to sample variant from nonempty intersection. {IMPOSSIBLE_ERROR_MESSAGE}"
+                        ),
+                    })
+                })
+                .map(std::string::ToString::to_string)
+        }
+    } else {
+        // Use weighted sampling from candidate variants
+        let random_threshold = uniform_sample * total_weight;
+        let mut cumulative_weight = 0.0;
+
+        let variant_name = active_variants.keys().find(|variant_name| {
+            cumulative_weight += candidate_variants
+                .get(variant_name.as_str())
+                .unwrap_or(&0.0);
+            cumulative_weight > random_threshold
+        });
+
+        if let Some(name) = variant_name {
+            Ok(name.clone())
+        } else {
+            // If we didn't find a variant (rare numerical precision issues),
+            // return the first variant as a fallback
+            active_variants
+                .keys()
+                .next()
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidFunctionVariants {
+                        message: format!(
+                            "No active variants available. {IMPOSSIBLE_ERROR_MESSAGE}"
+                        ),
+                    })
+                })
+                .cloned()
+        }
+    }
 }
 
 /// Implements a uniform distribution over the interval [0, 1) using a hash function.
@@ -192,5 +310,295 @@ mod tests {
                 "Variant {variant_name}: expected {expected_prob:.3}, got {actual_prob:.3}"
             );
         }
+    }
+
+    fn create_test_variants(names: &[&str]) -> BTreeMap<String, Arc<VariantInfo>> {
+        use crate::config::{ErrorContext, SchemaData};
+        use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
+
+        names
+            .iter()
+            .map(|&name| {
+                (
+                    name.to_string(),
+                    Arc::new(VariantInfo {
+                        inner: VariantConfig::ChatCompletion(
+                            UninitializedChatCompletionConfig {
+                                weight: None,
+                                model: "model-name".into(),
+                                ..Default::default()
+                            }
+                            .load(&SchemaData::default(), &ErrorContext::new_test())
+                            .unwrap(),
+                        ),
+                        timeouts: Default::default(),
+                    }),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_sample_static_weights_weighted_sampling_deterministic() {
+        // Test weighted sampling with specific uniform samples
+        let active_variants = create_test_variants(&["A", "B", "C"]);
+        let mut candidate_variants = BTreeMap::new();
+        candidate_variants.insert("A".to_string(), 1.0);
+        candidate_variants.insert("B".to_string(), 2.0);
+        candidate_variants.insert("C".to_string(), 3.0);
+        let fallback_variants = vec![];
+
+        // Total weight = 6.0
+        // A: [0.0, 1.0/6.0) -> [0.0, 0.1667)
+        // B: [1.0/6.0, 3.0/6.0) -> [0.1667, 0.5)
+        // C: [3.0/6.0, 6.0/6.0) -> [0.5, 1.0)
+
+        // Test sample that should select A
+        let result = sample_static_weights(
+            &active_variants,
+            &candidate_variants,
+            &fallback_variants,
+            0.1,
+        );
+        assert_eq!(result.unwrap(), "A");
+
+        // Test sample that should select B
+        let result = sample_static_weights(
+            &active_variants,
+            &candidate_variants,
+            &fallback_variants,
+            0.3,
+        );
+        assert_eq!(result.unwrap(), "B");
+
+        // Test sample that should select C
+        let result = sample_static_weights(
+            &active_variants,
+            &candidate_variants,
+            &fallback_variants,
+            0.7,
+        );
+        assert_eq!(result.unwrap(), "C");
+
+        // Test edge case: sample at 0.0 should select A
+        let result = sample_static_weights(
+            &active_variants,
+            &candidate_variants,
+            &fallback_variants,
+            0.0,
+        );
+        assert_eq!(result.unwrap(), "A");
+
+        // Test edge case: sample very close to 1.0 should select C
+        let result = sample_static_weights(
+            &active_variants,
+            &candidate_variants,
+            &fallback_variants,
+            0.999,
+        );
+        assert_eq!(result.unwrap(), "C");
+    }
+
+    #[test]
+    fn test_sample_static_weights_fallback_sampling() {
+        // Test fallback sampling when candidate variants have zero weight
+        let active_variants = create_test_variants(&["A", "B", "C"]);
+        let candidate_variants = BTreeMap::new(); // No candidate variants
+        let fallback_variants = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+
+        // With 3 fallback variants:
+        // A: [0.0, 1.0/3.0) -> [0.0, 0.333...)
+        // B: [1.0/3.0, 2.0/3.0) -> [0.333..., 0.666...)
+        // C: [2.0/3.0, 3.0/3.0) -> [0.666..., 1.0)
+
+        // Test sample that should select A
+        let result = sample_static_weights(
+            &active_variants,
+            &candidate_variants,
+            &fallback_variants,
+            0.1,
+        );
+        assert_eq!(result.unwrap(), "A");
+
+        // Test sample that should select B
+        let result = sample_static_weights(
+            &active_variants,
+            &candidate_variants,
+            &fallback_variants,
+            0.5,
+        );
+        assert_eq!(result.unwrap(), "B");
+
+        // Test sample that should select C
+        let result = sample_static_weights(
+            &active_variants,
+            &candidate_variants,
+            &fallback_variants,
+            0.9,
+        );
+        assert_eq!(result.unwrap(), "C");
+    }
+
+    #[test]
+    fn test_sample_static_weights_only_active_variants() {
+        // Test that only active variants are sampled
+        let active_variants = create_test_variants(&["A", "C"]);
+        let mut candidate_variants = BTreeMap::new();
+        candidate_variants.insert("A".to_string(), 1.0);
+        candidate_variants.insert("B".to_string(), 2.0); // B is not active
+        candidate_variants.insert("C".to_string(), 3.0);
+        let fallback_variants = vec![];
+
+        // Total weight of active variants = 1.0 + 3.0 = 4.0
+        // A: [0.0, 1.0/4.0) -> [0.0, 0.25)
+        // C: [1.0/4.0, 4.0/4.0) -> [0.25, 1.0)
+
+        // Test sample that should select A
+        let result = sample_static_weights(
+            &active_variants,
+            &candidate_variants,
+            &fallback_variants,
+            0.1,
+        );
+        assert_eq!(result.unwrap(), "A");
+
+        // Test sample that should select C (not B, which is not active)
+        let result = sample_static_weights(
+            &active_variants,
+            &candidate_variants,
+            &fallback_variants,
+            0.5,
+        );
+        assert_eq!(result.unwrap(), "C");
+    }
+
+    #[test]
+    fn test_sample_static_weights_partial_intersection_fallback() {
+        // Test fallback when only some variants have weights
+        let active_variants = create_test_variants(&["A", "B", "C"]);
+        let mut candidate_variants = BTreeMap::new();
+        candidate_variants.insert("A".to_string(), 0.0); // Zero weight, excluded from sampling
+        candidate_variants.insert("B".to_string(), 0.0); // Zero weight, excluded from sampling
+        let fallback_variants = vec!["B".to_string(), "C".to_string()];
+
+        // Total weight = 0.0, should use fallback
+        // Active fallbacks: B, C
+        // B: [0.0, 0.5)
+        // C: [0.5, 1.0)
+
+        let result = sample_static_weights(
+            &active_variants,
+            &candidate_variants,
+            &fallback_variants,
+            0.3,
+        );
+        assert_eq!(result.unwrap(), "B");
+
+        let result = sample_static_weights(
+            &active_variants,
+            &candidate_variants,
+            &fallback_variants,
+            0.7,
+        );
+        assert_eq!(result.unwrap(), "C");
+    }
+
+    #[test]
+    fn test_sample_static_weights_no_fallback_error() {
+        // Test error when no fallback variants are active
+        let active_variants = create_test_variants(&["A", "B"]);
+        let candidate_variants = BTreeMap::new(); // No weights
+        let fallback_variants = vec!["C".to_string(), "D".to_string()]; // None are active
+
+        let result = sample_static_weights(
+            &active_variants,
+            &candidate_variants,
+            &fallback_variants,
+            0.5,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sample_static_weights_empty_active_variants() {
+        // Test error when no active variants
+        let active_variants = BTreeMap::new();
+        let mut candidate_variants = BTreeMap::new();
+        candidate_variants.insert("A".to_string(), 1.0);
+        let fallback_variants = vec!["B".to_string()];
+
+        let result = sample_static_weights(
+            &active_variants,
+            &candidate_variants,
+            &fallback_variants,
+            0.5,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sample_static_weights_single_variant() {
+        // Test with single variant
+        let active_variants = create_test_variants(&["A"]);
+        let mut candidate_variants = BTreeMap::new();
+        candidate_variants.insert("A".to_string(), 1.0);
+        let fallback_variants = vec![];
+
+        // Should always select A regardless of sample
+        let result = sample_static_weights(
+            &active_variants,
+            &candidate_variants,
+            &fallback_variants,
+            0.0,
+        );
+        assert_eq!(result.unwrap(), "A");
+
+        let result = sample_static_weights(
+            &active_variants,
+            &candidate_variants,
+            &fallback_variants,
+            0.5,
+        );
+        assert_eq!(result.unwrap(), "A");
+
+        let result = sample_static_weights(
+            &active_variants,
+            &candidate_variants,
+            &fallback_variants,
+            0.999,
+        );
+        assert_eq!(result.unwrap(), "A");
+    }
+
+    #[test]
+    fn test_sample_static_weights_unequal_weights() {
+        // Test with very unequal weights
+        let active_variants = create_test_variants(&["A", "B"]);
+        let mut candidate_variants = BTreeMap::new();
+        candidate_variants.insert("A".to_string(), 0.001);
+        candidate_variants.insert("B".to_string(), 999.999);
+        let fallback_variants = vec![];
+
+        // Total weight = 1000.0
+        // A: [0.0, 0.000001) - very small range
+        // B: [0.000001, 1.0) - almost entire range
+
+        // Very small sample should select A
+        let result = sample_static_weights(
+            &active_variants,
+            &candidate_variants,
+            &fallback_variants,
+            0.0000001,
+        );
+        assert_eq!(result.unwrap(), "A");
+
+        // Any reasonable sample should select B
+        let result = sample_static_weights(
+            &active_variants,
+            &candidate_variants,
+            &fallback_variants,
+            0.5,
+        );
+        assert_eq!(result.unwrap(), "B");
     }
 }

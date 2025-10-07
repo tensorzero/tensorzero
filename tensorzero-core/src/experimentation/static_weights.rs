@@ -6,6 +6,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
+    db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     experimentation::get_uniform_value,
     variant::VariantInfo,
@@ -47,7 +48,11 @@ impl StaticWeightsConfig {
 }
 
 impl VariantSampler for StaticWeightsConfig {
-    async fn setup(&self) -> Result<(), Error> {
+    async fn setup(
+        &self,
+        _clickhouse: &ClickHouseConnectionInfo,
+        _function_name: &str,
+    ) -> Result<(), Error> {
         // We just assert that all weights are non-negative
         for weight in self.candidate_variants.values() {
             if *weight < 0.0 {
@@ -68,72 +73,25 @@ impl VariantSampler for StaticWeightsConfig {
         function_name: &str,
         episode_id: Uuid,
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
+        _postgres: &PostgresConnectionInfo,
     ) -> Result<(String, Arc<VariantInfo>), Error> {
-        // Compute the total weight of variants present in variant_names
-        let total_weight = active_variants
-            .keys()
-            .map(|variant_name| self.candidate_variants.get(variant_name).unwrap_or(&0.0))
-            .sum::<f64>();
-        if total_weight <= 0.0 {
-            // Assume that there are no active variants in the candidate set so
-            // we will try the fallback variants
-            // First, we take the intersection of active_variants and fallback_variants
-            let intersection = active_variants
-                .keys()
-                .filter(|variant_name| self.fallback_variants.contains(variant_name))
-                .collect::<Vec<_>>();
-            if intersection.is_empty() {
-                Err(ErrorDetails::NoFallbackVariantsRemaining.into())
-            } else {
-                // Use deterministic selection based on episode_id for consistent behavior
-                let random_index = (get_uniform_value(function_name, &episode_id)
-                    * intersection.len() as f64)
-                    .floor() as usize;
-                let selected_variant = intersection.get(random_index).ok_or_else(|| Error::new(ErrorDetails::Inference {
-                    message: format!("Failed to sample variant from nonempty intersection. {IMPOSSIBLE_ERROR_MESSAGE}")
-                }))?.to_string();
-                let variant_data = active_variants.remove(&selected_variant).ok_or_else(|| Error::new(ErrorDetails::Inference {
-                    message: format!("Failed to remove variant from active variants. {IMPOSSIBLE_ERROR_MESSAGE}")
-                }))?;
-                Ok((selected_variant, variant_data))
-            }
-        } else {
-            // Sample a random threshold between 0 and the total weight using the deterministic hashing trick
-            let random_threshold = get_uniform_value(function_name, &episode_id) * total_weight;
-            // Iterate over the variants to find the one that corresponds to the sampled threshold
-            let variant_to_remove = {
-                let mut cumulative_weight = 0.0;
-                active_variants
-                    .iter()
-                    .find(|(variant_name, _)| {
-                        cumulative_weight += self
-                            .candidate_variants
-                            .get(variant_name.as_str())
-                            .unwrap_or(&0.0);
-                        cumulative_weight > random_threshold
-                    })
-                    .map(|(name, _)| name.clone()) // Clone the key
-            };
+        let uniform_sample = get_uniform_value(function_name, &episode_id);
+        let selected_variant_name = super::sample_static_weights(
+            active_variants,
+            &self.candidate_variants,
+            &self.fallback_variants,
+            uniform_sample,
+        )?;
 
-            if let Some(variant_name) = variant_to_remove {
-                return active_variants.remove_entry(&variant_name).ok_or_else(|| {
-                    Error::new(ErrorDetails::InvalidFunctionVariants {
-                        message: format!(
-                            "Function `{function_name}` has no variant for the sampled variant `{variant_name}`. {IMPOSSIBLE_ERROR_MESSAGE}"
-                        )
-                    })
-                });
-            }
-            // If we didn't find a variant (which should only happen due to rare numerical precision issues),
-            // pop an arbitrary variant as a fallback
-            active_variants.pop_first().ok_or_else(|| {
+        active_variants
+            .remove_entry(&selected_variant_name)
+            .ok_or_else(|| {
                 Error::new(ErrorDetails::InvalidFunctionVariants {
                     message: format!(
-                        "Function `{function_name}` has no variants. {IMPOSSIBLE_ERROR_MESSAGE}"
+                        "Function `{function_name}` has no variant for the sampled variant `{selected_variant_name}`. {IMPOSSIBLE_ERROR_MESSAGE}"
                     ),
                 })
             })
-        }
     }
 }
 
@@ -185,9 +143,10 @@ mod tests {
         );
         let mut active_variants = variants_map;
         let episode_id = Uuid::now_v7();
+        let postgres = PostgresConnectionInfo::new_disabled();
 
         let (variant_name, _) = config
-            .sample("test_function", episode_id, &mut active_variants)
+            .sample("test_function", episode_id, &mut active_variants, &postgres)
             .await
             .unwrap();
         assert!(["A", "B", "C"].contains(&variant_name.as_str()));
@@ -205,9 +164,10 @@ mod tests {
         );
         let mut active_variants = variants_map;
         let episode_id = Uuid::now_v7();
+        let postgres = PostgresConnectionInfo::new_disabled();
 
         let (variant_name, _) = config
-            .sample("test_function", episode_id, &mut active_variants)
+            .sample("test_function", episode_id, &mut active_variants, &postgres)
             .await
             .unwrap();
         assert!(["B", "C"].contains(&variant_name.as_str())); // Should pick from fallback variants
@@ -221,9 +181,10 @@ mod tests {
         };
         let mut active_variants = BTreeMap::new();
         let episode_id = Uuid::now_v7();
+        let postgres = PostgresConnectionInfo::new_disabled();
 
         let result = config
-            .sample("test_function", episode_id, &mut active_variants)
+            .sample("test_function", episode_id, &mut active_variants, &postgres)
             .await;
         assert!(result.is_err());
     }
@@ -241,6 +202,7 @@ mod tests {
 
         let sample_size = 10_000;
         let mut counts = std::collections::HashMap::new();
+        let postgres = PostgresConnectionInfo::new_disabled();
 
         // Sample many times to build distribution
         for i in 0..sample_size {
@@ -248,7 +210,7 @@ mod tests {
             // Use different episode IDs to get different samples
             let episode_id = Uuid::from_u128(i as u128);
             let (variant_name, _) = config
-                .sample("test_function", episode_id, &mut active_variants)
+                .sample("test_function", episode_id, &mut active_variants, &postgres)
                 .await
                 .unwrap();
             *counts.entry(variant_name).or_insert(0) += 1;
@@ -314,12 +276,16 @@ mod tests {
         .unwrap();
         let experiment = config.functions.get("test").unwrap().experimentation();
         // no-op but we call it for completeness
-        experiment.setup().await.unwrap();
+        experiment
+            .setup(&ClickHouseConnectionInfo::Disabled, "test")
+            .await
+            .unwrap();
 
         // Test sampling distribution with many samples
         let sample_size = 10_000;
         let mut first_sample_counts = std::collections::HashMap::new();
         let mut third_sample_counts = std::collections::HashMap::new();
+        let postgres = PostgresConnectionInfo::new_disabled();
 
         for i in 0..sample_size {
             let mut variants = BTreeMap::from([
@@ -351,7 +317,7 @@ mod tests {
 
             // Sample first variant (should be from candidate variants: foo or bar)
             let (first_sample_name, _) = experiment
-                .sample("test", episode_id, &mut variants)
+                .sample("test", episode_id, &mut variants, &postgres)
                 .await
                 .unwrap();
             *first_sample_counts
@@ -360,7 +326,7 @@ mod tests {
 
             // Sample second variant
             let (second_sample_name, _) = experiment
-                .sample("test", episode_id, &mut variants)
+                .sample("test", episode_id, &mut variants, &postgres)
                 .await
                 .unwrap();
 
@@ -368,7 +334,7 @@ mod tests {
 
             // Sample third variant (should always be baz since it's the fallback)
             let (third_sample_name, _) = experiment
-                .sample("test", episode_id, &mut variants)
+                .sample("test", episode_id, &mut variants, &postgres)
                 .await
                 .unwrap();
             *third_sample_counts.entry(third_sample_name).or_insert(0) += 1;

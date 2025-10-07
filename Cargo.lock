@@ -147,6 +147,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
 
 [[package]]
+name = "arc-swap"
+version = "1.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
+
+[[package]]
 name = "arg_enum_proc_macro"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1779,7 +1785,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2025.10.0"
+version = "2025.10.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -1881,7 +1887,7 @@ dependencies = [
 
 [[package]]
 name = "feedback-load-test"
-version = "2025.10.0"
+version = "2025.10.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2118,7 +2124,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2025.10.0"
+version = "2025.10.1"
 dependencies = [
  "axum",
  "clap",
@@ -4412,7 +4418,7 @@ dependencies = [
 
 [[package]]
 name = "rate-limit-load-test"
-version = "2025.10.0"
+version = "2025.10.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5756,8 +5762,9 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-core"
-version = "2025.10.0"
+version = "2025.10.1"
 dependencies = [
+ "arc-swap",
  "async-stream",
  "async-trait",
  "aws-config",
@@ -5863,7 +5870,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2025.10.0"
+version = "2025.10.1"
 dependencies = [
  "napi",
  "napi-build",
@@ -5878,7 +5885,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.10.0"
+version = "2025.10.1"
 dependencies = [
  "futures",
  "pyo3",

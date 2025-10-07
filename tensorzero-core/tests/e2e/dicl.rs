@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tensorzero_core::{
     cache::{CacheEnabledMode, CacheOptions},
-    config::ProviderTypesConfig,
+    config::provider_types::ProviderTypesConfig,
     db::{
         clickhouse::{test_helpers::select_json_inference_clickhouse, ClickHouseConnectionInfo},
         postgres::PostgresConnectionInfo,
@@ -21,6 +21,7 @@ use tensorzero_core::{
         ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, ResolvedInputMessage,
         ResolvedInputMessageContent, Role, StoredContentBlock, StoredRequestMessage, TemplateInput,
     },
+    model_table::ProviderTypeDefaultCredentials,
     rate_limiting::ScopeInfo,
 };
 use tokio::time::sleep;
@@ -372,6 +373,7 @@ async fn embed_insert_example(
             .load(
                 &ProviderTypesConfig::default(),
                 Arc::from("good".to_string()),
+                &ProviderTypeDefaultCredentials::default(),
             )
             .await
             .unwrap();

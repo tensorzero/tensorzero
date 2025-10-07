@@ -18,20 +18,20 @@ use crate::experimentation::track_and_stop::check_stopping::choose_leader;
 /// while respecting an ε-tolerance for sub-optimality.
 pub struct EstimateOptimalProbabilitiesArgs {
     /// Reward observations and pull counts for each arm
-    feedback: Vec<FeedbackByVariant>,
+    pub feedback: Vec<FeedbackByVariant>,
     /// Sub-optimality tolerance (ε ≥ 0). Arms within ε of the best arm's mean are considered
     /// "good enough". Larger values lead to faster stopping.
     /// Default: 0.0
-    epsilon: Option<f64>,
+    pub epsilon: Option<f64>,
     /// Value used to lower bound empirical variance, for stability. Prevents numerical issues
     /// when observed variances are very small. Default: 1e-12
-    variance_floor: Option<f64>,
+    pub variance_floor: Option<f64>,
     /// Lower bound on per-arm sampling probability (must be in (0, 1/K) where K is number of arms).
     /// Ensures all arms receive minimum exploration for numerical stability. Default: 1e-6
-    min_prob: Option<f64>,
+    pub min_prob: Option<f64>,
     /// Regularization coefficient (≥ 0) to encourage proximity to uniform distribution.
     /// Smooths the progression of sampling distributions toward the optimum. Default: 0.01
-    reg0: Option<f64>,
+    pub reg0: Option<f64>,
 }
 /// Errors that can occur when computing optimal sampling probabilities.
 #[derive(Debug, Error)]
@@ -57,7 +57,6 @@ pub enum EstimateOptimalProbabilitiesError {
     #[error("Failed to build Clarabel solver")]
     CouldntBuildSolver,
 }
-
 /// Compute optimal sampling proportions for ε-best arm identification given sub-Gaussian rewards.
 ///
 /// This function implements an allocation strategy for multi-armed bandits that
@@ -84,7 +83,7 @@ pub enum EstimateOptimalProbabilitiesError {
 ///
 /// # Errors
 ///
-/// Returns `OptimalProbsError` if:
+/// Returns `EstimateOptimalProbabilitiesError` if:
 /// - Input vectors have mismatched lengths
 /// - Fewer than 2 arms are provided
 /// - Any values are non-finite (NaN or infinite)
