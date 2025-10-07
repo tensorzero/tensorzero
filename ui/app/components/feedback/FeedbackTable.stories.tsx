@@ -30,6 +30,7 @@ const config: Config = {
         traces: {
           enabled: false,
           format: "opentelemetry",
+          extra_headers: {},
         },
       },
     },
