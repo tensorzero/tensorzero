@@ -45,7 +45,11 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
       provider: "Together",
       model: "gpt-oss-20b",
       // TODO: fill this out
-      results: `?????`,
+      results: `
+      type = "together"
+      `,
+      // Together mock SFT provider randomly generates model name so we'll just
+      // assert that we have a model type together
     },
   ]
     .slice(2)
