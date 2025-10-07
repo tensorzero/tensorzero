@@ -149,10 +149,12 @@ pub fn estimate_optimal_probabilities(
 
     // ε-margins: gap_i = μ_L - μ_i + ε  (strictly > 0 for ε > 0)
     let gaps: Vec<f64> = means.iter().map(|&x| leader_mean - x + epsilon).collect();
-    let gaps2: Vec<f64> = gaps.iter().map(|&x| (x * x).max(1e-16)).collect();
+    // Floor gap² at 1e-6 for numerical stability in SOCP solver
+    // This prevents constraint coefficients from becoming too small
+    let gaps2: Vec<f64> = gaps.iter().map(|&x| (x * x).max(1e-6)).collect();
 
     // Edge case: if all arms have essentially equal means and variances, return uniform distribution
-    // This avoids numerical issues when the optimization problem becomes degenerate
+    // This avoids numerical issues when the optimization problem approaches degeneracy
     let all_gaps_tiny = gaps.iter().all(|&g| g.abs() < 1e-10);
     let (min_var, max_var) = variances
         .iter()
@@ -290,11 +292,30 @@ pub fn estimate_optimal_probabilities(
         .map_err(|_| EstimateOptimalProbabilitiesError::CouldntBuildSolver)?;
     solver.solve();
 
-    let x = solver.solution.x.as_slice();
-    let w_star = x[0..num_arms].to_vec();
+    // Check solver status and validate solution
+    use clarabel::solver::SolverStatus;
+    match solver.solution.status {
+        SolverStatus::Solved => {
+            // Solution is valid, extract weights
+            let x = solver.solution.x.as_slice();
+            let w_star = x[0..num_arms].to_vec();
 
-    let out: HashMap<String, f64> = variant_names.into_iter().zip(w_star).collect();
-    Ok(out)
+            let out: HashMap<String, f64> = variant_names.into_iter().zip(w_star).collect();
+            Ok(out)
+        }
+        _ => {
+            // Solver failed - this can happen when the problem is degenerate
+            // (e.g., when means are equal and epsilon is very small)
+            // Fall back to uniform distribution
+            tracing::warn!(
+                "SOCP solver failed with status {:?}, falling back to uniform distribution",
+                solver.solution.status
+            );
+            let probs = vec![1.0 / num_arms as f64; num_arms];
+            let out: HashMap<String, f64> = variant_names.into_iter().zip(probs).collect();
+            Ok(out)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -382,6 +403,124 @@ mod tests {
         assert!((probs.values().sum::<f64>() - 1.0).abs() < 1e-6);
         // With equal variances and only two arms, probabilities should be roughly equal
         assert!((probs.get("variant_0").unwrap() - probs.get("variant_1").unwrap()).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_equal_means_different_variances_above_floor() {
+        let feedback = make_feedback(vec![100, 100], vec![0.5, 0.5], vec![0.1, 0.5]);
+        let probs = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback,
+            epsilon: Some(0.0),
+            variance_floor: None,
+            min_prob: Some(1e-6),
+            reg0: Some(0.0),
+        })
+        .unwrap();
+
+        // Solver should succeed and return valid probabilities
+        assert!(
+            (probs.values().sum::<f64>() - 1.0).abs() < 1e-6,
+            "Probabilities should sum to 1"
+        );
+
+        // The higher-variance arm should get more sampling
+        assert!(
+            probs.get("variant_1").unwrap() > probs.get("variant_0").unwrap(),
+            "Higher variance arm should get more probability"
+        );
+    }
+
+    #[test]
+    fn test_equal_means_different_variances_small_epsilon() {
+        // Test with a small but non-zero epsilon
+        let feedback = make_feedback(vec![100, 100], vec![0.5, 0.5], vec![0.1, 0.5]);
+        let probs = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback,
+            epsilon: Some(0.01),
+            variance_floor: None,
+            min_prob: Some(1e-6),
+            reg0: Some(0.0),
+        })
+        .unwrap();
+
+        assert!(
+            (probs.values().sum::<f64>() - 1.0).abs() < 1e-6,
+            "Probabilities should sum to 1"
+        );
+    }
+
+    #[test]
+    fn test_nearly_equal_means_different_variances() {
+        // Test with nearly equal means (within floating point tolerance)
+        let feedback = make_feedback(vec![100, 100], vec![0.5, 0.5 + 1e-12], vec![0.1, 0.5]);
+        let probs = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback,
+            epsilon: Some(0.0),
+            variance_floor: None,
+            min_prob: Some(1e-6),
+            reg0: Some(0.0),
+        })
+        .unwrap();
+
+        // With gap² floor, solver should succeed
+        assert!(
+            (probs.values().sum::<f64>() - 1.0).abs() < 1e-6,
+            "Probabilities should sum to 1"
+        );
+    }
+
+    #[test]
+    fn test_equal_means_equal_variances_above_floor() {
+        // Test that variance_floor is applied when both variances are below it
+        let feedback = make_feedback(vec![100, 100], vec![0.5, 0.5], vec![1.0, 1.0 + 1e-10]);
+        let probs = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback,
+            epsilon: Some(0.0),
+            variance_floor: Some(0.01),
+            min_prob: Some(1e-6),
+            reg0: Some(0.0),
+        })
+        .unwrap();
+
+        // Should return valid probabilities that sum to 1
+        assert!(
+            (probs.values().sum::<f64>() - 1.0).abs() < 1e-6,
+            "Probabilities should sum to 1"
+        );
+
+        // Since both variances are floored to the same value and means are equal,
+        // probabilities should be approximately equal
+        assert!(
+            (probs.get("variant_0").unwrap() - probs.get("variant_1").unwrap()).abs() < 1e-10,
+            "With equal floored variances and equal means, probabilities should be similar"
+        );
+    }
+
+    #[test]
+    fn test_equal_means_equal_variances_below_floor() {
+        // Test that variance_floor is applied when both variances are below it
+        let feedback = make_feedback(vec![100, 100], vec![0.5, 0.5], vec![1e-15, 1e-14]);
+        let probs = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback,
+            epsilon: Some(0.0),
+            variance_floor: Some(0.01),
+            min_prob: Some(1e-6),
+            reg0: Some(0.0),
+        })
+        .unwrap();
+
+        // Should return valid probabilities that sum to 1
+        assert!(
+            (probs.values().sum::<f64>() - 1.0).abs() < 1e-6,
+            "Probabilities should sum to 1"
+        );
+
+        // Since both variances are floored to the same value and means are equal,
+        // probabilities should be approximately equal
+        assert!(
+            (probs.get("variant_0").unwrap() - probs.get("variant_1").unwrap()).abs() < 1e-10,
+            "With equal floored variances and equal means, probabilities should be similar"
+        );
     }
 
     #[test]
