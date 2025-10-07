@@ -364,7 +364,9 @@ def evaluation_datasets(
     Returns a mapping from original dataset names to unique test dataset names.
     This ensures test isolation and prevents conflicts between concurrent test runs.
     """
-    fixtures_dir = Path(__file__).parent / "../../../tensorzero-core/fixtures/datasets"
+    fixtures_dir = (
+        Path(__file__).resolve().parents[3] / "tensorzero-core/fixtures/datasets"
+    )
 
     # Create unique dataset names for this test run
     dataset_mapping = {
