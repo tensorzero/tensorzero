@@ -15,4 +15,16 @@ pub(super) enum TrackAndStopError {
     Database(#[from] Error),
     #[error("Task join error: {0}")]
     TaskJoin(#[from] tokio::task::JoinError),
+    #[error("Multiple feedback entries for variant '{variant_name}': found {num_entries} entries")]
+    MultipleEntriesForVariant {
+        variant_name: String,
+        num_entries: usize,
+    },
+    #[error("Negative probability {probability} for variant '{variant_name}'")]
+    NegativeProbability {
+        variant_name: String,
+        probability: f64,
+    },
+    #[error("No nursery or bandit arms detected. This should not happen.")]
+    NoArmsDetected,
 }
