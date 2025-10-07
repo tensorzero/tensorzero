@@ -1,22 +1,27 @@
 import { createRequire } from "module";
 import {
+  ClientInferenceParams,
+  Config,
+  DatasetMetadata,
+  DatasetDetailRow,
+  DatasetQueryParams,
+  EpisodeByIdRow,
+  GetDatasetMetadataParams,
+  GetDatasetRowsParams,
+  InferenceResponse,
+  LaunchOptimizationWorkflowParams,
+  ModelLatencyDatapoint,
+  ModelUsageTimePoint,
   OptimizationJobHandle,
   OptimizationJobInfo,
-  LaunchOptimizationWorkflowParams,
   StaleDatasetResponse,
-  Config,
-  ClientInferenceParams,
-  InferenceResponse,
-  EpisodeByIdRow,
   TableBoundsWithCount,
+  TimeWindow,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
   DatabaseClient as NativeDatabaseClientType,
 } from "../index";
-import { TimeWindow } from "./bindings/TimeWindow";
-import { ModelUsageTimePoint } from "./bindings/ModelUsageTimePoint";
-import { ModelLatencyDatapoint } from "./bindings/ModelLatencyDatapoint";
 
 // Re-export types from bindings
 export * from "./bindings";
@@ -178,5 +183,36 @@ export class DatabaseClient {
   async queryEpisodeTableBounds(): Promise<TableBoundsWithCount> {
     const bounds = await this.nativeDatabaseClient.queryEpisodeTableBounds();
     return JSON.parse(bounds) as TableBoundsWithCount;
+  }
+
+  async countRowsForDataset(params: DatasetQueryParams): Promise<number> {
+    const paramsString = safeStringify(params);
+    const result =
+      await this.nativeDatabaseClient.countRowsForDataset(paramsString);
+    return result;
+  }
+
+  async insertRowsForDataset(params: DatasetQueryParams): Promise<number> {
+    const paramsString = safeStringify(params);
+    const result =
+      await this.nativeDatabaseClient.insertRowsForDataset(paramsString);
+    return result;
+  }
+
+  async getDatasetMetadata(
+    params: GetDatasetMetadataParams,
+  ): Promise<DatasetMetadata[]> {
+    const paramsString = safeStringify(params);
+    const result =
+      await this.nativeDatabaseClient.getDatasetMetadata(paramsString);
+    return JSON.parse(result) as DatasetMetadata[];
+  }
+
+  async getDatasetRows(
+    params: GetDatasetRowsParams,
+  ): Promise<DatasetDetailRow[]> {
+    const paramsString = safeStringify(params);
+    const result = await this.nativeDatabaseClient.getDatasetRows(paramsString);
+    return JSON.parse(result) as DatasetDetailRow[];
   }
 }

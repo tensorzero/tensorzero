@@ -7,7 +7,7 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
+import type { DatasetMetadata } from "tensorzero-node";
 import { Link, useFetcher } from "react-router";
 import { TableItemTime } from "~/components/ui/TableItems";
 import { toDatasetUrl } from "~/utils/urls";
@@ -32,12 +32,12 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog";
 
-const columnHelper = createColumnHelper<DatasetCountInfo>();
+const columnHelper = createColumnHelper<DatasetMetadata>();
 
 export default function DatasetTable({
   counts,
 }: {
-  counts: DatasetCountInfo[];
+  counts: DatasetMetadata[];
 }) {
   const fetcher = useFetcher();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
