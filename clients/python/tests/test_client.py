@@ -2370,12 +2370,13 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
 
 def test_extra_headers_raw(sync_client: TensorZeroGateway):
     with pytest.raises(TensorZeroError) as exc_info:
+        id = uuid7()
         sync_client.inference(
             function_name="basic_test",
             variant_name="openai",
             input={
                 "system": {"assistant_name": "Alfred Pennyworth"},
-                "messages": [{"role": "user", "content": "Write me a haiku"}],
+                "messages": [{"role": "user", "content": f"Write me a haiku {id}"}],
             },
             extra_headers=[
                 {

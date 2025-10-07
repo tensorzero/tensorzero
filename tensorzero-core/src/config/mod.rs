@@ -389,6 +389,9 @@ pub struct OtlpTracesConfig {
     pub enabled: bool,
     #[serde(default)]
     pub format: OtlpTracesFormat,
+    /// Extra headers to include in OTLP export requests (can be overridden by dynamic headers at request time)
+    #[serde(default)]
+    pub extra_headers: HashMap<String, String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]

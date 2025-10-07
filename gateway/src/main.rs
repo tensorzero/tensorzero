@@ -94,6 +94,7 @@ async fn main() {
     let args = GatewayArgs::parse();
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
+    // We start with empty headers and update them after loading the config
     let delayed_log_config = observability::setup_observability(args.log_format)
         .await
         .expect_pretty("Failed to set up logs");
@@ -175,6 +176,17 @@ async fn main() {
             } else {
                 tracing::error!("The `gateway.export.otlp.traces.enabled` configuration option is `true`, but environment variable `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is not set. Please set it to the OTLP endpoint (e.g. `http://localhost:4317`).");
                 std::process::exit(1);
+            }
+        }
+
+        // Set config-level OTLP headers if we have a tracer wrapper
+        if let Some(ref tracer_wrapper) = delayed_log_config.otel_tracer {
+            if !config.gateway.export.otlp.traces.extra_headers.is_empty() {
+                tracer_wrapper
+                    .set_static_otlp_traces_extra_headers(
+                        &config.gateway.export.otlp.traces.extra_headers,
+                    )
+                    .expect_pretty("Failed to set OTLP config headers");
             }
         }
 
