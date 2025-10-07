@@ -8,18 +8,13 @@
 ///
 /// This module defines several Python classes (`BaseTensorZeroGateway`, `TensorZeroGateway`, `AsyncTensorZeroGateway`),
 /// and defines methods on them.
-use std::{collections::HashMap, future::Future, path::PathBuf, sync::Arc, time::Duration};
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
-use evaluations::{
-    run_evaluation_core_streaming,
-    stats::{EvaluationError, EvaluationInfo, EvaluationUpdate},
-    EvaluationCoreArgs, OutputFormat, RunInfo,
-};
+use evaluations::{run_evaluation_core_streaming, EvaluationCoreArgs};
 use futures::StreamExt;
 use pyo3::{
     exceptions::{PyStopAsyncIteration, PyStopIteration, PyValueError},
     ffi::c_str,
-    marker::Ungil,
     prelude::*,
     types::{PyDict, PyList, PyString, PyType},
     IntoPyObjectExt,
@@ -73,10 +68,12 @@ use tensorzero_rust::{
 use tokio::sync::Mutex;
 use url::Url;
 
+mod evaluation_handlers;
 mod gil_helpers;
 mod python_helpers;
 
-use crate::gil_helpers::DropInTokio;
+use crate::evaluation_handlers::{AsyncEvaluationJobHandler, EvaluationJobHandler};
+use crate::gil_helpers::{tokio_block_on_without_gil, DropInTokio};
 
 #[pymodule]
 fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -272,193 +269,6 @@ impl StreamWrapper {
     }
 }
 
-/// Helper function to serialize RunInfo to a Python dictionary
-fn evaluation_run_info_to_dict(py: Python<'_>, run_info: &RunInfo) -> PyResult<Py<PyAny>> {
-    let dict = pyo3::types::PyDict::new(py);
-    dict.set_item("evaluation_run_id", run_info.evaluation_run_id.to_string())?;
-    dict.set_item("num_datapoints", run_info.num_datapoints)?;
-    Ok(dict.into())
-}
-
-/// Helper function to serialize EvaluationInfo to a Python dictionary with type="success"
-fn serialize_evaluation_success(py: Python<'_>, info: &EvaluationInfo) -> PyResult<Py<PyAny>> {
-    let info_dict = serialize_to_dict(py, info)?;
-    info_dict.bind(py).set_item("type", "success")?;
-    Ok(info_dict)
-}
-
-/// Helper function to serialize EvaluationError to a Python dictionary with type="error"
-fn serialize_evaluation_error(py: Python<'_>, error: &EvaluationError) -> PyResult<Py<PyAny>> {
-    let error_dict = serialize_to_dict(py, error)?;
-    error_dict.bind(py).set_item("type", "error")?;
-    Ok(error_dict)
-}
-
-/// Helper function to compute evaluation statistics and return as a Python dictionary
-fn compute_evaluation_stats(
-    py: Python<'_>,
-    evaluation_infos: Vec<EvaluationInfo>,
-    evaluation_errors: Vec<EvaluationError>,
-    evaluation_config: Arc<tensorzero_core::evaluations::EvaluationConfig>,
-) -> PyResult<Py<PyAny>> {
-    let stats = evaluations::stats::EvaluationStats {
-        output_format: OutputFormat::Jsonl,
-        evaluation_infos,
-        evaluation_errors,
-        progress_bar: None,
-    };
-    // Extract evaluators from the evaluation config
-    let tensorzero_core::evaluations::EvaluationConfig::Static(static_config) = &*evaluation_config;
-    let computed_stats = stats.compute_stats(&static_config.evaluators);
-    serialize_to_dict(py, &computed_stats)
-}
-
-/// Job handler for streaming evaluation results (synchronous)
-#[pyclass(frozen)]
-struct EvaluationJobHandler {
-    receiver: Mutex<tokio::sync::mpsc::Receiver<EvaluationUpdate>>,
-    run_info: RunInfo,
-    evaluation_config: Arc<tensorzero_core::evaluations::EvaluationConfig>,
-    evaluation_infos: Arc<Mutex<Vec<EvaluationInfo>>>,
-    evaluation_errors: Arc<Mutex<Vec<EvaluationError>>>,
-}
-
-#[pymethods]
-impl EvaluationJobHandler {
-    /// Get the run information for this evaluation
-    #[getter]
-    fn run_info(&self) -> PyResult<Py<PyAny>> {
-        Python::attach(|py| evaluation_run_info_to_dict(py, &self.run_info))
-    }
-
-    /// Returns an iterator over evaluation results as they complete
-    fn results(this: Py<Self>) -> Py<Self> {
-        this
-    }
-
-    fn __iter__(this: Py<Self>) -> Py<Self> {
-        this
-    }
-
-    fn __next__(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        // Loop to skip RunInfo updates instead of using recursion
-        loop {
-            let evaluation_infos = self.evaluation_infos.clone();
-            let evaluation_errors = self.evaluation_errors.clone();
-
-            let update =
-                tokio_block_on_without_gil(py, async { self.receiver.lock().await.recv().await });
-
-            match update {
-                Some(EvaluationUpdate::RunInfo(_)) => {
-                    // Skip RunInfo, continue to next update
-                    continue;
-                }
-                Some(EvaluationUpdate::Success(info)) => {
-                    let info_clone = info.clone();
-                    tokio_block_on_without_gil(py, async move {
-                        evaluation_infos.lock().await.push(info_clone);
-                    });
-                    return serialize_evaluation_success(py, &info);
-                }
-                Some(EvaluationUpdate::Error(error)) => {
-                    let error_clone = error.clone();
-                    tokio_block_on_without_gil(py, async move {
-                        evaluation_errors.lock().await.push(error_clone);
-                    });
-                    return serialize_evaluation_error(py, &error);
-                }
-                None => return Err(PyStopIteration::new_err(())),
-            }
-        }
-    }
-
-    /// Get summary statistics for all evaluations after completion
-    fn summary_stats(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let evaluation_infos = self.evaluation_infos.clone();
-        let evaluation_errors = self.evaluation_errors.clone();
-        let evaluation_config = self.evaluation_config.clone();
-
-        tokio_block_on_without_gil(py, async move {
-            let infos = evaluation_infos.lock().await.clone();
-            let errors = evaluation_errors.lock().await.clone();
-            Python::attach(|py| compute_evaluation_stats(py, infos, errors, evaluation_config))
-        })
-    }
-}
-
-/// Job handler for streaming evaluation results (asynchronous)
-#[pyclass(frozen)]
-struct AsyncEvaluationJobHandler {
-    receiver: Arc<Mutex<tokio::sync::mpsc::Receiver<EvaluationUpdate>>>,
-    run_info: RunInfo,
-    evaluation_config: Arc<tensorzero_core::evaluations::EvaluationConfig>,
-    evaluation_infos: Arc<Mutex<Vec<EvaluationInfo>>>,
-    evaluation_errors: Arc<Mutex<Vec<EvaluationError>>>,
-}
-
-#[pymethods]
-impl AsyncEvaluationJobHandler {
-    /// Get the run information for this evaluation
-    #[getter]
-    fn run_info(&self) -> PyResult<Py<PyAny>> {
-        Python::attach(|py| evaluation_run_info_to_dict(py, &self.run_info))
-    }
-
-    /// Returns an async iterator over evaluation results as they complete
-    fn results(this: Py<Self>) -> Py<Self> {
-        this
-    }
-
-    fn __aiter__(this: Py<Self>) -> Py<Self> {
-        this
-    }
-
-    fn __anext__<'a>(&self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
-        let receiver = self.receiver.clone();
-        let evaluation_infos = self.evaluation_infos.clone();
-        let evaluation_errors = self.evaluation_errors.clone();
-
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            // Loop to skip RunInfo updates
-            loop {
-                let update = receiver.lock().await.recv().await;
-
-                match update {
-                    Some(EvaluationUpdate::RunInfo(_)) => {
-                        // Skip RunInfo, continue to next update
-                        continue;
-                    }
-                    Some(EvaluationUpdate::Success(info)) => {
-                        let info_clone = info.clone();
-                        evaluation_infos.lock().await.push(info_clone);
-                        return Python::attach(|py| serialize_evaluation_success(py, &info));
-                    }
-                    Some(EvaluationUpdate::Error(error)) => {
-                        let error_clone = error.clone();
-                        evaluation_errors.lock().await.push(error_clone);
-                        return Python::attach(|py| serialize_evaluation_error(py, &error));
-                    }
-                    None => return Err(PyStopAsyncIteration::new_err(())),
-                }
-            }
-        })
-    }
-
-    /// Get summary statistics for all evaluations after completion
-    fn summary_stats<'a>(&self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
-        let evaluation_infos = self.evaluation_infos.clone();
-        let evaluation_errors = self.evaluation_errors.clone();
-        let evaluation_config = self.evaluation_config.clone();
-
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let infos = evaluation_infos.lock().await.clone();
-            let errors = evaluation_errors.lock().await.clone();
-            Python::attach(|py| compute_evaluation_stats(py, infos, errors, evaluation_config))
-        })
-    }
-}
-
 /// Constructs a dummy embedded client. We use this so that we can move out of the real 'client'
 /// field of `BaseTensorZeroGateway` when it is dropped.
 fn make_dummy_client() -> Client {
@@ -575,22 +385,6 @@ impl BaseTensorZeroGateway {
 /// To connect to a running HTTP gateway, call `TensorZeroGateway.build_http(base_url = "http://gateway_url")`
 /// To create an embedded gateway, call `TensorZeroGateway.build_embedded(config_file = "/path/to/tensorzero.toml", clickhouse_url = "http://clickhouse_url")`
 struct TensorZeroGateway {}
-
-/// Calls `tokio::Runtime::block_on` without holding the Python GIL.
-/// This is used when we call into pure-Rust code from the synchronous `TensorZeroGateway`
-/// We don't need (or want) to hold the GIL when the Rust client code is running,
-/// since it doesn't need to interact with any Python objects.
-/// This allows other Python threads to run while the current thread is blocked on the Rust execution.
-fn tokio_block_on_without_gil<F: Future + Send>(py: Python<'_>, fut: F) -> F::Output
-where
-    F::Output: Ungil,
-{
-    // The Tokio runtime is managed by `pyo3_async_runtimes` - the entrypoint to
-    // our crate (`python`) is the `pymodule` function, rather than
-    // a `#[tokio::main]` function, so we need `pyo3_async_runtimes` to keep track of
-    // a Tokio runtime for us.
-    py.detach(|| pyo3_async_runtimes::tokio::get_runtime().block_on(fut))
-}
 
 impl BaseTensorZeroGateway {
     #[expect(clippy::too_many_arguments)]
