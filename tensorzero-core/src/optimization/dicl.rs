@@ -15,11 +15,10 @@ use crate::{
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     function::FunctionConfig,
     http::TensorzeroHttpClient,
-    model::{build_creds_caching_default, CredentialLocation},
+    model::CredentialLocation,
+    model_table::{OpenAIKind, ProviderKind, ProviderTypeDefaultCredentials},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput},
-    providers::openai::{
-        default_api_key_location, OpenAICredentials, DEFAULT_CREDENTIALS, PROVIDER_TYPE,
-    },
+    providers::openai::OpenAICredentials,
     stored_inference::RenderedSample,
     utils::retries::RetryConfig,
     variant::dicl::UninitializedDiclConfig,
@@ -188,7 +187,10 @@ impl UninitializedDiclOptimizationConfig {
 }
 
 impl UninitializedDiclOptimizationConfig {
-    pub fn load(self) -> Result<DiclOptimizationConfig, Error> {
+    pub async fn load(
+        self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<DiclOptimizationConfig, Error> {
         Ok(DiclOptimizationConfig {
             embedding_model: Arc::from(self.embedding_model),
             variant_name: self.variant_name,
@@ -199,12 +201,9 @@ impl UninitializedDiclOptimizationConfig {
             k: self.k,
             model: Arc::from(self.model),
             append_to_existing_variants: self.append_to_existing_variants,
-            credentials: build_creds_caching_default(
-                self.credentials.clone(),
-                default_api_key_location(),
-                PROVIDER_TYPE,
-                &DEFAULT_CREDENTIALS,
-            )?,
+            credentials: OpenAIKind
+                .get_defaulted_credential(self.credentials.as_ref(), default_credentials)
+                .await?,
             credential_location: self.credentials,
         })
     }
@@ -376,6 +375,7 @@ impl JobHandle for DiclOptimizationJobHandle {
         &self,
         client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
+        _default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
         // DICL optimization is synchronous, so it's always complete once launched
         let _ = (client, credentials);
@@ -401,6 +401,7 @@ impl JobHandle for DiclOptimizationJobHandle {
                     extra_body: None,
                     extra_headers: None,
                     retries: RetryConfig::default(),
+                    max_distance: None,
                 },
             ))),
         })
@@ -792,7 +793,11 @@ pub async fn dicl_examples_exist(
 mod tests {
     use super::*;
     use crate::{
-        embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo},
+        config::provider_types::ProviderTypesConfig,
+        embeddings::{
+            EmbeddingModelConfig, EmbeddingModelTable, EmbeddingProviderConfig,
+            EmbeddingProviderInfo,
+        },
         endpoints::inference::InferenceCredentials,
         experimentation::ExperimentationConfig,
     };
@@ -831,10 +836,13 @@ mod tests {
                 providers,
                 timeout_ms: None,
             };
+            let provider_types = ProviderTypesConfig::default();
             Config {
-                embedding_models: HashMap::from([(Arc::from(model_name), embedding_model_config)])
-                    .try_into()
-                    .unwrap(),
+                embedding_models: EmbeddingModelTable::new(
+                    HashMap::from([(Arc::from(model_name), embedding_model_config)]),
+                    ProviderTypeDefaultCredentials::new(&provider_types).into(),
+                )
+                .unwrap(),
                 ..Default::default()
             }
         }

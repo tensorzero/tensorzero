@@ -574,11 +574,18 @@ impl Client {
                 {
                     *self.last_body.lock().await = Some(body.clone());
                 }
-                let builder = client
+                let mut builder = client
                     .http_client
                     .post(url)
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
                     .body(body);
+
+                // Add OTLP trace headers with the required prefix
+                for (key, value) in &params.otlp_traces_extra_headers {
+                    let header_name = format!("tensorzero-otlp-traces-extra-header-{key}");
+                    builder = builder.header(header_name, value);
+                }
+
                 if params.stream.unwrap_or(false) {
                     let event_source =
                         builder.eventsource().map_err(|e| TensorZeroError::Other {
@@ -1114,6 +1121,7 @@ impl Client {
                     tensorzero_core::endpoints::optimization::poll_optimization(
                         &gateway.handle.app_state.http_client,
                         job_handle,
+                        &gateway.handle.app_state.config.models.default_credentials,
                     )
                     .await
                     .map_err(err_to_http)

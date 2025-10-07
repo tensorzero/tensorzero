@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::endpoints::openai_compatible::RouterExt;
 use crate::experimentation::VariantSampler;
-use axum::extract::{rejection::JsonRejection, FromRequest, Json, Request};
+use axum::extract::{rejection::JsonRejection, DefaultBodyLimit, FromRequest, Json, Request};
 use axum::Router;
 use serde::de::DeserializeOwned;
 use sqlx::postgres::PgPoolOptions;
@@ -99,12 +99,6 @@ pub type AppState = axum::extract::State<AppStateData>;
 impl GatewayHandle {
     pub async fn new(config: Arc<Config>) -> Result<Self, Error> {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
-        if clickhouse_url.is_none()
-            && std::env::var("CLICKHOUSE_URL").is_ok()
-            && config.gateway.observability.enabled.is_none()
-        {
-            return Err(ErrorDetails::ClickHouseConfiguration { message: "`CLICKHOUSE_URL` is deprecated and no longer accepted. Please set `TENSORZERO_CLICKHOUSE_URL`".to_string() }.into());
-        }
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
         Self::new_with_databases(config, clickhouse_url, postgres_url).await
     }
@@ -375,6 +369,7 @@ pub async fn start_openai_compatible_gateway(
     let router = Router::new()
         .register_openai_compatible_routes()
         .fallback(endpoints::fallback::handle_404)
+        .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
         .with_state(gateway_handle.app_state.clone());
 
     let (sender, recv) = tokio::sync::oneshot::channel::<()>();

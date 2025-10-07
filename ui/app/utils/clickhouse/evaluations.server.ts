@@ -242,6 +242,7 @@ export async function getEvaluationResults(
   SELECT
     dp.input as input,
     dp.id as datapoint_id,
+    dp.name as name,
     dp.output as reference_output,
     ci.output as generated_output,
     ci.function_name as function_name,
@@ -562,6 +563,7 @@ export async function getEvaluationsForDatapoint(
     SELECT
       filtered_inference.input as input,
       filtered_inference.tags['tensorzero::datapoint_id'] as datapoint_id,
+      filtered_datapoint.name as name,
       filtered_datapoint.output as reference_output,
       filtered_inference.id as inference_id,
       filtered_inference.episode_id as episode_id,

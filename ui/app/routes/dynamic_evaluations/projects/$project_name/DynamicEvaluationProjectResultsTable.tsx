@@ -9,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
+import { toEpisodeUrl } from "~/utils/urls";
 import {
   Tooltip,
   TooltipContent,
@@ -153,7 +154,7 @@ export function DynamicEvaluationProjectResultsTable({
                           <TableCell className="text-center align-middle">
                             <TableItemShortUuid
                               id={result.episode_id}
-                              link={`/observability/episodes/${result.episode_id}`}
+                              link={toEpisodeUrl(result.episode_id)}
                             />
                           </TableCell>
 

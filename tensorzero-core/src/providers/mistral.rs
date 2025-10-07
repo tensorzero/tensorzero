@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::OnceLock, time::Duration};
+use std::{borrow::Cow, time::Duration};
 
 use crate::{
     http::{TensorZeroEventSource, TensorzeroHttpClient},
@@ -29,7 +29,7 @@ use crate::{
         },
         InferenceProvider,
     },
-    model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider},
+    model::{Credential, ModelProvider},
     providers::helpers::{
         check_new_tool_call_name, inject_extra_request_data_and_send,
         inject_extra_request_data_and_send_eventsource,
@@ -49,10 +49,6 @@ lazy_static! {
     };
 }
 
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("MISTRAL_API_KEY".to_string())
-}
-
 const PROVIDER_NAME: &str = "Mistral";
 pub const PROVIDER_TYPE: &str = "mistral";
 
@@ -65,23 +61,12 @@ pub struct MistralProvider {
     credentials: MistralCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<MistralCredentials> = OnceLock::new();
-
 impl MistralProvider {
-    pub fn new(
-        model_name: String,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-        Ok(MistralProvider {
+    pub fn new(model_name: String, credentials: MistralCredentials) -> Self {
+        MistralProvider {
             model_name,
             credentials,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {

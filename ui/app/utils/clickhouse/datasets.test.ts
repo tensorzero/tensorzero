@@ -325,6 +325,7 @@ describe("getDatasetRows", () => {
         expect.objectContaining({
           id: expect.any(String),
           type: expect.stringMatching(/^(chat|json)$/),
+          name: expect.toBeOneOf([expect.any(String), null]),
           function_name: expect.any(String),
           episode_id: expect.any(String),
           updated_at: expect.any(String),
@@ -350,6 +351,7 @@ describe("getDatasetRows", () => {
         expect.objectContaining({
           id: expect.any(String),
           type: "json",
+          name: expect.toBeOneOf([expect.any(String), null]),
           function_name: expect.any(String),
           episode_id: expect.any(String),
           updated_at: expect.any(String),
@@ -372,13 +374,14 @@ describe("getDatapoint", () => {
       dataset_name: "bar",
       episode_id: "01942e26-4693-7e80-8591-47b98e25d721",
       function_name: "ask_question",
+      name: null,
       id: "01942e26-c48c-7720-b971-a1f7a3a9ac98",
       input: {
         messages: [
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "Is it a living thing?",
               },
             ],
@@ -387,7 +390,7 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "no.",
               },
             ],
@@ -396,7 +399,7 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "Is it commonly found indoors?",
               },
             ],
@@ -405,7 +408,7 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "no.",
               },
             ],
@@ -414,7 +417,7 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "Is it a natural object, like a rock or tree?",
               },
             ],
@@ -423,7 +426,7 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "yes.",
               },
             ],
@@ -477,13 +480,15 @@ describe("getDatapoint", () => {
       dataset_name: "foo",
       episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff9",
       function_name: "write_haiku",
+      name: null,
       id: "01934fc5-ea98-71f0-8191-9fd88f34c28b",
       input: {
         messages: [
           {
             content: [
               {
-                type: "structured_text",
+                type: "template",
+                name: "user",
                 arguments: {
                   topic: "upward",
                 },
@@ -527,12 +532,14 @@ describe("datapoint operations", () => {
       function_name: "write_haiku",
       id: datapoint_id,
       episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff9",
+      name: null,
       input: {
         messages: [
           {
             content: [
               {
-                type: "structured_text",
+                type: "template",
+                name: "user",
                 arguments: {
                   topic: "testing",
                 },
@@ -615,12 +622,13 @@ describe("datapoint operations", () => {
       function_name: "extract_entities",
       id: datapoint_id,
       episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff8",
+      name: null,
       input: {
         messages: [
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "Extract entities from: John visited Paris",
               },
             ],
@@ -715,12 +723,13 @@ describe("datapoint operations", () => {
       function_name: "write_haiku",
       id: "01934fc5-ea98-71f0-8191-9fd88f34c31e",
       episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff7",
+      name: null,
       input: {
         messages: [
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "Write a haiku about duplicates",
               },
             ],
@@ -908,6 +917,7 @@ describe("insertDatapoint", () => {
         function_name: "write_haiku",
         id: uuid(),
         episode_id: null,
+        name: null,
         input: { messages: [] },
         output: [],
         tool_params: {},

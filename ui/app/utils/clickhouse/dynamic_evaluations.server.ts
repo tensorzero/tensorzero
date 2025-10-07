@@ -146,7 +146,7 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
           run_id_uint,
           tags,
           updated_at,
-          datapoint_name as task_name,
+          datapoint_name AS task_name, -- for legacy reasons, \`task_name\` is stored as \`datapoint_name\` in the database
           ifNull(datapoint_name, concat('NULL_EPISODE_', toString(episode_id_uint))) as group_key
         FROM DynamicEvaluationRunEpisodeByRunId
         WHERE toUInt128(toUUID({run_id:String})) = run_id_uint
@@ -246,7 +246,7 @@ export async function getDynamicEvaluationRunStatisticsByMetricName(
           episode_id_uint,
           run_id_uint,
           tags,
-          datapoint_name
+          datapoint_name -- for legacy reasons, \`task_name\` is stored as \`datapoint_name\` in the database
         FROM DynamicEvaluationRunEpisodeByRunId
         WHERE toUInt128(toUUID({run_id:String})) = run_id_uint
         ORDER BY episode_id_uint DESC
@@ -419,7 +419,7 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
           run_id_uint,
           tags,
           updated_at,
-          datapoint_name AS task_name
+          datapoint_name AS task_name -- for legacy reasons, \`task_name\` is stored as \`datapoint_name\` in the database
         FROM DynamicEvaluationRunEpisodeByRunId
         WHERE run_id_uint IN (
           SELECT arrayJoin(
@@ -552,7 +552,7 @@ export async function countDynamicEvaluationRunEpisodesByTaskName(
           run_id_uint,
           tags,
           updated_at,
-          datapoint_name AS task_name
+          datapoint_name AS task_name -- for legacy reasons, \`task_name\` is stored as \`datapoint_name\` in the database
         FROM DynamicEvaluationRunEpisodeByRunId
         WHERE run_id_uint IN (
           SELECT arrayJoin(

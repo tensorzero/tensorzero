@@ -10,45 +10,7 @@ from tensorzero.util import uuid7
 
 
 @pytest.mark.asyncio
-async def test_async_basic_inference_old_model_format_and_headers():
-    async_client = AsyncOpenAI(api_key="donotuse")
-    # Patch the client
-    async_client = await tensorzero.patch_openai_client(
-        async_client,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
-        config_file="../../tensorzero-core/tests/e2e/tensorzero.toml",
-        async_setup=True,
-    )
-
-    messages = [
-        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
-        {"role": "user", "content": "Hello"},
-    ]
-
-    episode_id = uuid7()
-
-    result = await async_client.chat.completions.create(
-        extra_headers={"episode_id": str(episode_id)},
-        messages=messages,
-        model="tensorzero::function_name::basic_test",
-        temperature=0.4,
-    )
-    # Verify IDs are valid UUIDs
-    UUID(result.id)  # Will raise ValueError if invalid
-    assert UUID(result.episode_id) == episode_id
-    assert (
-        result.choices[0].message.content
-        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
-    )
-    usage = result.usage
-    assert usage.prompt_tokens == 10
-    assert usage.completion_tokens == 1
-    assert usage.total_tokens == 11
-    assert result.choices[0].finish_reason == "stop"
-
-
-@pytest.mark.asyncio
-async def test_dynamic_json_mode_inference_openai_deprecated():
+async def test_dynamic_json_mode_inference_openai():
     async_client = AsyncOpenAI(api_key="donotuse")
     # Patch the client
     async_client = await tensorzero.patch_openai_client(
@@ -66,10 +28,9 @@ async def test_dynamic_json_mode_inference_openai_deprecated():
         "additionalProperties": False,
     }
     serialized_output_schema = json.dumps(output_schema)
-    # This response format is deprecated and will be rejected in a future TensorZero release.
     response_format = {
         "type": "json_schema",
-        "json_schema": output_schema,
+        "json_schema": {"name": "test", "description": "test", "schema": output_schema},
     }
     messages = [
         {

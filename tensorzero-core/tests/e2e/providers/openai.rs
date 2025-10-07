@@ -10,7 +10,7 @@ use tensorzero::{
     InferenceOutput, InferenceResponse, Input, InputMessage, InputMessageContent, Role,
 };
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
-use tensorzero_core::config::ProviderTypesConfig;
+use tensorzero_core::config::provider_types::ProviderTypesConfig;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::embeddings::{
     Embedding, EmbeddingEncodingFormat, EmbeddingModelConfig, EmbeddingProviderConfig,
@@ -22,6 +22,7 @@ use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, Latency, ModelInferenceRequestJsonMode, TextKind,
 };
+use tensorzero_core::model_table::ProviderTypeDefaultCredentials;
 use tensorzero_core::rate_limiting::ScopeInfo;
 use url::Url;
 use uuid::Uuid;
@@ -83,15 +84,31 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
-    let inference_params_providers = vec![E2ETestProvider {
-        supports_batch_inference: true,
-        variant_name: "openai".to_string(),
-        model_name: "gpt-4o-mini-2024-07-18".into(),
-        model_provider_name: "openai".into(),
-        credentials: credentials.clone(),
-    }];
+    let inference_params_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai".to_string(),
+            model_name: "gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: credentials.clone(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+    ];
 
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         supports_batch_inference: true,
@@ -101,13 +118,22 @@ async fn get_providers() -> E2ETestProviders {
         credentials,
     }];
 
-    let image_providers = vec![E2ETestProvider {
-        supports_batch_inference: true,
-        variant_name: "openai".to_string(),
-        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
-        model_provider_name: "openai".into(),
-        credentials: HashMap::new(),
-    }];
+    let image_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai".to_string(),
+            model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+    ];
 
     let json_providers = vec![
         E2ETestProvider {
@@ -145,6 +171,20 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses-strict".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     let json_mode_off_providers = vec![
@@ -162,6 +202,13 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai-responses_json_mode_off".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     let shorthand_providers = vec![E2ETestProvider {
@@ -176,6 +223,22 @@ async fn get_providers() -> E2ETestProviders {
         model_name: "text-embedding-3-small".into(),
     }];
 
+    let provider_type_default_credentials_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
+        variant_name: "openai".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let provider_type_default_credentials_shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
+        variant_name: "openai-shorthand".to_string(),
+        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -184,6 +247,9 @@ async fn get_providers() -> E2ETestProviders {
         embeddings: embedding_providers,
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
+        provider_type_default_credentials: provider_type_default_credentials_providers,
+        provider_type_default_credentials_shorthand:
+            provider_type_default_credentials_shorthand_providers,
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),
@@ -1110,6 +1176,7 @@ async fn test_embedding_request() {
             .load(
                 &ProviderTypesConfig::default(),
                 Arc::from("good".to_string()),
+                &ProviderTypeDefaultCredentials::default(),
             )
             .await
             .unwrap();
@@ -1263,6 +1330,7 @@ async fn test_embedding_sanity_check() {
             .load(
                 &ProviderTypesConfig::default(),
                 Arc::from("good".to_string()),
+                &ProviderTypeDefaultCredentials::default(),
             )
             .await
             .unwrap();
@@ -2087,5 +2155,50 @@ async fn test_forward_file_url() {
     assert!(
         text.text.to_lowercase().contains("deepseek"),
         "Content should contain 'deepseek': {text:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_responses_api_reasoning() {
+    let payload = json!({
+        "function_name": "openai_responses_gpt5",
+        "variant_name": "openai",
+        "input":
+            {
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "How many letters are in the word potato?"
+                }
+            ]},
+        "extra_body": [
+            {
+                "variant_name": "openai",
+                "pointer": "/reasoning",
+                "value": {
+                    "effort": "high",
+                    "summary": "auto"
+                }
+            }
+        ]
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json}");
+
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    let has_thought = content_blocks
+        .iter()
+        .any(|block| block.get("type").unwrap().as_str().unwrap() == "thought");
+    assert!(
+        has_thought,
+        "Missing thought block in output: {content_blocks:?}"
     );
 }

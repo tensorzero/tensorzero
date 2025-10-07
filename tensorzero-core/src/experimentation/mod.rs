@@ -9,9 +9,8 @@ use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::variant::VariantInfo;
 
 mod static_weights;
-mod track_and_stop;
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -19,6 +18,24 @@ pub enum ExperimentationConfig {
     StaticWeights(static_weights::StaticWeightsConfig),
     #[default]
     Uniform,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum UninitializedExperimentationConfig {
+    StaticWeights(static_weights::StaticWeightsConfig),
+    Uniform,
+}
+
+impl UninitializedExperimentationConfig {
+    pub fn load(self) -> ExperimentationConfig {
+        match self {
+            UninitializedExperimentationConfig::StaticWeights(config) => {
+                ExperimentationConfig::StaticWeights(config)
+            }
+            UninitializedExperimentationConfig::Uniform => ExperimentationConfig::Uniform,
+        }
+    }
 }
 
 pub trait VariantSampler {
