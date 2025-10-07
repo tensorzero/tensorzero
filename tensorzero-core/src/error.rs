@@ -530,6 +530,9 @@ pub enum ErrorDetails {
         variant_type: String,
         issue_link: Option<String>,
     },
+    UnsupportedModelProviderForStreamingInference {
+        provider_type: String,
+    },
     UnsupportedVariantForFunctionType {
         function_name: String,
         variant_name: String,
@@ -663,6 +666,9 @@ impl ErrorDetails {
             ErrorDetails::UnknownMetric { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedFileExtension { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => tracing::Level::WARN,
+            ErrorDetails::UnsupportedModelProviderForStreamingInference { .. } => {
+                tracing::Level::ERROR
+            }
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedVariantForFunctionType { .. } => tracing::Level::ERROR,
             ErrorDetails::UnsupportedVariantForStreamingInference { .. } => tracing::Level::WARN,
@@ -785,6 +791,9 @@ impl ErrorDetails {
             ErrorDetails::UnknownMetric { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::UnsupportedFileExtension { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            ErrorDetails::UnsupportedModelProviderForStreamingInference { .. } => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => StatusCode::BAD_REQUEST,
@@ -1326,6 +1335,12 @@ impl std::fmt::Display for ErrorDetails {
                 write!(
                     f,
                     "Unsupported model provider for batch inference: {provider_type}"
+                )
+            }
+            ErrorDetails::UnsupportedModelProviderForStreamingInference { provider_type } => {
+                write!(
+                    f,
+                    "Unsupported model provider for streaming inference: {provider_type}"
                 )
             }
             ErrorDetails::UnsupportedFileExtension { extension } => {

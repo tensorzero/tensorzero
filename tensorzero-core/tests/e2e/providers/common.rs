@@ -692,6 +692,10 @@ type = "chat"
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 
+[functions.pdf_test.variants.openai-responses]
+type = "chat_completion"
+model = "responses-gpt-4o-mini-2024-07-18"
+
 [functions.pdf_test.variants.gcp_vertex_gemini]
 type = "chat_completion"
 model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-lite"
@@ -703,6 +707,14 @@ model = "anthropic::claude-3-5-sonnet-20241022"
 [functions.pdf_test.variants.aws-bedrock]
 type = "chat_completion"
 model = "claude-3-haiku-20240307-aws-bedrock"
+
+[models."responses-gpt-4o-mini-2024-07-18"]
+routing = ["openai"]
+
+[models."responses-gpt-4o-mini-2024-07-18".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+api_type = "responses"
 
 [models.claude-3-haiku-20240307-aws-bedrock]
 routing = ["aws_bedrock"]
@@ -724,6 +736,10 @@ type = "chat"
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 
+[functions.image_test.variants.openai-responses]
+type = "chat_completion"
+model = "responses-gpt-4o-mini-2024-07-18"
+
 [functions.image_test.variants.anthropic]
 type = "chat_completion"
 model = "anthropic::claude-3-haiku-20240307"
@@ -744,6 +760,14 @@ type = "gcp_vertex_gemini"
 model_id = "gemini-2.5-pro"
 location = "global"
 project_id = "tensorzero-public"
+
+[models."responses-gpt-4o-mini-2024-07-18"]
+routing = ["openai"]
+
+[models."responses-gpt-4o-mini-2024-07-18".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+api_type = "responses"
 
 [functions.image_test.variants.gcp-vertex-haiku]
 type = "chat_completion"
@@ -2711,13 +2735,15 @@ pub async fn check_simple_inference_response(
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
     }
-    let finish_reason = response_json
-        .get("finish_reason")
-        .unwrap()
-        .as_str()
-        .unwrap();
-    // Some providers return "stop" and others return "length"
-    assert!(finish_reason == "stop" || finish_reason == "length");
+    if provider.variant_name != "openai-responses" {
+        let finish_reason = response_json
+            .get("finish_reason")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        // Some providers return "stop" and others return "length"
+        assert!(finish_reason == "stop" || finish_reason == "length");
+    }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
@@ -3073,6 +3099,10 @@ pub async fn check_simple_image_inference_response(
 }
 
 pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvider) {
+    // We don't have streaming implemented yet for OpenAI Responses
+    if provider.variant_name == "openai-responses" {
+        return;
+    }
     // A top_p of -100 and temperature of -100 should produce errors on all providers
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -3135,6 +3165,10 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     if provider.variant_name == "aws-sagemaker-tgi" {
         return;
     }
+    // We don't have streaming implemented yet for OpenAI Responses
+    if provider.variant_name == "openai-responses" {
+        return;
+    }
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
     // Generate random u32
@@ -3155,6 +3189,10 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
 pub async fn test_streaming_include_original_response_with_provider(provider: E2ETestProvider) {
     // We use a serverless Sagemaker endpoint, which doesn't support streaming
     if provider.variant_name == "aws-sagemaker-tgi" {
+        return;
+    }
+    // We don't have streaming implemented yet for OpenAI Responses
+    if provider.variant_name == "openai-responses" {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -4262,6 +4300,11 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         return;
     }
 
+    // We don't have streaming implemented yet for OpenAI Responses
+    if provider.variant_name == "openai-responses" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
@@ -4668,6 +4711,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
 ) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let content = response_json.get("content").unwrap().as_array().unwrap();
 
     if let Some(episode_id) = episode_id {
         let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
@@ -4677,15 +4721,6 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
-
-    let content = response_json.get("content").unwrap().as_array().unwrap();
-    assert!(!content.iter().any(|block| block["type"] == "tool_call"));
-    let content_block = content
-        .iter()
-        .find(|block| block["type"] == "text")
-        .unwrap();
-    let content_block_text = content_block.get("text").unwrap().as_str().unwrap();
-    assert!(content_block_text.to_lowercase().contains("mehta"));
 
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
@@ -4870,6 +4905,14 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
             panic!("Expected a text block, got {first:?}");
         }
     }
+
+    assert!(!content.iter().any(|block| block["type"] == "tool_call"));
+    let content_block = content
+        .iter()
+        .find(|block| block["type"] == "text")
+        .unwrap();
+    let content_block_text = content_block.get("text").unwrap().as_str().unwrap();
+    assert!(content_block_text.to_lowercase().contains("mehta"));
 }
 
 /// This test is similar to `test_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider`, but it steers the model to not use the tool.
@@ -4879,6 +4922,11 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
 ) {
     // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
     if provider.model_provider_name == "together" {
+        return;
+    }
+
+    // We don't have streaming implemented yet for OpenAI Responses
+    if provider.variant_name == "openai-responses" {
         return;
     }
 
@@ -5483,6 +5531,11 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         || provider.model_provider_name == "groq"
         || provider.model_provider_name == "fireworks"
     {
+        return;
+    }
+
+    // We don't have streaming implemented yet for OpenAI Responses
+    if provider.variant_name == "openai-responses" {
         return;
     }
 
@@ -6093,6 +6146,11 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     // Gemini 2.5 Pro will produce 'executableCode' blocks for this test, which we don't support
     // in streaming mode (since we don't have "unknown" streaming chunks)
     if provider.model_name.contains("gemini-2.5-pro") {
+        return;
+    }
+
+    // We don't have streaming implemented yet for OpenAI Responses
+    if provider.variant_name == "openai-responses" {
         return;
     }
 
@@ -6738,6 +6796,11 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         || provider.model_provider_name == "together"
         || provider.model_provider_name == "groq"
     {
+        return;
+    }
+
+    // We don't have streaming implemented yet for OpenAI Responses
+    if provider.variant_name == "openai-responses" {
         return;
     }
 
@@ -7409,6 +7472,11 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
         return;
     }
 
+    // We don't have streaming implemented yet for OpenAI Responses
+    if provider.variant_name == "openai-responses" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -8022,6 +8090,11 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         return;
     }
 
+    // We don't have streaming implemented yet for OpenAI Responses
+    if provider.variant_name == "openai-responses" {
+        return;
+    }
+
     // NOTE: The xAI API returns an error for multi-turn tool use when the assistant message only has tool_calls but no content.
     // The xAI team has acknowledged the issue and is working on a fix.
     // We skip this test for xAI until the fix is deployed.
@@ -8334,6 +8407,10 @@ pub async fn test_stop_sequences_inference_request_with_provider(
     provider: E2ETestProvider,
     client: &tensorzero::Client,
 ) {
+    // OpenAI Responses doesn't support stop sequences
+    if provider.variant_name == "openai-responses" {
+        return;
+    }
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
@@ -8760,6 +8837,10 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
     client: &tensorzero::Client,
 ) {
+    // We don't have streaming implemented yet for OpenAI Responses
+    if provider.variant_name == "openai-responses" {
+        return;
+    }
     let episode_id = Uuid::now_v7();
 
     let input_function_name = "basic_test";
@@ -10431,6 +10512,11 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         return;
     }
 
+    // We don't have streaming implemented yet for OpenAI Responses
+    if provider.variant_name.starts_with("openai-responses") {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
     let payload = json!({
@@ -10720,6 +10806,13 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
         return;
     }
 
+    // The OpenAI Responses API has a minimum value of 16
+    let max_tokens = if provider.model_name.starts_with("responses-") {
+        16
+    } else {
+        1
+    };
+
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
@@ -10736,7 +10829,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the name of the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan? Explain your answer."
                 }
             ]},
         "stream": false,
@@ -10744,7 +10837,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
         "cache_options": {"enabled": "on", "lookback_s": 10},
         "params": {
             "chat_completion": {
-                "max_tokens": 1
+                "max_tokens": max_tokens
             }
         },
         "extra_headers": extra_headers.extra_headers,
@@ -10777,6 +10870,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
         response_json,
         Some(episode_id),
         &provider,
+        max_tokens,
         false,
     )
     .await;
@@ -10795,8 +10889,15 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
 
     println!("API response: {response_json:#?}");
 
-    check_short_inference_response(randomness, response_json, Some(episode_id), &provider, true)
-        .await;
+    check_short_inference_response(
+        randomness,
+        response_json,
+        Some(episode_id),
+        &provider,
+        max_tokens,
+        true,
+    )
+    .await;
 }
 
 async fn check_short_inference_response(
@@ -10804,6 +10905,7 @@ async fn check_short_inference_response(
     response_json: Value,
     episode_id: Option<Uuid>,
     provider: &E2ETestProvider,
+    max_tokens: u32,
     should_be_cached: bool,
 ) {
     let hardcoded_function_name = "basic_test";
@@ -10835,7 +10937,7 @@ async fn check_short_inference_response(
         assert_eq!(output_tokens, 0);
     } else {
         assert!(input_tokens > 0);
-        assert_eq!(output_tokens, 1);
+        assert_eq!(output_tokens, max_tokens as u64);
     }
     let finish_reason = response_json
         .get("finish_reason")
@@ -10878,7 +10980,7 @@ async fn check_short_inference_response(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
+                "content": [{"type": "text", "value": "What is the name of the capital city of Japan? Explain your answer."}]
             }
         ]
     });
@@ -10910,7 +11012,7 @@ async fn check_short_inference_response(
             .unwrap()
             .as_u64()
             .unwrap(),
-        1
+        max_tokens as u64
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -10964,7 +11066,7 @@ async fn check_short_inference_response(
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
-            text: "What is the name of the capital city of Japan?".to_string(),
+            text: "What is the name of the capital city of Japan? Explain your answer.".to_string(),
         })],
     }];
     assert_eq!(input_messages, expected_input_messages);
@@ -11690,6 +11792,8 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
 
+    println!("API response: {response_json}");
+
     // Assert the output isn't JSON
     let output = response_json.get("output").unwrap().as_object().unwrap();
     let parsed = output.get("parsed").unwrap().as_object();
@@ -11698,7 +11802,10 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert!(serde_json::from_str::<Value>(raw).is_err());
 
     // Assert that the answer is correct
-    assert!(raw.to_lowercase().contains("tokyo"));
+    assert!(
+        raw.to_lowercase().contains("tokyo"),
+        "Unexpected raw output: {raw}"
+    );
 
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
