@@ -150,6 +150,7 @@ export async function action({ request }: ActionFunctionArgs) {
       }
     } else if (action === "rename") {
       await renameDatapoint({
+        functionType: functionType,
         datasetName: parsedFormData.dataset_name,
         datapoint: parsedFormData,
         newName: parsedFormData.name || "",

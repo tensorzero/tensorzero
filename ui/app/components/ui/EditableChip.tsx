@@ -10,19 +10,19 @@ import { SaveButton } from "../utils/SaveButton";
  *
  * @extends ChipProps
  * @property {string} defaultLabel - The label to render if the label is nullish. If not provided, renders an empty string if label is empty.
- * @property {function} onConfirm - The callback function for confirmation.
+ * @property {function} onSetLabel - The callback function for confirmation.
  */
 interface EditableChipProps extends Omit<ChipProps, "label"> {
   label: string | null | undefined;
   defaultLabel?: string;
-  onConfirm?: (newValue: string) => void | Promise<void>;
+  onSetLabel?: (newValue: string) => void | Promise<void>;
 }
 
 /**
  * EditableChip is a component that allows the user to edit the label of a Chip.
  */
 export default function EditableChip({
-  onConfirm,
+  onSetLabel,
   defaultLabel,
   ...chipProps
 }: EditableChipProps) {
@@ -52,11 +52,11 @@ export default function EditableChip({
   };
 
   const handleConfirm = async () => {
-    if (!onConfirm) return;
+    if (!onSetLabel) return;
 
     setIsLoading(true);
     try {
-      await onConfirm(editValue);
+      await onSetLabel(editValue);
       setIsEditing(false);
       setEditValue("");
     } catch (error) {
@@ -84,6 +84,7 @@ export default function EditableChip({
           onKeyDown={handleKeyDown}
           className={`ml-1 h-5 text-sm ${font === "mono" ? "font-mono" : ""}`}
           disabled={isLoading}
+          aria-label="Datapoint name"
           autoFocus
         />
         <SaveButton
@@ -99,7 +100,7 @@ export default function EditableChip({
   return (
     <div className="flex items-center gap-2">
       <Chip {...chipProps} label={labelToRender} />
-      {onConfirm && (
+      {onSetLabel && (
         <EditButton
           className="size-5"
           onClick={handleEditClick}

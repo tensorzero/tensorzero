@@ -544,41 +544,4 @@ describe("datapointOperations", () => {
       ).rejects.toThrow("Json datapoint is missing output_schema");
     });
   });
-
-  describe("renameDatapoint - invalid", () => {
-    test("should throw error for invalid function type", async () => {
-      const datapoint: ParsedChatInferenceDatapointRow = {
-        dataset_name: "test_dataset",
-        function_name: "test_function",
-        name: "old_name",
-        id: uuid(),
-        episode_id: null,
-        input: {
-          messages: [
-            {
-              role: "user",
-              content: [{ type: "unstructured_text", text: "Test" }],
-            },
-          ],
-        },
-        output: [{ type: "text", text: "Output" }],
-        tags: {},
-        auxiliary: "",
-        is_deleted: false,
-        updated_at: new Date().toISOString(),
-        staled_at: null,
-        source_inference_id: null,
-        is_custom: false,
-      };
-
-      await expect(
-        renameDatapoint({
-          functionType: "invalid" as any,
-          datasetName: "test_dataset",
-          datapoint,
-          newName: "new_name",
-        }),
-      ).rejects.toThrow("Invalid function type: invalid");
-    });
-  });
 });

@@ -42,7 +42,7 @@ export default function BasicInfo({
             label={datapoint_name}
             defaultLabel="—"
             font="mono"
-            onConfirm={onRenameDatapoint}
+            onSetLabel={onRenameDatapoint}
           />
         </BasicInfoItemContent>
       </BasicInfoItem>
