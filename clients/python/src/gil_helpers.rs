@@ -78,7 +78,7 @@ impl<T: Send> Drop for DropInTokio<T> {
 /// We don't need (or want) to hold the GIL when the Rust client code is running,
 /// since it doesn't need to interact with any Python objects.
 /// This allows other Python threads to run while the current thread is blocked on the Rust execution.
-pub(crate) fn tokio_block_on_without_gil<F: Future + Send>(py: Python<'_>, fut: F) -> F::Output
+pub fn tokio_block_on_without_gil<F: Future + Send>(py: Python<'_>, fut: F) -> F::Output
 where
     F::Output: Ungil,
 {
