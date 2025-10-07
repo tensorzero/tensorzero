@@ -57,13 +57,13 @@ pub struct AnthropicProviderTypeConfig {
 #[ts(export)]
 pub struct AnthropicDefaults {
     #[ts(type = "string")]
-    pub credential_location: CredentialLocation,
+    pub api_key_location: CredentialLocation,
 }
 
 impl Default for AnthropicDefaults {
     fn default() -> Self {
         Self {
-            credential_location: CredentialLocation::Env("ANTHROPIC_API_KEY".to_string()),
+            api_key_location: CredentialLocation::Env("ANTHROPIC_API_KEY".to_string()),
         }
     }
 }
@@ -82,13 +82,13 @@ pub struct AzureProviderTypeConfig {
 #[ts(export)]
 pub struct AzureDefaults {
     #[ts(type = "string")]
-    pub credential_location: CredentialLocation,
+    pub api_key_location: CredentialLocation,
 }
 
 impl Default for AzureDefaults {
     fn default() -> Self {
         Self {
-            credential_location: CredentialLocation::Env("AZURE_OPENAI_API_KEY".to_string()),
+            api_key_location: CredentialLocation::Env("AZURE_OPENAI_API_KEY".to_string()),
         }
     }
 }
@@ -107,13 +107,13 @@ pub struct DeepSeekProviderTypeConfig {
 #[ts(export)]
 pub struct DeepSeekDefaults {
     #[ts(type = "string")]
-    pub credential_location: CredentialLocation,
+    pub api_key_location: CredentialLocation,
 }
 
 impl Default for DeepSeekDefaults {
     fn default() -> Self {
         Self {
-            credential_location: CredentialLocation::Env("DEEPSEEK_API_KEY".to_string()),
+            api_key_location: CredentialLocation::Env("DEEPSEEK_API_KEY".to_string()),
         }
     }
 }
@@ -132,13 +132,13 @@ pub struct FireworksProviderTypeConfig {
 #[ts(export)]
 pub struct FireworksDefaults {
     #[ts(type = "string")]
-    pub credential_location: CredentialLocation,
+    pub api_key_location: CredentialLocation,
 }
 
 impl Default for FireworksDefaults {
     fn default() -> Self {
         Self {
-            credential_location: CredentialLocation::Env("FIREWORKS_API_KEY".to_string()),
+            api_key_location: CredentialLocation::Env("FIREWORKS_API_KEY".to_string()),
         }
     }
 }
@@ -210,13 +210,13 @@ pub struct GoogleAIStudioGeminiProviderTypeConfig {
 #[ts(export)]
 pub struct GoogleAIStudioGeminiDefaults {
     #[ts(type = "string")]
-    pub credential_location: CredentialLocation,
+    pub api_key_location: CredentialLocation,
 }
 
 impl Default for GoogleAIStudioGeminiDefaults {
     fn default() -> Self {
         Self {
-            credential_location: CredentialLocation::Env("GOOGLE_AI_STUDIO_API_KEY".to_string()),
+            api_key_location: CredentialLocation::Env("GOOGLE_AI_STUDIO_API_KEY".to_string()),
         }
     }
 }
@@ -235,13 +235,13 @@ pub struct GroqProviderTypeConfig {
 #[ts(export)]
 pub struct GroqDefaults {
     #[ts(type = "string")]
-    pub credential_location: CredentialLocation,
+    pub api_key_location: CredentialLocation,
 }
 
 impl Default for GroqDefaults {
     fn default() -> Self {
         Self {
-            credential_location: CredentialLocation::Env("GROQ_API_KEY".to_string()),
+            api_key_location: CredentialLocation::Env("GROQ_API_KEY".to_string()),
         }
     }
 }
@@ -260,13 +260,13 @@ pub struct HyperbolicProviderTypeConfig {
 #[ts(export)]
 pub struct HyperbolicDefaults {
     #[ts(type = "string")]
-    pub credential_location: CredentialLocation,
+    pub api_key_location: CredentialLocation,
 }
 
 impl Default for HyperbolicDefaults {
     fn default() -> Self {
         Self {
-            credential_location: CredentialLocation::Env("HYPERBOLIC_API_KEY".to_string()),
+            api_key_location: CredentialLocation::Env("HYPERBOLIC_API_KEY".to_string()),
         }
     }
 }
@@ -285,13 +285,13 @@ pub struct MistralProviderTypeConfig {
 #[ts(export)]
 pub struct MistralDefaults {
     #[ts(type = "string")]
-    pub credential_location: CredentialLocation,
+    pub api_key_location: CredentialLocation,
 }
 
 impl Default for MistralDefaults {
     fn default() -> Self {
         Self {
-            credential_location: CredentialLocation::Env("MISTRAL_API_KEY".to_string()),
+            api_key_location: CredentialLocation::Env("MISTRAL_API_KEY".to_string()),
         }
     }
 }
@@ -310,13 +310,13 @@ pub struct OpenAIProviderTypeConfig {
 #[ts(export)]
 pub struct OpenAIDefaults {
     #[ts(type = "string")]
-    pub credential_location: CredentialLocation,
+    pub api_key_location: CredentialLocation,
 }
 
 impl Default for OpenAIDefaults {
     fn default() -> Self {
         Self {
-            credential_location: CredentialLocation::Env("OPENAI_API_KEY".to_string()),
+            api_key_location: CredentialLocation::Env("OPENAI_API_KEY".to_string()),
         }
     }
 }
@@ -334,13 +334,13 @@ pub struct OpenRouterProviderTypeConfig {
 #[ts(export)]
 pub struct OpenRouterDefaults {
     #[ts(type = "string")]
-    pub credential_location: CredentialLocation,
+    pub api_key_location: CredentialLocation,
 }
 
 impl Default for OpenRouterDefaults {
     fn default() -> Self {
         Self {
-            credential_location: CredentialLocation::Env("OPENROUTER_API_KEY".to_string()),
+            api_key_location: CredentialLocation::Env("OPENROUTER_API_KEY".to_string()),
         }
     }
 }
@@ -359,13 +359,13 @@ pub struct SGLangProviderTypeConfig {
 #[ts(export)]
 pub struct SGLangDefaults {
     #[ts(type = "string")]
-    pub credential_location: CredentialLocation,
+    pub api_key_location: CredentialLocation,
 }
 
 impl Default for SGLangDefaults {
     fn default() -> Self {
         Self {
-            credential_location: CredentialLocation::Env("SGLANG_API_KEY".to_string()),
+            api_key_location: CredentialLocation::Env("SGLANG_API_KEY".to_string()),
         }
     }
 }
@@ -383,13 +383,13 @@ pub struct TGIProviderTypeConfig {
 #[ts(export)]
 pub struct TGIDefaults {
     #[ts(type = "string")]
-    pub credential_location: CredentialLocation,
+    pub api_key_location: CredentialLocation,
 }
 
 impl Default for TGIDefaults {
     fn default() -> Self {
         Self {
-            credential_location: CredentialLocation::Env("TGI_API_KEY".to_string()),
+            api_key_location: CredentialLocation::Env("TGI_API_KEY".to_string()),
         }
     }
 }
@@ -407,13 +407,13 @@ pub struct TogetherProviderTypeConfig {
 #[ts(export)]
 pub struct TogetherDefaults {
     #[ts(type = "string")]
-    pub credential_location: CredentialLocation,
+    pub api_key_location: CredentialLocation,
 }
 
 impl Default for TogetherDefaults {
     fn default() -> Self {
         Self {
-            credential_location: CredentialLocation::Env("TOGETHER_API_KEY".to_string()),
+            api_key_location: CredentialLocation::Env("TOGETHER_API_KEY".to_string()),
         }
     }
 }
@@ -432,13 +432,13 @@ pub struct VLLMProviderTypeConfig {
 #[ts(export)]
 pub struct VLLMDefaults {
     #[ts(type = "string")]
-    pub credential_location: CredentialLocation,
+    pub api_key_location: CredentialLocation,
 }
 
 impl Default for VLLMDefaults {
     fn default() -> Self {
         Self {
-            credential_location: CredentialLocation::Env("VLLM_API_KEY".to_string()),
+            api_key_location: CredentialLocation::Env("VLLM_API_KEY".to_string()),
         }
     }
 }
@@ -457,13 +457,13 @@ pub struct XAIProviderTypeConfig {
 #[ts(export)]
 pub struct XAIDefaults {
     #[ts(type = "string")]
-    pub credential_location: CredentialLocation,
+    pub api_key_location: CredentialLocation,
 }
 
 impl Default for XAIDefaults {
     fn default() -> Self {
         Self {
-            credential_location: CredentialLocation::Env("XAI_API_KEY".to_string()),
+            api_key_location: CredentialLocation::Env("XAI_API_KEY".to_string()),
         }
     }
 }
