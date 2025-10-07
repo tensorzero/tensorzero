@@ -98,6 +98,7 @@ export const Completed: Story = {
               },
               discard_unknown_chunks: false,
               api_key_location: null,
+              api_type: "chat_completions",
             },
           },
           timeouts: {
@@ -165,6 +166,7 @@ export const LongJobId: Story = {
               },
               discard_unknown_chunks: false,
               api_key_location: null,
+              api_type: "chat_completions",
             },
           },
           timeouts: {

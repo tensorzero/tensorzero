@@ -2505,6 +2505,7 @@ weight = 1.0
 
 <Accordion title='type: "experimental_dynamic_in_context_learning"'>
 
+
 ##### `embedding_model`
 
 - **Type:** string
@@ -2726,6 +2727,16 @@ Defines the number of examples to retrieve for the inference.
 k = 10
 # ...
 ```
+
+##### `max_distance`
+
+- **Type:** non-negative float
+- **Required:** no (default: none)
+
+Filters retrieved examples based on their cosine distance from the input embedding.
+Only examples with a cosine distance less than or equal to the specified threshold are included in the prompt.
+
+If all examples are filtered out due to this threshold, the variant falls back to default chat completion behavior.
 
 ##### `max_tokens`
 

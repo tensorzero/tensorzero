@@ -526,8 +526,10 @@ pub type ProviderInferenceResponseStreamInner =
 
 pub type PeekableProviderInferenceResponseStream = Peekable<ProviderInferenceResponseStreamInner>;
 
-pub type InferenceResultStream =
+type InferenceResultStreamInner =
     Pin<Box<dyn Stream<Item = Result<InferenceResultChunk, Error>> + Send>>;
+
+pub type InferenceResultStream = Peekable<InferenceResultStreamInner>;
 
 /// Handles a textual content block (text or thought)
 /// It checks if there is already a block with the given id, and if so, appends the text to it.

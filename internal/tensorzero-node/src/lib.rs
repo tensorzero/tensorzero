@@ -7,6 +7,8 @@ use tensorzero::{
     OptimizationJobHandle, QUANTILES,
 };
 
+#[macro_use]
+mod napi_bridge;
 mod database;
 
 #[macro_use]

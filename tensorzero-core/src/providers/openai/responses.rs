@@ -1,0 +1,721 @@
+use std::borrow::Cow;
+
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use futures::future::try_join_all;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use url::Url;
+
+use crate::{
+    error::{warn_discarded_thought_block, Error, ErrorDetails},
+    inference::types::{
+        ContentBlock, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
+        ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseArgs,
+        RequestMessage, Role, Text, Thought, Usage,
+    },
+    providers::openai::{
+        prepare_file_message, prepare_system_or_developer_message_helper, OpenAIContentBlock,
+        OpenAIFile, OpenAIMessagesConfig, OpenAITool, OpenAIToolType, SystemOrDeveloper,
+        PROVIDER_TYPE,
+    },
+    tool::{ToolCall, ToolChoice},
+};
+
+#[derive(Serialize, Debug)]
+pub struct OpenAIResponsesRequest<'a> {
+    model: &'a str,
+    input: Vec<OpenAIResponsesInput<'a>>,
+    text: OpenAIResponsesTextConfig,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<OpenAIResponsesTool<'a>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parallel_tool_calls: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<OpenAIResponsesToolChoice>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_output_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    seed: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    frequency_penalty: Option<f32>,
+    stream: bool,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct OpenAIResponsesTextConfig {
+    format: OpenAIResponsesTextConfigFormat,
+}
+
+#[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "type")]
+pub enum OpenAIResponsesTextConfigFormat {
+    Text,
+    JsonObject,
+    JsonSchema {
+        name: String,
+        schema: Value,
+        strict: bool,
+    },
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub(super) struct OpenAIResponsesResponse<'a> {
+    #[serde(borrow)]
+    pub(super) output: Vec<OpenAIResponsesOutput<'a>>,
+    pub(super) usage: OpenAIResponsesUsage,
+    pub incomplete_details: Option<OpenAIResponsesIncompleteDetails>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct OpenAIResponsesIncompleteDetails {
+    reason: String,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct OpenAIResponsesUsage {
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+}
+
+impl From<OpenAIResponsesUsage> for Usage {
+    fn from(usage: OpenAIResponsesUsage) -> Self {
+        Usage {
+            input_tokens: usage.input_tokens,
+            output_tokens: usage.output_tokens,
+        }
+    }
+}
+
+impl OpenAIResponsesResponse<'_> {
+    pub fn into_provider_response(
+        self,
+        latency: Latency,
+        raw_request: String,
+        raw_response: String,
+        generic_request: &ModelInferenceRequest<'_>,
+    ) -> Result<ProviderInferenceResponse, Error> {
+        let mut output = Vec::new();
+        for message in self.output {
+            match message {
+                OpenAIResponsesOutput::Message(message) => {
+                    if message.role != "assistant" {
+                        return Err(Error::new(ErrorDetails::InferenceServer {
+                            message:
+                                "Only assistant messages are supported in responses API output"
+                                    .to_string(),
+                            provider_type: PROVIDER_TYPE.to_string(),
+                            raw_request: Some(raw_request.clone()),
+                            raw_response: Some(raw_response.clone()),
+                        }));
+                    }
+                    for block in message.content {
+                        match block {
+                            OpenAIResponsesInputMessageContent::OutputText { text } => {
+                                output.push(ContentBlockOutput::Text(Text {
+                                    text: text.to_string(),
+                                }));
+                            }
+                            _ => {
+                                return Err(Error::new(ErrorDetails::InferenceServer {
+                                    message:
+                                        "Only output text is supported in responses API output"
+                                            .to_string(),
+                                    provider_type: PROVIDER_TYPE.to_string(),
+                                    raw_request: Some(raw_request.clone()),
+                                    raw_response: Some(raw_response.clone()),
+                                }));
+                            }
+                        }
+                    }
+                }
+                OpenAIResponsesOutput::FunctionCall(function_call) => {
+                    output.push(ContentBlockOutput::ToolCall(ToolCall {
+                        id: function_call.call_id.to_string(),
+                        arguments: function_call.arguments.to_string(),
+                        name: function_call.name.to_string(),
+                    }));
+                }
+                OpenAIResponsesOutput::Reasoning { summary } => {
+                    for summary in summary {
+                        match summary {
+                            OpenAIResponsesReasoningSummary::SummaryText { text } => {
+                                output.push(ContentBlockOutput::Thought(Thought {
+                                    text: Some(text.to_string()),
+                                    signature: None,
+                                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                                }));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let finish_reason = match self.incomplete_details {
+            Some(incomplete_details) => {
+                // The contents of the 'reason' field is undocumented,
+                // but OpenAI appears to set it to 'max_output_tokens' when the 'max_output_tokens'
+                // field is provided and the response is incomplete.
+                if incomplete_details.reason == "max_output_tokens" {
+                    Some(FinishReason::Length)
+                } else {
+                    None
+                }
+            }
+            None => None,
+        };
+
+        Ok(ProviderInferenceResponse::new(
+            ProviderInferenceResponseArgs {
+                output,
+                system: generic_request.system.clone(),
+                input_messages: generic_request.messages.clone(),
+                raw_request,
+                raw_response: raw_response.clone(),
+                usage: self.usage.into(),
+                latency,
+                finish_reason,
+            },
+        ))
+    }
+}
+
+pub(super) fn get_responses_url(base_url: &Url) -> Result<Url, Error> {
+    let mut url = base_url.clone();
+    if !url.path().ends_with('/') {
+        url.set_path(&format!("{}/", url.path()));
+    }
+    url.join("responses").map_err(|e| {
+        Error::new(ErrorDetails::InvalidBaseUrl {
+            message: e.to_string(),
+        })
+    })
+}
+
+impl<'a> OpenAITool<'a> {
+    pub fn into_openai_responses_tool(self) -> OpenAIResponsesTool<'a> {
+        OpenAIResponsesTool {
+            r#type: self.r#type,
+            name: self.function.name,
+            description: self.function.description,
+            parameters: self.function.parameters,
+            strict: self.strict,
+        }
+    }
+}
+
+#[derive(Serialize, Debug)]
+pub struct OpenAIResponsesTool<'a> {
+    r#type: OpenAIToolType,
+    name: &'a str,
+    description: Option<&'a str>,
+    parameters: &'a Value,
+    strict: bool,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(untagged)]
+pub enum OpenAIResponsesToolChoice {
+    String(OpenAIResponsesToolChoiceString),
+    AllowedTools(OpenAIResponsesAllowedTools),
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum OpenAIResponsesToolChoiceString {
+    None,
+    Auto,
+    Required,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum OpenAIResponsesAllowedToolsMode {
+    Required,
+}
+
+#[derive(Serialize, Debug)]
+pub struct OpenAIResponsesAllowedTools {
+    mode: OpenAIResponsesAllowedToolsMode,
+    tools: Vec<OpenAIResponsesToolReference>,
+    r#type: StaticTypeAllowedTools,
+}
+
+#[derive(Debug)]
+struct StaticTypeAllowedTools;
+impl Serialize for StaticTypeAllowedTools {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str("allowed_tools")
+    }
+}
+
+#[derive(Serialize, Debug)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenAIResponsesToolReference {
+    Function { name: String },
+}
+
+impl<'a> OpenAIResponsesRequest<'a> {
+    pub async fn new(
+        model: &'a str,
+        request: &'a ModelInferenceRequest<'_>,
+    ) -> Result<OpenAIResponsesRequest<'a>, Error> {
+        let tools = request.tool_config.as_ref().map(|tool_config| {
+            tool_config
+                .tools_available
+                .iter()
+                .map(|tool| OpenAITool::from(tool).into_openai_responses_tool())
+                .collect()
+        });
+
+        // For now, we don't allow selecting any built-in tools
+        let tool_choice =
+            request
+                .tool_config
+                .as_ref()
+                .map(|tool_config| match &tool_config.tool_choice {
+                    ToolChoice::None => {
+                        OpenAIResponsesToolChoice::String(OpenAIResponsesToolChoiceString::None)
+                    }
+                    ToolChoice::Auto => {
+                        OpenAIResponsesToolChoice::String(OpenAIResponsesToolChoiceString::Auto)
+                    }
+                    ToolChoice::Required => {
+                        OpenAIResponsesToolChoice::String(OpenAIResponsesToolChoiceString::Required)
+                    }
+                    ToolChoice::Specific(tool_name) => {
+                        OpenAIResponsesToolChoice::AllowedTools(OpenAIResponsesAllowedTools {
+                            mode: OpenAIResponsesAllowedToolsMode::Required,
+                            tools: vec![OpenAIResponsesToolReference::Function {
+                                name: tool_name.clone(),
+                            }],
+                            r#type: StaticTypeAllowedTools,
+                        })
+                    }
+                });
+
+        let mut parallel_tool_calls = request
+            .tool_config
+            .as_ref()
+            .and_then(|config| config.parallel_tool_calls);
+        if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
+            parallel_tool_calls = None;
+        }
+
+        if request.borrow_stop_sequences().is_some() {
+            tracing::warn!("Stop sequences are not supported in the OpenAI Responses API");
+        }
+
+        let text = match request.json_mode {
+            ModelInferenceRequestJsonMode::On => OpenAIResponsesTextConfigFormat::JsonObject,
+            ModelInferenceRequestJsonMode::Off => OpenAIResponsesTextConfigFormat::Text,
+            ModelInferenceRequestJsonMode::Strict => {
+                if let Some(output_schema) = request.output_schema {
+                    OpenAIResponsesTextConfigFormat::JsonSchema {
+                        // TODO - should we allow users to customize this name?
+                        name: "response_schema".to_string(),
+                        schema: output_schema.clone(),
+                        strict: true,
+                    }
+                } else {
+                    OpenAIResponsesTextConfigFormat::JsonObject
+                }
+            }
+        };
+
+        Ok(Self {
+            model,
+            input: prepare_openai_responses_messages(
+                request
+                    .system
+                    .as_deref()
+                    .map(|m| SystemOrDeveloper::System(Cow::Borrowed(m))),
+                &request.messages,
+                OpenAIMessagesConfig {
+                    json_mode: Some(&request.json_mode),
+                    provider_type: PROVIDER_TYPE,
+                    fetch_and_encode_input_files_before_inference: request
+                        .fetch_and_encode_input_files_before_inference,
+                },
+            )
+            .await?,
+            text: OpenAIResponsesTextConfig { format: text },
+            tools,
+            parallel_tool_calls,
+            tool_choice,
+            temperature: request.temperature,
+            max_output_tokens: request.max_tokens,
+            seed: request.seed,
+            top_p: request.top_p,
+            presence_penalty: request.presence_penalty,
+            frequency_penalty: request.frequency_penalty,
+            stream: request.stream,
+        })
+    }
+}
+
+#[derive(Clone, Deserialize, Debug)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenAIResponsesOutput<'a> {
+    #[serde(borrow)]
+    Message(OpenAIResponsesInputMessage<'a>),
+    #[serde(borrow)]
+    FunctionCall(OpenAIResponsesFunctionCall<'a>),
+    Reasoning {
+        summary: Vec<OpenAIResponsesReasoningSummary<'a>>,
+    },
+}
+
+#[derive(Clone, Deserialize, Debug)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenAIResponsesReasoningSummary<'a> {
+    SummaryText { text: Cow<'a, str> },
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenAIResponsesInput<'a> {
+    #[serde(borrow)]
+    Message(OpenAIResponsesInputMessage<'a>),
+    #[serde(borrow)]
+    FunctionCallOutput(OpenAIResponsesFunctionCallOutput<'a>),
+    #[serde(borrow)]
+    FunctionCall(OpenAIResponsesFunctionCall<'a>),
+}
+
+impl OpenAIResponsesInput<'_> {
+    pub fn content_contains_case_insensitive(&self, value: &str) -> bool {
+        match self {
+            OpenAIResponsesInput::Message(msg) => {
+                for block in &msg.content {
+                    if let OpenAIResponsesInputMessageContent::InputText { text } = block {
+                        if text.to_lowercase().contains(value) {
+                            return true;
+                        }
+                    }
+                }
+                false
+            }
+            // Don't consider the content of non-text blocks
+            OpenAIResponsesInput::FunctionCallOutput(_) | OpenAIResponsesInput::FunctionCall(_) => {
+                false
+            }
+        }
+    }
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub struct OpenAIResponsesFunctionCallOutput<'a> {
+    call_id: Cow<'a, str>,
+    output: Cow<'a, str>,
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub struct OpenAIResponsesFunctionCall<'a> {
+    call_id: Cow<'a, str>,
+    name: Cow<'a, str>,
+    arguments: Cow<'a, str>,
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub struct OpenAIResponsesInputMessage<'a> {
+    pub role: &'a str,
+    pub id: Option<Cow<'a, str>>,
+    pub content: Vec<OpenAIResponsesInputMessageContent<'a>>,
+}
+
+#[derive(Clone, Deserialize, Debug, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenAIResponsesInputMessageContent<'a> {
+    InputText {
+        text: Cow<'a, str>,
+    },
+    InputImage {
+        image_url: Cow<'a, str>,
+    },
+    InputFile {
+        #[serde(flatten)]
+        file: OpenAIFile<'a>,
+    },
+    OutputText {
+        text: Cow<'a, str>,
+    },
+    Unknown {
+        data: Cow<'a, Value>,
+    },
+}
+
+impl Serialize for OpenAIResponsesInputMessageContent<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        #[derive(Serialize)]
+        #[serde(tag = "type", rename_all = "snake_case")]
+        enum Helper<'a> {
+            InputText {
+                text: &'a str,
+            },
+            InputImage {
+                image_url: &'a str,
+            },
+            InputFile {
+                #[serde(flatten)]
+                file: &'a OpenAIFile<'a>,
+            },
+            OutputText {
+                text: &'a str,
+            },
+        }
+        match self {
+            OpenAIResponsesInputMessageContent::InputText { text } => {
+                Helper::InputText { text }.serialize(serializer)
+            }
+            OpenAIResponsesInputMessageContent::InputImage { image_url } => {
+                Helper::InputImage { image_url }.serialize(serializer)
+            }
+            OpenAIResponsesInputMessageContent::InputFile { file } => {
+                Helper::InputFile { file }.serialize(serializer)
+            }
+            OpenAIResponsesInputMessageContent::OutputText { text } => {
+                Helper::OutputText { text }.serialize(serializer)
+            }
+            OpenAIResponsesInputMessageContent::Unknown { data } => data.serialize(serializer),
+        }
+    }
+}
+
+fn should_add_json_instruction_responses(
+    content: &str,
+    messages: &[OpenAIResponsesInput<'_>],
+) -> bool {
+    !content.to_lowercase().contains("json")
+        && !messages
+            .iter()
+            .any(|msg| msg.content_contains_case_insensitive("json"))
+}
+
+pub async fn prepare_openai_responses_messages<'a>(
+    system_or_developer: Option<SystemOrDeveloper<'a>>,
+    messages: &'a [RequestMessage],
+    messages_config: OpenAIMessagesConfig<'a>,
+) -> Result<Vec<OpenAIResponsesInput<'a>>, Error> {
+    let mut openai_messages: Vec<_> = try_join_all(
+        messages
+            .iter()
+            .map(|msg| tensorzero_to_openai_responses_messages(msg, messages_config)),
+    )
+    .await?
+    .into_iter()
+    .flatten()
+    .collect();
+
+    if let Some(system_msg) = prepare_system_or_developer_message_helper(
+        system_or_developer,
+        messages_config.json_mode,
+        |content| should_add_json_instruction_responses(content, &openai_messages),
+    ) {
+        openai_messages.insert(0, system_msg.into_openai_responses_input());
+    }
+
+    Ok(openai_messages)
+}
+
+pub(super) async fn tensorzero_to_openai_responses_messages<'a>(
+    message: &'a RequestMessage,
+    messages_config: OpenAIMessagesConfig<'_>,
+) -> Result<Vec<OpenAIResponsesInput<'a>>, Error> {
+    match message.role {
+        Role::User => {
+            tensorzero_to_openai_responses_user_messages(&message.content, messages_config).await
+        }
+        Role::Assistant => tensorzero_to_openai_responses_assistant_message(
+            Cow::Borrowed(&message.content),
+            messages_config.provider_type,
+        ),
+    }
+}
+
+async fn tensorzero_to_openai_responses_user_messages<'a>(
+    content_blocks: &'a [ContentBlock],
+    messages_config: OpenAIMessagesConfig<'_>,
+) -> Result<Vec<OpenAIResponsesInput<'a>>, Error> {
+    // We need to separate the tool result messages from the user content blocks.
+
+    let mut messages = Vec::new();
+
+    for block in content_blocks {
+        match block {
+            ContentBlock::Text(Text { text }) => {
+                messages.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
+                    id: None,
+                    role: "user",
+                    content: vec![OpenAIResponsesInputMessageContent::InputText {
+                        text: Cow::Borrowed(text),
+                    }],
+                }));
+            }
+            ContentBlock::ToolCall(_) => {
+                return Err(Error::new(ErrorDetails::InvalidMessage {
+                    message: "Tool calls are not supported in user messages".to_string(),
+                }));
+            }
+            ContentBlock::ToolResult(tool_result) => {
+                messages.push(OpenAIResponsesInput::FunctionCallOutput(
+                    OpenAIResponsesFunctionCallOutput {
+                        output: Cow::Borrowed(&tool_result.result),
+                        call_id: Cow::Borrowed(&tool_result.id),
+                    },
+                ));
+            }
+            ContentBlock::File(file) => {
+                let content_block = prepare_file_message(file, messages_config).await?;
+                match content_block {
+                    OpenAIContentBlock::ImageUrl { image_url } => {
+                        messages.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
+                            id: None,
+                            role: "user",
+                            content: vec![OpenAIResponsesInputMessageContent::InputImage {
+                                image_url: Cow::Owned(image_url.url),
+                            }],
+                        }));
+                    }
+                    OpenAIContentBlock::File { file } => {
+                        messages.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
+                            id: None,
+                            role: "user",
+                            content: vec![OpenAIResponsesInputMessageContent::InputFile { file }],
+                        }));
+                    }
+                    _ => {
+                        return Err(Error::new(ErrorDetails::InternalError {
+                            message: format!("`prepare_file_message` produced an unexpected content block. {IMPOSSIBLE_ERROR_MESSAGE}")
+                        }));
+                    }
+                }
+            }
+            ContentBlock::Thought(thought) => {
+                warn_discarded_thought_block(messages_config.provider_type, thought);
+            }
+            ContentBlock::Unknown {
+                data,
+                model_provider_name: _,
+            } => {
+                // The user included an 'unknown' content block inside of the user message,
+                // so push a new user message that includes their custom JSON valuei
+                messages.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
+                    id: None,
+                    role: "user",
+                    content: vec![OpenAIResponsesInputMessageContent::Unknown {
+                        data: Cow::Borrowed(data),
+                    }],
+                }));
+            }
+        };
+    }
+
+    Ok(messages)
+}
+
+pub fn tensorzero_to_openai_responses_assistant_message<'a>(
+    content_blocks: Cow<'a, [ContentBlock]>,
+    provider_type: &str,
+) -> Result<Vec<OpenAIResponsesInput<'a>>, Error> {
+    let mut output = Vec::new();
+    let content_block_cows: Vec<Cow<'_, ContentBlock>> = match content_blocks {
+        Cow::Borrowed(content_blocks) => content_blocks.iter().map(Cow::Borrowed).collect(),
+        Cow::Owned(content_blocks) => content_blocks.into_iter().map(Cow::Owned).collect(),
+    };
+
+    for block in content_block_cows {
+        match block {
+            Cow::Borrowed(ContentBlock::Text(Text { text })) => {
+                output.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
+                    id: None,
+                    role: "assistant",
+                    content: vec![OpenAIResponsesInputMessageContent::OutputText {
+                        text: Cow::Borrowed(text),
+                    }],
+                }));
+            }
+            Cow::Owned(ContentBlock::Text(Text { text })) => {
+                output.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
+                    id: None,
+                    role: "assistant",
+                    content: vec![OpenAIResponsesInputMessageContent::OutputText {
+                        text: Cow::Owned(text),
+                    }],
+                }));
+            }
+            Cow::Borrowed(ContentBlock::ToolCall(tool_call)) => {
+                output.push(OpenAIResponsesInput::FunctionCall(
+                    OpenAIResponsesFunctionCall {
+                        call_id: Cow::Borrowed(&tool_call.id),
+                        name: Cow::Borrowed(&tool_call.name),
+                        arguments: Cow::Borrowed(&tool_call.arguments),
+                    },
+                ));
+            }
+            Cow::Owned(ContentBlock::ToolCall(tool_call)) => {
+                output.push(OpenAIResponsesInput::FunctionCall(
+                    OpenAIResponsesFunctionCall {
+                        call_id: Cow::Owned(tool_call.id),
+                        name: Cow::Owned(tool_call.name),
+                        arguments: Cow::Owned(tool_call.arguments),
+                    },
+                ));
+            }
+            Cow::Borrowed(ContentBlock::ToolResult(_))
+            | Cow::Owned(ContentBlock::ToolResult(_)) => {
+                return Err(Error::new(ErrorDetails::InvalidMessage {
+                    message: "Tool results are not supported in assistant messages".to_string(),
+                }));
+            }
+            Cow::Borrowed(ContentBlock::File(_)) | Cow::Owned(ContentBlock::File(_)) => {
+                return Err(Error::new(ErrorDetails::InvalidMessage {
+                    message: "Files are not supported in assistant messages".to_string(),
+                }));
+            }
+            Cow::Borrowed(ContentBlock::Thought(ref thought))
+            | Cow::Owned(ContentBlock::Thought(ref thought)) => {
+                warn_discarded_thought_block(provider_type, thought);
+            }
+            Cow::Borrowed(ContentBlock::Unknown {
+                data,
+                model_provider_name: _,
+            }) => {
+                output.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
+                    id: None,
+                    role: "assistant",
+                    content: vec![OpenAIResponsesInputMessageContent::Unknown {
+                        data: Cow::Borrowed(data),
+                    }],
+                }));
+            }
+            Cow::Owned(ContentBlock::Unknown {
+                data,
+                model_provider_name: _,
+            }) => {
+                output.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
+                    id: None,
+                    role: "assistant",
+                    content: vec![OpenAIResponsesInputMessageContent::Unknown {
+                        data: Cow::Owned(data),
+                    }],
+                }));
+            }
+        }
+    }
+
+    Ok(output)
+}

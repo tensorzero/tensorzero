@@ -28,9 +28,14 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use tensorzero::{
+    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    InferenceOutput, InferenceResponse,
+};
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inferences_clickhouse,
 };
+use tensorzero_core::inference::types::TextKind;
 
 #[tokio::test]
 pub async fn test_dicl_inference_request_no_examples_empty_dicl() {
@@ -1353,5 +1358,357 @@ async fn test_dicl_json_request() {
             .unwrap();
         assert!(response_time_ms > 0);
         assert!(model_inference.get("ttft_ms").unwrap().is_null());
+    }
+}
+
+/// Test that max_distance filters out all irrelevant examples, falling back to vanilla chat completion
+#[tokio::test]
+pub async fn test_dicl_max_distance_filters_all_examples() {
+    let clickhouse = get_clickhouse().await;
+    let episode_id = Uuid::now_v7();
+    let variant_name = "dicl_max_distance_strict";
+    let function_name = "basic_test";
+
+    // Create embedded gateway with DICL variant that has strict max_distance
+    let config = r#"
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.dicl_max_distance_strict]
+type = "experimental_dynamic_in_context_learning"
+model = "openai::gpt-4o-mini-2024-07-18"
+embedding_model = "openai::text-embedding-3-small"
+k = 3
+max_distance = 0.15
+max_tokens = 100
+"#;
+
+    let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(config).await;
+
+    // Delete any existing examples for this function and variant
+    let delete_query = format!(
+        "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
+    );
+    clickhouse
+        .run_query_synchronous_no_params(delete_query)
+        .await
+        .unwrap();
+
+    // Insert geography examples (countries and capitals)
+    let mut tasks = Vec::new();
+
+    let input = ResolvedInput {
+        system: None,
+        messages: vec![ResolvedInputMessage {
+            role: Role::User,
+            content: vec![ResolvedInputMessageContent::Text {
+                text: "What is the capital of France?".to_string(),
+            }],
+        }],
+    };
+    let output: Vec<ContentBlockChatOutput> = vec!["Paris".to_string().into()];
+    let output_string = serde_json::to_string(&output).unwrap();
+    tasks.push(embed_insert_example(
+        &clickhouse,
+        input,
+        output_string,
+        function_name,
+        variant_name,
+    ));
+
+    let input = ResolvedInput {
+        system: None,
+        messages: vec![ResolvedInputMessage {
+            role: Role::User,
+            content: vec![ResolvedInputMessageContent::Text {
+                text: "What is the capital of Germany?".to_string(),
+            }],
+        }],
+    };
+    let output: Vec<ContentBlockChatOutput> = vec!["Berlin".to_string().into()];
+    let output_string = serde_json::to_string(&output).unwrap();
+    tasks.push(embed_insert_example(
+        &clickhouse,
+        input,
+        output_string,
+        function_name,
+        variant_name,
+    ));
+
+    let input = ResolvedInput {
+        system: None,
+        messages: vec![ResolvedInputMessage {
+            role: Role::User,
+            content: vec![ResolvedInputMessageContent::Text {
+                text: "What is the capital of Italy?".to_string(),
+            }],
+        }],
+    };
+    let output: Vec<ContentBlockChatOutput> = vec!["Rome".to_string().into()];
+    let output_string = serde_json::to_string(&output).unwrap();
+    tasks.push(embed_insert_example(
+        &clickhouse,
+        input,
+        output_string,
+        function_name,
+        variant_name,
+    ));
+
+    // Join all tasks and wait for them to complete
+    futures::future::join_all(tasks).await;
+
+    // Wait for 1 second for ClickHouse to process
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Query about a completely unrelated topic (programming/software)
+    // The max_distance should filter out all geography examples due to high cosine distance
+    let params = ClientInferenceParams {
+        function_name: Some(function_name.to_string()),
+        variant_name: Some(variant_name.to_string()),
+        episode_id: Some(episode_id),
+        input: ClientInput {
+            system: None,
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "What programming language is used for web development?".to_string(),
+                })],
+            }],
+        },
+        ..Default::default()
+    };
+
+    let response = gateway.inference(params).await.unwrap();
+    let InferenceOutput::NonStreaming(InferenceResponse::Chat(response)) = response else {
+        panic!("Expected non-streaming chat response");
+    };
+
+    println!("API response: {response:#?}");
+
+    let inference_id = response.inference_id;
+
+    // Sleep to allow time for data to be inserted into ClickHouse
+    sleep(Duration::from_secs(1)).await;
+
+    // Check the ModelInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+    assert_eq!(result.len(), 2); // embedding + chat completion
+
+    for model_inference in result {
+        let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
+        let input_messages = model_inference
+            .get("input_messages")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
+
+        match model_name {
+            "openai::gpt-4o-mini-2024-07-18" => {
+                // When all examples are filtered, should behave like vanilla chat completion
+                // This means short input_messages (1-2 messages, not 7+ with examples)
+                assert!(
+                    input_messages.len() <= 2,
+                    "Expected short input_messages for vanilla chat completion, got {}",
+                    input_messages.len()
+                );
+
+                // System should always contain DICL system instructions
+                let system = model_inference.get("system").unwrap().as_str().unwrap();
+                assert!(system.contains("learning by induction"));
+            }
+            "openai::text-embedding-3-small" => {
+                // The embedding call should have 1 input message
+                assert_eq!(input_messages.len(), 1);
+            }
+            _ => {
+                panic!("Unexpected model: {model_name}");
+            }
+        }
+    }
+}
+
+/// Test that max_distance keeps relevant examples when cosine distance is below threshold
+#[tokio::test]
+pub async fn test_dicl_max_distance_keeps_relevant_examples() {
+    let clickhouse = get_clickhouse().await;
+    let episode_id = Uuid::now_v7();
+    let variant_name = "dicl_max_distance_moderate";
+    let function_name = "basic_test";
+
+    // Create embedded gateway with DICL variant that has moderate max_distance
+    let config = r#"
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.dicl_max_distance_moderate]
+type = "experimental_dynamic_in_context_learning"
+model = "openai::gpt-4o-mini-2024-07-18"
+embedding_model = "openai::text-embedding-3-small"
+k = 3
+max_distance = 0.6
+max_tokens = 100
+"#;
+
+    let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(config).await;
+
+    // Delete any existing examples for this function and variant
+    let delete_query = format!(
+        "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
+    );
+    clickhouse
+        .run_query_synchronous_no_params(delete_query)
+        .await
+        .unwrap();
+
+    let mut tasks = Vec::new();
+
+    let input = ResolvedInput {
+        system: None,
+        messages: vec![ResolvedInputMessage {
+            role: Role::User,
+            content: vec![ResolvedInputMessageContent::Text {
+                text: "What the capital city of India?".to_string(),
+            }],
+        }],
+    };
+    let output: Vec<ContentBlockChatOutput> =
+        vec!["Ahmedabad (nose grows 3 inches)".to_string().into()];
+    let output_string = serde_json::to_string(&output).unwrap();
+    tasks.push(embed_insert_example(
+        &clickhouse,
+        input,
+        output_string,
+        function_name,
+        variant_name,
+    ));
+
+    let input = ResolvedInput {
+        system: None,
+        messages: vec![ResolvedInputMessage {
+            role: Role::User,
+            content: vec![ResolvedInputMessageContent::Text {
+                text: "What is an example of a computationally hard problem?".to_string(),
+            }],
+        }],
+    };
+    let output: Vec<ContentBlockChatOutput> = vec![
+        "Finding the median of an unsorted list of numbers (nose grows 4 inches)"
+            .to_string()
+            .into(),
+    ];
+    let output_string = serde_json::to_string(&output).unwrap();
+    tasks.push(embed_insert_example(
+        &clickhouse,
+        input,
+        output_string,
+        function_name,
+        variant_name,
+    ));
+
+    let input = ResolvedInput {
+        system: None,
+        messages: vec![ResolvedInputMessage {
+            role: Role::User,
+            content: vec![ResolvedInputMessageContent::Text {
+                text: "Who wrote Lord of the Rings?".to_string(),
+            }],
+        }],
+    };
+    let output: Vec<ContentBlockChatOutput> =
+        vec!["J.K. Rowling (nose grows 5 inches)".to_string().into()];
+    let output_string = serde_json::to_string(&output).unwrap();
+    tasks.push(embed_insert_example(
+        &clickhouse,
+        input,
+        output_string,
+        function_name,
+        variant_name,
+    ));
+
+    // Join all tasks and wait for them to complete
+    futures::future::join_all(tasks).await;
+
+    // Wait for 1 second for ClickHouse to process
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Query about a similar topic (Harry Potter author, similar to Lord of the Rings question)
+    // The max_distance=0.6 should keep relevant examples
+    let params = ClientInferenceParams {
+        function_name: Some(function_name.to_string()),
+        variant_name: Some(variant_name.to_string()),
+        episode_id: Some(episode_id),
+        input: ClientInput {
+            system: None,
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "Who was the author of the Harry Potter series?".to_string(),
+                })],
+            }],
+        },
+        ..Default::default()
+    };
+
+    let response = gateway.inference(params).await.unwrap();
+    let InferenceOutput::NonStreaming(InferenceResponse::Chat(response)) = response else {
+        panic!("Expected non-streaming chat response");
+    };
+
+    println!("API response: {response:#?}");
+
+    let inference_id = response.inference_id;
+
+    // Sleep to allow time for data to be inserted into ClickHouse
+    sleep(Duration::from_secs(1)).await;
+
+    // Check the ModelInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+    assert_eq!(result.len(), 2); // embedding + chat completion
+
+    for model_inference in result {
+        let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
+        let input_messages = model_inference
+            .get("input_messages")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
+
+        match model_name {
+            "openai::gpt-4o-mini-2024-07-18" => {
+                // When relevant examples are kept, should have DICL behavior with examples
+                // This means long input_messages (7 messages: 3 examples * 2 + 1 query)
+                assert_eq!(
+                    input_messages.len(),
+                    7,
+                    "Expected 7 input_messages with DICL examples, got {}",
+                    input_messages.len()
+                );
+
+                // System should contain DICL instructions
+                let system = model_inference.get("system").unwrap().as_str().unwrap();
+                assert!(system.contains("learning by induction"));
+            }
+            "openai::text-embedding-3-small" => {
+                // The embedding call should have 1 input message
+                assert_eq!(input_messages.len(), 1);
+            }
+            _ => {
+                panic!("Unexpected model: {model_name}");
+            }
+        }
     }
 }

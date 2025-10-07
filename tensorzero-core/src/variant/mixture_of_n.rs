@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fmt;
 
 use futures::future::{join_all, try_join_all};
+use futures::StreamExt;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -399,7 +400,7 @@ fn make_stream_from_non_stream(
             finish_reason: json.finish_reason,
         })),
     };
-    Ok(Box::pin(tokio_stream::once(chunk)))
+    Ok(StreamExt::peekable(Box::pin(tokio_stream::once(chunk))))
 }
 
 impl fmt::Debug for InferenceOrStreamResult {
