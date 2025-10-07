@@ -376,7 +376,7 @@ describe("datapointOperations", () => {
               role: "user",
               content: [
                 {
-                  type: "unstructured_text",
+                  type: "text",
                   text: "Write a haiku about coding",
                 },
               ],
@@ -444,7 +444,7 @@ describe("datapointOperations", () => {
               role: "user",
               content: [
                 {
-                  type: "unstructured_text",
+                  type: "text",
                   text: "John works at Google in Mountain View",
                 },
               ],
@@ -520,7 +520,7 @@ describe("datapointOperations", () => {
           messages: [
             {
               role: "user",
-              content: [{ type: "unstructured_text", text: "Test" }],
+              content: [{ type: "text", text: "Test" }],
             },
           ],
         },
