@@ -3,13 +3,14 @@ use std::borrow::Cow;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::types::{IntoPyDict, PyDict};
 use pyo3::{intern, prelude::*};
-use pyo3::{sync::GILOnceCell, types::PyModule, Bound, Py, PyAny, PyErr, PyResult, Python};
+use pyo3::{sync::PyOnceLock, types::PyModule, Bound, Py, PyAny, PyErr, PyResult, Python};
 use serde::Deserialize;
 use serde_json::Value;
 use uuid::Uuid;
 
 use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::stored_input::StoredInput;
+use crate::inference::types::ResolvedContentBlock;
 use crate::inference::types::{
     stored_input::StoredInputMessageContent, ContentBlockChatOutput, ResolvedInputMessageContent,
 };
@@ -24,13 +25,11 @@ use crate::stored_inference::{
 };
 use pyo3::types::PyNone;
 
-use super::ContentBlock;
-
-pub static JSON_LOADS: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
-pub static JSON_DUMPS: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
-pub static UUID_UUID: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
-static TENSORZERO_INTERNAL_ERROR: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
-static TENSORZERO_ERROR: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
+pub static JSON_LOADS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+pub static JSON_DUMPS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+pub static UUID_UUID: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+static TENSORZERO_INTERNAL_ERROR: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+static TENSORZERO_ERROR: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
 pub fn uuid_to_python(py: Python<'_>, uuid: Uuid) -> PyResult<Bound<'_, PyAny>> {
     let uuid_class = UUID_UUID.get_or_try_init::<_, PyErr>(py, || {
@@ -47,7 +46,7 @@ fn import_template_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
     // We may want to consider not doing this so that we don't have these tied together in our interface.
     // However, they are currently nearly identical so this would be duplicated code for now and
     // not intutitive for users
-    static TEMPLATE_CONTENT_BLOCK: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
+    static TEMPLATE_CONTENT_BLOCK: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
     TEMPLATE_CONTENT_BLOCK.get_or_try_init::<_, PyErr>(py, || {
         let self_module = PyModule::import(py, "tensorzero.types")?;
         Ok(self_module.getattr("Template")?.unbind())
@@ -59,7 +58,7 @@ fn import_text_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
     // We may want to consider not doing this so that we don't have these tied together in our interface.
     // However, they are currently nearly identical so this would be duplicated code for now and
     // not intutitive for users
-    static TEXT_CONTENT_BLOCK: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
+    static TEXT_CONTENT_BLOCK: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
     TEXT_CONTENT_BLOCK.get_or_try_init::<_, PyErr>(py, || {
         let self_module = PyModule::import(py, "tensorzero.types")?;
         Ok(self_module.getattr("Text")?.unbind())
@@ -67,7 +66,7 @@ fn import_text_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
 }
 
 fn import_raw_text_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
-    static RAW_TEXT_CONTENT_BLOCK: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
+    static RAW_TEXT_CONTENT_BLOCK: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
     RAW_TEXT_CONTENT_BLOCK.get_or_try_init::<_, PyErr>(py, || {
         let self_module = PyModule::import(py, "tensorzero.types")?;
         Ok(self_module.getattr("RawText")?.unbind())
@@ -75,7 +74,7 @@ fn import_raw_text_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
 }
 
 fn import_file_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
-    static FILE_CONTENT_BLOCK: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
+    static FILE_CONTENT_BLOCK: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
     FILE_CONTENT_BLOCK.get_or_try_init::<_, PyErr>(py, || {
         let self_module = PyModule::import(py, "tensorzero.types")?;
         Ok(self_module.getattr("FileBase64")?.unbind())
@@ -83,7 +82,7 @@ fn import_file_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
 }
 
 fn import_tool_call_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
-    static TOOL_CALL_CONTENT_BLOCK: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
+    static TOOL_CALL_CONTENT_BLOCK: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
     TOOL_CALL_CONTENT_BLOCK.get_or_try_init::<_, PyErr>(py, || {
         let self_module = PyModule::import(py, "tensorzero.types")?;
         Ok(self_module.getattr("ToolCall")?.unbind())
@@ -91,7 +90,7 @@ fn import_tool_call_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
 }
 
 fn import_thought_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
-    static THOUGHT_CONTENT_BLOCK: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
+    static THOUGHT_CONTENT_BLOCK: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
     THOUGHT_CONTENT_BLOCK.get_or_try_init::<_, PyErr>(py, || {
         let self_module = PyModule::import(py, "tensorzero.types")?;
         Ok(self_module.getattr("Thought")?.unbind())
@@ -99,7 +98,7 @@ fn import_thought_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
 }
 
 fn import_tool_result_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
-    static TOOL_RESULT_CONTENT_BLOCK: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
+    static TOOL_RESULT_CONTENT_BLOCK: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
     TOOL_RESULT_CONTENT_BLOCK.get_or_try_init::<_, PyErr>(py, || {
         let self_module = PyModule::import(py, "tensorzero.types")?;
         Ok(self_module.getattr("ToolResult")?.unbind())
@@ -107,30 +106,30 @@ fn import_tool_result_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
 }
 
 fn import_unknown_content_block(py: Python<'_>) -> PyResult<&Py<PyAny>> {
-    static UNKNOWN_CONTENT_BLOCK: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
+    static UNKNOWN_CONTENT_BLOCK: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
     UNKNOWN_CONTENT_BLOCK.get_or_try_init::<_, PyErr>(py, || {
         let self_module = PyModule::import(py, "tensorzero.types")?;
         Ok(self_module.getattr("UnknownContentBlock")?.unbind())
     })
 }
 
-pub fn content_block_to_python(
+pub fn resolved_content_block_to_python(
     py: Python<'_>,
-    content_block: &ContentBlock,
+    content_block: &ResolvedContentBlock,
 ) -> PyResult<Py<PyAny>> {
     match content_block {
-        ContentBlock::Text(text) => {
+        ResolvedContentBlock::Text(text) => {
             let text_content_block = import_text_content_block(py)?;
             text_content_block.call1(py, (text.text.clone(),))
         }
-        ContentBlock::File(file) => {
+        ResolvedContentBlock::File(file) => {
             let file_content_block = import_file_content_block(py)?;
             file_content_block.call1(
                 py,
                 (file.file.data.clone(), file.file.mime_type.to_string()),
             )
         }
-        ContentBlock::ToolCall(tool_call) => {
+        ResolvedContentBlock::ToolCall(tool_call) => {
             let tool_call_content_block = import_tool_call_content_block(py)?;
             tool_call_content_block.call1(
                 py,
@@ -143,11 +142,11 @@ pub fn content_block_to_python(
                 ),
             )
         }
-        ContentBlock::Thought(thought) => {
+        ResolvedContentBlock::Thought(thought) => {
             let thought_content_block = import_thought_content_block(py)?;
             thought_content_block.call1(py, (thought.text.clone(),))
         }
-        ContentBlock::ToolResult(tool_result) => {
+        ResolvedContentBlock::ToolResult(tool_result) => {
             let tool_result_content_block = import_tool_result_content_block(py)?;
             tool_result_content_block.call1(
                 py,
@@ -158,7 +157,7 @@ pub fn content_block_to_python(
                 ),
             )
         }
-        ContentBlock::Unknown {
+        ResolvedContentBlock::Unknown {
             data,
             model_provider_name,
         } => {

@@ -17,14 +17,14 @@ use crate::config::{Config, MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
-use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, FunctionType, Text,
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::serde_util::deserialize_optional_json_string;
 use crate::tool::{ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
-use crate::uuid_util::uuid_elapsed;
+use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
+use crate::utils::uuid::uuid_elapsed;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::validate_tags;
@@ -144,6 +144,12 @@ pub async fn feedback(
     if !dryrun {
         counter!(
             "request_count",
+            "endpoint" => "feedback",
+            "metric_name" => params.metric_name.to_string()
+        )
+        .increment(1);
+        counter!(
+            "tensorzero_requests_total",
             "endpoint" => "feedback",
             "metric_name" => params.metric_name.to_string()
         )
@@ -883,6 +889,7 @@ mod tests {
     use std::sync::Arc;
 
     use crate::config::{Config, MetricConfig, MetricConfigOptimize, SchemaData};
+    use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::testing::get_unit_test_gateway_handle;
@@ -1065,7 +1072,7 @@ mod tests {
         let config = Arc::new(Config {
             ..Default::default()
         });
-        let gateway_handle = get_unit_test_gateway_handle(config, true);
+        let gateway_handle = get_unit_test_gateway_handle(config);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
         let value = json!("test comment");
@@ -1098,7 +1105,7 @@ mod tests {
         let config = Arc::new(Config {
             ..Default::default()
         });
-        let gateway_handle = get_unit_test_gateway_handle(config, true);
+        let gateway_handle = get_unit_test_gateway_handle(config);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
         let value = json!("test demonstration");
@@ -1169,7 +1176,7 @@ mod tests {
             metrics,
             ..Default::default()
         });
-        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true);
+        let gateway_handle = get_unit_test_gateway_handle(config);
         let value = json!(4.5);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
@@ -1239,7 +1246,7 @@ mod tests {
             metrics,
             ..Default::default()
         });
-        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true);
+        let gateway_handle = get_unit_test_gateway_handle(config.clone());
         let value = json!(true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
@@ -1296,6 +1303,7 @@ mod tests {
                 parallel_tool_calls: None,
                 description: None,
                 all_explicit_templates_names: HashSet::new(),
+                experimentation: ExperimentationConfig::default(),
             })));
 
         // Case 1: a string passed to a chat function
@@ -1422,7 +1430,8 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(output_schema.clone()).unwrap(),
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })));
 
         // Case 5: a JSON function with correct output

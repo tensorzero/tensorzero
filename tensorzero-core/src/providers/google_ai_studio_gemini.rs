@@ -1,9 +1,7 @@
 use std::borrow::Cow;
-use std::sync::OnceLock;
 use std::time::Duration;
 
-use futures::StreamExt;
-use itertools::Itertools;
+use futures::{future::try_join_all, StreamExt};
 use reqwest::StatusCode;
 use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
@@ -38,10 +36,7 @@ use crate::inference::types::{
 };
 use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::inference::InferenceProvider;
-use crate::model::{
-    build_creds_caching_default, fully_qualified_name, Credential, CredentialLocation,
-    ModelProvider,
-};
+use crate::model::{fully_qualified_name, Credential, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_gemini::process_output_schema;
@@ -64,20 +59,8 @@ pub struct GoogleAIStudioGeminiProvider {
     credentials: GoogleAIStudioCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<GoogleAIStudioCredentials> = OnceLock::new();
-
 impl GoogleAIStudioGeminiProvider {
-    pub fn new(
-        model_name: String,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-
+    pub fn new(model_name: String, credentials: GoogleAIStudioCredentials) -> Result<Self, Error> {
         let request_url = Url::parse(&format!(
             "https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
         ))
@@ -105,10 +88,6 @@ impl GoogleAIStudioGeminiProvider {
     pub fn model_name(&self) -> &str {
         &self.model_name
     }
-}
-
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("GOOGLE_AI_STUDIO_API_KEY".to_string())
 }
 
 #[derive(Clone, Debug)]
@@ -172,14 +151,15 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = serde_json::to_value(GeminiRequest::new(request)?).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing Gemini request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
+        let request_body =
+            serde_json::to_value(GeminiRequest::new(request).await?).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error serializing Gemini request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut url = self.request_url.clone();
@@ -263,14 +243,15 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(GeminiRequest::new(request)?).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing Gemini request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
+        let request_body =
+            serde_json::to_value(GeminiRequest::new(request).await?).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error serializing Gemini request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut url = self.streaming_request_url.clone();
@@ -417,7 +398,7 @@ enum GeminiPartData<'a> {
     },
     InlineData {
         #[serde(rename = "inline_data")]
-        inline_data: GeminiInlineData<'a>,
+        inline_data: GeminiInlineData,
     },
     // TODO (if needed): FileData { file_data: FileData },
     FunctionCall {
@@ -431,9 +412,9 @@ enum GeminiPartData<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-struct GeminiInlineData<'a> {
+struct GeminiInlineData {
     mime_type: String,
-    data: &'a str,
+    data: String,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -443,7 +424,7 @@ struct GeminiContent<'a> {
 }
 
 impl<'a> GeminiContent<'a> {
-    fn from_request_message(message: &'a RequestMessage) -> Result<Self, Error> {
+    async fn from_request_message(message: &'a RequestMessage) -> Result<Self, Error> {
         let role = GeminiRole::from(message.role);
         let mut output = Vec::with_capacity(message.content.len());
         let mut iter = message.content.iter();
@@ -491,7 +472,8 @@ impl<'a> GeminiContent<'a> {
                                 }));
                             }
                             Some(next_block) => {
-                                let gemini_part = convert_non_thought_content_block(next_block)?;
+                                let gemini_part =
+                                    convert_non_thought_content_block(next_block).await?;
                                 match gemini_part {
                                     FlattenUnknown::Normal(part) => {
                                         output.push(GeminiContentPart {
@@ -512,7 +494,7 @@ impl<'a> GeminiContent<'a> {
                     }
                 }
                 _ => {
-                    let part = convert_non_thought_content_block(block)?;
+                    let part = convert_non_thought_content_block(block).await?;
                     match part {
                         FlattenUnknown::Normal(part) => {
                             output.push(GeminiContentPart {
@@ -541,7 +523,7 @@ impl<'a> GeminiContent<'a> {
 
 /// Handles all `ContentBlock`s other than `ContentBlock::Thought` (which needs special handling
 /// to merge the signature with the next block).
-fn convert_non_thought_content_block(
+async fn convert_non_thought_content_block(
     block: &ContentBlock,
 ) -> Result<FlattenUnknown<'_, GeminiPartData<'_>>, Error> {
     match block {
@@ -597,15 +579,16 @@ fn convert_non_thought_content_block(
             }))
         }
         ContentBlock::File(file) => {
+            let resolved_file = file.resolve().await?;
             let FileWithPath {
                 file,
                 storage_path: _,
-            } = &**file;
+            } = &*resolved_file;
             require_image(&file.mime_type, PROVIDER_TYPE)?;
             Ok(FlattenUnknown::Normal(GeminiPartData::InlineData {
                 inline_data: GeminiInlineData {
                     mime_type: file.mime_type.to_string(),
-                    data: file.data()?.as_str(),
+                    data: file.data()?.to_string(),
                 },
             }))
         }
@@ -747,7 +730,7 @@ struct GeminiRequest<'a> {
 }
 
 impl<'a> GeminiRequest<'a> {
-    pub fn new(request: &'a ModelInferenceRequest<'a>) -> Result<Self, Error> {
+    pub async fn new(request: &'a ModelInferenceRequest<'a>) -> Result<Self, Error> {
         if request.messages.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
                 message: "Google AI Studio Gemini requires at least one message".to_string(),
@@ -761,12 +744,17 @@ impl<'a> GeminiRequest<'a> {
                 .map(|system_instruction| GeminiPartData::Text {
                     text: system_instruction,
                 });
-        let contents: Vec<GeminiContent> = request
-            .messages
-            .iter()
-            .map(GeminiContent::from_request_message)
-            .filter_ok(|m| !m.parts.is_empty())
-            .collect::<Result<_, _>>()?;
+        let all_contents: Vec<GeminiContent> = try_join_all(
+            request
+                .messages
+                .iter()
+                .map(GeminiContent::from_request_message),
+        )
+        .await?;
+        let contents: Vec<GeminiContent> = all_contents
+            .into_iter()
+            .filter(|m| !m.parts.is_empty())
+            .collect();
         let (tools, tool_config) = prepare_tools(request);
         let (response_mime_type, response_schema) = match request.json_mode {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
@@ -1348,13 +1336,13 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_google_ai_studio_gemini_content_try_from() {
+    #[tokio::test]
+    async fn test_google_ai_studio_gemini_content_try_from() {
         let message = RequestMessage {
             role: Role::User,
             content: vec!["Hello, world!".to_string().into()],
         };
-        let content = GeminiContent::from_request_message(&message).unwrap();
+        let content = GeminiContent::from_request_message(&message).await.unwrap();
         assert_eq!(content.role, GeminiRole::User);
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
@@ -1372,7 +1360,7 @@ mod tests {
             role: Role::Assistant,
             content: vec!["Hello, world!".to_string().into()],
         };
-        let content = GeminiContent::from_request_message(&message).unwrap();
+        let content = GeminiContent::from_request_message(&message).await.unwrap();
         assert_eq!(content.role, GeminiRole::Model);
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
@@ -1396,7 +1384,7 @@ mod tests {
                 }),
             ],
         };
-        let content = GeminiContent::from_request_message(&message).unwrap();
+        let content = GeminiContent::from_request_message(&message).await.unwrap();
         assert_eq!(content.role, GeminiRole::Model);
         assert_eq!(content.parts.len(), 2);
         assert_eq!(
@@ -1431,7 +1419,7 @@ mod tests {
                 result: r#"{"temperature": 25, "conditions": "sunny"}"#.to_string(),
             })],
         };
-        let content = GeminiContent::from_request_message(&message).unwrap();
+        let content = GeminiContent::from_request_message(&message).await.unwrap();
         assert_eq!(content.role, GeminiRole::User);
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
@@ -1525,8 +1513,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_google_ai_studio_gemini_request_try_from() {
+    #[tokio::test]
+    async fn test_google_ai_studio_gemini_request_try_from() {
         // Test Case 1: Empty message list
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -1551,7 +1539,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let result = GeminiRequest::new(&inference_request);
+        let result = GeminiRequest::new(&inference_request).await;
         let error = result.unwrap_err();
         let details = error.get_details();
         assert_eq!(
@@ -1590,7 +1578,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let result = GeminiRequest::new(&inference_request);
+        let result = GeminiRequest::new(&inference_request).await;
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 2);
         assert_eq!(request.contents[0].role, GeminiRole::User);
@@ -1650,7 +1638,7 @@ mod tests {
             ..Default::default()
         };
         // JSON schema should be supported for Gemini Pro models
-        let result = GeminiRequest::new(&inference_request);
+        let result = GeminiRequest::new(&inference_request).await;
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 3);
         assert_eq!(request.contents[0].role, GeminiRole::User);

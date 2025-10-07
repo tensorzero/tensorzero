@@ -1,6 +1,11 @@
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
-use crate::{error::IMPOSSIBLE_ERROR_MESSAGE, http::TensorzeroHttpClient};
+use crate::{
+    error::IMPOSSIBLE_ERROR_MESSAGE,
+    http::TensorzeroHttpClient,
+    model_table::{OpenAIKind, ProviderKind, ProviderTypeDefaultCredentials},
+};
+use futures::future::try_join_all;
 #[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyValueError;
 #[cfg(feature = "pyo3")]
@@ -15,17 +20,15 @@ use crate::{
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
-    model::{build_creds_caching_default, CredentialLocation},
+    model::CredentialLocation,
     optimization::{JobHandle, OptimizationJobInfo, Optimizer},
     providers::openai::{
-        default_api_key_location,
         optimization::{
             convert_to_optimizer_status, OpenAIFineTuningJob, OpenAIFineTuningMethod,
             OpenAIFineTuningRequest, OpenAIGrader, OpenAIRFTResponseFormat, OpenAIReinforcementRow,
             Reinforcement, ReinforcementHyperparameters,
         },
-        upload_openai_file, OpenAICredentials, DEFAULT_CREDENTIALS, OPENAI_DEFAULT_BASE_URL,
-        PROVIDER_TYPE,
+        upload_openai_file, OpenAICredentials, OPENAI_DEFAULT_BASE_URL, PROVIDER_TYPE,
     },
     stored_inference::RenderedSample,
 };
@@ -201,7 +204,10 @@ impl UninitializedOpenAIRFTConfig {
 }
 
 impl UninitializedOpenAIRFTConfig {
-    pub fn load(self) -> Result<OpenAIRFTConfig, Error> {
+    pub async fn load(
+        self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<OpenAIRFTConfig, Error> {
         Ok(OpenAIRFTConfig {
             model: self.model,
             grader: self.grader,
@@ -213,12 +219,9 @@ impl UninitializedOpenAIRFTConfig {
             learning_rate_multiplier: self.learning_rate_multiplier,
             n_epochs: self.n_epochs,
             reasoning_effort: self.reasoning_effort,
-            credentials: build_creds_caching_default(
-                self.credentials.clone(),
-                default_api_key_location(),
-                PROVIDER_TYPE,
-                &DEFAULT_CREDENTIALS,
-            )?,
+            credentials: OpenAIKind
+                .get_defaulted_credential(self.credentials.as_ref(), default_credentials)
+                .await?,
             credential_location: self.credentials,
             api_base: self.api_base,
             suffix: self.suffix,
@@ -259,21 +262,36 @@ impl Optimizer for OpenAIRFTConfig {
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
         _config: &Config,
     ) -> Result<Self::Handle, Error> {
+        let train_examples = train_examples
+            .into_iter()
+            .map(RenderedSample::into_lazy_rendered_sample)
+            .collect::<Vec<_>>();
+        let val_examples = val_examples.map(|examples| {
+            examples
+                .into_iter()
+                .map(RenderedSample::into_lazy_rendered_sample)
+                .collect::<Vec<_>>()
+        });
         // TODO(#2642): improve error handling here so we know what index of example failed
-        let train_rows: Vec<OpenAIReinforcementRow> = train_examples
-            .iter()
-            .map(OpenAIReinforcementRow::try_from)
-            .collect::<Result<Vec<_>, _>>()?;
+        let train_rows: Vec<OpenAIReinforcementRow> = try_join_all(
+            train_examples
+                .iter()
+                .map(OpenAIReinforcementRow::from_rendered_sample),
+        )
+        .await?;
 
-        let val_rows: Option<Vec<OpenAIReinforcementRow>> = val_examples
-            .as_ref()
-            .map(|examples| {
-                examples
-                    .iter()
-                    .map(OpenAIReinforcementRow::try_from)
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .transpose()?;
+        let val_rows = if let Some(examples) = val_examples.as_ref() {
+            Some(
+                try_join_all(
+                    examples
+                        .iter()
+                        .map(OpenAIReinforcementRow::from_rendered_sample),
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
 
         let api_key = self.credentials.get_api_key(credentials)?;
 
@@ -400,13 +418,11 @@ impl JobHandle for OpenAIRFTJobHandle {
         &self,
         client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
-        let openai_credentials = build_creds_caching_default(
-            self.credential_location.clone(),
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
+        let openai_credentials: OpenAICredentials = OpenAIKind
+            .get_defaulted_credential(None, default_credentials)
+            .await?;
         let mut request = client.get(self.job_api_url.clone());
         let api_key = openai_credentials.get_api_key(credentials)?;
         if let Some(api_key) = api_key {

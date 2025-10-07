@@ -1,3 +1,4 @@
+use futures::future::try_join_all;
 use futures::{Stream, StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
@@ -7,7 +8,6 @@ use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::borrow::Cow;
-use std::sync::OnceLock;
 
 use crate::http::TensorzeroHttpClient;
 use std::time::Duration;
@@ -33,7 +33,7 @@ use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::providers::helpers::{
@@ -50,10 +50,6 @@ lazy_static! {
     };
 }
 
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("OPENROUTER_API_KEY".to_string())
-}
-
 const PROVIDER_NAME: &str = "OpenRouter";
 pub const PROVIDER_TYPE: &str = "openrouter";
 
@@ -66,23 +62,12 @@ pub struct OpenRouterProvider {
     credentials: OpenRouterCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<OpenRouterCredentials> = OnceLock::new();
-
 impl OpenRouterProvider {
-    pub fn new(
-        model_name: String,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-        Ok(OpenRouterProvider {
+    pub fn new(model_name: String, credentials: OpenRouterCredentials) -> Self {
+        OpenRouterProvider {
             model_name,
             credentials,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {
@@ -146,7 +131,7 @@ impl InferenceProvider for OpenRouterProvider {
         let request_url = get_chat_url(&OPENROUTER_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
-        let request_body_obj = OpenRouterRequest::new(&self.model_name, request.request)?;
+        let request_body_obj = OpenRouterRequest::new(&self.model_name, request.request).await?;
         let request_body = serde_json::to_value(request_body_obj).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
@@ -243,15 +228,16 @@ impl InferenceProvider for OpenRouterProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(OpenRouterRequest::new(&self.model_name, request)?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing OpenRouter request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+        let request_body =
+            serde_json::to_value(OpenRouterRequest::new(&self.model_name, request).await?)
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing OpenRouter request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
         let request_url = get_chat_url(&OPENROUTER_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -586,13 +572,19 @@ impl OpenRouterRequestMessage<'_> {
     }
 }
 
-pub(super) fn prepare_openrouter_messages<'a>(
+pub(super) async fn prepare_openrouter_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
 ) -> Result<Vec<OpenRouterRequestMessage<'a>>, Error> {
-    let mut messages = Vec::with_capacity(request.messages.len());
-    for message in &request.messages {
-        messages.extend(tensorzero_to_openrouter_messages(message)?);
-    }
+    let mut messages: Vec<_> = try_join_all(
+        request
+            .messages
+            .iter()
+            .map(tensorzero_to_openrouter_messages),
+    )
+    .await?
+    .into_iter()
+    .flatten()
+    .collect();
     if let Some(system_msg) = tensorzero_to_openrouter_system_message(
         request.system.as_deref(),
         request.json_mode,
@@ -675,16 +667,16 @@ pub(super) fn tensorzero_to_openrouter_system_message<'a>(
     }
 }
 
-pub(super) fn tensorzero_to_openrouter_messages(
+pub(super) async fn tensorzero_to_openrouter_messages(
     message: &RequestMessage,
 ) -> Result<Vec<OpenRouterRequestMessage<'_>>, Error> {
     match message.role {
-        Role::User => tensorzero_to_openrouter_user_messages(&message.content),
-        Role::Assistant => tensorzero_to_openrouter_assistant_messages(&message.content),
+        Role::User => tensorzero_to_openrouter_user_messages(&message.content).await,
+        Role::Assistant => tensorzero_to_openrouter_assistant_messages(&message.content).await,
     }
 }
 
-fn tensorzero_to_openrouter_user_messages(
+async fn tensorzero_to_openrouter_user_messages(
     content_blocks: &[ContentBlock],
 ) -> Result<Vec<OpenRouterRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the user content blocks.
@@ -713,10 +705,11 @@ fn tensorzero_to_openrouter_user_messages(
                 ));
             }
             ContentBlock::File(file) => {
+                let resolved_file = file.resolve().await?;
                 let FileWithPath {
                     file,
                     storage_path: _,
-                } = &**file;
+                } = &*resolved_file;
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 user_content_blocks.push(OpenRouterContentBlock::ImageUrl {
                     image_url: OpenRouterImageUrl {
@@ -752,7 +745,7 @@ fn tensorzero_to_openrouter_user_messages(
     Ok(messages)
 }
 
-fn tensorzero_to_openrouter_assistant_messages(
+async fn tensorzero_to_openrouter_assistant_messages(
     content_blocks: &[ContentBlock],
 ) -> Result<Vec<OpenRouterRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the assistant content blocks.
@@ -784,10 +777,11 @@ fn tensorzero_to_openrouter_assistant_messages(
                 }));
             }
             ContentBlock::File(file) => {
+                let resolved_file = file.resolve().await?;
                 let FileWithPath {
                     file,
                     storage_path: _,
-                } = &**file;
+                } = &*resolved_file;
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 assistant_content_blocks.push(OpenRouterContentBlock::ImageUrl {
                     image_url: OpenRouterImageUrl {
@@ -996,7 +990,7 @@ struct OpenRouterRequest<'a> {
 }
 
 impl<'a> OpenRouterRequest<'a> {
-    pub fn new(
+    pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<OpenRouterRequest<'a>, Error> {
@@ -1009,7 +1003,7 @@ impl<'a> OpenRouterRequest<'a> {
         } else {
             None
         };
-        let mut messages = prepare_openrouter_messages(request)?;
+        let mut messages = prepare_openrouter_messages(request).await?;
 
         let (tools, tool_choice, mut parallel_tool_calls) = prepare_openrouter_tools(request);
         if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
@@ -1481,8 +1475,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_openrouter_request_new() {
+    #[tokio::test]
+    async fn test_openrouter_request_new() {
         // Test basic request
         let basic_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -1512,9 +1506,11 @@ mod tests {
             ..Default::default()
         };
 
-        let openrouter_request = OpenRouterRequest::new("gpt-3.5-turbo", &basic_request).unwrap();
+        let openrouter_request = OpenRouterRequest::new("gpt-4.1-mini", &basic_request)
+            .await
+            .unwrap();
 
-        assert_eq!(openrouter_request.model, "gpt-3.5-turbo");
+        assert_eq!(openrouter_request.model, "gpt-4.1-mini");
         assert_eq!(openrouter_request.messages.len(), 2);
         assert_eq!(openrouter_request.temperature, Some(0.7));
         assert_eq!(openrouter_request.max_completion_tokens, Some(100));
@@ -1551,7 +1547,9 @@ mod tests {
             ..Default::default()
         };
 
-        let openrouter_request = OpenRouterRequest::new("gpt-4", &request_with_tools).unwrap();
+        let openrouter_request = OpenRouterRequest::new("gpt-4", &request_with_tools)
+            .await
+            .unwrap();
 
         assert_eq!(openrouter_request.model, "gpt-4");
         assert_eq!(openrouter_request.messages.len(), 2); // We'll add a system message containing Json to fit OpenRouter requirements
@@ -1603,7 +1601,9 @@ mod tests {
             ..Default::default()
         };
 
-        let openrouter_request = OpenRouterRequest::new("gpt-4", &request_with_tools).unwrap();
+        let openrouter_request = OpenRouterRequest::new("gpt-4", &request_with_tools)
+            .await
+            .unwrap();
 
         assert_eq!(openrouter_request.model, "gpt-4");
         assert_eq!(openrouter_request.messages.len(), 1);
@@ -1644,7 +1644,9 @@ mod tests {
             ..Default::default()
         };
 
-        let openrouter_request = OpenRouterRequest::new("gpt-4", &request_with_tools).unwrap();
+        let openrouter_request = OpenRouterRequest::new("gpt-4", &request_with_tools)
+            .await
+            .unwrap();
 
         assert_eq!(openrouter_request.model, "gpt-4");
         assert_eq!(openrouter_request.messages.len(), 1);
@@ -1664,8 +1666,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_openrouter_new_request_o1() {
+    #[tokio::test]
+    async fn test_openrouter_new_request_o1() {
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -1688,7 +1690,9 @@ mod tests {
             ..Default::default()
         };
 
-        let openrouter_request = OpenRouterRequest::new("o1-preview", &request).unwrap();
+        let openrouter_request = OpenRouterRequest::new("o1-preview", &request)
+            .await
+            .unwrap();
 
         assert_eq!(openrouter_request.model, "o1-preview");
         assert_eq!(openrouter_request.messages.len(), 1);
@@ -1726,7 +1730,9 @@ mod tests {
         };
 
         let openrouter_request_with_system =
-            OpenRouterRequest::new("o1-mini", &request_with_system).unwrap();
+            OpenRouterRequest::new("o1-mini", &request_with_system)
+                .await
+                .unwrap();
 
         // Check that the system message was converted to a user message
         assert_eq!(openrouter_request_with_system.messages.len(), 2);
@@ -1796,7 +1802,7 @@ mod tests {
 
         let request_body = OpenRouterRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "gpt-4.1-mini",
             temperature: Some(0.5),
             top_p: Some(0.5),
             presence_penalty: Some(0.5),
@@ -1894,7 +1900,7 @@ mod tests {
 
         let request_body = OpenRouterRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "gpt-4.1-mini",
             temperature: Some(0.5),
             top_p: Some(0.5),
             presence_penalty: Some(0.5),
@@ -1962,7 +1968,7 @@ mod tests {
         };
         let request_body = OpenRouterRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "gpt-4.1-mini",
             temperature: Some(0.5),
             top_p: Some(0.9),
             presence_penalty: Some(0.1),
@@ -2020,7 +2026,7 @@ mod tests {
 
         let request_body = OpenRouterRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "gpt-4.1-mini",
             temperature: Some(0.5),
             top_p: Some(0.9),
             presence_penalty: Some(0.1),
@@ -2123,10 +2129,12 @@ mod tests {
         assert!(parallel_tool_calls.is_none());
     }
 
-    #[test]
-    fn test_tensorzero_to_openrouter_messages() {
+    #[tokio::test]
+    async fn test_tensorzero_to_openrouter_messages() {
         let content_blocks = vec!["Hello".to_string().into()];
-        let openrouter_messages = tensorzero_to_openrouter_user_messages(&content_blocks).unwrap();
+        let openrouter_messages = tensorzero_to_openrouter_user_messages(&content_blocks)
+            .await
+            .unwrap();
         assert_eq!(openrouter_messages.len(), 1);
         match &openrouter_messages[0] {
             OpenRouterRequestMessage::User(content) => {
@@ -2145,7 +2153,9 @@ mod tests {
             "Hello".to_string().into(),
             "How are you?".to_string().into(),
         ];
-        let openrouter_messages = tensorzero_to_openrouter_user_messages(&content_blocks).unwrap();
+        let openrouter_messages = tensorzero_to_openrouter_user_messages(&content_blocks)
+            .await
+            .unwrap();
         assert_eq!(openrouter_messages.len(), 1);
         match &openrouter_messages[0] {
             OpenRouterRequestMessage::User(content) => {
@@ -2173,8 +2183,9 @@ mod tests {
             arguments: "{}".to_string(),
         });
         let content_blocks = vec!["Hello".to_string().into(), tool_block];
-        let openrouter_messages =
-            tensorzero_to_openrouter_assistant_messages(&content_blocks).unwrap();
+        let openrouter_messages = tensorzero_to_openrouter_assistant_messages(&content_blocks)
+            .await
+            .unwrap();
         assert_eq!(openrouter_messages.len(), 1);
         match &openrouter_messages[0] {
             OpenRouterRequestMessage::Assistant(content) => {
@@ -2392,7 +2403,7 @@ mod tests {
             _ => panic!("Expected JsonSchema format"),
         }
 
-        // Test JSON mode Strict with schema but gpt-3.5
+        // Test JSON mode Strict with schema but gpt-3.5-turbo (does not support strict mode)
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let schema = serde_json::json!({
             "type": "object",

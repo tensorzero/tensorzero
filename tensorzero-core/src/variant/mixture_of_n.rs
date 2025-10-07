@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fmt;
 
 use futures::future::{join_all, try_join_all};
+use futures::StreamExt;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -43,10 +44,32 @@ use super::{
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct MixtureOfNConfig {
-    pub weight: Option<f64>,
-    pub timeout_s: f64,
-    pub candidates: Vec<String>,
-    pub fuser: FuserConfig,
+    weight: Option<f64>,
+    timeout_s: f64,
+    candidates: Vec<String>,
+    fuser: FuserConfig,
+}
+
+impl MixtureOfNConfig {
+    pub fn weight(&self) -> Option<f64> {
+        self.weight
+    }
+
+    pub fn set_weight(&mut self, weight: Option<f64>) {
+        self.weight = weight;
+    }
+
+    pub fn timeout_s(&self) -> f64 {
+        self.timeout_s
+    }
+
+    pub fn candidates(&self) -> &Vec<String> {
+        &self.candidates
+    }
+
+    pub fn fuser(&self) -> &FuserConfig {
+        &self.fuser
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
@@ -209,7 +232,7 @@ impl Variant for MixtureOfNConfig {
                 })
             })?;
         }
-        // Validate the evaluator variant
+        // Validate the fuser variant
         self.fuser
             .inner
             .validate(
@@ -226,7 +249,7 @@ impl Variant for MixtureOfNConfig {
 
     // We do not return templates for the candidates, as they are required to be variants in the same function
     // and will therefore also have the same templates.
-    // We only return templates for the evaluator variant.
+    // We only return templates for the fuser variant.
     fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
         self.fuser.inner.get_all_template_paths()
     }
@@ -377,7 +400,7 @@ fn make_stream_from_non_stream(
             finish_reason: json.finish_reason,
         })),
     };
-    Ok(Box::pin(tokio_stream::once(chunk)))
+    Ok(StreamExt::peekable(Box::pin(tokio_stream::once(chunk))))
 }
 
 impl fmt::Debug for InferenceOrStreamResult {
@@ -591,7 +614,7 @@ async fn inner_fuse_candidates<'a, 'request>(
 ) -> Result<InferenceResult, Error> {
     let mut inference_params = InferenceParams::default();
     let (inference_request, included_indices) = fuser
-        .prepare_request(
+        .prepare_fuser_request(
             input,
             function,
             inference_config,
@@ -606,18 +629,18 @@ async fn inner_fuse_candidates<'a, 'request>(
         }
         .into());
     }
-    let model_config = models.get(&fuser.inner.model).await?.ok_or_else(|| {
+    let model_config = models.get(fuser.inner.model()).await?.ok_or_else(|| {
         Error::new(ErrorDetails::UnknownModel {
-            name: fuser.inner.model.to_string(),
+            name: fuser.inner.model().to_string(),
         })
     })?;
     let infer_model_request_args = InferModelRequestArgs {
         request: inference_request,
-        model_name: fuser.inner.model.clone(),
+        model_name: fuser.inner.model().clone(),
         model_config: &model_config,
         function,
         inference_config,
-        retry_config: &fuser.inner.retries,
+        retry_config: fuser.inner.retries(),
         clients,
         inference_params: InferenceParams::default(),
     };
@@ -644,7 +667,7 @@ async fn inner_fuse_candidates_stream<'a, 'request>(
 ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
     let mut params = InferenceParams::default();
     let (inference_request, included_indices) = fuser
-        .prepare_request(
+        .prepare_fuser_request(
             input,
             function,
             inference_config,
@@ -659,19 +682,19 @@ async fn inner_fuse_candidates_stream<'a, 'request>(
         }
         .into());
     }
-    let model_config = models.get(&fuser.inner.model).await?.ok_or_else(|| {
+    let model_config = models.get(fuser.inner.model()).await?.ok_or_else(|| {
         Error::new(ErrorDetails::UnknownModel {
-            name: fuser.inner.model.to_string(),
+            name: fuser.inner.model().to_string(),
         })
     })?;
     infer_model_request_stream(
         inference_request,
-        fuser.inner.model.clone(),
+        fuser.inner.model().clone(),
         &model_config,
         function,
         clients,
         params,
-        fuser.inner.retries,
+        *fuser.inner.retries(),
     )
     .await
 }
@@ -718,7 +741,7 @@ impl FuserConfig {
     /// # Returns
     ///
     /// On success, returns a tuple containing:
-    /// - `RequestMessage`: The templated message to be sent to the evaluator.
+    /// - `RequestMessage`: The templated message to be sent to the fuser.
     /// - `Vec<usize>`: A sorted vector of indices indicating which candidates were successfully included in the fuser message.
     ///
     /// # Errors
@@ -766,9 +789,9 @@ impl FuserConfig {
         ))
     }
 
-    /// Prepares the request for the evaluator variant.
+    /// Prepares the request for the fuser variant.
     /// We use the `prepare_system_message` and `prepare_candidate_message` functions to generate
-    /// the system and candidate messages for the evaluator, which take candidate selection into account.
+    /// the system and candidate messages for the fuser, which take candidate selection into account.
     ///
     /// Additionally, this function returns the indices of candidates that were successfully included in the fuser message.
     ///
@@ -781,7 +804,7 @@ impl FuserConfig {
     /// # Errors
     ///
     /// Returns an `Error` if any of the candidate outputs fail to serialize or if templating fails.
-    async fn prepare_request<'a, 'request>(
+    async fn prepare_fuser_request<'a, 'request>(
         &'a self,
         input: &'request LazyResolvedInput,
         function: &'a FunctionConfig,
@@ -812,13 +835,13 @@ impl FuserConfig {
         inference_params
             .chat_completion
             .backfill_with_variant_params(
-                self.inner.temperature,
-                self.inner.max_tokens,
-                self.inner.seed,
-                self.inner.top_p,
-                self.inner.presence_penalty,
-                self.inner.frequency_penalty,
-                self.inner.stop_sequences.clone(),
+                self.inner.temperature(),
+                self.inner.max_tokens(),
+                self.inner.seed(),
+                self.inner.top_p(),
+                self.inner.presence_penalty(),
+                self.inner.frequency_penalty(),
+                self.inner.stop_sequences().cloned(),
             );
 
         if !inference_config.extra_body.is_empty() {
@@ -830,11 +853,11 @@ impl FuserConfig {
             .into());
         }
         let extra_body = FullExtraBodyConfig {
-            extra_body: self.inner.extra_body.clone(),
+            extra_body: self.inner.extra_body().cloned(),
             inference_extra_body: Default::default(),
         };
         let extra_headers = FullExtraHeadersConfig {
-            variant_extra_headers: self.inner.extra_headers.clone(),
+            variant_extra_headers: self.inner.extra_headers().cloned(),
             inference_extra_headers: inference_config
                 .extra_headers
                 .clone()
@@ -848,7 +871,7 @@ impl FuserConfig {
             inference_config,
             stream,
             inference_params,
-            self.inner.json_mode,
+            self.inner.json_mode().cloned(),
             extra_body,
             extra_headers,
         )?;
@@ -865,9 +888,10 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        config::{SchemaData, UninitializedSchemas},
-        db::clickhouse::ClickHouseConnectionInfo,
+        config::{provider_types::ProviderTypesConfig, SchemaData, UninitializedSchemas},
+        db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
+        experimentation::ExperimentationConfig,
         function::{FunctionConfigChat, FunctionConfigJson},
         http::TensorzeroHttpClient,
         inference::types::{
@@ -880,6 +904,7 @@ mod tests {
             test_system_template_schema,
         },
         model::{ModelConfig, ModelProvider, ProviderConfig},
+        model_table::ProviderTypeDefaultCredentials,
         providers::dummy::DummyProvider,
         tool::{ToolCallConfig, ToolCallOutput, ToolChoice},
     };
@@ -1253,7 +1278,8 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
             implicit_tool_call_config: ToolCallConfig::default(),
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
@@ -1322,27 +1348,31 @@ mod tests {
             .await,
         );
         let candidates = vec![candidate0, candidate1];
-        let models = ModelTable::try_from(HashMap::from([(
-            "json".into(),
-            ModelConfig {
-                routing: vec!["json".into()],
-                providers: HashMap::from([(
-                    "json".into(),
-                    ModelProvider {
-                        name: "json".into(),
-                        config: ProviderConfig::Dummy(DummyProvider {
-                            model_name: "json".into(),
-                            ..Default::default()
-                        }),
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        timeouts: Default::default(),
-                        discard_unknown_chunks: false,
-                    },
-                )]),
-                timeouts: Default::default(),
-            },
-        )]))
+        let provider_types = ProviderTypesConfig::default();
+        let models = ModelTable::new(
+            HashMap::from([(
+                "json".into(),
+                ModelConfig {
+                    routing: vec!["json".into()],
+                    providers: HashMap::from([(
+                        "json".into(),
+                        ModelProvider {
+                            name: "json".into(),
+                            config: ProviderConfig::Dummy(DummyProvider {
+                                model_name: "json".into(),
+                                ..Default::default()
+                            }),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            timeouts: Default::default(),
+                            discard_unknown_chunks: false,
+                        },
+                    )]),
+                    timeouts: Default::default(),
+                },
+            )]),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
         .expect("Failed to create model table");
         let client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
@@ -1350,11 +1380,14 @@ mod tests {
         let inference_clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
             otlp_config: &Default::default(),
         };
         let input = LazyResolvedInput {
@@ -1371,6 +1404,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: "",
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -1451,7 +1485,12 @@ mod tests {
                     timeouts: Default::default(),
                 },
             );
-            ModelTable::try_from(map).expect("Failed to create model table")
+            let provider_types = ProviderTypesConfig::default();
+            ModelTable::new(
+                map,
+                ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            )
+            .expect("Failed to create model table")
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1487,7 +1526,7 @@ mod tests {
         }
         // Depending on implementation, you might check which candidate was selected
 
-        // Set up evaluator with a provider that returns invalid JSON
+        // Set up fuser with a provider that returns invalid JSON
         let fuser_config = FuserConfig {
             inner: UninitializedChatCompletionConfig {
                 model: "regular".into(),
@@ -1526,7 +1565,12 @@ mod tests {
                     timeouts: Default::default(),
                 },
             );
-            ModelTable::try_from(map).expect("Failed to create model table")
+            let provider_types = ProviderTypesConfig::default();
+            ModelTable::new(
+                map,
+                ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            )
+            .expect("Failed to create model table")
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1540,6 +1584,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
 
         let InferenceOrStreamResult::NonStream(result) = mixture_of_n_variant

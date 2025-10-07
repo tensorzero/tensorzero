@@ -4,7 +4,6 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use crate::providers::common::{make_embedded_gateway, make_http_gateway};
 use serde_json::json;
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
@@ -22,7 +21,7 @@ use uuid::{Timestamp, Uuid};
 
 #[tokio::test]
 async fn test_dynamic_evaluation() {
-    let client = make_http_gateway().await;
+    let client = tensorzero::test_helpers::make_http_gateway().await;
     let params = DynamicEvaluationRunParams {
         internal: false,
         variants: HashMap::from([("basic_test".to_string(), "test2".to_string())]),
@@ -53,7 +52,6 @@ async fn test_dynamic_evaluation() {
                 run_id,
                 DynamicEvaluationRunEpisodeParams {
                     task_name: Some(format!("test_datapoint_{i}")),
-                    datapoint_name: None,
                     tags: HashMap::from([
                         ("baz".to_string(), format!("baz_{i}")),
                         ("zoo".to_string(), format!("zoo_{i}")),
@@ -153,10 +151,7 @@ async fn test_dynamic_evaluation() {
             episode_row.variant_pins,
             HashMap::from([("basic_test".to_string(), "test2".to_string())])
         );
-        assert_eq!(
-            episode_row.datapoint_name,
-            Some(format!("test_datapoint_{i}"))
-        );
+        assert_eq!(episode_row.task_name, Some(format!("test_datapoint_{i}")));
         let expected_tags = HashMap::from([
             ("foo".to_string(), "bar".to_string()),
             ("baz".to_string(), format!("baz_{i}")),
@@ -191,7 +186,7 @@ async fn test_dynamic_evaluation() {
 
 #[tokio::test]
 async fn test_dynamic_evaluation_nonexistent_function() {
-    let client = make_http_gateway().await;
+    let client = tensorzero::test_helpers::make_http_gateway().await;
     let params = DynamicEvaluationRunParams {
         variants: HashMap::from([("nonexistent_function".to_string(), "test2".to_string())]),
         tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
@@ -210,7 +205,7 @@ async fn test_dynamic_evaluation_nonexistent_function() {
 /// But the tags are applied
 #[tokio::test(flavor = "multi_thread")]
 async fn test_dynamic_evaluation_other_function() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let params = DynamicEvaluationRunParams {
         variants: HashMap::from([("dynamic_json".to_string(), "gcp-vertex-haiku".to_string())]),
         tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
@@ -233,7 +228,6 @@ async fn test_dynamic_evaluation_other_function() {
             run_id,
             DynamicEvaluationRunEpisodeParams {
                 task_name: None,
-                datapoint_name: None,
                 tags: HashMap::new(),
             },
         )
@@ -283,7 +277,7 @@ async fn test_dynamic_evaluation_other_function() {
 /// This should error
 #[tokio::test(flavor = "multi_thread")]
 async fn test_dynamic_evaluation_variant_error() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let params = DynamicEvaluationRunParams {
         variants: HashMap::from([("basic_test".to_string(), "error".to_string())]),
         tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
@@ -306,7 +300,6 @@ async fn test_dynamic_evaluation_variant_error() {
             run_id,
             DynamicEvaluationRunEpisodeParams {
                 task_name: None,
-                datapoint_name: None,
                 tags: HashMap::new(),
             },
         )
@@ -332,14 +325,14 @@ async fn test_dynamic_evaluation_variant_error() {
     };
     let response = client.inference(inference_params).await.unwrap_err();
     println!("Response: {response:#?}");
-    assert!(response.to_string().contains("All variants failed"));
+    assert!(response.to_string().contains("All model providers failed"));
 }
 
 /// Test that the variant behavior is default if we pin a different variant name
 /// But the tags are applied
 #[tokio::test(flavor = "multi_thread")]
 async fn test_dynamic_evaluation_override_variant_tags() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let params = DynamicEvaluationRunParams {
         internal: false,
         variants: HashMap::from([("basic_test".to_string(), "error".to_string())]),
@@ -362,7 +355,6 @@ async fn test_dynamic_evaluation_override_variant_tags() {
             run_id,
             DynamicEvaluationRunEpisodeParams {
                 task_name: None,
-                datapoint_name: None,
                 tags: HashMap::new(),
             },
         )
@@ -413,7 +405,7 @@ async fn test_dynamic_evaluation_override_variant_tags() {
 
 #[tokio::test]
 async fn test_bad_dynamic_evaluation_run() {
-    let client = make_http_gateway().await;
+    let client = tensorzero::test_helpers::make_http_gateway().await;
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards");
@@ -451,7 +443,7 @@ async fn test_bad_dynamic_evaluation_run() {
 
 #[tokio::test]
 async fn test_dynamic_evaluation_tag_validation() {
-    let client = make_http_gateway().await;
+    let client = tensorzero::test_helpers::make_http_gateway().await;
     let params = DynamicEvaluationRunParams {
         internal: false,
         variants: HashMap::from([("basic_test".to_string(), "test2".to_string())]),

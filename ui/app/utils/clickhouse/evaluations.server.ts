@@ -242,6 +242,7 @@ export async function getEvaluationResults(
   SELECT
     dp.input as input,
     dp.id as datapoint_id,
+    dp.name as name,
     dp.output as reference_output,
     ci.output as generated_output,
     ci.function_name as function_name,
@@ -249,6 +250,7 @@ export async function getEvaluationResults(
     ci.tags['tensorzero::dataset_name'] as dataset_name,
     if(length(feedback.evaluator_inference_id) > 0, feedback.evaluator_inference_id, null) as evaluator_inference_id,
     ci.id as inference_id,
+    ci.episode_id as episode_id,
     feedback.metric_name as metric_name,
     feedback.value as metric_value,
     feedback.feedback_id as feedback_id,
@@ -259,7 +261,6 @@ export async function getEvaluationResults(
   LEFT JOIN filtered_feedback feedback
     ON feedback.target_id = ci.id
   ORDER BY toUInt128(datapoint_id) DESC
-
   `;
 
   const result = await getClickhouseClient().query({
@@ -562,8 +563,10 @@ export async function getEvaluationsForDatapoint(
     SELECT
       filtered_inference.input as input,
       filtered_inference.tags['tensorzero::datapoint_id'] as datapoint_id,
+      filtered_datapoint.name as name,
       filtered_datapoint.output as reference_output,
       filtered_inference.id as inference_id,
+      filtered_inference.episode_id as episode_id,
       filtered_inference.output as generated_output,
       filtered_inference.tags['tensorzero::evaluation_run_id'] as evaluation_run_id,
       filtered_inference.variant_name as variant_name,
@@ -578,7 +581,6 @@ export async function getEvaluationsForDatapoint(
       ON filtered_datapoint.id = toUUIDOrNull(filtered_inference.tags['tensorzero::datapoint_id'])
     LEFT JOIN filtered_feedback
       ON filtered_feedback.target_id = filtered_inference.id
-
   `;
 
   const result = await getClickhouseClient().query({

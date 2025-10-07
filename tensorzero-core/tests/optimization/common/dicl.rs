@@ -6,7 +6,7 @@ use tokio::time::{sleep, Duration};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
-use super::{make_embedded_gateway, make_http_gateway, use_mock_inference_provider};
+use super::use_mock_inference_provider;
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     InferenceOutput, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
@@ -22,10 +22,11 @@ use tensorzero_core::{
     },
     http::TensorzeroHttpClient,
     inference::types::{
-        ContentBlock, ContentBlockChatOutput, ContentBlockChunk, JsonInferenceOutput, ModelInput,
-        RequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent, Text, TextKind,
-        Usage,
+        ContentBlockChatOutput, ContentBlockChunk, JsonInferenceOutput, ModelInput,
+        ResolvedContentBlock, ResolvedRequestMessage, StoredContentBlock, StoredInput,
+        StoredInputMessage, StoredInputMessageContent, StoredRequestMessage, Text, TextKind, Usage,
     },
+    model_table::ProviderTypeDefaultCredentials,
     optimization::{
         dicl::UninitializedDiclOptimizationConfig, JobHandle, OptimizationJobInfo, Optimizer,
         OptimizerOutput, UninitializedOptimizerConfig, UninitializedOptimizerInfo,
@@ -88,7 +89,10 @@ pub async fn test_dicl_optimization_chat() {
         }),
     };
 
-    let optimizer_info = uninitialized_optimizer_info.load().await.unwrap();
+    let optimizer_info = uninitialized_optimizer_info
+        .load(&ProviderTypeDefaultCredentials::default())
+        .await
+        .unwrap();
     let client = TensorzeroHttpClient::new().unwrap();
     let test_examples = get_pinocchio_examples(false);
     let val_examples = None; // No validation examples needed for this test
@@ -128,7 +132,14 @@ pub async fn test_dicl_optimization_chat() {
 
     let mut status;
     loop {
-        status = job_handle.poll(&client, &credentials).await.unwrap();
+        status = job_handle
+            .poll(
+                &client,
+                &credentials,
+                &ProviderTypeDefaultCredentials::default(),
+            )
+            .await
+            .unwrap();
         println!("Status: `{status:?}` Handle: `{job_handle}`");
         if matches!(status, OptimizationJobInfo::Completed { .. }) {
             break;
@@ -355,7 +366,10 @@ pub async fn test_dicl_optimization_json() {
         }),
     };
 
-    let optimizer_info = uninitialized_optimizer_info.load().await.unwrap();
+    let optimizer_info = uninitialized_optimizer_info
+        .load(&ProviderTypeDefaultCredentials::default())
+        .await
+        .unwrap();
 
     let client = TensorzeroHttpClient::new().unwrap();
     let test_examples = get_pinocchio_examples(true);
@@ -396,7 +410,14 @@ pub async fn test_dicl_optimization_json() {
 
     let mut status;
     loop {
-        status = job_handle.poll(&client, &credentials).await.unwrap();
+        status = job_handle
+            .poll(
+                &client,
+                &credentials,
+                &ProviderTypeDefaultCredentials::default(),
+            )
+            .await
+            .unwrap();
         println!("Status: `{status:?}` Handle: `{job_handle}`");
         if matches!(status, OptimizationJobInfo::Completed { .. }) {
             break;
@@ -621,6 +642,7 @@ fn create_inference_params(
         extra_body: Default::default(),
         extra_headers: Default::default(),
         internal_dynamic_variant_config: None,
+        otlp_traces_extra_headers: Default::default(),
     }
 }
 
@@ -873,9 +895,10 @@ async fn validate_model_inference_clickhouse(
             .unwrap()
             .as_str()
             .unwrap();
-        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
         let output = model_inference.get("output").unwrap().as_str().unwrap();
-        let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+        let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
 
         match model_name {
             name if name == expected_model => {
@@ -906,7 +929,7 @@ async fn validate_model_inference_clickhouse(
                 assert_eq!(output.len(), 1);
 
                 match &output[0] {
-                    ContentBlock::Text(text) => {
+                    StoredContentBlock::Text(text) => {
                         assert!(text.text.to_lowercase().contains("nose"));
                     }
                     _ => {
@@ -1019,7 +1042,7 @@ async fn validate_model_inference_clickhouse(
 #[allow(clippy::allow_attributes, dead_code)] // False positive
 pub async fn test_dicl_workflow_with_embedded_client() {
     // Create embedded gateway client
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     run_dicl_workflow_with_client(&client).await;
 }
 
@@ -1027,7 +1050,7 @@ pub async fn test_dicl_workflow_with_embedded_client() {
 #[allow(clippy::allow_attributes, dead_code)] // False positive
 pub async fn test_dicl_workflow_with_http_client() {
     // Create HTTP gateway client
-    let client = make_http_gateway().await;
+    let client = tensorzero::test_helpers::make_http_gateway().await;
     run_dicl_workflow_with_client(&client).await;
 }
 
@@ -1155,9 +1178,9 @@ fn create_pinocchio_example(
         function_name: "basic_test".to_string(),
         input: ModelInput {
             system: system.as_ref().map(std::string::ToString::to_string),
-            messages: vec![RequestMessage {
+            messages: vec![ResolvedRequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::Text(Text {
+                content: vec![ResolvedContentBlock::Text(Text {
                     text: question.to_string(),
                 })],
             }],

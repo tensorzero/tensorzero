@@ -449,7 +449,21 @@ test("should be able to add a datapoint from the inference page", async ({
   // Click on the "Inference Output" button
   await page.getByText("Inference Output").click();
 
-  // Wait for navigation to the new page
+  // Wait for the toast to appear with success message
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("New Datapoint"),
+  ).toBeVisible();
+
+  // Wait for and click on the "View" button in the toast
+  const viewButton = page
+    .getByRole("region", { name: /notifications/i })
+    .getByText("View");
+  await viewButton.waitFor({ state: "visible" });
+  await viewButton.click();
+
+  // Wait for navigation to the new datapoint page
   await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
     timeout: 5000,
   });
@@ -459,7 +473,10 @@ test("should be able to add a datapoint from the inference page", async ({
     new RegExp(`/datasets/${datasetName}/datapoint/.*`),
   );
 
-  // Next, let's delete the dataset by going to the list datasets page
+  // Verify we can see the datapoint content
+  await expect(page.getByText("Datapoint", { exact: true })).toBeVisible();
+
+  // Clean up: delete the dataset by going to the list datasets page
   await page.goto("/datasets");
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
@@ -521,4 +538,38 @@ test("should display inferences with thought block output", async ({
   await expect(
     page.locator(".text-fg-tertiary").getByText("Thought"),
   ).toBeVisible();
+});
+
+test("should handle model inference with null input and output tokens", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/01954435-76a5-7331-8a3a-16296a0ba5b6",
+  );
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Verify the inference page loads
+  await expect(
+    page.getByText("01954435-76a5-7331-8a3a-16296a0ba5b6").first(),
+  ).toBeVisible();
+
+  // Click on the model inference ID to open the model inference detail sheet
+  await page.getByText("01954435-76ab-78b1-a76e-d5676b0dd2f9").click();
+
+  // Wait for the sheet/dialog to appear
+  const sheet = page.locator('[role="dialog"]');
+  await sheet.waitFor({ state: "visible" });
+
+  // Verify we're on the model inference page (use exact match to avoid matching "Model Inferences")
+  await expect(
+    sheet.getByText("Model Inference", { exact: true }),
+  ).toBeVisible();
+
+  // Verify that null tokens are displayed in the sheet (they should show as "null tok")
+  await expect(sheet.getByText("null tok")).toHaveCount(2);
+
+  // Verify the crab description output is visible in the sheet
+  await expect(sheet.getByText("cartoon-style crab").first()).toBeVisible();
 });

@@ -38,6 +38,20 @@ test-e2e-no-creds = [
     "e2e_tests",
     "--profile",
     "clickhouse",
+    ]
+test-rate-limit-load = [
+    "run",
+    "--release",
+    "--package",
+    "rate-limit-load-test",
+    "--",
+]
+test-feedback-load = [
+    "run",
+    "--release",
+    "--package",
+    "feedback-load-test",
+    "--",
 ]
 
 

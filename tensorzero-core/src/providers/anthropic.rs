@@ -1,3 +1,4 @@
+use futures::future::try_join_all;
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use mime::MediaType;
@@ -7,7 +8,6 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
-use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
@@ -30,10 +30,7 @@ use crate::inference::types::{
     ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk, Usage,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{
-    build_creds_caching_default, fully_qualified_name, Credential, CredentialLocation,
-    ModelProvider,
-};
+use crate::model::{fully_qualified_name, Credential, ModelProvider};
 use crate::providers;
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
@@ -54,10 +51,6 @@ const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 const PROVIDER_NAME: &str = "Anthropic";
 pub const PROVIDER_TYPE: &str = "anthropic";
 
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("ANTHROPIC_API_KEY".to_string())
-}
-
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -67,23 +60,12 @@ pub struct AnthropicProvider {
     credentials: AnthropicCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<AnthropicCredentials> = OnceLock::new();
-
 impl AnthropicProvider {
-    pub fn new(
-        model_name: String,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-        Ok(AnthropicProvider {
+    pub fn new(model_name: String, credentials: AnthropicCredentials) -> Self {
+        AnthropicProvider {
             model_name,
             credentials,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {
@@ -153,16 +135,15 @@ impl InferenceProvider for AnthropicProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body =
-            serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request)?).map_err(
-                |e| {
+            serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request).await?)
+                .map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
                         message: format!(
                             "Error serializing Anthropic request: {}",
                             DisplayOrDebugGateway::new(e)
                         ),
                     })
-                },
-            )?;
+                })?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let builder = http_client
@@ -249,16 +230,15 @@ impl InferenceProvider for AnthropicProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body =
-            serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request)?).map_err(
-                |e| {
+            serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request).await?)
+                .map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
                         message: format!(
                             "Error serializing Anthropic request: {}",
                             DisplayOrDebugGateway::new(e)
                         ),
                     })
-                },
-            )?;
+                })?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key)?;
         let builder = http_client
@@ -504,7 +484,7 @@ pub enum AnthropicDocumentType {
 }
 
 impl<'a> AnthropicMessageContent<'a> {
-    fn from_content_block(
+    async fn from_content_block(
         block: &'a ContentBlock,
     ) -> Result<Option<FlattenUnknown<'a, AnthropicMessageContent<'a>>>, Error> {
         match block {
@@ -553,10 +533,11 @@ impl<'a> AnthropicMessageContent<'a> {
                 },
             ))),
             ContentBlock::File(file) => {
+                let file = file.resolve().await?;
                 let FileWithPath {
                     file,
                     storage_path: _,
-                } = &**file;
+                } = &*file;
                 let document = AnthropicDocumentSource {
                     r#type: AnthropicDocumentType::Base64,
                     media_type: file.mime_type.clone(),
@@ -603,15 +584,17 @@ struct AnthropicMessage<'a> {
 }
 
 impl<'a> AnthropicMessage<'a> {
-    fn from_request_message(message: &'a RequestMessage) -> Result<Self, Error> {
-        let content: Vec<FlattenUnknown<AnthropicMessageContent>> = message
-            .content
-            .iter()
-            .map(AnthropicMessageContent::from_content_block)
-            .collect::<Result<Vec<Option<FlattenUnknown<AnthropicMessageContent>>>, _>>()?
-            .into_iter()
-            .flatten()
-            .collect();
+    async fn from_request_message(message: &'a RequestMessage) -> Result<Self, Error> {
+        let content: Vec<FlattenUnknown<AnthropicMessageContent>> = try_join_all(
+            message
+                .content
+                .iter()
+                .map(AnthropicMessageContent::from_content_block),
+        )
+        .await?
+        .into_iter()
+        .flatten()
+        .collect();
 
         Ok(AnthropicMessage {
             role: message.role.into(),
@@ -643,9 +626,9 @@ struct AnthropicRequestBody<'a> {
 }
 
 impl<'a> AnthropicRequestBody<'a> {
-    fn new(
+    async fn new(
         model_name: &'a str,
-        request: &'a ModelInferenceRequest,
+        request: &'a ModelInferenceRequest<'_>,
     ) -> Result<AnthropicRequestBody<'a>, Error> {
         if request.messages.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
@@ -654,11 +637,13 @@ impl<'a> AnthropicRequestBody<'a> {
             .into());
         }
         let system = request.system.as_deref();
-        let request_messages: Vec<AnthropicMessage> = request
-            .messages
-            .iter()
-            .map(AnthropicMessage::from_request_message)
-            .collect::<Result<Vec<_>, _>>()?;
+        let request_messages: Vec<AnthropicMessage> = try_join_all(
+            request
+                .messages
+                .iter()
+                .map(AnthropicMessage::from_request_message),
+        )
+        .await?;
         let messages = prepare_messages(request_messages);
         let messages = if matches!(
             request.json_mode,
@@ -1443,11 +1428,12 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_try_from_content_block() {
+    #[tokio::test]
+    async fn test_try_from_content_block() {
         let text_content_block: ContentBlock = "test".to_string().into();
         let anthropic_content_block =
             AnthropicMessageContent::from_content_block(&text_content_block)
+                .await
                 .unwrap()
                 .unwrap();
         assert_eq!(
@@ -1462,6 +1448,7 @@ mod tests {
         });
         let anthropic_content_block =
             AnthropicMessageContent::from_content_block(&tool_call_content_block)
+                .await
                 .unwrap()
                 .unwrap();
         assert_eq!(
@@ -1474,15 +1461,16 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_try_from_request_message() {
+    #[tokio::test]
+    async fn test_try_from_request_message() {
         // Test a User message
         let inference_request_message = RequestMessage {
             role: Role::User,
             content: vec!["test".to_string().into()],
         };
-        let anthropic_message =
-            AnthropicMessage::from_request_message(&inference_request_message).unwrap();
+        let anthropic_message = AnthropicMessage::from_request_message(&inference_request_message)
+            .await
+            .unwrap();
         assert_eq!(
             anthropic_message,
             AnthropicMessage {
@@ -1498,8 +1486,9 @@ mod tests {
             role: Role::Assistant,
             content: vec!["test_assistant".to_string().into()],
         };
-        let anthropic_message =
-            AnthropicMessage::from_request_message(&inference_request_message).unwrap();
+        let anthropic_message = AnthropicMessage::from_request_message(&inference_request_message)
+            .await
+            .unwrap();
         assert_eq!(
             anthropic_message,
             AnthropicMessage {
@@ -1519,8 +1508,9 @@ mod tests {
                 result: "test_tool_response".to_string(),
             })],
         };
-        let anthropic_message =
-            AnthropicMessage::from_request_message(&inference_request_message).unwrap();
+        let anthropic_message = AnthropicMessage::from_request_message(&inference_request_message)
+            .await
+            .unwrap();
         assert_eq!(
             anthropic_message,
             AnthropicMessage {
@@ -1537,8 +1527,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_initialize_anthropic_request_body() {
+    #[tokio::test]
+    async fn test_initialize_anthropic_request_body() {
         let model = "claude-3-7-sonnet-latest".to_string();
         let listening_message = AnthropicMessage {
             role: AnthropicRole::User,
@@ -1566,7 +1556,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
+        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request).await;
         let error = anthropic_request_body.unwrap_err();
         let details = error.get_details();
         assert_eq!(
@@ -1599,7 +1589,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
+        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request).await;
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
@@ -1607,7 +1597,9 @@ mod tests {
                 model: &model,
                 messages: vec![
                     listening_message.clone(),
-                    AnthropicMessage::from_request_message(&inference_request.messages[0]).unwrap(),
+                    AnthropicMessage::from_request_message(&inference_request.messages[0])
+                        .await
+                        .unwrap(),
                     listening_message.clone(),
                 ],
                 max_tokens: 64_000,
@@ -1650,15 +1642,19 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
+        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request).await;
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
             AnthropicRequestBody {
                 model: &model,
                 messages: vec![
-                    AnthropicMessage::from_request_message(&inference_request.messages[0]).unwrap(),
-                    AnthropicMessage::from_request_message(&inference_request.messages[1]).unwrap(),
+                    AnthropicMessage::from_request_message(&inference_request.messages[0])
+                        .await
+                        .unwrap(),
+                    AnthropicMessage::from_request_message(&inference_request.messages[1])
+                        .await
+                        .unwrap(),
                     listening_message.clone(),
                 ],
                 max_tokens: 100,
@@ -1705,17 +1701,23 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
+        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request).await;
         assert!(anthropic_request_body.is_ok());
+        // Convert messages asynchronously
+        let expected_messages = try_join_all(
+            inference_request
+                .messages
+                .iter()
+                .map(AnthropicMessage::from_request_message),
+        )
+        .await
+        .unwrap();
+
         assert_eq!(
             anthropic_request_body.unwrap(),
             AnthropicRequestBody {
                 model: &model,
-                messages: inference_request
-                    .messages
-                    .iter()
-                    .map(|m| AnthropicMessage::from_request_message(m).unwrap())
-                    .collect(),
+                messages: expected_messages,
                 max_tokens: 64_000,
                 stream: Some(false),
                 system: None,
@@ -1760,17 +1762,21 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
+        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request).await;
         assert!(anthropic_request_body.is_ok());
         let result = anthropic_request_body.unwrap();
         assert_eq!(result.messages.len(), 4); // Original 2 messages + listening message + JSON prefill
         assert_eq!(
             result.messages[0],
-            AnthropicMessage::from_request_message(&inference_request.messages[0]).unwrap()
+            AnthropicMessage::from_request_message(&inference_request.messages[0])
+                .await
+                .unwrap()
         );
         assert_eq!(
             result.messages[1],
-            AnthropicMessage::from_request_message(&inference_request.messages[1]).unwrap()
+            AnthropicMessage::from_request_message(&inference_request.messages[1])
+                .await
+                .unwrap()
         );
         assert_eq!(result.messages[2], listening_message);
         assert_eq!(
@@ -1784,8 +1790,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_get_default_max_tokens_in_new_anthropic_request_body() {
+    #[tokio::test]
+    async fn test_get_default_max_tokens_in_new_anthropic_request_body() {
         let messages = vec![RequestMessage {
             role: Role::User,
             content: vec!["Hello".to_string().into()],
@@ -1803,98 +1809,98 @@ mod tests {
         };
 
         let model = "claude-opus-4-1-20250805".to_string();
-        let body = AnthropicRequestBody::new(&model, &request);
+        let body = AnthropicRequestBody::new(&model, &request).await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-opus-4-20250514".to_string();
-        let body = AnthropicRequestBody::new(&model, &request);
+        let body = AnthropicRequestBody::new(&model, &request).await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4-20250514".to_string();
-        let body = AnthropicRequestBody::new(&model, &request);
+        let body = AnthropicRequestBody::new(&model, &request).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-7-sonnet-20250219".to_string();
-        let body = AnthropicRequestBody::new(&model, &request);
+        let body = AnthropicRequestBody::new(&model, &request).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-sonnet-20241022".to_string();
-        let body = AnthropicRequestBody::new(&model, &request);
+        let body = AnthropicRequestBody::new(&model, &request).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-haiku-20241022".to_string();
-        let body = AnthropicRequestBody::new(&model, &request);
+        let body = AnthropicRequestBody::new(&model, &request).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-opus-4-1".to_string();
-        let body = AnthropicRequestBody::new(&model, &request);
+        let body = AnthropicRequestBody::new(&model, &request).await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-opus-4-0".to_string();
-        let body = AnthropicRequestBody::new(&model, &request);
+        let body = AnthropicRequestBody::new(&model, &request).await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4-0".to_string();
-        let body = AnthropicRequestBody::new(&model, &request);
+        let body = AnthropicRequestBody::new(&model, &request).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-7-sonnet-latest".to_string();
-        let body = AnthropicRequestBody::new(&model, &request);
+        let body = AnthropicRequestBody::new(&model, &request).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-sonnet-latest".to_string();
-        let body = AnthropicRequestBody::new(&model, &request);
+        let body = AnthropicRequestBody::new(&model, &request).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-haiku-latest".to_string();
-        let body = AnthropicRequestBody::new(&model, &request);
+        let body = AnthropicRequestBody::new(&model, &request).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-haiku-20240307".to_string();
-        let body = AnthropicRequestBody::new(&model, &request);
+        let body = AnthropicRequestBody::new(&model, &request).await;
         assert_eq!(body.unwrap().max_tokens, 4_096);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-ballad-latest".to_string(); // fake model
-        let body = AnthropicRequestBody::new(&model, &request);
+        let body = AnthropicRequestBody::new(&model, &request).await;
         assert!(body.is_err());
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-4-5-haiku-20260101".to_string(); // fake model
-        let body = AnthropicRequestBody::new(&model, &request);
+        let body = AnthropicRequestBody::new(&model, &request).await;
         assert!(body.is_err());
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
     }
 
-    #[test]
-    fn test_prepare_messages() {
+    #[tokio::test]
+    async fn test_prepare_messages() {
         let listening_message = AnthropicMessage {
             role: AnthropicRole::User,
             content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {

@@ -3,6 +3,7 @@ import React, { type ReactNode, useState, useRef, useEffect } from "react";
 import { Button } from "~/components/ui/button";
 import { clsx } from "clsx";
 import { cva } from "class-variance-authority";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 export function SnippetLayout({ children }: React.PropsWithChildren) {
   return (
@@ -76,8 +77,28 @@ export function SnippetContent({
 
       {needsExpansion && !expanded && maxHeight !== "Content" && (
         <div className="from-bg-primary absolute right-0 bottom-0 left-0 flex justify-center bg-gradient-to-t to-transparent pt-8 pb-4">
-          <Button variant="outline" size="sm" onClick={() => setExpanded(true)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setExpanded(true)}
+            className="flex items-center gap-1"
+          >
             Show more
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
+      {needsExpansion && expanded && maxHeight !== "Content" && (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setExpanded(false)}
+            className="flex items-center gap-1"
+          >
+            Show less
+            <ChevronUp className="h-4 w-4" />
           </Button>
         </div>
       )}
@@ -88,6 +109,7 @@ export function SnippetContent({
 interface SnippetMessageProps {
   children?: ReactNode;
   role?: "system" | "user" | "assistant";
+  action?: ReactNode;
 }
 
 const snippetMessageLabel = cva("text-sm font-medium capitalize", {
@@ -110,10 +132,17 @@ const snippetMessage = cva("flex w-full flex-col gap-4 border-l-2 pl-2", {
   },
 });
 
-export function SnippetMessage({ children, role }: SnippetMessageProps) {
+export function SnippetMessage({
+  children,
+  role,
+  action,
+}: SnippetMessageProps) {
   return (
     <div className="flex w-full flex-col gap-1">
-      <div className={snippetMessageLabel({ role })}>{role}</div>
+      <div className="relative flex items-center gap-4">
+        <div className={snippetMessageLabel({ role })}>{role}</div>
+        {action && <div className="absolute left-16">{action}</div>}
+      </div>
       <div className={snippetMessage({ role })}>{children}</div>
     </div>
   );
@@ -121,7 +150,7 @@ export function SnippetMessage({ children, role }: SnippetMessageProps) {
 
 export interface SnippetTab {
   id: string;
-  label: string;
+  label: string | ReactNode;
   content?: ReactNode;
   indicator?: "none" | "empty" | "content" | "fail" | "warning";
 }
@@ -180,7 +209,7 @@ export function SnippetTabs({
               key={tab.id}
               value={tab.id}
               className={clsx(
-                "flex items-center text-xs",
+                "flex cursor-pointer items-center text-xs",
                 tab.indicator && "gap-2",
               )}
             >

@@ -4,6 +4,7 @@ import {
   getEvaluationsForDatapoint,
   pollForEvaluations,
 } from "~/utils/clickhouse/evaluations.server";
+import { toEvaluationUrl, toInferenceUrl } from "~/utils/urls";
 import type { Route } from "./+types/route";
 import {
   PageHeader,
@@ -51,10 +52,13 @@ import type {
   JsonInferenceOutput,
 } from "tensorzero-node";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
+import { InferenceButton } from "~/components/utils/InferenceButton";
 import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
+import { handleAddToDatasetAction } from "~/utils/dataset.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
+import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { logger } from "~/utils/logger";
 
 export const handle: RouteHandle = {
@@ -83,7 +87,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ? selected_evaluation_run_ids.split(",")
     : [];
   if (selectedRunIds.length === 0) {
-    return redirect(`/evaluations/${evaluation_name}`);
+    return redirect(toEvaluationUrl(evaluation_name));
   }
 
   // Define all promises
@@ -151,6 +155,9 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const _action = formData.get("_action");
   switch (_action) {
+    case "addToDataset": {
+      return handleAddToDatasetAction(formData);
+    }
     case "addFeedback": {
       const response = await addEvaluationHumanFeedback(formData);
       const url = new URL(request.url);
@@ -201,16 +208,22 @@ export default function EvaluationDatapointPage({
     );
   }
   const outputsToDisplay = [
-    {
-      id: "Reference",
-      output: consolidatedEvaluationResults[0].reference_output,
-      metrics: [],
-      variant_name: "Reference",
-      inferenceId: null,
-    },
+    ...(consolidatedEvaluationResults[0].reference_output !== null
+      ? [
+          {
+            id: "Reference",
+            output: consolidatedEvaluationResults[0].reference_output,
+            metrics: [],
+            variant_name: "Reference",
+            inferenceId: null,
+            episodeId: null,
+          },
+        ]
+      : []),
     ...consolidatedEvaluationResults.map((result) => ({
       id: result.evaluation_run_id,
       inferenceId: result.inference_id,
+      episodeId: result.episode_id,
       variant_name: result.variant_name,
       output: result.generated_output,
       metrics: result.metrics,
@@ -224,6 +237,7 @@ export default function EvaluationDatapointPage({
       });
     }
   }, [newFeedbackId, newJudgeDemonstrationId, toast]);
+
   return (
     // Provider remains here
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
@@ -233,6 +247,7 @@ export default function EvaluationDatapointPage({
             evaluation_name={evaluation_name}
             evaluation_config={evaluation_config}
             dataset_name={consolidatedEvaluationResults[0].dataset_name}
+            task_name={consolidatedEvaluationResults[0].name}
           />
           <EvalRunSelector
             evaluationName={evaluation_name}
@@ -343,7 +358,7 @@ const MetricRow = ({
   }
   const evaluationType = evaluatorConfig.type;
   return (
-    <div className="flex items-center gap-2">
+    <div className="group flex items-center gap-2">
       <TooltipProvider delayDuration={300}>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -390,7 +405,7 @@ const MetricRow = ({
         className="text-sm"
       />
       {inferenceId !== null && evaluationType === "llm_judge" && (
-        <div className="opacity-0 transition-opacity duration-200 hover:opacity-100">
+        <div className="flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
           <EvaluationFeedbackEditor
             inferenceId={inferenceId}
             datapointId={datapointId}
@@ -400,6 +415,12 @@ const MetricRow = ({
             evaluatorInferenceId={evaluatorInferenceId}
             variantName={variantName}
           />
+          {evaluatorInferenceId && (
+            <InferenceButton
+              inferenceId={evaluatorInferenceId}
+              tooltipText="View LLM judge inference"
+            />
+          )}
         </div>
       )}
     </div>
@@ -441,6 +462,7 @@ type OutputsSectionProps = {
     output: ContentBlockChatOutput[] | JsonInferenceOutput;
     metrics: ConsolidatedMetric[];
     inferenceId: string | null;
+    episodeId: string | null;
   }>;
   evaluation_name: string;
   evaluation_config: EvaluationConfig; // Use the specific config type
@@ -480,16 +502,27 @@ function OutputsSection({
                     // Use the getColor obtained from the correct context
                     getColor={getColor}
                   />
-
                   {result.inferenceId && (
-                    <div className="text-xs text-gray-500">
-                      Inference:{" "}
-                      <Link
-                        to={`/observability/inferences/${result.inferenceId}`}
-                        className="text-blue-600 hover:text-blue-800 hover:underline"
-                      >
-                        {result.inferenceId}
-                      </Link>
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span>
+                        Inference:{" "}
+                        <Link
+                          to={toInferenceUrl(result.inferenceId)}
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {result.inferenceId}
+                        </Link>
+                      </span>
+                      {result.inferenceId && result.episodeId && (
+                        <AddToDatasetButton
+                          inferenceId={result.inferenceId}
+                          functionName={evaluation_config.function_name}
+                          variantName={result.variant_name}
+                          episodeId={result.episodeId}
+                          hasDemonstration={false}
+                          alwaysUseInherit={true}
+                        />
+                      )}
                     </div>
                   )}
                 </>

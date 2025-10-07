@@ -7,7 +7,4 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * Currently, this is just used to fetch image URLs in the image input,
  * so that we always pass a base64-encoded image to the model provider.
  */
-export type ResolvedInput = {
-  system: JsonValue | null;
-  messages: Array<ResolvedInputMessage>;
-};
+export type ResolvedInput = { system: JsonValue | null, messages: Array<ResolvedInputMessage>, };

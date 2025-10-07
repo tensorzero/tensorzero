@@ -16,6 +16,8 @@ use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeader
 use crate::inference::types::resolved_input::{
     LazyResolvedInput, LazyResolvedInputMessage, LazyResolvedInputMessageContent,
 };
+use crate::utils::retries::RetryConfig;
+
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultStream,
     ModelInferenceRequest, RequestMessage, Role,
@@ -31,7 +33,7 @@ pub use templates::ChatTemplates;
 
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
-    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, RetryConfig, Variant,
+    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, Variant,
 };
 
 /// If we have a schema, then we forward the 'arguments' object as-is to the template.
@@ -56,26 +58,87 @@ pub struct TemplateWithSchema {
 #[derive(Debug, Default, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-#[expect(clippy::manual_non_exhaustive)]
 pub struct ChatCompletionConfig {
-    pub weight: Option<f64>,
-    pub model: Arc<str>,
-    pub templates: ChatTemplates,
-    pub temperature: Option<f32>,
-    pub top_p: Option<f32>,
-    pub max_tokens: Option<u32>,
-    pub presence_penalty: Option<f32>,
-    pub frequency_penalty: Option<f32>,
-    pub seed: Option<u32>,
-    pub stop_sequences: Option<Vec<String>>,
-    pub json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
-    pub retries: RetryConfig,
+    weight: Option<f64>,
+    model: Arc<str>,
+    templates: ChatTemplates,
+    temperature: Option<f32>,
+    top_p: Option<f32>,
+    max_tokens: Option<u32>,
+    presence_penalty: Option<f32>,
+    frequency_penalty: Option<f32>,
+    seed: Option<u32>,
+    stop_sequences: Option<Vec<String>>,
+    json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
+    retries: RetryConfig,
     #[cfg_attr(test, ts(skip))]
-    pub extra_body: Option<ExtraBodyConfig>,
+    extra_body: Option<ExtraBodyConfig>,
     #[cfg_attr(test, ts(skip))]
-    pub extra_headers: Option<ExtraHeadersConfig>,
+    extra_headers: Option<ExtraHeadersConfig>,
     #[serde(skip)]
     _private: (),
+}
+
+impl ChatCompletionConfig {
+    pub fn weight(&self) -> Option<f64> {
+        self.weight
+    }
+
+    pub fn set_weight(&mut self, weight: Option<f64>) {
+        self.weight = weight;
+    }
+
+    pub fn model(&self) -> &Arc<str> {
+        &self.model
+    }
+
+    pub fn templates(&self) -> &ChatTemplates {
+        &self.templates
+    }
+
+    pub fn temperature(&self) -> Option<f32> {
+        self.temperature
+    }
+
+    pub fn top_p(&self) -> Option<f32> {
+        self.top_p
+    }
+
+    pub fn max_tokens(&self) -> Option<u32> {
+        self.max_tokens
+    }
+
+    pub fn presence_penalty(&self) -> Option<f32> {
+        self.presence_penalty
+    }
+
+    pub fn frequency_penalty(&self) -> Option<f32> {
+        self.frequency_penalty
+    }
+
+    pub fn seed(&self) -> Option<u32> {
+        self.seed
+    }
+
+    pub fn stop_sequences(&self) -> Option<&Vec<String>> {
+        self.stop_sequences.as_ref()
+    }
+
+    pub fn json_mode(&self) -> Option<&JsonMode> {
+        self.json_mode.as_ref()
+    }
+
+    pub fn retries(&self) -> &RetryConfig {
+        &self.retries
+    }
+
+    pub fn extra_body(&self) -> Option<&ExtraBodyConfig> {
+        self.extra_body.as_ref()
+    }
+
+    pub fn extra_headers(&self) -> Option<&ExtraHeadersConfig> {
+        self.extra_headers.as_ref()
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
@@ -278,11 +341,16 @@ pub async fn prepare_model_input(
     }
     Ok(ModelInput {
         system,
-        messages: templated_messages,
+        messages: try_join_all(
+            templated_messages
+                .into_iter()
+                .map(RequestMessage::into_resolved_message),
+        )
+        .await?,
     })
 }
 
-fn prepare_system_message(
+pub fn prepare_system_message(
     system: Option<&Value>,
     templates: &TemplateConfig,
     template: Option<&TemplateWithSchema>,
@@ -328,7 +396,7 @@ fn prepare_system_message(
     }})
 }
 
-async fn prepare_request_message(
+pub async fn prepare_request_message(
     message: &LazyResolvedInputMessage,
     templates_config: &TemplateConfig<'_>,
     chat_templates: &ChatTemplates,
@@ -382,11 +450,8 @@ async fn prepare_request_message(
             LazyResolvedInputMessageContent::ToolResult(tool_result) => {
                 content.push(ContentBlock::ToolResult(tool_result.clone()));
             }
-            LazyResolvedInputMessageContent::File(image) => {
-                // NOTE - since `RequestMessage` currently requires files to be fully resolved,
-                // we need to await the future here. In an upcoming PR, we will introduce a `LazyRequestMessage` type,
-                // which will allow us to just pass along the future without awaiting it.
-                content.push(ContentBlock::File(Box::new(image.clone().await?)));
+            LazyResolvedInputMessageContent::File(file) => {
+                content.push(ContentBlock::File(file.clone()));
             }
             LazyResolvedInputMessageContent::Thought(thought) => {
                 content.push(ContentBlock::Thought(thought.clone()));
@@ -712,12 +777,13 @@ mod tests {
     use uuid::Uuid;
 
     use crate::cache::{CacheEnabledMode, CacheOptions};
-    use crate::config::{SchemaData, UninitializedSchemas};
-    use crate::db::clickhouse::ClickHouseConnectionInfo;
+    use crate::config::{provider_types::ProviderTypesConfig, SchemaData, UninitializedSchemas};
+    use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
     use crate::embeddings::EmbeddingModelTable;
     use crate::endpoints::inference::{
         ChatCompletionInferenceParams, InferenceCredentials, InferenceIds,
     };
+    use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::http::TensorzeroHttpClient;
     use crate::inference::types::TemplateInput;
@@ -731,6 +797,7 @@ mod tests {
         test_system_template_schema, test_user_template_schema,
     };
     use crate::model::{ModelConfig, ModelProvider, ProviderConfig};
+    use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
     use crate::providers::test_helpers::get_temperature_tool_config;
     use crate::tool::{ToolCallConfig, ToolChoice};
@@ -1101,11 +1168,14 @@ mod tests {
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
             otlp_config: &Default::default(),
         };
         let templates = get_test_template_config();
@@ -1152,6 +1222,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".into(),
@@ -1249,6 +1320,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -1287,9 +1359,12 @@ mod tests {
             system: Some(json!({"assistant_name": "R2-D2"})),
             messages,
         };
-        let models = HashMap::from([("invalid_model".into(), text_model_config)])
-            .try_into()
-            .unwrap();
+        let provider_types = ProviderTypesConfig::default();
+        let models = ModelTable::new(
+            HashMap::from([("invalid_model".into(), text_model_config)]),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
+        .unwrap();
         let inference_models = InferenceModels {
             models: &models,
             embedding_models: &EmbeddingModelTable::default(),
@@ -1300,6 +1375,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
@@ -1352,10 +1428,19 @@ mod tests {
         .unwrap();
         let inference_params = InferenceParams::default();
         let models = HashMap::from([("error".into(), error_model_config)]);
-        let models = models.try_into().unwrap();
+        let provider_types = ProviderTypesConfig::default();
+        let models = ModelTable::new(
+            models,
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
+        .unwrap();
         let inference_models = InferenceModels {
             models: &models,
-            embedding_models: &EmbeddingModelTable::try_from(HashMap::new()).unwrap(),
+            embedding_models: &EmbeddingModelTable::new(
+                HashMap::new(),
+                ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            )
+            .unwrap(),
         };
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -1363,6 +1448,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
@@ -1445,9 +1531,12 @@ mod tests {
             )]),
             timeouts: Default::default(),
         };
-        let models = HashMap::from([("good".into(), text_model_config)])
-            .try_into()
-            .unwrap();
+        let provider_types = ProviderTypesConfig::default();
+        let models = ModelTable::new(
+            HashMap::from([("good".into(), text_model_config)]),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
+        .unwrap();
         let inference_models = InferenceModels {
             models: &models,
             embedding_models: &EmbeddingModelTable::default(),
@@ -1458,6 +1547,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
@@ -1523,9 +1613,12 @@ mod tests {
                 content: vec!["What is the weather in Brooklyn?".to_string().into()],
             }],
         };
-        let models = HashMap::from([("tool".into(), tool_model_config)])
-            .try_into()
-            .unwrap();
+        let provider_types = ProviderTypesConfig::default();
+        let models = ModelTable::new(
+            HashMap::from([("tool".into(), tool_model_config)]),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
+        .unwrap();
         let inference_models = InferenceModels {
             models: &models,
             embedding_models: &EmbeddingModelTable::default(),
@@ -1537,6 +1630,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
@@ -1624,7 +1718,8 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -1632,6 +1727,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
@@ -1687,9 +1783,12 @@ mod tests {
         };
         // Test case 6: JSON output was supposed to happen and it did
         let inference_params = InferenceParams::default();
-        let models = HashMap::from([("json".into(), json_model_config)])
-            .try_into()
-            .unwrap();
+        let provider_types = ProviderTypesConfig::default();
+        let models = ModelTable::new(
+            HashMap::from([("json".into(), json_model_config)]),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
+        .unwrap();
         let inference_models = InferenceModels {
             models: &models,
             embedding_models: &EmbeddingModelTable::default(),
@@ -1704,6 +1803,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -1800,7 +1900,8 @@ mod tests {
             output_schema: hardcoded_output_schema,
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         let inference_params = InferenceParams {
             chat_completion: ChatCompletionInferenceParams {
@@ -1834,6 +1935,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: Some(&output_schema),
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -1930,7 +2032,8 @@ mod tests {
             output_schema: hardcoded_output_schema,
             implicit_tool_call_config,
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         let inference_params = InferenceParams::default();
         // Will dynamically set "response" instead of "answer"
@@ -1953,6 +2056,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: Some(&output_schema),
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -2047,11 +2151,14 @@ mod tests {
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
             otlp_config: &Default::default(),
         };
         let templates = Box::leak(Box::new(get_test_template_config()));
@@ -2071,6 +2178,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })));
 
         let system_template = get_system_template();
@@ -2156,12 +2264,21 @@ mod tests {
             )
             .unwrap(),
         ));
+        let provider_types = Box::leak(Box::new(ProviderTypesConfig::default()));
         let models = Box::leak(Box::new(
-            HashMap::from([("error".into(), error_model_config)])
-                .try_into()
-                .unwrap(),
+            ModelTable::new(
+                HashMap::from([("error".into(), error_model_config)]),
+                ProviderTypeDefaultCredentials::new(provider_types).into(),
+            )
+            .unwrap(),
         ));
-        let embedding_models = &EmbeddingModelTable::try_from(HashMap::new()).unwrap();
+        let embedding_models = Box::leak(Box::new(
+            EmbeddingModelTable::new(
+                HashMap::new(),
+                ProviderTypeDefaultCredentials::new(provider_types).into(),
+            )
+            .unwrap(),
+        ));
         let inference_models = InferenceModels {
             models,
             embedding_models,
@@ -2176,6 +2293,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: "",
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -2234,10 +2352,13 @@ mod tests {
             },
         )
         .unwrap();
+        let provider_types = Box::leak(Box::new(ProviderTypesConfig::default()));
         let models = Box::leak(Box::new(
-            HashMap::from([("good".into(), text_model_config)])
-                .try_into()
-                .unwrap(),
+            ModelTable::new(
+                HashMap::from([("good".into(), text_model_config)]),
+                ProviderTypeDefaultCredentials::new(provider_types).into(),
+            )
+            .unwrap(),
         ));
         let inference_models = InferenceModels {
             models,
@@ -2253,6 +2374,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -2344,6 +2466,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         let mut inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
@@ -2356,6 +2479,7 @@ mod tests {
             function_name: "",
             variant_name: "",
             dynamic_output_schema: None,
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -2454,7 +2578,8 @@ mod tests {
                 parallel_tool_calls: None,
             },
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         let inference_config = InferenceConfig {
             ids: InferenceIds {
@@ -2466,6 +2591,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: "",
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -2548,6 +2674,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,

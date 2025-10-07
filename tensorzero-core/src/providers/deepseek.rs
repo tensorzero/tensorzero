@@ -28,7 +28,8 @@ use crate::inference::types::{
     PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
+use crate::providers::openai::OpenAIMessagesConfig;
 use crate::tool::ToolCallChunk;
 
 use super::openai::{
@@ -47,14 +48,10 @@ lazy_static! {
     };
 }
 
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("DEEPSEEK_API_KEY".to_string())
-}
-
 const PROVIDER_NAME: &str = "DeepSeek";
 pub const PROVIDER_TYPE: &str = "deepseek";
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum DeepSeekCredentials {
     Static(SecretString),
     Dynamic(String),
@@ -111,18 +108,11 @@ pub struct DeepSeekProvider {
 }
 
 impl DeepSeekProvider {
-    pub fn new(
-        model_name: String,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or_else(default_api_key_location);
-        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials = DeepSeekCredentials::try_from(generic_credentials)?;
-
-        Ok(DeepSeekProvider {
+    pub fn new(model_name: String, credentials: DeepSeekCredentials) -> Self {
+        DeepSeekProvider {
             model_name,
-            credentials: provider_credentials,
-        })
+            credentials,
+        }
     }
 
     pub fn model_name(&self) -> &str {
@@ -143,8 +133,10 @@ impl InferenceProvider for DeepSeekProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = serde_json::to_value(DeepSeekRequest::new(&self.model_name, request)?)
-            .map_err(|e| {
+        let request_body = serde_json::to_value(
+            DeepSeekRequest::new(&self.model_name, request).await?,
+        )
+        .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
                     "Error serializing DeepSeek request: {}",
@@ -242,8 +234,10 @@ impl InferenceProvider for DeepSeekProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(DeepSeekRequest::new(&self.model_name, request)?)
-            .map_err(|e| {
+        let request_body = serde_json::to_value(
+            DeepSeekRequest::new(&self.model_name, request).await?,
+        )
+        .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
                     "Error serializing DeepSeek request: {}",
@@ -349,7 +343,7 @@ struct DeepSeekRequest<'a> {
 }
 
 impl<'a> DeepSeekRequest<'a> {
-    pub fn new(
+    pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<DeepSeekRequest<'a>, Error> {
@@ -381,7 +375,17 @@ impl<'a> DeepSeekRequest<'a> {
         // NOTE: as mentioned by the DeepSeek team here: https://github.com/deepseek-ai/DeepSeek-R1?tab=readme-ov-file#usage-recommendations
         // the R1 series of models does not perform well with the system prompt. As we move towards first-class support for reasoning models we should check
         // if a model is an R1 model and if so, remove the system prompt from the request and instead put it in the first user message.
-        let messages = prepare_deepseek_messages(request, model)?;
+        let messages = prepare_deepseek_messages(
+            request,
+            model,
+            OpenAIMessagesConfig {
+                json_mode: Some(&request.json_mode),
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: request
+                    .fetch_and_encode_input_files_before_inference,
+            },
+        )
+        .await?;
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);
 
@@ -589,13 +593,14 @@ struct DeepSeekResponse {
     usage: OpenAIUsage,
 }
 
-pub(super) fn prepare_deepseek_messages<'a>(
+pub(super) async fn prepare_deepseek_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
     model_name: &'a str,
+    config: OpenAIMessagesConfig<'a>,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
     for message in &request.messages {
-        messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
+        messages.extend(tensorzero_to_openai_messages(message, config).await?);
     }
     // If this is an R1 model, prepend the system message as the first user message instead of using it as a system message
     if model_name.to_lowercase().contains("reasoner") {
@@ -610,7 +615,10 @@ pub(super) fn prepare_deepseek_messages<'a>(
             );
         }
     } else if let Some(system_msg) = prepare_system_or_developer_message(
-        request.system.as_deref().map(SystemOrDeveloper::System),
+        request
+            .system
+            .as_deref()
+            .map(|m| SystemOrDeveloper::System(Cow::Borrowed(m))),
         Some(&request.json_mode),
         &messages,
     ) {
@@ -772,8 +780,8 @@ mod tests {
     };
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
-    #[test]
-    fn test_deepseek_request_new() {
+    #[tokio::test]
+    async fn test_deepseek_request_new() {
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -797,6 +805,7 @@ mod tests {
         };
 
         let deepseek_request = DeepSeekRequest::new("deepseek-chat", &request_with_tools)
+            .await
             .expect("failed to create Deepseek Request during test");
 
         assert_eq!(deepseek_request.messages.len(), 1);
@@ -843,6 +852,7 @@ mod tests {
         };
 
         let deepseek_request = DeepSeekRequest::new("deepseek-chat", &request_with_tools)
+            .await
             .expect("failed to create Deepseek Request");
 
         assert_eq!(deepseek_request.messages.len(), 2);
@@ -875,7 +885,7 @@ mod tests {
             ..request_with_tools
         };
 
-        let deepseek_request = DeepSeekRequest::new("deepseek-chat", &request_with_tools);
+        let deepseek_request = DeepSeekRequest::new("deepseek-chat", &request_with_tools).await;
         let deepseek_request = deepseek_request.unwrap();
         // We should downgrade the strict JSON mode to normal JSON mode for deepseek
         assert_eq!(
@@ -884,16 +894,16 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_deepseek_api_base() {
+    #[tokio::test]
+    async fn test_deepseek_api_base() {
         assert_eq!(
             DEEPSEEK_DEFAULT_BASE_URL.as_str(),
             "https://api.deepseek.com/v1"
         );
     }
 
-    #[test]
-    fn test_credential_to_deepseek_credentials() {
+    #[tokio::test]
+    async fn test_credential_to_deepseek_credentials() {
         // Test Static credential
         let generic = Credential::Static(SecretString::from("test_key"));
         let creds: DeepSeekCredentials = DeepSeekCredentials::try_from(generic).unwrap();
@@ -918,8 +928,8 @@ mod tests {
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }
-    #[test]
-    fn test_deepseek_response_with_metadata_try_into() {
+    #[tokio::test]
+    async fn test_deepseek_response_with_metadata_try_into() {
         let valid_response = DeepSeekResponse {
             choices: vec![DeepSeekResponseChoice {
                 index: 0,
@@ -964,7 +974,9 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &DeepSeekRequest::new("deepseek-chat", &generic_request).unwrap(),
+                &DeepSeekRequest::new("deepseek-chat", &generic_request)
+                    .await
+                    .unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,
@@ -998,8 +1010,8 @@ mod tests {
         assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
     }
 
-    #[test]
-    fn test_prepare_deepseek_messages() {
+    #[tokio::test]
+    async fn test_prepare_deepseek_messages() {
         // Test case 1: Regular model with system message
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -1023,13 +1035,33 @@ mod tests {
             ..Default::default()
         };
 
-        let messages = prepare_deepseek_messages(&request, "deepseek-chat").unwrap();
+        let messages = prepare_deepseek_messages(
+            &request,
+            "deepseek-chat",
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: false,
+            },
+        )
+        .await
+        .unwrap();
         assert_eq!(messages.len(), 2);
         assert!(matches!(messages[0], OpenAIRequestMessage::System(_)));
         assert!(matches!(messages[1], OpenAIRequestMessage::User(_)));
 
         // Test case 2: Reasoner model with system message
-        let messages = prepare_deepseek_messages(&request, "deepseek-reasoner").unwrap();
+        let messages = prepare_deepseek_messages(
+            &request,
+            "deepseek-reasoner",
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: false,
+            },
+        )
+        .await
+        .unwrap();
         assert_eq!(messages.len(), 1);
         match &messages[0] {
             OpenAIRequestMessage::User(user_msg) => {
@@ -1071,7 +1103,17 @@ mod tests {
             ..Default::default()
         };
 
-        let messages = prepare_deepseek_messages(&request_no_system, "deepseek-chat").unwrap();
+        let messages = prepare_deepseek_messages(
+            &request_no_system,
+            "deepseek-chat",
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: false,
+            },
+        )
+        .await
+        .unwrap();
         assert_eq!(messages.len(), 1);
         assert!(matches!(messages[0], OpenAIRequestMessage::User(_)));
 
@@ -1108,7 +1150,17 @@ mod tests {
             ..Default::default()
         };
 
-        let messages = prepare_deepseek_messages(&request_multiple, "deepseek-chat").unwrap();
+        let messages = prepare_deepseek_messages(
+            &request_multiple,
+            "deepseek-chat",
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: false,
+            },
+        )
+        .await
+        .unwrap();
         assert_eq!(messages.len(), 4);
         assert!(matches!(messages[0], OpenAIRequestMessage::System(_)));
         assert!(matches!(messages[1], OpenAIRequestMessage::User(_)));
@@ -1145,8 +1197,8 @@ mod tests {
         })
     }
 
-    #[test]
-    fn test_coalesce_consecutive_messages() {
+    #[tokio::test]
+    async fn test_coalesce_consecutive_messages() {
         // Create dummy tool calls to test assistant message merging.
         let tool_call1 = OpenAIRequestToolCall {
             id: "tc1".into(),

@@ -16,8 +16,8 @@ use crate::{
     inference::types::{ContentBlock, ContentBlockChatOutput},
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     optimization::{OptimizationJobInfo, OptimizerOutput},
-    providers::openai::{OpenAIRequestToolCall, PROVIDER_TYPE},
-    stored_inference::RenderedSample,
+    providers::openai::{OpenAIMessagesConfig, OpenAIRequestToolCall, PROVIDER_TYPE},
+    stored_inference::LazyRenderedSample,
     tool::ToolCall,
 };
 
@@ -335,9 +335,8 @@ pub struct OpenAISupervisedRow<'a> {
     tools: Vec<OpenAISFTTool<'a>>,
 }
 
-impl<'a> TryFrom<&'a RenderedSample> for OpenAISupervisedRow<'a> {
-    type Error = Error;
-    fn try_from(inference: &'a RenderedSample) -> Result<Self, Self::Error> {
+impl<'a> OpenAISupervisedRow<'a> {
+    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample) -> Result<Self, Error> {
         let (parallel_tool_calls, tools) = match &inference.tool_params {
             Some(tool_params) => (
                 tool_params.parallel_tool_calls.unwrap_or_default(),
@@ -347,14 +346,18 @@ impl<'a> TryFrom<&'a RenderedSample> for OpenAISupervisedRow<'a> {
         };
         let mut messages = prepare_openai_messages(
             inference
-                .input
-                .system
+                .system_input
                 .as_deref()
-                .map(super::SystemOrDeveloper::System),
-            &inference.input.messages,
-            None,
-            PROVIDER_TYPE,
-        )?;
+                .map(|m| super::SystemOrDeveloper::System(Cow::Borrowed(m))),
+            &inference.messages,
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
+                fetch_and_encode_input_files_before_inference: true,
+            },
+        )
+        .await?;
         let Some(output) = &inference.output else {
             return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
                 message: "No output in inference".to_string(),
@@ -369,8 +372,14 @@ impl<'a> TryFrom<&'a RenderedSample> for OpenAISupervisedRow<'a> {
             output.iter().map(|c| c.clone().into()).collect::<Vec<_>>();
         let final_assistant_message = tensorzero_to_openai_assistant_message(
             Cow::Owned(output_content_blocks),
-            PROVIDER_TYPE,
-        )?;
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
+                fetch_and_encode_input_files_before_inference: true,
+            },
+        )
+        .await?;
         messages.push(final_assistant_message);
         // TODO: add a test that makes sure the last message is from the assistant
         Ok(Self {
@@ -400,9 +409,8 @@ pub struct OpenAIReinforcementRow<'a> {
     parallel_tool_calls: bool,
 }
 
-impl<'a> TryFrom<&'a RenderedSample> for OpenAIReinforcementRow<'a> {
-    type Error = Error;
-    fn try_from(inference: &'a RenderedSample) -> Result<Self, Self::Error> {
+impl<'a> OpenAIReinforcementRow<'a> {
+    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample) -> Result<Self, Error> {
         let (parallel_tool_calls, tools) = match &inference.tool_params {
             Some(tool_params) => (
                 tool_params.parallel_tool_calls.unwrap_or_default(),
@@ -412,14 +420,18 @@ impl<'a> TryFrom<&'a RenderedSample> for OpenAIReinforcementRow<'a> {
         };
         let messages = prepare_openai_messages(
             inference
-                .input
-                .system
+                .system_input
                 .as_deref()
-                .map(super::SystemOrDeveloper::Developer),
-            &inference.input.messages,
-            None,
-            PROVIDER_TYPE,
-        )?;
+                .map(|m| super::SystemOrDeveloper::Developer(Cow::Borrowed(m))),
+            &inference.messages,
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                // For now, this isn't configurable in RFT (we should never need to resolve a file URL here)
+                fetch_and_encode_input_files_before_inference: true,
+            },
+        )
+        .await?;
         let Some(output) = &inference.output else {
             return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
                 message: "No output in inference".to_string(),
@@ -550,6 +562,7 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizat
                     model_name: model_name.clone(),
                     api_base: None,
                     api_key_location: None,
+                    api_type: Default::default(),
                 },
                 extra_headers: None,
                 extra_body: None,
@@ -590,18 +603,18 @@ pub enum OpenAIFineTuningJobStatus {
 mod tests {
     use crate::{
         inference::types::{
-            ContentBlockChatOutput, ModelInput, RequestMessage, Role, StoredInput,
-            StoredInputMessage, StoredInputMessageContent, Text,
+            ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
+            StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
         },
         providers::openai::OpenAIContentBlock,
-        stored_inference::StoredOutput,
+        stored_inference::{RenderedSample, StoredOutput},
     };
     use serde_json::json;
 
     use super::*;
 
-    #[test]
-    fn test_convert_to_sft_row() {
+    #[tokio::test]
+    async fn test_convert_to_sft_row() {
         let output = Some(vec![ContentBlockChatOutput::Text(Text {
             text: "The capital of France is Paris.".to_string(),
         })]);
@@ -609,9 +622,9 @@ mod tests {
             function_name: "test".to_string(),
             input: ModelInput {
                 system: Some("You are a helpful assistant named Dr. M.M. Patel.".to_string()),
-                messages: vec![RequestMessage {
+                messages: vec![ResolvedRequestMessage {
                     role: Role::User,
-                    content: vec![ContentBlock::Text(Text {
+                    content: vec![ResolvedContentBlock::Text(Text {
                         text: "What is the capital of France?".to_string(),
                     })],
                 }],
@@ -634,7 +647,10 @@ mod tests {
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
         };
-        let row = OpenAISupervisedRow::try_from(&inference).unwrap();
+        let lazy_inference = inference.into_lazy_rendered_sample();
+        let row = OpenAISupervisedRow::from_rendered_sample(&lazy_inference)
+            .await
+            .unwrap();
         assert_eq!(row.messages.len(), 3);
         let OpenAIRequestMessage::System(system_message) = &row.messages[0] else {
             panic!("First message should be a system message");
@@ -663,17 +679,17 @@ mod tests {
         assert_eq!(row.tools.len(), 0);
     }
 
-    #[test]
-    fn test_convert_to_rft_row() {
+    #[tokio::test]
+    async fn test_convert_to_rft_row() {
         use crate::stored_inference::StoredOutput;
 
         let inference = RenderedSample {
             function_name: "test".to_string(),
             input: ModelInput {
                 system: Some("You are a helpful assistant named Dr. M.M. Patel.".to_string()),
-                messages: vec![RequestMessage {
+                messages: vec![ResolvedRequestMessage {
                     role: Role::User,
-                    content: vec![ContentBlock::Text(Text {
+                    content: vec![ResolvedContentBlock::Text(Text {
                         text: "What is the capital of France?".to_string(),
                     })],
                 }],
@@ -702,7 +718,10 @@ mod tests {
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
         };
-        let row = OpenAIReinforcementRow::try_from(&inference).unwrap();
+        let lazy_inference = inference.into_lazy_rendered_sample();
+        let row = OpenAIReinforcementRow::from_rendered_sample(&lazy_inference)
+            .await
+            .unwrap();
         assert_eq!(row.messages.len(), 2); // System and User messages (no assistant message added)
         let OpenAIRequestMessage::Developer(system_message) = &row.messages[0] else {
             panic!("First message should be a developer message");
@@ -729,8 +748,8 @@ mod tests {
         assert_eq!(row.tools.len(), 0);
     }
 
-    #[test]
-    fn test_convert_to_rft_row_with_tool_calls() {
+    #[tokio::test]
+    async fn test_convert_to_rft_row_with_tool_calls() {
         use crate::stored_inference::StoredOutput;
         use crate::tool::ToolCallOutput;
 
@@ -738,9 +757,9 @@ mod tests {
             function_name: "test".to_string(),
             input: ModelInput {
                 system: Some("You are a helpful assistant.".to_string()),
-                messages: vec![RequestMessage {
+                messages: vec![ResolvedRequestMessage {
                     role: Role::User,
-                    content: vec![ContentBlock::Text(Text {
+                    content: vec![ResolvedContentBlock::Text(Text {
                         text: "What's the weather like?".to_string(),
                     })],
                 }],
@@ -785,7 +804,10 @@ mod tests {
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
         };
-        let row = OpenAIReinforcementRow::try_from(&inference).unwrap();
+        let lazy_inference = inference.into_lazy_rendered_sample();
+        let row = OpenAIReinforcementRow::from_rendered_sample(&lazy_inference)
+            .await
+            .unwrap();
 
         // Check the output structure
         assert_eq!(
@@ -811,7 +833,7 @@ mod tests {
         let succeeded_model = json!({
             "id": "ftjob-123",
             "status": "succeeded",
-            "fine_tuned_model": "ft:gpt-3.5-turbo:my-org:custom_suffix:id",
+            "fine_tuned_model": "ft:gpt-4.1-mini:my-org:custom_suffix:id",
             "created_at": 1620000000,
             "metadata": {},
         });
@@ -829,7 +851,7 @@ mod tests {
             "id": "ftjob-456",
             "status": "succeeded",
             "result_files": ["file-abc"],
-            "fine_tuned_model": "ft:gpt-3.5-turbo:my-org:custom_suffix:id",
+            "fine_tuned_model": "ft:gpt-4.1-mini:my-org:custom_suffix:id",
             "created_at": 1620000000,
             "metadata": {},
         });

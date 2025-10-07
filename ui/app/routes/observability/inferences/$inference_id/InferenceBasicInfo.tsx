@@ -18,6 +18,7 @@ import {
   Output,
   Cached,
 } from "~/components/icons/Icons";
+import { toFunctionUrl, toVariantUrl, toEpisodeUrl } from "~/utils/urls";
 import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
 import { getFunctionTypeIcon } from "~/utils/icon";
 
@@ -48,7 +49,10 @@ export default function BasicInfo({
 }: BasicInfoProps) {
   const functionConfig = useFunctionConfig(inference.function_name);
   const variantType =
-    functionConfig?.variants[inference.variant_name]?.inner.type;
+    functionConfig?.variants[inference.variant_name]?.inner.type ??
+    (inference.function_name === "tensorzero::default"
+      ? "chat_completion"
+      : "unknown");
 
   // Create timestamp tooltip
   const timestampTooltip = createTimestampTooltip(inference.timestamp);
@@ -76,7 +80,7 @@ export default function BasicInfo({
             iconBg={functionIconConfig.iconBg}
             label={inference.function_name}
             secondaryLabel={`· ${inference.function_type}`}
-            link={`/observability/functions/${inference.function_name}`}
+            link={toFunctionUrl(inference.function_name)}
             font="mono"
           />
         </BasicInfoItemContent>
@@ -88,7 +92,7 @@ export default function BasicInfo({
           <Chip
             label={inference.variant_name}
             secondaryLabel={`· ${variantType}`}
-            link={`/observability/functions/${inference.function_name}/variants/${inference.variant_name}`}
+            link={toVariantUrl(inference.function_name, inference.variant_name)}
             font="mono"
           />
         </BasicInfoItemContent>
@@ -99,7 +103,7 @@ export default function BasicInfo({
         <BasicInfoItemContent>
           <Chip
             label={inference.episode_id}
-            link={`/observability/episodes/${inference.episode_id}`}
+            link={toEpisodeUrl(inference.episode_id)}
             font="mono"
           />
         </BasicInfoItemContent>
