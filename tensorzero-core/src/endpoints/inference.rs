@@ -26,9 +26,10 @@ use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedV
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
+use crate::experimentation::{ExperimentationConfig, VariantSampler};
 use crate::function::FunctionConfig;
-use crate::function::{sample_variant, FunctionConfigChat};
+use crate::function::FunctionConfigChat;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
@@ -287,7 +288,7 @@ pub async fn inference(
     let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
     let mut templates = Cow::Borrowed(&config.templates);
 
-    prepare_candidate_variants(
+    let needs_sampling = prepare_candidate_variants(
         &mut candidate_variants,
         &mut params.tags,
         params.variant_name.as_deref(),
@@ -341,10 +342,64 @@ pub async fn inference(
         client: http_client,
         object_store_info: &config.object_store_info,
     })?;
+
+    // If we don't need sampling (pinned or dynamic variant), directly infer with the single variant
+    if !needs_sampling {
+        // Extract the single variant (should be exactly one)
+        let (variant_name, variant) = candidate_variants
+            .into_iter()
+            .next()
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::Inference {
+                    message: format!("No candidate variants available for direct inference. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                })
+            })?;
+
+        return infer_variant(InferVariantArgs {
+            variant_name,
+            variant,
+            function: &function,
+            function_name: &function_name,
+            inference_id,
+            episode_id,
+            dryrun,
+            start_time,
+            stream,
+            resolved_input: &resolved_input,
+            inference_models: &inference_models,
+            inference_clients: &inference_clients,
+            inference_params: params.params.clone(),
+            templates,
+            tool_config: &tool_config,
+            output_schema: &output_schema,
+            config: &config,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            tags: &params.tags,
+            extra_body: &params.extra_body,
+            extra_headers: &params.extra_headers,
+            include_original_response: params.include_original_response,
+        })
+        .await;
+    }
+
     // Keep sampling variants until one succeeds
     while !candidate_variants.is_empty() {
-        let (variant_name, variant) =
-            sample_variant(&mut candidate_variants, &function_name, &episode_id)?;
+        let result = function
+            .experimentation()
+            .sample(&function_name, episode_id, &mut candidate_variants)
+            .await;
+        let (variant_name, variant) = match result {
+            Ok((variant_name, variant)) => (variant_name, variant),
+            Err(e) => {
+                if variant_errors.is_empty() {
+                    return Err(e);
+                }
+                // If the sampling fails we break out of the loop and return the AllVariantsExhausted error
+                // It is more informative to the caller that variants have failed than that there's some internal error with the sampling strategy.
+                // As we continue work on experimentation we will make sure that the sampler only errors if there is no way to provide a valid variant.
+                break;
+            }
+        };
 
         let result = infer_variant(InferVariantArgs {
             variant_name: variant_name.clone(),
@@ -648,6 +703,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                     parallel_tool_calls: None,
                     description: None,
                     all_explicit_templates_names: HashSet::new(),
+                    experimentation: ExperimentationConfig::default(),
                 })),
                 DEFAULT_FUNCTION_NAME.to_string(),
             ))
@@ -1276,6 +1332,15 @@ impl ChatCompletionInferenceParams {
     }
 }
 
+/// Prepares the candidate variants map using inference parameters prior to sampling
+/// This function handles 2 cases:
+/// 1. If a variant is pinned, only that variant should be attempted
+/// 2. If a dynamic variant is configured, only that variant should be attempted
+///
+/// It also errors if both are configured or there is a failure to initialize the dynamic variant
+///
+/// Returns `Ok(true)` if experimentation/sampling is needed (multiple candidate variants)
+/// Returns `Ok(false)` if direct inference is needed (single predetermined variant - no sampling)
 fn prepare_candidate_variants(
     candidate_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     tags: &mut HashMap<String, String>,
@@ -1284,8 +1349,8 @@ fn prepare_candidate_variants(
     template_config: &mut Cow<'_, TemplateConfig>,
     function: &FunctionConfig,
     function_name: String,
-) -> Result<(), Error> {
-    match (pinned_variant_name, dynamic_variant_config) {
+) -> Result<bool, Error> {
+    let needs_sampling = match (pinned_variant_name, dynamic_variant_config) {
         // If a variant is pinned, only that variant should be attempted
         (Some(variant_name), None) => {
             candidate_variants.retain(|k, _| k == variant_name);
@@ -1301,6 +1366,7 @@ fn prepare_candidate_variants(
                 "tensorzero::variant_pinned".to_string(),
                 variant_name.to_string(),
             );
+            false // Direct inference - no sampling needed
         }
         (None, Some(dynamic_variant_config)) => {
             // Replace the variant config with just the dynamic variant
@@ -1330,23 +1396,19 @@ fn prepare_candidate_variants(
                 "tensorzero::dynamic_variant".to_string(),
                 Arc::new(candidate_variant_info),
             );
+            false // Direct inference - no sampling needed
         }
-        (None, None) => {
-            // Remove all zero-weight variants - these can only be used if explicitly pinned above
-            candidate_variants.retain(|_, variant| {
-                // Retain 'None' and positive-weight variants, discarding zero-weight variants
-                variant.inner.weight().is_none_or(|w| w > 0.0)
-            });
-        }
-        _ => {
+        // If neither variant_name nor internal_dynamic_variant_config is set, we need sampling
+        (None, None) => true,
+        (Some(_), Some(_)) => {
             return Err(ErrorDetails::InvalidRequest {
                 message: "`variant_name` and `internal_dynamic_variant_config` cannot both be set."
                     .to_string(),
             }
             .into())
         }
-    }
-    Ok(())
+    };
+    Ok(needs_sampling)
 }
 
 #[cfg(test)]

@@ -889,6 +889,7 @@ mod tests {
     use std::sync::Arc;
 
     use crate::config::{Config, MetricConfig, MetricConfigOptimize, SchemaData};
+    use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::testing::get_unit_test_gateway_handle;
@@ -1302,6 +1303,7 @@ mod tests {
                 parallel_tool_calls: None,
                 description: None,
                 all_explicit_templates_names: HashSet::new(),
+                experimentation: ExperimentationConfig::default(),
             })));
 
         // Case 1: a string passed to a chat function
@@ -1429,6 +1431,7 @@ mod tests {
             implicit_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })));
 
         // Case 5: a JSON function with correct output

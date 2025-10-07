@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::endpoints::openai_compatible::RouterExt;
+use crate::experimentation::VariantSampler;
 use axum::extract::{rejection::JsonRejection, DefaultBodyLimit, FromRequest, Json, Request};
 use axum::Router;
 use serde::de::DeserializeOwned;
@@ -110,12 +111,13 @@ impl GatewayHandle {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
         let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
         let http_client = TensorzeroHttpClient::new()?;
-        Ok(Self::new_with_database_and_http_client(
+        Self::new_with_database_and_http_client(
             config,
             clickhouse_connection_info,
             postgres_connection_info,
             http_client,
-        ))
+        )
+        .await
     }
 
     /// # Panics
@@ -127,26 +129,7 @@ impl GatewayHandle {
             ClickHouseConnectionInfo::new_mock(test_options.clickhouse_healthy);
         let postgres_connection_info =
             PostgresConnectionInfo::new_mock(test_options.postgres_healthy);
-        Self::new_with_database_and_http_client(
-            config,
-            clickhouse_connection_info,
-            postgres_connection_info,
-            http_client,
-        )
-    }
-
-    pub fn new_with_database_and_http_client(
-        config: Arc<Config>,
-        clickhouse_connection_info: ClickHouseConnectionInfo,
-        postgres_connection_info: PostgresConnectionInfo,
-        http_client: TensorzeroHttpClient,
-    ) -> Self {
         let cancel_token = CancellationToken::new();
-        setup_howdy(
-            &config,
-            clickhouse_connection_info.clone(),
-            cancel_token.clone(),
-        );
         Self {
             app_state: AppStateData {
                 config,
@@ -158,6 +141,53 @@ impl GatewayHandle {
             cancel_token,
             _private: (),
         }
+    }
+
+    #[cfg(feature = "pyo3")]
+    pub fn new_dummy(http_client: TensorzeroHttpClient) -> Self {
+        let config = Arc::new(Config::default());
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_mock(true);
+        let postgres_connection_info = PostgresConnectionInfo::new_mock(true);
+        let cancel_token = CancellationToken::new();
+        Self {
+            app_state: AppStateData {
+                config,
+                http_client,
+                clickhouse_connection_info,
+                postgres_connection_info,
+                _private: (),
+            },
+            cancel_token,
+            _private: (),
+        }
+    }
+
+    pub async fn new_with_database_and_http_client(
+        config: Arc<Config>,
+        clickhouse_connection_info: ClickHouseConnectionInfo,
+        postgres_connection_info: PostgresConnectionInfo,
+        http_client: TensorzeroHttpClient,
+    ) -> Result<Self, Error> {
+        let cancel_token = CancellationToken::new();
+        setup_howdy(
+            &config,
+            clickhouse_connection_info.clone(),
+            cancel_token.clone(),
+        );
+        for function_config in config.functions.values() {
+            function_config.experimentation().setup().await?;
+        }
+        Ok(Self {
+            app_state: AppStateData {
+                config,
+                http_client,
+                clickhouse_connection_info,
+                postgres_connection_info,
+                _private: (),
+            },
+            cancel_token,
+            _private: (),
+        })
     }
 }
 

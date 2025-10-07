@@ -133,7 +133,10 @@ mod tests {
 
     use serde_json::json;
     use tensorzero::Tool;
-    use tensorzero_core::{config::SchemaData, function::FunctionConfigChat, tool::ToolChoice};
+    use tensorzero_core::{
+        config::SchemaData, experimentation::ExperimentationConfig, function::FunctionConfigChat,
+        tool::ToolChoice,
+    };
 
     use super::*;
 
@@ -158,6 +161,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::legacy_from_variants_map(&HashMap::new()),
         });
         let tool_params_args = get_tool_params_args(&tool_database_insert, &function_config).await;
         assert_eq!(
@@ -194,6 +198,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::legacy_from_variants_map(&HashMap::new()),
         });
         let tool_params_args = get_tool_params_args(&tool_database_insert, &function_config).await;
         assert_eq!(
