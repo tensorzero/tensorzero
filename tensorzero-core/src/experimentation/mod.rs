@@ -36,15 +36,19 @@ pub enum UninitializedExperimentationConfig {
 }
 
 impl UninitializedExperimentationConfig {
-    pub fn load(self, variants: &HashMap<String, Arc<VariantInfo>>) -> ExperimentationConfig {
+    pub fn load(
+        self,
+        variants: &HashMap<String, Arc<VariantInfo>>,
+        metrics: &HashMap<String, crate::config::MetricConfig>,
+    ) -> Result<ExperimentationConfig, Error> {
         match self {
             UninitializedExperimentationConfig::StaticWeights(config) => {
-                ExperimentationConfig::StaticWeights(config)
+                Ok(ExperimentationConfig::StaticWeights(config))
             }
-            UninitializedExperimentationConfig::Uniform => ExperimentationConfig::Uniform,
-            UninitializedExperimentationConfig::TrackAndStop(config) => {
-                ExperimentationConfig::TrackAndStop(config.load(variants))
-            }
+            UninitializedExperimentationConfig::Uniform => Ok(ExperimentationConfig::Uniform),
+            UninitializedExperimentationConfig::TrackAndStop(config) => Ok(
+                ExperimentationConfig::TrackAndStop(config.load(variants, metrics)?),
+            ),
         }
     }
 }

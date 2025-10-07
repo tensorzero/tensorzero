@@ -117,8 +117,73 @@ pub struct UninitializedTrackAndStopConfig {
 }
 
 impl UninitializedTrackAndStopConfig {
-    pub fn load(self, variants: &HashMap<String, Arc<VariantInfo>>) -> TrackAndStopConfig {
-        TrackAndStopConfig {
+    pub fn load(
+        self,
+        variants: &HashMap<String, Arc<VariantInfo>>,
+        metrics: &HashMap<String, crate::config::MetricConfig>,
+    ) -> Result<TrackAndStopConfig, Error> {
+        // Validate metric exists
+        if !metrics.contains_key(&self.metric) {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Track-and-Stop experiment references unknown metric '{}'. Available metrics: {:?}",
+                    self.metric,
+                    metrics.keys().collect::<Vec<_>>()
+                ),
+            }));
+        }
+
+        // Validate candidate_variants are a subset of available variants
+        for variant in &self.candidate_variants {
+            if !variants.contains_key(variant) {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Track-and-Stop candidate_variants includes unknown variant '{}'. Available variants: {:?}",
+                        variant,
+                        variants.keys().collect::<Vec<_>>()
+                    ),
+                }));
+            }
+        }
+
+        // Validate fallback_variants are a subset of available variants
+        for variant in &self.fallback_variants {
+            if !variants.contains_key(variant) {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Track-and-Stop fallback_variants includes unknown variant '{}'. Available variants: {:?}",
+                        variant,
+                        variants.keys().collect::<Vec<_>>()
+                    ),
+                }));
+            }
+        }
+
+        // Validate min_samples_per_variant >= 1
+        if self.min_samples_per_variant < 1 {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Track-and-Stop min_samples_per_variant must be >= 1, got {}",
+                    self.min_samples_per_variant
+                ),
+            }));
+        }
+
+        // Validate delta is in (0, 1)
+        if self.delta <= 0.0 || self.delta >= 1.0 {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!("Track-and-Stop delta must be in (0, 1), got {}", self.delta),
+            }));
+        }
+
+        // Validate epsilon >= 0
+        if self.epsilon < 0.0 {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!("Track-and-Stop epsilon must be >= 0, got {}", self.epsilon),
+            }));
+        }
+
+        Ok(TrackAndStopConfig {
             metric: self.metric,
             candidate_variants: self.candidate_variants,
             fallback_variants: self.fallback_variants,
@@ -128,7 +193,7 @@ impl UninitializedTrackAndStopConfig {
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::nursery_from_variants(variants.keys().cloned().collect()),
             ))),
-        }
+        })
     }
 }
 
