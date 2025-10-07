@@ -32,11 +32,8 @@ mod check_stopping;
 mod error;
 mod estimate_optimal_probabilities;
 
-const SLEEP_DURATION: Duration = Duration::from_secs(15 * 60);
-
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct TrackAndStopConfig {
     // TODO: validate all of these fields
     metric: String,
@@ -45,6 +42,8 @@ pub struct TrackAndStopConfig {
     min_samples_per_variant: u64,
     delta: f64,
     epsilon: f64,
+    #[ts(skip)]
+    update_period: Duration,
     #[serde(skip)]
     state: Arc<ArcSwap<TrackAndStopState>>,
 }
@@ -114,6 +113,7 @@ pub struct UninitializedTrackAndStopConfig {
     min_samples_per_variant: u64,
     delta: f64,
     epsilon: f64,
+    update_period_s: u64,
 }
 
 impl UninitializedTrackAndStopConfig {
@@ -190,6 +190,7 @@ impl UninitializedTrackAndStopConfig {
             min_samples_per_variant: self.min_samples_per_variant,
             delta: self.delta,
             epsilon: self.epsilon,
+            update_period: Duration::from_secs(self.update_period_s),
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::nursery_from_variants(variants.keys().cloned().collect()),
             ))),
@@ -211,7 +212,7 @@ impl VariantSampler for TrackAndStopConfig {
             metric_name: self.metric.clone(),
             function_name: function_name.to_string(),
             sampling_probabilities: self.state.clone(),
-            sleep_duration: SLEEP_DURATION,
+            update_period: self.update_period,
             min_samples_per_variant: self.min_samples_per_variant,
             epsilon: self.epsilon,
             delta: self.delta,
@@ -276,7 +277,7 @@ struct ProbabilityUpdateTaskArgs {
     metric_name: String,
     function_name: String,
     sampling_probabilities: Arc<ArcSwap<TrackAndStopState>>,
-    sleep_duration: Duration,
+    update_period: Duration,
     min_samples_per_variant: u64,
     epsilon: f64,
     delta: f64,
@@ -289,7 +290,7 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
         metric_name,
         function_name,
         sampling_probabilities,
-        sleep_duration,
+        update_period,
         min_samples_per_variant,
         epsilon,
         delta,
@@ -315,7 +316,7 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
             }
         }
 
-        tokio::time::sleep(sleep_duration).await;
+        tokio::time::sleep(update_period).await;
     }
 }
 
