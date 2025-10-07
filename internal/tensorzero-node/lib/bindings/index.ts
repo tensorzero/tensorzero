@@ -171,6 +171,7 @@ export * from "./SGLangDefaults";
 export * from "./SGLangProvider";
 export * from "./SGLangProviderTypeConfig";
 export * from "./SchemaData";
+export * from "./SchemaWithMetadata";
 export * from "./StaleDatasetResponse";
 export * from "./StaticEvaluationConfig";
 export * from "./StaticJSONSchema";
