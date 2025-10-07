@@ -4,12 +4,4 @@ import type { SchemaData } from "./SchemaData";
 import type { ToolChoice } from "./ToolChoice";
 import type { VariantInfo } from "./VariantInfo";
 
-export type FunctionConfigChat = {
-  variants: { [key in string]?: VariantInfo };
-  schemas: SchemaData;
-  tools: Array<string>;
-  tool_choice: ToolChoice;
-  parallel_tool_calls: boolean | null;
-  description: string | null;
-  experimentation: ExperimentationConfig;
-};
+export type FunctionConfigChat = { variants: { [key in string]?: VariantInfo }, schemas: SchemaData, tools: Array<string>, tool_choice: ToolChoice, parallel_tool_calls: boolean | null, description: string | null, experimentation: ExperimentationConfig, };
