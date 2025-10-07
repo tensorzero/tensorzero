@@ -686,14 +686,14 @@ test("should be able to delete an existing system message", async ({
   await expect(page.getByText("system", { exact: true })).not.toBeVisible();
 });
 
-test("should be able to rename a datapoint", async ({
-  page,
-}) => {
+test("should be able to rename a datapoint", async ({ page }) => {
   await page.goto(
     "/datasets/foo/datapoint/0196374b-d575-77b3-ac22-91806c67745c",
   );
   await page.waitForLoadState("networkidle");
-  await expect(page.getByRole("button", { name: "Rename datapoint" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Rename datapoint" }),
+  ).toBeVisible();
 
   // Click on the Add to dataset button
   await page.getByRole("button", { name: "Rename datapoint" }).click();
@@ -712,15 +712,14 @@ test("should be able to rename a datapoint", async ({
   ).toBeVisible();
 });
 
-
-test("should be able to cancel renaming a datapoint", async ({
-  page,
-}) => {
+test("should be able to cancel renaming a datapoint", async ({ page }) => {
   await page.goto(
     "/datasets/foo/datapoint/0196374b-d575-77b3-ac22-91806c67745c",
   );
   await page.waitForLoadState("networkidle");
-  await expect(page.getByRole("button", { name: "Rename datapoint" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Rename datapoint" }),
+  ).toBeVisible();
 
   // Click on the Add to dataset button
   await page.getByRole("button", { name: "Rename datapoint" }).click();
