@@ -739,6 +739,7 @@ function variantInfoToUninitializedVariantInfo(
         seed: inner.seed,
         json_mode: inner.json_mode,
         retries: inner.retries,
+        max_distance: inner.max_distance,
       };
 
     case "mixture_of_n": {
