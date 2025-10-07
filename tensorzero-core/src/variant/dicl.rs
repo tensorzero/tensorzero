@@ -909,6 +909,7 @@ mod tests {
     use super::*;
     use crate::config::SchemaData;
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceIds};
+    use crate::experimentation::ExperimentationConfig;
     use crate::inference::types::resolved_input::LazyResolvedInputMessage;
     use crate::inference::types::stored_input::StoredFile;
     use crate::inference::types::StoredInputMessage;
@@ -1373,6 +1374,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: Default::default(),
+            experimentation: ExperimentationConfig::default(),
         });
 
         // Call prepare_request with EMPTY examples
@@ -1495,6 +1497,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: Default::default(),
+            experimentation: ExperimentationConfig::default(),
         });
 
         // Call prepare_request with examples
