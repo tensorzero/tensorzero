@@ -118,6 +118,12 @@ impl EvaluationJobHandler {
             Python::attach(|py| compute_evaluation_stats(py, infos, errors, evaluation_config))
         })
     }
+
+    fn __repr__(&self) -> PyResult<String> {
+        serde_json::to_string_pretty(&self.run_info).map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!("Serialization error: {e}"))
+        })
+    }
 }
 
 impl std::fmt::Display for EvaluationJobHandler {
@@ -195,6 +201,12 @@ impl AsyncEvaluationJobHandler {
             let infos = evaluation_infos.lock().await.clone();
             let errors = evaluation_errors.lock().await.clone();
             Python::attach(|py| compute_evaluation_stats(py, infos, errors, evaluation_config))
+        })
+    }
+
+    fn __repr__(&self) -> PyResult<String> {
+        serde_json::to_string_pretty(&self.run_info).map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!("Serialization error: {e}"))
         })
     }
 }

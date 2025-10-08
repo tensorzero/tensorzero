@@ -88,6 +88,8 @@ class EvaluationJobHandler:
         """
         ...
 
+    def __repr__(self) -> str: ...
+
 @final
 class AsyncEvaluationJobHandler:
     """
@@ -128,6 +130,8 @@ class AsyncEvaluationJobHandler:
         Returns dict mapping evaluator names to {"mean": float, "stderr": float}.
         """
         ...
+
+    def __repr__(self) -> str: ...
 
 @final
 class StoredInference:
