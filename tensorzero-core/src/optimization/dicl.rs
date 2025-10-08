@@ -839,7 +839,7 @@ mod tests {
             let embedding_model_config = EmbeddingModelConfig {
                 routing: vec![Arc::from("dummy")],
                 providers,
-                //timeouts: TimeoutsConfig::default(),
+                timeouts: TimeoutsConfig::default()
                 timeout_ms: None,
                 retries: RetryConfig::default(),
             };
