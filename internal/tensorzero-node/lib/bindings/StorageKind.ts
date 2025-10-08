@@ -5,13 +5,4 @@
  * Currently, we only support S3-compatible object storage and local filesystem storage
  * We test against Amazon S3, GCS, Cloudflare R2, and Minio
  */
-export type StorageKind =
-  | {
-      type: "s3_compatible";
-      bucket_name: string | null;
-      region: string | null;
-      endpoint: string | null;
-      allow_http: boolean | null;
-    }
-  | { type: "filesystem"; path: string }
-  | { type: "disabled" };
+export type StorageKind = { "type": "s3_compatible", bucket_name: string | null, region: string | null, endpoint: string | null, allow_http: boolean | null, } | { "type": "filesystem", path: string, } | { "type": "disabled" };

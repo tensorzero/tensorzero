@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fmt;
 
 use futures::future::{join_all, try_join_all};
+use futures::StreamExt;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -399,7 +400,7 @@ fn make_stream_from_non_stream(
             finish_reason: json.finish_reason,
         })),
     };
-    Ok(Box::pin(tokio_stream::once(chunk)))
+    Ok(StreamExt::peekable(Box::pin(tokio_stream::once(chunk))))
 }
 
 impl fmt::Debug for InferenceOrStreamResult {
@@ -890,6 +891,7 @@ mod tests {
         config::{provider_types::ProviderTypesConfig, SchemaData, UninitializedSchemas},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
+        experimentation::ExperimentationConfig,
         function::{FunctionConfigChat, FunctionConfigJson},
         http::TensorzeroHttpClient,
         inference::types::{
@@ -1277,6 +1279,7 @@ mod tests {
             implicit_tool_call_config: ToolCallConfig::default(),
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
@@ -1581,6 +1584,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
 
         let InferenceOrStreamResult::NonStream(result) = mixture_of_n_variant

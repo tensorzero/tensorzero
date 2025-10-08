@@ -768,7 +768,7 @@ async fn infer_model_request_stream<'request>(
     let config_type = function.config_type();
     let stream =
         stream.map(move |chunk| chunk.map(|chunk| InferenceResultChunk::new(chunk, config_type)));
-    Ok((Box::pin(stream), model_used_info))
+    Ok((StreamExt::peekable(Box::pin(stream)), model_used_info))
 }
 
 impl<'a> BatchInferenceConfig<'a> {
@@ -853,6 +853,7 @@ mod tests {
     use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::error::ErrorDetails;
+    use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::http::TensorzeroHttpClient;
     use crate::inference::types::{
@@ -937,6 +938,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         let json_mode = JsonMode::Off;
 
@@ -985,6 +987,7 @@ mod tests {
             implicit_tool_call_config: implicit_tool_call_config.clone(),
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
 
         let json_mode = JsonMode::On;
@@ -1148,6 +1151,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
 
         let request_messages = vec![RequestMessage {
@@ -1263,6 +1267,7 @@ mod tests {
             },
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         let output_schema = json!({
             "type": "object",
@@ -1451,6 +1456,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
 
         let request_messages = vec![RequestMessage {
@@ -1597,6 +1603,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
 
         // Create an input message
@@ -1748,6 +1755,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })));
 
         let request_messages = vec![RequestMessage {

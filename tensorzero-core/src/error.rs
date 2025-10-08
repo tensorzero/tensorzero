@@ -440,6 +440,7 @@ pub enum ErrorDetails {
     ModelValidation {
         message: String,
     },
+    NoFallbackVariantsRemaining,
     Observability {
         message: String,
     },
@@ -529,6 +530,9 @@ pub enum ErrorDetails {
     UnsupportedVariantForStreamingInference {
         variant_type: String,
         issue_link: Option<String>,
+    },
+    UnsupportedModelProviderForStreamingInference {
+        provider_type: String,
     },
     UnsupportedVariantForFunctionType {
         function_name: String,
@@ -637,6 +641,7 @@ impl ErrorDetails {
             ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
             ErrorDetails::ModelNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
+            ErrorDetails::NoFallbackVariantsRemaining => tracing::Level::WARN,
             ErrorDetails::Observability { .. } => tracing::Level::WARN,
             ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
             ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
@@ -663,6 +668,9 @@ impl ErrorDetails {
             ErrorDetails::UnknownMetric { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedFileExtension { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => tracing::Level::WARN,
+            ErrorDetails::UnsupportedModelProviderForStreamingInference { .. } => {
+                tracing::Level::ERROR
+            }
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedVariantForFunctionType { .. } => tracing::Level::ERROR,
             ErrorDetails::UnsupportedVariantForStreamingInference { .. } => tracing::Level::WARN,
@@ -757,6 +765,7 @@ impl ErrorDetails {
             ErrorDetails::ModelNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::NoFallbackVariantsRemaining => StatusCode::BAD_GATEWAY,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OptimizationResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OutputParsing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -785,6 +794,9 @@ impl ErrorDetails {
             ErrorDetails::UnknownMetric { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::UnsupportedFileExtension { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            ErrorDetails::UnsupportedModelProviderForStreamingInference { .. } => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => StatusCode::BAD_REQUEST,
@@ -1227,6 +1239,9 @@ impl std::fmt::Display for ErrorDetails {
                         .join(", ")
                 )
             }
+            ErrorDetails::NoFallbackVariantsRemaining => {
+                write!(f, "No fallback variants remaining.")
+            }
             ErrorDetails::ModelValidation { message } => {
                 write!(f, "Failed to validate model: {message}")
             }
@@ -1326,6 +1341,12 @@ impl std::fmt::Display for ErrorDetails {
                 write!(
                     f,
                     "Unsupported model provider for batch inference: {provider_type}"
+                )
+            }
+            ErrorDetails::UnsupportedModelProviderForStreamingInference { provider_type } => {
+                write!(
+                    f,
+                    "Unsupported model provider for streaming inference: {provider_type}"
                 )
             }
             ErrorDetails::UnsupportedFileExtension { extension } => {

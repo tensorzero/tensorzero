@@ -526,8 +526,10 @@ pub type ProviderInferenceResponseStreamInner =
 
 pub type PeekableProviderInferenceResponseStream = Peekable<ProviderInferenceResponseStreamInner>;
 
-pub type InferenceResultStream =
+type InferenceResultStreamInner =
     Pin<Box<dyn Stream<Item = Result<InferenceResultChunk, Error>> + Send>>;
+
+pub type InferenceResultStream = Peekable<InferenceResultStreamInner>;
 
 /// Handles a textual content block (text or thought)
 /// It checks if there is already a block with the given id, and if so, appends the text to it.
@@ -568,6 +570,7 @@ mod tests {
     use super::*;
     use crate::{
         config::SchemaData,
+        experimentation::ExperimentationConfig,
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
             current_timestamp, ContentBlockChatOutput, ContentBlockOutputType, InferenceResult,
@@ -839,6 +842,7 @@ mod tests {
             output_schema,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -1123,6 +1127,7 @@ mod tests {
             output_schema,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -1223,6 +1228,7 @@ mod tests {
             output_schema,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
