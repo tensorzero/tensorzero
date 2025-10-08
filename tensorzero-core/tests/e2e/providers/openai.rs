@@ -4,10 +4,13 @@ use std::sync::Arc;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
-use tensorzero::{File, Input, InputMessage, InputMessageContent, Role};
+use tensorzero::test_helpers::make_embedded_gateway_with_config;
+use tensorzero::{
+    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent, File,
+    InferenceOutput, InferenceResponse, Input, InputMessage, InputMessageContent, Role,
+};
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
-use tensorzero_core::config::ProviderTypesConfig;
-use tensorzero_core::config::TimeoutsConfig;
+use tensorzero_core::config::provider_types::ProviderTypesConfig;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::embeddings::{
     Embedding, EmbeddingEncodingFormat, EmbeddingModelConfig, EmbeddingProviderConfig,
@@ -16,13 +19,17 @@ use tensorzero_core::embeddings::{
 use tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams;
 use tensorzero_core::endpoints::inference::{InferenceClients, InferenceCredentials};
 use tensorzero_core::http::TensorzeroHttpClient;
-use tensorzero_core::inference::types::{Latency, ModelInferenceRequestJsonMode, TextKind};
+use tensorzero_core::inference::types::{
+    ContentBlockChatOutput, Latency, ModelInferenceRequestJsonMode, TextKind,
+};
+use tensorzero_core::model_table::ProviderTypeDefaultCredentials;
 use tensorzero_core::rate_limiting::ScopeInfo;
+use url::Url;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::{
-    E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, FERRIS_PNG,
+    E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, DEEPSEEK_PAPER_PDF, FERRIS_PNG,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_batch_model_inference_clickhouse, select_chat_inference_clickhouse,
@@ -77,15 +84,31 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
-    let inference_params_providers = vec![E2ETestProvider {
-        supports_batch_inference: true,
-        variant_name: "openai".to_string(),
-        model_name: "gpt-4o-mini-2024-07-18".into(),
-        model_provider_name: "openai".into(),
-        credentials: credentials.clone(),
-    }];
+    let inference_params_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai".to_string(),
+            model_name: "gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: credentials.clone(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+    ];
 
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         supports_batch_inference: true,
@@ -95,13 +118,22 @@ async fn get_providers() -> E2ETestProviders {
         credentials,
     }];
 
-    let image_providers = vec![E2ETestProvider {
-        supports_batch_inference: true,
-        variant_name: "openai".to_string(),
-        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
-        model_provider_name: "openai".into(),
-        credentials: HashMap::new(),
-    }];
+    let image_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai".to_string(),
+            model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+    ];
 
     let json_providers = vec![
         E2ETestProvider {
@@ -139,6 +171,20 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses-strict".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     let json_mode_off_providers = vec![
@@ -156,6 +202,13 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai-responses_json_mode_off".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     let shorthand_providers = vec![E2ETestProvider {
@@ -170,6 +223,22 @@ async fn get_providers() -> E2ETestProviders {
         model_name: "text-embedding-3-small".into(),
     }];
 
+    let provider_type_default_credentials_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
+        variant_name: "openai".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let provider_type_default_credentials_shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
+        variant_name: "openai-shorthand".to_string(),
+        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -178,6 +247,9 @@ async fn get_providers() -> E2ETestProviders {
         embeddings: embedding_providers,
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
+        provider_type_default_credentials: provider_type_default_credentials_providers,
+        provider_type_default_credentials_shorthand:
+            provider_type_default_credentials_shorthand_providers,
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),
@@ -1104,6 +1176,7 @@ async fn test_embedding_request() {
             .load(
                 &ProviderTypesConfig::default(),
                 Arc::from("good".to_string()),
+                &ProviderTypeDefaultCredentials::default(),
             )
             .await
             .unwrap();
@@ -1121,7 +1194,7 @@ async fn test_embedding_request() {
         providers: [(model_name.as_str().into(), provider_config)]
             .into_iter()
             .collect(),
-        timeouts: TimeoutsConfig::default(),
+        timeout_ms: None,
     };
 
     let request = EmbeddingRequest {
@@ -1257,6 +1330,7 @@ async fn test_embedding_sanity_check() {
             .load(
                 &ProviderTypesConfig::default(),
                 Arc::from("good".to_string()),
+                &ProviderTypeDefaultCredentials::default(),
             )
             .await
             .unwrap();
@@ -1929,4 +2003,202 @@ pub async fn test_start_batch_inference_write_file() {
     // Check that the file exists on the filesystem
     let result = std::fs::read(temp_dir.path().join(file_path)).unwrap();
     assert_eq!(result, FERRIS_PNG);
+}
+
+#[tokio::test]
+async fn test_forward_image_url() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config = format!(
+        r#"
+    [object_storage]
+    type = "filesystem"
+    path = "{}"
+
+    [gateway]
+    fetch_and_encode_input_files_before_inference = false
+    "#,
+        temp_dir.path().to_string_lossy()
+    );
+
+    let client = make_embedded_gateway_with_config(&config).await;
+
+    let response = client.inference(ClientInferenceParams {
+        model_name: Some("openai::gpt-4o-mini".to_string()),
+        input: ClientInput {
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the image".to_string() }),
+                ClientInputMessageContent::File(File::Url {
+                    url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap(),
+                    mime_type: Some(mime::IMAGE_PNG)
+                }),
+                ],
+            }],
+            ..Default::default()
+        },
+        ..Default::default()
+    }).await.unwrap();
+
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming inference response");
+    };
+
+    // Sleep for 1 second to allow writing to ClickHouse
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let clickhouse = get_clickhouse().await;
+
+    let model_inference = select_model_inference_clickhouse(&clickhouse, response.inference_id())
+        .await
+        .unwrap();
+
+    let raw_request = model_inference
+        .get("raw_request")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert_eq!(raw_request, "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the image\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png\"}}]}],\"model\":\"gpt-4o-mini\",\"stream\":false}");
+
+    let file_path =
+        "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png";
+
+    // Check that the file exists on the filesystem
+    let result = std::fs::read(temp_dir.path().join(file_path)).unwrap();
+    assert_eq!(result, FERRIS_PNG);
+
+    println!("Got response: {response:#?}");
+
+    let InferenceResponse::Chat(response) = response else {
+        panic!("Expected chat inference response");
+    };
+    let text_block = &response.content[0];
+    let ContentBlockChatOutput::Text(text) = text_block else {
+        panic!("Expected text content block");
+    };
+    assert!(
+        text.text.to_lowercase().contains("cartoon")
+            || text.text.to_lowercase().contains("crab")
+            || text.text.to_lowercase().contains("animal"),
+        "Content should contain 'cartoon' or 'crab' or 'animal': {text:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_forward_file_url() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config = format!(
+        r#"
+    [object_storage]
+    type = "filesystem"
+    path = "{}"
+
+    [gateway]
+    fetch_and_encode_input_files_before_inference = false
+    "#,
+        temp_dir.path().to_string_lossy()
+    );
+
+    let client = make_embedded_gateway_with_config(&config).await;
+
+    let response = client.inference(ClientInferenceParams {
+        model_name: Some("openai::gpt-4o-mini".to_string()),
+        input: ClientInput {
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the PDF".to_string() }),
+                ClientInputMessageContent::File(File::Url {
+                    url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
+                    mime_type: Some(mime::APPLICATION_PDF)
+                }),
+                ],
+            }],
+            ..Default::default()
+        },
+        ..Default::default()
+    }).await.unwrap();
+
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming inference response");
+    };
+
+    // Sleep for 1 second to allow writing to ClickHouse
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let clickhouse = get_clickhouse().await;
+
+    let model_inference = select_model_inference_clickhouse(&clickhouse, response.inference_id())
+        .await
+        .unwrap();
+
+    let raw_request = model_inference
+        .get("raw_request")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    // OpenAI currently doesn't support forwarding file urls, so we should base64 encode the file data
+    assert_eq!(raw_request, "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the PDF\"},{\"type\":\"file\",\"file\":{\"file_data\":\"data:application/pdf;base64,<TENSORZERO_FILE_0>\",\"filename\":\"input.pdf\"}}]}],\"model\":\"gpt-4o-mini\",\"stream\":false}");
+
+    let file_path =
+        "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf";
+
+    // Check that the file exists on the filesystem
+    let result = std::fs::read(temp_dir.path().join(file_path)).unwrap();
+    assert_eq!(result, DEEPSEEK_PAPER_PDF);
+
+    println!("Got response: {response:#?}");
+
+    let InferenceResponse::Chat(response) = response else {
+        panic!("Expected chat inference response");
+    };
+    let text_block = &response.content[0];
+    let ContentBlockChatOutput::Text(text) = text_block else {
+        panic!("Expected text content block");
+    };
+    assert!(
+        text.text.to_lowercase().contains("deepseek"),
+        "Content should contain 'deepseek': {text:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_responses_api_reasoning() {
+    let payload = json!({
+        "function_name": "openai_responses_gpt5",
+        "variant_name": "openai",
+        "input":
+            {
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "How many letters are in the word potato?"
+                }
+            ]},
+        "extra_body": [
+            {
+                "variant_name": "openai",
+                "pointer": "/reasoning",
+                "value": {
+                    "effort": "high",
+                    "summary": "auto"
+                }
+            }
+        ]
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json}");
+
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    let has_thought = content_blocks
+        .iter()
+        .any(|block| block.get("type").unwrap().as_str().unwrap() == "thought");
+    assert!(
+        has_thought,
+        "Missing thought block in output: {content_blocks:?}"
+    );
 }

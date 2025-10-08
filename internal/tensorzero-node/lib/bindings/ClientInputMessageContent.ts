@@ -7,16 +7,4 @@ import type { ToolCallInput } from "./ToolCallInput";
 import type { ToolResult } from "./ToolResult";
 import type { JsonValue } from "./serde_json/JsonValue";
 
-<<<<<<< HEAD
-export type ClientInputMessageContent = { "type": "text" } & TextKind | { "type": "tool_call" } & ToolCallInput | { "type": "tool_result" } & ToolResult | { "type": "raw_text", value: string, } | { "type": "thought" } & Thought | { "type": "file" } & File | { "type": "unknown", data: JsonValue, model_provider_name: string | null, };
-=======
-export type ClientInputMessageContent =
-  | ({ type: "text" } & TextKind)
-  | ({ type: "template" } & TemplateInput)
-  | ({ type: "tool_call" } & ToolCallInput)
-  | ({ type: "tool_result" } & ToolResult)
-  | { type: "raw_text"; value: string }
-  | ({ type: "thought" } & Thought)
-  | ({ type: "file" } & File)
-  | { type: "unknown"; data: JsonValue; model_provider_name: string | null };
->>>>>>> upstream/main
+export type ClientInputMessageContent = { "type": "text" } & TextKind | { "type": "template" } & TemplateInput | { "type": "tool_call" } & ToolCallInput | { "type": "tool_result" } & ToolResult | { "type": "raw_text", value: string, } | { "type": "thought" } & Thought | { "type": "file" } & File | { "type": "unknown", data: JsonValue, model_provider_name: string | null, };

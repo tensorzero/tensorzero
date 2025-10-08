@@ -26,6 +26,7 @@ use tensorzero_core::{
         ResolvedContentBlock, ResolvedRequestMessage, StoredContentBlock, StoredInput,
         StoredInputMessage, StoredInputMessageContent, StoredRequestMessage, Text, TextKind, Usage,
     },
+    model_table::ProviderTypeDefaultCredentials,
     optimization::{
         dicl::UninitializedDiclOptimizationConfig, JobHandle, OptimizationJobInfo, Optimizer,
         OptimizerOutput, UninitializedOptimizerConfig, UninitializedOptimizerInfo,
@@ -88,7 +89,10 @@ pub async fn test_dicl_optimization_chat() {
         }),
     };
 
-    let optimizer_info = uninitialized_optimizer_info.load().await.unwrap();
+    let optimizer_info = uninitialized_optimizer_info
+        .load(&ProviderTypeDefaultCredentials::default())
+        .await
+        .unwrap();
     let client = TensorzeroHttpClient::new().unwrap();
     let test_examples = get_pinocchio_examples(false);
     let val_examples = None; // No validation examples needed for this test
@@ -128,7 +132,14 @@ pub async fn test_dicl_optimization_chat() {
 
     let mut status;
     loop {
-        status = job_handle.poll(&client, &credentials).await.unwrap();
+        status = job_handle
+            .poll(
+                &client,
+                &credentials,
+                &ProviderTypeDefaultCredentials::default(),
+            )
+            .await
+            .unwrap();
         println!("Status: `{status:?}` Handle: `{job_handle}`");
         if matches!(status, OptimizationJobInfo::Completed { .. }) {
             break;
@@ -355,7 +366,10 @@ pub async fn test_dicl_optimization_json() {
         }),
     };
 
-    let optimizer_info = uninitialized_optimizer_info.load().await.unwrap();
+    let optimizer_info = uninitialized_optimizer_info
+        .load(&ProviderTypeDefaultCredentials::default())
+        .await
+        .unwrap();
 
     let client = TensorzeroHttpClient::new().unwrap();
     let test_examples = get_pinocchio_examples(true);
@@ -396,7 +410,14 @@ pub async fn test_dicl_optimization_json() {
 
     let mut status;
     loop {
-        status = job_handle.poll(&client, &credentials).await.unwrap();
+        status = job_handle
+            .poll(
+                &client,
+                &credentials,
+                &ProviderTypeDefaultCredentials::default(),
+            )
+            .await
+            .unwrap();
         println!("Status: `{status:?}` Handle: `{job_handle}`");
         if matches!(status, OptimizationJobInfo::Completed { .. }) {
             break;
@@ -621,6 +642,7 @@ fn create_inference_params(
         extra_body: Default::default(),
         extra_headers: Default::default(),
         internal_dynamic_variant_config: None,
+        otlp_traces_extra_headers: Default::default(),
     }
 }
 

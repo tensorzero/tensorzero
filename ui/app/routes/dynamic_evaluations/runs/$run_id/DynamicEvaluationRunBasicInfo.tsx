@@ -10,6 +10,11 @@ import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
 import type { DynamicEvaluationRun } from "~/utils/clickhouse/dynamic_evaluations";
 import KVChip from "~/components/ui/KVChip";
 import { CommitHash } from "~/components/ui/CommitHash";
+import {
+  toFunctionUrl,
+  toVariantUrl,
+  toDynamicEvaluationProjectUrl,
+} from "~/utils/urls";
 
 // Create timestamp tooltip component
 const createTimestampTooltip = (timestamp: string | number | Date) => {
@@ -72,7 +77,9 @@ export default function BasicInfo({
             <Chip
               label={dynamicEvaluationRun.project_name}
               font="mono"
-              link={`/dynamic_evaluations/projects/${dynamicEvaluationRun.project_name}`}
+              link={toDynamicEvaluationProjectUrl(
+                dynamicEvaluationRun.project_name,
+              )}
             />
           </BasicInfoItemContent>
         </BasicInfoItem>
@@ -87,8 +94,8 @@ export default function BasicInfo({
                 key={k}
                 k={k}
                 v={v}
-                k_href={`/observability/functions/${k}`}
-                v_href={`/observability/functions/${k}/variants/${v}`}
+                k_href={toFunctionUrl(k)}
+                v_href={toVariantUrl(k, v)}
               />
             ))}
           </div>

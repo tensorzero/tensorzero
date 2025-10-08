@@ -32,6 +32,7 @@ from os import path
 from uuid import UUID
 
 import pytest
+import requests
 import tensorzero
 from clickhouse_connect import get_client  # type: ignore
 from openai import AsyncOpenAI, OpenAI
@@ -350,7 +351,9 @@ async def test_async_thought_input(async_client: AsyncTensorZeroGateway):
 
 
 @pytest.mark.asyncio
-async def test_async_thought_signature_only_input(async_client: AsyncTensorZeroGateway):
+async def test_async_thought_signature_only_input(
+    async_client: AsyncTensorZeroGateway,
+):
     result = await async_client.inference(
         model_name="dummy::echo_request_messages",
         input={
@@ -440,7 +443,9 @@ async def test_async_reasoning_inference(async_client: AsyncTensorZeroGateway):
 
 
 @pytest.mark.asyncio
-async def test_async_default_function_inference(async_client: AsyncTensorZeroGateway):
+async def test_async_default_function_inference(
+    async_client: AsyncTensorZeroGateway,
+):
     input = {
         "system": "You are a helpful assistant named Alfred Pennyworth.",
         "messages": [{"role": "user", "content": [RawText(value="Hello")]}],
@@ -477,7 +482,10 @@ async def test_async_default_function_inference_plain_dict(
     input = {
         "system": "You are a helpful assistant named Alfred Pennyworth.",
         "messages": [
-            {"role": "user", "content": [{"type": "raw_text", "value": "Hello"}]}
+            {
+                "role": "user",
+                "content": [{"type": "raw_text", "value": "Hello"}],
+            }
         ],
     }
     input_copy = deepcopy(input)
@@ -878,7 +886,9 @@ async def test_async_json_streaming(async_client: AsyncTensorZeroGateway):
 
 
 @pytest.mark.asyncio
-async def test_async_json_streaming_reasoning(async_client: AsyncTensorZeroGateway):
+async def test_async_json_streaming_reasoning(
+    async_client: AsyncTensorZeroGateway,
+):
     stream = await async_client.inference(
         function_name="json_success",
         variant_name="json_reasoner",
@@ -936,7 +946,10 @@ async def test_async_json_success(async_client: AsyncTensorZeroGateway):
                 }
             ],
         },
-        output_schema={"type": "object", "properties": {"answer": {"type": "string"}}},
+        output_schema={
+            "type": "object",
+            "properties": {"answer": {"type": "string"}},
+        },
         stream=False,
     )
     assert isinstance(result, JsonInferenceResponse)
@@ -1027,7 +1040,9 @@ async def test_async_feedback(async_client: AsyncTensorZeroGateway):
 
 
 @pytest.mark.asyncio
-async def test_async_feedback_invalid_input(async_client: AsyncTensorZeroGateway):
+async def test_async_feedback_invalid_input(
+    async_client: AsyncTensorZeroGateway,
+):
     with pytest.raises(TensorZeroError):
         await async_client.feedback(metric_name="test_metric", value=5)
 
@@ -1319,7 +1334,11 @@ def test_image_inference_base64(sync_client: TensorZeroGateway):
     assert json_content == [
         {
             "FileWithPath": {
-                "file": {"url": None, "mime_type": "image/png", "data": ferris_png},
+                "file": {
+                    "url": None,
+                    "mime_type": "image/png",
+                    "data": ferris_png,
+                },
                 "storage_path": {
                     "kind": {"type": "disabled"},
                     "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
@@ -1363,7 +1382,11 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
     assert json_content == [
         {
             "FileWithPath": {
-                "file": {"url": None, "mime_type": "image/png", "data": ferris_png},
+                "file": {
+                    "url": None,
+                    "mime_type": "image/png",
+                    "data": ferris_png,
+                },
                 "storage_path": {
                     "kind": {"type": "disabled"},
                     "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
@@ -1633,7 +1656,9 @@ def test_sync_inference_streaming(sync_client: TensorZeroGateway):
             assert chunk.usage.output_tokens == 16
 
 
-def test_sync_inference_streaming_nonexistent_function(sync_client: TensorZeroGateway):
+def test_sync_inference_streaming_nonexistent_function(
+    sync_client: TensorZeroGateway,
+):
     with pytest.raises(TensorZeroError) as exc_info:
         stream = sync_client.inference(
             function_name="does_not_exist",
@@ -1652,7 +1677,9 @@ def test_sync_inference_streaming_nonexistent_function(sync_client: TensorZeroGa
     assert exc_info.value.status_code == 404
 
 
-def test_sync_inference_streaming_malformed_input(sync_client: TensorZeroGateway):
+def test_sync_inference_streaming_malformed_input(
+    sync_client: TensorZeroGateway,
+):
     with pytest.raises(TensorZeroError) as exc_info:
         stream = sync_client.inference(
             function_name="basic_test",
@@ -2001,7 +2028,10 @@ def test_sync_json_success(sync_client: TensorZeroGateway):
                 }
             ],
         },
-        output_schema={"type": "object", "properties": {"answer": {"type": "string"}}},
+        output_schema={
+            "type": "object",
+            "properties": {"answer": {"type": "string"}},
+        },
         stream=False,
     )
     assert isinstance(result, JsonInferenceResponse)
@@ -2128,7 +2158,9 @@ def test_sync_tensorzero_error_embedded():
     )
 
 
-def test_sync_basic_inference_with_content_block(sync_client: TensorZeroGateway):
+def test_sync_basic_inference_with_content_block(
+    sync_client: TensorZeroGateway,
+):
     result = sync_client.inference(
         function_name="basic_test",
         input={
@@ -2273,13 +2305,20 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
         stream=True,
         dryrun=False,
         episode_id=episode_id,
-        output_schema={"type": "object", "properties": {"answer": {"type": "string"}}},
+        output_schema={
+            "type": "object",
+            "properties": {"answer": {"type": "string"}},
+        },
         variant_name="baz",
         params={"chat_completion": {"temperature": 0.1}},
         tool_choice="auto",
         parallel_tool_calls=True,
         additional_tools=[
-            {"name": "drill", "parameters": '{"foo": "bar"}', "description": "drills"}
+            {
+                "name": "drill",
+                "parameters": '{"foo": "bar"}',
+                "description": "drills",
+            }
         ],
     )
 
@@ -2331,12 +2370,13 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
 
 def test_extra_headers_raw(sync_client: TensorZeroGateway):
     with pytest.raises(TensorZeroError) as exc_info:
+        id = uuid7()
         sync_client.inference(
             function_name="basic_test",
             variant_name="openai",
             input={
                 "system": {"assistant_name": "Alfred Pennyworth"},
-                "messages": [{"role": "user", "content": "Write me a haiku"}],
+                "messages": [{"role": "user", "content": f"Write me a haiku {id}"}],
             },
             extra_headers=[
                 {
@@ -2349,6 +2389,109 @@ def test_extra_headers_raw(sync_client: TensorZeroGateway):
     assert "You didn't provide an API key" in str(exc_info.value)
 
 
+def test_otlp_traces_extra_headers(sync_client: TensorZeroGateway):
+    """Test that otlp_traces_extra_headers parameter is accepted and doesn't break inference."""
+    result = sync_client.inference(
+        function_name="basic_test",
+        variant_name="openai",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Write me a haiku"}],
+        },
+        otlp_traces_extra_headers={
+            "My-Custom-Header": "My-Custom-Value",
+            "Another-Header": "Another-Value",
+        },
+    )
+    # Verify the inference completed successfully
+    assert isinstance(result, ChatInferenceResponse)
+    assert result.variant_name == "openai"
+    content = result.content
+    assert len(content) >= 1
+    assert content[0].type == "text"
+    assert isinstance(content[0], Text)
+    assert content[0].text is not None
+
+
+# TODO - investigate why this test is sometimes flaky when running locally
+@pytest.mark.tempo
+def test_otlp_traces_extra_headers_tempo():
+    """Test that OTLP headers are actually sent to Tempo (requires Tempo running and HTTP gateway)."""
+    # Only use HTTP gateway for this test (embedded doesn't send to external Tempo)
+    client = TensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000",
+        verbose_errors=True,
+    )
+
+    # Use a unique header value to identify this specific trace
+    test_value = f"python-test-{uuid7()}"
+
+    result = client.inference(
+        function_name="basic_test",
+        variant_name="openai",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "What is 2+2?"}],
+        },
+        otlp_traces_extra_headers={
+            "x-dummy-tensorzero": test_value,
+        },
+    )
+
+    assert isinstance(result, ChatInferenceResponse)
+    inference_id = str(result.inference_id)
+
+    # Wait for trace to be exported to Tempo (same as Rust e2e tests)
+    time.sleep(25)
+
+    # Query Tempo for the trace
+    tempo_url = os.environ.get("TENSORZERO_TEMPO_URL", "http://localhost:3200")
+    start_time = int(time.time()) - 60  # Look back 60 seconds
+    end_time = int(time.time())
+
+    search_url = f"{tempo_url}/api/search?tags=inference_id={inference_id}&start={start_time}&end={end_time}"
+    search_response = requests.get(search_url, timeout=10)
+    assert search_response.status_code == 200, (
+        f"Failed to search Tempo: {search_response.text}"
+    )
+
+    tempo_traces = search_response.json()
+    assert len(tempo_traces.get("traces", [])) > 0, (
+        f"No traces found for inference_id {inference_id}"
+    )
+
+    trace_id = tempo_traces["traces"][0]["traceID"]
+
+    # Get trace details
+    trace_url = f"{tempo_url}/api/traces/{trace_id}"
+    trace_response = requests.get(trace_url, timeout=10)
+    assert trace_response.status_code == 200, (
+        f"Failed to get trace: {trace_response.text}"
+    )
+
+    trace_data = trace_response.json()
+
+    # Find the parent span (POST /inference) and check for our custom header in attributes
+    found_header = False
+    for batch in trace_data.get("batches", []):
+        for scope_span in batch.get("scopeSpans", []):
+            for span in scope_span.get("spans", []):
+                if span.get("name") == "POST /inference":
+                    # Check span attributes for our custom header value
+                    for attr in span.get("attributes", []):
+                        if attr.get("key") == "tensorzero.custom_key":
+                            attr_value = attr.get("value", {}).get("stringValue")
+                            if attr_value == test_value:
+                                found_header = True
+                                break
+
+    assert found_header, (
+        f"Custom OTLP header value '{test_value}' not found in Tempo trace"
+    )
+
+    client.close()
+
+
 def test_extra_body_raw(sync_client: TensorZeroGateway):
     result = sync_client.inference(
         function_name="basic_test",
@@ -2358,7 +2501,11 @@ def test_extra_body_raw(sync_client: TensorZeroGateway):
             "messages": [{"role": "user", "content": "Write me a haiku"}],
         },
         extra_body=[
-            {"variant_name": "openai", "pointer": "/max_completion_tokens", "value": 2}
+            {
+                "variant_name": "openai",
+                "pointer": "/max_completion_tokens",
+                "value": 2,
+            }
         ],
     )
     assert isinstance(result, ChatInferenceResponse)
@@ -2745,7 +2892,10 @@ def test_patch_openai_client_with_config():
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
+                    {
+                        "type": "text",
+                        "tensorzero::arguments": {"country": "Japan"},
+                    }
                 ],
             },
         ],
@@ -2902,7 +3052,8 @@ async def test_repeated_patch_openai_client_async_setup():
 
     with pytest.raises(RuntimeError) as exc_info:
         new_patch_fut = tensorzero.patch_openai_client(
-            sync_client, config_file="../../examples/quickstart/config/tensorzero.toml"
+            sync_client,
+            config_file="../../examples/quickstart/config/tensorzero.toml",
         )
         assert isinstance(new_patch_fut, t.Awaitable)
         await new_patch_fut
@@ -2921,7 +3072,8 @@ async def test_repeated_patch_openai_client_async_setup():
     await async_patch_fut
     with pytest.raises(RuntimeError) as exc_info:
         new_async_patch_fut = tensorzero.patch_openai_client(
-            async_client, config_file="../../examples/quickstart/config/tensorzero.toml"
+            async_client,
+            config_file="../../examples/quickstart/config/tensorzero.toml",
         )
         assert isinstance(new_async_patch_fut, t.Awaitable)
         await new_async_patch_fut
@@ -2945,7 +3097,9 @@ async def test_close_patch_openai_client():
 
 
 @pytest.mark.asyncio
-async def test_async_multi_turn_parallel_tool_use(async_client: AsyncTensorZeroGateway):
+async def test_async_multi_turn_parallel_tool_use(
+    async_client: AsyncTensorZeroGateway,
+):
     episode_id = str(uuid7())
 
     system = {"assistant_name": "Dr. Mehta"}
@@ -3040,7 +3194,9 @@ async def test_async_multi_turn_parallel_tool_use(async_client: AsyncTensorZeroG
     assert "30" in assistant_message
 
 
-def test_text_arguments_deprecation_1170_warning(sync_client: TensorZeroGateway):
+def test_text_arguments_deprecation_1170_warning(
+    sync_client: TensorZeroGateway,
+):
     """Test that using Text with dictionary for text parameter works but emits DeprecationWarning for #1170."""
 
     with pytest.warns(
@@ -3055,7 +3211,9 @@ def test_text_arguments_deprecation_1170_warning(sync_client: TensorZeroGateway)
                     {
                         "role": "user",
                         # Intentionally ignore the type error to check the deprecation warning
-                        "content": [Text(type="text", text={"country": "Japan"})],  # type: ignore
+                        "content": [
+                            Text(type="text", text={"country": "Japan"})  # type: ignore
+                        ],
                     }
                 ],
             },
@@ -3130,7 +3288,9 @@ def test_sync_dynamic_evaluation_run(sync_client: TensorZeroGateway):
 
 
 @pytest.mark.asyncio
-async def test_async_dynamic_evaluation_run(async_client: AsyncTensorZeroGateway):
+async def test_async_dynamic_evaluation_run(
+    async_client: AsyncTensorZeroGateway,
+):
     response = await async_client.dynamic_evaluation_run(
         variants={"basic_test": "test2"},
         tags={"foo": "bar"},
@@ -3473,7 +3633,9 @@ def test_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
 
 
 @pytest.mark.asyncio
-async def test_async_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
+async def test_async_embedded_client_no_spurious_log(
+    capfd: CaptureFixture[str],
+):
     client_fut = AsyncTensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
         clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
@@ -3484,6 +3646,115 @@ async def test_async_embedded_client_no_spurious_log(capfd: CaptureFixture[str])
     captured = capfd.readouterr()
     assert captured.err == ""
     assert captured.out == ""
+
+
+@pytest.mark.asyncio
+async def test_async_otlp_traces_extra_headers(
+    async_client: AsyncTensorZeroGateway,
+):
+    """Test that otlp_traces_extra_headers parameter is accepted in async inference."""
+    result = await async_client.inference(
+        function_name="basic_test",
+        variant_name="openai",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Write me a haiku"}],
+        },
+        otlp_traces_extra_headers={
+            "My-Async-Header": "My-Async-Value",
+            "Test-Header": "Test-Value",
+        },
+    )
+    # Verify the inference completed successfully
+    assert isinstance(result, ChatInferenceResponse)
+    assert result.variant_name == "openai"
+    content = result.content
+    assert len(content) >= 1
+    assert content[0].type == "text"
+    assert isinstance(content[0], Text)
+    assert content[0].text is not None
+
+
+# TODO - investigate why this test is sometimes flaky when running locally
+@pytest.mark.tempo
+@pytest.mark.asyncio
+async def test_async_otlp_traces_extra_headers_tempo():
+    """Test that OTLP headers are actually sent to Tempo with async client (requires Tempo running and HTTP gateway)."""
+    # Only use HTTP gateway for this test (embedded doesn't send to external Tempo)
+    client = AsyncTensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000",
+        verbose_errors=True,
+        async_setup=False,
+    )
+    assert isinstance(client, AsyncTensorZeroGateway)
+
+    # Use a unique header value to identify this specific trace
+    test_value = f"python-async-test-{uuid7()}"
+
+    result = await client.inference(
+        function_name="basic_test",
+        variant_name="openai",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "What is 3+3?"}],
+        },
+        otlp_traces_extra_headers={
+            "x-dummy-tensorzero": test_value,
+        },
+    )
+
+    assert isinstance(result, ChatInferenceResponse)
+    inference_id = str(result.inference_id)
+
+    # Wait for trace to be exported to Tempo (same as Rust e2e tests)
+    await asyncio.sleep(25)
+
+    # Query Tempo for the trace
+    tempo_url = os.environ.get("TENSORZERO_TEMPO_URL", "http://localhost:3200")
+    start_time = int(time.time()) - 60  # Look back 60 seconds
+    end_time = int(time.time())
+
+    search_url = f"{tempo_url}/api/search?tags=inference_id={inference_id}&start={start_time}&end={end_time}"
+    search_response = requests.get(search_url, timeout=10)
+    assert search_response.status_code == 200, (
+        f"Failed to search Tempo: {search_response.text}"
+    )
+
+    tempo_traces = search_response.json()
+    assert len(tempo_traces.get("traces", [])) > 0, (
+        f"No traces found for inference_id {inference_id}"
+    )
+
+    trace_id = tempo_traces["traces"][0]["traceID"]
+
+    # Get trace details
+    trace_url = f"{tempo_url}/api/traces/{trace_id}"
+    trace_response = requests.get(trace_url, timeout=10)
+    assert trace_response.status_code == 200, (
+        f"Failed to get trace: {trace_response.text}"
+    )
+
+    trace_data = trace_response.json()
+
+    # Find the parent span (POST /inference) and check for our custom header in attributes
+    found_header = False
+    for batch in trace_data.get("batches", []):
+        for scope_span in batch.get("scopeSpans", []):
+            for span in scope_span.get("spans", []):
+                if span.get("name") == "POST /inference":
+                    # Check span attributes for our custom header value
+                    for attr in span.get("attributes", []):
+                        if attr.get("key") == "tensorzero.custom_key":
+                            attr_value = attr.get("value", {}).get("stringValue")
+                            if attr_value == test_value:
+                                found_header = True
+                                break
+
+    assert found_header, (
+        f"Custom OTLP header value '{test_value}' not found in Tempo trace"
+    )
+
+    await client.close()
 
 
 def test_capfd_captured_warnings(capfd: CaptureFixture[str]):

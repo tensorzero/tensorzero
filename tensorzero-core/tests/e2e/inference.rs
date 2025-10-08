@@ -1909,7 +1909,7 @@ model_name = "json"
 
 #[tokio::test]
 async fn test_original_response_mixture_of_n_flaky_fuser() {
-    let exporter = install_capturing_otel_exporter();
+    let exporter = install_capturing_otel_exporter().await;
     // We use an embedded client so that we can control the number of
     // requests to the flaky judge.
     let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(
@@ -2669,7 +2669,7 @@ pub async fn e2e_test_dynamic_api_key() {
         .await
         .unwrap();
     // Check that the API response is an error since we didn't provide the right key
-    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     let response_json = response.json::<Value>().await.unwrap();
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
     assert!(

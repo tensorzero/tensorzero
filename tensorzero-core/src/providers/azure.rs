@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::sync::OnceLock;
 
 use futures::{StreamExt, TryStreamExt};
 use secrecy::{ExposeSecret, SecretString};
@@ -25,12 +24,11 @@ use crate::inference::types::{
     ProviderInferenceResponse,
 };
 use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
-use crate::model::{
-    build_creds_caching_default, Credential, CredentialLocation, EndpointLocation, ModelProvider,
-};
+use crate::model::{Credential, EndpointLocation, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
+use crate::providers::openai::OpenAIMessagesConfig;
 
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
@@ -83,21 +81,12 @@ impl AzureEndpoint {
     }
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<AzureCredentials> = OnceLock::new();
-
 impl AzureProvider {
     pub fn new(
         deployment_id: String,
         endpoint_location: EndpointLocation,
-        api_key_location: Option<CredentialLocation>,
+        credentials: AzureCredentials,
     ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-
         let endpoint = match endpoint_location {
             EndpointLocation::Static(url_str) => {
                 let url = Url::parse(&url_str).map_err(|e| {
@@ -182,10 +171,6 @@ impl AzureCredentials {
             .into()),
         }
     }
-}
-
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("AZURE_OPENAI_API_KEY".to_string())
 }
 
 impl InferenceProvider for AzureProvider {
@@ -606,10 +591,17 @@ impl<'a> AzureRequest<'a> {
     pub async fn new(request: &'a ModelInferenceRequest<'_>) -> Result<AzureRequest<'a>, Error> {
         let response_format = AzureResponseFormat::new(request.json_mode, request.output_schema);
         let messages = prepare_openai_messages(
-            request.system.as_deref().map(SystemOrDeveloper::System),
+            request
+                .system
+                .as_deref()
+                .map(|m| SystemOrDeveloper::System(Cow::Borrowed(m))),
             &request.messages,
-            Some(&request.json_mode),
-            PROVIDER_TYPE,
+            OpenAIMessagesConfig {
+                json_mode: Some(&request.json_mode),
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: request
+                    .fetch_and_encode_input_files_before_inference,
+            },
         )
         .await?;
         let (tools, tool_choice, _) = prepare_openai_tools(request);
@@ -1025,15 +1017,15 @@ mod tests {
         let provider = SKIP_CREDENTIAL_VALIDATION
             .scope((), async {
                 AzureProvider::new(
-                    "gpt-35-turbo".to_string(),
+                    "gpt-4.1-mini".to_string(),
                     EndpointLocation::Static("https://test.openai.azure.com".to_string()),
-                    None,
+                    AzureCredentials::None,
                 )
             })
             .await
             .unwrap();
 
-        assert_eq!(provider.deployment_id(), "gpt-35-turbo");
+        assert_eq!(provider.deployment_id(), "gpt-4.1-mini");
         match provider.endpoint {
             AzureEndpoint::Static(url) => {
                 assert_eq!(url.as_str(), "https://test.openai.azure.com/");
@@ -1048,15 +1040,15 @@ mod tests {
         let provider = SKIP_CREDENTIAL_VALIDATION
             .scope((), async {
                 AzureProvider::new(
-                    "gpt-35-turbo".to_string(),
+                    "gpt-4.1-mini".to_string(),
                     EndpointLocation::Dynamic("azure_endpoint".to_string()),
-                    None,
+                    AzureCredentials::None,
                 )
             })
             .await
             .unwrap();
 
-        assert_eq!(provider.deployment_id(), "gpt-35-turbo");
+        assert_eq!(provider.deployment_id(), "gpt-4.1-mini");
         match provider.endpoint {
             AzureEndpoint::Dynamic(key) => {
                 assert_eq!(key, "azure_endpoint");

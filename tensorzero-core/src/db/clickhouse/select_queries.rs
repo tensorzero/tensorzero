@@ -1,6 +1,6 @@
 use crate::db::{
     clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args, EpisodeByIdRow,
-    TableBoundsWithCount,
+    FeedbackByVariant, TableBoundsWithCount,
 };
 use async_trait::async_trait;
 use uuid::Uuid;
@@ -10,7 +10,7 @@ use crate::{
     error::{Error, ErrorDetails},
 };
 
-use super::ClickHouseConnectionInfo;
+use super::{escape_string_for_clickhouse_literal, ClickHouseConnectionInfo};
 
 #[async_trait]
 impl SelectQueries for ClickHouseConnectionInfo {
@@ -283,5 +283,58 @@ impl SelectQueries for ClickHouseConnectionInfo {
                 message: e.to_string(),
             })
         })
+    }
+
+    async fn get_feedback_by_variant(
+        &self,
+        metric_name: &str,
+        function_name: &str,
+        variant_names: Option<&Vec<String>>,
+    ) -> Result<Vec<FeedbackByVariant>, Error> {
+        let escaped_function_name = escape_string_for_clickhouse_literal(function_name);
+        let escaped_metric_name = escape_string_for_clickhouse_literal(metric_name);
+
+        // If None we don't filter at all;
+        // If empty, we'll return an empty vector for consistency
+        // If there are variants passed, we'll filter by them
+        let variant_filter = match variant_names {
+            None => String::new(),
+            Some(names) if names.is_empty() => {
+                return Ok(vec![]);
+            }
+            Some(names) => {
+                let escaped_names: Vec<String> = names
+                    .iter()
+                    .map(|name| format!("'{}'", escape_string_for_clickhouse_literal(name)))
+                    .collect();
+                format!(" AND variant_name IN ({})", escaped_names.join(", "))
+            }
+        };
+
+        let query = format!(
+            r"
+            SELECT
+                variant_name,
+                avgMerge(feedback_mean) as mean,
+                varSampStableMerge(feedback_variance) as variance,
+                sum(count) as count
+            FROM FeedbackByVariantStatistics
+            WHERE function_name = '{escaped_function_name}' and metric_name = '{escaped_metric_name}'{variant_filter}
+            GROUP BY variant_name
+            FORMAT JSONEachRow"
+        );
+        // Each row is a JSON encoded FeedbackByVariant struct
+        let res = self.run_query_synchronous_no_params(query).await?;
+
+        res.response
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(serde_json::from_str)
+            .collect::<Result<Vec<FeedbackByVariant>, _>>()
+            .map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseDeserialization {
+                    message: format!("Failed to deserialize FeedbackByVariant: {e}"),
+                })
+            })
     }
 }

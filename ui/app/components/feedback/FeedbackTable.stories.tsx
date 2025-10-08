@@ -13,6 +13,7 @@ function makeOrderedUuid(num = 0): string {
 const config: Config = {
   gateway: {
     disable_pseudonymous_usage_analytics: false,
+    fetch_and_encode_input_files_before_inference: false,
     observability: {
       enabled: true,
       async_writes: false,
@@ -22,12 +23,14 @@ const config: Config = {
         flush_interval_ms: 100n,
         max_rows: 1000,
       },
+      disable_automatic_migrations: false,
     },
     export: {
       otlp: {
         traces: {
           enabled: false,
           format: "opentelemetry",
+          extra_headers: {},
         },
       },
     },
@@ -43,11 +46,30 @@ const config: Config = {
   },
   object_store_info: { kind: { type: "disabled" } },
   provider_types: {
-    gcp_vertex_gemini: null,
+    anthropic: { defaults: { api_key_location: "" } },
+    azure: { defaults: { api_key_location: "" } },
+    deepseek: { defaults: { api_key_location: "" } },
+    fireworks: { defaults: { api_key_location: "" } },
+    gcp_vertex_gemini: { batch: null, defaults: { credential_location: "" } },
+    gcp_vertex_anthropic: {
+      batch: null,
+      defaults: { credential_location: "" },
+    },
+    google_ai_studio_gemini: { defaults: { api_key_location: "" } },
+    groq: { defaults: { api_key_location: "" } },
+    hyperbolic: { defaults: { api_key_location: "" } },
+    mistral: { defaults: { api_key_location: "" } },
+    openai: { defaults: { api_key_location: "" } },
+    openrouter: { defaults: { api_key_location: "" } },
+    sglang: { defaults: { api_key_location: "" } },
+    tgi: { defaults: { api_key_location: "" } },
+    together: { defaults: { api_key_location: "" } },
+    vllm: { defaults: { api_key_location: "" } },
+    xai: { defaults: { api_key_location: "" } },
   },
   optimizers: {},
-  models: {},
-  embedding_models: {},
+  models: { table: {} },
+  embedding_models: { table: {} },
   functions: {},
   metrics: {
     accuracy: {

@@ -4,11 +4,4 @@ import type { ResolvedRequestMessage } from "./ResolvedRequestMessage";
 /**
  * For use in rendering for optimization purposes
  */
-<<<<<<< HEAD
-export type ModelInput = { system: string | null, messages: Array<RequestMessage>, };
-=======
-export type ModelInput = {
-  system: string | null;
-  messages: Array<ResolvedRequestMessage>;
-};
->>>>>>> upstream/main
+export type ModelInput = { system: string | null, messages: Array<ResolvedRequestMessage>, };

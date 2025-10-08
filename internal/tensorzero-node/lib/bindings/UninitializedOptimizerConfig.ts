@@ -6,14 +6,4 @@ import type { UninitializedOpenAIRFTConfig } from "./UninitializedOpenAIRFTConfi
 import type { UninitializedOpenAISFTConfig } from "./UninitializedOpenAISFTConfig";
 import type { UninitializedTogetherSFTConfig } from "./UninitializedTogetherSFTConfig";
 
-<<<<<<< HEAD
-export type UninitializedOptimizerConfig = { "type": "dicl" } & UninitializedDiclOptimizationConfig | { "type": "openai_sft" } & UninitializedOpenAISFTConfig | { "type": "fireworks_sft" } & UninitializedFireworksSFTConfig | { "type": "gcp_vertex_gemini_sft" } & UninitializedGCPVertexGeminiSFTConfig | { "type": "together_sft" } & UninitializedTogetherSFTConfig;
-=======
-export type UninitializedOptimizerConfig =
-  | ({ type: "dicl" } & UninitializedDiclOptimizationConfig)
-  | ({ type: "openai_sft" } & UninitializedOpenAISFTConfig)
-  | ({ type: "openai_rft" } & UninitializedOpenAIRFTConfig)
-  | ({ type: "fireworks_sft" } & UninitializedFireworksSFTConfig)
-  | ({ type: "gcp_vertex_gemini_sft" } & UninitializedGCPVertexGeminiSFTConfig)
-  | ({ type: "together_sft" } & UninitializedTogetherSFTConfig);
->>>>>>> upstream/main
+export type UninitializedOptimizerConfig = { "type": "dicl" } & UninitializedDiclOptimizationConfig | { "type": "openai_sft" } & UninitializedOpenAISFTConfig | { "type": "openai_rft" } & UninitializedOpenAIRFTConfig | { "type": "fireworks_sft" } & UninitializedFireworksSFTConfig | { "type": "gcp_vertex_gemini_sft" } & UninitializedGCPVertexGeminiSFTConfig | { "type": "together_sft" } & UninitializedTogetherSFTConfig;

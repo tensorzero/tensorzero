@@ -47,7 +47,11 @@ export function RawDataAccordion({ rawData }: RawDataAccordionProps) {
 
   // Add these utility functions
   const getSerializedData = (entry: OptimizationJobInfo) => {
-    return JSON.stringify(entry, null, 2);
+    return JSON.stringify(
+      entry,
+      (_key, value) => (typeof value === "bigint" ? value.toString() : value),
+      2,
+    );
   };
 
   const getTextAreaHeight = (text: string) => {
