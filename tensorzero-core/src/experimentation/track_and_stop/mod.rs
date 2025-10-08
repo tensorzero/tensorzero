@@ -30,7 +30,7 @@ use super::VariantSampler;
 
 mod check_stopping;
 mod error;
-mod estimate_optimal_probabilities;
+pub mod estimate_optimal_probabilities;
 
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
