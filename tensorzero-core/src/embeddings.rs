@@ -29,7 +29,7 @@ use crate::{
     model::ProviderConfig,
     providers::openai::OpenAIProvider,
 };
-use crate::variant::RetryConfig;
+use crate::utils::retries::RetryConfig;
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
 use tokio::time::error::Elapsed;
@@ -138,6 +138,7 @@ impl EmbeddingModelConfig {
                     })
                 })?;
                 let provider_request = EmbeddingModelProviderRequest {
+                    model_name,
                     request,
                     provider_name,
                     otlp_config: clients.otlp_config,

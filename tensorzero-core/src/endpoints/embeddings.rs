@@ -99,7 +99,7 @@ mod tests {
     use crate::config::TimeoutsConfig;
     use crate::embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo};
     use crate::providers::dummy::DummyProvider;
-    use crate::variant::RetryConfig;
+    use crate::utils::retries::RetryConfig;
     use std::collections::HashMap;
     use tracing_test::traced_test;
 

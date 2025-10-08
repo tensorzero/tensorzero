@@ -835,6 +835,7 @@ mod tests {
                 routing: vec![Arc::from("dummy")],
                 providers,
                 timeouts: TimeoutsConfig::default(),
+                retries: RetryConfig::default(),
             };
             Config {
                 embedding_models: HashMap::from([(Arc::from(model_name), embedding_model_config)])
