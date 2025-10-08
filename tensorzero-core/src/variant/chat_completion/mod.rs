@@ -248,26 +248,23 @@ impl ChatCompletionConfig {
         )
     }
 
-    async fn prepare_request<'a, 'request>(
-        &'a self,
+    async fn prepare_request<'request>(
+        &self,
         input: &LazyResolvedInput,
-        function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
+        function: &'request FunctionConfig,
+        inference_config: &'request InferenceConfig,
         stream: bool,
         inference_params: &mut InferenceParams,
-    ) -> Result<ModelInferenceRequest<'request>, Error>
-    where
-        'a: 'request,
-    {
+    ) -> Result<ModelInferenceRequest<'request>, Error> {
         let messages = try_join_all(
             input
                 .messages
                 .iter()
-                .map(|message| self.prepare_request_message(inference_config.templates, message)),
+                .map(|message| self.prepare_request_message(&inference_config.templates, message)),
         )
         .await?;
         let system =
-            self.prepare_system_message(inference_config.templates, input.system.as_ref())?;
+            self.prepare_system_message(&inference_config.templates, input.system.as_ref())?;
 
         inference_params
             .chat_completion
@@ -286,8 +283,7 @@ impl ChatCompletionConfig {
             inference_extra_body: inference_config
                 .extra_body
                 .clone()
-                .into_owned()
-                .filter(inference_config.variant_name),
+                .filter(&inference_config.variant_name),
         };
 
         let extra_headers = FullExtraHeadersConfig {
@@ -295,8 +291,7 @@ impl ChatCompletionConfig {
             inference_extra_headers: inference_config
                 .extra_headers
                 .clone()
-                .into_owned()
-                .filter(inference_config.variant_name),
+                .filter(&inference_config.variant_name),
         };
 
         prepare_model_inference_request(
@@ -475,21 +470,22 @@ async fn prepare_request_message(
 }
 
 impl Variant for ChatCompletionConfig {
-    async fn infer<'a: 'request, 'request>(
+    async fn infer<'request>(
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
         function: Arc<FunctionConfig>,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: Arc<InferenceConfig>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
+        let inference_config_clone = Arc::clone(&inference_config);
         let mut inference_params = inference_params;
         let request = self
             .prepare_request(
                 &input,
                 &function,
-                inference_config,
+                &inference_config,
                 false,
                 &mut inference_params,
             )
@@ -504,7 +500,7 @@ impl Variant for ChatCompletionConfig {
             model_name: self.model.clone(),
             model_config: &model_config,
             function: &function,
-            inference_config,
+            inference_config: inference_config_clone,
             clients,
             inference_params,
             retry_config: &self.retries,
@@ -517,7 +513,7 @@ impl Variant for ChatCompletionConfig {
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
         function: Arc<FunctionConfig>,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: Arc<InferenceConfig>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -526,7 +522,7 @@ impl Variant for ChatCompletionConfig {
             .prepare_request(
                 &input,
                 &function,
-                inference_config,
+                &inference_config,
                 true,
                 &mut inference_params,
             )
@@ -647,7 +643,7 @@ impl Variant for ChatCompletionConfig {
         inputs: &[LazyResolvedInput],
         models: InferenceModels,
         function: &'a FunctionConfig,
-        inference_configs: &'a [InferenceConfig<'a>],
+        inference_configs: &'a [InferenceConfig],
         clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
@@ -1177,7 +1173,7 @@ mod tests {
             rate_limiting_config: &Default::default(),
             otlp_config: &Default::default(),
         };
-        let templates = get_test_template_config();
+        let templates = Arc::new(get_test_template_config());
         let system_template = get_system_template();
         let user_template = get_greeting_with_age_template();
         let chat_completion_config = UninitializedChatCompletionConfig {
@@ -1309,10 +1305,10 @@ mod tests {
         };
         let inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1333,7 +1329,7 @@ mod tests {
                 Arc::new(input.clone()),
                 inference_models.clone(),
                 Arc::clone(&function_config),
-                &inference_config,
+                Arc::new(inference_config.clone()),
                 &clients,
                 inference_params,
             )
@@ -1368,10 +1364,10 @@ mod tests {
             embedding_models: Arc::new(EmbeddingModelTable::default()),
         };
         let inference_config = InferenceConfig {
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
             fetch_and_encode_input_files_before_inference: false,
             ids: InferenceIds {
@@ -1387,7 +1383,7 @@ mod tests {
                 Arc::new(input.clone()),
                 inference_models.clone(),
                 Arc::clone(&function_config),
-                &inference_config,
+                Arc::new(inference_config.clone()),
                 &clients,
                 inference_params,
             )
@@ -1443,10 +1439,10 @@ mod tests {
             ),
         };
         let inference_config = InferenceConfig {
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
             fetch_and_encode_input_files_before_inference: false,
             ids: InferenceIds {
@@ -1462,7 +1458,7 @@ mod tests {
                 Arc::new(input.clone()),
                 inference_models.clone(),
                 Arc::clone(&function_config),
-                &inference_config,
+                Arc::new(inference_config.clone()),
                 &clients,
                 inference_params,
             )
@@ -1542,10 +1538,10 @@ mod tests {
             embedding_models: Arc::new(EmbeddingModelTable::default()),
         };
         let inference_config = InferenceConfig {
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
             fetch_and_encode_input_files_before_inference: false,
             ids: InferenceIds {
@@ -1561,7 +1557,7 @@ mod tests {
                 Arc::new(input.clone()),
                 inference_models.clone(),
                 Arc::clone(&function_config),
-                &inference_config,
+                Arc::new(inference_config.clone()),
                 &clients,
                 inference_params.clone(),
             )
@@ -1625,10 +1621,10 @@ mod tests {
         };
         let weather_tool_config = get_temperature_tool_config();
         let inference_config = InferenceConfig {
-            templates: &templates,
-            tool_config: Some(&weather_tool_config),
-            function_name: "",
-            variant_name: "",
+            templates: templates.clone(),
+            tool_config: Some(Arc::new(weather_tool_config)),
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
             fetch_and_encode_input_files_before_inference: false,
             ids: InferenceIds {
@@ -1644,7 +1640,7 @@ mod tests {
                 Arc::new(input.clone()),
                 inference_models.clone(),
                 Arc::clone(&function_config),
-                &inference_config,
+                Arc::new(inference_config.clone()),
                 &clients,
                 inference_params.clone(),
             )
@@ -1721,10 +1717,10 @@ mod tests {
             all_explicit_template_names: HashSet::new(),
         }));
         let inference_config = InferenceConfig {
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
             fetch_and_encode_input_files_before_inference: false,
             ids: InferenceIds {
@@ -1741,7 +1737,7 @@ mod tests {
                 Arc::new(input.clone()),
                 inference_models.clone(),
                 Arc::clone(&json_function_config),
-                &inference_config,
+                Arc::new(inference_config.clone()),
                 &clients,
                 inference_params.clone(),
             )
@@ -1797,10 +1793,10 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
             fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
@@ -1837,7 +1833,7 @@ mod tests {
                 Arc::new(input.clone()),
                 inference_models.clone(),
                 Arc::clone(&json_function_config),
-                &inference_config,
+                Arc::new(inference_config.clone()),
                 &clients,
                 inference_params.clone(),
             )
@@ -1928,11 +1924,11 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
-            function_name: "",
-            variant_name: "",
-            dynamic_output_schema: Some(&output_schema),
+            function_name: "".into(),
+            variant_name: "".into(),
+            dynamic_output_schema: Some(Arc::new(output_schema)),
             fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -1968,7 +1964,7 @@ mod tests {
                 Arc::new(input.clone()),
                 inference_models.clone(),
                 Arc::clone(&json_function_config),
-                &inference_config,
+                Arc::new(inference_config.clone()),
                 &clients,
                 inference_params.clone(),
             )
@@ -2048,11 +2044,11 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
-            function_name: "",
-            variant_name: "",
-            dynamic_output_schema: Some(&output_schema),
+            function_name: "".into(),
+            variant_name: "".into(),
+            dynamic_output_schema: Some(Arc::new(output_schema)),
             fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -2093,7 +2089,7 @@ mod tests {
                 Arc::new(input.clone()),
                 inference_models.clone(),
                 Arc::clone(&json_function_config),
-                &inference_config,
+                Arc::new(inference_config.clone()),
                 &clients,
                 inference_params.clone(),
             )
@@ -2284,11 +2280,11 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            templates,
+            templates: Arc::new(templates.clone()),
             tool_config: None,
             dynamic_output_schema: None,
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -2299,7 +2295,7 @@ mod tests {
                 Arc::new(input.clone()),
                 inference_models.clone(),
                 Arc::clone(&function_config),
-                &inference_config,
+                Arc::new(inference_config.clone()),
                 &clients,
                 inference_params.clone(),
             )
@@ -2365,10 +2361,10 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            templates,
+            templates: Arc::new(templates.clone()),
             tool_config: None,
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
             fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
@@ -2380,7 +2376,7 @@ mod tests {
                 Arc::new(input.clone()),
                 inference_models.clone(),
                 Arc::clone(&function_config),
-                &inference_config,
+                Arc::new(inference_config.clone()),
                 &clients,
                 inference_params.clone(),
             )
@@ -2469,21 +2465,22 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            templates,
+            templates: Arc::new(templates.clone()),
             tool_config: None,
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
             fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
         };
+        let inference_config_arc = Arc::new(inference_config);
         let model_request = chat_completion_config
             .prepare_request(
                 &input,
                 &function_config,
-                &inference_config,
+                &inference_config_arc,
                 stream,
                 &mut inference_params,
             )
@@ -2512,7 +2509,7 @@ mod tests {
             .prepare_request(
                 &input,
                 &function_config,
-                &inference_config,
+                &inference_config_arc,
                 stream,
                 &mut inference_params,
             )
@@ -2580,22 +2577,23 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            templates,
+            templates: Arc::new(templates.clone()),
             tool_config: None,
             dynamic_output_schema: None,
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
         };
+        let inference_config_arc = Arc::new(inference_config);
         let mut inference_params = InferenceParams::default();
         let model_request = chat_completion_config
             .prepare_request(
                 &input,
                 &function_config,
-                &inference_config,
+                &inference_config_arc,
                 stream,
                 &mut inference_params,
             )
@@ -2634,7 +2632,7 @@ mod tests {
             .prepare_request(
                 &input,
                 &function_config,
-                &inference_config,
+                &inference_config_arc,
                 stream,
                 &mut inference_params,
             )
@@ -2659,11 +2657,11 @@ mod tests {
         }));
         let dynamic_output_schema_value = dynamic_output_schema.value.clone();
         let inference_config = InferenceConfig {
-            templates,
+            templates: Arc::new(templates.clone()),
             tool_config: None,
-            dynamic_output_schema: Some(&dynamic_output_schema),
-            function_name: "",
-            variant_name: "",
+            dynamic_output_schema: Some(Arc::new(dynamic_output_schema)),
+            function_name: "".into(),
+            variant_name: "".into(),
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
@@ -2673,11 +2671,12 @@ mod tests {
             extra_headers: Default::default(),
             extra_cache_key: None,
         };
+        let inference_config_arc = Arc::new(inference_config);
         let model_request = chat_completion_config
             .prepare_request(
                 &input,
                 &function_config,
-                &inference_config,
+                &inference_config_arc,
                 stream,
                 &mut inference_params,
             )

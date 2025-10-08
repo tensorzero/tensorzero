@@ -354,12 +354,20 @@ async fn start_variant_batch_inference(
         tags,
     } = args;
 
+    let tool_configs_arc: Vec<Option<Arc<ToolCallConfig>>> = tool_configs
+        .iter()
+        .map(|opt| opt.as_ref().map(|tc| Arc::new(tc.clone())))
+        .collect();
+    let schemas_arc: Vec<Option<Arc<DynamicJSONSchema>>> = batch_dynamic_output_schemas
+        .iter()
+        .map(|opt| opt.as_ref().map(|s| Arc::new(s.clone())))
+        .collect();
     let inference_config = BatchInferenceConfig::new(
-        &config.templates,
-        tool_configs,
-        batch_dynamic_output_schemas,
-        function_name,
-        &variant_name,
+        Arc::clone(&config.templates),
+        tool_configs_arc,
+        schemas_arc,
+        Arc::from(function_name),
+        Arc::from(variant_name.as_str()),
         config.gateway.fetch_and_encode_input_files_before_inference,
     );
     let inference_configs = inference_config.inference_configs(episode_ids, inference_ids);
@@ -648,7 +656,7 @@ async fn write_start_batch_inference<'a>(
     result: StartBatchModelInferenceWithMetadata<'a>,
     metadata: BatchInferenceDatabaseInsertMetadata<'a>,
     tool_configs: &[Option<ToolCallConfig>],
-    inference_configs: &[InferenceConfig<'a>],
+    inference_configs: &[InferenceConfig],
 ) -> Result<(Uuid, Vec<Uuid>), Error> {
     let model_name = &result.model_name;
     let model_provider_name = &result.model_provider_name;
@@ -966,11 +974,11 @@ pub async fn write_completed_batch_inference<'a>(
         let extra_body = Default::default();
         let extra_headers = Default::default();
         let inference_config = InferenceConfig {
-            tool_config: tool_config.as_ref(),
-            dynamic_output_schema: output_schema.as_ref(),
-            templates: &config.templates,
-            function_name,
-            variant_name: variant_name.as_ref(),
+            tool_config: tool_config.as_ref().map(|tc| Arc::new(tc.clone())),
+            dynamic_output_schema: output_schema.as_ref().map(|s| Arc::new(s.clone())),
+            templates: Arc::clone(&config.templates),
+            function_name: Arc::from(function_name.as_ref()),
+            variant_name: Arc::from(variant_name.as_ref()),
             ids: InferenceIds {
                 inference_id,
                 episode_id,
@@ -979,8 +987,8 @@ pub async fn write_completed_batch_inference<'a>(
                 .gateway
                 .fetch_and_encode_input_files_before_inference,
             // Not currently supported as a batch inference parameter
-            extra_body: Cow::Borrowed(&extra_body),
-            extra_headers: Cow::Borrowed(&extra_headers),
+            extra_body,
+            extra_headers,
             extra_cache_key: None,
         };
         let inference_result = function

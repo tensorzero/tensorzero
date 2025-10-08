@@ -150,22 +150,28 @@ lazy_static! {
 }
 
 impl Variant for BestOfNSamplingConfig {
-    async fn infer<'a: 'request, 'request>(
+    async fn infer<'request>(
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
         function: Arc<FunctionConfig>,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: Arc<InferenceConfig>,
         clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
         let candidate_inference_results = self
-            .infer_candidates(&input, &models, &function, inference_config, clients)
+            .infer_candidates(
+                &input,
+                &models,
+                &function,
+                Arc::clone(&inference_config),
+                clients,
+            )
             .await?;
         self.select_best_candidate(
             &input,
             &models.models,
-            inference_config,
+            &inference_config,
             clients,
             candidate_inference_results,
         )
@@ -177,18 +183,24 @@ impl Variant for BestOfNSamplingConfig {
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
         function: Arc<FunctionConfig>,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: Arc<InferenceConfig>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         let candidate_inference_results = self
-            .infer_candidates(&input, &models, &function, inference_config, clients)
+            .infer_candidates(
+                &input,
+                &models,
+                &function,
+                Arc::clone(&inference_config),
+                clients,
+            )
             .await?;
         let inference_result = self
             .select_best_candidate(
                 &input,
                 &models.models,
-                inference_config,
+                &inference_config,
                 clients,
                 candidate_inference_results,
             )
@@ -265,7 +277,7 @@ impl Variant for BestOfNSamplingConfig {
         _input: &[LazyResolvedInput],
         _models: InferenceModels,
         _function: &'a FunctionConfig,
-        _inference_configs: &'a [InferenceConfig<'a>],
+        _inference_configs: &'a [InferenceConfig],
         _clients: &'a InferenceClients<'a>,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
@@ -280,7 +292,7 @@ impl BestOfNSamplingConfig {
         input: &LazyResolvedInput,
         models: &'request InferenceModels,
         function: &Arc<FunctionConfig>,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: Arc<InferenceConfig>,
         clients: &'request InferenceClients<'request>,
     ) -> Result<Vec<InferenceResult>, Error> {
         // Get all the variants we are going to infer
@@ -308,10 +320,12 @@ impl BestOfNSamplingConfig {
                 // the sub-variant will make the same request (and have the same injected index)
                 // However, the 'A, C' and 'C, D' evaluations will all have distinct cache keys:
                 // (A, 2), (C, 3), (C, 2), (D, 4)
-                let mut config = inference_config.clone();
-                config.variant_name = candidate;
-                config.extra_cache_key = Some(format!("candidate_{i}"));
-                Ok((candidate.to_string(), variant, config))
+                let config = InferenceConfig {
+                    variant_name: Arc::from(candidate.as_str()),
+                    extra_cache_key: Some(format!("candidate_{i}")),
+                    ..inference_config.as_ref().clone()
+                };
+                Ok((candidate.to_string(), variant, Arc::new(config)))
             })
             .collect::<Result<Vec<_>, Error>>()?;
 
@@ -326,7 +340,7 @@ impl BestOfNSamplingConfig {
                         Arc::new(input.clone()),
                         models.clone(),
                         Arc::clone(function),
-                        config,
+                        Arc::clone(config),
                         clients,
                         InferenceParams::default(),
                     ),
@@ -371,7 +385,7 @@ impl BestOfNSamplingConfig {
         &self,
         input: &LazyResolvedInput,
         models: &Arc<ModelTable>,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: &'request InferenceConfig,
         clients: &'request InferenceClients<'request>,
         candidates: Vec<InferenceResult>,
     ) -> Result<InferenceResult, Error> {
@@ -458,7 +472,7 @@ async fn inner_select_best_candidate<'a, 'request>(
     evaluator: &'a BestOfNEvaluatorConfig,
     input: &'request LazyResolvedInput,
     models: &'a ModelTable,
-    inference_config: &'request InferenceConfig<'request>,
+    inference_config: &'request InferenceConfig,
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult],
 ) -> Result<(Option<usize>, Option<ModelInferenceResponseWithMetadata>), Error> {
@@ -673,13 +687,13 @@ impl BestOfNEvaluatorConfig {
     async fn prepare_evaluator_request<'a>(
         &self,
         input: &LazyResolvedInput,
-        inference_config: &InferenceConfig<'_>,
+        inference_config: &InferenceConfig,
         candidates: &[InferenceResult],
         inference_params: &mut InferenceParams,
     ) -> Result<(ModelInferenceRequest<'a>, Vec<usize>), Error> {
         // Do this before we prepare the system message so we can use the correct max index in the system message
         let (candidate_message, skipped_indices) =
-            Self::prepare_candidate_message(inference_config.templates, candidates)?;
+            Self::prepare_candidate_message(&inference_config.templates, candidates)?;
         // Need to subtract the skipped indices from the total number of candidates to get the correct max index
         let max_index = candidates
             .len()
@@ -691,13 +705,13 @@ impl BestOfNEvaluatorConfig {
                 })
             })?;
         let system = Some(self.prepare_system_message(
-            inference_config.templates,
+            &inference_config.templates,
             input.system.as_ref(),
             max_index,
         )?);
         let mut messages = try_join_all(input.messages.iter().map(|message| {
             self.inner
-                .prepare_request_message(inference_config.templates, message)
+                .prepare_request_message(&inference_config.templates, message)
         }))
         .await?;
         messages.push(candidate_message);
@@ -1324,11 +1338,11 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            templates: &templates,
+            templates: Arc::new(templates),
             tool_config: None,
             dynamic_output_schema: None,
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),

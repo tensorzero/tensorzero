@@ -349,12 +349,12 @@ impl FunctionConfig {
     }
 
     #[instrument(skip_all, fields(inference_id))]
-    pub async fn prepare_response<'request>(
+    pub async fn prepare_response(
         &self,
         inference_id: Uuid,
         content_blocks: Vec<ContentBlockOutput>,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: &InferenceConfig,
         inference_params: InferenceParams,
         original_response: Option<String>,
     ) -> Result<InferenceResult, Error> {
@@ -364,7 +364,7 @@ impl FunctionConfig {
                     inference_id,
                     content_blocks,
                     model_inference_results,
-                    inference_config.tool_config,
+                    inference_config.tool_config.as_deref(),
                     inference_params,
                     original_response,
                 )
@@ -1873,16 +1873,16 @@ mod tests {
             latency,
             cached: false,
         };
-        let templates = TemplateConfig::default();
+        let templates = Arc::new(TemplateConfig::default());
         let inference_config = InferenceConfig {
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
             tool_config: None,
-            function_name: "",
-            variant_name: "",
-            templates: &templates,
+            function_name: "".into(),
+            variant_name: "".into(),
+            templates: templates.clone(),
             dynamic_output_schema: None,
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -2192,10 +2192,10 @@ mod tests {
                 episode_id: Uuid::now_v7(),
             },
             tool_config: None,
-            function_name: "",
-            variant_name: "",
-            templates: &templates,
-            dynamic_output_schema: Some(&dynamic_output_schema),
+            function_name: "".into(),
+            variant_name: "".into(),
+            templates: templates.clone(),
+            dynamic_output_schema: Some(Arc::new(dynamic_output_schema)),
             extra_body: Default::default(),
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,

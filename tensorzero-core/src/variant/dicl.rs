@@ -169,12 +169,12 @@ pub struct UninitializedDiclConfig {
 }
 
 impl Variant for DiclConfig {
-    async fn infer<'a: 'request, 'request>(
+    async fn infer<'request>(
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
         function: Arc<FunctionConfig>,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: Arc<InferenceConfig>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -187,8 +187,8 @@ impl Variant for DiclConfig {
                 &input,
                 &models.embedding_models,
                 clients,
-                inference_config.function_name,
-                inference_config.variant_name,
+                &inference_config.function_name,
+                &inference_config.variant_name,
                 &function,
             )
             .await?;
@@ -198,7 +198,7 @@ impl Variant for DiclConfig {
             &input,
             &relevant_examples,
             &function,
-            inference_config,
+            &inference_config,
             false,
             &mut inference_params,
         )?;
@@ -215,7 +215,7 @@ impl Variant for DiclConfig {
             model_name: self.model().clone(),
             model_config: &model_config,
             function: function.as_ref(),
-            inference_config,
+            inference_config: Arc::clone(&inference_config),
             clients,
             inference_params,
             retry_config: self.retries(),
@@ -238,7 +238,7 @@ impl Variant for DiclConfig {
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
         function: Arc<FunctionConfig>,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: Arc<InferenceConfig>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -251,8 +251,8 @@ impl Variant for DiclConfig {
                 &input,
                 &models.embedding_models,
                 clients,
-                inference_config.function_name,
-                inference_config.variant_name,
+                &inference_config.function_name,
+                &inference_config.variant_name,
                 &function,
             )
             .await?;
@@ -261,7 +261,7 @@ impl Variant for DiclConfig {
             &input,
             &relevant_examples,
             &function,
-            inference_config,
+            &inference_config,
             true,
             &mut inference_params,
         )?;
@@ -350,7 +350,7 @@ impl Variant for DiclConfig {
         _input: &[LazyResolvedInput],
         _models: InferenceModels,
         _function: &'a FunctionConfig,
-        _inference_configs: &'a [InferenceConfig<'a>],
+        _inference_configs: &'a [InferenceConfig],
         _clients: &'a InferenceClients<'a>,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
@@ -625,7 +625,7 @@ impl DiclConfig {
         input: &LazyResolvedInput,
         examples: &[Example],
         function: &'request Arc<FunctionConfig>,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: &'request InferenceConfig,
         stream: bool,
         inference_params: &mut InferenceParams,
     ) -> Result<ModelInferenceRequest<'request>, Error>
@@ -671,8 +671,7 @@ impl DiclConfig {
             inference_extra_headers: inference_config
                 .extra_headers
                 .clone()
-                .into_owned()
-                .filter(inference_config.variant_name),
+                .filter(&inference_config.variant_name),
         };
         prepare_model_inference_request(
             messages,

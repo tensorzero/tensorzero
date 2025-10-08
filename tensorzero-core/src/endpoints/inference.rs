@@ -9,7 +9,6 @@ use metrics::counter;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
@@ -285,7 +284,7 @@ pub async fn inference(
     }
 
     let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
-    let mut templates = Cow::Borrowed(&config.templates);
+    let mut templates = Arc::clone(&config.templates);
 
     prepare_candidate_variants(
         &mut candidate_variants,
@@ -296,7 +295,7 @@ pub async fn inference(
         &function,
         function_name.clone(),
     )?;
-    let templates = &*templates;
+    let templates = &templates;
 
     // Increment the request count if we're not in dryrun mode
     if !dryrun {
@@ -407,7 +406,7 @@ struct InferVariantArgs<'a> {
     inference_models: InferenceModels,
     inference_clients: &'a InferenceClients<'a>,
     inference_params: InferenceParams,
-    templates: &'a TemplateConfig<'a>,
+    templates: &'a Arc<TemplateConfig<'static>>,
     tool_config: &'a Option<ToolCallConfig>,
     output_schema: &'a Option<DynamicJSONSchema>,
     config: &'a Arc<Config>,
@@ -446,12 +445,14 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
 
     // Will be edited by the variant as part of making the request so we must clone here
     let variant_inference_params = inference_params.clone();
-    let inference_config = InferenceConfig {
-        function_name,
-        variant_name: &variant_name,
-        templates,
-        tool_config: tool_config.as_ref(),
-        dynamic_output_schema: output_schema.as_ref(),
+    let inference_config = Arc::new(InferenceConfig {
+        function_name: Arc::from(function_name),
+        variant_name: Arc::from(variant_name.as_str()),
+        templates: Arc::clone(templates),
+        tool_config: tool_config.as_ref().map(|tc| Arc::new(tc.clone())),
+        dynamic_output_schema: output_schema
+            .as_ref()
+            .map(|schema| Arc::new(schema.clone())),
         ids: InferenceIds {
             inference_id,
             episode_id,
@@ -460,9 +461,9 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             .gateway
             .fetch_and_encode_input_files_before_inference,
         extra_cache_key: None,
-        extra_body: Cow::Borrowed(extra_body),
-        extra_headers: Cow::Borrowed(extra_headers),
-    };
+        extra_body: extra_body.clone(),
+        extra_headers: extra_headers.clone(),
+    });
 
     if stream {
         let result = variant
@@ -470,7 +471,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 resolved_input.clone(),
                 inference_models,
                 function.clone(),
-                &inference_config,
+                inference_config.clone(),
                 inference_clients,
                 variant_inference_params,
             )
@@ -480,8 +481,8 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
         // The provider has already checked that the first chunk is OK.
         let (stream, model_used_info) = result?;
 
-        let extra_body = inference_config.extra_body.into_owned();
-        let extra_headers = inference_config.extra_headers.into_owned();
+        let extra_body = inference_config.extra_body.clone();
+        let extra_headers = inference_config.extra_headers.clone();
         // Create InferenceMetadata for a streaming inference
         let inference_metadata = InferenceMetadata {
             function_name: function_name.to_string(),
@@ -526,7 +527,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 Arc::clone(&resolved_input),
                 inference_models,
                 function.clone(),
-                &inference_config,
+                Arc::clone(&inference_config),
                 inference_clients,
                 variant_inference_params,
             )
@@ -537,8 +538,8 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
         if !dryrun {
             // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
             let result_to_write = result.clone();
-            let extra_body = inference_config.extra_body.into_owned();
-            let extra_headers = inference_config.extra_headers.into_owned();
+            let extra_body = inference_config.extra_body.clone();
+            let extra_headers = inference_config.extra_headers.clone();
             let write_metadata = InferenceDatabaseInsertMetadata {
                 function_name: function_name.to_string(),
                 variant_name: inference_config.variant_name.to_string(),
@@ -604,7 +605,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
     ) {
         // Get the function config or return an error if it doesn't exist
         (Some(function_name), None, _) => Ok((
-            config.get_function(function_name)?.into_owned(),
+            config.get_function(function_name)?.clone().into_owned(),
             function_name.to_string(),
         )),
         (None, Some(model_name), None) => {
@@ -767,7 +768,7 @@ fn create_stream(
             let config = config.clone();
             let async_write = config.gateway.observability.async_writes;
             let write_future = async move {
-                let templates = Cow::Borrowed(&config.templates);
+                let templates = Arc::clone(&config.templates);
                 let collect_chunks_args = CollectChunksArgs {
                     value: buffer,
                     inference_id,
@@ -780,11 +781,11 @@ fn create_stream(
                     raw_request,
                     raw_response,
                     inference_params,
-                    function_name: &function_name,
-                    variant_name: &variant_name,
-                    dynamic_output_schema,
-                    templates: &templates,
-                    tool_config: tool_config.as_ref(),
+                    function_name: Arc::from(function_name.as_str()),
+                    variant_name: Arc::from(variant_name.as_str()),
+                    dynamic_output_schema: dynamic_output_schema.map(Arc::new),
+                    templates,
+                    tool_config: tool_config.as_ref().map(|tc| Arc::new(tc.clone())),
                     cached,
                     extra_body: extra_body.clone(),
                     extra_headers: extra_headers.clone(),
@@ -1284,7 +1285,7 @@ fn prepare_candidate_variants(
     tags: &mut HashMap<String, String>,
     pinned_variant_name: Option<&str>,
     dynamic_variant_config: Option<UninitializedVariantInfo>,
-    template_config: &mut Cow<'_, TemplateConfig>,
+    template_config: &mut Arc<TemplateConfig<'static>>,
     function: &FunctionConfig,
     function_name: String,
 ) -> Result<(), Error> {
@@ -1315,7 +1316,7 @@ fn prepare_candidate_variants(
 
             // Replace templates in the template config with the ones passed in
             // We Clone here so that we can still reference the old templates that don't conflict
-            let mut dynamic_template_config: TemplateConfig = template_config.clone().into_owned();
+            let mut dynamic_template_config: TemplateConfig = (**template_config).clone();
             for path_with_contents in candidate_variant_info.get_all_template_paths() {
                 let template_name = path_with_contents.path.get_template_key();
                 if dynamic_template_config.contains_template(&template_name) {
@@ -1327,7 +1328,7 @@ fn prepare_candidate_variants(
                 dynamic_template_config
                     .add_template(template_name, path_with_contents.contents.clone())?;
             }
-            *template_config = Cow::Owned(dynamic_template_config);
+            *template_config = Arc::new(dynamic_template_config);
             candidate_variants.clear();
             candidate_variants.insert(
                 "tensorzero::dynamic_variant".to_string(),

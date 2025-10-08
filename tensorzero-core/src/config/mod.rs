@@ -88,7 +88,7 @@ pub struct Config {
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
     #[serde(skip)]
-    pub templates: TemplateConfig<'static>,
+    pub templates: Arc<TemplateConfig<'static>>,
     pub object_store_info: Option<ObjectStoreInfo>,
     pub provider_types: ProviderTypesConfig,
     pub optimizers: HashMap<String, OptimizerInfo>,
@@ -614,7 +614,7 @@ impl Config {
         }
         let uninitialized_config = UninitializedConfig::try_from(table)?;
 
-        let templates = TemplateConfig::new();
+        let mut templates = TemplateConfig::new();
 
         let functions = uninitialized_config
             .functions
@@ -697,7 +697,7 @@ impl Config {
             metrics: uninitialized_config.metrics,
             tools,
             evaluations: HashMap::new(),
-            templates,
+            templates: Arc::new(TemplateConfig::new()), // Will be populated below
             object_store_info,
             provider_types: uninitialized_config.provider_types,
             optimizers,
@@ -738,9 +738,7 @@ impl Config {
         } else {
             None
         };
-        config
-            .templates
-            .initialize(template_paths, template_fs_base_path.as_deref())?;
+        templates.initialize(template_paths, template_fs_base_path.as_deref())?;
 
         // Validate the config
         config.validate().await?;
@@ -765,7 +763,7 @@ impl Config {
                 }
                 for variant in evaluation_function_config.variants().values() {
                     for template in variant.get_all_template_paths() {
-                        config.templates.add_template(
+                        templates.add_template(
                             template.path.get_template_key(),
                             template.contents.clone(),
                         )?;
@@ -776,7 +774,7 @@ impl Config {
                         &config.tools,
                         &config.models,
                         &config.embedding_models,
-                        &config.templates,
+                        &templates,
                         &evaluation_function_name,
                     )
                     .await?;
@@ -797,6 +795,7 @@ impl Config {
             }
         }
         config.evaluations = evaluations;
+        config.templates = Arc::new(templates);
 
         Ok(config)
     }

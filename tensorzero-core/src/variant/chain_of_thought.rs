@@ -51,12 +51,12 @@ impl UninitializedChainOfThoughtConfig {
 }
 
 impl Variant for ChainOfThoughtConfig {
-    async fn infer<'a: 'request, 'request>(
+    async fn infer<'request>(
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
         function: Arc<FunctionConfig>,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: Arc<InferenceConfig>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -69,31 +69,31 @@ impl Variant for ChainOfThoughtConfig {
             }
             .into());
         };
-        let original_output_schema = match inference_config.dynamic_output_schema {
+        let original_output_schema = match &inference_config.dynamic_output_schema {
             Some(schema) => &schema.value,
             None => &json_config.output_schema.value,
         };
         let augmented_output_schema = prepare_thinking_output_schema(original_output_schema);
-        let augmented_inference_config = InferenceConfig {
-            dynamic_output_schema: Some(&augmented_output_schema),
+        let augmented_inference_config = Arc::new(InferenceConfig {
+            dynamic_output_schema: Some(Arc::new(augmented_output_schema)),
             tool_config: None, // Dynamic tool configs are handled farther down, we don't need to set that here
-            templates: inference_config.templates,
-            function_name: inference_config.function_name,
-            variant_name: inference_config.variant_name,
+            templates: Arc::clone(&inference_config.templates),
+            function_name: Arc::clone(&inference_config.function_name),
+            variant_name: Arc::clone(&inference_config.variant_name),
             ids: inference_config.ids,
             fetch_and_encode_input_files_before_inference: inference_config
                 .fetch_and_encode_input_files_before_inference,
             extra_body: inference_config.extra_body.clone(),
             extra_cache_key: inference_config.extra_cache_key.clone(),
             extra_headers: inference_config.extra_headers.clone(),
-        };
+        });
         let inference_result = self
             .inner
             .infer(
                 Arc::clone(&input),
                 models.clone(),
                 Arc::clone(&function),
-                &augmented_inference_config,
+                augmented_inference_config,
                 clients,
                 inference_params,
             )
@@ -124,7 +124,7 @@ impl Variant for ChainOfThoughtConfig {
         _input: Arc<LazyResolvedInput>,
         _models: InferenceModels,
         _function: Arc<FunctionConfig>,
-        _inference_config: &'request InferenceConfig<'request>,
+        _inference_config: Arc<InferenceConfig>,
         _clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -178,7 +178,7 @@ impl Variant for ChainOfThoughtConfig {
         _input: &[LazyResolvedInput],
         _models: InferenceModels,
         _function: &'a FunctionConfig,
-        _inference_configs: &'a [InferenceConfig<'a>],
+        _inference_configs: &'a [InferenceConfig],
         _clients: &'a InferenceClients<'a>,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
