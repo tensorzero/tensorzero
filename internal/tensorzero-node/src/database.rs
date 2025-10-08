@@ -147,10 +147,7 @@ impl DatabaseClient {
 
         let result = self
             .0
-            .get_adjacent_datapoint_ids(
-                &parsed_params.dataset_name,
-                parsed_params.datapoint_id,
-            )
+            .get_adjacent_datapoint_ids(&parsed_params.dataset_name, parsed_params.datapoint_id)
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
 

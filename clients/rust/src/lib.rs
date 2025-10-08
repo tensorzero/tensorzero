@@ -10,7 +10,7 @@ use serde_json::Value;
 use std::fmt::Debug;
 use tensorzero_core::config::ConfigFileGlob;
 pub use tensorzero_core::db::clickhouse::dataset_queries::{
-    DatasetDetailRow, DatasetQueryParams, GetDatasetMetadataParams, GetDatasetRowsParams, AdjacentDatapointIds, DatapointInsert,
+    AdjacentDatapointIds, DatapointInsert, DatasetDetailRow, DatasetQueryParams, GetDatasetMetadataParams, GetDatasetRowsParams,
 };
 pub use tensorzero_core::db::ClickHouseConnection;
 use tensorzero_core::db::HealthCheckable;
