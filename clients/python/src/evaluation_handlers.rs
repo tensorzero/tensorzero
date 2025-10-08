@@ -47,7 +47,7 @@ fn compute_evaluation_stats(
 }
 
 /// Job handler for streaming evaluation results (synchronous)
-#[pyclass(frozen)]
+#[pyclass(frozen, str)]
 pub struct EvaluationJobHandler {
     pub(crate) receiver: Mutex<tokio::sync::mpsc::Receiver<EvaluationUpdate>>,
     pub(crate) run_info: RunInfo,
@@ -120,8 +120,15 @@ impl EvaluationJobHandler {
     }
 }
 
+impl std::fmt::Display for EvaluationJobHandler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(&self.run_info).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
 /// Job handler for streaming evaluation results (asynchronous)
-#[pyclass(frozen)]
+#[pyclass(frozen, str)]
 pub struct AsyncEvaluationJobHandler {
     pub(crate) receiver: Arc<Mutex<tokio::sync::mpsc::Receiver<EvaluationUpdate>>>,
     pub(crate) run_info: RunInfo,
@@ -189,5 +196,12 @@ impl AsyncEvaluationJobHandler {
             let errors = evaluation_errors.lock().await.clone();
             Python::attach(|py| compute_evaluation_stats(py, infos, errors, evaluation_config))
         })
+    }
+}
+
+impl std::fmt::Display for AsyncEvaluationJobHandler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(&self.run_info).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
     }
 }
