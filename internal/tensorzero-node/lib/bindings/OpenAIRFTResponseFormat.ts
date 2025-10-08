@@ -13,4 +13,7 @@ import type { RFTJsonSchemaInfoOption } from "./RFTJsonSchemaInfoOption";
  * to produce structured outputs, those outputs will be returned as raw JSON strings
  * in the `output_text` field of the Sample namespace instead.
  */
-export type OpenAIRFTResponseFormat = { "type": "json_schema", json_schema: RFTJsonSchemaInfoOption, };
+export type OpenAIRFTResponseFormat = {
+  type: "json_schema";
+  json_schema: RFTJsonSchemaInfoOption;
+};

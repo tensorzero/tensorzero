@@ -5,4 +5,15 @@ import type { UninitializedChatCompletionConfig } from "./UninitializedChatCompl
 import type { UninitializedDiclConfig } from "./UninitializedDiclConfig";
 import type { UninitializedMixtureOfNConfig } from "./UninitializedMixtureOfNConfig";
 
-export type UninitializedVariantConfig = { "type": "chat_completion" } & UninitializedChatCompletionConfig | { "type": "experimental_best_of_n_sampling" } & UninitializedBestOfNSamplingConfig | { "type": "experimental_dynamic_in_context_learning" } & UninitializedDiclConfig | { "type": "experimental_mixture_of_n" } & UninitializedMixtureOfNConfig | { "type": "experimental_chain_of_thought" } & UninitializedChainOfThoughtConfig;
+export type UninitializedVariantConfig =
+  | ({ type: "chat_completion" } & UninitializedChatCompletionConfig)
+  | ({
+      type: "experimental_best_of_n_sampling";
+    } & UninitializedBestOfNSamplingConfig)
+  | ({
+      type: "experimental_dynamic_in_context_learning";
+    } & UninitializedDiclConfig)
+  | ({ type: "experimental_mixture_of_n" } & UninitializedMixtureOfNConfig)
+  | ({
+      type: "experimental_chain_of_thought";
+    } & UninitializedChainOfThoughtConfig);

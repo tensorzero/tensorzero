@@ -3,4 +3,19 @@ import type { JsonInferenceOutput } from "./JsonInferenceOutput";
 import type { StoredInput } from "./StoredInput";
 import type { JsonValue } from "./serde_json/JsonValue";
 
-export type JsonInferenceDatapoint = { dataset_name: string, function_name: string, id: string, episode_id: string | null, input: StoredInput, output?: JsonInferenceOutput | null, output_schema: JsonValue, tags?: { [key in string]?: string } | null, auxiliary?: string, is_deleted: boolean, is_custom: boolean, source_inference_id?: string | null, staled_at?: string | null, name?: string | null, };
+export type JsonInferenceDatapoint = {
+  dataset_name: string;
+  function_name: string;
+  id: string;
+  episode_id: string | null;
+  input: StoredInput;
+  output?: JsonInferenceOutput | null;
+  output_schema: JsonValue;
+  tags?: { [key in string]?: string } | null;
+  auxiliary?: string;
+  is_deleted: boolean;
+  is_custom: boolean;
+  source_inference_id?: string | null;
+  staled_at?: string | null;
+  name?: string | null;
+};

@@ -2,4 +2,6 @@
 import type { ExactMatchConfig } from "./ExactMatchConfig";
 import type { LLMJudgeConfig } from "./LLMJudgeConfig";
 
-export type EvaluatorConfig = { "type": "exact_match" } & ExactMatchConfig | { "type": "llm_judge" } & LLMJudgeConfig;
+export type EvaluatorConfig =
+  | ({ type: "exact_match" } & ExactMatchConfig)
+  | ({ type: "llm_judge" } & LLMJudgeConfig);

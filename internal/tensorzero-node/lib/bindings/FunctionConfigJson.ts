@@ -5,4 +5,11 @@ import type { StaticJSONSchema } from "./StaticJSONSchema";
 import type { ToolCallConfig } from "./ToolCallConfig";
 import type { VariantInfo } from "./VariantInfo";
 
-export type FunctionConfigJson = { variants: { [key in string]?: VariantInfo }, schemas: SchemaData, output_schema: StaticJSONSchema, implicit_tool_call_config: ToolCallConfig, description: string | null, experimentation: ExperimentationConfig, };
+export type FunctionConfigJson = {
+  variants: { [key in string]?: VariantInfo };
+  schemas: SchemaData;
+  output_schema: StaticJSONSchema;
+  implicit_tool_call_config: ToolCallConfig;
+  description: string | null;
+  experimentation: ExperimentationConfig;
+};

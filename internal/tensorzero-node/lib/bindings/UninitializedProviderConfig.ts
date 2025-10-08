@@ -3,4 +3,84 @@ import type { EndpointLocation } from "./EndpointLocation";
 import type { HostedProviderKind } from "./HostedProviderKind";
 import type { OpenAIAPIType } from "./OpenAIAPIType";
 
-export type UninitializedProviderConfig = { "type": "anthropic", model_name: string, api_key_location: string | null, } | { "type": "aws_bedrock", model_id: string, region: string | null, allow_auto_detect_region: boolean, } | { "type": "aws_sagemaker", endpoint_name: string, model_name: string, region: string | null, allow_auto_detect_region: boolean, hosted_provider: HostedProviderKind, } | { "type": "azure", deployment_id: string, endpoint: EndpointLocation, api_key_location: string | null, } | { "type": "gcp_vertex_anthropic", model_id: string, location: string, project_id: string, credential_location: string | null, } | { "type": "gcp_vertex_gemini", model_id: string | null, endpoint_id: string | null, location: string, project_id: string, credential_location: string | null, } | { "type": "google_ai_studio_gemini", model_name: string, api_key_location: string | null, } | { "type": "groq", model_name: string, api_key_location: string | null, } | { "type": "hyperbolic", model_name: string, api_key_location: string | null, } | { "type": "fireworks", model_name: string, api_key_location: string | null, parse_think_blocks: boolean, } | { "type": "mistral", model_name: string, api_key_location: string | null, } | { "type": "openai", model_name: string, api_base: string | null, api_key_location: string | null, api_type: OpenAIAPIType, } | { "type": "openrouter", model_name: string, api_key_location: string | null, } | { "type": "together", model_name: string, api_key_location: string | null, parse_think_blocks: boolean, } | { "type": "vllm", model_name: string, api_base: string, api_key_location: string | null, } | { "type": "xai", model_name: string, api_key_location: string | null, } | { "type": "tgi", api_base: string, api_key_location: string | null, } | { "type": "sglang", model_name: string, api_base: string, api_key_location: string | null, } | { "type": "deepseek", model_name: string, api_key_location: string | null, } | { "type": "dummy", model_name: string, api_key_location: string | null, };
+export type UninitializedProviderConfig =
+  | { type: "anthropic"; model_name: string; api_key_location: string | null }
+  | {
+      type: "aws_bedrock";
+      model_id: string;
+      region: string | null;
+      allow_auto_detect_region: boolean;
+    }
+  | {
+      type: "aws_sagemaker";
+      endpoint_name: string;
+      model_name: string;
+      region: string | null;
+      allow_auto_detect_region: boolean;
+      hosted_provider: HostedProviderKind;
+    }
+  | {
+      type: "azure";
+      deployment_id: string;
+      endpoint: EndpointLocation;
+      api_key_location: string | null;
+    }
+  | {
+      type: "gcp_vertex_anthropic";
+      model_id: string;
+      location: string;
+      project_id: string;
+      credential_location: string | null;
+    }
+  | {
+      type: "gcp_vertex_gemini";
+      model_id: string | null;
+      endpoint_id: string | null;
+      location: string;
+      project_id: string;
+      credential_location: string | null;
+    }
+  | {
+      type: "google_ai_studio_gemini";
+      model_name: string;
+      api_key_location: string | null;
+    }
+  | { type: "groq"; model_name: string; api_key_location: string | null }
+  | { type: "hyperbolic"; model_name: string; api_key_location: string | null }
+  | {
+      type: "fireworks";
+      model_name: string;
+      api_key_location: string | null;
+      parse_think_blocks: boolean;
+    }
+  | { type: "mistral"; model_name: string; api_key_location: string | null }
+  | {
+      type: "openai";
+      model_name: string;
+      api_base: string | null;
+      api_key_location: string | null;
+      api_type: OpenAIAPIType;
+    }
+  | { type: "openrouter"; model_name: string; api_key_location: string | null }
+  | {
+      type: "together";
+      model_name: string;
+      api_key_location: string | null;
+      parse_think_blocks: boolean;
+    }
+  | {
+      type: "vllm";
+      model_name: string;
+      api_base: string;
+      api_key_location: string | null;
+    }
+  | { type: "xai"; model_name: string; api_key_location: string | null }
+  | { type: "tgi"; api_base: string; api_key_location: string | null }
+  | {
+      type: "sglang";
+      model_name: string;
+      api_base: string;
+      api_key_location: string | null;
+    }
+  | { type: "deepseek"; model_name: string; api_key_location: string | null }
+  | { type: "dummy"; model_name: string; api_key_location: string | null };

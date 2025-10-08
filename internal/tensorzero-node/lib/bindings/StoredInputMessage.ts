@@ -2,4 +2,7 @@
 import type { Role } from "./Role";
 import type { StoredInputMessageContent } from "./StoredInputMessageContent";
 
-export type StoredInputMessage = { role: Role, content: Array<StoredInputMessageContent>, };
+export type StoredInputMessage = {
+  role: Role;
+  content: Array<StoredInputMessageContent>;
+};

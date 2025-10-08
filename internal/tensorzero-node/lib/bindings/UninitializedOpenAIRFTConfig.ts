@@ -2,4 +2,18 @@
 import type { OpenAIGrader } from "./OpenAIGrader";
 import type { OpenAIRFTResponseFormat } from "./OpenAIRFTResponseFormat";
 
-export type UninitializedOpenAIRFTConfig = { model: string, grader: OpenAIGrader, response_format: OpenAIRFTResponseFormat | null, batch_size: number | null, compute_multiplier: number | null, eval_interval: number | null, eval_samples: number | null, learning_rate_multiplier: number | null, n_epochs: number | null, reasoning_effort: string | null, api_base: string | null, seed: bigint | null, suffix: string | null, };
+export type UninitializedOpenAIRFTConfig = {
+  model: string;
+  grader: OpenAIGrader;
+  response_format: OpenAIRFTResponseFormat | null;
+  batch_size: number | null;
+  compute_multiplier: number | null;
+  eval_interval: number | null;
+  eval_samples: number | null;
+  learning_rate_multiplier: number | null;
+  n_epochs: number | null;
+  reasoning_effort: string | null;
+  api_base: string | null;
+  seed: bigint | null;
+  suffix: string | null;
+};
