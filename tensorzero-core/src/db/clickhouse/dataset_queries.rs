@@ -557,7 +557,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 now64() as staled_at,
                 now64() as updated_at
             FROM {{table:Identifier}} FINAL
-            WHERE dataset_name = {{dataset_name:String}} AND id = {{datapoint_id:UUID}}
+            WHERE dataset_name = {{dataset_name:String}} AND id = {{datapoint_id:String}}
             "
         );
 
@@ -714,7 +714,6 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                     (SELECT uint_to_uuid(max(id_uint)) FROM DatasetIds WHERE id_uint < toUInt128({datapoint_id:UUID})),
                     toUUID('00000000-0000-0000-0000-000000000000')
                 ) as previous_id
-            FROM DatasetIds
             FORMAT JSONEachRow
         ";
 
