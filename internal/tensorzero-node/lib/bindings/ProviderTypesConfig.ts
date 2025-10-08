@@ -16,4 +16,22 @@ import type { TogetherProviderTypeConfig } from "./TogetherProviderTypeConfig";
 import type { VLLMProviderTypeConfig } from "./VLLMProviderTypeConfig";
 import type { XAIProviderTypeConfig } from "./XAIProviderTypeConfig";
 
-export type ProviderTypesConfig = { anthropic: AnthropicProviderTypeConfig, azure: AzureProviderTypeConfig, deepseek: DeepSeekProviderTypeConfig, fireworks: FireworksProviderTypeConfig, gcp_vertex_gemini: GCPProviderTypeConfig, gcp_vertex_anthropic: GCPProviderTypeConfig, google_ai_studio_gemini: GoogleAIStudioGeminiProviderTypeConfig, groq: GroqProviderTypeConfig, hyperbolic: HyperbolicProviderTypeConfig, mistral: MistralProviderTypeConfig, openai: OpenAIProviderTypeConfig, openrouter: OpenRouterProviderTypeConfig, sglang: SGLangProviderTypeConfig, tgi: TGIProviderTypeConfig, together: TogetherProviderTypeConfig, vllm: VLLMProviderTypeConfig, xai: XAIProviderTypeConfig, };
+export type ProviderTypesConfig = {
+  anthropic: AnthropicProviderTypeConfig;
+  azure: AzureProviderTypeConfig;
+  deepseek: DeepSeekProviderTypeConfig;
+  fireworks: FireworksProviderTypeConfig;
+  gcp_vertex_gemini: GCPProviderTypeConfig;
+  gcp_vertex_anthropic: GCPProviderTypeConfig;
+  google_ai_studio_gemini: GoogleAIStudioGeminiProviderTypeConfig;
+  groq: GroqProviderTypeConfig;
+  hyperbolic: HyperbolicProviderTypeConfig;
+  mistral: MistralProviderTypeConfig;
+  openai: OpenAIProviderTypeConfig;
+  openrouter: OpenRouterProviderTypeConfig;
+  sglang: SGLangProviderTypeConfig;
+  tgi: TGIProviderTypeConfig;
+  together: TogetherProviderTypeConfig;
+  vllm: VLLMProviderTypeConfig;
+  xai: XAIProviderTypeConfig;
+};

@@ -8,4 +8,10 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * but also allows manually-constructed `ToolCallInput` where users don't care about the
  * name/raw_name distinction.
  */
-export type ToolCallInput = { name: string | null, arguments: JsonValue | null, id: string, raw_arguments: string | null, raw_name: string | null, };
+export type ToolCallInput = {
+  name: string | null;
+  arguments: JsonValue | null;
+  id: string;
+  raw_arguments: string | null;
+  raw_name: string | null;
+};

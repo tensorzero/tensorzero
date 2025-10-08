@@ -3,4 +3,8 @@ import type { RateLimit } from "./RateLimit";
 import type { RateLimitingConfigPriority } from "./RateLimitingConfigPriority";
 import type { RateLimitingConfigScopes } from "./RateLimitingConfigScopes";
 
-export type RateLimitingConfigRule = { limits: Array<RateLimit>, scope: RateLimitingConfigScopes, priority: RateLimitingConfigPriority, };
+export type RateLimitingConfigRule = {
+  limits: Array<RateLimit>;
+  scope: RateLimitingConfigScopes;
+  priority: RateLimitingConfigPriority;
+};

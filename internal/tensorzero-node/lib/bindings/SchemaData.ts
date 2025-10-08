@@ -5,4 +5,6 @@ import type { StaticJSONSchema } from "./StaticJSONSchema";
  * Holds all of the schemas used by a chat completion function.
  * These are used by variants to construct a `TemplateWithSchema`
  */
-export type SchemaData = { [key in string]?: { schema: StaticJSONSchema, legacy_definition: boolean, } };
+export type SchemaData = {
+  [key in string]?: { schema: StaticJSONSchema; legacy_definition: boolean };
+};

@@ -7,4 +7,8 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * Defines the types of content block that can come from a `chat` function
  */
-export type ContentBlockChatOutput = { "type": "text" } & Text | { "type": "tool_call" } & ToolCallOutput | { "type": "thought" } & Thought | { "type": "unknown", data: JsonValue, model_provider_name: string | null, };
+export type ContentBlockChatOutput =
+  | ({ type: "text" } & Text)
+  | ({ type: "tool_call" } & ToolCallOutput)
+  | ({ type: "thought" } & Thought)
+  | { type: "unknown"; data: JsonValue; model_provider_name: string | null };
