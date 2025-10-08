@@ -15,6 +15,7 @@ services:
       start_period: 30s
       start_interval: 1s
       timeout: 1s
+
   # This is not a gateway to use but rather one that just sets up migrations for the ClickHouse db
   # If you need to add fixtures that reference newly-added database columns, you'll need to temporarily
   # bump this to a locally-built image (or published 'sha' tag)
@@ -41,6 +42,7 @@ services:
       start_period: 1s
       start_interval: 1s
       timeout: 1s
+
   fixtures:
     build:
       dockerfile: ui/fixtures/Dockerfile

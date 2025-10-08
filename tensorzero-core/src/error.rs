@@ -12,6 +12,7 @@ use tokio::sync::OnceCell;
 use url::Url;
 use uuid::Uuid;
 
+use crate::db::clickhouse::migration_manager::get_run_migrations_command;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::Thought;
 use crate::rate_limiting::{ActiveRateLimitKey, RateLimitingConfigScopes};
@@ -228,6 +229,7 @@ pub enum ErrorDetails {
         id: String,
         message: String,
     },
+    ClickHouseMigrationsDisabled,
     ClickHouseQuery {
         message: String,
     },
@@ -438,6 +440,7 @@ pub enum ErrorDetails {
     ModelValidation {
         message: String,
     },
+    NoFallbackVariantsRemaining,
     Observability {
         message: String,
     },
@@ -528,6 +531,9 @@ pub enum ErrorDetails {
         variant_type: String,
         issue_link: Option<String>,
     },
+    UnsupportedModelProviderForStreamingInference {
+        provider_type: String,
+    },
     UnsupportedVariantForFunctionType {
         function_name: String,
         variant_name: String,
@@ -572,6 +578,7 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseConfiguration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseMigrationsDisabled => tracing::Level::ERROR,
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
@@ -634,6 +641,7 @@ impl ErrorDetails {
             ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
             ErrorDetails::ModelNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
+            ErrorDetails::NoFallbackVariantsRemaining => tracing::Level::WARN,
             ErrorDetails::Observability { .. } => tracing::Level::WARN,
             ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
             ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
@@ -660,6 +668,9 @@ impl ErrorDetails {
             ErrorDetails::UnknownMetric { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedFileExtension { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => tracing::Level::WARN,
+            ErrorDetails::UnsupportedModelProviderForStreamingInference { .. } => {
+                tracing::Level::ERROR
+            }
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedVariantForFunctionType { .. } => tracing::Level::ERROR,
             ErrorDetails::UnsupportedVariantForStreamingInference { .. } => tracing::Level::WARN,
@@ -685,6 +696,7 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseMigrationsDisabled => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DatapointNotFound { .. } => StatusCode::NOT_FOUND,
@@ -753,6 +765,7 @@ impl ErrorDetails {
             ErrorDetails::ModelNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::NoFallbackVariantsRemaining => StatusCode::BAD_GATEWAY,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OptimizationResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OutputParsing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -781,6 +794,9 @@ impl ErrorDetails {
             ErrorDetails::UnknownMetric { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::UnsupportedFileExtension { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            ErrorDetails::UnsupportedModelProviderForStreamingInference { .. } => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => StatusCode::BAD_REQUEST,
@@ -946,6 +962,10 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::ClickHouseMigration { id, message } => {
                 write!(f, "Error running ClickHouse migration {id}: {message}")
+            }
+            ErrorDetails::ClickHouseMigrationsDisabled => {
+                let run_migrations_command: String = get_run_migrations_command();
+                write!(f, "Automatic ClickHouse migrations were disabled, but not all migrations were run. Please run `{run_migrations_command}`")
             }
             ErrorDetails::ClickHouseQuery { message } => {
                 write!(f, "Failed to run ClickHouse query: {message}")
@@ -1219,6 +1239,9 @@ impl std::fmt::Display for ErrorDetails {
                         .join(", ")
                 )
             }
+            ErrorDetails::NoFallbackVariantsRemaining => {
+                write!(f, "No fallback variants remaining.")
+            }
             ErrorDetails::ModelValidation { message } => {
                 write!(f, "Failed to validate model: {message}")
             }
@@ -1320,6 +1343,12 @@ impl std::fmt::Display for ErrorDetails {
                     "Unsupported model provider for batch inference: {provider_type}"
                 )
             }
+            ErrorDetails::UnsupportedModelProviderForStreamingInference { provider_type } => {
+                write!(
+                    f,
+                    "Unsupported model provider for streaming inference: {provider_type}"
+                )
+            }
             ErrorDetails::UnsupportedFileExtension { extension } => {
                 write!(f, "Unsupported file extension: {extension}")
             }
@@ -1368,14 +1397,19 @@ impl std::fmt::Display for ErrorDetails {
 impl IntoResponse for Error {
     /// Log the error and convert it into an Axum response
     fn into_response(self) -> Response {
+        let message = self.to_string();
         let mut body = json!({
-            "error": self.to_string(),
+            "error": message,
         });
         if *UNSTABLE_ERROR_JSON.get().unwrap_or(&false) {
             body["error_json"] =
                 serde_json::to_value(self.get_details()).unwrap_or_else(|e| json!(e.to_string()));
         }
-        (self.status_code(), Json(body)).into_response()
+        let mut response = (self.status_code(), Json(body)).into_response();
+        // Attach the error to the response, so that we can set a nice message in our
+        // `apply_otel_http_trace_layer` middleware
+        response.extensions_mut().insert(self);
+        response
     }
 }
 

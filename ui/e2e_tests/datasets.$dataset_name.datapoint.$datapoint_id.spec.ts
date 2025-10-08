@@ -331,15 +331,22 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
     .filter({ has: page.getByRole("heading", { name: "Tags" }) });
   await expect(tagsSection.locator("table")).toBeVisible();
 
+  // Wait for the input fields to be visible and ready
+  await tagsSection.getByPlaceholder("Key").waitFor({ state: "visible" });
+  await tagsSection.getByPlaceholder("Value").waitFor({ state: "visible" });
+
   // Test 1: Add a new tag
   const testKey1 = "environment";
   const testValue1 = "test";
 
-  await page.getByPlaceholder("Key").fill(testKey1);
-  await page.getByPlaceholder("Value").fill(testValue1);
+  await tagsSection.getByPlaceholder("Key").fill(testKey1);
+  await tagsSection.getByPlaceholder("Value").fill(testValue1);
   await page.getByRole("button", { name: "Add" }).click();
 
-  // Verify the tag appears in the table
+  // Wait for inputs to be cleared after adding (indicates operation completed)
+  await expect(tagsSection.getByPlaceholder("Key")).toHaveValue("");
+
+  // Wait for the tag to appear in the table before proceeding
   await expect(tagsSection.locator("table")).toContainText(testKey1);
   await expect(tagsSection.locator("table")).toContainText(testValue1);
 
@@ -347,11 +354,14 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   const testKey2 = "author";
   const testValue2 = "e2e-test";
 
-  await page.getByPlaceholder("Key").fill(testKey2);
-  await page.getByPlaceholder("Value").fill(testValue2);
+  await tagsSection.getByPlaceholder("Key").fill(testKey2);
+  await tagsSection.getByPlaceholder("Value").fill(testValue2);
   await page.getByRole("button", { name: "Add" }).click();
 
-  // Verify both tags appear in the table (should be sorted alphabetically)
+  // Wait for inputs to be cleared after adding (indicates operation completed)
+  await expect(tagsSection.getByPlaceholder("Key")).toHaveValue("");
+
+  // Wait for the tag to appear in the table before proceeding
   await expect(tagsSection.locator("table")).toContainText(testKey2);
   await expect(tagsSection.locator("table")).toContainText(testValue2);
 
@@ -359,8 +369,11 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   const systemKey = "tensorzero::blocked";
   const systemValue = "should_not_work";
 
-  await page.getByPlaceholder("Key").fill(systemKey);
-  await page.getByPlaceholder("Value").fill(systemValue);
+  await tagsSection.getByPlaceholder("Key").fill(systemKey);
+  await tagsSection.getByPlaceholder("Value").fill(systemValue);
+
+  // Wait for the button state to update based on input validation
+  await page.waitForTimeout(100);
 
   // The Add button should be disabled
   await expect(page.getByRole("button", { name: "Add" })).toBeDisabled();
@@ -373,8 +386,8 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   ).toBeVisible();
 
   // Clear the system tag input
-  await page.getByPlaceholder("Key").clear();
-  await page.getByPlaceholder("Value").clear();
+  await tagsSection.getByPlaceholder("Key").clear();
+  await tagsSection.getByPlaceholder("Value").clear();
 
   // Test 4: Save the datapoint and verify tags persist
   await page.getByRole("button", { name: "Save" }).click();
@@ -415,11 +428,14 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   // Test 6: Edit an existing tag by overwriting it
   const newTestValue1 = "production"; // New value for environment tag
 
-  await page.getByPlaceholder("Key").fill(testKey1); // Use same key "environment"
-  await page.getByPlaceholder("Value").fill(newTestValue1);
+  await tagsSection3.getByPlaceholder("Key").fill(testKey1); // Use same key "environment"
+  await tagsSection3.getByPlaceholder("Value").fill(newTestValue1);
   await page.getByRole("button", { name: "Add" }).click();
 
-  // Verify the tag value was overwritten (old value gone, new value present)
+  // Wait for inputs to be cleared after adding (indicates operation completed)
+  await expect(tagsSection3.getByPlaceholder("Key")).toHaveValue("");
+
+  // Wait for the tag to be updated in the table
   await expect(tagsSection3.locator("table")).toContainText(testKey1);
   await expect(tagsSection3.locator("table")).toContainText(newTestValue1);
   await expect(tagsSection3.locator("table")).not.toContainText(testValue1); // Old value should be gone
@@ -461,4 +477,211 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   await expect(tagsSection5.locator("table")).not.toContainText(testValue1); // Old value should be gone
   await expect(tagsSection5.locator("table")).not.toContainText(testKey2);
   await expect(tagsSection5.locator("table")).not.toContainText(testValue2);
+});
+
+test("should be able to add a system message when none exists", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/0196374b-0d7a-7a22-b2d2-598a14f2eacc",
+  );
+  await page.waitForLoadState("networkidle");
+  const datasetName =
+    "test_system_add_" + Math.random().toString(36).substring(2, 15);
+
+  // Create a new datapoint from an inference without a system message
+  await page.getByText("Add to dataset").click();
+  const commandInput = page.getByPlaceholder("Create or find a dataset...");
+  await commandInput.waitFor({ state: "visible" });
+  await commandInput.fill(datasetName);
+  const createOption = page
+    .locator("[cmdk-item]")
+    .filter({ hasText: datasetName });
+  await createOption.waitFor({ state: "visible" });
+  await createOption.click();
+  await page.getByText("Inference Output").click();
+
+  // Wait for the toast to appear with success message
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("New Datapoint"),
+  ).toBeVisible();
+
+  // Wait for and click on the "View" button in the toast
+  const viewButton = page
+    .getByRole("region", { name: /notifications/i })
+    .getByText("View");
+  await viewButton.waitFor({ state: "visible" });
+  await viewButton.click();
+
+  // Wait for navigation to the new page
+  await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
+    timeout: 10000,
+  });
+
+  // Enter edit mode
+  await page.getByRole("button", { name: "Edit" }).click();
+
+  // Verify that "Add System" button is visible
+  const addSystemMessageButton = page.getByRole("button", {
+    name: "Add System",
+  });
+  await expect(addSystemMessageButton).toBeVisible();
+
+  // Click the "Add System" button
+  await addSystemMessageButton.click();
+
+  // Wait for the system message editor to appear
+  // The system message should appear as the first contenteditable div
+  const systemMessageEditor = page
+    .locator("div[contenteditable='true']")
+    .first();
+  await systemMessageEditor.waitFor({ state: "visible" });
+
+  // Type a system message
+  const systemMessageText = v7();
+  await systemMessageEditor.fill(
+    `You are a helpful assistant. Context: ${systemMessageText}`,
+  );
+
+  // Save the datapoint
+  await page.getByRole("button", { name: "Save" }).click();
+
+  // Wait for redirect to new datapoint page (saving creates a new datapoint)
+  await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
+    timeout: 10000,
+  });
+  await page.waitForLoadState("networkidle");
+
+  // Wait for ClickHouse to fully commit the data (eventual consistency)
+  await page.waitForTimeout(2000);
+
+  // Assert that "error" is not in the page
+  await expect(page.getByText("error", { exact: false })).not.toBeVisible();
+
+  // Verify the system message is visible in the page
+  await expect(page.getByText(systemMessageText)).toBeVisible();
+
+  // Reload the page to verify persistence
+  await page.reload();
+  await page.waitForLoadState("networkidle");
+
+  // Verify system message is still present after reload
+  await expect(page.getByText(systemMessageText)).toBeVisible();
+});
+
+test("should be able to delete an existing system message", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/0196368f-1ae8-7551-b5df-9a61593eb307",
+  );
+  await page.waitForLoadState("networkidle");
+  const datasetName =
+    "test_system_delete_" + Math.random().toString(36).substring(2, 15);
+
+  // Create a new datapoint from an inference
+  await page.getByText("Add to dataset").click();
+  const commandInput = page.getByPlaceholder("Create or find a dataset...");
+  await commandInput.waitFor({ state: "visible" });
+  await commandInput.fill(datasetName);
+  const createOption = page
+    .locator("[cmdk-item]")
+    .filter({ hasText: datasetName });
+  await createOption.waitFor({ state: "visible" });
+  await createOption.click();
+  await page.getByText("Inference Output").click();
+
+  // Wait for the toast to appear with success message
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("New Datapoint"),
+  ).toBeVisible();
+
+  // Wait for and click on the "View" button in the toast
+  const viewButton = page
+    .getByRole("region", { name: /notifications/i })
+    .getByText("View");
+  await viewButton.waitFor({ state: "visible" });
+  await viewButton.click();
+
+  // Wait for navigation to the new page
+  await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
+    timeout: 10000,
+  });
+
+  // First, add a system message (deterministic test - always start fresh)
+  await page.getByRole("button", { name: "Edit" }).click();
+
+  // Click Add System to add a new system message
+  const addSystemMessageButton = page.getByRole("button", {
+    name: "Add System",
+  });
+  await addSystemMessageButton.click();
+
+  // Fill in the system message
+  const systemMessageEditor = page
+    .locator("div[contenteditable='true']")
+    .first();
+  await systemMessageEditor.waitFor({ state: "visible" });
+  const systemMessageText = v7();
+  await systemMessageEditor.fill(
+    `You are a helpful assistant. Context: ${systemMessageText}`,
+  );
+
+  // Save the datapoint with the system message
+  await page.getByRole("button", { name: "Save" }).click();
+
+  // Wait for redirect to new datapoint page
+  await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
+    timeout: 10000,
+  });
+  await page.waitForLoadState("networkidle");
+
+  // Wait for ClickHouse to fully commit the data (eventual consistency)
+  await page.waitForTimeout(2000);
+
+  // Verify system message was saved
+  await expect(page.getByText(systemMessageText)).toBeVisible();
+
+  // Enter edit mode to delete the system message
+  await page.getByRole("button", { name: "Edit" }).click();
+
+  // At this point we're in edit mode with a system message present
+  // Now delete the system message
+  const deleteSystemMessageButton = page.getByRole("button", {
+    name: "Delete system message",
+  });
+  await expect(deleteSystemMessageButton).toBeVisible();
+  await deleteSystemMessageButton.click();
+
+  // Verify the "Add System" button is now visible (system message removed from UI)
+  await expect(page.getByRole("button", { name: "Add System" })).toBeVisible();
+
+  // Save the datapoint
+  await page.getByRole("button", { name: "Save" }).click();
+
+  // Wait for redirect to new datapoint page (saving creates a new datapoint)
+  await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
+    timeout: 10000,
+  });
+  await page.waitForLoadState("networkidle");
+
+  // Wait for ClickHouse to fully commit the data (eventual consistency)
+  await page.waitForTimeout(2000);
+
+  // Assert that "error" is not in the page
+  await expect(page.getByText("error", { exact: false })).not.toBeVisible();
+
+  // Verify the system role is no longer visible on the page
+  await expect(page.getByText("system", { exact: true })).not.toBeVisible();
+
+  // Reload the page to verify persistence
+  await page.reload();
+  await page.waitForLoadState("networkidle");
+
+  // Verify system role is still not present after reload
+  await expect(page.getByText("system", { exact: true })).not.toBeVisible();
 });

@@ -16,6 +16,7 @@ import {
   TableItemShortUuid,
 } from "~/components/ui/TableItems";
 import { useFunctionConfig } from "~/context/config";
+import { toEvaluationUrl, toDatasetUrl, toFunctionUrl } from "~/utils/urls";
 
 function EvaluationRunRow({
   evaluationRun,
@@ -33,12 +34,14 @@ function EvaluationRunRow({
       <TableCell className="max-w-[200px]">
         <TableItemShortUuid
           id={evaluationRun.evaluation_run_id}
-          link={`/evaluations/${evaluationRun.evaluation_name}?evaluation_run_ids=${evaluationRun.evaluation_run_id}`}
+          link={toEvaluationUrl(evaluationRun.evaluation_name, {
+            evaluation_run_ids: evaluationRun.evaluation_run_id,
+          })}
         />
       </TableCell>
       <TableCell className="max-w-[200px]">
         <Link
-          to={`/evaluations/${evaluationRun.evaluation_name}`}
+          to={toEvaluationUrl(evaluationRun.evaluation_name)}
           className="block no-underline"
         >
           <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
@@ -48,7 +51,7 @@ function EvaluationRunRow({
       </TableCell>
       <TableCell>
         <Link
-          to={`/datasets/${evaluationRun.dataset_name}`}
+          to={toDatasetUrl(evaluationRun.dataset_name)}
           className="block no-underline"
         >
           <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
@@ -60,7 +63,7 @@ function EvaluationRunRow({
         <TableItemFunction
           functionName={evaluationRun.function_name}
           functionType={functionType ?? ""}
-          link={`/functions/${evaluationRun.function_name}`}
+          link={toFunctionUrl(evaluationRun.function_name)}
         />
       </TableCell>
       <TableCell>

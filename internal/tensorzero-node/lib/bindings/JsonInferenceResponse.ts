@@ -3,12 +3,4 @@ import type { FinishReason } from "./FinishReason";
 import type { JsonInferenceOutput } from "./JsonInferenceOutput";
 import type { Usage } from "./Usage";
 
-export type JsonInferenceResponse = {
-  inference_id: string;
-  episode_id: string;
-  variant_name: string;
-  output: JsonInferenceOutput;
-  usage: Usage;
-  original_response: string | null;
-  finish_reason: FinishReason | null;
-};
+export type JsonInferenceResponse = { inference_id: string, episode_id: string, variant_name: string, output: JsonInferenceOutput, usage: Usage, original_response: string | null, finish_reason: FinishReason | null, };

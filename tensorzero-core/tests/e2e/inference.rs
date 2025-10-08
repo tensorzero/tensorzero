@@ -2669,7 +2669,7 @@ pub async fn e2e_test_dynamic_api_key() {
         .await
         .unwrap();
     // Check that the API response is an error since we didn't provide the right key
-    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     let response_json = response.json::<Value>().await.unwrap();
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
     assert!(

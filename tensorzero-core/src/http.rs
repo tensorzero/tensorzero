@@ -7,6 +7,8 @@ use std::{
     },
     task::{Context, Poll},
 };
+use tracing::Span;
+use tracing_futures::Instrument;
 
 use futures::Stream;
 use http::{HeaderName, HeaderValue};
@@ -30,19 +32,43 @@ struct LimitedClient {
     // This needs to be an `Arc` so that we can share the counter
     // when we create a `TensorzeroEventSource` stream wrapper
     // (we need to decrement it when the stream is dropped)
+    // Be careful - this should only ever be cloned from `LimitedClientTicket.into_owned`,
+    // where we also set `should_decrement` to `false`
     concurrent_requests: Arc<AtomicU8>,
     client: Client,
 }
 
 struct LimitedClientTicket<'a> {
     client: CowNoClone<'a, LimitedClient>,
+    // If `true`, decrement `client.concurrent_requests` when we drop `self
+    // This will be `false` when using the fallback client (which has no limit),
+    // or when we transfer ownership in 'LimitedClientTicket.into_owned'
+    should_decrement: bool,
+}
+
+impl LimitedClientTicket<'_> {
+    fn into_owned(mut self) -> LimitedClientTicket<'static> {
+        // Set 'self.should_decrement' to `false`, so that we don't decrement the counter when we drop `self`
+        // The previous value of 'self.should_decrement' is used in the new `LimitedClientTicket`,
+        // which takes responsibility for decrementing the counter
+        let should_decrement = std::mem::replace(&mut self.should_decrement, false);
+        LimitedClientTicket {
+            client: CowNoClone::Owned(LimitedClient {
+                concurrent_requests: self.client.concurrent_requests.clone(),
+                client: self.client.client.clone(),
+            }),
+            should_decrement,
+        }
+    }
 }
 
 impl Drop for LimitedClientTicket<'_> {
     fn drop(&mut self) {
-        self.client
-            .concurrent_requests
-            .fetch_sub(1, Ordering::SeqCst);
+        if self.should_decrement {
+            self.client
+                .concurrent_requests
+                .fetch_sub(1, Ordering::SeqCst);
+        }
     }
 }
 
@@ -154,6 +180,7 @@ impl TensorzeroHttpClient {
             if val.is_ok() {
                 return LimitedClientTicket {
                     client: CowNoClone::Borrowed(client),
+                    should_decrement: true,
                 };
             }
             // Otherwise, continue looping through the array
@@ -168,6 +195,8 @@ impl TensorzeroHttpClient {
         });
         LimitedClientTicket {
             client: CowNoClone::Borrowed(&self.fallback_client),
+            // The fallback client has no limit, so don't decrement its counter when we drop it
+            should_decrement: false,
         }
     }
 
@@ -231,6 +260,7 @@ pub struct TensorZeroEventSource {
     #[pin]
     source: EventSource,
     ticket: LimitedClientTicket<'static>,
+    span: Span,
 }
 
 impl TensorZeroEventSource {
@@ -243,11 +273,38 @@ impl Stream for TensorZeroEventSource {
     type Item = Result<Event, reqwest_eventsource::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+        let _guard = this.span.enter();
         // Just forward to the underlying `EventSource`, without doing anything else.
         // The `TensorZeroEventSource` type only exists to hold on to a `LimitedClientTicket`
         // until the stream is dropped.
-        self.project().source.poll_next(cx)
+        this.source.poll_next(cx)
     }
+}
+
+// Workaround for https://github.com/hyperium/h2/issues/763
+// The 'h2' crate creates a long-lived span for outgoing HTTP connections.
+// Due to connection pooling, these spans can live for a long time -
+// in particular, they can live across multiple TensorZero `POST /inference` requests.
+//
+// A `tracing` span always lives as long as its longest-lived descendant span:
+// https://docs.rs/tracing/latest/tracing/span/index.html#span-relationships
+// As a result, the h2 connection span can cause our spans to live for an extremely long time,
+// delaying the reporting of spans to OpenTelemetry.
+//
+// The h2 span is a trace-level span, so it would normally get disabled entirely
+// by our span filters. Unfortunately, our workaround for a tracing bug
+// intentionally blocks this type of logic (`Interest::never()` / `Interest::always()`)
+// - see apply_filter_fixing_tracing_bug
+//
+// As a result, we need to prevent the h2 span from ending up as a descendant of our spans.
+// When we call into `reqwest`, we enter this special span, which we override to be a root span
+// (no parent). This prevents the h2 span from getting associated with any of our OTEL spans.
+//
+// If https://github.com/hyperium/h2/issues/713 is ever fixed, we should disable tracing
+// within the `h2` crate itself.
+fn tensorzero_h2_workaround_span() -> tracing::Span {
+    tracing::trace_span!(parent: None, "__tensorzero_h2_span_hack__")
 }
 
 impl<'a> TensorzeroRequestBuilder<'a> {
@@ -304,19 +361,18 @@ impl<'a> TensorzeroRequestBuilder<'a> {
     pub fn eventsource(self) -> Result<TensorZeroEventSource, CannotCloneRequestError> {
         Ok(TensorZeroEventSource {
             source: self.builder.eventsource()?,
-            ticket: LimitedClientTicket {
-                client: CowNoClone::Owned(LimitedClient {
-                    concurrent_requests: self.ticket.client.concurrent_requests.clone(),
-                    client: self.ticket.client.client.clone(),
-                }),
-            },
+            ticket: self.ticket.into_owned(),
+            span: tensorzero_h2_workaround_span(),
         })
     }
 
     // This method takes an owned `self`, so we'll drop `self.ticket` when this method
     // returns (after we've gotten a response)
     pub async fn send(self) -> Result<Response, reqwest::Error> {
-        self.builder.send().await
+        self.builder
+            .send()
+            .instrument(tensorzero_h2_workaround_span())
+            .await
     }
 
     pub async fn send_and_parse_json<T: DeserializeOwned>(
@@ -337,27 +393,35 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         let raw_body = request
             .body()
             .and_then(|b| b.as_bytes().map(|b| String::from_utf8_lossy(b).to_string()));
-        let response = client.execute(request).await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceClient {
-                status_code: e.status(),
-                message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
-                provider_type: provider_type.to_string(),
-                raw_request: raw_body.clone(),
-                raw_response: None,
-            })
-        })?;
+        let response = client
+            .execute(request)
+            .instrument(tensorzero_h2_workaround_span())
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    status_code: e.status(),
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
+                    provider_type: provider_type.to_string(),
+                    raw_request: raw_body.clone(),
+                    raw_response: None,
+                })
+            })?;
 
         let status_code = response.status();
 
-        let raw_response = response.text().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceClient {
-                status_code: e.status(),
-                message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
-                provider_type: provider_type.to_string(),
-                raw_request: raw_body.clone(),
-                raw_response: None,
-            })
-        })?;
+        let raw_response = response
+            .text()
+            .instrument(tensorzero_h2_workaround_span())
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    status_code: e.status(),
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
+                    provider_type: provider_type.to_string(),
+                    raw_request: raw_body.clone(),
+                    raw_response: None,
+                })
+            })?;
 
         if !status_code.is_success() {
             return Err(Error::new(ErrorDetails::InferenceClient {
@@ -428,55 +492,134 @@ mod tests {
         },
     };
 
-    use axum::{extract::Request, routing::get, Router};
+    use axum::{
+        extract::Request,
+        response::{sse::Event, Sse},
+        routing::get,
+        Router,
+    };
+    use futures::StreamExt;
     use reqwest::Proxy;
     use tokio::task::{JoinHandle, JoinSet};
 
-    use crate::http::{LimitedClient, CONCURRENCY_LIMIT};
+    use crate::http::{LimitedClient, TensorZeroEventSource, CONCURRENCY_LIMIT};
 
     async fn start_target_server() -> (SocketAddr, JoinHandle<Result<(), std::io::Error>>) {
-        let app = Router::new().route(
-            "/hello",
-            get(|_req: Request| async {
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                http::Response::new("Hello".to_string())
-            }),
-        );
+        let app = Router::new()
+            .route(
+                "/hello",
+                get(|_req: Request| async {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    http::Response::new("Hello".to_string())
+                }),
+            )
+            .route(
+                "/hello-stream",
+                get(|_req: Request| async {
+                    Sse::new(futures::stream::iter(vec![
+                        Ok::<_, String>(Event::default().data("Hello")),
+                        Ok(Event::default().data("[DONE]")),
+                    ]))
+                }),
+            );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let handle = tokio::spawn(axum::serve(listener, app).into_future());
         (addr, handle)
     }
 
+    async fn process_stream(stream: &mut TensorZeroEventSource) {
+        while let Some(event) = stream.next().await {
+            match event {
+                Ok(_) => {}
+                Err(e) => {
+                    if matches!(e, reqwest_eventsource::Error::StreamEnded) {
+                        break;
+                    }
+                    panic!("Error in streaming response: {e:?}");
+                }
+            }
+        }
+    }
+
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_concurrent_requests() {
+    async fn test_concurrent_requests_helper() {
         let (addr, _handle) = start_target_server().await;
         let mut client = super::TensorzeroHttpClient::new().unwrap();
-        // Send one request, and check that it didn't require using a new client
+
+        // Send one non-stream request, and check that it didn't require using a new client
         let response = client
             .get(format!("http://{addr}/hello"))
             .send()
             .await
             .unwrap();
         assert_eq!(response.status(), 200);
+
         for (i, client_cell) in client.clients.iter().enumerate() {
-            assert_eq!(
-                client_cell.get().is_some(),
-                i == 0,
-                "Wrong initialization state for client {i}"
-            );
+            if i == 0 {
+                assert_eq!(
+                    client_cell
+                        .get()
+                        .unwrap()
+                        .concurrent_requests
+                        .load(Ordering::SeqCst),
+                    0
+                );
+            } else {
+                assert!(
+                    client_cell.get().is_none(),
+                    "Client {i} should not be initialized"
+                );
+            }
         }
+
+        // Send one non-stream request, and check that it didn't require using a new client
+        let mut event_source = client
+            .get(format!("http://{addr}/hello-stream"))
+            .eventsource()
+            .unwrap();
+        process_stream(&mut event_source).await;
+        drop(event_source);
+
+        for (i, client_cell) in client.clients.iter().enumerate() {
+            if i == 0 {
+                assert_eq!(
+                    client_cell
+                        .get()
+                        .unwrap()
+                        .concurrent_requests
+                        .load(Ordering::SeqCst),
+                    0
+                );
+            } else {
+                assert!(
+                    client_cell.get().is_none(),
+                    "Client {i} should not be initialized"
+                );
+            }
+        }
+
         let mut tasks = JoinSet::new();
         let num_tasks: usize = 1000;
-        for _ in 0..num_tasks {
+        for i in 0..num_tasks {
             let client = client.clone();
-            tasks.spawn(async move {
-                client
-                    .get(format!("http://{addr}/hello"))
-                    .send()
-                    .await
-                    .unwrap()
-            });
+            if i % 2 == 0 {
+                tasks.spawn(async move {
+                    client
+                        .get(format!("http://{addr}/hello"))
+                        .send()
+                        .await
+                        .unwrap();
+                });
+            } else {
+                tasks.spawn(async move {
+                    let mut stream = client
+                        .get(format!("http://{addr}/hello-stream"))
+                        .eventsource()
+                        .unwrap();
+                    process_stream(&mut stream).await;
+                });
+            }
         }
         tasks.join_all().await;
         // We should have used at least one new client
@@ -516,6 +659,24 @@ mod tests {
             }
         }
 
+        // Send one stream request, and check that it didn't require using a new client
+        let mut stream = client
+            .get(format!("http://{addr}/hello-stream"))
+            .eventsource()
+            .unwrap();
+        process_stream(&mut stream).await;
+        drop(stream);
+        for (i, client_cell) in client.clients.iter().enumerate() {
+            assert_eq!(
+                client_cell.get().is_some(),
+                i == 0,
+                "Wrong initialization state for client {i}"
+            );
+            if let Some(client) = client_cell.get() {
+                assert_eq!(client.concurrent_requests.load(Ordering::SeqCst), 0);
+            }
+        }
+
         let clients_mut = Arc::get_mut(&mut client.clients).unwrap();
         // Store invalid clients in the array, to verify that we don't try to use them when our concurrency
         // level is below `CONCURRENCY_LIMIT`
@@ -534,15 +695,25 @@ mod tests {
 
         // We only spawn `CONCURRENCY_LIMIT` tasks, so we should never need to go beyond the first array entry
         let mut new_tasks = JoinSet::new();
-        for _ in 0..CONCURRENCY_LIMIT as usize {
+        for i in 0..CONCURRENCY_LIMIT as usize {
             let client = client.clone();
-            new_tasks.spawn(async move {
-                client
-                    .get(format!("http://{addr}/hello"))
-                    .send()
-                    .await
-                    .unwrap()
-            });
+            if i % 2 == 0 {
+                new_tasks.spawn(async move {
+                    client
+                        .get(format!("http://{addr}/hello"))
+                        .send()
+                        .await
+                        .unwrap();
+                });
+            } else {
+                new_tasks.spawn(async move {
+                    let mut stream = client
+                        .get(format!("http://{addr}/hello-stream"))
+                        .eventsource()
+                        .unwrap();
+                    process_stream(&mut stream).await;
+                });
+            }
         }
 
         new_tasks.join_all().await;
@@ -550,6 +721,35 @@ mod tests {
             if let Some(client) = client_cell.get() {
                 assert_eq!(client.concurrent_requests.load(Ordering::SeqCst), 0);
             }
+        }
+
+        // Spawn a streaming request, and verify that it holds a ticket until the stream is dropped
+        let mut stream = client
+            .get(format!("http://{addr}/hello-stream"))
+            .eventsource()
+            .unwrap();
+
+        process_stream(&mut stream).await;
+        assert_eq!(
+            client.clients[0]
+                .get()
+                .unwrap()
+                .concurrent_requests
+                .load(Ordering::SeqCst),
+            1
+        );
+        drop(stream);
+        assert_eq!(
+            client.clients[0]
+                .get()
+                .unwrap()
+                .concurrent_requests
+                .load(Ordering::SeqCst),
+            0
+        );
+
+        for client_cell in client.clients.iter() {
+            assert!(client_cell.get().is_some(), "Client should be initialized");
         }
     }
 }

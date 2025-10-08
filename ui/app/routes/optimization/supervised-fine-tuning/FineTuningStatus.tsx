@@ -27,6 +27,7 @@ import type {
   OptimizationJobHandle,
   OptimizationJobInfo,
 } from "tensorzero-node";
+import { toFunctionUrl } from "~/utils/urls";
 
 export default function LLMFineTuningStatus({
   status,
@@ -34,12 +35,11 @@ export default function LLMFineTuningStatus({
   result,
   jobHandle,
 }: {
-  status: { status: "idle" } | OptimizationJobInfo;
+  status: OptimizationJobInfo;
   formData: SFTFormValues;
   result: string | null;
   jobHandle: OptimizationJobHandle;
 }) {
-  if (status.status === "idle") return null;
   const createdAt = extractTimestampFromUUIDv7(formData.jobId);
   return (
     <SectionsGroup>
@@ -57,7 +57,7 @@ export default function LLMFineTuningStatus({
             <BasicInfoItemTitle>Function</BasicInfoItemTitle>
             <BasicInfoItemContent>
               <Chip
-                link={`/observability/functions/${formData.function}`}
+                link={toFunctionUrl(formData.function)}
                 icon={<Function className="text-fg-tertiary" />}
                 label={formData.function}
                 font="mono"

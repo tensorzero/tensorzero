@@ -112,7 +112,7 @@ async fn test_config_from_toml_table_valid() {
         FunctionConfig::Chat(_) => panic!("Expected a JSON function"),
     }
 
-    assert_eq!(config.embedding_models.len(), 1);
+    assert_eq!(config.embedding_models.table.len(), 1);
 
     let embedding_model = config
         .embedding_models
@@ -326,7 +326,7 @@ async fn test_config_from_toml_table_missing_models() {
             .await
             .unwrap_err(),
         Error::new(ErrorDetails::Config {
-            message: "Model name 'gpt-3.5-turbo' not found in model table".to_string()
+            message: "Model name 'gpt-4.1-mini' not found in model table".to_string()
         })
     );
 }
@@ -611,33 +611,33 @@ async fn test_config_from_toml_table_extra_variables_metrics() {
 #[tokio::test]
 async fn test_config_validate_model_empty_providers() {
     let mut config = get_sample_valid_config();
-    config["models"]["gpt-3.5-turbo"]["routing"] = toml::Value::Array(vec![]);
+    config["models"]["gpt-4.1-mini"]["routing"] = toml::Value::Array(vec![]);
 
     let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
     let error = result.unwrap_err();
     assert!(error
         .to_string()
-        .contains("`models.gpt-3.5-turbo`: `routing` must not be empty"));
+        .contains("`models.gpt-4.1-mini`: `routing` must not be empty"));
 }
 
 /// Ensure that the config validation fails when there are duplicate routing entries
 #[tokio::test]
 async fn test_config_validate_model_duplicate_routing_entry() {
     let mut config = get_sample_valid_config();
-    config["models"]["gpt-3.5-turbo"]["routing"] =
+    config["models"]["gpt-4.1-mini"]["routing"] =
         toml::Value::Array(vec!["openai".into(), "openai".into()]);
     let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
     let error = result.unwrap_err().to_string();
-    assert!(error.contains("`models.gpt-3.5-turbo.routing`: duplicate entry `openai`"));
+    assert!(error.contains("`models.gpt-4.1-mini.routing`: duplicate entry `openai`"));
 }
 
 /// Ensure that the config validation fails when a routing entry does not exist in providers
 #[tokio::test]
 async fn test_config_validate_model_routing_entry_not_in_providers() {
     let mut config = get_sample_valid_config();
-    config["models"]["gpt-3.5-turbo"]["routing"] = toml::Value::Array(vec!["closedai".into()]);
+    config["models"]["gpt-4.1-mini"]["routing"] = toml::Value::Array(vec!["closedai".into()]);
     let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
-    assert!(result.unwrap_err().to_string().contains("`models.gpt-3.5-turbo`: `routing` contains entry `closedai` that does not exist in `providers`"));
+    assert!(result.unwrap_err().to_string().contains("`models.gpt-4.1-mini`: `routing` contains entry `closedai` that does not exist in `providers`"));
 }
 
 /// Ensure that the config loading fails when the system schema does not exist
@@ -1076,8 +1076,8 @@ async fn test_config_validate_model_name_tensorzero_prefix() {
     let old_model_entry = config["models"]
         .as_table_mut()
         .unwrap()
-        .remove("gpt-3.5-turbo")
-        .expect("Did not find model `gpt-3.5-turbo`");
+        .remove("gpt-4.1-mini")
+        .expect("Did not find model `gpt-4.1-mini`");
     config["models"]
         .as_table_mut()
         .unwrap()
@@ -1201,18 +1201,18 @@ async fn test_config_validate_model_provider_name_tensorzero_prefix() {
     let mut config = get_sample_valid_config();
 
     // Rename an existing provider to start with `tensorzero::`
-    let old_openai_provider = config["models"]["gpt-3.5-turbo"]["providers"]
+    let old_openai_provider = config["models"]["gpt-4.1-mini"]["providers"]
         .as_table_mut()
         .unwrap()
         .remove("openai")
-        .expect("Did not find provider `openai` under `gpt-3.5-turbo`");
-    config["models"]["gpt-3.5-turbo"]["providers"]
+        .expect("Did not find provider `openai` under `gpt-4.1-mini`");
+    config["models"]["gpt-4.1-mini"]["providers"]
         .as_table_mut()
         .unwrap()
         .insert("tensorzero::openai".to_string(), old_openai_provider);
 
     // Update the routing entry to match the new provider name
-    let routing = config["models"]["gpt-3.5-turbo"]["routing"]
+    let routing = config["models"]["gpt-4.1-mini"]["routing"]
         .as_array_mut()
         .expect("Expected routing to be an array");
     for entry in routing.iter_mut() {
@@ -1223,7 +1223,7 @@ async fn test_config_validate_model_provider_name_tensorzero_prefix() {
 
     let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
 
-    assert!(result.unwrap_err().to_string().contains("`models.gpt-3.5-turbo.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"));
+    assert!(result.unwrap_err().to_string().contains("`models.gpt-4.1-mini.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"));
 }
 
 /// Ensure that get_templates returns the correct templates
@@ -1495,7 +1495,7 @@ async fn test_config_load_shorthand_models_only() {
         [functions.generate_draft.variants.openai_promptA]
         type = "chat_completion"
         weight = 0.9
-        model = "openai::gpt-3.5-turbo"
+        model = "openai::gpt-4.1-mini"
         "#
             .as_bytes(),
         )
@@ -2074,6 +2074,7 @@ async fn test_missing_json_mode_mixture_of_n() {
 
 #[tokio::test]
 async fn test_missing_json_mode_best_of_n() {
+    // Test that evaluator json_mode is optional (it defaults to `strict` at runtime)
     let config_str = r#"
         [gateway]
         bind_address = "0.0.0.0:3000"
@@ -2088,7 +2089,7 @@ async fn test_missing_json_mode_best_of_n() {
 
         [functions.basic_test.variants.best_of_n_variant]
         type = "experimental_best_of_n_sampling"
-        candidates = ["test"]
+        candidates = ["good_variant"]
 
         [functions.basic_test.variants.best_of_n_variant.evaluator]
         model = "my-model"
@@ -2100,14 +2101,14 @@ async fn test_missing_json_mode_best_of_n() {
         type = "openai"
         model_name = "gpt-4o-mini-2024-07-18"
         "#;
+
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = SKIP_CREDENTIAL_VALIDATION
+    // This should succeed (evaluator's `json_mode` is optional)
+    SKIP_CREDENTIAL_VALIDATION
         .scope((), Config::load_from_toml(config, &SpanMap::new_empty()))
         .await
-        .unwrap_err();
-
-    assert_eq!(err.to_string(), "`json_mode` must be specified for `[functions.basic_test.variants.best_of_n_variant.evaluator]` (parent function `basic_test` is a JSON function)");
+        .expect("Config should load successfully with missing evaluator json_mode");
 }
 
 #[tokio::test]

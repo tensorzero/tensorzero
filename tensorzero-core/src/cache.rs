@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::config::OtlpConfig;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
-use crate::embeddings::{EmbeddingModelResponse, EmbeddingRequest};
+use crate::embeddings::{Embedding, EmbeddingModelResponse, EmbeddingRequest};
 use crate::error::{warn_discarded_cache_write, Error, ErrorDetails};
 use crate::inference::types::file::serialize_with_file_data;
 use crate::inference::types::{
@@ -12,7 +12,7 @@ use crate::inference::types::{
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
 use crate::model::StreamResponse;
-use crate::serde_util::deserialize_json_string;
+use crate::serde_util::{deserialize_json_string, serialize_json_string};
 use crate::tool::{ToolCallConfig, ToolCallOutput};
 use blake3::Hash;
 use clap::ValueEnum;
@@ -271,11 +271,21 @@ impl CacheOutput for EmbeddingCacheData {
     }
 }
 
+/// Cache data for embeddings.
+///
+/// Note: Unlike `NonStreamingCacheData` and `StreamingCacheData`, this requires both `serialize_with` and
+/// `deserialize_with` because `Embedding` is an untagged enum. Without `untagged`, OpenAI's API responses wouldn't
+/// deserialize correctly (they send bare arrays/strings). But with `untagged`, the enum serializes as bare JSON
+/// values ([1.0, 2.0] or "abc"), which breaks `deserialize_json_string` (which expects a JSON-encoded string). So we
+/// need `serialize_json_string` to ensure the data is stored in the format that `deserialize_json_string` expects.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct EmbeddingCacheData {
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub embedding: Vec<f32>,
+    #[serde(
+        serialize_with = "serialize_json_string",
+        deserialize_with = "deserialize_json_string"
+    )]
+    pub embedding: Embedding,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

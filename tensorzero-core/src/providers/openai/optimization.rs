@@ -348,7 +348,7 @@ impl<'a> OpenAISupervisedRow<'a> {
             inference
                 .system_input
                 .as_deref()
-                .map(super::SystemOrDeveloper::System),
+                .map(|m| super::SystemOrDeveloper::System(Cow::Borrowed(m))),
             &inference.messages,
             OpenAIMessagesConfig {
                 json_mode: None,
@@ -422,7 +422,7 @@ impl<'a> OpenAIReinforcementRow<'a> {
             inference
                 .system_input
                 .as_deref()
-                .map(super::SystemOrDeveloper::Developer),
+                .map(|m| super::SystemOrDeveloper::Developer(Cow::Borrowed(m))),
             &inference.messages,
             OpenAIMessagesConfig {
                 json_mode: None,
@@ -562,6 +562,7 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizat
                     model_name: model_name.clone(),
                     api_base: None,
                     api_key_location: None,
+                    api_type: Default::default(),
                 },
                 extra_headers: None,
                 extra_body: None,
@@ -832,7 +833,7 @@ mod tests {
         let succeeded_model = json!({
             "id": "ftjob-123",
             "status": "succeeded",
-            "fine_tuned_model": "ft:gpt-3.5-turbo:my-org:custom_suffix:id",
+            "fine_tuned_model": "ft:gpt-4.1-mini:my-org:custom_suffix:id",
             "created_at": 1620000000,
             "metadata": {},
         });
@@ -850,7 +851,7 @@ mod tests {
             "id": "ftjob-456",
             "status": "succeeded",
             "result_files": ["file-abc"],
-            "fine_tuned_model": "ft:gpt-3.5-turbo:my-org:custom_suffix:id",
+            "fine_tuned_model": "ft:gpt-4.1-mini:my-org:custom_suffix:id",
             "created_at": 1620000000,
             "metadata": {},
         });

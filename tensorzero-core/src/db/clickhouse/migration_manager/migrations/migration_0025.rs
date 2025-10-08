@@ -73,7 +73,7 @@ impl Migration for Migration0025<'_> {
                 episode_id_uint UInt128, -- UUID encoded as a UInt128
                 -- this is duplicated so that we can look it up without joining at inference time
                 variant_pins Map(String, String),
-                datapoint_name Nullable(String),
+                datapoint_name Nullable(String), -- externally: task_name (TODO: rename in a future migration)
                 tags Map(String, String),
                 is_deleted Bool DEFAULT false,
                 updated_at DateTime64(6, 'UTC') DEFAULT now()
