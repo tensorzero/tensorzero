@@ -6,8 +6,9 @@ use uuid::Uuid;
 
 use crate::config::{MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::query_builder::FloatComparisonOperator;
-use crate::db::clickhouse::ClickHouseConnectionInfo;
-use crate::endpoints::datasets::DatapointKind;
+use crate::db::clickhouse::{ClickHouseConnectionInfo, Rows};
+// TODO: move things somewhere sensible
+use crate::endpoints::datasets::{validate_dataset_name, DatapointKind};
 use crate::error::{Error, ErrorDetails};
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -140,6 +141,14 @@ pub struct DatasetMetadata {
     pub last_updated: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export, optional_fields))]
+pub struct AdjacentDatapointIds {
+    pub previous_id: Option<Uuid>,
+    pub next_id: Option<Uuid>,
+}
+
 #[async_trait]
 pub trait DatasetQueries {
     /// Counts rows for a dataset based on query parameters
@@ -160,6 +169,35 @@ pub trait DatasetQueries {
         &self,
         params: &GetDatasetMetadataParams,
     ) -> Result<Vec<DatasetMetadata>, Error>;
+
+    /// Gets the count of unique dataset names
+    async fn get_number_of_datasets(&self) -> Result<u32, Error>;
+
+    /// Marks a datapoint as stale by inserting a new row with staled_at set to now
+    async fn stale_datapoint(
+        &self,
+        dataset_name: &str,
+        datapoint_id: Uuid,
+        function_type: DatapointKind,
+    ) -> Result<(), Error>;
+
+    /// Inserts a new datapoint into the dataset
+    async fn insert_datapoint(&self, datapoint: &DatapointInsert) -> Result<(), Error>;
+
+    /// Counts datapoints for a specific dataset and function
+    async fn count_datapoints_for_dataset_function(
+        &self,
+        dataset_name: &str,
+        function_name: &str,
+        function_type: DatapointKind,
+    ) -> Result<u32, Error>;
+
+    /// Gets the adjacent (previous and next) datapoint IDs for a given datapoint
+    async fn get_adjacent_datapoint_ids(
+        &self,
+        dataset_name: &str,
+        datapoint_id: Uuid,
+    ) -> Result<AdjacentDatapointIds, Error>;
 }
 
 #[async_trait]
@@ -427,6 +465,278 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 })
             })
             .collect::<Result<Vec<_>, _>>()
+    }
+
+    async fn get_number_of_datasets(&self) -> Result<u32, Error> {
+        let query = r"
+            SELECT
+                toUInt32(uniqExact(dataset_name)) as count
+            FROM (
+                SELECT dataset_name
+                FROM ChatInferenceDatapoint FINAL
+                WHERE staled_at IS NULL
+                UNION ALL
+                SELECT dataset_name
+                FROM JsonInferenceDatapoint FINAL
+                WHERE staled_at IS NULL
+            )
+            FORMAT JSONEachRow
+        ";
+
+        let response = self
+            .run_query_synchronous(query.to_string(), &std::collections::HashMap::new())
+            .await?;
+
+        // Parse the count from the response
+        let count_str = response.response.trim();
+
+        #[derive(Deserialize)]
+        struct CountResult {
+            count: u32,
+        }
+
+        let count_result: CountResult = serde_json::from_str(count_str).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: format!("Failed to deserialize count: {e}"),
+            })
+        })?;
+
+        Ok(count_result.count)
+    }
+
+    async fn stale_datapoint(
+        &self,
+        dataset_name: &str,
+        datapoint_id: Uuid,
+        function_type: DatapointKind,
+    ) -> Result<(), Error> {
+        let table = match function_type {
+            DatapointKind::Chat => "ChatInferenceDatapoint",
+            DatapointKind::Json => "JsonInferenceDatapoint",
+        };
+
+        let type_specific_field = match function_type {
+            DatapointKind::Chat => "tool_params",
+            DatapointKind::Json => "output_schema",
+        };
+
+        let query = format!(
+            r"
+            INSERT INTO {{table:Identifier}}
+            (
+                dataset_name,
+                function_name,
+                id,
+                name,
+                episode_id,
+                input,
+                output,
+                {type_specific_field},
+                tags,
+                auxiliary,
+                is_deleted,
+                source_inference_id,
+                is_custom,
+                staled_at,
+                updated_at
+            )
+            SELECT
+                dataset_name,
+                function_name,
+                id,
+                name,
+                episode_id,
+                input,
+                output,
+                {type_specific_field},
+                tags,
+                auxiliary,
+                is_deleted,
+                source_inference_id,
+                is_custom,
+                now64() as staled_at,
+                now64() as updated_at
+            FROM {{table:Identifier}} FINAL
+            WHERE dataset_name = {{dataset_name:String}} AND id = {{datapoint_id:UUID}}
+            "
+        );
+
+        let dataset_name_str = dataset_name.to_string();
+        let datapoint_id_str = datapoint_id.to_string();
+
+        let mut query_params = std::collections::HashMap::new();
+        query_params.insert("table", table);
+        query_params.insert("dataset_name", dataset_name_str.as_str());
+        query_params.insert("datapoint_id", datapoint_id_str.as_str());
+
+        self.run_query_synchronous(query, &query_params).await?;
+
+        Ok(())
+    }
+
+    async fn insert_datapoint(&self, datapoint: &DatapointInsert) -> Result<(), Error> {
+        use crate::db::clickhouse::TableName;
+
+        match datapoint {
+            DatapointInsert::Chat(chat_datapoint) => {
+                // Validate dataset name
+                if let Some(dataset_name) = &chat_datapoint.dataset_name {
+                    validate_dataset_name(dataset_name)?;
+                }
+
+                // Build the struct for the insert
+                let value = serde_json::json!({
+                    "dataset_name": chat_datapoint.dataset_name,
+                    "function_name": chat_datapoint.function_name,
+                    "id": chat_datapoint.id,
+                    "name": chat_datapoint.name,
+                    "episode_id": chat_datapoint.episode_id,
+                    "input": chat_datapoint.input,
+                    "output": chat_datapoint.output,
+                    "tool_params": chat_datapoint.tool_params,
+                    "tags": chat_datapoint.tags,
+                    "auxiliary": chat_datapoint.auxiliary,
+                    "is_deleted": false,
+                    "source_inference_id": chat_datapoint.source_inference_id,
+                    "is_custom": chat_datapoint.is_custom,
+                });
+
+                // Serialize to JSON string
+                let value_str = serde_json::to_string(&value).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: e.to_string(),
+                    })
+                })?;
+
+                self.write_non_batched::<()>(
+                    Rows::Serialized(&[value_str]),
+                    TableName::ChatInferenceDatapoint,
+                )
+                .await?;
+            }
+            DatapointInsert::Json(json_datapoint) => {
+                // Validate dataset name
+                if let Some(dataset_name) = &json_datapoint.dataset_name {
+                    validate_dataset_name(dataset_name)?;
+                }
+
+                let value = serde_json::json!({
+                    "dataset_name": json_datapoint.dataset_name,
+                    "function_name": json_datapoint.function_name,
+                    "id": json_datapoint.id,
+                    "name": json_datapoint.name,
+                    "episode_id": json_datapoint.episode_id,
+                    "input": json_datapoint.input,
+                    "output": json_datapoint.output,
+                    "output_schema": json_datapoint.output_schema,
+                    "tags": json_datapoint.tags,
+                    "auxiliary": json_datapoint.auxiliary,
+                    "is_deleted": false,
+                    "source_inference_id": json_datapoint.source_inference_id,
+                    "is_custom": json_datapoint.is_custom,
+                });
+
+                // Serialize to JSON string
+                let value_str = serde_json::to_string(&value).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: e.to_string(),
+                    })
+                })?;
+
+                self.write_non_batched::<()>(
+                    Rows::Serialized(&[value_str]),
+                    TableName::JsonInferenceDatapoint,
+                )
+                .await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn count_datapoints_for_dataset_function(
+        &self,
+        dataset_name: &str,
+        function_name: &str,
+        function_type: DatapointKind,
+    ) -> Result<u32, Error> {
+        let table = match function_type {
+            DatapointKind::Chat => "ChatInferenceDatapoint",
+            DatapointKind::Json => "JsonInferenceDatapoint",
+        };
+
+        let query = "SELECT toUInt32(count()) as count FROM {table:Identifier} WHERE dataset_name = {dataset_name:String} AND function_name = {function_name:String} FORMAT JSONEachRow";
+
+        let dataset_name_str = dataset_name.to_string();
+        let function_name_str = function_name.to_string();
+
+        let mut query_params = std::collections::HashMap::new();
+        query_params.insert("table", table);
+        query_params.insert("dataset_name", dataset_name_str.as_str());
+        query_params.insert("function_name", function_name_str.as_str());
+
+        let response = self
+            .run_query_synchronous(query.to_string(), &query_params)
+            .await?;
+
+        #[derive(Deserialize)]
+        struct CountResult {
+            count: u32,
+        }
+
+        let count_result: CountResult = serde_json::from_str(response.response.trim())
+            .map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseDeserialization {
+                    message: format!("Failed to deserialize count: {e}"),
+                })
+            })?;
+
+        Ok(count_result.count)
+    }
+
+    async fn get_adjacent_datapoint_ids(
+        &self,
+        dataset_name: &str,
+        datapoint_id: Uuid,
+    ) -> Result<AdjacentDatapointIds, Error> {
+        let query = r"
+            WITH DatasetIds AS (
+                SELECT toUInt128(id) as id_uint FROM ChatInferenceDatapoint WHERE dataset_name = {dataset_name:String}
+                UNION ALL
+                SELECT toUInt128(id) as id_uint FROM JsonInferenceDatapoint WHERE dataset_name = {dataset_name:String}
+            )
+            SELECT
+                NULLIF(
+                    (SELECT uint_to_uuid(min(id_uint)) FROM DatasetIds WHERE id_uint > toUInt128({datapoint_id:UUID})),
+                    toUUID('00000000-0000-0000-0000-000000000000')
+                ) as next_id,
+                NULLIF(
+                    (SELECT uint_to_uuid(max(id_uint)) FROM DatasetIds WHERE id_uint < toUInt128({datapoint_id:UUID})),
+                    toUUID('00000000-0000-0000-0000-000000000000')
+                ) as previous_id
+            FROM DatasetIds
+            FORMAT JSONEachRow
+        ";
+
+        let dataset_name_str = dataset_name.to_string();
+        let datapoint_id_str = datapoint_id.to_string();
+
+        let mut query_params = std::collections::HashMap::new();
+        query_params.insert("dataset_name", dataset_name_str.as_str());
+        query_params.insert("datapoint_id", datapoint_id_str.as_str());
+
+        let response = self
+            .run_query_synchronous(query.to_string(), &query_params)
+            .await?;
+
+        let result: AdjacentDatapointIds = serde_json::from_str(response.response.trim())
+            .map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseDeserialization {
+                    message: format!("Failed to deserialize AdjacentDatapointIds: {e}"),
+                })
+            })?;
+
+        Ok(result)
     }
 }
 

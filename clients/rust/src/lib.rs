@@ -10,7 +10,7 @@ use serde_json::Value;
 use std::fmt::Debug;
 use tensorzero_core::config::ConfigFileGlob;
 pub use tensorzero_core::db::clickhouse::dataset_queries::{
-    DatasetDetailRow, DatasetQueryParams, GetDatasetMetadataParams, GetDatasetRowsParams,
+    DatasetDetailRow, DatasetQueryParams, GetDatasetMetadataParams, GetDatasetRowsParams, AdjacentDatapointIds, DatapointInsert,
 };
 pub use tensorzero_core::db::ClickHouseConnection;
 use tensorzero_core::db::HealthCheckable;
@@ -63,7 +63,7 @@ pub use tensorzero_core::db::clickhouse::query_builder::{
     TimeComparisonOperator, TimeFilter,
 };
 pub use tensorzero_core::endpoints::datasets::{
-    ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
+    ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
 };
 pub use tensorzero_core::endpoints::dynamic_evaluation_run::{
     DynamicEvaluationRunParams, DynamicEvaluationRunResponse,

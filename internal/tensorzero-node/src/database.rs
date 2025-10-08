@@ -1,7 +1,8 @@
 use serde::Deserialize;
 use tensorzero::{
-    setup_clickhouse_without_config, ClickHouseConnection, DatasetQueryParams,
-    GetDatasetMetadataParams, GetDatasetRowsParams, TimeWindow,
+    setup_clickhouse_without_config, ClickHouseConnection, DatapointInsert,
+    DatasetQueryParams, GetDatasetMetadataParams, GetDatasetRowsParams, TimeWindow,
+    DatapointKind
 };
 use uuid::Uuid;
 
@@ -89,6 +90,73 @@ impl DatabaseClient {
             GetDatasetMetadataParams
         )
     }
+
+    #[napi]
+    pub async fn get_number_of_datasets(&self) -> Result<u32, napi::Error> {
+        napi_call_no_deserializing!(&self, get_number_of_datasets)
+    }
+
+    #[napi]
+    pub async fn stale_datapoint(&self, params: String) -> Result<(), napi::Error> {
+        let parsed_params: StaleDatapointParams = serde_json::from_str(&params)
+            .map_err(|e| napi::Error::from_reason(format!("Failed to parse params: {e}")))?;
+
+        self.0
+            .stale_datapoint(
+                &parsed_params.dataset_name,
+                parsed_params.datapoint_id,
+                parsed_params.function_type,
+            )
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))
+    }
+
+    #[napi]
+    pub async fn insert_datapoint(&self, params: String) -> Result<(), napi::Error> {
+        let datapoint: DatapointInsert = serde_json::from_str(&params)
+            .map_err(|e| napi::Error::from_reason(format!("Failed to parse params: {e}")))?;
+
+        self.0
+            .insert_datapoint(&datapoint)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))
+    }
+
+    #[napi]
+    pub async fn count_datapoints_for_dataset_function(
+        &self,
+        params: String,
+    ) -> Result<u32, napi::Error> {
+        let parsed_params: CountDatapointsForDatasetFunctionParams = serde_json::from_str(&params)
+            .map_err(|e| napi::Error::from_reason(format!("Failed to parse params: {e}")))?;
+
+        self.0
+            .count_datapoints_for_dataset_function(
+                &parsed_params.dataset_name,
+                &parsed_params.function_name,
+                parsed_params.function_type,
+            )
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))
+    }
+
+    #[napi]
+    pub async fn get_adjacent_datapoint_ids(&self, params: String) -> Result<String, napi::Error> {
+        let parsed_params: GetAdjacentDatapointIdsParams = serde_json::from_str(&params)
+            .map_err(|e| napi::Error::from_reason(format!("Failed to parse params: {e}")))?;
+
+        let result = self
+            .0
+            .get_adjacent_datapoint_ids(
+                &parsed_params.dataset_name,
+                parsed_params.datapoint_id,
+            )
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+        serde_json::to_string(&result)
+            .map_err(|e| napi::Error::from_reason(format!("Failed to serialize result: {e}")))
+    }
 }
 
 #[derive(Deserialize, ts_rs::TS)]
@@ -96,6 +164,29 @@ impl DatabaseClient {
 struct GetModelUsageTimeseriesParams {
     pub time_window: TimeWindow,
     pub max_periods: u32,
+}
+
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
+struct StaleDatapointParams {
+    pub dataset_name: String,
+    pub datapoint_id: Uuid,
+    pub function_type: DatapointKind,
+}
+
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
+struct CountDatapointsForDatasetFunctionParams {
+    pub dataset_name: String,
+    pub function_name: String,
+    pub function_type: DatapointKind,
+}
+
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
+struct GetAdjacentDatapointIdsParams {
+    pub dataset_name: String,
+    pub datapoint_id: Uuid,
 }
 
 #[derive(Deserialize, ts_rs::TS)]
