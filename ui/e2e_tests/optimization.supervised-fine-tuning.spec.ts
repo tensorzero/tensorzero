@@ -54,7 +54,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
   ]
     .slice(2)
     .forEach(({ provider, model, results }) => {
-      test.only(`@slow should fine-tune on filtered metric data with a mocked ${provider} server`, async ({
+      test(`@slow should fine-tune on filtered metric data with a mocked ${provider} server`, async ({
         page,
       }) => {
         await page.goto("/optimization/supervised-fine-tuning");
