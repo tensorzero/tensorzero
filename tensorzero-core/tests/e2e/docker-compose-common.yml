@@ -90,6 +90,7 @@ services:
       clickhouse:
         condition: service_healthy
     command: ["--run-clickhouse-migrations"]
+    restart: "no"
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
 
@@ -104,5 +105,6 @@ services:
       postgres:
         condition: service_healthy
     command: ["--run-postgres-migrations"]
+    restart: "no"
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
