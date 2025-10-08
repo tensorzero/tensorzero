@@ -1,3 +1,4 @@
+use rand_distr::Distribution;
 use serde_json::json;
 use std::collections::HashMap;
 use tensorzero::{
@@ -203,7 +204,6 @@ impl GaussianBandit {
             .get(variant_name)
             .unwrap_or_else(|| panic!("Unknown variant: {variant_name}"));
 
-        use rand_distr::Distribution;
         let normal = rand_distr::Normal::new(*mean, *stddev)
             .unwrap_or_else(|e| panic!("Failed to create normal distribution: {e}"));
         normal.sample(&mut rand::rng())
@@ -682,18 +682,6 @@ async fn test_track_and_stop_bernoulli_bandit_convergence() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_track_and_stop_gaussian_bandit_convergence() {
-    use serde_json::json;
-    use std::collections::HashMap;
-    use tensorzero::{
-        ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-        FeedbackParams, InferenceOutput, InferenceResponse, Role,
-    };
-    use tensorzero_core::db::clickhouse::test_helpers::{
-        clickhouse_flush_async_insert, get_clickhouse,
-    };
-    use tensorzero_core::inference::types::TextKind;
-    use tokio::time::Duration;
-
     // Setup: Create config with short update period for testing
     let config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
