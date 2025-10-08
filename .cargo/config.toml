@@ -66,4 +66,6 @@ tsbuild = [
     "tensorzero-core",
     "-p",
     "tensorzero",
+    "-p",
+    "tensorzero-node",
 ] # Export Typescript bindings for TensorZero
