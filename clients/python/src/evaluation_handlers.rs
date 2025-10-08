@@ -1,14 +1,16 @@
 use std::sync::Arc;
 
 use evaluations::{
-    stats::{EvaluationError, EvaluationInfo, EvaluationUpdate},
+    stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate},
     OutputFormat, RunInfo,
 };
 use pyo3::{
     exceptions::{PyStopAsyncIteration, PyStopIteration},
     prelude::*,
 };
-use tensorzero_core::inference::types::pyo3_helpers::serialize_to_dict;
+use tensorzero_core::{
+    evaluations::EvaluationConfig, inference::types::pyo3_helpers::serialize_to_dict,
+};
 use tokio::sync::Mutex;
 
 use crate::gil_helpers::tokio_block_on_without_gil;
@@ -32,16 +34,16 @@ fn compute_evaluation_stats(
     py: Python<'_>,
     evaluation_infos: Vec<EvaluationInfo>,
     evaluation_errors: Vec<EvaluationError>,
-    evaluation_config: Arc<tensorzero_core::evaluations::EvaluationConfig>,
+    evaluation_config: Arc<EvaluationConfig>,
 ) -> PyResult<Py<PyAny>> {
-    let stats = evaluations::stats::EvaluationStats {
+    let stats = EvaluationStats {
         output_format: OutputFormat::Jsonl,
         evaluation_infos,
         evaluation_errors,
         progress_bar: None,
     };
     // Extract evaluators from the evaluation config
-    let tensorzero_core::evaluations::EvaluationConfig::Static(static_config) = &*evaluation_config;
+    let EvaluationConfig::Static(static_config) = &*evaluation_config;
     let computed_stats = stats.compute_stats(&static_config.evaluators);
     serialize_to_dict(py, &computed_stats)
 }
@@ -51,7 +53,7 @@ fn compute_evaluation_stats(
 pub struct EvaluationJobHandler {
     pub(crate) receiver: Mutex<tokio::sync::mpsc::Receiver<EvaluationUpdate>>,
     pub(crate) run_info: RunInfo,
-    pub(crate) evaluation_config: Arc<tensorzero_core::evaluations::EvaluationConfig>,
+    pub(crate) evaluation_config: Arc<EvaluationConfig>,
     pub(crate) evaluation_infos: Arc<Mutex<Vec<EvaluationInfo>>>,
     pub(crate) evaluation_errors: Arc<Mutex<Vec<EvaluationError>>>,
 }
@@ -138,7 +140,7 @@ impl std::fmt::Display for EvaluationJobHandler {
 pub struct AsyncEvaluationJobHandler {
     pub(crate) receiver: Arc<Mutex<tokio::sync::mpsc::Receiver<EvaluationUpdate>>>,
     pub(crate) run_info: RunInfo,
-    pub(crate) evaluation_config: Arc<tensorzero_core::evaluations::EvaluationConfig>,
+    pub(crate) evaluation_config: Arc<EvaluationConfig>,
     pub(crate) evaluation_infos: Arc<Mutex<Vec<EvaluationInfo>>>,
     pub(crate) evaluation_errors: Arc<Mutex<Vec<EvaluationError>>>,
 }
