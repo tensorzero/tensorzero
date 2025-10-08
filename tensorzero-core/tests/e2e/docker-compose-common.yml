@@ -93,7 +93,7 @@ services:
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
 
-  # This is not a gateway to use but rather one that just sets up migrations for the ClickHouse db
+  # This is not a gateway to use but rather one that just sets up migrations for the Postgres db
   # If you need to add fixtures that reference newly-added database columns, you'll need to temporarily
   # bump this to a locally-built image (or published 'sha' tag)
   gateway-postgres-migrations:
