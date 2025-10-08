@@ -130,7 +130,7 @@ async fn test_create_delete_datapoint_chat() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/bulk",
+            "/datasets/{dataset_name}/datapoints",
         )))
         .json(&json!({
             "datapoints": [
@@ -426,7 +426,7 @@ async fn test_insert_datapoint_chat_bad_request() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/bulk",
+            "/datasets/{dataset_name}/datapoints",
         )))
         .json(&json!({
             "datapoints": [
@@ -974,7 +974,7 @@ async fn test_create_delete_datapoint_json() {
     });
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/bulk",
+            "/datasets/{dataset_name}/datapoints",
         )))
         .json(&json!({
             "datapoints": [
@@ -1158,7 +1158,7 @@ async fn test_insert_datapoint_json_bad_output() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/bulk",
+            "/datasets/{dataset_name}/datapoints",
         )))
         .json(&json!({
             "datapoints": [
@@ -2549,7 +2549,7 @@ async fn test_list_datapoints_function_name_filter() {
     // Insert basic_test datapoints
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/bulk",
+            "/datasets/{dataset_name}/datapoints",
         )))
         .json(&json!({
             "datapoints": datapoints_basic
@@ -2562,7 +2562,7 @@ async fn test_list_datapoints_function_name_filter() {
     // Insert basic_test_timeout datapoints
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/bulk",
+            "/datasets/{dataset_name}/datapoints",
         )))
         .json(&json!({
             "datapoints": datapoints_basic_test_timeout

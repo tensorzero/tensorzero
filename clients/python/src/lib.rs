@@ -889,7 +889,7 @@ impl TensorZeroGateway {
         }
     }
 
-    ///  Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
+    ///  Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
     ///
     /// :param dataset_name: The name of the dataset to insert the datapoints into.
     /// :param datapoints: A list of datapoints to insert.
@@ -920,7 +920,7 @@ impl TensorZeroGateway {
 
     /// DEPRECATED: Use `insert_datapoints` instead.
     ///
-    /// Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
+    /// Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
     ///
     /// :param dataset_name: The name of the dataset to insert the datapoints into.
     /// :param datapoints: A list of datapoints to insert.
@@ -1590,7 +1590,7 @@ impl AsyncTensorZeroGateway {
         })
     }
 
-    ///  Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
+    ///  Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
     ///
     /// :param dataset_name: The name of the dataset to insert the datapoints into.
     /// :param datapoints: A list of datapoints to insert.
@@ -1627,7 +1627,7 @@ impl AsyncTensorZeroGateway {
 
     /// DEPRECATED: Use `insert_datapoints` instead.
     ///
-    /// Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
+    /// Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
     ///
     /// :param dataset_name: The name of the dataset to insert the datapoints into.
     /// :param datapoints: A list of datapoints to insert.
