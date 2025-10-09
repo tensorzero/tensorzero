@@ -2847,7 +2847,10 @@ async fn test_config_file_glob_integration() {
 
     // Should match 2 .toml files, not the .md file
     assert_eq!(config_glob.paths.len(), 2);
-    assert!(config_glob.paths.iter().all(|p| p.extension().unwrap() == "toml"));
+    assert!(config_glob
+        .paths
+        .iter()
+        .all(|p| p.extension().unwrap() == "toml"));
 }
 
 #[tokio::test]

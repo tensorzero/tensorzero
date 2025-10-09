@@ -571,7 +571,10 @@ impl ConfigFileGlob {
         }
 
         // Sort the paths to avoid depending on the filesystem iteration order
-        glob_paths.sort_by_key(|path| path.display().to_string());
+        // when we merge configs. This should only affect the precise error message we display,
+        // not whether or not the config parses successfully (or the final `Config`
+        // that we resolve)
+        glob_paths.sort();
         Ok(Self {
             glob,
             paths: glob_paths,
@@ -597,7 +600,7 @@ fn extract_base_path_from_glob(glob: &str) -> PathBuf {
     for component in path.components() {
         let component_str = component.as_os_str().to_string_lossy();
         // Stop at the first component containing glob metacharacters
-        if component_str.contains(|c| matches!(c, '*' | '?' | '[' | '{')) {
+        if component_str.contains(['*', '?', '[', '{']) {
             break;
         }
         base_components.push(component);
@@ -617,7 +620,7 @@ fn find_matching_files(base_path: &Path, matcher: &globset::GlobMatcher) -> Vec<
     for entry in walkdir::WalkDir::new(base_path)
         .follow_links(false)
         .into_iter()
-        .filter_map(|e| e.ok())
+        .filter_map(Result::ok)
     {
         let path = entry.path();
         if path.is_file() && matcher.is_match(path) {
