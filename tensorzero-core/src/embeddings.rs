@@ -810,7 +810,7 @@ mod tests {
                 "fallback",
                 &InferenceClients {
                     http_client: &TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
+                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_fake(),
                     postgres_connection_info: &PostgresConnectionInfo::Disabled,
                     credentials: &InferenceCredentials::default(),
                     cache_options: &CacheOptions {

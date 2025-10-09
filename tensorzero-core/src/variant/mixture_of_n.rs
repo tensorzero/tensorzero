@@ -1375,7 +1375,7 @@ mod tests {
         )
         .expect("Failed to create model table");
         let client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_fake();
         let api_keys = InferenceCredentials::default();
         let inference_clients = InferenceClients {
             http_client: &client,

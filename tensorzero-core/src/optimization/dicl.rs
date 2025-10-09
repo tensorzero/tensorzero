@@ -531,7 +531,9 @@ async fn process_embedding_batch(
 
     // Create InferenceClients context for the embedding model
     let cache_options = CacheOptions::default();
-    let disabled_clickhouse = ClickHouseConnectionInfo::new_disabled();
+
+    // We don't currently write any inferences for embedding models to ClickHouse, so we take a disabled one.
+    let disabled_clickhouse: ClickHouseConnectionInfo = ClickHouseConnectionInfo::new_disabled();
     let clients = InferenceClients {
         http_client: client,
         credentials,

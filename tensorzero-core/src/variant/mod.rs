@@ -1109,7 +1109,7 @@ mod tests {
         // Setup common variables
         let api_keys = InferenceCredentials::default();
         let client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_fake();
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
@@ -1414,7 +1414,7 @@ mod tests {
         // Setup common variables
         let api_keys = InferenceCredentials::default();
         let client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_fake();
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
@@ -1578,7 +1578,7 @@ mod tests {
     async fn test_infer_model_request_stream() {
         // Set up the HTTP client and ClickHouse connection info
         let client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_fake();
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
             http_client: &client,
@@ -1729,7 +1729,7 @@ mod tests {
         // Setup common variables
         let api_keys = InferenceCredentials::default();
         let client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_fake();
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,

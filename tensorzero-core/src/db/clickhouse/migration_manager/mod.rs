@@ -664,7 +664,7 @@ mod tests {
 
         // First check that method succeeds
         assert!(run_migration(RunMigrationArgs {
-            clickhouse: &ClickHouseConnectionInfo::new_disabled(),
+            clickhouse: &ClickHouseConnectionInfo::new_fake(),
             migration: &mock_migration,
             clean_start: false,
             is_replicated: false,
@@ -694,7 +694,7 @@ mod tests {
 
         // First check that method succeeds
         assert!(run_migration(RunMigrationArgs {
-            clickhouse: &ClickHouseConnectionInfo::new_disabled(),
+            clickhouse: &ClickHouseConnectionInfo::new_fake(),
             migration: &mock_migration,
             clean_start: false,
             is_replicated: true,
@@ -724,7 +724,7 @@ mod tests {
 
         // First check that method succeeds
         assert!(run_migration(RunMigrationArgs {
-            clickhouse: &ClickHouseConnectionInfo::new_disabled(),
+            clickhouse: &ClickHouseConnectionInfo::new_fake(),
             migration: &mock_migration,
             clean_start: false,
             is_replicated: true,
@@ -757,7 +757,7 @@ mod tests {
 
         // First check that the method fails
         assert!(run_migration(RunMigrationArgs {
-            clickhouse: &ClickHouseConnectionInfo::new_disabled(),
+            clickhouse: &ClickHouseConnectionInfo::new_fake(),
             migration: &mock_migration,
             clean_start: false,
             is_replicated: false,
@@ -790,7 +790,7 @@ mod tests {
 
         // First check that the method succeeds
         assert!(run_migration(RunMigrationArgs {
-            clickhouse: &ClickHouseConnectionInfo::new_disabled(),
+            clickhouse: &ClickHouseConnectionInfo::new_fake(),
             migration: &mock_migration,
             clean_start: false,
             is_replicated: false,
@@ -823,7 +823,7 @@ mod tests {
 
         // First check that the method succeeds
         assert!(run_migration(RunMigrationArgs {
-            clickhouse: &ClickHouseConnectionInfo::new_disabled(),
+            clickhouse: &ClickHouseConnectionInfo::new_fake(),
             migration: &mock_migration,
             clean_start: false,
             is_replicated: true,
@@ -856,7 +856,7 @@ mod tests {
 
         // First check that the method fails
         assert!(run_migration(RunMigrationArgs {
-            clickhouse: &ClickHouseConnectionInfo::new_disabled(),
+            clickhouse: &ClickHouseConnectionInfo::new_fake(),
             migration: &mock_migration,
             clean_start: false,
             is_replicated: false,
@@ -889,7 +889,7 @@ mod tests {
 
         // First check that the method fails
         assert!(run_migration(RunMigrationArgs {
-            clickhouse: &ClickHouseConnectionInfo::new_disabled(),
+            clickhouse: &ClickHouseConnectionInfo::new_fake(),
             migration: &mock_migration,
             clean_start: false,
             is_replicated: false,

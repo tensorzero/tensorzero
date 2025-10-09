@@ -152,6 +152,7 @@ image = "0.25.6"
 gag = "1.0.0"
 log = "0.4.28"
 tracing-core = "0.1.34"
+mockall = "0.13"
 
 [build-dependencies]
 built = { version = "0.8.0", features = ["git2"] }

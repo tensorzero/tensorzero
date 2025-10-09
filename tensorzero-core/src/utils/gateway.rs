@@ -17,6 +17,7 @@ use tracing::instrument;
 use crate::config::{Config, ConfigFileGlob};
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::clickhouse::MockClickHouseClient;
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
@@ -126,7 +127,7 @@ impl GatewayHandle {
     pub fn new_unit_test_data(config: Arc<Config>, test_options: GatewayHandleTestOptions) -> Self {
         let http_client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info =
-            ClickHouseConnectionInfo::new_mock(test_options.clickhouse_healthy);
+            ClickHouseConnectionInfo::new_mock(test_options.clickhouse_client);
         let postgres_connection_info =
             PostgresConnectionInfo::new_mock(test_options.postgres_healthy);
         let cancel_token = CancellationToken::new();
@@ -393,7 +394,7 @@ pub async fn start_openai_compatible_gateway(
 
 #[cfg(test)]
 pub struct GatewayHandleTestOptions {
-    pub clickhouse_healthy: bool,
+    pub clickhouse_client: Arc<dyn ClickHouseClient>,
     pub postgres_healthy: bool,
 }
 

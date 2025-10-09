@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use enum_map::Enum;
 use migration_manager::migrations::check_table_exists;
+use mockall::automock;
 use reqwest::multipart::Form;
 use reqwest::multipart::Part;
 use reqwest::Client;
@@ -13,14 +14,18 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
-use tokio::sync::RwLockWriteGuard;
 use url::Url;
 
 mod batching;
 pub mod migration_manager;
 pub mod query_builder;
 mod select_queries;
+
+pub mod disabled_clickhouse_client;
+#[cfg(test)]
+mod fake_clickhouse_client;
+#[cfg(test)]
+use fake_clickhouse_client::FakeClickHouseClient;
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod test_helpers;
 
@@ -37,8 +42,12 @@ use query_builder::ListInferencesParams;
 use super::HealthCheckable;
 
 /// Trait defining the interface for ClickHouse database operations.
+///
+/// For testing, use `FakeClickHouseClient` from the `mock_clickhouse_client` module.
+/// For advanced mocking scenarios, you can use `mockall` to create custom mocks.
 #[async_trait]
-trait ClickHouseClient: Send + Sync + HealthCheckable {
+#[automock]
+pub trait ClickHouseClient: Send + Sync + HealthCheckable {
     /// Returns the name of the database
     fn database(&self) -> &str;
 
@@ -133,12 +142,6 @@ impl fmt::Debug for ProductionClickHouseClient {
     }
 }
 
-/// Mock implementation of ClickHouseClient for testing
-#[derive(Debug, Clone)]
-struct MockClickHouseClient {
-    mock_data: Arc<RwLock<HashMap<String, Vec<serde_json::Value>>>>,
-    healthy: bool,
-}
 
 /// Disabled implementation of ClickHouseClient (no-op)
 #[derive(Debug, Clone, Copy)]
@@ -284,19 +287,28 @@ impl ClickHouseConnectionInfo {
         })
     }
 
-    // TODO: Pass in a Mock that we can mock calls from.
-    pub fn new_mock(healthy: bool) -> Self {
+    pub fn new_disabled() -> Self {
         Self {
-            inner: Arc::new(MockClickHouseClient::new(healthy)),
+            inner: Arc::new(DisabledClickHouseClient),
+            database_url: String::new().into(),
+            database: String::new(),
+        }
+    }
+    
+    #[cfg(test)]
+    pub fn new_mock(inner: Arc<dyn ClickHouseClient>) -> Self {
+        Self {
+            inner,
             database_url: String::new().into(),
             database: String::new(),
         }
     }
 
     // TODO: Remove the disabled one.
-    pub fn new_disabled() -> Self {
+    #[cfg(test)]
+    pub fn new_fake() -> Self {
         Self {
-            inner: Arc::new(DisabledClickHouseClient),
+            inner: Arc::new(FakeClickHouseClient::new(true)),
             database_url: String::new().into(),
             database: String::new(),
         }
@@ -349,9 +361,9 @@ impl ClickHouseConnectionInfo {
     #[cfg(test)]
     #[expect(clippy::missing_panics_doc)]
     pub async fn read(&self, table: &str, column: &str, value: &str) -> Option<serde_json::Value> {
-        // Only MockClickHouseClient supports this
+        // Only FakeClickHouseClient supports this
         let inner_any = &self.inner as &dyn std::any::Any;
-        if let Some(mock) = inner_any.downcast_ref::<MockClickHouseClient>() {
+        if let Some(mock) = inner_any.downcast_ref::<FakeClickHouseClient>() {
             let mock_data = mock.mock_data.read().await;
             let table = mock_data.get(table).unwrap();
             for row in table {
@@ -363,7 +375,7 @@ impl ClickHouseConnectionInfo {
             }
             None
         } else {
-            panic!("read() is only supported on MockClickHouseClient")
+            panic!("read() is only supported on FakeClickHouseClient")
         }
     }
 
@@ -504,14 +516,6 @@ impl ProductionClickHouseClient {
     }
 }
 
-impl MockClickHouseClient {
-    pub fn new(healthy: bool) -> Self {
-        Self {
-            mock_data: Arc::new(RwLock::new(HashMap::new())),
-            healthy,
-        }
-    }
-}
 
 // Trait implementations for ProductionClickHouseClient
 #[async_trait]
@@ -979,249 +983,6 @@ impl HealthCheckable for ProductionClickHouseClient {
     }
 }
 
-// Trait implementations for MockClickHouseClient
-#[async_trait]
-impl ClickHouseClient for MockClickHouseClient {
-    fn database(&self) -> &str {
-        "mock"
-    }
-
-    fn batcher_join_handle(&self) -> Option<BatchWriterHandle> {
-        None
-    }
-
-    async fn write_batched_internal(
-        &self,
-        rows: Vec<String>,
-        table: TableName,
-    ) -> Result<(), Error> {
-        write_mock(
-            Rows::<String>::Serialized(&rows),
-            table,
-            &mut self.mock_data.write().await,
-        )
-        .await
-    }
-
-    async fn write_non_batched_internal(
-        &self,
-        rows: Vec<String>,
-        table: TableName,
-    ) -> Result<(), Error> {
-        write_mock(
-            Rows::<String>::Serialized(&rows),
-            table,
-            &mut self.mock_data.write().await,
-        )
-        .await
-    }
-
-    async fn run_query_synchronous(
-        &self,
-        _query: String,
-        _parameters: &HashMap<&str, &str>,
-    ) -> Result<ClickHouseResponse, Error> {
-        Ok(ClickHouseResponse {
-            response: String::new(),
-            metadata: ClickHouseResponseMetadata {
-                read_rows: 0,
-                written_rows: 0,
-            },
-        })
-    }
-
-    async fn run_query_synchronous_with_err_logging(
-        &self,
-        _query: String,
-        _parameters: &HashMap<&str, &str>,
-        _err_logging: bool,
-    ) -> Result<ClickHouseResponse, Error> {
-        Ok(ClickHouseResponse {
-            response: String::new(),
-            metadata: ClickHouseResponseMetadata {
-                read_rows: 0,
-                written_rows: 0,
-            },
-        })
-    }
-
-    async fn run_query_with_external_data(
-        &self,
-        _external_data: ExternalDataInfo,
-        _query: String,
-    ) -> Result<ClickHouseResponse, Error> {
-        Ok(ClickHouseResponse {
-            response: String::new(),
-            metadata: ClickHouseResponseMetadata {
-                read_rows: 0,
-                written_rows: 0,
-            },
-        })
-    }
-
-    async fn check_database_and_migrations_table_exists(&self) -> Result<bool, Error> {
-        Ok(true)
-    }
-
-    async fn create_database_and_migrations_table(&self) -> Result<(), Error> {
-        Ok(())
-    }
-
-    async fn list_inferences(
-        &self,
-        _config: &Config,
-        _opts: &ListInferencesParams<'_>,
-    ) -> Result<Vec<StoredInference>, Error> {
-        Ok(Vec::new())
-    }
-
-    fn is_cluster_configured(&self) -> bool {
-        false
-    }
-
-    fn get_on_cluster_name(&self) -> String {
-        String::new()
-    }
-
-    fn get_maybe_replicated_table_engine_name(
-        &self,
-        args: GetMaybeReplicatedTableEngineNameArgs<'_>,
-    ) -> String {
-        args.table_engine_name.to_string()
-    }
-
-    fn variant_name(&self) -> &'static str {
-        "Mock"
-    }
-}
-
-#[async_trait]
-impl HealthCheckable for MockClickHouseClient {
-    async fn health(&self) -> Result<(), Error> {
-        if self.healthy {
-            Ok(())
-        } else {
-            Err(ErrorDetails::ClickHouseConnection {
-                message: "Mock ClickHouse is not healthy".to_string(),
-            }
-            .into())
-        }
-    }
-}
-
-// Trait implementations for DisabledClickHouseClient
-#[async_trait]
-impl ClickHouseClient for DisabledClickHouseClient {
-    fn database(&self) -> &str {
-        "disabled"
-    }
-
-    fn batcher_join_handle(&self) -> Option<BatchWriterHandle> {
-        None
-    }
-
-    async fn write_batched_internal(
-        &self,
-        _rows: Vec<String>,
-        _table: TableName,
-    ) -> Result<(), Error> {
-        Ok(())
-    }
-
-    async fn write_non_batched_internal(
-        &self,
-        _rows: Vec<String>,
-        _table: TableName,
-    ) -> Result<(), Error> {
-        Ok(())
-    }
-
-    async fn run_query_synchronous(
-        &self,
-        _query: String,
-        _parameters: &HashMap<&str, &str>,
-    ) -> Result<ClickHouseResponse, Error> {
-        Ok(ClickHouseResponse {
-            response: String::new(),
-            metadata: ClickHouseResponseMetadata {
-                read_rows: 0,
-                written_rows: 0,
-            },
-        })
-    }
-
-    async fn run_query_synchronous_with_err_logging(
-        &self,
-        _query: String,
-        _parameters: &HashMap<&str, &str>,
-        _err_logging: bool,
-    ) -> Result<ClickHouseResponse, Error> {
-        Ok(ClickHouseResponse {
-            response: String::new(),
-            metadata: ClickHouseResponseMetadata {
-                read_rows: 0,
-                written_rows: 0,
-            },
-        })
-    }
-
-    async fn run_query_with_external_data(
-        &self,
-        _external_data: ExternalDataInfo,
-        _query: String,
-    ) -> Result<ClickHouseResponse, Error> {
-        Ok(ClickHouseResponse {
-            response: String::new(),
-            metadata: ClickHouseResponseMetadata {
-                read_rows: 0,
-                written_rows: 0,
-            },
-        })
-    }
-
-    async fn check_database_and_migrations_table_exists(&self) -> Result<bool, Error> {
-        Ok(true)
-    }
-
-    async fn create_database_and_migrations_table(&self) -> Result<(), Error> {
-        Ok(())
-    }
-
-    async fn list_inferences(
-        &self,
-        _config: &Config,
-        _opts: &ListInferencesParams<'_>,
-    ) -> Result<Vec<StoredInference>, Error> {
-        Ok(Vec::new())
-    }
-
-    fn is_cluster_configured(&self) -> bool {
-        false
-    }
-
-    fn get_on_cluster_name(&self) -> String {
-        String::new()
-    }
-
-    fn get_maybe_replicated_table_engine_name(
-        &self,
-        args: GetMaybeReplicatedTableEngineNameArgs<'_>,
-    ) -> String {
-        args.table_engine_name.to_string()
-    }
-
-    fn variant_name(&self) -> &'static str {
-        "Disabled"
-    }
-}
-
-#[async_trait]
-impl HealthCheckable for DisabledClickHouseClient {
-    async fn health(&self) -> Result<(), Error> {
-        Ok(())
-    }
-}
-
 // Update the HealthCheckable implementation to delegate to the trait
 #[async_trait]
 impl HealthCheckable for ClickHouseConnectionInfo {
@@ -1270,19 +1031,6 @@ pub fn escape_string_for_clickhouse_literal(s: &str) -> String {
     s.replace(r#"\"#, r#"\\"#).replace(r#"'"#, r#"\'"#)
 }
 
-async fn write_mock<T: Serialize + Send + Sync>(
-    rows: Rows<'_, T>,
-    table: TableName,
-    tables: &mut RwLockWriteGuard<'_, HashMap<String, Vec<serde_json::Value>>>,
-) -> Result<(), Error> {
-    for row in rows.as_json()?.iter() {
-        tables
-            .entry(table.as_str().to_string())
-            .or_default()
-            .push(serde_json::Value::String(row.clone()));
-    }
-    Ok(())
-}
 
 /// A wrapper type used with `write_non_batched`
 pub enum Rows<'a, T: Serialize + Send + Sync> {
