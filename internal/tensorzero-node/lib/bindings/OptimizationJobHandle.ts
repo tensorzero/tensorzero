@@ -6,4 +6,10 @@ import type { OpenAIRFTJobHandle } from "./OpenAIRFTJobHandle";
 import type { OpenAISFTJobHandle } from "./OpenAISFTJobHandle";
 import type { TogetherSFTJobHandle } from "./TogetherSFTJobHandle";
 
-export type OptimizationJobHandle = { "type": "dicl" } & DiclOptimizationJobHandle | { "type": "openai_sft" } & OpenAISFTJobHandle | { "type": "openai_rft" } & OpenAIRFTJobHandle | { "type": "fireworks_sft" } & FireworksSFTJobHandle | { "type": "gcp_vertex_gemini_sft" } & GCPVertexGeminiSFTJobHandle | { "type": "together_sft" } & TogetherSFTJobHandle;
+export type OptimizationJobHandle =
+  | ({ type: "dicl" } & DiclOptimizationJobHandle)
+  | ({ type: "openai_sft" } & OpenAISFTJobHandle)
+  | ({ type: "openai_rft" } & OpenAIRFTJobHandle)
+  | ({ type: "fireworks_sft" } & FireworksSFTJobHandle)
+  | ({ type: "gcp_vertex_gemini_sft" } & GCPVertexGeminiSFTJobHandle)
+  | ({ type: "together_sft" } & TogetherSFTJobHandle);

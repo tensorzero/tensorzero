@@ -4,4 +4,9 @@ import type { DynamicJSONSchema } from "./DynamicJSONSchema";
 /**
  * Contains the configuration information for a tool defined at runtime
  */
-export type DynamicToolConfig = { description: string, parameters: DynamicJSONSchema, name: string, strict: boolean, };
+export type DynamicToolConfig = {
+  description: string;
+  parameters: DynamicJSONSchema;
+  name: string;
+  strict: boolean;
+};

@@ -8,4 +8,7 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * Only the object-storage path is actually stored in clickhouse
  * (which can be used to re-fetch the file and produce a `ResolvedInput`).
  */
-export type StoredInput = { system: JsonValue | null, messages: Array<StoredInputMessage>, };
+export type StoredInput = {
+  system: JsonValue | null;
+  messages: Array<StoredInputMessage>;
+};

@@ -318,6 +318,9 @@ jobs:
         run: cargo deny check
 
       - name: Test (Rust)
+        env:
+          # Write the exported bindings to somewhere we don't care about
+          TS_RS_EXPORT_DIR: /tmp/tensorzero-bindings
         run: |
           cargo test-unit ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }}
 
