@@ -40,8 +40,8 @@ services:
       - CLICKHOUSE_USER=chuser
       # - TENSORZERO_SKIP_LARGE_FIXTURES=1
     depends_on:
-      gateway-clickhouse-migrations:
-        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
     command:
       ["bash", "-c", "cd /fixtures && ./load_fixtures.sh tensorzero_e2e_tests"]
     # Added healthcheck to wait for the marker file created by the script
@@ -72,8 +72,6 @@ services:
       - ../../../target:/app/target
 
     depends_on:
-      gateway-clickhouse-migrations:
-        condition: service_completed_successfully
       fixtures:
         condition: service_completed_successfully
       clickhouse:

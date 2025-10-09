@@ -30,8 +30,8 @@ services:
       - CLICKHOUSE_USER=chuser
       - TENSORZERO_SKIP_LARGE_FIXTURES
     depends_on:
-      gateway-clickhouse-migrations:
-        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
     # Keep this running to make 'check-docker-compose.sh' detect that all containers are healthy
     command:
       [

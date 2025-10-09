@@ -222,10 +222,6 @@ services:
       # Shared tmpdir filesystem
       - shared-tmpdir:/tmp
     depends_on:
-      gateway-clickhouse-migrations:
-        condition: service_completed_successfully
-      gateway-postgres-migrations:
-        condition: service_completed_successfully
       fixtures:
         condition: service_completed_successfully
       clickhouse:

@@ -195,6 +195,11 @@ jobs:
         run: |
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY ./ci/download-provider-proxy-cache.sh
 
+      - name: Run database migrations for E2E tests
+        run: |
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile migrations run --rm gateway-clickhouse-migrations
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile migrations run --rm gateway-postgres-migrations
+
       - name: Launch ClickHouse container for E2E tests
         run: |
           docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --build -d --wait
@@ -342,6 +347,11 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Build Docker container for production deployment tests
         run: docker build -t tensorzero/gateway -f gateway/Dockerfile .
+
+      - name: Run database migrations for E2E tests
+        run: |
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile migrations run --rm gateway-clickhouse-migrations
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile migrations run --rm gateway-postgres-migrations
 
       - name: Launch ClickHouse container for E2E tests
         run: |
