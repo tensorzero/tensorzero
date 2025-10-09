@@ -313,9 +313,12 @@ test("should navigate to inference from playground and verify tags", async ({
     page.getByRole("combobox").filter({ hasText: "foo" }),
   ).toBeVisible();
 
-  // Wait for the inference to complete - look for the inference link
-  const inferenceLink = page.getByText(/View inference:/);
-  await inferenceLink.waitFor({ state: "visible", timeout: 15000 });
+  // Wait for the inference to complete and get the inference ID link
+  const inferenceLink = page
+    .getByText(/Inference ID:/)
+    .locator("..")
+    .getByRole("link");
+  await inferenceLink.waitFor({ state: "visible", timeout: 5000 });
 
   // Click the inference link to navigate to the inference page
   await inferenceLink.click();

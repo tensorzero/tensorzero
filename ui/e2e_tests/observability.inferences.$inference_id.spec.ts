@@ -448,14 +448,19 @@ test.describe("should navigate to inference from Try with X modal and verify tag
       // Wait for the variant response modal to open and show results
       await page.getByRole("dialog").waitFor({ state: "visible" });
 
-      // Wait for the inference to complete - look for the inference link
+      // Wait for the inference to complete and get the inference ID link
       const inferenceLink = page
         .getByRole("dialog")
-        .getByText(/View inference:/);
-      await inferenceLink.waitFor({ state: "visible", timeout: 15000 });
+        .getByText(/Inference ID:/)
+        .locator("..")
+        .getByRole("link");
+      await inferenceLink.waitFor({ state: "visible", timeout: 5000 });
 
       // Click the inference link to navigate to the inference page
       await inferenceLink.click();
+
+      // Verify the modal is closed after clicking the link
+      await expect(page.getByRole("dialog")).not.toBeVisible();
 
       // Wait for navigation to the new inference page
       await page.waitForURL("/observability/inferences/**", {

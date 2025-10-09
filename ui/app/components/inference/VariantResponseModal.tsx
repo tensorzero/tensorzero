@@ -23,6 +23,7 @@ interface ResponseColumnProps {
   response: VariantResponseInfo | null;
   errorMessage?: string | null;
   inferenceId?: string | null;
+  onClose?: () => void;
   children?: React.ReactNode;
 }
 
@@ -31,6 +32,7 @@ function ResponseColumn({
   response,
   errorMessage,
   inferenceId,
+  onClose,
   children,
 }: ResponseColumnProps) {
   return (
@@ -64,6 +66,7 @@ function ResponseColumn({
                 <Link
                   to={toInferenceUrl(inferenceId)}
                   className="font-mono text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                  onClick={onClose}
                 >
                   {inferenceId}
                 </Link>
@@ -194,6 +197,7 @@ export function VariantResponseModal({
                   response={variantResponse}
                   errorMessage={error}
                   inferenceId={rawResponse?.inference_id}
+                  onClose={onClose}
                 >
                   {children}
                 </ResponseColumn>
