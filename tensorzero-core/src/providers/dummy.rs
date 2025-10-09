@@ -276,9 +276,13 @@ impl InferenceProvider for DummyProvider {
             // Fail on even-numbered calls
             if *counter % 2 == 0 {
                 if self.model_name.contains("rate_limit") {
+                    use crate::rate_limiting::FailedRateLimit;
                     return Err(ErrorDetails::RateLimitExceeded {
-                        key: ActiveRateLimitKey(String::from("key")),
-                        tickets_remaining: 0,
+                        failed_rate_limits: vec![FailedRateLimit {
+                            key: ActiveRateLimitKey(String::from("key")),
+                            requested: 100,
+                            available: 0,
+                        }],
                     }
                     .into());
                 }

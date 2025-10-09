@@ -23,7 +23,7 @@ pub struct BucketInfo {
 impl RateLimitQueries for PostgresConnectionInfo {
     async fn consume_tickets(
         &self,
-        requests: &Vec<ConsumeTicketsRequest>,
+        requests: &[ConsumeTicketsRequest],
     ) -> Result<Vec<ConsumeTicketsReceipt>, Error> {
         if requests.is_empty() {
             return Ok(vec![]);
