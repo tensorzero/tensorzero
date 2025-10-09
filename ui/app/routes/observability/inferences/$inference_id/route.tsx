@@ -23,16 +23,14 @@ import BasicInfo from "./InferenceBasicInfo";
 import InputSnippet from "~/components/inference/InputSnippet";
 import { Output } from "~/components/inference/Output";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
-import {
-  addHumanFeedback,
-  getTensorZeroClient,
-} from "~/utils/tensorzero.server";
+import { addHumanFeedback } from "~/utils/tensorzero.server";
+import { handleAddToDatasetAction } from "~/utils/dataset.server";
 import { ParameterCard } from "./InferenceParameters";
-import { TagsTable } from "~/components/utils/TagsTable";
+import { TagsTable } from "~/components/tags/TagsTable";
 import { ModelInferencesTable } from "./ModelInferencesTable";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { useFunctionConfig } from "~/context/config";
+import { useConfig, useFunctionConfig } from "~/context/config";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import {
@@ -50,8 +48,8 @@ import {
   type VariantResponseInfo,
 } from "~/routes/api/tensorzero/inference.utils";
 import { ActionBar } from "~/components/layout/ActionBar";
-import { TryWithVariantButton } from "~/components/inference/TryWithVariantButton";
-import { AddToDatasetButton } from "./AddToDatasetButton";
+import { TryWithButton } from "~/components/inference/TryWithButton";
+import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
@@ -59,6 +57,8 @@ import { DemonstrationFeedbackButton } from "~/components/feedback/Demonstration
 import { logger } from "~/utils/logger";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
+import { getUsedVariants } from "~/utils/clickhouse/function";
+import { DEFAULT_FUNCTION } from "~/utils/constants";
 
 export const handle: RouteHandle = {
   crumb: (match) => [match.params.inference_id!],
@@ -127,9 +127,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     });
   }
 
+  const usedVariants =
+    inference.function_name === DEFAULT_FUNCTION
+      ? await getUsedVariants(inference.function_name)
+      : [];
+
   return {
     inference,
     model_inferences,
+    usedVariants,
     feedback,
     feedback_bounds,
     hasDemonstration: demonstration_feedback.length > 0,
@@ -147,47 +153,7 @@ export async function action({ request }: Route.ActionArgs) {
   const _action = formData.get("_action");
   switch (_action) {
     case "addToDataset": {
-      const dataset = formData.get("dataset");
-      const output = formData.get("output");
-      const inferenceId = formData.get("inference_id");
-      const functionName = formData.get("function_name");
-      const variantName = formData.get("variant_name");
-      const episodeId = formData.get("episode_id");
-      if (
-        !dataset ||
-        !output ||
-        !inferenceId ||
-        !functionName ||
-        !variantName ||
-        !episodeId
-      ) {
-        return data<ActionData>(
-          { error: "Missing required fields" },
-          { status: 400 },
-        );
-      }
-      try {
-        const datapoint = await getTensorZeroClient().createDatapoint(
-          dataset.toString(),
-          inferenceId.toString(),
-          output.toString() as "inherit" | "demonstration" | "none",
-          functionName.toString(),
-          variantName.toString(),
-          episodeId.toString(),
-        );
-        return data<ActionData>({
-          redirectTo: `/datasets/${dataset.toString()}/datapoint/${datapoint.id}`,
-        });
-      } catch (error) {
-        logger.error(error);
-        return data<ActionData>(
-          {
-            error:
-              "Failed to create datapoint as a datapoint exists with the same `source_inference_id`",
-          },
-          { status: 400 },
-        );
-      }
+      return handleAddToDatasetAction(formData);
     }
     case "addFeedback": {
       try {
@@ -228,6 +194,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const {
     inference,
     model_inferences,
+    usedVariants,
     feedback,
     feedback_bounds,
     hasDemonstration,
@@ -274,18 +241,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
   const functionConfig = useFunctionConfig(inference.function_name);
   const variants = Object.keys(functionConfig?.variants || {});
-  const addToDatasetFetcher = useFetcher<typeof action>();
-  const addToDatasetError =
-    addToDatasetFetcher.state === "idle" && addToDatasetFetcher.data?.error
-      ? addToDatasetFetcher.data.error
-      : null;
-  useEffect(() => {
-    const currentState = addToDatasetFetcher.state;
-    const data = addToDatasetFetcher.data;
-    if (currentState === "idle" && data?.redirectTo) {
-      navigate(data.redirectTo);
-    }
-  }, [addToDatasetFetcher.data, addToDatasetFetcher.state, navigate]);
 
   const demonstrationFeedbackFetcher = useFetcher<typeof action>();
   const demonstrationFeedbackFormError =
@@ -306,20 +261,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     navigate,
   ]);
 
-  const handleAddToDataset = (
-    dataset: string,
-    output: "inherit" | "demonstration" | "none",
-  ) => {
-    const formData = new FormData();
-    formData.append("dataset", dataset);
-    formData.append("output", output);
-    formData.append("inference_id", inference.id);
-    formData.append("function_name", inference.function_name);
-    formData.append("variant_name", inference.variant_name);
-    formData.append("episode_id", inference.episode_id);
-    formData.append("_action", "addToDataset");
-    addToDatasetFetcher.submit(formData, { method: "post", action: "." });
-  };
   const { toast } = useToast();
 
   useEffect(() => {
@@ -337,16 +278,15 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
       variantInferenceFetcher.state === "loading");
 
   const { submit } = variantInferenceFetcher;
-  const onVariantSelect = (variant: string) => {
+  const processRequest = (
+    option: string,
+    args: Parameters<typeof prepareInferenceActionRequest>[0],
+  ) => {
     try {
-      const request = prepareInferenceActionRequest({
-        resource: inference,
-        source: variantSource,
-        variant,
-      });
+      const request = prepareInferenceActionRequest(args);
 
       // Set state and open modal only if request preparation succeeds
-      setSelectedVariant(variant);
+      setSelectedVariant(option);
       setOpenModal("variant-response");
 
       try {
@@ -384,6 +324,22 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     }
   };
 
+  const onVariantSelect = (variant: string) => {
+    processRequest(variant, {
+      resource: inference,
+      source: variantSource,
+      variant,
+    });
+  };
+
+  const onModelSelect = (model: string) => {
+    processRequest(model, {
+      resource: inference,
+      source: variantSource,
+      model_name: model,
+    });
+  };
+
   const humanFeedbackFetcher = useFetcherWithReset<typeof action>();
   const humanFeedbackFormError =
     humanFeedbackFetcher.state === "idle"
@@ -398,6 +354,23 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     }
   }, [humanFeedbackFetcher.data, humanFeedbackFetcher.state, navigate]);
 
+  const config = useConfig();
+
+  const isDefault = inference.function_name === DEFAULT_FUNCTION;
+
+  const modelsSet = new Set<string>([
+    // models successfully used with default function
+    ...usedVariants,
+    // all configured models in config
+    ...Object.keys(config.models),
+    // TODO(bret): list of popular/common model choices
+    // see https://github.com/tensorzero/tensorzero/issues/1396#issuecomment-3286424944
+  ]);
+  const models = [...modelsSet].sort();
+
+  const options = isDefault ? models : variants;
+  const onSelect = isDefault ? onModelSelect : onVariantSelect;
+
   return (
     <PageLayout>
       <PageHeader label="Inference" name={inference.id}>
@@ -407,20 +380,18 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           modelInferences={model_inferences}
         />
 
-        {addToDatasetError && (
-          <div className="mt-2 inline-block rounded-md bg-red-50 p-2 text-sm text-red-500">
-            {addToDatasetError}
-          </div>
-        )}
-
         <ActionBar>
-          <TryWithVariantButton
-            variants={variants}
-            onVariantSelect={onVariantSelect}
+          <TryWithButton
+            options={options}
+            onOptionSelect={onSelect}
             isLoading={variantInferenceIsLoading}
+            isDefaultFunction={isDefault}
           />
           <AddToDatasetButton
-            onDatasetSelect={handleAddToDataset}
+            inferenceId={inference.id}
+            functionName={inference.function_name}
+            variantName={inference.variant_name}
+            episodeId={inference.episode_id}
             hasDemonstration={hasDemonstration}
           />
           <HumanFeedbackModal
@@ -519,7 +490,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Tags" />
-          <TagsTable tags={inference.tags} />
+          <TagsTable tags={inference.tags} isEditing={false} />
         </SectionLayout>
 
         <SectionLayout>

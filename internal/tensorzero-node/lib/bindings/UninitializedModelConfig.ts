@@ -2,8 +2,4 @@
 import type { TimeoutsConfig } from "./TimeoutsConfig";
 import type { UninitializedModelProvider } from "./UninitializedModelProvider";
 
-export type UninitializedModelConfig = {
-  routing: Array<string>;
-  providers: { [key in string]?: UninitializedModelProvider };
-  timeouts: TimeoutsConfig;
-};
+export type UninitializedModelConfig = { routing: Array<string>, providers: { [key in string]?: UninitializedModelProvider }, timeouts: TimeoutsConfig, };

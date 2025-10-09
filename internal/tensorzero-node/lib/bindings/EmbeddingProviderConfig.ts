@@ -3,7 +3,4 @@ import type { AzureProvider } from "./AzureProvider";
 import type { DummyProvider } from "./DummyProvider";
 import type { OpenAIProvider } from "./OpenAIProvider";
 
-export type EmbeddingProviderConfig =
-  | { OpenAI: OpenAIProvider }
-  | { Azure: AzureProvider }
-  | { Dummy: DummyProvider };
+export type EmbeddingProviderConfig = { "OpenAI": OpenAIProvider } | { "Azure": AzureProvider } | { "Dummy": DummyProvider };

@@ -15,10 +15,7 @@ use tensorzero_core::{
 
 use uuid::Uuid;
 
-use crate::{
-    common::{delete_datapoint, get_gateway_endpoint},
-    providers::common::make_embedded_gateway,
-};
+use crate::common::{delete_datapoint, get_gateway_endpoint};
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_datapoint_clickhouse, select_json_datapoint_clickhouse,
 };
@@ -99,6 +96,7 @@ async fn test_datapoint_insert_synthetic_chat() {
       "is_custom": true,
       "staled_at": null,
       "source_inference_id": source_inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -653,6 +651,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
       "is_custom": true,
       "staled_at": null,
       "source_inference_id": null,
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -723,7 +722,7 @@ async fn test_datapoint_insert_synthetic_json() {
       "function_name": "json_success",
       "id": id,
       "episode_id": null,
-      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"US\"}}]}]}",
+      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"template\",\"name\":\"user\",\"arguments\":{\"country\":\"US\"}}]}]}",
       "output": "{\"raw\":\"{\\\"answer\\\":\\\"Hello\\\"}\",\"parsed\":{\"answer\":\"Hello\"}}",
       "output_schema": "{}",
       "tags": {},
@@ -732,6 +731,7 @@ async fn test_datapoint_insert_synthetic_json() {
       "is_custom": true,
       "staled_at": null,
       "source_inference_id": source_inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 
@@ -840,7 +840,7 @@ async fn test_datapoint_insert_synthetic_json() {
       "function_name": "json_success",
       "id": id,
       "episode_id": null,
-      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"US\"}}]}]}",
+      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"template\",\"name\":\"user\",\"arguments\":{\"country\":\"US\"}}]}]}",
       "output": "{\"raw\":\"{\\\"answer\\\":\\\"New answer\\\"}\",\"parsed\":{\"answer\":\"New answer\"}}",
       "output_schema": "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}",
       "tags": {},
@@ -849,6 +849,7 @@ async fn test_datapoint_insert_synthetic_json() {
       "is_custom": true,
       "staled_at": null,
       "source_inference_id": source_inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 
@@ -946,7 +947,7 @@ async fn test_datapoint_insert_synthetic_json() {
       "function_name": "json_success",
       "id": new_datapoint_id.to_string(),
       "episode_id": null,
-      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"US\"}}]}]}",
+      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"template\",\"name\":\"user\",\"arguments\":{\"country\":\"US\"}}]}]}",
       "output": "{\"raw\":\"{\\\"answer\\\":\\\"New answer\\\"}\",\"parsed\":{\"answer\":\"New answer\"}}",
       "output_schema": "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}",
       "tags": {},
@@ -955,6 +956,7 @@ async fn test_datapoint_insert_synthetic_json() {
       "is_custom": true,
       "staled_at": null,
       "source_inference_id": source_inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -1081,11 +1083,7 @@ async fn test_create_delete_datapoint_json() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            StoredInputMessageContent::Text { .. }
-        ));
-        assert!(matches!(
-            first_content,
-            StoredInputMessageContent::Text { value: _, .. }
+            StoredInputMessageContent::Template { .. }
         ));
 
         // Verify the list datapoint input structure and content
@@ -1104,7 +1102,7 @@ async fn test_create_delete_datapoint_json() {
         let first_content = content[0].clone();
         assert!(matches!(
             first_content,
-            StoredInputMessageContent::Text { .. }
+            StoredInputMessageContent::Template { .. }
         ));
 
         // Get the output schema
@@ -1518,6 +1516,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
       "is_custom": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 
@@ -1634,6 +1633,7 @@ async fn test_datapoint_insert_output_none_chat() {
       "is_custom": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -1806,6 +1806,7 @@ async fn test_datapoint_insert_output_demonstration_chat() {
       "staled_at": null,
       "is_custom": false,
       "source_inference_id": inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -1895,7 +1896,7 @@ async fn test_datapoint_insert_output_inherit_json() {
       "function_name": "json_success",
       "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
-      "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"Japan\"}}]}]}",
+      "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"template\",\"name\":\"user\",\"arguments\":{\"country\":\"Japan\"}}]}]}",
       "output": "{\"raw\":\"{\\\"answer\\\":\\\"Hello\\\"}\",\"parsed\":{\"answer\":\"Hello\"}}",
       "output_schema": "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}",
       "tags": {},
@@ -1904,6 +1905,7 @@ async fn test_datapoint_insert_output_inherit_json() {
       "staled_at": null,
       "is_custom": false,
       "source_inference_id": inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 
@@ -2010,7 +2012,7 @@ async fn test_datapoint_insert_output_none_json() {
       "function_name": "json_success",
       "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
-      "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"Japan\"}}]}]}",
+      "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"template\",\"name\":\"user\",\"arguments\":{\"country\":\"Japan\"}}]}]}",
       "output":null,
       "output_schema": "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}",
       "tags": {},
@@ -2019,6 +2021,7 @@ async fn test_datapoint_insert_output_none_json() {
       "is_custom": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2129,7 +2132,7 @@ async fn test_datapoint_insert_output_demonstration_json() {
       "function_name": "json_success",
       "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
-      "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"Japan\"}}]}]}",
+      "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"template\",\"name\":\"user\",\"arguments\":{\"country\":\"Japan\"}}]}]}",
       "output": "{\"raw\":\"{\\\"answer\\\":\\\"My demonstration answer\\\"}\",\"parsed\":{\"answer\":\"My demonstration answer\"}}",
       "output_schema": "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}",
       "tags": {},
@@ -2138,6 +2141,7 @@ async fn test_datapoint_insert_output_demonstration_json() {
       "is_custom": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2285,6 +2289,7 @@ async fn test_datapoint_insert_missing_output_chat() {
       "is_custom": true,
       "staled_at": null,
       "source_inference_id": null,
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2350,6 +2355,7 @@ async fn test_datapoint_insert_null_output_chat() {
       "is_custom": true,
       "staled_at": null,
       "source_inference_id": null,
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2407,7 +2413,7 @@ async fn test_datapoint_insert_missing_output_json() {
       "function_name": "json_success",
       "id": id,
       "episode_id": null,
-      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"US\"}}]}]}",
+      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"template\",\"name\":\"user\",\"arguments\":{\"country\":\"US\"}}]}]}",
       "output": null,
       "output_schema": "{}",
       "tags": {},
@@ -2416,6 +2422,7 @@ async fn test_datapoint_insert_missing_output_json() {
       "is_custom": false,
       "staled_at": null,
       "source_inference_id": null,
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2473,7 +2480,7 @@ async fn test_datapoint_insert_null_output_json() {
       "function_name": "json_success",
       "id": id,
       "episode_id": null,
-      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"US\"}}]}]}",
+      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"template\",\"name\":\"user\",\"arguments\":{\"country\":\"US\"}}]}]}",
       "output": null,
       "output_schema": "{}",
       "tags": {},
@@ -2482,6 +2489,7 @@ async fn test_datapoint_insert_null_output_json() {
       "is_custom": true,
       "staled_at": null,
       "source_inference_id": null,
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2644,7 +2652,7 @@ async fn test_list_datapoints_function_name_filter() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_stale_dataset_with_datapoints() {
     let clickhouse = get_clickhouse().await;
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let dataset_name = format!("test-stale-dataset-{}", Uuid::now_v7());
     println!("dataset_name: {dataset_name}");
 
@@ -2770,7 +2778,7 @@ async fn test_stale_dataset_with_datapoints() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_stale_dataset_empty() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let dataset_name = format!("test-empty-stale-dataset-{}", Uuid::now_v7());
 
     // Stale an empty dataset (no datapoints exist)
@@ -2780,7 +2788,7 @@ async fn test_stale_dataset_empty() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_stale_dataset_already_staled() {
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-already-staled-{}", Uuid::now_v7());

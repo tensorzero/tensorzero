@@ -5,21 +5,4 @@ import type { RetryConfig } from "./RetryConfig";
 import type { UninitializedChatTemplates } from "./UninitializedChatTemplates";
 import type { UninitializedInputWrappers } from "./UninitializedInputWrappers";
 
-export type UninitializedBestOfNEvaluatorConfig = {
-  weight: number | null;
-  model: string;
-  system_template: ResolvedTomlPath | null;
-  user_template: ResolvedTomlPath | null;
-  assistant_template: ResolvedTomlPath | null;
-  input_wrappers: UninitializedInputWrappers | null;
-  templates: UninitializedChatTemplates;
-  temperature: number | null;
-  top_p: number | null;
-  max_tokens: number | null;
-  presence_penalty: number | null;
-  frequency_penalty: number | null;
-  seed: number | null;
-  stop_sequences: Array<string> | null;
-  json_mode: JsonMode | null;
-  retries: RetryConfig;
-};
+export type UninitializedBestOfNEvaluatorConfig = { weight: number | null, model: string, system_template: ResolvedTomlPath | null, user_template: ResolvedTomlPath | null, assistant_template: ResolvedTomlPath | null, input_wrappers: UninitializedInputWrappers | null, templates: UninitializedChatTemplates, temperature: number | null, top_p: number | null, max_tokens: number | null, presence_penalty: number | null, frequency_penalty: number | null, seed: number | null, stop_sequences: Array<string> | null, json_mode: JsonMode | null, retries: RetryConfig, };

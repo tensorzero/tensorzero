@@ -3,8 +3,4 @@ import type { MetricConfigLevel } from "./MetricConfigLevel";
 import type { MetricConfigOptimize } from "./MetricConfigOptimize";
 import type { MetricConfigType } from "./MetricConfigType";
 
-export type MetricConfig = {
-  type: MetricConfigType;
-  optimize: MetricConfigOptimize;
-  level: MetricConfigLevel;
-};
+export type MetricConfig = { type: MetricConfigType, optimize: MetricConfigOptimize, level: MetricConfigLevel, };

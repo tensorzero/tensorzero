@@ -1,10 +1,10 @@
-use std::{borrow::Cow, sync::OnceLock, time::Duration};
+use std::{borrow::Cow, time::Duration};
 
 use crate::inference::types::RequestMessage;
-use crate::providers::openai::OpenAIToolChoiceString;
-use futures::StreamExt;
+use crate::providers::openai::{OpenAIMessagesConfig, OpenAIToolChoiceString};
+use futures::{future::try_join_all, StreamExt};
 use lazy_static::lazy_static;
-use reqwest_eventsource::{Event, EventSource};
+use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -13,13 +13,14 @@ use url::Url;
 
 use crate::cache::ModelProviderRequest;
 use crate::error::DisplayOrDebugGateway;
+use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::{
     FinishReason, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
@@ -66,34 +67,22 @@ pub fn default_parse_think_blocks() -> bool {
     true
 }
 
-pub static DEFAULT_CREDENTIALS: OnceLock<TogetherCredentials> = OnceLock::new();
-
 impl TogetherProvider {
     pub fn new(
         model_name: String,
-        api_key_location: Option<CredentialLocation>,
+        credentials: TogetherCredentials,
         parse_think_blocks: bool,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-        Ok(TogetherProvider {
+    ) -> Self {
+        TogetherProvider {
             model_name,
             credentials,
             parse_think_blocks,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {
         &self.model_name
     }
-}
-
-pub fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("TOGETHER_API_KEY".to_string())
 }
 
 #[derive(Clone, Debug)]
@@ -148,13 +137,16 @@ impl InferenceProvider for TogetherProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = serde_json::to_value(TogetherRequest::new(&self.model_name, request)?)
-            .map_err(|e| {
+        let request_body = serde_json::to_value(
+            TogetherRequest::new(&self.model_name, request).await?,
+        )
+        .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
                     "Error serializing Together request: {}",
@@ -243,13 +235,16 @@ impl InferenceProvider for TogetherProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(TogetherRequest::new(&self.model_name, request)?)
-            .map_err(|e| {
+        let request_body = serde_json::to_value(
+            TogetherRequest::new(&self.model_name, request).await?,
+        )
+        .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
                     "Error serializing request: {}",
@@ -280,7 +275,7 @@ impl InferenceProvider for TogetherProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
+        _client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -292,7 +287,7 @@ impl InferenceProvider for TogetherProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -348,7 +343,7 @@ struct TogetherRequest<'a> {
 }
 
 impl<'a> TogetherRequest<'a> {
-    pub fn new(
+    pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<TogetherRequest<'a>, Error> {
@@ -360,7 +355,17 @@ impl<'a> TogetherRequest<'a> {
             }
             ModelInferenceRequestJsonMode::Off => None,
         };
-        let messages = prepare_together_messages(request.system.as_deref(), &request.messages)?;
+        let messages = prepare_together_messages(
+            request.system.as_deref(),
+            &request.messages,
+            OpenAIMessagesConfig {
+                json_mode: Some(&request.json_mode),
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: request
+                    .fetch_and_encode_input_files_before_inference,
+            },
+        )
+        .await?;
 
         // NOTE: Together AI doesn't seem to support `tool_choice="none"`, so we simply don't include the `tools` field if that's the case
         let tool_choice = request
@@ -396,14 +401,20 @@ impl<'a> TogetherRequest<'a> {
     }
 }
 
-pub fn prepare_together_messages<'a>(
+pub async fn prepare_together_messages<'a>(
     system: Option<&'a str>,
     request_messages: &'a [RequestMessage],
+    config: OpenAIMessagesConfig<'a>,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
-    let mut messages = Vec::with_capacity(request_messages.len());
-    for message in request_messages {
-        messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
-    }
+    let mut messages: Vec<_> = try_join_all(
+        request_messages
+            .iter()
+            .map(|msg| tensorzero_to_openai_messages(msg, config)),
+    )
+    .await?
+    .into_iter()
+    .flatten()
+    .collect();
 
     if let Some(system_msg) = tensorzero_to_together_system_message(system) {
         messages.insert(0, system_msg);
@@ -578,7 +589,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
 // ThinkingState has been moved to helpers_thinking_block.rs
 
 fn stream_together(
-    mut event_source: EventSource,
+    mut event_source: TensorZeroEventSource,
     start_time: Instant,
     parse_think_blocks: bool,
 ) -> ProviderInferenceResponseStreamInner {
@@ -780,8 +791,8 @@ mod tests {
     };
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
-    #[test]
-    fn test_together_request_new() {
+    #[tokio::test]
+    async fn test_together_request_new() {
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -805,7 +816,9 @@ mod tests {
         };
 
         let together_request =
-            TogetherRequest::new("togethercomputer/llama-v3-8b", &request_with_tools).unwrap();
+            TogetherRequest::new("togethercomputer/llama-v3-8b", &request_with_tools)
+                .await
+                .unwrap();
 
         assert_eq!(together_request.model, "togethercomputer/llama-v3-8b");
         assert_eq!(together_request.messages.len(), 1);
@@ -858,13 +871,13 @@ mod tests {
         let result = TogetherCredentials::try_from(generic);
         assert!(result.is_err());
         assert!(matches!(
-            result.unwrap_err().get_owned_details(),
+            result.unwrap_err().get_details(),
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }
 
-    #[test]
-    fn test_together_response_with_metadata_try_into() {
+    #[tokio::test]
+    async fn test_together_response_with_metadata_try_into() {
         let valid_response = TogetherResponse {
             choices: vec![TogetherResponseChoice {
                 index: 0,
@@ -908,7 +921,9 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &TogetherRequest::new("test-model", &generic_request).unwrap(),
+                &TogetherRequest::new("test-model", &generic_request)
+                    .await
+                    .unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,
@@ -955,7 +970,9 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &TogetherRequest::new("test-model", &generic_request).unwrap(),
+                &TogetherRequest::new("test-model", &generic_request)
+                    .await
+                    .unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,
@@ -1001,7 +1018,9 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &TogetherRequest::new("test-model", &generic_request).unwrap(),
+                &TogetherRequest::new("test-model", &generic_request)
+                    .await
+                    .unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,
@@ -1025,8 +1044,8 @@ mod tests {
         assert_eq!(inference_response.raw_response, "test_response");
     }
 
-    #[test]
-    fn test_together_think_block_parsing_in_response() {
+    #[tokio::test]
+    async fn test_together_think_block_parsing_in_response() {
         // Test how TogetherAI integration works with think blocks in response parsing
         let response_with_thinking = TogetherResponse {
             choices: vec![TogetherResponseChoice {
@@ -1074,7 +1093,9 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &TogetherRequest::new("test-model", &generic_request).unwrap(),
+                &TogetherRequest::new("test-model", &generic_request)
+                    .await
+                    .unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,
@@ -1116,7 +1137,9 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &TogetherRequest::new("test-model", &generic_request).unwrap(),
+                &TogetherRequest::new("test-model", &generic_request)
+                    .await
+                    .unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,
@@ -1139,8 +1162,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_together_to_tensorzero_chunk_thinking() {
+    #[tokio::test]
+    async fn test_together_to_tensorzero_chunk_thinking() {
         // Test that the streaming function correctly handles thinking blocks
         let chunk = TogetherChatChunk {
             choices: vec![TogetherChatChunkChoice {
@@ -1264,8 +1287,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_together_to_tensorzero_chunk() {
+    #[tokio::test]
+    async fn test_together_to_tensorzero_chunk() {
         let chunk = TogetherChatChunk {
             choices: vec![TogetherChatChunkChoice {
                 delta: TogetherDelta {

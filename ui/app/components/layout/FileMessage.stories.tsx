@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { withRouter } from "storybook-addon-remix-react-router";
 import { FileMessage } from "./SnippetContent";
 import pdfUrl from "../inference/InputSnippet.stories.fixture.tensorzero.pdf?url";
 
@@ -19,7 +18,6 @@ async function getBase64File(url: string): Promise<string> {
 const meta = {
   title: "UI/Message Blocks/FileMessage",
   component: FileMessage,
-  decorators: [withRouter],
   parameters: {
     layout: "padded",
   },

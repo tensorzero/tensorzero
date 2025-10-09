@@ -1,5 +1,5 @@
 //! An HTTP/HTTPS proxy that caches non-error responses to disk.
-//! Heavily based on https://github.com/hatoo/http-mitm-proxy (MIT-licensed),
+//! Heavily based on <https://github.com/hatoo/http-mitm-proxy> (MIT-licensed),
 //! with the openssl dependency and `default_client` removed.
 #![expect(
     clippy::expect_used,

@@ -49,10 +49,12 @@ Please submit a PR directly once you're ready to start working on an issue.
 
 ### Documentation
 
-We're planning to open-source our documentation pages soon.
-See [issue #432](https://github.com/tensorzero/tensorzero/issues/432) for more details.
+The content for our documentation lives in the `docs/` directory.
 
-In the meantime, please open an issue if you have suggestions or find any problems with the documentation.
+For small changes (e.g. typos), feel free to open a PR directly.
+
+For larger changes, please communicate with us first to avoid duplicate work or wasted effort.
+You can start a discussion (GitHub, Slack, or Discord) or open an issue as a starting point.
 
 ### Content — Examples, Tutorials, etc.
 
@@ -183,36 +185,37 @@ cargo test-unit
    uv run ruff check --output-format=github --extend-select I .
    ```
 
-#### Dashboard
+#### TensorZero UI
 
-For development, the UI runs against hardcoded fixtures in `ui/fixtures/`.
-It depends on a running ClickHouse instance that has been initialized with the TensorZero data model.
-We include some fixture data as well in order to exercise some functionality.
+The UI depends on ClickHouse and other TensorZero components.
+For development, we recommend running the TensorZero Gateway and ClickHouse as containers.
+We also provide fixtures in `ui/fixtures/`.
 
-It also requires a one-time build of a WebAssembly module from Rust source code that is used to ensure consistent templating of messages across the gateway and UI.
-
-Here are the steps in order to run or test the UI assuming you have the prerequisites installed and this repository checked out:
+To set it up, follow these steps from the `ui` directory:
 
 1. Install dependencies: `pnpm install`
-2. Build the internal N-API client for TensorZero using `pnpm -r build`. If you have changed your Rust code, you may also have to run `pnpm build-bindings` from `internal/tensorzero-node`.
-3. Create a `ui/fixtures/.env` following the `ui/fixtures/.env.example`.
-4. Create a `ui/.env` file and set the following environment variables for the server:
+2. Build the internal N-API client for TensorZero using `pnpm -r build`. If you have changed your Rust code, you may also have to run `pnpm build-bindings` from `../internal/tensorzero-node`.
+3. Create a `fixtures/.env` following the `fixtures/.env.example`.
+4. Run `cargo build`.
+5. Set the following environment variables in your cwd `ui/` (note the previous step edited the vars in `fixtures/`):
+   ```bash
+   TENSORZERO_GATEWAY_URL="http://localhost:3000"
+   TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
+   TENSORZERO_UI_CONFIG_PATH="fixtures/config/tensorzero.toml"
+   TENSORZERO_EVALUATIONS_PATH="../target/debug/evaluations"
 
-```bash
-OPENAI_API_KEY=<your-key>
-FIREWORKS_API_KEY=<your-key>
-FIREWORKS_ACCOUNT_ID=<your-account-id>
-TENSORZERO_CLICKHOUSE_URL=<your-clickhouse-url> # For testing, set to http://chuser:chpassword@localhost:8123/tensorzero
-TENSORZERO_UI_CONFIG_PATH=<path-to-config-file> # For testing, set to ./fixtures/config/tensorzero.toml
-```
+   # Optional: add provider credentials for optimization workflows
+   OPENAI_API_KEY="..."
+   FIREWORKS_API_KEY="..."
+   FIREWORKS_ACCOUNT_ID="..."
+   ```
+6. Launch the dependencies: `docker compose -f fixtures/docker-compose.yml up --build --force-recreate`.
+You can omit these last 2 flags to skip the build step, but they ensure you're using the latest gateway.
+7. Launch the development server: `pnpm dev`
 
-5. Run the dependencies: `docker compose -f ui/fixtures/docker-compose.yml up --build --force-recreate`
-   (you can omit these last 2 flags to skip the build step, but they ensure you're using the latest gateway)
-
-With the dependencies running, you can run the tests with `pnpm ui:test` and the Playwright tests with `pnpm ui:test:e2e`.
-Similarly, you can start a development server with `pnpm ui:dev`.
-
-There may be some Playwright tests in `main` that require feature flags to be on, so be aware of that if they fail for nonobvious reasons.
+Separately, you can run headless tests with `pnpm test` and Playwright tests with `pnpm test-e2e` (the latter will require a `pnpm exec playwright install`).
+We also maintain a Docker Compose for e2e tests `fixtures/docker-compose.e2e.yml` that is used in CI for the Playwright tests.
+This file uses a different configuration that mandates credentials for image fetching.
 
 ---
 

@@ -5,4 +5,4 @@ import type { StaticJSONSchema } from "./StaticJSONSchema";
  * Contains the configuration information for a tool used in implicit tool calling for
  * JSON schema enforcement
  */
-export type ImplicitToolConfig = { parameters: StaticJSONSchema };
+export type ImplicitToolConfig = { parameters: StaticJSONSchema, };

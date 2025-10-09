@@ -1,4 +1,9 @@
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::{
+    error::IMPOSSIBLE_ERROR_MESSAGE,
+    http::TensorzeroHttpClient,
+    model_table::{OpenAIKind, ProviderKind, ProviderTypeDefaultCredentials},
+};
+use futures::future::try_join_all;
 #[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyValueError;
 #[cfg(feature = "pyo3")]
@@ -13,16 +18,14 @@ use crate::{
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
-    model::{build_creds_caching_default, CredentialLocation},
+    model::CredentialLocation,
     optimization::{JobHandle, OptimizationJobInfo, Optimizer},
     providers::openai::{
-        default_api_key_location,
         optimization::{
             convert_to_optimizer_status, OpenAIFineTuningJob, OpenAIFineTuningMethod,
             OpenAIFineTuningRequest, OpenAISupervisedRow, Supervised, SupervisedHyperparameters,
         },
-        upload_openai_file, OpenAICredentials, DEFAULT_CREDENTIALS, OPENAI_DEFAULT_BASE_URL,
-        PROVIDER_TYPE,
+        upload_openai_file, OpenAICredentials, OPENAI_DEFAULT_BASE_URL, PROVIDER_TYPE,
     },
     stored_inference::RenderedSample,
 };
@@ -95,8 +98,8 @@ impl UninitializedOpenAISFTConfig {
         let credentials = credentials
             .map(|s| serde_json::from_str(&s))
             .transpose()
-            .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid credentials JSON: {e}")))?
-            .or_else(|| Some(default_api_key_location()));
+            .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid credentials JSON: {e}")))?;
+
         let api_base = api_base
             .map(|s| {
                 Url::parse(&s)
@@ -121,7 +124,7 @@ impl UninitializedOpenAISFTConfig {
     /// :param batch_size: The batch size to use for the fine-tuning job.
     /// :param learning_rate_multiplier: The learning rate multiplier to use for the fine-tuning job.
     /// :param n_epochs: The number of epochs to use for the fine-tuning job.
-    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::OPENAI_API_KEY". See docs for more details.
+    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like `env::OPENAI_API_KEY`. See docs for more details.
     /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
     /// :param seed: The seed to use for the fine-tuning job.
     /// :param suffix: The suffix to use for the fine-tuning job (this is for naming in OpenAI).
@@ -143,19 +146,19 @@ impl UninitializedOpenAISFTConfig {
 }
 
 impl UninitializedOpenAISFTConfig {
-    pub fn load(self) -> Result<OpenAISFTConfig, Error> {
+    pub async fn load(
+        self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<OpenAISFTConfig, Error> {
         Ok(OpenAISFTConfig {
             model: self.model,
             api_base: self.api_base,
             batch_size: self.batch_size,
             learning_rate_multiplier: self.learning_rate_multiplier,
             n_epochs: self.n_epochs,
-            credentials: build_creds_caching_default(
-                self.credentials.clone(),
-                default_api_key_location(),
-                PROVIDER_TYPE,
-                &DEFAULT_CREDENTIALS,
-            )?,
+            credentials: OpenAIKind
+                .get_defaulted_credential(self.credentials.as_ref(), default_credentials)
+                .await?,
             credential_location: self.credentials,
             seed: self.seed,
             suffix: self.suffix,
@@ -188,28 +191,43 @@ impl Optimizer for OpenAISFTConfig {
 
     async fn launch(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
         _config: &Config,
     ) -> Result<Self::Handle, Error> {
+        let train_examples = train_examples
+            .into_iter()
+            .map(RenderedSample::into_lazy_rendered_sample)
+            .collect::<Vec<_>>();
+        let val_examples = val_examples.map(|examples| {
+            examples
+                .into_iter()
+                .map(RenderedSample::into_lazy_rendered_sample)
+                .collect::<Vec<_>>()
+        });
         // TODO(#2642): improve error handling here so we know what index of example failed
-        let train_rows: Vec<OpenAISupervisedRow> = train_examples
-            .iter()
-            .map(OpenAISupervisedRow::try_from)
-            .collect::<Result<Vec<_>, _>>()?;
+        let train_rows: Vec<OpenAISupervisedRow> = try_join_all(
+            train_examples
+                .iter()
+                .map(OpenAISupervisedRow::from_rendered_sample),
+        )
+        .await?;
 
-        let val_rows: Option<Vec<OpenAISupervisedRow>> = val_examples
-            .as_ref()
-            .map(|examples| {
-                examples
-                    .iter()
-                    .map(OpenAISupervisedRow::try_from)
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .transpose()?;
+        let val_rows = if let Some(examples) = val_examples.as_ref() {
+            Some(
+                try_join_all(
+                    examples
+                        .iter()
+                        .map(OpenAISupervisedRow::from_rendered_sample),
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
 
         let api_key = self.credentials.get_api_key(credentials)?;
 
@@ -328,15 +346,13 @@ impl Optimizer for OpenAISFTConfig {
 impl JobHandle for OpenAISFTJobHandle {
     async fn poll(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
-        let openai_credentials = build_creds_caching_default(
-            self.credential_location.clone(),
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
+        let openai_credentials: OpenAICredentials = OpenAIKind
+            .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
+            .await?;
         let mut request = client.get(self.job_api_url.clone());
         let api_key = openai_credentials.get_api_key(credentials)?;
         if let Some(api_key) = api_key {

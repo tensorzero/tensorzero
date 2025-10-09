@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "build-bindings": "pnpm --filter=tensorzero-node build-bindings",
     "ui:dev": "pnpm --filter=tensorzero-ui dev",
     "ui:storybook": "pnpm --filter=tensorzero-ui storybook",
     "ui:test": "pnpm --filter=tensorzero-ui test",
@@ -9,7 +10,7 @@
     "clean:node": "find . -name 'node_modules' -type d -prune -exec rm -rf '{}' +"
   },
   "devDependencies": {
-    "typescript": "^5.8.2"
+    "typescript": "^5.9.2"
   },
   "packageManager": "pnpm@10.15.0",
   "pnpm": {

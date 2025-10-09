@@ -112,20 +112,18 @@ services:
       - "9411:9411"
 
   # This is not a gateway to use but rather one that just sets up migrations for the ClickHouse db
+  # If you need to add fixtures that reference newly-added database columns, you'll need to temporarily
+  # bump this to a locally-built image (or published 'sha' tag)
   gateway:
     image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
-    build:
-      context: ../../..
-      dockerfile: gateway/Dockerfile
-      target: gateway
     environment:
-      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse-01:8123/tensorzero_e2e_tests
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse-01:8123/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero_e2e_tests}
       TENSORZERO_CLICKHOUSE_CLUSTER_NAME: tensorzero_e2e_tests_cluster
     depends_on:
       clickhouse-01:
         condition: service_healthy
     entrypoint: /bin/bash
-    command: -c "gateway --run-migrations-only && gateway --default-config"
+    command: -c "gateway --run-clickhouse-migrations && gateway --default-config"
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
     healthcheck:
@@ -143,7 +141,8 @@ services:
       timeout: 1s
   fixtures:
     build:
-      dockerfile: ../../../ui/fixtures/Dockerfile
+      dockerfile: ui/fixtures/Dockerfile
+      context: ../../..
     volumes:
       - ../../../ui/fixtures:/fixtures
       - ~/.aws:/root/.aws
@@ -161,7 +160,7 @@ services:
       [
         "bash",
         "-c",
-        "cd /fixtures && ./load_fixtures.sh tensorzero_e2e_tests && sleep infinity",
+        "cd /fixtures && ./load_fixtures.sh ${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero_e2e_tests} && sleep infinity",
       ]
     healthcheck:
       test: ["CMD", "test", "-f", "/load_complete.marker"]

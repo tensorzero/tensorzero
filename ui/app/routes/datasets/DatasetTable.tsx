@@ -10,6 +10,7 @@ import {
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import { Link, useFetcher } from "react-router";
 import { TableItemTime } from "~/components/ui/TableItems";
+import { toDatasetUrl } from "~/utils/urls";
 import { Button } from "~/components/ui/button";
 import { Trash, ChevronUp, ChevronDown, Search } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -39,7 +40,6 @@ export default function DatasetTable({
   counts: DatasetCountInfo[];
 }) {
   const fetcher = useFetcher();
-  const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [datasetToDelete, setDatasetToDelete] = useState<string | null>(null);
 
@@ -52,7 +52,7 @@ export default function DatasetTable({
         header: "Dataset Name",
         cell: (info) => (
           <Link
-            to={`/datasets/${info.getValue()}`}
+            to={toDatasetUrl(info.getValue())}
             className="block no-underline"
           >
             <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
@@ -77,9 +77,7 @@ export default function DatasetTable({
             <Button
               variant="ghost"
               size="icon"
-              className={
-                hoveredRow === info.row.original.dataset_name ? "" : "invisible"
-              }
+              className="opacity-60 transition-opacity hover:opacity-100"
               onClick={() => {
                 setDatasetToDelete(info.row.original.dataset_name);
                 setDeleteDialogOpen(true);
@@ -92,7 +90,7 @@ export default function DatasetTable({
         enableSorting: false,
       }),
     ],
-    [hoveredRow],
+    [],
   );
 
   const table = useReactTable({
@@ -170,12 +168,7 @@ export default function DatasetTable({
             <TableEmptyState message="No datasets found" />
           ) : (
             table.getRowModel().rows.map((row) => (
-              <TableRow
-                key={row.id}
-                id={row.original.dataset_name}
-                onMouseEnter={() => setHoveredRow(row.original.dataset_name)}
-                onMouseLeave={() => setHoveredRow(null)}
-              >
+              <TableRow key={row.id} id={row.original.dataset_name}>
                 {row.getVisibleCells().map((cell, index) => (
                   <TableCell
                     key={cell.id}

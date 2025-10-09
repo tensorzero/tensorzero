@@ -1,0 +1,7 @@
+[functions.functionA]
+type = "chat"
+
+[functions.functionA.variants.baseline]
+type = "chat_completion"
+model = "my_gpt_5_mini"  # defined in `root.toml`
+system_template = "templates/system.minijinja"  # relative to this file

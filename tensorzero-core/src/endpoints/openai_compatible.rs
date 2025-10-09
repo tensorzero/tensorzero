@@ -13,12 +13,13 @@ use std::collections::HashMap;
 use axum::body::Body;
 use axum::debug_handler;
 use axum::extract::State;
-use axum::http::HeaderMap;
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use futures::Stream;
 use mime::MediaType;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio_stream::StreamExt;
@@ -33,15 +34,15 @@ use crate::endpoints::inference::{
     inference, ChatCompletionInferenceParams, InferenceParams, Params,
 };
 use crate::error::{Error, ErrorDetails};
-use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::file::filename_to_mime_type;
 use crate::inference::types::{
     current_timestamp, ContentBlockChatOutput, ContentBlockChunk, File, FinishReason, Input,
-    InputMessage, InputMessageContent, Role, TextKind, Usage,
+    InputMessage, InputMessageContent, Role, TemplateInput, TextKind, Usage,
 };
 use crate::tool::{DynamicToolParams, Tool, ToolCallInput, ToolCallOutput, ToolChoice, ToolResult};
+use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::JsonMode;
 use serde::Deserializer;
 
@@ -75,9 +76,9 @@ pub async fn inference_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        postgres_connection_info,
         ..
     }): AppState,
-    headers: HeaderMap,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
 ) -> Result<Response<Body>, Error> {
     if !openai_compatible_params.unknown_fields.is_empty() {
@@ -104,7 +105,7 @@ pub async fn inference_handler(
         );
     }
     let stream_options = openai_compatible_params.stream_options;
-    let params = Params::try_from_openai(headers, openai_compatible_params)?;
+    let params = Params::try_from_openai(openai_compatible_params)?;
 
     // The prefix for the response's `model` field depends on the inference target
     // (We run this disambiguation deep in the `inference` call below but we don't get the decision out, so we duplicate it here)
@@ -123,7 +124,14 @@ pub async fn inference_handler(
         .into()),
     }?;
 
-    let response = inference(config, &http_client, clickhouse_connection_info, params, ()).await?;
+    let response = inference(
+        config,
+        &http_client,
+        clickhouse_connection_info,
+        postgres_connection_info,
+        params,
+    )
+    .await?;
 
     match response {
         InferenceOutput::NonStreaming(response) => {
@@ -232,6 +240,7 @@ pub async fn embeddings_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        postgres_connection_info,
         ..
     }): AppState,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleEmbeddingParams>,
@@ -241,6 +250,7 @@ pub async fn embeddings_handler(
         config,
         &http_client,
         clickhouse_connection_info,
+        postgres_connection_info,
         embedding_params,
     )
     .await?;
@@ -314,29 +324,31 @@ enum OpenAICompatibleMessage {
     Tool(OpenAICompatibleToolMessage),
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 enum OpenAICompatibleResponseFormat {
     Text,
-    JsonSchema { json_schema: JsonSchemaInfoOption },
+    JsonSchema { json_schema: JsonSchemaInfo },
     JsonObject,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-#[serde(untagged)]
-enum JsonSchemaInfoOption {
-    JsonSchema(JsonSchemaInfo),
-    DeprecatedJsonSchema(Value),
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct JsonSchemaInfo {
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+pub struct JsonSchemaInfo {
     name: String,
     description: Option<String>,
     schema: Option<Value>,
     #[serde(default)]
     strict: bool,
+}
+
+impl std::fmt::Display for JsonSchemaInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -365,6 +377,28 @@ struct OpenAICompatibleNamedToolChoice {
     function: FunctionName,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum OpenAICompatibleAllowedToolsMode {
+    Auto,
+    Required,
+}
+
+impl From<OpenAICompatibleAllowedToolsMode> for ToolChoice {
+    fn from(mode: OpenAICompatibleAllowedToolsMode) -> Self {
+        match mode {
+            OpenAICompatibleAllowedToolsMode::Auto => ToolChoice::Auto,
+            OpenAICompatibleAllowedToolsMode::Required => ToolChoice::Required,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+struct OpenAICompatibleAllowedTools {
+    tools: Vec<OpenAICompatibleNamedToolChoice>,
+    mode: OpenAICompatibleAllowedToolsMode,
+}
+
 /// Controls which (if any) tool is called by the model.
 /// `none` means the model will not call any tool and instead generates a message.
 /// `auto` means the model can pick between generating a message or calling one or more tools.
@@ -372,15 +406,115 @@ struct OpenAICompatibleNamedToolChoice {
 /// Specifying a particular tool via `{"type": "function", "function": {"name": "my_function"}}` forces the model to call that tool.
 ///
 /// `none` is the default when no tools are present. `auto` is the default if tools are present.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[derive(Clone, Debug, Default, PartialEq)]
 enum ChatCompletionToolChoiceOption {
     #[default]
     None,
     Auto,
     Required,
-    #[serde(untagged)]
+    AllowedTools(OpenAICompatibleAllowedTools),
     Named(OpenAICompatibleNamedToolChoice),
+}
+
+impl<'de> Deserialize<'de> for ChatCompletionToolChoiceOption {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+        use serde_json::Value;
+
+        let value = Value::deserialize(deserializer)?;
+
+        match &value {
+            Value::String(s) => match s.as_str() {
+                "none" => Ok(ChatCompletionToolChoiceOption::None),
+                "auto" => Ok(ChatCompletionToolChoiceOption::Auto),
+                "required" => Ok(ChatCompletionToolChoiceOption::Required),
+                _ => Err(D::Error::custom(format!("Invalid tool choice string: {s}"))),
+            },
+            Value::Object(obj) => {
+                if let Some(type_value) = obj.get("type") {
+                    if let Some(type_str) = type_value.as_str() {
+                        match type_str {
+                            "function" => {
+                                // This is a named tool choice
+                                let named: OpenAICompatibleNamedToolChoice =
+                                    serde_json::from_value(value).map_err(D::Error::custom)?;
+                                Ok(ChatCompletionToolChoiceOption::Named(named))
+                            }
+                            "allowed_tools" => {
+                                // This is an allowed tools choice - extract the allowed_tools field
+                                if let Some(allowed_tools_value) = obj.get("allowed_tools") {
+                                    let allowed_tools: OpenAICompatibleAllowedTools =
+                                        serde_json::from_value(allowed_tools_value.clone())
+                                            .map_err(D::Error::custom)?;
+                                    Ok(ChatCompletionToolChoiceOption::AllowedTools(allowed_tools))
+                                } else {
+                                    Err(D::Error::custom(
+                                        "Missing 'allowed_tools' field in allowed_tools type",
+                                    ))
+                                }
+                            }
+                            _ => Err(D::Error::custom(format!(
+                                "Invalid tool choice type: {type_str}",
+                            ))),
+                        }
+                    } else {
+                        Err(D::Error::custom(
+                            "Tool choice 'type' field must be a string",
+                        ))
+                    }
+                } else {
+                    Err(D::Error::custom(
+                        "Tool choice field must have a 'type' field if it is an object",
+                    ))
+                }
+            }
+            _ => Err(D::Error::custom("Tool choice must be a string or object")),
+        }
+    }
+}
+
+impl ChatCompletionToolChoiceOption {
+    fn into_tool_params(self) -> OpenAICompatibleToolChoiceParams {
+        match self {
+            ChatCompletionToolChoiceOption::None => OpenAICompatibleToolChoiceParams {
+                allowed_tools: None,
+                tool_choice: Some(ToolChoice::None),
+            },
+            ChatCompletionToolChoiceOption::Auto => OpenAICompatibleToolChoiceParams {
+                allowed_tools: None,
+                tool_choice: Some(ToolChoice::Auto),
+            },
+            ChatCompletionToolChoiceOption::Required => OpenAICompatibleToolChoiceParams {
+                allowed_tools: None,
+                tool_choice: Some(ToolChoice::Required),
+            },
+            ChatCompletionToolChoiceOption::AllowedTools(allowed_tool_info) => {
+                OpenAICompatibleToolChoiceParams {
+                    allowed_tools: Some(
+                        allowed_tool_info
+                            .tools
+                            .into_iter()
+                            .map(|tool| tool.function.name)
+                            .collect(),
+                    ),
+                    tool_choice: Some(allowed_tool_info.mode.into()),
+                }
+            }
+            ChatCompletionToolChoiceOption::Named(named_tool) => OpenAICompatibleToolChoiceParams {
+                allowed_tools: None,
+                tool_choice: Some(ToolChoice::Specific(named_tool.function.name)),
+            },
+        }
+    }
+}
+
+#[derive(Default)]
+struct OpenAICompatibleToolChoiceParams {
+    pub allowed_tools: Option<Vec<String>>,
+    pub tool_choice: Option<ToolChoice>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
@@ -493,10 +627,7 @@ const TENSORZERO_MODEL_NAME_PREFIX: &str = "tensorzero::model_name::";
 const TENSORZERO_EMBEDDING_MODEL_NAME_PREFIX: &str = "tensorzero::embedding_model_name::";
 
 impl Params {
-    fn try_from_openai(
-        headers: HeaderMap,
-        openai_compatible_params: OpenAICompatibleParams,
-    ) -> Result<Self, Error> {
+    fn try_from_openai(openai_compatible_params: OpenAICompatibleParams) -> Result<Self, Error> {
         let (function_name, model_name) = if let Some(function_name) = openai_compatible_params
             .model
             .strip_prefix(TENSORZERO_FUNCTION_NAME_PREFIX)
@@ -507,14 +638,6 @@ impl Params {
             .strip_prefix(TENSORZERO_MODEL_NAME_PREFIX)
         {
             (None, Some(model_name.to_string()))
-        } else if let Some(function_name) =
-            openai_compatible_params.model.strip_prefix("tensorzero::")
-        {
-            tracing::warn!(
-                function_name = function_name,
-                "Deprecation Warning: Please set the `model` parameter to `tensorzero::function_name::your_function` instead of `tensorzero::your_function.` The latter will be removed in a future release."
-            );
-            (Some(function_name.to_string()), None)
         } else {
             return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                 message: "`model` field must start with `tensorzero::function_name::` or `tensorzero::model_name::`. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, `tensorzero::model_name::my_model` for a model `my_model` defined in your config, or default functions like `tensorzero::model_name::openai::gpt-4o-mini`.".to_string(),
@@ -541,26 +664,6 @@ impl Params {
             }
         }
 
-        let header_episode_id = headers
-            .get("episode_id")
-            .map(|h| {
-                tracing::warn!("Deprecation Warning: Please use the `tensorzero::episode_id` field instead of the `episode_id` header. The header will be removed in a future release.");
-                h.to_str()
-                    .map_err(|_| {
-                        Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                            message: "episode_id header is not valid UTF-8".to_string(),
-                        })
-                    })
-                    .and_then(|s| {
-                        Uuid::parse_str(s).map_err(|_| {
-                            Error::new(ErrorDetails::InvalidTensorzeroUuid {
-                                kind: "Episode".to_string(),
-                                message: "episode_id header is not a valid UUID".to_string(),
-                            })
-                        })
-                    })
-            })
-            .transpose()?;
         // If both max_tokens and max_completion_tokens are provided, we use the minimum of the two.
         // Otherwise, we use the provided value, or None if neither is provided.
         let max_tokens = match (
@@ -596,71 +699,34 @@ impl Params {
         let inference_params = InferenceParams {
             chat_completion: chat_completion_inference_params,
         };
-        let header_variant_name = headers
-            .get("variant_name")
-            .map(|h| {
-                tracing::warn!("Deprecation Warning: Please use the `tensorzero::variant_name` field instead of the `variant_name` header. The header will be removed in a future release.");
-                h.to_str()
-                    .map_err(|_| {
-                        Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                            message: "variant_name header is not valid UTF-8".to_string(),
-                        })
-                    })
-                    .map(str::to_string)
-            })
-            .transpose()?;
-        let header_dryrun = headers
-            .get("dryrun")
-            .map(|h| {
-                tracing::warn!("Deprecation Warning: Please use the `tensorzero::dryrun` field instead of the `dryrun` header. The header will be removed in a future release.");
-                h.to_str()
-                    .map_err(|_| {
-                        Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                            message: "dryrun header is not valid UTF-8".to_string(),
-                        })
-                    })
-                    .and_then(|s| {
-                        s.parse::<bool>().map_err(|_| {
-                            Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                                message: "dryrun header is not a valid boolean".to_string(),
-                            })
-                        })
-                    })
-            })
-            .transpose()?;
+        let OpenAICompatibleToolChoiceParams {
+            allowed_tools,
+            tool_choice,
+        } = openai_compatible_params
+            .tool_choice
+            .map(ChatCompletionToolChoiceOption::into_tool_params)
+            .unwrap_or_default();
         let dynamic_tool_params = DynamicToolParams {
-            allowed_tools: None,
+            allowed_tools,
             additional_tools: openai_compatible_params
                 .tools
                 .map(|tools| tools.into_iter().map(OpenAICompatibleTool::into).collect()),
-            tool_choice: openai_compatible_params
-                .tool_choice
-                .map(ChatCompletionToolChoiceOption::into),
+            tool_choice,
             parallel_tool_calls: openai_compatible_params.parallel_tool_calls,
         };
         let output_schema = match openai_compatible_params.response_format {
-            Some(OpenAICompatibleResponseFormat::JsonSchema { json_schema }) => match json_schema {
-                JsonSchemaInfoOption::JsonSchema(json_schema) => json_schema.schema,
-                JsonSchemaInfoOption::DeprecatedJsonSchema(value) => {
-                    tracing::warn!("Deprecation Warning: Please provide the correct `name`, `description`, `schema`, and `strict` fields in the `json_schema` field in the response format. Simply providing a JSON schema in this field will be rejected in a future TensorZero release.");
-                    Some(value)
-                }
-            },
+            Some(OpenAICompatibleResponseFormat::JsonSchema { json_schema }) => json_schema.schema,
             _ => None,
         };
         Ok(Params {
             function_name,
             model_name,
-            episode_id: openai_compatible_params
-                .tensorzero_episode_id
-                .or(header_episode_id),
+            episode_id: openai_compatible_params.tensorzero_episode_id,
             input,
             stream: openai_compatible_params.stream,
             params: inference_params,
-            variant_name: openai_compatible_params
-                .tensorzero_variant_name
-                .or(header_variant_name),
-            dryrun: openai_compatible_params.tensorzero_dryrun.or(header_dryrun),
+            variant_name: openai_compatible_params.tensorzero_variant_name,
+            dryrun: openai_compatible_params.tensorzero_dryrun,
             dynamic_tool_params,
             output_schema,
             credentials: openai_compatible_params.tensorzero_credentials,
@@ -807,12 +873,19 @@ enum OpenAICompatibleContentBlock {
     RawText {
         value: String,
     },
+    #[serde(rename = "tensorzero::template")]
+    Template {
+        name: String,
+        arguments: Map<String, Value>,
+    },
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "type", deny_unknown_fields, rename_all = "snake_case")]
 struct OpenAICompatibleImageUrl {
     url: Url,
+    #[serde(rename = "tensorzero::mime_type")]
+    mime_type: Option<MediaType>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -894,6 +967,7 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
                 let block = serde_json::from_value::<OpenAICompatibleContentBlock>(val.clone());
                 let output = match block {
                     Ok(OpenAICompatibleContentBlock::RawText{ value }) => InputMessageContent::RawText { value },
+                    Ok(OpenAICompatibleContentBlock::Template { name, arguments }) => InputMessageContent::Template(TemplateInput { name, arguments }),
                     Ok(OpenAICompatibleContentBlock::Text(TextContent::Text { text })) => InputMessageContent::Text(TextKind::Text {text }),
                     Ok(OpenAICompatibleContentBlock::Text(TextContent::TensorZeroArguments { tensorzero_arguments })) => InputMessageContent::Text(TextKind::Arguments { arguments: tensorzero_arguments }),
                     Ok(OpenAICompatibleContentBlock::ImageUrl { image_url }) => {
@@ -902,7 +976,7 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
                             let (mime_type, data) = parse_base64_image_data_url(&url_str)?;
                             InputMessageContent::File(File::Base64 { mime_type, data: data.to_string() })
                         } else {
-                            InputMessageContent::File(File::Url { url: image_url.url, mime_type: None })
+                            InputMessageContent::File(File::Url { url: image_url.url, mime_type: image_url.mime_type })
                         }
                     }
                     Ok(OpenAICompatibleContentBlock::File { file }) => {
@@ -960,19 +1034,6 @@ impl From<OpenAICompatibleTool> for Tool {
                 name,
                 strict,
             },
-        }
-    }
-}
-
-impl From<ChatCompletionToolChoiceOption> for ToolChoice {
-    fn from(tool_choice: ChatCompletionToolChoiceOption) -> Self {
-        match tool_choice {
-            ChatCompletionToolChoiceOption::None => ToolChoice::None,
-            ChatCompletionToolChoiceOption::Auto => ToolChoice::Auto,
-            ChatCompletionToolChoiceOption::Required => ToolChoice::Required,
-            ChatCompletionToolChoiceOption::Named(named) => {
-                ToolChoice::Specific(named.function.name)
-            }
         }
     }
 }
@@ -1334,7 +1395,6 @@ fn prepare_serialized_openai_compatible_events(
 mod tests {
 
     use super::*;
-    use axum::http::header::{HeaderName, HeaderValue};
     use serde_json::json;
     use tracing_test::traced_test;
 
@@ -1345,52 +1405,39 @@ mod tests {
     #[test]
     fn test_try_from_openai_compatible_params() {
         let episode_id = Uuid::now_v7();
-        let headers = HeaderMap::from_iter(vec![
-            (
-                HeaderName::from_static("episode_id"),
-                HeaderValue::from_str(&episode_id.to_string()).unwrap(),
-            ),
-            (
-                HeaderName::from_static("variant_name"),
-                HeaderValue::from_static("test_variant"),
-            ),
-        ]);
         let messages = vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
             content: Value::String("Hello, world!".to_string()),
         })];
         let tensorzero_tags = HashMap::from([("test".to_string(), "test".to_string())]);
-        let params = Params::try_from_openai(
-            headers,
-            OpenAICompatibleParams {
-                messages,
-                model: "tensorzero::test_function".into(),
-                frequency_penalty: Some(0.5),
-                max_tokens: Some(100),
-                max_completion_tokens: Some(50),
-                presence_penalty: Some(0.5),
-                response_format: None,
-                seed: Some(23),
-                stream: None,
-                temperature: Some(0.5),
-                tools: None,
-                tool_choice: None,
-                top_p: Some(0.5),
-                parallel_tool_calls: None,
-                tensorzero_episode_id: None,
-                tensorzero_variant_name: None,
-                tensorzero_dryrun: None,
-                tensorzero_cache_options: None,
-                tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
-                tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
-                tensorzero_tags: tensorzero_tags.clone(),
-                tensorzero_deny_unknown_fields: false,
-                tensorzero_credentials: InferenceCredentials::default(),
-                unknown_fields: Default::default(),
-                stream_options: None,
-                stop: None,
-                tensorzero_internal_dynamic_variant_config: None,
-            },
-        )
+        let params = Params::try_from_openai(OpenAICompatibleParams {
+            messages,
+            model: "tensorzero::function_name::test_function".into(),
+            frequency_penalty: Some(0.5),
+            max_tokens: Some(100),
+            max_completion_tokens: Some(50),
+            presence_penalty: Some(0.5),
+            response_format: None,
+            seed: Some(23),
+            stream: None,
+            temperature: Some(0.5),
+            tools: None,
+            tool_choice: None,
+            top_p: Some(0.5),
+            parallel_tool_calls: None,
+            tensorzero_episode_id: Some(episode_id),
+            tensorzero_variant_name: Some("test_variant".to_string()),
+            tensorzero_dryrun: None,
+            tensorzero_cache_options: None,
+            tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
+            tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
+            tensorzero_tags: tensorzero_tags.clone(),
+            tensorzero_deny_unknown_fields: false,
+            tensorzero_credentials: InferenceCredentials::default(),
+            unknown_fields: Default::default(),
+            stream_options: None,
+            stop: None,
+            tensorzero_internal_dynamic_variant_config: None,
+        })
         .unwrap();
         assert_eq!(params.function_name, Some("test_function".to_string()));
         assert_eq!(params.episode_id, Some(episode_id));
@@ -1455,9 +1502,10 @@ mod tests {
             }),
         ];
         let input: Result<Input, Error> = messages.try_into();
-        let details = input.unwrap_err().get_owned_details();
+        let error = input.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidOpenAICompatibleRequest {
                 message: "message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
             }
@@ -1610,9 +1658,9 @@ mod tests {
             "city": "Tokyo",
         });
         let error = convert_openai_message_content(content.clone()).unwrap_err();
-        let details = error.get_owned_details();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidOpenAICompatibleRequest {
                 message: "message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
             }
@@ -1637,6 +1685,25 @@ mod tests {
                 .as_object()
                 .unwrap()
                 .clone(),
+            })]
+        );
+
+        let template_block = json!([{
+            "type": "tensorzero::template",
+            "name": "my_template",
+            "arguments": {
+                "custom_key": "custom_val",
+            }
+        }]);
+        let value = convert_openai_message_content(template_block).unwrap();
+        assert_eq!(
+            value,
+            vec![InputMessageContent::Template(TemplateInput {
+                name: "my_template".to_string(),
+                arguments: json!({ "custom_key": "custom_val" })
+                    .as_object()
+                    .unwrap()
+                    .clone()
             })]
         );
     }
@@ -1832,84 +1899,76 @@ mod tests {
 
     #[test]
     fn test_cache_options() {
-        let headers = HeaderMap::new();
-
         // Test default cache options (should be write-only)
-        let params = Params::try_from_openai(
-            headers.clone(),
-            OpenAICompatibleParams {
-                messages: vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
-                    content: Value::String("test".to_string()),
-                })],
-                model: "tensorzero::function_name::test_function".into(),
-                frequency_penalty: None,
-                max_tokens: None,
-                max_completion_tokens: None,
-                presence_penalty: None,
-                response_format: None,
-                seed: None,
-                stream: None,
-                temperature: None,
-                tools: None,
-                tool_choice: None,
-                top_p: None,
-                parallel_tool_calls: None,
-                tensorzero_variant_name: None,
-                tensorzero_dryrun: None,
-                tensorzero_episode_id: None,
-                tensorzero_cache_options: None,
-                tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
-                tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
-                tensorzero_tags: HashMap::new(),
-                tensorzero_credentials: InferenceCredentials::default(),
-                unknown_fields: Default::default(),
-                stream_options: None,
-                stop: None,
-                tensorzero_deny_unknown_fields: false,
-                tensorzero_internal_dynamic_variant_config: None,
-            },
-        )
+        let params = Params::try_from_openai(OpenAICompatibleParams {
+            messages: vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
+                content: Value::String("test".to_string()),
+            })],
+            model: "tensorzero::function_name::test_function".into(),
+            frequency_penalty: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            presence_penalty: None,
+            response_format: None,
+            seed: None,
+            stream: None,
+            temperature: None,
+            tools: None,
+            tool_choice: None,
+            top_p: None,
+            parallel_tool_calls: None,
+            tensorzero_variant_name: None,
+            tensorzero_dryrun: None,
+            tensorzero_episode_id: None,
+            tensorzero_cache_options: None,
+            tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
+            tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
+            tensorzero_tags: HashMap::new(),
+            tensorzero_credentials: InferenceCredentials::default(),
+            unknown_fields: Default::default(),
+            stream_options: None,
+            stop: None,
+            tensorzero_deny_unknown_fields: false,
+            tensorzero_internal_dynamic_variant_config: None,
+        })
         .unwrap();
         assert_eq!(params.cache_options, CacheParamsOptions::default());
 
         // Test explicit cache options
-        let params = Params::try_from_openai(
-            headers.clone(),
-            OpenAICompatibleParams {
-                messages: vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
-                    content: Value::String("test".to_string()),
-                })],
-                model: "tensorzero::function_name::test_function".into(),
-                frequency_penalty: None,
-                max_tokens: None,
-                max_completion_tokens: None,
-                presence_penalty: None,
-                response_format: None,
-                seed: None,
-                stream: None,
-                temperature: None,
-                tools: None,
-                tool_choice: None,
-                top_p: None,
-                parallel_tool_calls: None,
-                tensorzero_variant_name: None,
-                tensorzero_dryrun: None,
-                tensorzero_episode_id: None,
-                tensorzero_cache_options: Some(CacheParamsOptions {
-                    max_age_s: Some(3600),
-                    enabled: CacheEnabledMode::On,
-                }),
-                tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
-                tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
-                tensorzero_tags: HashMap::new(),
-                tensorzero_credentials: InferenceCredentials::default(),
-                unknown_fields: Default::default(),
-                stream_options: None,
-                stop: None,
-                tensorzero_deny_unknown_fields: false,
-                tensorzero_internal_dynamic_variant_config: None,
-            },
-        )
+        let params = Params::try_from_openai(OpenAICompatibleParams {
+            messages: vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
+                content: Value::String("test".to_string()),
+            })],
+            model: "tensorzero::function_name::test_function".into(),
+            frequency_penalty: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            presence_penalty: None,
+            response_format: None,
+            seed: None,
+            stream: None,
+            temperature: None,
+            tools: None,
+            tool_choice: None,
+            top_p: None,
+            parallel_tool_calls: None,
+            tensorzero_variant_name: None,
+            tensorzero_dryrun: None,
+            tensorzero_episode_id: None,
+            tensorzero_cache_options: Some(CacheParamsOptions {
+                max_age_s: Some(3600),
+                enabled: CacheEnabledMode::On,
+            }),
+            tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
+            tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
+            tensorzero_tags: HashMap::new(),
+            tensorzero_credentials: InferenceCredentials::default(),
+            unknown_fields: Default::default(),
+            stream_options: None,
+            stop: None,
+            tensorzero_deny_unknown_fields: false,
+            tensorzero_internal_dynamic_variant_config: None,
+        })
         .unwrap();
         assert_eq!(
             params.cache_options,
@@ -1920,43 +1979,40 @@ mod tests {
         );
 
         // Test interaction with dryrun
-        let params = Params::try_from_openai(
-            headers.clone(),
-            OpenAICompatibleParams {
-                messages: vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
-                    content: Value::String("test".to_string()),
-                })],
-                model: "tensorzero::function_name::test_function".into(),
-                frequency_penalty: None,
-                max_tokens: None,
-                max_completion_tokens: None,
-                presence_penalty: None,
-                response_format: None,
-                seed: None,
-                stream: None,
-                temperature: None,
-                tools: None,
-                tool_choice: None,
-                top_p: None,
-                parallel_tool_calls: None,
-                tensorzero_variant_name: None,
-                tensorzero_dryrun: Some(true),
-                tensorzero_episode_id: None,
-                tensorzero_cache_options: Some(CacheParamsOptions {
-                    max_age_s: Some(3600),
-                    enabled: CacheEnabledMode::On,
-                }),
-                tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
-                tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
-                tensorzero_tags: HashMap::new(),
-                tensorzero_credentials: InferenceCredentials::default(),
-                unknown_fields: Default::default(),
-                stream_options: None,
-                stop: None,
-                tensorzero_deny_unknown_fields: false,
-                tensorzero_internal_dynamic_variant_config: None,
-            },
-        )
+        let params = Params::try_from_openai(OpenAICompatibleParams {
+            messages: vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
+                content: Value::String("test".to_string()),
+            })],
+            model: "tensorzero::function_name::test_function".into(),
+            frequency_penalty: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            presence_penalty: None,
+            response_format: None,
+            seed: None,
+            stream: None,
+            temperature: None,
+            tools: None,
+            tool_choice: None,
+            top_p: None,
+            parallel_tool_calls: None,
+            tensorzero_variant_name: None,
+            tensorzero_dryrun: Some(true),
+            tensorzero_episode_id: None,
+            tensorzero_cache_options: Some(CacheParamsOptions {
+                max_age_s: Some(3600),
+                enabled: CacheEnabledMode::On,
+            }),
+            tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
+            tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
+            tensorzero_tags: HashMap::new(),
+            tensorzero_credentials: InferenceCredentials::default(),
+            unknown_fields: Default::default(),
+            stream_options: None,
+            stop: None,
+            tensorzero_deny_unknown_fields: false,
+            tensorzero_internal_dynamic_variant_config: None,
+        })
         .unwrap();
         assert_eq!(
             params.cache_options,
@@ -1967,43 +2023,40 @@ mod tests {
         );
 
         // Test write-only with dryrun (should become Off)
-        let params = Params::try_from_openai(
-            headers,
-            OpenAICompatibleParams {
-                messages: vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
-                    content: Value::String("test".to_string()),
-                })],
-                model: "tensorzero::function_name::test_function".into(),
-                frequency_penalty: None,
-                max_tokens: None,
-                max_completion_tokens: None,
-                presence_penalty: None,
-                response_format: None,
-                seed: None,
-                stream: None,
-                temperature: None,
-                tools: None,
-                tool_choice: None,
-                top_p: None,
-                parallel_tool_calls: None,
-                tensorzero_variant_name: None,
-                tensorzero_dryrun: Some(true),
-                tensorzero_episode_id: None,
-                tensorzero_cache_options: Some(CacheParamsOptions {
-                    max_age_s: None,
-                    enabled: CacheEnabledMode::WriteOnly,
-                }),
-                tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
-                tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
-                tensorzero_tags: HashMap::new(),
-                tensorzero_credentials: InferenceCredentials::default(),
-                unknown_fields: Default::default(),
-                stream_options: None,
-                stop: None,
-                tensorzero_deny_unknown_fields: false,
-                tensorzero_internal_dynamic_variant_config: None,
-            },
-        )
+        let params = Params::try_from_openai(OpenAICompatibleParams {
+            messages: vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
+                content: Value::String("test".to_string()),
+            })],
+            model: "tensorzero::function_name::test_function".into(),
+            frequency_penalty: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            presence_penalty: None,
+            response_format: None,
+            seed: None,
+            stream: None,
+            temperature: None,
+            tools: None,
+            tool_choice: None,
+            top_p: None,
+            parallel_tool_calls: None,
+            tensorzero_variant_name: None,
+            tensorzero_dryrun: Some(true),
+            tensorzero_episode_id: None,
+            tensorzero_cache_options: Some(CacheParamsOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            }),
+            tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
+            tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
+            tensorzero_tags: HashMap::new(),
+            tensorzero_credentials: InferenceCredentials::default(),
+            unknown_fields: Default::default(),
+            stream_options: None,
+            stop: None,
+            tensorzero_deny_unknown_fields: false,
+            tensorzero_internal_dynamic_variant_config: None,
+        })
         .unwrap();
         assert_eq!(
             params.cache_options,
@@ -2050,5 +2103,252 @@ mod tests {
         assert_eq!(param.dimensions, Some(15));
         assert_eq!(param.encoding_format, EmbeddingEncodingFormat::Float);
         assert!(!logs_contain("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"));
+    }
+
+    #[test]
+    fn test_chat_completion_tool_choice_option_deserialization_and_conversion() {
+        // Test deserialization from JSON and conversion to OpenAICompatibleToolChoiceParams
+
+        // Test None variant
+        let json_none = json!("none");
+        let tool_choice: ChatCompletionToolChoiceOption =
+            serde_json::from_value(json_none).unwrap();
+        assert_eq!(tool_choice, ChatCompletionToolChoiceOption::None);
+        let params = tool_choice.into_tool_params();
+        assert_eq!(params.allowed_tools, None);
+        assert_eq!(params.tool_choice, Some(ToolChoice::None));
+
+        // Test Auto variant
+        let json_auto = json!("auto");
+        let tool_choice: ChatCompletionToolChoiceOption =
+            serde_json::from_value(json_auto).unwrap();
+        assert_eq!(tool_choice, ChatCompletionToolChoiceOption::Auto);
+        let params = tool_choice.into_tool_params();
+        assert_eq!(params.allowed_tools, None);
+        assert_eq!(params.tool_choice, Some(ToolChoice::Auto));
+
+        // Test Required variant
+        let json_required = json!("required");
+        let tool_choice: ChatCompletionToolChoiceOption =
+            serde_json::from_value(json_required).unwrap();
+        assert_eq!(tool_choice, ChatCompletionToolChoiceOption::Required);
+        let params = tool_choice.into_tool_params();
+        assert_eq!(params.allowed_tools, None);
+        assert_eq!(params.tool_choice, Some(ToolChoice::Required));
+
+        // Test Named variant (specific tool)
+        let json_named = json!({
+            "type": "function",
+            "function": {
+                "name": "get_weather"
+            }
+        });
+        let tool_choice: ChatCompletionToolChoiceOption =
+            serde_json::from_value(json_named).unwrap();
+        assert_eq!(
+            tool_choice,
+            ChatCompletionToolChoiceOption::Named(OpenAICompatibleNamedToolChoice {
+                r#type: "function".to_string(),
+                function: FunctionName {
+                    name: "get_weather".to_string()
+                }
+            })
+        );
+        let params = tool_choice.into_tool_params();
+        assert_eq!(params.allowed_tools, None);
+        assert_eq!(
+            params.tool_choice,
+            Some(ToolChoice::Specific("get_weather".to_string()))
+        );
+
+        // Test AllowedTools variant with auto mode
+        let json_allowed_auto = json!({
+            "type": "allowed_tools",
+            "allowed_tools": {
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather"
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "send_email"
+                    }
+                }
+            ],
+            "mode": "auto"
+        }});
+        let tool_choice: ChatCompletionToolChoiceOption =
+            serde_json::from_value(json_allowed_auto).unwrap();
+        assert_eq!(
+            tool_choice,
+            ChatCompletionToolChoiceOption::AllowedTools(OpenAICompatibleAllowedTools {
+                tools: vec![
+                    OpenAICompatibleNamedToolChoice {
+                        r#type: "function".to_string(),
+                        function: FunctionName {
+                            name: "get_weather".to_string()
+                        }
+                    },
+                    OpenAICompatibleNamedToolChoice {
+                        r#type: "function".to_string(),
+                        function: FunctionName {
+                            name: "send_email".to_string()
+                        }
+                    }
+                ],
+                mode: OpenAICompatibleAllowedToolsMode::Auto
+            })
+        );
+        let params = tool_choice.into_tool_params();
+        assert_eq!(
+            params.allowed_tools,
+            Some(vec!["get_weather".to_string(), "send_email".to_string()])
+        );
+        assert_eq!(params.tool_choice, Some(ToolChoice::Auto));
+
+        // Test AllowedTools variant with required mode
+        let json_allowed_required = json!({
+            "type": "allowed_tools",
+            "allowed_tools": {
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather"
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "send_email"
+                    }
+                }
+            ],
+            "mode": "required"
+        }});
+        let tool_choice: ChatCompletionToolChoiceOption =
+            serde_json::from_value(json_allowed_required).unwrap();
+        assert_eq!(
+            tool_choice,
+            ChatCompletionToolChoiceOption::AllowedTools(OpenAICompatibleAllowedTools {
+                tools: vec![
+                    OpenAICompatibleNamedToolChoice {
+                        r#type: "function".to_string(),
+                        function: FunctionName {
+                            name: "get_weather".to_string()
+                        }
+                    },
+                    OpenAICompatibleNamedToolChoice {
+                        r#type: "function".to_string(),
+                        function: FunctionName {
+                            name: "send_email".to_string()
+                        }
+                    }
+                ],
+                mode: OpenAICompatibleAllowedToolsMode::Required
+            })
+        );
+        let params = tool_choice.into_tool_params();
+        assert_eq!(
+            params.allowed_tools,
+            Some(vec!["get_weather".to_string(), "send_email".to_string()])
+        );
+        assert_eq!(params.tool_choice, Some(ToolChoice::Required));
+
+        // Test default value (should be None)
+        let tool_choice_default = ChatCompletionToolChoiceOption::default();
+        assert_eq!(tool_choice_default, ChatCompletionToolChoiceOption::None);
+        let params_default = tool_choice_default.into_tool_params();
+        assert_eq!(params_default.allowed_tools, None);
+        assert_eq!(params_default.tool_choice, Some(ToolChoice::None));
+    }
+
+    #[test]
+    fn test_chat_completion_tool_choice_option_invalid_deserialization() {
+        // Test invalid JSON values that should fail to deserialize
+
+        // Invalid string value
+        let json_invalid = json!("invalid_choice");
+        let result: Result<ChatCompletionToolChoiceOption, _> =
+            serde_json::from_value(json_invalid);
+        assert!(result.is_err());
+
+        // Invalid object structure for named tool choice
+        let json_invalid_named = json!({
+            "type": "invalid_type",
+            "function": {
+                "name": "test"
+            }
+        });
+        let result: Result<ChatCompletionToolChoiceOption, _> =
+            serde_json::from_value(json_invalid_named);
+        assert!(result.is_err());
+
+        // Missing function name in named tool choice
+        let json_missing_name = json!({
+            "type": "function",
+            "function": {}
+        });
+        let result: Result<ChatCompletionToolChoiceOption, _> =
+            serde_json::from_value(json_missing_name);
+        assert!(result.is_err());
+
+        // Invalid mode in allowed tools
+        let json_invalid_mode = json!({
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "test"
+                    }
+                }
+            ],
+            "mode": "invalid_mode"
+        });
+        let result: Result<ChatCompletionToolChoiceOption, _> =
+            serde_json::from_value(json_invalid_mode);
+        assert!(result.is_err());
+
+        // Test AllowedTools variant with no type
+        let json_allowed_required = json!({
+            "allowed_tools": {
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather"
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "send_email"
+                    }
+                }
+            ],
+            "mode": "required"
+        }});
+        let err = serde_json::from_value::<ChatCompletionToolChoiceOption>(json_allowed_required)
+            .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Tool choice field must have a 'type' field if it is an object"
+        );
+    }
+
+    #[test]
+    fn test_openai_compatible_allowed_tools_mode_conversion() {
+        // Test conversion from OpenAICompatibleAllowedToolsMode to ToolChoice
+        let auto_mode = OpenAICompatibleAllowedToolsMode::Auto;
+        let tool_choice: ToolChoice = auto_mode.into();
+        assert_eq!(tool_choice, ToolChoice::Auto);
+
+        let required_mode = OpenAICompatibleAllowedToolsMode::Required;
+        let tool_choice: ToolChoice = required_mode.into();
+        assert_eq!(tool_choice, ToolChoice::Required);
     }
 }

@@ -3,7 +3,9 @@ use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
-use tensorzero_core::inference::types::{ContentBlock, RequestMessage, Role, Usage};
+use tensorzero_core::inference::types::{
+    Role, StoredContentBlock, StoredRequestMessage, Text, Usage,
+};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -185,10 +187,10 @@ async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
             let cached = result.get("cached").unwrap().as_bool().unwrap();
             assert_eq!(cached, should_be_cached);
             let output = result.get("output").unwrap().as_str().unwrap();
-            let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+            let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
             assert_eq!(output.len(), 1);
             match &output[0] {
-                ContentBlock::Text(text) => {
+                StoredContentBlock::Text(text) => {
                     let parsed: Value = serde_json::from_str(&text.text).unwrap();
                     let uuid = parsed.get("answer").unwrap().as_str().unwrap();
                     dummy_uuids.push(uuid.to_string());
@@ -420,7 +422,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
         assert!(result.get("response_time_ms").is_some());
         assert!(result.get("ttft_ms").is_some());
 
-        // For the judge model we want to check that the raw_request is corredt
+        // For the judge model we want to check that the `raw_request` is correct
         if model_name == "gpt-4o-mini-2024-07-18" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
@@ -451,32 +453,30 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
             let system = result.get("system").unwrap().as_str().unwrap();
             assert_eq!(system, "You have been provided with a set of responses from various models to the following problem:\n------\nYou are a helpful and friendly assistant named AskJeeves\n------\nYour task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses.");
             let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-            let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+            let input_messages: Vec<StoredRequestMessage> =
+                serde_json::from_str(input_messages).unwrap();
             assert_eq!(input_messages.len(), 2);
             assert_eq!(
                 input_messages[0],
-                RequestMessage {
+                StoredRequestMessage {
                     role: Role::User,
-                    content: vec![
-                        "Please write me a sentence about the anime character Megumin."
+                    content: vec![StoredContentBlock::Text(Text {
+                        text: "Please write me a sentence about the anime character Megumin."
                             .to_string()
-                            .into()
-                    ],
+                    })],
                 }
             );
-            assert_eq!(input_messages[1], RequestMessage {
+            assert_eq!(input_messages[1], StoredRequestMessage {
                 role: Role::User,
                 content: vec![
-                    "Here are the candidate answers (with the index and a row of ------ separating):\n0:\n[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]\n------\n1:\n[{\"type\":\"text\",\"text\":\"Megumin chanted her spell, but instead of an explosion, a gentle rain began to fall.\"}]\n------"
-                        .to_string()
-                        .into()
+                    StoredContentBlock::Text(Text { text: "Here are the candidate answers (with the index and a row of ------ separating):\n0:\n[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]\n------\n1:\n[{\"type\":\"text\",\"text\":\"Megumin chanted her spell, but instead of an explosion, a gentle rain began to fall.\"}]\n------".to_string() })
                 ],
             });
             let output = result.get("output").unwrap().as_str().unwrap();
-            let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+            let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
             assert_eq!(output.len(), 1);
             match &output[0] {
-                ContentBlock::Text(_) => {
+                StoredContentBlock::Text(_) => {
                     // We don't need to check the exact content since this is a fuser model
                 }
                 _ => {
@@ -485,17 +485,19 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
             }
         } else if model_name == "test" {
             let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-            let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+            let input_messages: Vec<StoredRequestMessage> =
+                serde_json::from_str(input_messages).unwrap();
             assert_eq!(input_messages.len(), 1);
             assert_eq!(
                 input_messages[0],
-                RequestMessage {
+                StoredRequestMessage {
                     role: Role::User,
                     content: vec![
-                        "Please write me a sentence about the anime character Megumin."
-                            .to_string()
-                            .into(),
-                        ContentBlock::Unknown {
+                        StoredContentBlock::Text(Text {
+                            text: "Please write me a sentence about the anime character Megumin."
+                                .to_string()
+                        }),
+                        StoredContentBlock::Unknown {
                             model_provider_name: Some(
                                 "tensorzero::model_name::test::provider_name::good".to_string()
                             ),
@@ -506,17 +508,17 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
             );
         } else if model_name == "alternate" {
             let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-            let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+            let input_messages: Vec<StoredRequestMessage> =
+                serde_json::from_str(input_messages).unwrap();
             assert_eq!(input_messages.len(), 1);
             assert_eq!(
                 input_messages[0],
-                RequestMessage {
+                StoredRequestMessage {
                     role: Role::User,
-                    content: vec![
-                        "Please write me a sentence about the anime character Megumin."
+                    content: vec![StoredContentBlock::Text(Text {
+                        text: "Please write me a sentence about the anime character Megumin."
                             .to_string()
-                            .into(),
-                    ],
+                    }),],
                 }
             );
         }
@@ -677,7 +679,7 @@ async fn e2e_test_mixture_of_n_json_real_judge() {
         assert!(result.get("output_tokens").is_some());
         assert!(result.get("response_time_ms").is_some());
         assert!(result.get("ttft_ms").is_some());
-        // For the judge model we want to check that the raw_request is corredt
+        // For the judge model we want to check that the `raw_request` is correct
         if model_name == "gpt-4o-mini-2024-07-18" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
@@ -726,32 +728,29 @@ async fn e2e_test_mixture_of_n_json_real_judge() {
             let system = result.get("system").unwrap().as_str().unwrap();
             assert_eq!(system, "You have been provided with a set of responses from various models to the following problem:\n------\nYou are a helpful and friendly assistant named AskJeeves\n------\nYour task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses.");
             let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-            let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+            let input_messages: Vec<StoredRequestMessage> =
+                serde_json::from_str(input_messages).unwrap();
             assert_eq!(input_messages.len(), 2);
             assert_eq!(
                 input_messages[0],
-                RequestMessage {
+                StoredRequestMessage {
                     role: Role::User,
                     content: vec![
-                        "What are the first names of the Beatles? Respond in the format {\"names\": List[str]}"
-                            .to_string()
-                            .into()
+                        StoredContentBlock::Text(Text { text: "What are the first names of the Beatles? Respond in the format {\"names\": List[str]}".to_string() })
                     ],
                 }
             );
-            assert_eq!(input_messages[1], RequestMessage {
+            assert_eq!(input_messages[1], StoredRequestMessage {
                 role: Role::User,
                 content: vec![
-                    "Here are the candidate answers (with the index and a row of ------ separating):\n0:\n{\"names\":[\"John\", \"George\"]}\n------\n1:\n{\"names\":[\"Paul\", \"Ringo\"]}\n------"
-                        .to_string()
-                        .into()
+                    StoredContentBlock::Text(Text { text: "Here are the candidate answers (with the index and a row of ------ separating):\n0:\n{\"names\":[\"John\", \"George\"]}\n------\n1:\n{\"names\":[\"Paul\", \"Ringo\"]}\n------".to_string() })
                 ],
             });
             let output = result.get("output").unwrap().as_str().unwrap();
-            let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+            let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
             assert_eq!(output.len(), 1);
             match &output[0] {
-                ContentBlock::Text(_) => {
+                StoredContentBlock::Text(_) => {
                     // We don't need to check the exact content since this is a fuser model
                 }
                 _ => {

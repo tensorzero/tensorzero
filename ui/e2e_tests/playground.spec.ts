@@ -180,7 +180,7 @@ test("playground should work for data with tools", async ({ page }) => {
       .getByTestId("datapoint-playground-output")
       .getByText("Tool Call")
       .first(),
-  ).toBeVisible({ timeout: 15_000 });
+  ).toBeVisible({ timeout: 30_000 });
 
   // Verify that at least one tool call has the expected fields
   await expect(page.getByText("Name").first()).toBeVisible();
@@ -230,7 +230,7 @@ test("playground should work for data with tools", async ({ page }) => {
       .getByTestId("datapoint-playground-output")
       .getByText("Tool Call")
       .first(),
-  ).toBeVisible({ timeout: 15_000 });
+  ).toBeVisible({ timeout: 30_000 });
 
   // Verify that at least one tool call has the expected fields
   await expect(page.getByText("Name").first()).toBeVisible();
@@ -272,7 +272,7 @@ test("editing variants works @credentials", async ({ page }) => {
   // Target the system template editor specifically within the modal/sheet content
   const systemTemplateEditor = page
     .getByRole("dialog")
-    .getByText("System Template")
+    .getByText("system")
     .locator("..")
     .locator(".cm-content")
     .first();

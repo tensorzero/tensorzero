@@ -15,18 +15,25 @@ use tensorzero::ClientInput;
 use tensorzero::ClientInputMessage;
 use tensorzero::ClientInputMessageContent;
 use tensorzero::ContentBlockChunk;
+use tensorzero::DynamicToolParams;
 use tensorzero::InferenceOutput;
+use tensorzero::InferenceResponse;
+use tensorzero::Tool;
 use tensorzero_core::cache::cache_lookup_streaming;
 use tensorzero_core::cache::start_cache_write_streaming;
+use tensorzero_core::cache::CacheData;
 use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::cache::CacheValidationInfo;
 use tensorzero_core::cache::NonStreamingCacheData;
 use tensorzero_core::inference::types::ContentBlock;
+use tensorzero_core::inference::types::ContentBlockChatOutput;
 use tensorzero_core::inference::types::ContentBlockOutput;
 use tensorzero_core::inference::types::FinishReason;
 use tensorzero_core::inference::types::ProviderInferenceResponseChunk;
 use tensorzero_core::inference::types::Text;
 use tensorzero_core::inference::types::TextChunk;
 use tensorzero_core::inference::types::TextKind;
+use tensorzero_core::tool::ToolCallOutput;
 use tracing_test::traced_test;
 use uuid::Uuid;
 
@@ -34,15 +41,14 @@ use tensorzero_core::cache::cache_lookup;
 use tensorzero_core::cache::start_cache_write;
 use tensorzero_core::cache::ModelProviderRequest;
 use tensorzero_core::inference::types::Latency;
-use tensorzero_core::inference::types::RequestMessage;
 use tensorzero_core::inference::types::Role;
 use tensorzero_core::inference::types::Usage;
 use tensorzero_core::inference::types::{
     FunctionType, ModelInferenceRequest, ModelInferenceRequestJsonMode,
 };
+use tensorzero_core::inference::types::{RequestMessage, StoredContentBlock, StoredRequestMessage};
 
 use crate::common::get_gateway_endpoint;
-use crate::providers::common::make_embedded_gateway;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
@@ -61,7 +67,9 @@ async fn test_cache_write_and_read() {
         inference_id: Uuid::now_v7(),
         messages: vec![RequestMessage {
             role: Role::User,
-            content: vec!["test message".to_string().into()],
+            content: vec![ContentBlock::Text(Text {
+                text: "test message".to_string(),
+            })],
         }],
         system: Some("test system".to_string()),
         tool_config: None,
@@ -82,6 +90,7 @@ async fn test_cache_write_and_read() {
         request: &model_inference_request,
         model_name: "test_model",
         provider_name: "test_provider",
+        otlp_config: &Default::default(),
     };
 
     // Read (should be None)
@@ -98,18 +107,19 @@ async fn test_cache_write_and_read() {
     start_cache_write(
         &clickhouse_connection_info,
         model_provider_request.get_cache_key().unwrap(),
-        NonStreamingCacheData {
-            blocks: vec![ContentBlockOutput::Text(Text {
-                text: "my test content".to_string(),
-            })],
-        },
-        "raw request",
-        "raw response",
-        &Usage {
+        CacheData {
+            output: NonStreamingCacheData {
+                blocks: vec![ContentBlockOutput::Text(Text {
+                    text: "my test content".to_string(),
+                })],
+            },
+            raw_request: "raw request".to_string(),
+            raw_response: "raw response".to_string(),
             input_tokens: 10,
             output_tokens: 16,
+            finish_reason: Some(FinishReason::Stop),
         },
-        Some(&FinishReason::Stop),
+        CacheValidationInfo { tool_config: None },
     )
     .unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -145,7 +155,9 @@ async fn test_cache_write_and_read() {
         result.input_messages,
         vec![RequestMessage {
             role: Role::User,
-            content: vec!["test message".to_string().into()],
+            content: vec![ContentBlock::Text(Text {
+                text: "test message".to_string(),
+            })],
         }]
     );
     assert_eq!(
@@ -185,7 +197,9 @@ async fn test_cache_stream_write_and_read() {
         inference_id: Uuid::now_v7(),
         messages: vec![RequestMessage {
             role: Role::User,
-            content: vec!["test message".to_string().into()],
+            content: vec![ContentBlock::Text(Text {
+                text: "test message".to_string(),
+            })],
         }],
         system: Some("test system".to_string()),
         tool_config: None,
@@ -206,6 +220,7 @@ async fn test_cache_stream_write_and_read() {
         request: &model_inference_request,
         model_name: "test_model",
         provider_name: "test_provider",
+        otlp_config: &Default::default(),
     };
 
     // Read (should be None)
@@ -259,6 +274,7 @@ async fn test_cache_stream_write_and_read() {
             input_tokens: 1,
             output_tokens: 2,
         },
+        None,
     )
     .unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -337,7 +353,7 @@ pub async fn test_dont_cache_invalid_tool_call() {
         // from GatewayHandle
         return;
     }
-    let client = make_embedded_gateway().await;
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let randomness = Uuid::now_v7();
     let params = ClientInferenceParams {
         model_name: Some("dummy::invalid_tool_arguments".to_string()),
@@ -357,6 +373,86 @@ pub async fn test_dont_cache_invalid_tool_call() {
         ..Default::default()
     };
     client.inference(params.clone()).await.unwrap();
+
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    let clickhouse = get_clickhouse().await;
+    assert!(logs_contain("Skipping cache write"));
+
+    // Run again, and check that we get a cache miss
+    let res = client.inference(params).await.unwrap();
+    let InferenceOutput::NonStreaming(res) = res else {
+        panic!("Expected non-streaming inference response");
+    };
+    let model_inference = select_model_inference_clickhouse(&clickhouse, res.inference_id())
+        .await
+        .unwrap();
+    assert_eq!(model_inference.get("cached").unwrap(), false);
+}
+
+#[traced_test]
+#[tokio::test]
+pub async fn test_dont_cache_tool_call_schema_error() {
+    let is_batched_writes = match std::env::var("TENSORZERO_CLICKHOUSE_BATCH_WRITES") {
+        Ok(value) => value == "true",
+        Err(_) => false,
+    };
+    if is_batched_writes {
+        // Skip test if batched writes are enabled
+        // The message is logged from the batch writer tokio task, which may run
+        // a different thread when the multi-threaded tokio runtime is used (and fail to be captured)
+        // We cannot use the single-threaded tokio runtime here, since we need to call 'block_in_place'
+        // from GatewayHandle
+        return;
+    }
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let randomness = Uuid::now_v7();
+    let params = ClientInferenceParams {
+        model_name: Some("dummy::tool".to_string()),
+        input: ClientInput {
+            system: None,
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: format!("Test inference: {randomness}"),
+                })],
+            }],
+        },
+        cache_options: CacheParamsOptions {
+            enabled: CacheEnabledMode::On,
+            max_age_s: None,
+        },
+        dynamic_tool_params: DynamicToolParams {
+            additional_tools: Some(vec![Tool {
+                name: "get_temperature".to_string(),
+                description: "Get the temperature".to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "other_param": {"type": "string"},
+                    },
+                    "required": ["other_param"]
+                }),
+                strict: true,
+            }]),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let res = client.inference(params.clone()).await.unwrap();
+    let InferenceOutput::NonStreaming(InferenceResponse::Chat(res)) = res else {
+        panic!("Expected non-streaming chat  inference response");
+    };
+    assert_eq!(res.content.len(), 1);
+    assert_eq!(
+        res.content[0],
+        ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            name: Some("get_temperature".to_string()),
+            raw_name: "get_temperature".to_string(),
+            arguments: None,
+            raw_arguments: "{\"location\":\"Brooklyn\",\"units\":\"celsius\"}".to_string(),
+            id: "0".to_string(),
+        })
+    );
 
     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     let clickhouse = get_clickhouse().await;
@@ -653,14 +749,16 @@ pub async fn check_test_streaming_cache_with_err(
         format!("You are a helpful and friendly assistant named AskJeeves")
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
+    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["My test input string".to_string().into()],
+        content: vec![StoredContentBlock::Text(Text {
+            text: "My test input string".to_string(),
+        })],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
 
     full_content

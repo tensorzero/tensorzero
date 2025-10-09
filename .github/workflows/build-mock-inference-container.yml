@@ -1,0 +1,28 @@
+name: Build Mock Inference Container
+
+on:
+  workflow_call:
+
+jobs:
+  build-mock-inference-container:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Build `mock-inference-provider` container
+        run: |
+          docker build -f tensorzero-core/tests/mock-inference-provider/Dockerfile . -t mock-inference-provider:latest
+
+      - name: Save `mock-inference-provider` container
+        run: docker save mock-inference-provider:latest > mock-inference-container.tar
+
+      - name: Upload `mock-inference-provider` container as an artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: build-mock-inference-container
+          path: mock-inference-container.tar
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: false

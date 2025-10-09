@@ -3,19 +3,4 @@ import type { JsonMode } from "./JsonMode";
 import type { ResolvedTomlPath } from "./ResolvedTomlPath";
 import type { RetryConfig } from "./RetryConfig";
 
-export type UninitializedDiclConfig = {
-  weight: number | null;
-  embedding_model: string;
-  k: number;
-  model: string;
-  system_instructions: ResolvedTomlPath | null;
-  temperature: number | null;
-  top_p: number | null;
-  stop_sequences: Array<string> | null;
-  presence_penalty: number | null;
-  frequency_penalty: number | null;
-  max_tokens: number | null;
-  seed: number | null;
-  json_mode: JsonMode | null;
-  retries: RetryConfig;
-};
+export type UninitializedDiclConfig = { weight: number | null, embedding_model: string, k: number, model: string, system_instructions: ResolvedTomlPath | null, temperature: number | null, top_p: number | null, stop_sequences: Array<string> | null, presence_penalty: number | null, frequency_penalty: number | null, max_tokens: number | null, seed: number | null, json_mode: JsonMode | null, retries: RetryConfig, max_distance: number | null, };

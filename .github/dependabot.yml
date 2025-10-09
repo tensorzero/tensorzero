@@ -20,6 +20,11 @@ updates:
       interval: "weekly"
     labels: []
     open-pull-requests-limit: 0 # only send security updates
+    # These paths contain educational content that is not directly meant for production use.
+    # Automatic upgrades are likely to break them over time as they're not actively tested.
+    exclude-paths:
+      - "examples/**"
+      - "recipes/**"
 
   - package-ecosystem: "cargo"
     directory: "/"
@@ -28,7 +33,11 @@ updates:
       interval: "weekly"
     labels: []
     groups:
+      opentelemetry-dependencies:
+        patterns:
+          - "*opentelemetry*"
+          - "tonic"
       rust-dependencies:
         patterns:
           - "*"
-    open-pull-requests-limit: 1 # This does not affect the security update PR limit
+    open-pull-requests-limit: 2 # This does not affect the security update PR limit

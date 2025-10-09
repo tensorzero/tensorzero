@@ -158,7 +158,7 @@ See above for more details.
 #### Standalone HTTP Gateway
 
 You can deploy the TensorZero Gateway as a separate service and configure the OpenAI client to talk to it.
-See [Deployment](/gateway/deployment/) for instructions on how to deploy the TensorZero Gateway.
+See [Deployment](/deployment/tensorzero-gateway/) for instructions on how to deploy the TensorZero Gateway.
 
 ```python "base_url="http://localhost:3000/openai/v1" "tensorzero::model_name::openai::gpt-4o-mini"
 from openai import OpenAI
@@ -212,7 +212,7 @@ response = client.chat.completions.create(
 You can use the OpenAI client to run inference requests with TensorZero.
 You can deploy the TensorZero Gateway as a separate service and configure the OpenAI client to talk to the TensorZero Gateway.
 
-See [Deployment](/gateway/deployment/) for instructions on how to deploy the TensorZero Gateway.
+See [Deployment](/deployment/tensorzero-gateway/) for instructions on how to deploy the TensorZero Gateway.
 
 ```ts "base_url="http://localhost:3000/openai/v1" "tensorzero::model_name::openai::gpt-4o-mini"
 import OpenAI from "openai";
@@ -252,7 +252,7 @@ const result = await client.chat.completions.create({
 The TensorZero Gateway exposes every feature via its HTTP API.
 You can deploy the TensorZero Gateway as a standalone service and interact with it from any programming language by making HTTP requests.
 
-See [Deployment](/gateway/deployment/) for instructions on how to deploy the TensorZero Gateway.
+See [Deployment](/deployment/tensorzero-gateway/) for instructions on how to deploy the TensorZero Gateway.
 
 ### TensorZero HTTP API
 

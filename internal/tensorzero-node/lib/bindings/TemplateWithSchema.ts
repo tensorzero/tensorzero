@@ -8,7 +8,4 @@ import type { StaticJSONSchema } from "./StaticJSONSchema";
  * kind (e.g. `SYSTEM_TEXT_TEMPLATE_VAR` for a system template), and set this variable the
  * string contents of the input block.
  */
-export type TemplateWithSchema = {
-  template: PathWithContents;
-  schema: StaticJSONSchema | null;
-};
+export type TemplateWithSchema = { template: PathWithContents, schema: StaticJSONSchema | null, legacy_definition: boolean, };

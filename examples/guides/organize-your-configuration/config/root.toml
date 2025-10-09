@@ -1,0 +1,20 @@
+[models.my_gpt_5_mini]
+routing = ["openai"]
+
+[models.my_gpt_5_mini.providers.openai]
+type = "openai"
+model_name = "gpt-5-mini"
+
+[gateway]
+# Optional: Enable file system access for MiniJinja templates to use `include` and `import` directives.
+# This allows templates to import content from other template files at runtime.
+#
+# By default, file system access is disabled for security reasons, since template imports
+# are evaluated dynamically and could potentially access sensitive files.
+#
+# To enable file system access, set `template_filesystem_access.enabled = true`.
+#
+# If you split your configuration into multiple files, you must additionally specify the base path for the template imports.
+# Template imports will then be resolved relative to this base path.
+# If `base_path` itself is relative, it'll be relative to the configuration file in which it's defined.
+template_filesystem_access = { enabled = true, base_path = "." }

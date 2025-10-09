@@ -4,7 +4,7 @@ use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use tensorzero_core::{
-    inference::types::{ContentBlock, RequestMessage, Role},
+    inference::types::{Role, StoredContentBlock, StoredRequestMessage, Text},
     providers::dummy::DUMMY_INFER_RESPONSE_CONTENT,
 };
 use uuid::Uuid;
@@ -158,10 +158,10 @@ async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(
             let cached = result.get("cached").unwrap().as_bool().unwrap();
             assert_eq!(cached, should_be_cached);
             let output = result.get("output").unwrap().as_str().unwrap();
-            let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+            let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
             assert_eq!(output.len(), 1);
             match &output[0] {
-                ContentBlock::Text(text) => {
+                StoredContentBlock::Text(text) => {
                     let parsed: Value = serde_json::from_str(&text.text).unwrap();
                     let uuid = parsed.get("answer").unwrap().as_str().unwrap();
                     dummy_uuids.push(uuid.to_string());
@@ -319,7 +319,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
         assert!(result.get("response_time_ms").is_some());
         assert!(result.get("ttft_ms").is_some());
 
-        // For the judge model we want to check that the raw_request is corredt
+        // For the judge model we want to check that the `raw_request` is correct
         if model_name == "gemini-2.0-flash-001" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
@@ -382,36 +382,33 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
             let system = result.get("system").unwrap().as_str().unwrap();
             assert_eq!(system, "You are an assistant tasked with re-ranking candidate answers to the following problem:\n------\nYou are a helpful and friendly assistant named AskJeeves\n------\nThe messages below are the conversation history between the user and the assistant along with a final message giving a set of candidate responses.\nPlease evaluate the following candidate responses and provide your reasoning along with the index of the best candidate in the following JSON format:\n{\n    \"thinking\": \"your reasoning here\",\n    \"answer_choice\": int  // Range: 0 to 1\n}\nIn the \"thinking\" block:\nFirst, you should analyze each response itself against the conversation history and determine if it is a good response or not.\nThen you should think out loud about which is best and most faithful to instructions.\nIn the \"answer_choice\" block: you should output the index of the best response.");
             let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-            let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+            let input_messages: Vec<StoredRequestMessage> =
+                serde_json::from_str(input_messages).unwrap();
             assert_eq!(input_messages.len(), 2);
             assert_eq!(
                 input_messages[0],
-                RequestMessage {
+                StoredRequestMessage {
                     role: Role::User,
                     content: vec![
-                        "Please write me a sentence about Megumin making an explosion."
-                            .to_string()
-                            .into(),
-                        ContentBlock::Unknown {
+                        StoredContentBlock::Text(Text { text: "Please write me a sentence about Megumin making an explosion.".to_string() }),
+                        StoredContentBlock::Unknown {
                             model_provider_name: Some("tensorzero::model_name::gemini-2.0-flash-001::provider_name::gcp_vertex_gemini".into()),
                             data: serde_json::json!({"text": "My extra gemini text"})
                         }
                     ],
                 }
             );
-            assert_eq!(input_messages[1], RequestMessage {
+            assert_eq!(input_messages[1], StoredRequestMessage {
                 role: Role::User,
                 content: vec![
-                    "Here are the candidate answers (with the index and a row of ------ separating):\n0: [{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]\n------\n1: [{\"type\":\"text\",\"text\":\"{\\\"answer\\\":\\\"Hello\\\"}\"}]\n------\nPlease evaluate these candidates and provide the index of the best one."
-                        .to_string()
-                        .into()
+                    StoredContentBlock::Text(Text { text: "Here are the candidate answers (with the index and a row of ------ separating):\n0: [{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]\n------\n1: [{\"type\":\"text\",\"text\":\"{\\\"answer\\\":\\\"Hello\\\"}\"}]\n------\nPlease evaluate these candidates and provide the index of the best one.".to_string() })
                 ],
             });
             let output = result.get("output").unwrap().as_str().unwrap();
-            let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+            let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
             assert_eq!(output.len(), 1);
             match &output[0] {
-                ContentBlock::Text(text) => {
+                StoredContentBlock::Text(text) => {
                     let parsed: Value = serde_json::from_str(&text.text).unwrap();
                     let answer = parsed.get("answer_choice").unwrap().as_u64().unwrap();
                     assert_eq!(answer, 0);
@@ -431,9 +428,10 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
         assert!(result.get("ttft_ms").unwrap().is_null());
         let system = result.get("system").unwrap().as_str().unwrap();
         let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
         let output = result.get("output").unwrap().as_str().unwrap();
-        let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+        let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
         if model_name == "json" {
             assert_eq!(
                 system,
@@ -442,13 +440,14 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
             assert_eq!(input_messages.len(), 1);
             assert_eq!(
                 input_messages[0],
-                RequestMessage {
+                StoredRequestMessage {
                     role: Role::User,
                     content: vec![
-                        "Please write me a sentence about Megumin making an explosion."
-                            .to_string()
-                            .into(),
-                        ContentBlock::Unknown {
+                        StoredContentBlock::Text(Text {
+                            text: "Please write me a sentence about Megumin making an explosion."
+                                .to_string()
+                        }),
+                        StoredContentBlock::Unknown {
                             model_provider_name: Some(
                                 "tensorzero::model_name::json::provider_name::json".into()
                             ),
@@ -459,7 +458,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
             );
             assert_eq!(output.len(), 1);
             match &output[0] {
-                ContentBlock::Text(text) => {
+                StoredContentBlock::Text(text) => {
                     let parsed: Value = serde_json::from_str(&text.text).unwrap();
                     let answer = parsed.get("answer").unwrap().as_str().unwrap();
                     assert_eq!(answer, "Hello");
@@ -477,7 +476,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
             assert_eq!(input_messages.len(), 1);
             assert_eq!(
                 input_messages[0],
-                RequestMessage {
+                StoredRequestMessage {
                     role: Role::User,
                     content: vec![
                         "Please write me a sentence about Megumin making an explosion."
@@ -488,7 +487,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
             );
             assert_eq!(output.len(), 1);
             match &output[0] {
-                ContentBlock::Text(text) => {
+                StoredContentBlock::Text(text) => {
                     assert_eq!(text.text, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
                 }
                 _ => {
@@ -634,9 +633,10 @@ async fn e2e_test_best_of_n_json_real_judge() {
         assert!(result.get("ttft_ms").unwrap().is_null());
         let system = result.get("system").unwrap().as_str().unwrap();
         let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
         let output = result.get("output").unwrap().as_str().unwrap();
-        let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+        let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
         if model_name == "json" {
             assert_eq!(
                 system,
@@ -645,18 +645,16 @@ async fn e2e_test_best_of_n_json_real_judge() {
             assert_eq!(input_messages.len(), 1);
             assert_eq!(
                 input_messages[0],
-                RequestMessage {
+                StoredRequestMessage {
                     role: Role::User,
                     content: vec![
-                        "What's the first word in the typical output of one's first program. Answer as a json object with a single field 'answer' containing the string."
-                            .to_string()
-                            .into()
+                        StoredContentBlock::Text(Text { text: "What's the first word in the typical output of one's first program. Answer as a json object with a single field 'answer' containing the string.".to_string() })
                     ],
                 }
             );
             assert_eq!(output.len(), 1);
             match &output[0] {
-                ContentBlock::Text(text) => {
+                StoredContentBlock::Text(text) => {
                     let parsed: Value = serde_json::from_str(&text.text).unwrap();
                     let answer = parsed.get("answer").unwrap().as_str().unwrap();
                     assert_eq!(answer, "Hello");
@@ -674,7 +672,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
             assert_eq!(input_messages.len(), 1);
             assert_eq!(
                 input_messages[0],
-                RequestMessage {
+                StoredRequestMessage {
                     role: Role::User,
                     content: vec![
                         "What's the first word in the typical output of one's first program. Answer as a json object with a single field 'answer' containing the string."
@@ -685,7 +683,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
             );
             assert_eq!(output.len(), 1);
             match &output[0] {
-                ContentBlock::Text(text) => {
+                StoredContentBlock::Text(text) => {
                     assert_eq!(text.text, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
                 }
                 _ => {
@@ -701,7 +699,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
             assert_eq!(input_messages.len(), 1);
             assert_eq!(
               input_messages[0],
-              RequestMessage {
+              StoredRequestMessage {
                   role: Role::User,
                   content: vec![
                       "What's the first word in the typical output of one's first program. Answer as a json object with a single field 'answer' containing the string."
@@ -712,7 +710,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
           );
             assert_eq!(output.len(), 1);
             match &output[0] {
-                ContentBlock::Text(text) => {
+                StoredContentBlock::Text(text) => {
                     let parsed: Value = serde_json::from_str(&text.text).unwrap();
                     let answer = parsed.get("answer").unwrap().as_str().unwrap();
                     assert_eq!(answer, "Goodbye");
@@ -722,7 +720,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
                 }
             }
         }
-        // For the judge model we want to check that the raw_request is corredt
+        // For the judge model we want to check that the `raw_request` is correct
         if model_name == "gemini-2.0-flash-001" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
@@ -915,9 +913,10 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
         assert!(result.get("ttft_ms").unwrap().is_null());
         let system = result.get("system").unwrap().as_str().unwrap();
         let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
         let output = result.get("output").unwrap().as_str().unwrap();
-        let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+        let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
         if model_name == "json" {
             assert_eq!(
                 system,
@@ -926,18 +925,16 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
             assert_eq!(input_messages.len(), 1);
             assert_eq!(
                 input_messages[0],
-                RequestMessage {
+                StoredRequestMessage {
                     role: Role::User,
                     content: vec![
-                        "What's the first word in the typical output of one's first program. Answer as a json object with a single field 'answer' containing the string."
-                            .to_string()
-                            .into()
+                        StoredContentBlock::Text(Text { text: "What's the first word in the typical output of one's first program. Answer as a json object with a single field 'answer' containing the string.".to_string() })
                     ],
                 }
             );
             assert_eq!(output.len(), 1);
             match &output[0] {
-                ContentBlock::Text(text) => {
+                StoredContentBlock::Text(text) => {
                     let parsed: Value = serde_json::from_str(&text.text).unwrap();
                     let answer = parsed.get("answer").unwrap().as_str().unwrap();
                     assert_eq!(answer, "Hello");
@@ -955,18 +952,16 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
             assert_eq!(input_messages.len(), 1);
             assert_eq!(
                 input_messages[0],
-                RequestMessage {
+                StoredRequestMessage {
                     role: Role::User,
                     content: vec![
-                        "What's the first word in the typical output of one's first program. Answer as a json object with a single field 'answer' containing the string."
-                            .to_string()
-                            .into()
+                        StoredContentBlock::Text(Text { text: "What's the first word in the typical output of one's first program. Answer as a json object with a single field 'answer' containing the string.".to_string() })
                     ],
                 }
             );
             assert_eq!(output.len(), 1);
             match &output[0] {
-                ContentBlock::Text(text) => {
+                StoredContentBlock::Text(text) => {
                     assert_eq!(text.text, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
                 }
                 _ => {
@@ -982,18 +977,16 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
             assert_eq!(input_messages.len(), 1);
             assert_eq!(
               input_messages[0],
-              RequestMessage {
+              StoredRequestMessage {
                   role: Role::User,
                   content: vec![
-                      "What's the first word in the typical output of one's first program. Answer as a json object with a single field 'answer' containing the string."
-                          .to_string()
-                          .into()
+                      StoredContentBlock::Text(Text { text: "What's the first word in the typical output of one's first program. Answer as a json object with a single field 'answer' containing the string.".to_string() })
                   ],
               }
           );
             assert_eq!(output.len(), 1);
             match &output[0] {
-                ContentBlock::Text(text) => {
+                StoredContentBlock::Text(text) => {
                     let parsed: Value = serde_json::from_str(&text.text).unwrap();
                     let answer = parsed.get("answer").unwrap().as_str().unwrap();
                     assert_eq!(answer, "Goodbye");
@@ -1003,7 +996,7 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
                 }
             }
         }
-        // For the judge model we want to check that the raw_request is corredt
+        // For the judge model we want to check that the `raw_request` is correct
         if model_name == "claude-3-haiku-20240307-anthropic" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
@@ -1150,7 +1143,7 @@ async fn e2e_test_best_of_n_judge_extra_body() {
         assert!(result.get("response_time_ms").is_some());
         assert!(result.get("ttft_ms").is_some());
 
-        // For the judge model we want to check that the raw_request is corredt
+        // For the judge model we want to check that the `raw_request` is correct
         if model_name == "gemini-2.0-flash-001" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();

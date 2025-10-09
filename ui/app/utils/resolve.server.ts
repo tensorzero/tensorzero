@@ -2,9 +2,6 @@ import type {
   DisplayInput,
   DisplayInputMessage,
   DisplayInputMessageContent,
-  DisplayMissingFunctionTextInput,
-  DisplayUnstructuredTextInput,
-  DisplayStructuredTextInput,
   FileContent,
   Input,
   InputMessage,
@@ -92,6 +89,7 @@ async function resolveContent(
     case "raw_text":
     case "thought":
     case "unknown":
+    case "template":
       return content;
     case "text":
       return prepareDisplayText(content, role, functionConfig);
@@ -141,7 +139,7 @@ async function resolveModelInferenceContent(
       // Do not use prepareDisplayText here because these are model inferences and should be post-templating
       // and will always be unstructured text.
       return {
-        type: "unstructured_text",
+        type: "text",
         text: content.text,
       };
     case "tool_call":
@@ -205,10 +203,8 @@ function prepareDisplayText(
   textBlock: TextInput,
   role: Role,
   functionConfig: FunctionConfig | null,
-):
-  | DisplayUnstructuredTextInput
-  | DisplayStructuredTextInput
-  | DisplayMissingFunctionTextInput {
+): DisplayInputMessageContent {
+  // If there's no function config, we can't do any templating because of legacy templates...
   if (!functionConfig) {
     return {
       type: "missing_function_text",
@@ -216,19 +212,29 @@ function prepareDisplayText(
     };
   }
 
-  // True if the function has a schema for the role (user or assistant)
-  const hasSchemaForRole =
-    role === "user"
-      ? !!functionConfig.schemas.user
-      : !!functionConfig.schemas.assistant;
-  if (hasSchemaForRole) {
+  // Handle the legacy structured prompts that were stored as text content blocks
+  if (role === "user" && functionConfig.schemas["user"] !== undefined) {
     return {
-      type: "structured_text",
+      type: "template",
+      name: "user",
       arguments: textBlock.value,
     };
   }
+
+  if (
+    role === "assistant" &&
+    functionConfig.schemas["assistant"] !== undefined
+  ) {
+    return {
+      type: "template",
+      name: "assistant",
+      arguments: textBlock.value,
+    };
+  }
+
+  // Otherwise it's just unstructured text
   return {
-    type: "unstructured_text",
+    type: "text",
     text: textBlock.value,
   };
 }

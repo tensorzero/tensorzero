@@ -176,6 +176,20 @@ ChatInferenceResponse(
 
 </Accordion>
 
+## Extras
+
+### Supply your own episode ID
+
+The gateway automatically generates episode IDs when you don't provide one.
+If you must supply your own, generate a UUIDv7 and use it as the episode ID.
+
+<Warning>
+
+In Python, use `from tensorzero.util import uuid7` instead of `pip install uuid7`.
+The external `uuid7` library is broken and will cause `"Invalid Episode ID: Timestamp is in the future"` errors.
+
+</Warning>
+
 ## Conclusion & Next Steps
 
 Episodes are first-class citizens in TensorZero that enable powerful workflows for multi-step LLM systems.

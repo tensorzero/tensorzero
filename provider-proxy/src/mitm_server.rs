@@ -1,4 +1,4 @@
-//! Code is based on https://github.com/hatoo/http-mitm-proxy/blob/7c8c3bde77173af6385d5d0ffaea6105498df1ff/src/lib.rs (MIT-licensed)
+//! Code is based on <https://github.com/hatoo/http-mitm-proxy/blob/7c8c3bde77173af6385d5d0ffaea6105498df1ff/src/lib.rs> (MIT-licensed)
 #![expect(clippy::unwrap_used)]
 
 use crate::tls::{generate_cert, CertifiedKeyDer};
@@ -23,14 +23,14 @@ pub struct MitmProxy<C> {
     /// If None, proxy will just tunnel HTTPS traffic and will not observe HTTPS traffic.
     pub root_cert: Option<C>,
     /// Cache to store generated certificates. If None, cache will not be used.
-    /// If root_cert is None, cache will not be used.
+    /// If `root_cert` is None, cache will not be used.
     ///
     /// The key of cache is hostname.
     pub cert_cache: Option<Cache<String, CertifiedKeyDer>>,
 }
 
 impl<C> MitmProxy<C> {
-    /// Create a new MitmProxy
+    /// Create a new `MitmProxy`
     pub fn new(root_cert: Option<C>, cache: Option<Cache<String, CertifiedKeyDer>>) -> Self {
         Self {
             root_cert,

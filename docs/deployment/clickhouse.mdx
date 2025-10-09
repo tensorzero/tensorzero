@@ -1,0 +1,87 @@
+---
+title: Deploy ClickHouse (optional)
+description: Learn how to deploy ClickHouse for TensorZero's observability features.
+---
+
+The TensorZero Gateway can optionally collect inference and feedback data for observability, optimization, evaluation, and experimentation.
+Under the hood, TensorZero stores this data in ClickHouse, an open-source columnar database that is optimized for analytical workloads.
+
+<Tip>
+  If you're planning to use the gateway without observability, you don't need to
+  deploy ClickHouse.
+</Tip>
+
+## Deploy
+
+### Development
+
+For development purposes, you can run a single-node ClickHouse instance locally (e.g. using Homebrew or Docker) or a cheap Development-tier cluster on ClickHouse Cloud.
+
+See the [ClickHouse documentation](https://clickhouse.com/docs/install) for more details on configuring your ClickHouse deployment.
+
+### Production
+
+#### Managed deployments
+
+For production deployments, the easiest setup is to use a managed service like <a href="https://clickhouse.com/cloud" target="_blank">ClickHouse Cloud</a>.
+
+ClickHouse Cloud is also available through the [AWS Marketplace](https://aws.amazon.com/marketplace/pp/prodview-jettukeanwrfc), [GCP Marketplace](https://console.cloud.google.com/marketplace/product/clickhouse-public/clickhouse-cloud), and [Azure Marketplace](https://azuremarketplace.microsoft.com/en-us/marketplace/apps/clickhouse.clickhouse_cloud).
+
+Other options for managed ClickHouse deployments include [Tinybird](https://www.tinybird.co/) (serverless) and [Altinity](https://www.altinity.com/) (hands-on support).
+
+<Note>
+  TensorZero tests against ClickHouse Cloud's `regular` and `fast` release
+  channels.
+</Note>
+
+#### Self-hosted deployments
+
+You can alternatively run your own self-managed ClickHouse instance or cluster.
+
+TensorZero supports single-node and replicated deployments.
+
+<Warning>
+  TensorZero does not currently support **sharded** self-hosted ClickHouse
+  deployments.
+</Warning>
+
+See the [ClickHouse documentation](https://clickhouse.com/docs/install) for more details on configuring your ClickHouse deployment.
+
+<Note>
+  TensorZero tests against ClickHouse `24.12` and `latest`. We recommend pinning
+  a version (`24.12` or newer). ClickHouse will occasionally introduce breaking
+  changes and other issues (e.g. `25.8` had multiple regressions).
+</Note>
+
+## Configure
+
+### Connecting to ClickHouse
+
+To configure TensorZero to use ClickHouse, set the `TENSORZERO_CLICKHOUSE_URL` environment variable with your ClickHouse connection details.
+
+```bash title=".env"
+TENSORZERO_CLICKHOUSE_URL="http[s]://[username]:[password]@[hostname]:[port]/[database]"
+
+# Example: ClickHouse running locally
+TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero"
+
+# Example: ClickHouse Cloud
+TENSORZERO_CLICKHOUSE_URL="https://USERNAME:PASSWORD@XXXXX.clickhouse.cloud:8443/tensorzero"
+
+# Example: TensorZero Gateway running in a container, ClickHouse running on host machine
+TENSORZERO_CLICKHOUSE_URL="http://host.docker.internal:8123/tensorzero"
+```
+
+If you're using a self-hosted replicated ClickHouse deployment, you must also provide the ClickHouse cluster name in the `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` environment variable.
+
+### Applying ClickHouse migrations
+
+By default, the TensorZero Gateway applies ClickHouse migrations automatically when it starts up.
+This behavior can be suppressed by setting `observability.disable_automatic_migrations = true` under the `[gateway]` section of `config/tensorzero.toml`.
+See https://www.tensorzero.com/docs/gateway/configuration-reference#gateway.
+If automatic migrations are disabled, then you must apply them manually with
+`docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-clickhouse-migrations`.
+The gateway will error on startup if automatic migrations are disabled and any required migrations are missing.
+
+If you're using a self-hosted replicated ClickHouse deployment, you must apply database migrations manually;
+they cannot be applied automatically.

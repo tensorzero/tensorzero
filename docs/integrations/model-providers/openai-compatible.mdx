@@ -1,0 +1,130 @@
+---
+title: Getting Started with OpenAI-Compatible Endpoints (e.g. Ollama)
+sidebarTitle: OpenAI-Compatible
+description: "Learn how to use TensorZero with OpenAI-compatible LLMs: open-source gateway, observability, optimization, evaluations, and experimentation."
+---
+
+This guide shows how to set up a minimal deployment to use the TensorZero Gateway with OpenAI-compatible endpoints like Ollama.
+
+## Setup
+
+This guide assumes that you are running Ollama locally with `ollama serve` and that you've pulled the `llama3.1` model in advance (e.g. `ollama pull llama3.1`).
+Make sure to update the `api_base` and `model_name` in the configuration below to match your OpenAI-compatible endpoint and model.
+
+For this minimal setup, you'll need just two files in your project directory:
+
+```
+- config/
+  - tensorzero.toml
+- docker-compose.yml
+```
+
+<Tip>
+
+You can also find the complete code for this example on [GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/guides/providers/openai-compatible).
+
+</Tip>
+
+For production deployments, see our [Deployment Guide](/deployment/tensorzero-gateway/).
+
+### Configuration
+
+Create a minimal configuration file that defines a model and a simple chat function:
+
+```toml title="config/tensorzero.toml"
+[models.llama3_1_8b_instruct]
+routing = ["ollama"]
+
+[models.llama3_1_8b_instruct.providers.ollama]
+type = "openai"
+api_base = "http://host.docker.internal:11434/v1"  # for Ollama running locally on the host
+model_name = "llama3.1"
+api_key_location = "none"  # by default, Ollama requires no API key
+
+[functions.my_function_name]
+type = "chat"
+
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "llama3_1_8b_instruct"
+```
+
+### Credentials
+
+The `api_key_location` field in your model provider configuration specifies how to handle API key authentication:
+
+- If your endpoint does not require an API key (e.g. Ollama by default):
+
+  ```toml
+  api_key_location = "none"
+  ```
+
+- If your endpoint requires an API key, you have two options:
+  1. Configure it in advance through an environment variable:
+
+     ```toml
+     api_key_location = "env::ENVIRONMENT_VARIABLE_NAME"
+     ```
+
+     You'll need to set the environment variable before starting the gateway.
+
+  2. Provide it at inference time:
+     ```toml
+     api_key_location = "dynamic::ARGUMENT_NAME"
+     ```
+     The API key can then be passed in the inference request.
+
+See the [Credential Management](/gateway/guides/credential-management/) guide, the [Configuration Reference](/gateway/configuration-reference/), and the [API reference](/gateway/api-reference/inference-openai-compatible/) for more details.
+
+In this example, Ollama is running locally without authentication, so we use `api_key_location = "none"`.
+
+### Deployment (Docker Compose)
+
+Create a minimal Docker Compose configuration:
+
+```yaml title="docker-compose.yml"
+# This is a simplified example for learning purposes. Do not use this in production.
+# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
+
+services:
+  gateway:
+    image: tensorzero/gateway
+    volumes:
+      - ./config:/app/config:ro
+    command: --config-file /app/config/tensorzero.toml
+    # environment:
+    # - OLLAMA_API_KEY=${OLLAMA_API_KEY:?Environment variable OLLAMA_API_KEY must be set.} // not necessary for this example
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+```
+
+You can start the gateway with `docker compose up`.
+
+## Inference
+
+Make an inference request to the gateway:
+
+```bash
+curl -X POST http://localhost:3000/inference \
+  -H "Content-Type: application/json" \
+  -d '{
+    "function_name": "my_function_name",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "What is the capital of Japan?"
+        }
+      ]
+    }
+  }'
+```
+
+## Other Features
+
+### Generate embeddings
+
+The OpenAI model provider supports generating embeddings.
+You can find a [complete code example using Ollama on GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/guides/embeddings/providers/openai-compatible-ollama).

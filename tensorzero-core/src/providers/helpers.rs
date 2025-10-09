@@ -1,10 +1,12 @@
 use std::{collections::HashMap, pin::Pin};
 
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::{
+    error::IMPOSSIBLE_ERROR_MESSAGE,
+    http::{TensorZeroEventSource, TensorzeroRequestBuilder},
+};
 use axum::http;
 use bytes::Bytes;
 use futures::{stream::Peekable, Stream};
-use reqwest_eventsource::{EventSource, RequestBuilderExt};
 use serde::de::DeserializeOwned;
 use serde_json::{map::Entry, Map, Value};
 use uuid::Uuid;
@@ -108,7 +110,7 @@ pub async fn inject_extra_request_data_and_send(
     model_provider_data: impl Into<ModelProviderRequestInfo>,
     model_name: &str,
     mut body: serde_json::Value,
-    builder: reqwest::RequestBuilder,
+    builder: TensorzeroRequestBuilder<'_>,
 ) -> Result<(reqwest::Response, String), Error> {
     let headers = inject_extra_request_data(
         config,
@@ -149,8 +151,8 @@ pub async fn inject_extra_request_data_and_send_eventsource(
     model_provider_data: impl Into<ModelProviderRequestInfo>,
     model_name: &str,
     mut body: serde_json::Value,
-    builder: reqwest::RequestBuilder,
-) -> Result<(EventSource, String), Error> {
+    builder: TensorzeroRequestBuilder<'_>,
+) -> Result<(TensorZeroEventSource, String), Error> {
     let headers = inject_extra_request_data(
         config,
         extra_headers_config,
@@ -637,78 +639,9 @@ pub(crate) fn check_new_tool_call_name(
     }
 }
 
-pub trait TensorZeroRequestBuilderExt {
-    async fn send_and_parse_json<T: DeserializeOwned>(
-        self,
-        provider_type: &str,
-    ) -> Result<T, Error>;
-}
+pub trait TensorZeroRequestBuilderExt {}
 
-impl TensorZeroRequestBuilderExt for reqwest::RequestBuilder {
-    async fn send_and_parse_json<T: DeserializeOwned>(
-        self,
-        provider_type: &str,
-    ) -> Result<T, Error> {
-        let (client, request) = self.build_split();
-        let request = request.map_err(|e| {
-            Error::new(ErrorDetails::InferenceClient {
-                status_code: None,
-                message: format!("Error building request: {}", DisplayOrDebugGateway::new(e)),
-                provider_type: provider_type.to_string(),
-                raw_request: None,
-                raw_response: None,
-            })
-        })?;
-        let url = request.url().clone();
-        let raw_body = request
-            .body()
-            .and_then(|b| b.as_bytes().map(|b| String::from_utf8_lossy(b).to_string()));
-        let response = client.execute(request).await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceClient {
-                status_code: e.status(),
-                message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
-                provider_type: provider_type.to_string(),
-                raw_request: raw_body.clone(),
-                raw_response: None,
-            })
-        })?;
-
-        let status_code = response.status();
-
-        let raw_response = response.text().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceClient {
-                status_code: e.status(),
-                message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
-                provider_type: provider_type.to_string(),
-                raw_request: raw_body.clone(),
-                raw_response: None,
-            })
-        })?;
-
-        if !status_code.is_success() {
-            return Err(Error::new(ErrorDetails::InferenceClient {
-                status_code: Some(status_code),
-                message: format!("Non-successful status code for url `{url}`",),
-                provider_type: provider_type.to_string(),
-                raw_request: raw_body.clone(),
-                raw_response: Some(raw_response.clone()),
-            }));
-        }
-
-        let res: T = serde_json::from_str(&raw_response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error parsing JSON response: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                raw_request: raw_body.clone(),
-                raw_response: Some(raw_response.clone()),
-                provider_type: provider_type.to_string(),
-            })
-        })?;
-        Ok(res)
-    }
-}
+impl TensorZeroRequestBuilderExt for TensorzeroRequestBuilder<'_> {}
 
 pub trait UrlParseErrExt<T> {
     fn convert_parse_error(self) -> Result<T, Error>;

@@ -2,6 +2,7 @@ use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
+use futures::future::{join_all, try_join_all};
 use itertools::{izip, Itertools};
 use metrics::counter;
 use serde::{Deserialize, Serialize};
@@ -20,15 +21,18 @@ use super::inference::{
 use crate::cache::{CacheEnabledMode, CacheOptions};
 use crate::config::Config;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
-use crate::error::{Error, ErrorDetails};
-use crate::function::{sample_variant, FunctionConfig};
-use crate::gateway_util::{AppState, AppStateData, StructuredJson};
+use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
+use crate::experimentation::VariantSampler;
+use crate::function::FunctionConfig;
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{
     BatchEpisodeIds, BatchEpisodeIdsWithSize, BatchInferenceDatabaseInsertMetadata,
     BatchInferenceParams, BatchInferenceParamsWithSize, BatchModelInferenceRow,
     BatchOutputSchemasWithSize, BatchRequestRow, BatchStatus, PollBatchInferenceResponse,
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
 };
+use crate::inference::types::resolved_input::LazyResolvedInput;
+use crate::inference::types::RequestMessage;
 use crate::inference::types::{batch::StartBatchModelInferenceWithMetadata, Input};
 use crate::inference::types::{
     current_timestamp, ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext,
@@ -36,18 +40,18 @@ use crate::inference::types::{
     JsonInferenceOutput, Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch,
     Usage,
 };
-use crate::inference::types::{RequestMessage, ResolvedInput};
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
 use crate::tool::{
     BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams, ToolCallConfig,
     ToolCallConfigDatabaseInsert,
 };
+use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::{BatchInferenceConfig, InferenceConfig, Variant, VariantInfo};
 
 /// The expected payload to the `/start_batch_inference` endpoint.
 /// It will be a JSON object with the following fields:
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StartBatchInferenceParams {
     // the function name
@@ -106,14 +110,22 @@ pub type BatchOutputSchemas = Vec<Option<Value>>;
 )]
 #[debug_handler(state = AppStateData)]
 pub async fn start_batch_inference_handler(
-    State(AppStateData {
+    State(app_state): State<AppStateData>,
+    StructuredJson(params): StructuredJson<StartBatchInferenceParams>,
+) -> Result<Response<Body>, Error> {
+    Ok(Json(start_batch_inference(app_state, params).await?).into_response())
+}
+
+pub async fn start_batch_inference(
+    AppStateData {
         config,
         http_client,
         clickhouse_connection_info,
+        postgres_connection_info,
         ..
-    }): AppState,
-    StructuredJson(params): StructuredJson<StartBatchInferenceParams>,
-) -> Result<Response<Body>, Error> {
+    }: AppStateData,
+    params: StartBatchInferenceParams,
+) -> Result<PrepareBatchInferenceOutput, Error> {
     // Get the function config or return an error if it doesn't exist
     let function = config.get_function(&params.function_name)?;
     let num_inferences = params.inputs.len();
@@ -187,7 +199,19 @@ pub async fn start_batch_inference_handler(
     )
     .increment(1);
     counter!(
+        "tensorzero_requests_total",
+        "endpoint" => "batch_inference",
+        "function_name" => params.function_name.to_string(),
+    )
+    .increment(1);
+    counter!(
         "inference_count",
+        "endpoint" => "batch_inference",
+        "function_name" => params.function_name.to_string(),
+    )
+    .increment(num_inferences as u64);
+    counter!(
+        "tensorzero_inferences_total",
         "endpoint" => "batch_inference",
         "function_name" => params.function_name.to_string(),
     )
@@ -204,8 +228,12 @@ pub async fn start_batch_inference_handler(
     let inference_clients = InferenceClients {
         http_client: &http_client,
         clickhouse_connection_info: &clickhouse_connection_info,
+        postgres_connection_info: &postgres_connection_info,
         credentials: &params.credentials,
         cache_options: &cache_options,
+        rate_limiting_config: &config.rate_limiting,
+        tags: &HashMap::default(), // NOTE: we currently do not rate limit batch inference
+        otlp_config: &config.gateway.export.otlp,
     };
 
     let inference_models = InferenceModels {
@@ -220,13 +248,47 @@ pub async fn start_batch_inference_handler(
         object_store_info: &config.object_store_info,
     };
 
-    let resolved_inputs = futures::future::try_join_all(
-        params
-            .inputs
+    let resolved_inputs = params
+        .inputs
+        .into_iter()
+        .map(|input| input.into_lazy_resolved_input(context))
+        .collect::<Result<Vec<LazyResolvedInput>, Error>>()?;
+
+    // If we have a pinned variant (only one candidate), skip sampling and directly start the batch inference
+    if candidate_variants.len() == 1 {
+        let (variant_name, variant) = candidate_variants
             .into_iter()
-            .map(|input| input.resolve(&context)),
-    )
-    .await?;
+            .next()
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::Inference {
+                    message: format!("No candidate variants available for batch inference. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                })
+            })?;
+
+        return start_variant_batch_inference(StartVariantBatchInferenceArgs {
+            variant_name,
+            variant,
+            function: &function,
+            function_name: &params.function_name,
+            episode_ids: &episode_ids,
+            inference_ids: &inference_ids,
+            resolved_inputs: resolved_inputs.clone(),
+            inference_models: &inference_models,
+            inference_clients: &inference_clients,
+            inference_params: inference_params.clone(),
+            tool_configs: &tool_configs,
+            batch_dynamic_output_schemas: &batch_dynamic_output_schemas,
+            config: &config,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            tags: params.tags.clone(),
+        })
+        .await
+        .map(|(batch_id, inference_ids)| PrepareBatchInferenceOutput {
+            batch_id,
+            inference_ids,
+            episode_ids,
+        });
+    }
 
     // Keep sampling variants until one succeeds
     // We already guarantee there is at least one inference
@@ -238,70 +300,64 @@ pub async fn start_batch_inference_handler(
 
     while !candidate_variants.is_empty() {
         // We sample the same variant for the whole batch
-        let (variant_name, variant) = sample_variant(
-            &mut candidate_variants,
-            &params.function_name,
-            first_episode_id,
-        )?;
-        let inference_config = BatchInferenceConfig::new(
-            &config.templates,
-            &tool_configs,
-            &batch_dynamic_output_schemas,
-            &params.function_name,
-            &variant_name,
-        );
-        let inference_configs = inference_config.inference_configs(&episode_ids, &inference_ids);
-        // Will be edited by the variant as part of making the request so we must clone here
-        // This could potentially be improved by decoupling the variant name from the rest of the inference params
-        let variant_inference_params = inference_params.clone();
-
-        let result = variant
-            .start_batch_inference(
-                &resolved_inputs,
-                &inference_models,
-                &function,
-                &inference_configs,
-                &inference_clients,
-                variant_inference_params,
+        let result = function
+            .experimentation()
+            .sample(
+                &params.function_name,
+                *first_episode_id,
+                &mut candidate_variants,
             )
             .await;
-
-        let result = match result {
-            Ok(result) => result,
+        let (variant_name, variant) = match result {
+            Ok((variant_name, variant)) => (variant_name, variant),
             Err(e) => {
-                tracing::warn!(
-                        "functions.{function_name}.variants.{variant_name} failed during inference: {e}",
-                        function_name = params.function_name,
-                        variant_name = variant_name,
-                    );
-                variant_errors.insert(variant_name.to_string(), e);
-                continue;
+                if variant_errors.is_empty() {
+                    return Err(e);
+                }
+                // If the sampling fails we break out of the loop and return the AllVariantsExhausted error
+                // It is more informative to the caller that variants have failed than that there's some internal error with the sampling strategy.
+                // As we continue work on experimentation we will make sure that the sampler only errors if there is no way to provide a valid variant.
+                break;
             }
         };
 
-        // Write to ClickHouse (don't spawn a thread for this because it's required and we should fail loudly)
-        let write_metadata = BatchInferenceDatabaseInsertMetadata {
-            function_name: params.function_name.as_str(),
-            variant_name: variant_name.as_str(),
+        let result = start_variant_batch_inference(StartVariantBatchInferenceArgs {
+            variant_name: variant_name.clone(),
+            variant,
+            function: &function,
+            function_name: &params.function_name,
             episode_ids: &episode_ids,
-            tags: params.tags,
-        };
-
-        let (batch_id, inference_ids) = write_start_batch_inference(
-            &clickhouse_connection_info,
-            resolved_inputs,
-            result,
-            write_metadata,
-            &tool_configs,
-            &inference_configs,
-        )
-        .await?;
-        return Ok(Json(PrepareBatchInferenceOutput {
-            batch_id,
-            inference_ids,
-            episode_ids,
+            inference_ids: &inference_ids,
+            resolved_inputs: resolved_inputs.clone(),
+            inference_models: &inference_models,
+            inference_clients: &inference_clients,
+            inference_params: inference_params.clone(),
+            tool_configs: &tool_configs,
+            batch_dynamic_output_schemas: &batch_dynamic_output_schemas,
+            config: &config,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            tags: params.tags.clone(),
         })
-        .into_response());
+        .await;
+
+        match result {
+            Ok((batch_id, inference_ids)) => {
+                return Ok(PrepareBatchInferenceOutput {
+                    batch_id,
+                    inference_ids,
+                    episode_ids,
+                });
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "functions.{function_name}.variants.{variant_name} failed during inference: {e}",
+                    function_name = params.function_name,
+                    variant_name = variant_name,
+                );
+                variant_errors.insert(variant_name, e);
+                continue;
+            }
+        }
     }
 
     // Eventually, if we get here, it means we tried every variant and none of them worked
@@ -311,12 +367,95 @@ pub async fn start_batch_inference_handler(
     .into())
 }
 
+struct StartVariantBatchInferenceArgs<'a> {
+    variant_name: String,
+    variant: Arc<VariantInfo>,
+    function: &'a Arc<FunctionConfig>,
+    function_name: &'a str,
+    episode_ids: &'a BatchEpisodeIds,
+    inference_ids: &'a [Uuid],
+    resolved_inputs: Vec<LazyResolvedInput>,
+    inference_models: &'a InferenceModels<'a>,
+    inference_clients: &'a InferenceClients<'a>,
+    inference_params: Vec<InferenceParams>,
+    tool_configs: &'a Vec<Option<ToolCallConfig>>,
+    batch_dynamic_output_schemas: &'a Vec<Option<DynamicJSONSchema>>,
+    config: &'a Arc<Config>,
+    clickhouse_connection_info: &'a ClickHouseConnectionInfo,
+    tags: Option<BatchTags>,
+}
+
+async fn start_variant_batch_inference(
+    args: StartVariantBatchInferenceArgs<'_>,
+) -> Result<(Uuid, Vec<Uuid>), Error> {
+    let StartVariantBatchInferenceArgs {
+        variant_name,
+        variant,
+        function,
+        function_name,
+        episode_ids,
+        inference_ids,
+        resolved_inputs,
+        inference_models,
+        inference_clients,
+        inference_params,
+        tool_configs,
+        batch_dynamic_output_schemas,
+        config,
+        clickhouse_connection_info,
+        tags,
+    } = args;
+
+    let inference_config = BatchInferenceConfig::new(
+        &config.templates,
+        tool_configs,
+        batch_dynamic_output_schemas,
+        function_name,
+        &variant_name,
+        config.gateway.fetch_and_encode_input_files_before_inference,
+    );
+    let inference_configs = inference_config.inference_configs(episode_ids, inference_ids);
+    // Will be edited by the variant as part of making the request so we must clone here
+    // This could potentially be improved by decoupling the variant name from the rest of the inference params
+    let variant_inference_params = inference_params.clone();
+
+    let result = variant
+        .start_batch_inference(
+            &resolved_inputs,
+            inference_models,
+            function,
+            &inference_configs,
+            inference_clients,
+            variant_inference_params,
+        )
+        .await?;
+
+    // Write to ClickHouse (don't spawn a thread for this because it's required and we should fail loudly)
+    let write_metadata = BatchInferenceDatabaseInsertMetadata {
+        function_name,
+        variant_name: variant_name.as_str(),
+        episode_ids,
+        tags,
+    };
+
+    write_start_batch_inference(
+        clickhouse_connection_info,
+        config,
+        resolved_inputs,
+        result,
+        write_metadata,
+        tool_configs,
+        &inference_configs,
+    )
+    .await
+}
+
 // Determines the return type of the `/start_batch_inference` endpoint upon success
 #[derive(Debug, Serialize)]
-struct PrepareBatchInferenceOutput {
-    batch_id: Uuid,
-    inference_ids: Vec<Uuid>,
-    episode_ids: Vec<Uuid>,
+pub struct PrepareBatchInferenceOutput {
+    pub batch_id: Uuid,
+    pub inference_ids: Vec<Uuid>,
+    pub episode_ids: Vec<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -512,7 +651,7 @@ pub async fn get_batch_request(
 /// and if it's newly completed, the response.
 async fn poll_batch_inference(
     batch_request: &BatchRequestRow<'static>,
-    http_client: reqwest::Client,
+    http_client: TensorzeroHttpClient,
     models: &ModelTable,
     credentials: &InferenceCredentials,
 ) -> Result<PollBatchInferenceResponse, Error> {
@@ -544,7 +683,7 @@ async fn poll_batch_inference(
 // This is only used to help with iteration in the `write_batch_inference` function
 struct BatchInferenceRowHelper<'a> {
     inference_id: &'a Uuid,
-    input: ResolvedInput,
+    input: LazyResolvedInput,
     input_messages: Vec<RequestMessage>,
     system: Option<&'a str>,
     tool_config: Option<&'a ToolCallConfig>,
@@ -556,12 +695,15 @@ struct BatchInferenceRowHelper<'a> {
 
 async fn write_start_batch_inference<'a>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    inputs: Vec<ResolvedInput>,
+    config: &Config,
+    inputs: Vec<LazyResolvedInput>,
     result: StartBatchModelInferenceWithMetadata<'a>,
     metadata: BatchInferenceDatabaseInsertMetadata<'a>,
     tool_configs: &[Option<ToolCallConfig>],
     inference_configs: &[InferenceConfig<'a>],
 ) -> Result<(Uuid, Vec<Uuid>), Error> {
+    let model_name = &result.model_name;
+    let model_provider_name = &result.model_provider_name;
     // Collect all the data into BatchInferenceRow structs
     let inference_rows = izip!(
         inference_configs.iter(),
@@ -603,38 +745,51 @@ async fn write_start_batch_inference<'a>(
             }
         },
     );
-    let mut rows: Vec<BatchModelInferenceRow<'_>> = vec![];
-
-    // Process each row by serializing the stuff that needs to be serialized twice
-    for row in inference_rows {
+    let rows = join_all(inference_rows.enumerate().map(|(i, row)| async move {
         let tool_params: Option<ToolCallConfigDatabaseInsert> =
             row.tool_config.map(|tc| tc.clone().into());
 
-        rows.push(BatchModelInferenceRow {
+        let resolved_input = row.input.clone().resolve().await?;
+        join_all(resolved_input.clone().write_all_files(config)).await;
+
+        Ok::<_, Error>(BatchModelInferenceRow {
             inference_id: *row.inference_id,
             batch_id: result.batch_id,
             function_name: metadata.function_name.into(),
             variant_name: metadata.variant_name.into(),
-            episode_id: metadata.episode_ids[rows.len()],
-            input: row.input.into_stored_input(),
-            input_messages: row
-                .input_messages
-                .into_iter()
-                .map(RequestMessage::into_stored_message)
-                .collect(),
+            episode_id: metadata.episode_ids[i],
+            input: resolved_input.into_stored_input(),
+            input_messages: try_join_all(
+                row.input_messages
+                    .into_iter()
+                    .map(RequestMessage::into_stored_message),
+            )
+            .await?,
             system: row.system.map(Cow::Borrowed),
             tool_params,
             inference_params: Cow::Borrowed(row.inference_params),
             output_schema: row.output_schema.map(Value::to_string),
             raw_request: Cow::Borrowed(row.raw_request),
-            model_name: Cow::Borrowed(result.model_name),
-            model_provider_name: Cow::Borrowed(&result.model_provider_name),
+            model_name: Cow::Borrowed(model_name),
+            model_provider_name: Cow::Borrowed(model_provider_name),
             tags: row.tags.unwrap_or_default(),
-        });
-    }
+        })
+    }))
+    .await;
+
+    let success_rows = rows
+        .into_iter()
+        .flat_map(|res| match res {
+            Ok(row) => Some(row),
+            Err(e) => {
+                tracing::error!("Failed to resolve batch inference input: {e:?}");
+                None
+            }
+        })
+        .collect::<Vec<_>>();
 
     clickhouse_connection_info
-        .write_batched(rows.as_slice(), TableName::BatchModelInference)
+        .write_batched(success_rows.as_slice(), TableName::BatchModelInference)
         .await?;
 
     let batch_request_insert = BatchRequestRow::new(UnparsedBatchRequestRow {
@@ -872,6 +1027,9 @@ pub async fn write_completed_batch_inference<'a>(
                 inference_id,
                 episode_id,
             },
+            fetch_and_encode_input_files_before_inference: config
+                .gateway
+                .fetch_and_encode_input_files_before_inference,
             // Not currently supported as a batch inference parameter
             extra_body: Cow::Borrowed(&extra_body),
             extra_headers: Cow::Borrowed(&extra_headers),
@@ -905,7 +1063,8 @@ pub async fn write_completed_batch_inference<'a>(
             extra_body: Default::default(),
             extra_headers: Default::default(),
         };
-        model_inference_rows_to_write.extend(inference_result.get_serialized_model_inferences());
+        model_inference_rows_to_write
+            .extend(inference_result.get_serialized_model_inferences().await);
         match inference_result {
             InferenceResult::Chat(chat_result) => {
                 let chat_inference = ChatInferenceDatabaseInsert::new(chat_result, input, metadata);

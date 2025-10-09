@@ -39,6 +39,7 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+    command: ["--config-file", "/app/config/tensorzero.toml"]
     healthcheck:
       test:
         [

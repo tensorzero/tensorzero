@@ -1,7 +1,7 @@
-[models.mixtral-groq]
+[models.llama-4-scout]
 routing = ["groq"]
 
-[models.mixtral-groq.providers.groq]
+[models.llama-4-scout.providers.groq]
 type = "groq"
 model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
 
@@ -10,4 +10,4 @@ type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "mixtral-groq"
+model = "llama-4-scout"

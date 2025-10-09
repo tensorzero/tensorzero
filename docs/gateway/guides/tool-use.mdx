@@ -6,7 +6,7 @@ description: Learn how to use tool use (function calling) with TensorZero Gatewa
 TensorZero has first-class support for tool use, a feature that allows LLMs to interact with external tools (e.g. APIs, databases, web browsers).
 
 Tool use is available for most model providers supported by TensorZero.
-See [Integrations](/gateway/integrations/) for a list of supported model providers.
+See [Integrations](/integrations/model-providers/) for a list of supported model providers.
 
 You can define a tool in your configuration file and attach it to a TensorZero function that should be allowed to call it.
 Alternatively, you can define a tool dynamically at inference time.
@@ -350,11 +350,11 @@ The `tool_choice` parameter can be set either in your configuration file or dire
 
 ### Calling multiple tools in parallel
 
-You can enable parallel tool calling by setting the `parallel_tool_calling` parameter to `true`.
+You can enable parallel tool calling by setting the `parallel_tool_calls` parameter to `true`.
 
 If enabled, the models will be able to request multiple tool calls in a single inference request (conversation turn).
 
-You can specify `parallel_tool_calling` in the configuration file or in the inference request.
+You can specify `parallel_tool_calls` in the configuration file or in the inference request.
 
 ### Integrating with Model Context Protocol (MCP) servers
 

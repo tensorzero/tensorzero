@@ -7,8 +7,4 @@ import type { ToolConfig } from "./ToolConfig";
  * and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
  * Most inference providers can convert this into their desired tool format.
  */
-export type ToolCallConfig = {
-  tools_available: Array<ToolConfig>;
-  tool_choice: ToolChoice;
-  parallel_tool_calls: boolean | null;
-};
+export type ToolCallConfig = { tools_available: Array<ToolConfig>, tool_choice: ToolChoice, parallel_tool_calls: boolean | null, };

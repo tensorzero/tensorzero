@@ -17,14 +17,14 @@ use crate::config::{Config, MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
-use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, FunctionType, Text,
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::serde_util::deserialize_optional_json_string;
 use crate::tool::{ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
-use crate::uuid_util::uuid_elapsed;
+use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
+use crate::utils::uuid::uuid_elapsed;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::validate_tags;
@@ -144,6 +144,12 @@ pub async fn feedback(
     if !dryrun {
         counter!(
             "request_count",
+            "endpoint" => "feedback",
+            "metric_name" => params.metric_name.to_string()
+        )
+        .increment(1);
+        counter!(
+            "tensorzero_requests_total",
             "endpoint" => "feedback",
             "metric_name" => params.metric_name.to_string()
         )
@@ -879,10 +885,11 @@ fn validate_feedback_specific_tags(tags: &HashMap<String, String>) -> Result<(),
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
     use std::sync::Arc;
 
     use crate::config::{Config, MetricConfig, MetricConfigOptimize, SchemaData};
+    use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::testing::get_unit_test_gateway_handle;
@@ -913,9 +920,9 @@ mod tests {
 
         // Case 1.2: ID not provided
         let metadata = get_feedback_metadata(&config, "test_metric", None, None).unwrap_err();
-        let details = metadata.get_owned_details();
+        let details = metadata.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "Correct ID was not provided for feedback level \"inference\"."
                     .to_string(),
@@ -924,9 +931,9 @@ mod tests {
         // Case 1.3: ID provided but not for the correct level
         let metadata =
             get_feedback_metadata(&config, "test_metric", Some(Uuid::now_v7()), None).unwrap_err();
-        let details = metadata.get_owned_details();
+        let details = metadata.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "Correct ID was not provided for feedback level \"inference\"."
                     .to_string(),
@@ -941,9 +948,9 @@ mod tests {
             Some(Uuid::now_v7()),
         )
         .unwrap_err();
-        let details = metadata.get_owned_details();
+        let details = metadata.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "Both episode_id and inference_id cannot be provided".to_string(),
             }
@@ -966,9 +973,9 @@ mod tests {
         let metadata =
             get_feedback_metadata(&config, "comment", Some(episode_id), Some(inference_id))
                 .unwrap_err();
-        let details = metadata.get_owned_details();
+        let details = metadata.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "Both episode_id and inference_id cannot be provided".to_string(),
             }
@@ -984,9 +991,9 @@ mod tests {
         // Case 3.2 Demonstration Feedback with only episode id
         let metadata =
             get_feedback_metadata(&config, "demonstration", Some(episode_id), None).unwrap_err();
-        let details = metadata.get_owned_details();
+        let details = metadata.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "Correct ID was not provided for feedback level \"inference\"."
                     .to_string(),
@@ -1001,9 +1008,9 @@ mod tests {
             Some(inference_id),
         )
         .unwrap_err();
-        let details = metadata.get_owned_details();
+        let details = metadata.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "Both episode_id and inference_id cannot be provided".to_string(),
             }
@@ -1032,9 +1039,9 @@ mod tests {
         let metadata =
             get_feedback_metadata(&config, "test_metric", Some(episode_id), Some(inference_id))
                 .unwrap_err();
-        let details = metadata.get_owned_details();
+        let details = metadata.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "Both episode_id and inference_id cannot be provided".to_string(),
             }
@@ -1052,9 +1059,9 @@ mod tests {
         let metadata_err =
             get_feedback_metadata(&config, "missing_metric_name", None, Some(inference_id))
                 .unwrap_err();
-        let details = metadata_err.get_owned_details();
+        let details = metadata_err.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::UnknownMetric {
                 name: "missing_metric_name".to_string(),
             }
@@ -1065,7 +1072,7 @@ mod tests {
         let config = Arc::new(Config {
             ..Default::default()
         });
-        let gateway_handle = get_unit_test_gateway_handle(config, true);
+        let gateway_handle = get_unit_test_gateway_handle(config);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
         let value = json!("test comment");
@@ -1083,9 +1090,10 @@ mod tests {
             StructuredJson(params),
         )
         .await;
-        let details = response.unwrap_err().get_owned_details();
+        let error = response.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: format!("Episode ID: {episode_id} does not exist"),
             }
@@ -1097,7 +1105,7 @@ mod tests {
         let config = Arc::new(Config {
             ..Default::default()
         });
-        let gateway_handle = get_unit_test_gateway_handle(config, true);
+        let gateway_handle = get_unit_test_gateway_handle(config);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
         let value = json!("test demonstration");
@@ -1118,9 +1126,9 @@ mod tests {
         )
         .await
         .unwrap_err();
-        let details = response.get_owned_details();
+        let details = response.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "Correct ID was not provided for feedback level \"inference\"."
                     .to_string(),
@@ -1143,9 +1151,10 @@ mod tests {
             StructuredJson(params),
         )
         .await;
-        let details = response.unwrap_err().get_owned_details();
+        let error = response.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: format!("Inference ID: {inference_id} does not exist"),
             }
@@ -1167,7 +1176,7 @@ mod tests {
             metrics,
             ..Default::default()
         });
-        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true);
+        let gateway_handle = get_unit_test_gateway_handle(config);
         let value = json!(4.5);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
@@ -1189,9 +1198,9 @@ mod tests {
         )
         .await
         .unwrap_err();
-        let details = response.get_owned_details();
+        let details = response.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "Correct ID was not provided for feedback level \"episode\".".to_string(),
             }
@@ -1212,9 +1221,10 @@ mod tests {
             StructuredJson(params),
         )
         .await;
-        let details = response.unwrap_err().get_owned_details();
+        let error = response.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: format!("Episode ID: {episode_id} does not exist"),
             }
@@ -1236,7 +1246,7 @@ mod tests {
             metrics,
             ..Default::default()
         });
-        let gateway_handle = get_unit_test_gateway_handle(config.clone(), true);
+        let gateway_handle = get_unit_test_gateway_handle(config.clone());
         let value = json!(true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
@@ -1254,9 +1264,10 @@ mod tests {
             StructuredJson(params),
         )
         .await;
-        let details = response.unwrap_err().get_owned_details();
+        let error = response.unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: format!("Inference ID: {inference_id} does not exist"),
             }
@@ -1291,6 +1302,8 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
                 description: None,
+                all_explicit_templates_names: HashSet::new(),
+                experimentation: ExperimentationConfig::default(),
             })));
 
         // Case 1: a string passed to a chat function
@@ -1363,9 +1376,9 @@ mod tests {
         )
         .await
         .unwrap_err();
-        let details = err.get_owned_details();
+        let details = err.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "Demonstration contains invalid tool name".to_string(),
             }
@@ -1386,9 +1399,9 @@ mod tests {
         )
         .await
         .unwrap_err();
-        let details = err.get_owned_details();
+        let details = err.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "Demonstration contains invalid tool call arguments".to_string(),
             }
@@ -1417,6 +1430,8 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(output_schema.clone()).unwrap(),
             implicit_tool_call_config,
             description: None,
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })));
 
         // Case 5: a JSON function with correct output
@@ -1457,9 +1472,9 @@ mod tests {
         )
         .await
         .unwrap_err();
-        let details = err.get_owned_details();
+        let details = err.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::Inference {
                 message: "The DynamicDemonstrationInfo does not match the function type. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string()
             }
@@ -1478,9 +1493,9 @@ mod tests {
         let err = validate_parse_demonstration(function_config, &value, dynamic_demonstration_info)
             .await
             .unwrap_err();
-        let details = err.get_owned_details();
+        let details = err.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::Inference {
                 message: "The DynamicDemonstrationInfo does not match the function type. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string()
             }
@@ -1509,9 +1524,9 @@ mod tests {
         tags.insert("tensorzero::human_feedback".to_string(), "true".to_string());
         assert!(validate_feedback_specific_tags(&tags).is_err());
         let err = validate_feedback_specific_tags(&tags).unwrap_err();
-        let details = err.get_owned_details();
+        let details = err.get_details();
         assert_eq!(
-            details,
+            *details,
             ErrorDetails::InvalidRequest {
                 message: "tensorzero::evaluator_inference_id is required when tensorzero::datapoint_id and tensorzero::human_feedback are provided".to_string(),
             }

@@ -1,6 +1,8 @@
 use crate::config::Config;
 use crate::endpoints::object_storage::get_object;
 use crate::error::Error;
+use crate::error::ErrorDetails;
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::inference::types::file::Base64FileMetadata;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::stored_input_message_content_to_python;
@@ -10,6 +12,8 @@ use crate::inference::types::FileWithPath;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessage;
 use crate::inference::types::ResolvedInputMessageContent;
+use crate::inference::types::StoredContentBlock;
+use crate::inference::types::TemplateInput;
 use crate::inference::types::{Role, Thought, ToolCall, ToolResult};
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
@@ -88,7 +92,7 @@ impl StoredInputMessage {
             content: try_join_all(
                 self.content
                     .into_iter()
-                    .map(|content| content.reresolve(resolver)),
+                    .map(|content| content.reresolve(self.role, resolver)),
             )
             .await?,
         })
@@ -103,6 +107,7 @@ pub enum StoredInputMessageContent {
     Text {
         value: Value,
     },
+    Template(TemplateInput),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
     RawText {
@@ -121,11 +126,33 @@ pub enum StoredInputMessageContent {
 impl StoredInputMessageContent {
     pub async fn reresolve(
         self,
+        role: Role,
         resolver: &impl StoragePathResolver,
     ) -> Result<ResolvedInputMessageContent, Error> {
         match self {
             StoredInputMessageContent::Text { value } => {
-                Ok(ResolvedInputMessageContent::Text { value })
+                match value {
+                    // Plain string input (which might later be templated by an `input_wrapper` template)
+                    Value::String(text) => Ok(ResolvedInputMessageContent::Text { text }),
+                    // Convert legacy `{"type": "text", "arguments": {}}` inputs to `{"type": "template", "name": "<role>", "arguments": {}}` inputs,
+                    // where the template name is determined by the message role.
+                    // We don't store any new entries in ClickHouse using the legacy format - this is needed to handle
+                    // existing entries in our database.
+                    Value::Object(object) => {
+                        Ok(ResolvedInputMessageContent::Template(TemplateInput {
+                            name: role.implicit_template_name().to_string(),
+                            arguments: object,
+                        }))
+                    }
+                    _ => Err(Error::new(ErrorDetails::InternalError {
+                        message: format!(
+                            "Invalid text content: {value:?}. {IMPOSSIBLE_ERROR_MESSAGE}"
+                        ),
+                    })),
+                }
+            }
+            StoredInputMessageContent::Template(template) => {
+                Ok(ResolvedInputMessageContent::Template(template))
             }
             StoredInputMessageContent::ToolCall(tool_call) => {
                 Ok(ResolvedInputMessageContent::ToolCall(tool_call))
@@ -232,4 +259,15 @@ impl StoredInput {
     pub fn get_messages(&self) -> Vec<StoredInputMessage> {
         self.messages.clone()
     }
+}
+
+/// The message type that we directly store in ClickHouse.
+/// This is almost identical to `RequestMessage`, but without `File` data.
+/// Only the object-storage path is actually stored in clickhouse
+/// The `RequestMessage/StoredRequestMessage` pair is the model-level equivalent
+/// of `ResolvedInput/StoredInput`
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct StoredRequestMessage {
+    pub role: Role,
+    pub content: Vec<StoredContentBlock>,
 }

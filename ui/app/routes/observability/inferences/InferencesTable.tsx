@@ -14,6 +14,7 @@ import {
   TableItemFunction,
 } from "~/components/ui/TableItems";
 import { VariantLink } from "~/components/function/variant/VariantLink";
+import { toInferenceUrl, toEpisodeUrl, toFunctionUrl } from "~/utils/urls";
 
 export default function InferencesTable({
   inferences,
@@ -41,20 +42,20 @@ export default function InferencesTable({
                 <TableCell>
                   <TableItemShortUuid
                     id={inference.id}
-                    link={`/observability/inferences/${inference.id}`}
+                    link={toInferenceUrl(inference.id)}
                   />
                 </TableCell>
                 <TableCell>
                   <TableItemShortUuid
                     id={inference.episode_id}
-                    link={`/observability/episodes/${inference.episode_id}`}
+                    link={toEpisodeUrl(inference.episode_id)}
                   />
                 </TableCell>
                 <TableCell>
                   <TableItemFunction
                     functionName={inference.function_name}
                     functionType={inference.function_type}
-                    link={`/observability/functions/${inference.function_name}`}
+                    link={toFunctionUrl(inference.function_name)}
                   />
                 </TableCell>
                 <TableCell>

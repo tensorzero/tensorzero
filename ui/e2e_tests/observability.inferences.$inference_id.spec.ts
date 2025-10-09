@@ -337,61 +337,81 @@ test("should be able to add chat demonstration feedback via the inference page",
   await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
 });
 
-test("should be able to add demonstration feedback via Try with variant flow", async ({
-  page,
-}) => {
-  await page.goto(
-    "/observability/inferences/0196374b-0d7d-7422-b6dc-e94c572cc79b",
-  );
+test.describe("should be able to add demonstration feedback via Try with X flows", () => {
+  const testData = [
+    {
+      buttonText: "Try with variant",
+      inference: "0196374b-0d7d-7422-b6dc-e94c572cc79b",
+      option: "initial_prompt_gpt4o_mini",
+    },
+    {
+      buttonText: "Try with model",
+      inference: "019926fd-1a06-7fe2-b7f4-2318de2f2046",
+      // NOTE(bret): This option was chosen because it came
+      // from `getUsedVariants('tensorzero::default')`
+      option: "openai::gpt-4o-mini",
+    },
+  ];
+  testData.forEach(({ buttonText, inference, option }) => {
+    test(buttonText, async ({ page }) => {
+      await page.goto(`/observability/inferences/${inference}`);
 
-  // Wait for the page to load
-  await page.waitForLoadState("networkidle");
+      // Wait for the page to load
+      await page.waitForLoadState("networkidle");
 
-  // Click on "Try with variant" button
-  await page.getByText("Try with variant").click();
+      // Click on "Try with variant" button
+      await page.getByText(buttonText).click();
 
-  // Wait for the dropdown menu to appear and select a variant
-  // Look for variant options and click on one that's not the current variant
-  const variantOption = page
-    .getByRole("menuitem")
-    .filter({ hasText: "initial_prompt_gpt4o_mini" });
-  await variantOption.waitFor({ state: "visible" });
-  await variantOption.click();
+      // Wait for the dropdown menu to appear and select a variant
+      // Look for variant options and click on one that's not the current variant
+      const variantOption = page.getByRole("menuitem").filter({
+        // NOTE(bret): Get exact match, in the case that the
+        // option is also a substring of another option
+        has: page.locator(`text="${option}"`),
+      });
 
-  // Wait for the variant response modal to open and show results
-  await page.getByRole("dialog").waitFor({ state: "visible" });
+      await variantOption.waitFor({ state: "visible" });
+      await variantOption.click();
 
-  // Wait for the variant inference to complete and show the "Add as Demonstration" button
-  await page
-    .getByText("Add as Demonstration")
-    .waitFor({ state: "visible", timeout: 15000 });
+      // Wait for the variant response modal to open and show results
+      await page.getByRole("dialog").waitFor({ state: "visible" });
 
-  // Click the "Add as Demonstration" button
-  await page.getByText("Add as Demonstration").click();
+      // Wait for the variant inference to complete and show the "Add as Demonstration" button
+      const demoButton = page.getByText("Add as Demonstration");
+      await demoButton.waitFor({ state: "visible", timeout: 15000 });
 
-  // Wait for the modal to close and the page to redirect with newFeedbackId
-  await page.waitForURL((url) => url.searchParams.has("newFeedbackId"), {
-    timeout: 10000,
+      // Click the "Add as Demonstration" button
+      await demoButton.click();
+
+      // Wait for the modal to close and the page to redirect with newFeedbackId
+      await page.waitForURL((url) => url.searchParams.has("newFeedbackId"), {
+        timeout: 10000,
+      });
+
+      // Verify the modal is closed (no longer visible)
+      await expect(page.getByRole("dialog")).not.toBeVisible();
+
+      // Verify the toast appears (look for "Feedback Added" text)
+      await expect(
+        page
+          .getByRole("region", { name: /notifications/i })
+          .getByText("Feedback Added"),
+      ).toBeVisible();
+
+      // Get the feedback ID from URL and verify it appears in the feedback table
+      const newFeedbackId = new URL(page.url()).searchParams.get(
+        "newFeedbackId",
+      );
+      if (!newFeedbackId) {
+        throw new Error("newFeedbackId is not present in the url");
+      }
+
+      // Assert that the feedback ID is visible in the feedback table
+      await expect(
+        page.getByRole("cell", { name: newFeedbackId }),
+      ).toBeVisible();
+    });
   });
-
-  // Verify the modal is closed (no longer visible)
-  await expect(page.getByRole("dialog")).not.toBeVisible();
-
-  // Verify the toast appears (look for "Feedback Added" text)
-  await expect(
-    page
-      .getByRole("region", { name: /notifications/i })
-      .getByText("Feedback Added"),
-  ).toBeVisible();
-
-  // Get the feedback ID from URL and verify it appears in the feedback table
-  const newFeedbackId = new URL(page.url()).searchParams.get("newFeedbackId");
-  if (!newFeedbackId) {
-    throw new Error("newFeedbackId is not present in the url");
-  }
-
-  // Assert that the feedback ID is visible in the feedback table
-  await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
 });
 
 test("should be able to add a datapoint from the inference page", async ({
@@ -429,7 +449,21 @@ test("should be able to add a datapoint from the inference page", async ({
   // Click on the "Inference Output" button
   await page.getByText("Inference Output").click();
 
-  // Wait for navigation to the new page
+  // Wait for the toast to appear with success message
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("New Datapoint"),
+  ).toBeVisible();
+
+  // Wait for and click on the "View" button in the toast
+  const viewButton = page
+    .getByRole("region", { name: /notifications/i })
+    .getByText("View");
+  await viewButton.waitFor({ state: "visible" });
+  await viewButton.click();
+
+  // Wait for navigation to the new datapoint page
   await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
     timeout: 5000,
   });
@@ -439,7 +473,10 @@ test("should be able to add a datapoint from the inference page", async ({
     new RegExp(`/datasets/${datasetName}/datapoint/.*`),
   );
 
-  // Next, let's delete the dataset by going to the list datasets page
+  // Verify we can see the datapoint content
+  await expect(page.getByText("Datapoint", { exact: true })).toBeVisible();
+
+  // Clean up: delete the dataset by going to the list datasets page
   await page.goto("/datasets");
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
@@ -485,4 +522,54 @@ test("should load an inference page with a tool call", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByText("multi_hop_rag_agent").first()).toBeVisible();
   await expect(page.getByText("Testerian catechisms").first()).toBeVisible();
+});
+
+test("should display inferences with thought block output", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/019926fd-1a06-7fe2-b7f4-2318de2f2046",
+  );
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // assert that there is a text element with specific styling class containing "Thought"
+  await expect(
+    page.locator(".text-fg-tertiary").getByText("Thought"),
+  ).toBeVisible();
+});
+
+test("should handle model inference with null input and output tokens", async ({
+  page,
+}) => {
+  await page.goto(
+    "/observability/inferences/01954435-76a5-7331-8a3a-16296a0ba5b6",
+  );
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Verify the inference page loads
+  await expect(
+    page.getByText("01954435-76a5-7331-8a3a-16296a0ba5b6").first(),
+  ).toBeVisible();
+
+  // Click on the model inference ID to open the model inference detail sheet
+  await page.getByText("01954435-76ab-78b1-a76e-d5676b0dd2f9").click();
+
+  // Wait for the sheet/dialog to appear
+  const sheet = page.locator('[role="dialog"]');
+  await sheet.waitFor({ state: "visible" });
+
+  // Verify we're on the model inference page (use exact match to avoid matching "Model Inferences")
+  await expect(
+    sheet.getByText("Model Inference", { exact: true }),
+  ).toBeVisible();
+
+  // Verify that null tokens are displayed in the sheet (they should show as "null tok")
+  await expect(sheet.getByText("null tok")).toHaveCount(2);
+
+  // Verify the crab description output is visible in the sheet
+  await expect(sheet.getByText("cartoon-style crab").first()).toBeVisible();
 });

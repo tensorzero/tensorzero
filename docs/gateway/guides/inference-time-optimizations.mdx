@@ -82,7 +82,7 @@ This example showcases how best-of-N sampling can significantly enhance an LLM's
 ## Chain-of-Thought (CoT)
 
 <img
-  src="./inference-time-optimizations-best-of-n-sampling.png"
+  src="./inference-time-optimizations-chain-of-thought.svg"
   alt="Inference-Time Optimization: Chain-of-Thought (CoT)"
   height={480}
 />
@@ -124,6 +124,7 @@ model = "gpt-4o-mini"
 embedding_model = "text-embedding-3-small"
 system_instructions = "functions/draft_email/dicl/system.txt"
 k = 5
+max_distance = 0.5  # Optional: filter examples by cosine distance
 
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]
@@ -139,6 +140,7 @@ In this configuration:
 - The `embedding_model` field specifies the model used to embed inputs for similarity search.
   We also need to define this model in the `embedding_models` section.
 - The `k` parameter determines the number of similar examples to retrieve and incorporate into the prompt.
+- The optional `max_distance` parameter filters examples based on their cosine distance from the input, ensuring only highly relevant examples are included.
 
 To use Dynamic In-Context Learning (DICL), you also need to add relevant examples to the `DynamicInContextLearningExample` table in your ClickHouse database.
 These examples will be used by the DICL variant to enhance the context of your prompts at inference time.

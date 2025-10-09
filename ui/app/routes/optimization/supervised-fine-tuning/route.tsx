@@ -23,6 +23,7 @@ import type {
   OptimizationJobHandle,
   OptimizationJobInfo,
 } from "tensorzero-node";
+import { toSupervisedFineTuningJobUrl } from "~/utils/urls";
 
 export const handle: RouteHandle = {
   crumb: () => ["Supervised Fine-Tuning"],
@@ -95,9 +96,7 @@ export async function action({ request }: Route.ActionArgs) {
     handle: job,
   };
 
-  return redirect(
-    `/optimization/supervised-fine-tuning/${validatedData.jobId}`,
-  );
+  return redirect(toSupervisedFineTuningJobUrl(validatedData.jobId));
 }
 
 type LoaderData = Route.ComponentProps["loaderData"];
@@ -125,6 +124,7 @@ function SupervisedFineTuningImpl(props: LoaderData) {
         clearInterval(interval);
       };
     }
+    return undefined;
   }, [jobInfo, revalidator]);
 
   const finalResult =

@@ -2,7 +2,4 @@
 import type { ClientInputMessageContent } from "./ClientInputMessageContent";
 import type { Role } from "./Role";
 
-export type ClientInputMessage = {
-  role: Role;
-  content: Array<ClientInputMessageContent>;
-};
+export type ClientInputMessage = { role: Role, content: Array<ClientInputMessageContent>, };

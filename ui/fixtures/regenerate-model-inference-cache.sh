@@ -11,5 +11,11 @@ docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose
 # Wipe the ModelInferenceCache table to ensure that we regenerate everything
 docker run --add-host=host.docker.internal:host-gateway clickhouse/clickhouse-server clickhouse-client --host host.docker.internal --user chuser --password chpassword --database tensorzero_ui_fixtures 'TRUNCATE TABLE ModelInferenceCache SYNC'
 # Don't use any retries, since this will pollute the model inference cache with duplicate entries.
-TENSORZERO_PLAYWRIGHT_RETRIES=0 TENSORZERO_PLAYWRIGHT_NO_WEBSERVER=1 TENSORZERO_GATEWAY_URL=http://localhost:3000 TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures pnpm test-e2e -j 1 --grep-invert "@credentials"
+# These 2 vars are set so the env.server code doesn't complain
+export TENSORZERO_UI_CONFIG_PATH="ui/fixtures/config/tensorzero.toml"
+export TENSORZERO_PLAYWRIGHT_RETRIES=0
+export TENSORZERO_PLAYWRIGHT_NO_WEBSERVER=1
+export TENSORZERO_GATEWAY_URL=http://localhost:3000
+export TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures
+pnpm test-e2e -j 1 --grep-invert "@credentials"
 docker run --add-host=host.docker.internal:host-gateway clickhouse/clickhouse-server clickhouse-client --host host.docker.internal --user chuser --password chpassword --database tensorzero_ui_fixtures 'SELECT * FROM ModelInferenceCache ORDER BY long_cache_key ASC FORMAT JSONEachRow' > ./fixtures/model_inference_cache_e2e.jsonl

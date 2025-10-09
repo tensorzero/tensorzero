@@ -1,10 +1,14 @@
+use std::collections::HashSet;
 use std::{collections::HashMap, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 
-use crate::config::{ErrorContext, UninitializedSchemas};
+use crate::config::{ErrorContext, LoadableConfig, UninitializedSchemas};
+use crate::experimentation::ExperimentationConfig;
+use crate::utils::retries::RetryConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
+use crate::variant::Variant;
 use crate::{
     config::{
         path::ResolvedTomlPath, MetricConfig, MetricConfigLevel, MetricConfigOptimize,
@@ -17,13 +21,13 @@ use crate::{
     tool::create_implicit_tool_call_config,
     variant::{
         best_of_n_sampling::{
-            BestOfNEvaluatorConfig as OnlineEvaluatorConfig, BestOfNSamplingConfig,
+            UninitializedBestOfNEvaluatorConfig, UninitializedBestOfNSamplingConfig,
         },
         chain_of_thought::ChainOfThoughtConfig,
         chat_completion::ChatCompletionConfig,
-        dicl::DiclConfig,
-        mixture_of_n::{FuserConfig, MixtureOfNConfig},
-        JsonMode, RetryConfig, VariantConfig, VariantInfo,
+        dicl::UninitializedDiclConfig,
+        mixture_of_n::{UninitializedFuserConfig, UninitializedMixtureOfNConfig},
+        JsonMode, VariantConfig, VariantInfo,
     },
 };
 
@@ -383,26 +387,31 @@ impl UninitializedEvaluatorConfig {
                     }
                     match &mut variant.inner {
                         VariantConfig::ChatCompletion(variant) => {
-                            variant.weight = Some(1.0);
+                            variant.set_weight(Some(1.0));
                         }
                         VariantConfig::BestOfNSampling(variant) => {
-                            variant.weight = Some(1.0);
+                            variant.set_weight(Some(1.0));
                         }
                         VariantConfig::MixtureOfN(variant) => {
-                            variant.weight = Some(1.0);
+                            variant.set_weight(Some(1.0));
                         }
                         VariantConfig::Dicl(variant) => {
-                            variant.weight = Some(1.0);
+                            variant.set_weight(Some(1.0));
                         }
                         VariantConfig::ChainOfThought(variant) => {
-                            variant.inner.weight = Some(1.0);
+                            variant.inner.set_weight(Some(1.0));
                         }
                     };
                 }
-                let variants = variants
+                let variants: HashMap<_, _> = variants
                     .into_iter()
                     .map(|(name, variant)| (name, Arc::new(variant)))
                     .collect();
+                let all_template_names: HashSet<String> = variants
+                    .values()
+                    .flat_map(|v| v.get_all_explicit_template_names())
+                    .collect();
+                let experimentation = ExperimentationConfig::legacy_from_variants_map(&variants);
                 let function_config = FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     schemas: SchemaData::load(
@@ -415,6 +424,8 @@ impl UninitializedEvaluatorConfig {
                     output_schema,
                     implicit_tool_call_config,
                     description: None,
+                    all_explicit_template_names: all_template_names,
+                    experimentation,
                 });
                 Ok((
                     EvaluatorConfig::LLMJudge(LLMJudgeConfig {
@@ -676,46 +687,48 @@ impl UninitializedLLMJudgeVariantInfo {
                     }
                     LLMJudgeInputFormat::Messages => None,
                 };
-                VariantConfig::BestOfNSampling(BestOfNSamplingConfig {
-                    weight: get_weight(params.active),
-                    timeout_s: params.timeout_s,
-                    candidates: params.candidates,
-                    evaluator: OnlineEvaluatorConfig {
-                        inner: UninitializedChatCompletionConfig {
-                            weight: None,
-                            model: params.evaluator.model,
-                            user_template: evaluator_user_template.map(|t| t.path),
-                            system_template: Some(evaluator_system_template.path),
-                            templates: Default::default(),
-                            input_wrappers: None,
-                            assistant_template: None,
-                            temperature: params.evaluator.temperature,
-                            top_p: params.evaluator.top_p,
-                            max_tokens: params.evaluator.max_tokens,
-                            presence_penalty: params.evaluator.presence_penalty,
-                            frequency_penalty: params.evaluator.frequency_penalty,
-                            seed: params.evaluator.seed,
-                            json_mode: Some(params.evaluator.json_mode),
-                            stop_sequences: params.evaluator.stop_sequences,
-                            retries: params.evaluator.retries,
-                            extra_body: params.evaluator.extra_body,
-                            extra_headers: params.evaluator.extra_headers,
-                        }
-                        .load(
-                            &SchemaData::load(
-                                user_schema,
-                                None,
-                                None,
-                                UninitializedSchemas::default(),
-                                &format!("tensorzero::evaluator::{evaluator_name}"),
-                            )?,
-                            &ErrorContext {
-                                function_name: "tensorzero::evaluator".to_string(),
-                                variant_name: evaluator_name.to_string(),
+                VariantConfig::BestOfNSampling(
+                    UninitializedBestOfNSamplingConfig {
+                        weight: get_weight(params.active),
+                        timeout_s: params.timeout_s,
+                        candidates: params.candidates,
+                        evaluator: UninitializedBestOfNEvaluatorConfig {
+                            inner: UninitializedChatCompletionConfig {
+                                weight: None,
+                                model: params.evaluator.model,
+                                user_template: evaluator_user_template.map(|t| t.path),
+                                system_template: Some(evaluator_system_template.path),
+                                templates: Default::default(),
+                                input_wrappers: None,
+                                assistant_template: None,
+                                temperature: params.evaluator.temperature,
+                                top_p: params.evaluator.top_p,
+                                max_tokens: params.evaluator.max_tokens,
+                                presence_penalty: params.evaluator.presence_penalty,
+                                frequency_penalty: params.evaluator.frequency_penalty,
+                                seed: params.evaluator.seed,
+                                json_mode: Some(params.evaluator.json_mode),
+                                stop_sequences: params.evaluator.stop_sequences,
+                                retries: params.evaluator.retries,
+                                extra_body: params.evaluator.extra_body,
+                                extra_headers: params.evaluator.extra_headers,
                             },
+                        },
+                    }
+                    .load(
+                        &SchemaData::load(
+                            user_schema,
+                            None,
+                            None,
+                            UninitializedSchemas::default(),
+                            &format!("tensorzero::evaluator::{evaluator_name}"),
                         )?,
-                    },
-                })
+                        &ErrorContext {
+                            function_name: "tensorzero::evaluator".to_string(),
+                            variant_name: evaluator_name.to_string(),
+                        },
+                    )?,
+                )
             }
             UninitializedLLMJudgeVariantConfig::MixtureOfNSampling(params) => {
                 let fuser_system_instructions = &params.fuser.system_instructions.read()?;
@@ -742,46 +755,48 @@ impl UninitializedLLMJudgeVariantInfo {
                     }
                     LLMJudgeInputFormat::Messages => None,
                 };
-                VariantConfig::MixtureOfN(MixtureOfNConfig {
-                    weight: get_weight(params.active),
-                    timeout_s: params.timeout_s,
-                    candidates: params.candidates,
-                    fuser: FuserConfig {
-                        inner: UninitializedChatCompletionConfig {
-                            weight: None,
-                            model: params.fuser.model,
-                            user_template: fuser_user_template.map(|t| t.path),
-                            system_template: Some(fuser_system_template.path),
-                            templates: Default::default(),
-                            assistant_template: None,
-                            input_wrappers: None,
-                            temperature: params.fuser.temperature,
-                            top_p: params.fuser.top_p,
-                            max_tokens: params.fuser.max_tokens,
-                            presence_penalty: params.fuser.presence_penalty,
-                            frequency_penalty: params.fuser.frequency_penalty,
-                            seed: params.fuser.seed,
-                            json_mode: Some(params.fuser.json_mode),
-                            retries: params.fuser.retries,
-                            stop_sequences: params.fuser.stop_sequences,
-                            extra_body: params.fuser.extra_body,
-                            extra_headers: params.fuser.extra_headers,
-                        }
-                        .load(
-                            &SchemaData::load(
-                                user_schema,
-                                None,
-                                None,
-                                UninitializedSchemas::default(),
-                                &format!("tensorzero::evaluator::{evaluator_name}"),
-                            )?,
-                            &ErrorContext {
-                                function_name: "tensorzero::evaluator".to_string(),
-                                variant_name: evaluator_name.to_string(),
+                VariantConfig::MixtureOfN(
+                    UninitializedMixtureOfNConfig {
+                        weight: get_weight(params.active),
+                        timeout_s: params.timeout_s,
+                        candidates: params.candidates,
+                        fuser: UninitializedFuserConfig {
+                            inner: UninitializedChatCompletionConfig {
+                                weight: None,
+                                model: params.fuser.model,
+                                user_template: fuser_user_template.map(|t| t.path),
+                                system_template: Some(fuser_system_template.path),
+                                templates: Default::default(),
+                                assistant_template: None,
+                                input_wrappers: None,
+                                temperature: params.fuser.temperature,
+                                top_p: params.fuser.top_p,
+                                max_tokens: params.fuser.max_tokens,
+                                presence_penalty: params.fuser.presence_penalty,
+                                frequency_penalty: params.fuser.frequency_penalty,
+                                seed: params.fuser.seed,
+                                json_mode: Some(params.fuser.json_mode),
+                                retries: params.fuser.retries,
+                                stop_sequences: params.fuser.stop_sequences,
+                                extra_body: params.fuser.extra_body,
+                                extra_headers: params.fuser.extra_headers,
                             },
+                        },
+                    }
+                    .load(
+                        &SchemaData::load(
+                            user_schema,
+                            None,
+                            None,
+                            UninitializedSchemas::default(),
+                            &format!("tensorzero::evaluator::{evaluator_name}"),
                         )?,
-                    },
-                })
+                        &ErrorContext {
+                            function_name: "tensorzero::evaluator".to_string(),
+                            variant_name: evaluator_name.to_string(),
+                        },
+                    )?,
+                )
             }
             UninitializedLLMJudgeVariantConfig::Dicl(params) => {
                 let dicl_system_instructions = params
@@ -793,14 +808,16 @@ impl UninitializedLLMJudgeVariantInfo {
                             include_str!("llm_judge_system_instructions.txt"),
                             system_instructions = si,
                         )
-                    })
-                    .unwrap_or_else(crate::variant::dicl::default_system_instructions);
-                VariantConfig::Dicl(DiclConfig {
+                    });
+
+                let uninitialized_config = UninitializedDiclConfig {
                     weight: get_weight(params.active),
-                    embedding_model: params.embedding_model.into(),
+                    embedding_model: params.embedding_model,
                     k: params.k,
-                    model: params.model.into(),
-                    system_instructions: dicl_system_instructions,
+                    model: params.model,
+                    system_instructions: dicl_system_instructions.map(|s| {
+                        ResolvedTomlPath::new_fake_path("tensorzero::llm_judge".to_string(), s)
+                    }),
                     temperature: params.temperature,
                     top_p: params.top_p,
                     presence_penalty: params.presence_penalty,
@@ -812,7 +829,9 @@ impl UninitializedLLMJudgeVariantInfo {
                     extra_headers: params.extra_headers,
                     retries: params.retries,
                     stop_sequences: params.stop_sequences,
-                })
+                    max_distance: None,
+                };
+                VariantConfig::Dicl(uninitialized_config.load()?)
             }
             UninitializedLLMJudgeVariantConfig::ChainOfThought(params) => {
                 VariantConfig::ChainOfThought(ChainOfThoughtConfig {
@@ -848,22 +867,22 @@ fn check_convert_variant_to_llm_judge_variant(
             Ok(UninitializedLLMJudgeVariantConfig::ChatCompletion(
                 UninitializedLLMJudgeChatCompletionVariantConfig {
                     active: Some(false),
-                    model: variant.model,
+                    model: variant.model().clone(),
                     system_instructions: ResolvedTomlPath::new_fake_path(
                         String::new(),
                         String::new(),
                     ),
-                    temperature: variant.temperature,
-                    top_p: variant.top_p,
-                    max_tokens: variant.max_tokens,
-                    presence_penalty: variant.presence_penalty,
-                    frequency_penalty: variant.frequency_penalty,
-                    seed: variant.seed,
+                    temperature: variant.temperature(),
+                    top_p: variant.top_p(),
+                    max_tokens: variant.max_tokens(),
+                    presence_penalty: variant.presence_penalty(),
+                    frequency_penalty: variant.frequency_penalty(),
+                    seed: variant.seed(),
                     json_mode: JsonMode::Off,
-                    retries: variant.retries,
-                    stop_sequences: variant.stop_sequences,
-                    extra_body: variant.extra_body,
-                    extra_headers: variant.extra_headers,
+                    retries: *variant.retries(),
+                    stop_sequences: variant.stop_sequences().cloned(),
+                    extra_body: variant.extra_body().cloned(),
+                    extra_headers: variant.extra_headers().cloned(),
                 },
             ))
         }
@@ -871,26 +890,26 @@ fn check_convert_variant_to_llm_judge_variant(
             Ok(UninitializedLLMJudgeVariantConfig::BestOfNSampling(
                 UninitializedLLMJudgeBestOfNVariantConfig {
                     active: Some(false),
-                    timeout_s: variant.timeout_s,
-                    candidates: variant.candidates,
+                    timeout_s: variant.timeout_s(),
+                    candidates: variant.candidates().clone(),
                     evaluator: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
-                        model: variant.evaluator.inner.model,
+                        model: variant.evaluator().inner.model().clone(),
                         system_instructions: ResolvedTomlPath::new_fake_path(
                             String::new(),
                             String::new(),
                         ),
-                        temperature: variant.evaluator.inner.temperature,
-                        top_p: variant.evaluator.inner.top_p,
-                        max_tokens: variant.evaluator.inner.max_tokens,
-                        presence_penalty: variant.evaluator.inner.presence_penalty,
-                        frequency_penalty: variant.evaluator.inner.frequency_penalty,
-                        seed: variant.evaluator.inner.seed,
+                        temperature: variant.evaluator().inner.temperature(),
+                        top_p: variant.evaluator().inner.top_p(),
+                        max_tokens: variant.evaluator().inner.max_tokens(),
+                        presence_penalty: variant.evaluator().inner.presence_penalty(),
+                        frequency_penalty: variant.evaluator().inner.frequency_penalty(),
+                        seed: variant.evaluator().inner.seed(),
                         json_mode: JsonMode::Off,
-                        retries: variant.evaluator.inner.retries,
-                        stop_sequences: variant.evaluator.inner.stop_sequences,
-                        extra_body: variant.evaluator.inner.extra_body,
-                        extra_headers: variant.evaluator.inner.extra_headers,
+                        retries: *variant.evaluator().inner.retries(),
+                        stop_sequences: variant.evaluator().inner.stop_sequences().cloned(),
+                        extra_body: variant.evaluator().inner.extra_body().cloned(),
+                        extra_headers: variant.evaluator().inner.extra_headers().cloned(),
                     },
                 },
             ))
@@ -899,26 +918,26 @@ fn check_convert_variant_to_llm_judge_variant(
             Ok(UninitializedLLMJudgeVariantConfig::MixtureOfNSampling(
                 UninitializedLLMJudgeMixtureOfNVariantConfig {
                     active: Some(false),
-                    timeout_s: variant.timeout_s,
-                    candidates: variant.candidates,
+                    timeout_s: variant.timeout_s(),
+                    candidates: variant.candidates().clone(),
                     fuser: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
-                        model: variant.fuser.inner.model,
+                        model: variant.fuser().inner.model().clone(),
                         system_instructions: ResolvedTomlPath::new_fake_path(
                             String::new(),
                             String::new(),
                         ),
-                        temperature: variant.fuser.inner.temperature,
-                        top_p: variant.fuser.inner.top_p,
-                        max_tokens: variant.fuser.inner.max_tokens,
-                        presence_penalty: variant.fuser.inner.presence_penalty,
-                        frequency_penalty: variant.fuser.inner.frequency_penalty,
-                        seed: variant.fuser.inner.seed,
+                        temperature: variant.fuser().inner.temperature(),
+                        top_p: variant.fuser().inner.top_p(),
+                        max_tokens: variant.fuser().inner.max_tokens(),
+                        presence_penalty: variant.fuser().inner.presence_penalty(),
+                        frequency_penalty: variant.fuser().inner.frequency_penalty(),
+                        seed: variant.fuser().inner.seed(),
                         json_mode: JsonMode::Off,
-                        retries: variant.fuser.inner.retries,
-                        stop_sequences: variant.fuser.inner.stop_sequences,
-                        extra_body: variant.fuser.inner.extra_body,
-                        extra_headers: variant.fuser.inner.extra_headers,
+                        retries: *variant.fuser().inner.retries(),
+                        stop_sequences: variant.fuser().inner.stop_sequences().cloned(),
+                        extra_body: variant.fuser().inner.extra_body().cloned(),
+                        extra_headers: variant.fuser().inner.extra_headers().cloned(),
                     },
                 },
             ))
@@ -926,21 +945,21 @@ fn check_convert_variant_to_llm_judge_variant(
         VariantConfig::Dicl(variant) => Ok(UninitializedLLMJudgeVariantConfig::Dicl(
             UninitializedLLMJudgeDiclVariantConfig {
                 active: Some(false),
-                embedding_model: variant.embedding_model.to_string(),
-                k: variant.k,
-                model: variant.model.to_string(),
+                embedding_model: variant.embedding_model().to_string(),
+                k: variant.k(),
+                model: variant.model().to_string(),
                 system_instructions: None,
-                temperature: variant.temperature,
-                top_p: variant.top_p,
-                presence_penalty: variant.presence_penalty,
-                frequency_penalty: variant.frequency_penalty,
-                max_tokens: variant.max_tokens,
-                seed: variant.seed,
-                json_mode: variant.json_mode,
-                extra_body: variant.extra_body,
-                extra_headers: variant.extra_headers,
-                retries: variant.retries,
-                stop_sequences: variant.stop_sequences,
+                temperature: variant.temperature(),
+                top_p: variant.top_p(),
+                presence_penalty: variant.presence_penalty(),
+                frequency_penalty: variant.frequency_penalty(),
+                max_tokens: variant.max_tokens(),
+                seed: variant.seed(),
+                json_mode: variant.json_mode().cloned(),
+                extra_body: variant.extra_body().cloned(),
+                extra_headers: variant.extra_headers().cloned(),
+                retries: *variant.retries(),
+                stop_sequences: variant.stop_sequences().cloned(),
             },
         )),
         VariantConfig::ChainOfThought(variant) => {
@@ -948,22 +967,22 @@ fn check_convert_variant_to_llm_judge_variant(
                 UninitializedLLMJudgeChainOfThoughtVariantConfig {
                     inner: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
-                        model: variant.inner.model,
+                        model: variant.inner.model().to_string().into(),
                         system_instructions: ResolvedTomlPath::new_fake_path(
                             String::new(),
                             String::new(),
                         ),
-                        temperature: variant.inner.temperature,
-                        top_p: variant.inner.top_p,
-                        max_tokens: variant.inner.max_tokens,
-                        presence_penalty: variant.inner.presence_penalty,
-                        frequency_penalty: variant.inner.frequency_penalty,
-                        seed: variant.inner.seed,
+                        temperature: variant.inner.temperature(),
+                        top_p: variant.inner.top_p(),
+                        max_tokens: variant.inner.max_tokens(),
+                        presence_penalty: variant.inner.presence_penalty(),
+                        frequency_penalty: variant.inner.frequency_penalty(),
+                        seed: variant.inner.seed(),
                         json_mode: JsonMode::Off,
-                        retries: variant.inner.retries,
-                        stop_sequences: variant.inner.stop_sequences,
-                        extra_body: variant.inner.extra_body,
-                        extra_headers: variant.inner.extra_headers,
+                        retries: *variant.inner.retries(),
+                        stop_sequences: variant.inner.stop_sequences().cloned(),
+                        extra_body: variant.inner.extra_body().cloned(),
+                        extra_headers: variant.inner.extra_headers().cloned(),
                     },
                 },
             ))
@@ -992,6 +1011,8 @@ mod tests {
             output_schema: create_test_schema(),
             implicit_tool_call_config: create_implicit_tool_call_config(create_test_schema()),
             description: None,
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::legacy_from_variants_map(&HashMap::new()),
         });
         functions.insert(function_name.to_string(), Arc::new(function_config));
 
@@ -1048,7 +1069,7 @@ mod tests {
                     inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
-                            model: Arc::from("gpt-3.5-turbo"),
+                            model: Arc::from("gpt-4.1-mini"),
                             system_instructions:
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
                                     .into(),
@@ -1172,7 +1193,7 @@ mod tests {
                     inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
-                            model: Arc::from("gpt-3.5-turbo"),
+                            model: Arc::from("gpt-4.1-mini"),
                             system_instructions:
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
                                     .into(),
@@ -1323,7 +1344,7 @@ mod tests {
                     inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
-                            model: Arc::from("gpt-3.5-turbo"),
+                            model: Arc::from("gpt-4.1-mini"),
                             system_instructions:
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
                                     .into(),
@@ -1429,6 +1450,10 @@ mod tests {
                         create_test_schema(),
                     ),
                     description: None,
+                    all_explicit_template_names: HashSet::new(),
+                    experimentation: ExperimentationConfig::legacy_from_variants_map(
+                        &HashMap::new(),
+                    ),
                 })),
             );
 
@@ -1464,7 +1489,7 @@ mod tests {
                     inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
-                            model: Arc::from("gpt-3.5-turbo"),
+                            model: Arc::from("gpt-4.1-mini"),
                             system_instructions: ResolvedTomlPath::new_for_tests(PathBuf::from(
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                             ), None),
@@ -1535,7 +1560,7 @@ mod tests {
                     inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: None, // No 'active' field specified
-                            model: Arc::from("gpt-3.5-turbo"),
+                            model: Arc::from("gpt-4.1-mini"),
                             system_instructions: ResolvedTomlPath::new_for_tests(PathBuf::from(
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                             ), None),
@@ -1590,7 +1615,7 @@ mod tests {
                     // Check that the weight is Some(1.0) which indicates it defaulted to active
                     match &variant.inner {
                         VariantConfig::ChatCompletion(cc_config) => {
-                            assert_eq!(cc_config.weight, Some(1.0));
+                            assert_eq!(cc_config.weight(), Some(1.0));
                         }
                         _ => panic!("Expected ChatCompletion variant config"),
                     }
@@ -1608,7 +1633,7 @@ mod tests {
                     inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(false), // Explicitly inactive
-                            model: Arc::from("gpt-3.5-turbo"),
+                            model: Arc::from("gpt-4.1-mini"),
                             system_instructions: ResolvedTomlPath::new_for_tests(PathBuf::from(
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                             ), None),

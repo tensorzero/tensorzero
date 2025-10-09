@@ -12,7 +12,7 @@ This page shows how to:
 
 <Tip>
 
-We provide [complete code examples](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/gateway/call-any-llm) on Github.
+We provide [complete code examples](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/gateway/call-any-llm) on GitHub.
 
 </Tip>
 
@@ -34,7 +34,7 @@ export OPENAI_API_KEY="sk-..."
 
 <Tip>
 
-See the [Integrations](./integrations/) page to learn how to set up credentials for other LLM providers.
+See the [Integrations](/integrations/model-providers) page to learn how to set up credentials for other LLM providers.
 
 </Tip>
 
@@ -65,7 +65,7 @@ t0 = TensorZeroGateway.build_embedded()
 
 The TensorZero Python SDK includes a synchronous `TensorZeroGateway` client and an asynchronous `AsyncTensorZeroGateway` client.
 Both options support running the gateway embedded in your application with `build_embedded` or connecting to a standalone gateway with `build_http`.
-See [Clients](./clients) for more details.
+See [Clients](/gateway/clients/) for more details.
 
 </Tip>
 
@@ -113,7 +113,7 @@ ChatInferenceResponse(
 
 <Tip>
 
-See the [Inference API Reference](./api-reference/inference) for more details on the request and response formats.
+See the [Inference API Reference](/gateway/api-reference/inference) for more details on the request and response formats.
 
 </Tip>
 
@@ -139,7 +139,7 @@ export OPENAI_API_KEY="sk-..."
 
 <Tip>
 
-See the [Integrations](./integrations/) page to learn how to set up credentials for other LLM providers.
+See the [Integrations](/integrations/model-providers) page to learn how to set up credentials for other LLM providers.
 
 </Tip>
 
@@ -173,7 +173,7 @@ patch_openai_client(client, async_setup=False)
 The TensorZero Python SDK supports both the synchronous `OpenAI` client and the asynchronous `AsyncOpenAI` client.
 Both options support running the gateway embedded in your application with `patch_openai_client` or connecting to a standalone gateway with `base_url`.
 The embedded gateway supports synchronous initialization with `async_setup=False` or asynchronous initialization with `async_setup=True`.
-See [Clients](./clients) for more details.
+See [Clients](/gateway/clients/) for more details.
 
 </Tip>
 
@@ -236,7 +236,7 @@ ChatCompletion(
 
 <Tip>
 
-See the [Inference (OpenAI) API Reference](./api-reference/inference-openai-compatible) for more details on the request and response formats.
+See the [Inference (OpenAI) API Reference](/gateway/api-reference/inference-openai-compatible) for more details on the request and response formats.
 
 </Tip>
 
@@ -262,7 +262,7 @@ export OPENAI_API_KEY="sk-..."
 
 <Tip>
 
-See the [Integrations](./integrations/) page to learn how to set up credentials for other LLM providers.
+See the [Integrations](/integrations/model-providers) page to learn how to set up credentials for other LLM providers.
 
 </Tip>
 
@@ -293,7 +293,7 @@ docker run \
 
 <Tip>
 
-See the [TensorZero Gateway Deployment](./deployment) page for more details.
+See the [TensorZero Gateway Deployment](/gateway/deployment) page for more details.
 
 </Tip>
 
@@ -359,7 +359,7 @@ const response = await client.chat.completions.create({
 
 <Tip>
 
-See the [Inference (OpenAI) API Reference](./api-reference/inference-openai-compatible) for more details on the request and response formats.
+See the [Inference (OpenAI) API Reference](/gateway/api-reference/inference-openai-compatible) for more details on the request and response formats.
 
 </Tip>
 
@@ -385,7 +385,7 @@ export OPENAI_API_KEY="sk-..."
 
 <Tip>
 
-See the [Integrations](./integrations/) page to learn how to set up credentials for other LLM providers.
+See the [Integrations](/integrations/model-providers) page to learn how to set up credentials for other LLM providers.
 
 </Tip>
 
@@ -406,7 +406,7 @@ docker run \
 
 <Tip>
 
-See the [TensorZero Gateway Deployment](./deployment) page for more details.
+See the [TensorZero Gateway Deployment](/gateway/deployment) page for more details.
 
 </Tip>
 
@@ -457,7 +457,7 @@ curl -X POST "http://localhost:3000/inference" \
 
 <Tip>
 
-See the [Inference API Reference](./api-reference/inference) for more details on the request and response formats.
+See the [Inference API Reference](/gateway/api-reference/inference) for more details on the request and response formats.
 
 </Tip>
 

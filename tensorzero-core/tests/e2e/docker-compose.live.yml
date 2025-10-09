@@ -1,3 +1,6 @@
+include:
+  - docker-compose-common.yml
+
 volumes:
   shared-tmpdir:
     driver: local
@@ -7,29 +10,6 @@ volumes:
       o: size=8G,uid=1000,gid=1000,mode=1777
 
 services:
-  clickhouse:
-    image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}
-    environment:
-      CLICKHOUSE_USER: chuser
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-      CLICKHOUSE_PASSWORD: chpassword
-    volumes:
-      # If the directory doesn't exist locally (i.e. we haven't defined a version-specific config),
-      # an empty dir will get mounted in the container
-      - ./clickhouse-configs/${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}/users.xml:/etc/clickhouse-server/users.d/users.xml
-    ports:
-      - "8123:8123" # HTTP port
-      - "9000:9000" # Native port
-    ulimits:
-      nofile:
-        soft: 262144
-        hard: 262144
-    healthcheck:
-      test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
-      start_period: 30s
-      start_interval: 1s
-      timeout: 1s
-
   mock-inference-provider:
     image: tensorzero/mock-inference-provider:${TENSORZERO_COMMIT_TAG}
     build:
@@ -41,39 +21,6 @@ services:
       - "3030:3030"
     healthcheck:
       test: wget --spider --tries 1 http://localhost:3030/status
-      start_period: 30s
-      start_interval: 1s
-      timeout: 1s
-
-  minio:
-    image: bitnamilegacy/minio:2025.7.23
-    ports:
-      - "8000:9000" # API port
-      - "9001:9001" # Console port
-    environment:
-      MINIO_ROOT_USER: tensorzero-root
-      MINIO_ROOT_PASSWORD: tensorzero-root
-      MINIO_DEFAULT_BUCKETS: tensorzero-e2e-tests
-    healthcheck:
-      test: "mc ls local/tensorzero-e2e-tests || exit 1"
-      start_period: 30s
-      start_interval: 1s
-      timeout: 1s
-
-  jaeger:
-    image: jaegertracing/jaeger:2.5.0
-    volumes:
-      - ./jaeger-config.yaml:/jaeger/config.yaml
-    #command: --set=extensions.jaeger_storage.backends.some_store.memory.max_traces=1
-    command: --config /jaeger/config.yaml
-    ports:
-      - "16686:16686" # Browser UI
-      - "4317:4317"
-      - "4318:4318"
-      - "5778:5778"
-      - "9411:9411"
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "--tries=1", "http://localhost:16686/"]
       start_period: 30s
       start_interval: 1s
       timeout: 1s
@@ -121,7 +68,7 @@ services:
       TENSORZERO_MOCK_INFERENCE_PROVIDER_BASE_URL: http://mock-inference-provider:3030
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       TMPDIR: /tmp
-      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4317
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
       # API Keys
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
@@ -170,8 +117,6 @@ services:
       provider-proxy:
         condition: service_healthy
       minio:
-        condition: service_healthy
-      jaeger:
         condition: service_healthy
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
@@ -224,10 +169,12 @@ services:
       # Test environment variables
       TENSORZERO_GATEWAY_URL: http://gateway:3000
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/tensorzero_e2e_tests
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_e2e_tests
       TENSORZERO_MINIO_URL: http://minio:9000
       TENSORZERO_MOCK_INFERENCE_PROVIDER_BASE_URL: http://mock-inference-provider:3030
-      TENSORZERO_JAEGER_URL: http://jaeger:16686
-      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4317
+      TENSORZERO_TEMPO_URL: http://tempo:16686
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
       TENSORZERO_E2E_PROXY: http://provider-proxy:3003
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       TMPDIR: /tmp
@@ -281,9 +228,13 @@ services:
         condition: service_completed_successfully
       clickhouse:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
       mock-inference-provider:
         condition: service_healthy
       provider-proxy:
         condition: service_healthy
       minio:
         condition: service_healthy
+      otel-collector:
+        condition: service_started

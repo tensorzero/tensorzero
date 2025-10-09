@@ -116,6 +116,7 @@ class RenderedSample:
 class OptimizationJobHandle:
     Dicl: Type["OptimizationJobHandle"]
     OpenAISFT: Type["OptimizationJobHandle"]
+    OpenAIRFT: Type["OptimizationJobHandle"]
     FireworksSFT: Type["OptimizationJobHandle"]
     GCPVertexGeminiSFT: Type["OptimizationJobHandle"]
     TogetherSFT: Type["OptimizationJobHandle"]
@@ -130,6 +131,7 @@ class OptimizationJobStatus:
 class OptimizationJobInfo:
     Dicl: Type["OptimizationJobInfo"]
     OpenAISFT: Type["OptimizationJobInfo"]
+    OpenAIRFT: Type["OptimizationJobInfo"]
     FireworksSFT: Type["OptimizationJobInfo"]
     GCPVertexGeminiSFT: Type["OptimizationJobInfo"]
     TogetherSFT: Type["OptimizationJobInfo"]
@@ -143,7 +145,7 @@ class OptimizationJobInfo:
     def estimated_finish(self) -> Optional[int]: ...
 
 @final
-class DiclOptimizationConfig:
+class DICLOptimizationConfig:
     def __init__(
         self,
         *,
@@ -155,6 +157,7 @@ class DiclOptimizationConfig:
         max_concurrency: Optional[int] = None,
         k: Optional[int] = None,
         model: Optional[str] = None,
+        append_to_existing_variants: Optional[bool] = None,
         credentials: Optional[str] = None,
     ) -> None: ...
 
@@ -167,6 +170,27 @@ class OpenAISFTConfig:
         batch_size: Optional[int] = None,
         learning_rate_multiplier: Optional[float] = None,
         n_epochs: Optional[int] = None,
+        credentials: Optional[str] = None,
+        api_base: Optional[str] = None,
+        seed: Optional[int] = None,
+        suffix: Optional[str] = None,
+    ) -> None: ...
+
+@final
+class OpenAIRFTConfig:
+    def __init__(
+        self,
+        *,
+        model: str,
+        grader: Dict[str, Any],
+        response_format: Optional[Dict[str, Any]] = None,
+        batch_size: Optional[int] = None,
+        compute_multiplier: Optional[float] = None,
+        eval_interval: Optional[int] = None,
+        eval_samples: Optional[int] = None,
+        learning_rate_multiplier: Optional[float] = None,
+        n_epochs: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
         credentials: Optional[str] = None,
         api_base: Optional[str] = None,
         seed: Optional[int] = None,
@@ -295,8 +319,8 @@ class BestOfNSamplingConfig:
     pass
 
 @final
-class DiclConfig:
-    pass
+class DICLConfig:
+    __deprecated__: str = ...
 
 @final
 class MixtureOfNConfig:
@@ -314,7 +338,7 @@ class VariantsConfig:
     ) -> Union[
         ChatCompletionConfig,
         BestOfNSamplingConfig,
-        DiclConfig,
+        DICLConfig,
         MixtureOfNConfig,
         ChainOfThoughtConfig,
     ]: ...
@@ -393,6 +417,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         *,
         config_file: Optional[str] = None,
         clickhouse_url: Optional[str] = None,
+        postgres_url: Optional[str] = None,
         timeout: Optional[float] = None,
     ) -> "TensorZeroGateway":
         """
@@ -400,7 +425,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
         :param config_file: (Optional) The path to the TensorZero configuration file.
         :param clickhouse_url: (Optional) The URL of the ClickHouse database.
-        :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
+        :param postgres_url: (Optional) The URL of the Postgres database.
+        :param timeout: (Optional) The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
         """
 
     def inference(
@@ -427,6 +453,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         cache_options: Optional[Dict[str, Any]] = None,
         extra_body: Optional[List[ExtraBody | Dict[str, Any]]] = None,
         extra_headers: Optional[List[Dict[str, Any]]] = None,
+        otlp_traces_extra_headers: Optional[Dict[str, str]] = None,
         include_original_response: Optional[bool] = None,
     ) -> Union[InferenceResponse, Iterator[InferenceChunk]]:
         """
@@ -458,6 +485,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param tags: If set, adds tags to the inference request.
         :param extra_body: If set, injects extra fields into the provider request body.
         :param extra_headers: If set, injects extra headers into the provider request.
+        :param otlp_traces_extra_headers: If set, adds custom headers to OTLP trace exports. Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-header-".
         :param include_original_response: If set, add an `original_response` field to the response, containing the raw string response from the model.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async iterator that yields InferenceChunks as they come in.
@@ -513,7 +541,6 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         *,
         run_id: str | UUID | uuid_utils.UUID,
         task_name: Optional[str] = None,
-        datapoint_name: Optional[str] = None,
         tags: Optional[Dict[str, str]] = None,
     ) -> DynamicEvaluationRunEpisodeResponse:
         """
@@ -521,8 +548,6 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
         :param run_id: The run ID to use for the dynamic evaluation run.
         :param task_name: The name of the task to use for the dynamic evaluation run.
-        :param datapoint_name: The name of the datapoint to use for the dynamic evaluation run.
-                    Deprecated: use `task_name` instead.
         :param tags: A dictionary of tags to add to the dynamic evaluation run.
         :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
         """
@@ -733,6 +758,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         *,
         config_file: Optional[str] = None,
         clickhouse_url: Optional[str] = None,
+        postgres_url: Optional[str] = None,
         timeout: Optional[float] = None,
         async_setup: bool = True,
     ) -> Union[Awaitable["AsyncTensorZeroGateway"], "AsyncTensorZeroGateway"]:
@@ -741,7 +767,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
         :param config_file: (Optional) The path to the TensorZero configuration file.
         :param clickhouse_url: (Optional) The URL of the ClickHouse database.
-        :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
+        :param postgres_url: (Optional) The URL of the Postgres database.
+        :param timeout: (Optional) The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
         :param async_setup (Optional): If True, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and return an `AsyncTensorZeroGateway` directly.
         """
 
@@ -769,6 +796,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         cache_options: Optional[Dict[str, Any]] = None,
         extra_body: Optional[List[ExtraBody | Dict[str, Any]]] = None,
         extra_headers: Optional[List[Dict[str, Any]]] = None,
+        otlp_traces_extra_headers: Optional[Dict[str, str]] = None,
         include_original_response: Optional[bool] = None,
     ) -> Union[InferenceResponse, AsyncIterator[InferenceChunk]]:
         """
@@ -800,6 +828,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param tags: If set, adds tags to the inference request.
         :param extra_body: If set, injects extra fields into the provider request body.
         :param extra_headers: If set, injects extra headers into the provider request.
+        :param otlp_traces_extra_headers: If set, adds custom headers to OTLP trace exports. Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-header-".
         :param include_original_response: If set, add an `original_response` field to the response, containing the raw string response from the model.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async iterator that yields InferenceChunks as they come in.
@@ -855,7 +884,6 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         *,
         run_id: str | UUID | uuid_utils.UUID,
         task_name: Optional[str] = None,
-        datapoint_name: Optional[str] = None,
         tags: Optional[Dict[str, str]] = None,
     ) -> DynamicEvaluationRunEpisodeResponse:
         """
@@ -863,8 +891,6 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
         :param run_id: The run ID to use for the dynamic evaluation run.
         :param task_name: The name of the task to use for the dynamic evaluation run.
-        :param datapoint_name: The name of the datapoint to use for the dynamic evaluation run.
-                    Deprecated: use `task_name` instead.
         :param tags: A dictionary of tags to add to the dynamic evaluation run.
         :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
         """
@@ -1047,6 +1073,7 @@ def _start_http_gateway(
     *,
     config_file: Optional[str],
     clickhouse_url: Optional[str],
+    postgres_url: Optional[str],
     async_setup: bool,
 ) -> Union[Any, Awaitable[Any]]: ...
 @final
@@ -1063,8 +1090,8 @@ __all__ = [
     "ChainOfThoughtConfig",
     "Config",
     "Datapoint",
-    "DiclOptimizationConfig",
-    "DiclConfig",
+    "DICLOptimizationConfig",
+    "DICLConfig",
     "FunctionConfigChat",
     "FunctionConfigJson",
     "FunctionsConfig",
@@ -1074,6 +1101,7 @@ __all__ = [
     "LocalHttpGateway",
     "MixtureOfNConfig",
     "_start_http_gateway",
+    "OpenAIRFTConfig",
     "OpenAISFTConfig",
     "OptimizationJobHandle",
     "OptimizationJobInfo",

@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use enum_map::Enum;
 use migration_manager::migrations::check_table_exists;
 use reqwest::multipart::Form;
@@ -18,6 +19,7 @@ use url::Url;
 mod batching;
 pub mod migration_manager;
 pub mod query_builder;
+mod select_queries;
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod test_helpers;
 
@@ -31,7 +33,7 @@ use crate::stored_inference::StoredInference;
 use query_builder::generate_list_inferences_sql;
 use query_builder::ListInferencesParams;
 
-use super::DatabaseConnection;
+use super::HealthCheckable;
 
 #[derive(Debug, Clone)]
 pub enum ClickHouseConnectionInfo {
@@ -576,11 +578,25 @@ impl ClickHouseConnectionInfo {
                             message: e.to_string(),
                         })
                     })?;
+
+                let status = response.status();
                 let text = response.text().await.map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
                         message: format!("Failed to fetch response text: {e}"),
                     })
                 })?;
+
+                // Check if the request was successful before trying to parse the response
+                if !status.is_success() {
+                    return Err(Error::new(ErrorDetails::ClickHouseConnection {
+                        message: format!(
+                            "ClickHouse query failed with status {}: {}",
+                            status.as_u16(),
+                            text
+                        ),
+                    }));
+                }
+
                 let count: u8 = text.trim().parse().map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
                         message: format!("Failed to parse count response as u8: {e}"),
@@ -757,7 +773,8 @@ impl ClickHouseConnectionInfo {
     }
 }
 
-impl DatabaseConnection for ClickHouseConnectionInfo {
+#[async_trait]
+impl HealthCheckable for ClickHouseConnectionInfo {
     async fn health(&self) -> Result<(), Error> {
         match self {
             Self::Disabled => Ok(()),
@@ -936,13 +953,16 @@ async fn write_production<T: Serialize + Send + Sync>(
             })
         })?;
 
-    match response.status() {
+    let status = response.status();
+    let response_body = response
+        .text()
+        .await
+        .unwrap_or_else(|e| format!("Failed to get response text: {e}"));
+
+    match status {
         reqwest::StatusCode::OK => Ok(()),
         _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
-            message: response
-                .text()
-                .await
-                .unwrap_or_else(|e| format!("Failed to get response text: {e}")),
+            message: response_body,
         })),
     }
 }

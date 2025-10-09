@@ -1,0 +1,40 @@
+---
+title: Optimize latency and throughput
+description: Learn how to optimize the performance of the TensorZero Gateway for lower latency and higher throughput.
+---
+
+The TensorZero Gateway is designed from the ground up with performance in mind.
+Even with default settings, the gateway is fast and lightweight enough to be unnoticeable in most applications.
+The best practices below are designed to help you optimize the performance of the TensorZero Gateway for production deployments requiring maximum performance.
+
+<Tip>
+
+The TensorZero Gateway can achieve &lt;1ms P99 latency overhead at 10,000+ QPS. See [Benchmarks](/gateway/benchmarks/) for details.
+
+</Tip>
+
+## Best practices
+
+### Observability data collection strategy
+
+By default, the gateway takes a conservative approach to observability data durability, ensuring that data is persisted in ClickHouse before sending a response to the client.
+This strategy provides a consistent and reliable experience but can introduce latency overhead.
+
+For scenarios where latency and throughput are critical, the gateway can be configured to sacrifice data durability guarantees for better performance.
+If latency is critical for your application, you can enable `gateway.observability.async_writes` or `gateway.observability.batch_writes`.
+With either of these settings, the gateway will return the response to the client immediately and asynchronously insert data into ClickHouse.
+The former will immediately insert each row individually, while the latter will batch multiple rows together for more efficient writes.
+
+As a rule of thumb, consider the following decision matrix:
+
+|                             | **High throughput** | **Low throughput** |
+| --------------------------- | ------------------- | ------------------ |
+| **Latency is critical**     | `batch_writes`      | `async_writes`     |
+| **Latency is not critical** | `batch_writes`      | Default strategy   |
+
+See the [Configuration Reference](/gateway/configuration-reference/) for more details.
+
+### Other recommendations
+
+- Ensure your application, the TensorZero Gateway, and ClickHouse are deployed in the same region to minimize network latency.
+- Initialize the client once and reuse it as much as possible, to avoid initialization overhead and to keep the connection alive.

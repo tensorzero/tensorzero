@@ -1,7 +1,8 @@
+
 // This is an internal crate, so we're the only consumers of
 // traits with async fns for now.
-#![expect(async_fn_in_trait)]
 
+#![expect(async_fn_in_trait)]
 pub mod cache;
 pub mod config; // TensorZero config file
 pub mod db;
@@ -9,9 +10,10 @@ pub mod embeddings; // embedding inference
 pub mod endpoints; // API endpoints
 pub mod error; // error handling
 pub mod evaluations; // evaluation
+pub mod experimentation;
 pub mod function; // types and methods for working with TensorZero functions
-pub mod gateway_util; // utilities for gateway
 pub mod howdy;
+pub mod http;
 pub mod inference; // model inference
 pub mod jsonschema_util; // utilities for working with JSON schemas
 mod minijinja_util; // utilities for working with MiniJinja templates
@@ -20,14 +22,16 @@ pub mod model_table;
 pub mod observability; // utilities for observability (logs, metrics, etc.)
 pub mod optimization;
 pub mod providers; // providers for the inference and / or optimization services TensorZero integrates
+pub mod rate_limiting; // utilities for rate limiting
 pub mod serde_util; // utilities for working with serde
 pub mod stored_inference; // types and methods for working with stored inferences
 mod testing;
 pub mod tool; // types and methods for working with TensorZero tools
-mod uuid_util; // utilities for working with UUIDs
+pub mod utils;
 pub mod variant; // types and methods for working with TensorZero variants
 
 pub mod built_info {
     #![expect(clippy::allow_attributes)]
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
+

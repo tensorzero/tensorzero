@@ -156,7 +156,7 @@ mod tests {
         let result = process_think_blocks(text, true, provider_type);
         assert!(result.is_err());
         if let Err(err) = result {
-            if let ErrorDetails::InferenceServer { message, .. } = err.get_owned_details() {
+            if let ErrorDetails::InferenceServer { message, .. } = err.get_details() {
                 assert_eq!(message, "Multiple thinking blocks found");
             }
         }
@@ -176,7 +176,7 @@ mod tests {
         let result = process_think_blocks(text, true, provider_type);
         assert!(result.is_err());
         if let Err(err) = result {
-            if let ErrorDetails::InferenceServer { message, .. } = err.get_owned_details() {
+            if let ErrorDetails::InferenceServer { message, .. } = err.get_details() {
                 assert_eq!(message, "Mismatched thinking tags");
             }
         }
@@ -186,7 +186,7 @@ mod tests {
         let result = process_think_blocks(text, true, provider_type);
         assert!(result.is_err());
         if let Err(err) = result {
-            if let ErrorDetails::InferenceServer { message, .. } = err.get_owned_details() {
+            if let ErrorDetails::InferenceServer { message, .. } = err.get_details() {
                 assert_eq!(message, "Mismatched thinking tags");
             }
         }

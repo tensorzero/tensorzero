@@ -5,9 +5,4 @@ import type { StaticJSONSchema } from "./StaticJSONSchema";
 /**
  * Holds of all of the templates and schemas used by a chat-completion variant.
  */
-export type ChatTemplates = {
-  [key in string]?: {
-    template: PathWithContents;
-    schema: StaticJSONSchema | null;
-  };
-};
+export type ChatTemplates = { [key in string]?: { template: PathWithContents, schema: StaticJSONSchema | null, legacy_definition: boolean, } };

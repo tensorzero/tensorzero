@@ -10,6 +10,12 @@ import Chip from "~/components/ui/Chip";
 import { Calendar, Dataset } from "~/components/icons/Icons";
 import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
 import { getFunctionTypeIcon } from "~/utils/icon";
+import {
+  toDatasetUrl,
+  toFunctionUrl,
+  toInferenceUrl,
+  toEpisodeUrl,
+} from "~/utils/urls";
 
 interface BasicInfoProps {
   datapoint: ParsedDatasetRow;
@@ -31,10 +37,7 @@ const createTimestampTooltip = (timestamp: string | number | Date) => {
 
 export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
   const function_config = useFunctionConfig(datapoint.function_name);
-  const type = function_config?.type;
-  if (!type) {
-    throw new Error(`Function ${datapoint.function_name} not found`);
-  }
+  const type = function_config?.type || "unknown";
 
   // Create timestamp tooltip
   const timestampTooltip = createTimestampTooltip(datapoint.updated_at);
@@ -45,12 +48,20 @@ export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
   return (
     <BasicInfoLayout>
       <BasicInfoItem>
+        <BasicInfoItemTitle>Name</BasicInfoItemTitle>
+        <BasicInfoItemContent>
+          {/* TODO: support editing names */}
+          <Chip label={datapoint.name || "-"} font="mono" />
+        </BasicInfoItemContent>
+      </BasicInfoItem>
+
+      <BasicInfoItem>
         <BasicInfoItemTitle>Dataset</BasicInfoItemTitle>
         <BasicInfoItemContent>
           <Chip
             icon={<Dataset className="text-fg-tertiary" />}
             label={datapoint.dataset_name}
-            link={`/datasets/${datapoint.dataset_name}`}
+            link={toDatasetUrl(datapoint.dataset_name)}
             font="mono"
           />
         </BasicInfoItemContent>
@@ -64,7 +75,7 @@ export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
             iconBg={functionIconConfig.iconBg}
             label={datapoint.function_name}
             secondaryLabel={type}
-            link={`/observability/functions/${datapoint.function_name}`}
+            link={toFunctionUrl(datapoint.function_name)}
             font="mono"
           />
         </BasicInfoItemContent>
@@ -76,7 +87,7 @@ export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
           <BasicInfoItemContent>
             <Chip
               label={datapoint.source_inference_id}
-              link={`/observability/inferences/${datapoint.source_inference_id}`}
+              link={toInferenceUrl(datapoint.source_inference_id)}
               font="mono"
             />
           </BasicInfoItemContent>
@@ -89,7 +100,7 @@ export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
           <BasicInfoItemContent>
             <Chip
               label={datapoint.episode_id}
-              link={`/observability/episodes/${datapoint.episode_id}`}
+              link={toEpisodeUrl(datapoint.episode_id)}
               font="mono"
             />
           </BasicInfoItemContent>

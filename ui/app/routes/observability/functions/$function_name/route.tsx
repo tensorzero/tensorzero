@@ -38,6 +38,7 @@ import {
 } from "~/components/layout/PageLayout";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { logger } from "~/utils/logger";
+import { DEFAULT_FUNCTION } from "~/utils/constants";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -114,7 +115,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variantThroughputPromise,
   ]);
   const variant_counts_with_metadata = variant_counts.map((variant_count) => {
-    const variant_config = function_config.variants[
+    let variant_config = function_config.variants[
       variant_count.variant_name
     ] || {
       inner: {
@@ -123,6 +124,32 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         weight: 0,
       },
     };
+
+    if (function_name === DEFAULT_FUNCTION) {
+      variant_config = {
+        inner: {
+          type: "chat_completion",
+          model: variant_count.variant_name,
+          weight: null,
+          templates: {},
+          temperature: null,
+          top_p: null,
+          max_tokens: null,
+          presence_penalty: null,
+          frequency_penalty: null,
+          seed: null,
+          stop_sequences: null,
+          json_mode: null,
+          retries: { num_retries: 0, max_delay_s: 0 },
+        },
+        timeouts: {
+          non_streaming: { total_ms: null },
+          streaming: { ttft_ms: null },
+        },
+      };
+      function_config.variants[variant_count.variant_name] = variant_config;
+    }
+
     return {
       ...variant_count,
       type: variant_config.inner.type,

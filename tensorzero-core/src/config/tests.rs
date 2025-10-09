@@ -37,7 +37,7 @@ async fn test_config_from_toml_table_valid() {
         .unwrap()
         .inner
     {
-        VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode.unwrap(),
+        VariantConfig::ChatCompletion(chat_config) => chat_config.json_mode().unwrap(),
         _ => panic!("Expected a chat completion variant"),
     };
     assert_eq!(prompt_a_json_mode, &JsonMode::ImplicitTool);
@@ -51,10 +51,10 @@ async fn test_config_from_toml_table_valid() {
         .unwrap()
         .inner
     {
-        VariantConfig::ChatCompletion(chat_config) => chat_config.json_mode,
+        VariantConfig::ChatCompletion(chat_config) => chat_config.json_mode(),
         _ => panic!("Expected a chat completion variant"),
     };
-    assert_eq!(prompt_b_json_mode, Some(JsonMode::Strict));
+    assert_eq!(prompt_b_json_mode, Some(&JsonMode::Strict));
     // Check that the tool choice for get_weather is set to "specific" and the correct tool
     let function = config.functions.get("weather_helper").unwrap();
     match &**function {
@@ -77,7 +77,7 @@ async fn test_config_from_toml_table_valid() {
                 match &variant.inner {
                     VariantConfig::BestOfNSampling(best_of_n_config) => {
                         assert!(
-                            best_of_n_config.candidates.len() > 1,
+                            best_of_n_config.candidates().len() > 1,
                             "Best of n variant should have multiple candidates"
                         );
                     }
@@ -104,7 +104,7 @@ async fn test_config_from_toml_table_valid() {
             let variant = json_config.variants.get("variant_with_variables").unwrap();
             match &variant.inner {
                 VariantConfig::ChatCompletion(chat_config) => {
-                    assert_eq!(chat_config.weight, None); // Default weight should be None
+                    assert_eq!(chat_config.weight(), None); // Default weight should be None
                 }
                 _ => panic!("Expected a chat completion variant"),
             }
@@ -112,7 +112,7 @@ async fn test_config_from_toml_table_valid() {
         FunctionConfig::Chat(_) => panic!("Expected a JSON function"),
     }
 
-    assert_eq!(config.embedding_models.len(), 1);
+    assert_eq!(config.embedding_models.table.len(), 1);
 
     let embedding_model = config
         .embedding_models
@@ -135,10 +135,10 @@ async fn test_config_from_toml_table_valid() {
             assert_eq!(json_config.variants.len(), 7);
             match &json_config.variants["anthropic_promptA"].inner {
                 VariantConfig::ChatCompletion(chat_config) => {
-                    assert_eq!(chat_config.model, "anthropic::claude-3.5-sonnet".into());
-                    assert_eq!(chat_config.weight, Some(1.0));
+                    assert_eq!(chat_config.model(), &"anthropic::claude-3.5-sonnet".into());
+                    assert_eq!(chat_config.weight(), Some(1.0));
                     assert_eq!(
-                            chat_config.templates.get_implicit_system_template().unwrap().template,
+                            chat_config.templates().get_implicit_system_template().unwrap().template,
                             PathWithContents {
                                 // We don't use a real path for programmatically generated templates
                                 // Instead we use this handle and then the same in minijinja
@@ -153,61 +153,67 @@ async fn test_config_from_toml_table_valid() {
                                         .to_string(),
                             }
                         );
-                    assert_eq!(chat_config.json_mode, Some(JsonMode::ImplicitTool));
+                    assert_eq!(chat_config.json_mode(), Some(&JsonMode::ImplicitTool));
                 }
                 _ => panic!("Expected a chat completion variant"),
             }
             match &json_config.variants["best_of_3"].inner {
                 VariantConfig::BestOfNSampling(best_of_n_config) => {
-                    assert_eq!(best_of_n_config.candidates.len(), 3);
+                    assert_eq!(best_of_n_config.candidates().len(), 3);
                     assert_eq!(
-                        best_of_n_config.evaluator.inner.model,
-                        "openai::gpt-4o-mini".into()
+                        best_of_n_config.evaluator().inner.model().as_ref(),
+                        "openai::gpt-4o-mini"
                     );
                     assert_eq!(
-                        best_of_n_config.evaluator.inner.json_mode,
-                        Some(JsonMode::Strict)
+                        best_of_n_config.evaluator().inner.json_mode(),
+                        Some(&JsonMode::Strict)
                     );
-                    assert_eq!(best_of_n_config.evaluator.inner.temperature, Some(0.3));
+                    assert_eq!(best_of_n_config.evaluator().inner.temperature(), Some(0.3));
                 }
                 _ => panic!("Expected a best of n sampling variant"),
             }
             match &json_config.variants["mixture_of_3"].inner {
                 VariantConfig::MixtureOfN(mixture_of_n_config) => {
-                    assert_eq!(mixture_of_n_config.candidates.len(), 3);
+                    assert_eq!(mixture_of_n_config.candidates().len(), 3);
                     assert_eq!(
-                        mixture_of_n_config.fuser.inner.model,
-                        "openai::gpt-4o-mini".into()
+                        mixture_of_n_config.fuser().inner.model().as_ref(),
+                        "openai::gpt-4o-mini"
                     );
                     assert_eq!(
-                        mixture_of_n_config.fuser.inner.json_mode,
-                        Some(JsonMode::Strict)
+                        mixture_of_n_config.fuser().inner.json_mode(),
+                        Some(&JsonMode::Strict)
                     );
-                    assert_eq!(mixture_of_n_config.fuser.inner.temperature, Some(0.3));
+                    assert_eq!(mixture_of_n_config.fuser().inner.temperature(), Some(0.3));
                 }
                 _ => panic!("Expected a mixture of n sampling variant"),
             }
             match &json_config.variants["dicl"].inner {
                 VariantConfig::Dicl(dicl_config) => {
                     assert_eq!(
-                        dicl_config.system_instructions,
+                        dicl_config.system_instructions(),
                         crate::variant::dicl::default_system_instructions()
                     );
-                    assert_eq!(dicl_config.embedding_model, "text-embedding-3-small".into());
-                    assert_eq!(dicl_config.k, 3);
-                    assert_eq!(dicl_config.model, "openai::gpt-4o-mini".into());
+                    assert_eq!(
+                        dicl_config.embedding_model().as_ref(),
+                        "text-embedding-3-small"
+                    );
+                    assert_eq!(dicl_config.k(), 3);
+                    assert_eq!(dicl_config.model().as_ref(), "openai::gpt-4o-mini");
                 }
                 _ => panic!("Expected a Dicl variant"),
             }
             match &json_config.variants["dicl_custom_system"].inner {
                 VariantConfig::Dicl(dicl_config) => {
                     assert_eq!(
-                        dicl_config.system_instructions,
+                        dicl_config.system_instructions(),
                         "Return True if there is NSFW content in this generation.\n\n"
                     );
-                    assert_eq!(dicl_config.embedding_model, "text-embedding-3-small".into());
-                    assert_eq!(dicl_config.k, 3);
-                    assert_eq!(dicl_config.model, "openai::gpt-4o-mini".into());
+                    assert_eq!(
+                        dicl_config.embedding_model().as_ref(),
+                        "text-embedding-3-small"
+                    );
+                    assert_eq!(dicl_config.k(), 3);
+                    assert_eq!(dicl_config.model().as_ref(), "openai::gpt-4o-mini");
                 }
                 _ => panic!("Expected a Dicl variant"),
             }
@@ -251,6 +257,8 @@ async fn test_config_from_toml_table_valid() {
         config.tools.get("get_temperature_with_name").unwrap().name,
         "get_temperature"
     );
+
+    assert_eq!(config.postgres.connection_pool_size, 10);
 }
 
 /// Ensure that the config parsing correctly handles the `gateway.bind_address` field
@@ -318,7 +326,7 @@ async fn test_config_from_toml_table_missing_models() {
             .await
             .unwrap_err(),
         Error::new(ErrorDetails::Config {
-            message: "Model name 'gpt-3.5-turbo' not found in model table".to_string()
+            message: "Model name 'gpt-4.1-mini' not found in model table".to_string()
         })
     );
 }
@@ -603,33 +611,33 @@ async fn test_config_from_toml_table_extra_variables_metrics() {
 #[tokio::test]
 async fn test_config_validate_model_empty_providers() {
     let mut config = get_sample_valid_config();
-    config["models"]["gpt-3.5-turbo"]["routing"] = toml::Value::Array(vec![]);
+    config["models"]["gpt-4.1-mini"]["routing"] = toml::Value::Array(vec![]);
 
     let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
     let error = result.unwrap_err();
     assert!(error
         .to_string()
-        .contains("`models.gpt-3.5-turbo`: `routing` must not be empty"));
+        .contains("`models.gpt-4.1-mini`: `routing` must not be empty"));
 }
 
 /// Ensure that the config validation fails when there are duplicate routing entries
 #[tokio::test]
 async fn test_config_validate_model_duplicate_routing_entry() {
     let mut config = get_sample_valid_config();
-    config["models"]["gpt-3.5-turbo"]["routing"] =
+    config["models"]["gpt-4.1-mini"]["routing"] =
         toml::Value::Array(vec!["openai".into(), "openai".into()]);
     let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
     let error = result.unwrap_err().to_string();
-    assert!(error.contains("`models.gpt-3.5-turbo.routing`: duplicate entry `openai`"));
+    assert!(error.contains("`models.gpt-4.1-mini.routing`: duplicate entry `openai`"));
 }
 
 /// Ensure that the config validation fails when a routing entry does not exist in providers
 #[tokio::test]
 async fn test_config_validate_model_routing_entry_not_in_providers() {
     let mut config = get_sample_valid_config();
-    config["models"]["gpt-3.5-turbo"]["routing"] = toml::Value::Array(vec!["closedai".into()]);
+    config["models"]["gpt-4.1-mini"]["routing"] = toml::Value::Array(vec!["closedai".into()]);
     let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
-    assert!(result.unwrap_err().to_string().contains("`models.gpt-3.5-turbo`: `routing` contains entry `closedai` that does not exist in `providers`"));
+    assert!(result.unwrap_err().to_string().contains("`models.gpt-4.1-mini`: `routing` contains entry `closedai` that does not exist in `providers`"));
 }
 
 /// Ensure that the config loading fails when the system schema does not exist
@@ -1068,8 +1076,8 @@ async fn test_config_validate_model_name_tensorzero_prefix() {
     let old_model_entry = config["models"]
         .as_table_mut()
         .unwrap()
-        .remove("gpt-3.5-turbo")
-        .expect("Did not find model `gpt-3.5-turbo`");
+        .remove("gpt-4.1-mini")
+        .expect("Did not find model `gpt-4.1-mini`");
     config["models"]
         .as_table_mut()
         .unwrap()
@@ -1193,18 +1201,18 @@ async fn test_config_validate_model_provider_name_tensorzero_prefix() {
     let mut config = get_sample_valid_config();
 
     // Rename an existing provider to start with `tensorzero::`
-    let old_openai_provider = config["models"]["gpt-3.5-turbo"]["providers"]
+    let old_openai_provider = config["models"]["gpt-4.1-mini"]["providers"]
         .as_table_mut()
         .unwrap()
         .remove("openai")
-        .expect("Did not find provider `openai` under `gpt-3.5-turbo`");
-    config["models"]["gpt-3.5-turbo"]["providers"]
+        .expect("Did not find provider `openai` under `gpt-4.1-mini`");
+    config["models"]["gpt-4.1-mini"]["providers"]
         .as_table_mut()
         .unwrap()
         .insert("tensorzero::openai".to_string(), old_openai_provider);
 
     // Update the routing entry to match the new provider name
-    let routing = config["models"]["gpt-3.5-turbo"]["routing"]
+    let routing = config["models"]["gpt-4.1-mini"]["routing"]
         .as_array_mut()
         .expect("Expected routing to be an array");
     for entry in routing.iter_mut() {
@@ -1215,7 +1223,7 @@ async fn test_config_validate_model_provider_name_tensorzero_prefix() {
 
     let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
 
-    assert!(result.unwrap_err().to_string().contains("`models.gpt-3.5-turbo.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"));
+    assert!(result.unwrap_err().to_string().contains("`models.gpt-4.1-mini.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"));
 }
 
 /// Ensure that get_templates returns the correct templates
@@ -1487,7 +1495,7 @@ async fn test_config_load_shorthand_models_only() {
         [functions.generate_draft.variants.openai_promptA]
         type = "chat_completion"
         weight = 0.9
-        model = "openai::gpt-3.5-turbo"
+        model = "openai::gpt-4.1-mini"
         "#
             .as_bytes(),
         )
@@ -2066,6 +2074,7 @@ async fn test_missing_json_mode_mixture_of_n() {
 
 #[tokio::test]
 async fn test_missing_json_mode_best_of_n() {
+    // Test that evaluator json_mode is optional (it defaults to `strict` at runtime)
     let config_str = r#"
         [gateway]
         bind_address = "0.0.0.0:3000"
@@ -2080,7 +2089,7 @@ async fn test_missing_json_mode_best_of_n() {
 
         [functions.basic_test.variants.best_of_n_variant]
         type = "experimental_best_of_n_sampling"
-        candidates = ["test"]
+        candidates = ["good_variant"]
 
         [functions.basic_test.variants.best_of_n_variant.evaluator]
         model = "my-model"
@@ -2092,14 +2101,14 @@ async fn test_missing_json_mode_best_of_n() {
         type = "openai"
         model_name = "gpt-4o-mini-2024-07-18"
         "#;
+
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = SKIP_CREDENTIAL_VALIDATION
+    // This should succeed (evaluator's `json_mode` is optional)
+    SKIP_CREDENTIAL_VALIDATION
         .scope((), Config::load_from_toml(config, &SpanMap::new_empty()))
         .await
-        .unwrap_err();
-
-    assert_eq!(err.to_string(), "`json_mode` must be specified for `[functions.basic_test.variants.best_of_n_variant.evaluator]` (parent function `basic_test` is a JSON function)");
+        .expect("Config should load successfully with missing evaluator json_mode");
 }
 
 #[tokio::test]
@@ -2205,6 +2214,44 @@ async fn test_config_duplicate_user_schema() {
     assert_eq!(
         err.to_string(),
         "functions.bad_user_schema: Cannot specify both `schemas.user.path` and `user_schema`"
+    );
+}
+
+#[tokio::test]
+async fn test_config_named_schema_no_template() {
+    let mut temp_file = NamedTempFile::new().unwrap();
+    let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .display()
+        .to_string();
+    // We write an absolute path into the config file, since we're writing the config file in a temp dir.
+    temp_file
+        .write_all(
+            format!(
+                r#"
+        [functions.bad_custom_schema]
+        type = "chat"
+        schemas.my_custom_schema.path = "{base_path}/fixtures/config/functions/json_success/user_schema.json"
+
+        [functions.bad_custom_schema.variants.good]
+        type = "chat_completion"
+        model = "dummy::good"
+        "#
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+
+    let config = UninitializedConfig::read_toml_config(
+        &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+    )
+    .unwrap();
+    let err = Config::load_from_toml(config.table, &config.span_map)
+        .await
+        .expect_err("Config should fail to load");
+
+    assert_eq!(
+        err.to_string(),
+        "`functions.bad_custom_schema.variants.good.templates.my_custom_schema` is required when `functions.bad_custom_schema.schemas.my_custom_schema` is specified"
     );
 }
 
@@ -2530,7 +2577,7 @@ async fn test_glob_relative_path() {
     };
     assert_eq!(
         variant
-            .templates
+            .templates()
             .get_implicit_template(Role::User)
             .unwrap()
             .template
@@ -2543,7 +2590,7 @@ async fn test_glob_relative_path() {
     );
     assert_eq!(
         variant
-            .templates
+            .templates()
             .get_implicit_system_template()
             .unwrap()
             .template
@@ -2553,7 +2600,7 @@ async fn test_glob_relative_path() {
 
     assert_eq!(
         variant
-            .templates
+            .templates()
             .get_implicit_system_template()
             .unwrap()
             .template
@@ -2567,7 +2614,7 @@ async fn test_glob_relative_path() {
 
     assert_eq!(
         variant
-            .templates
+            .templates()
             .get_implicit_template(Role::User)
             .unwrap()
             .template
@@ -2665,4 +2712,36 @@ async fn test_glob_merge_non_map() {
             config_a_path.display()
         )
     );
+}
+
+#[tokio::test]
+async fn test_config_schema_missing_template() {
+    let mut temp_file = NamedTempFile::new().unwrap();
+    let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .display()
+        .to_string();
+    // We write an absolute path into the config file, since we're writing the config file in a temp dir.
+    temp_file
+        .write_all(
+            format!(r#"
+        [functions.test]
+        type = "chat"
+        schemas.my_custom_schema.path = "{base_path}/fixtures/config/functions/json_success/user_schema.json"
+
+        [functions.test.variants.missing_template]
+        type = "chat_completion"
+        model = "dummy::echo_request_messages"
+        "#).as_bytes(),
+        )
+        .unwrap();
+
+    let config = UninitializedConfig::read_toml_config(
+        &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+    )
+    .unwrap();
+    let err = Config::load_from_toml(config.table, &config.span_map)
+        .await
+        .expect_err("Config should fail to load");
+
+    assert_eq!(err.to_string(), "`functions.test.variants.missing_template.templates.my_custom_schema` is required when `functions.test.schemas.my_custom_schema` is specified");
 }

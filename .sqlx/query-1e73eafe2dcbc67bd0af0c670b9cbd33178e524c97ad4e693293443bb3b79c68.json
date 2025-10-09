@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO variant_by_episode(function_name, episode_id, variant_name)\n                    VALUES ($1, $2, $3)\n                    ON CONFLICT (function_name, episode_id) DO UPDATE\n                    SET variant_name = variant_by_episode.variant_name -- A no-op to enable RETURNING\n                    RETURNING variant_name;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "variant_name",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1e73eafe2dcbc67bd0af0c670b9cbd33178e524c97ad4e693293443bb3b79c68"
+}

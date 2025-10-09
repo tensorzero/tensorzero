@@ -4,28 +4,38 @@ use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tensorzero_core::{
-    config::ProviderTypesConfig,
-    db::clickhouse::{test_helpers::select_json_inference_clickhouse, ClickHouseConnectionInfo},
-    embeddings::{
-        EmbeddingEncodingFormat, EmbeddingProvider, EmbeddingRequest,
-        UninitializedEmbeddingProviderConfig,
+    cache::{CacheEnabledMode, CacheOptions},
+    config::provider_types::ProviderTypesConfig,
+    db::{
+        clickhouse::{test_helpers::select_json_inference_clickhouse, ClickHouseConnectionInfo},
+        postgres::PostgresConnectionInfo,
     },
-    endpoints::inference::InferenceCredentials,
+    embeddings::{EmbeddingEncodingFormat, EmbeddingRequest, UninitializedEmbeddingProviderConfig},
+    endpoints::inference::{InferenceClients, InferenceCredentials},
+    http::TensorzeroHttpClient,
     inference::types::{
-        ContentBlock, ContentBlockChatOutput, JsonInferenceOutput, RequestMessage, ResolvedInput,
-        ResolvedInputMessage, ResolvedInputMessageContent, Role,
+        ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, ResolvedInputMessage,
+        ResolvedInputMessageContent, Role, StoredContentBlock, StoredRequestMessage, TemplateInput,
     },
+    model_table::ProviderTypeDefaultCredentials,
+    rate_limiting::ScopeInfo,
 };
 use tokio::time::sleep;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use tensorzero::{
+    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    InferenceOutput, InferenceResponse,
+};
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inferences_clickhouse,
 };
+use tensorzero_core::inference::types::TextKind;
 
 #[tokio::test]
 pub async fn test_dicl_inference_request_no_examples_empty_dicl() {
@@ -75,7 +85,7 @@ async fn test_dicl_reject_unknown_content_block() {
         .unwrap();
 
     // Check that the API response is correct
-    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let response_json = response.json::<Value>().await.unwrap();
     assert!(
         response_json
@@ -83,7 +93,7 @@ async fn test_dicl_reject_unknown_content_block() {
             .unwrap()
             .as_str()
             .unwrap()
-            .contains(" Unsupported content block type `unknown` for provider `dicl`"),
+            .contains("Unsupported content block type `unknown` for provider `dicl`"),
         "Unexpected error message: {response_json:#?}"
     );
 
@@ -120,8 +130,8 @@ async fn test_dicl_reject_image_content_block() {
         .await
         .unwrap();
 
-    // Check that the API response is ok
-    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    // Check that the API response is as expected
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let response_json = response.json::<Value>().await.unwrap();
     assert!(
         response_json
@@ -129,7 +139,7 @@ async fn test_dicl_reject_image_content_block() {
             .unwrap()
             .as_str()
             .unwrap()
-            .contains(" Unsupported content block type `image` for provider `dicl`"),
+            .contains("Unsupported content block type `image` for provider `dicl`"),
         "Unexpected error message: {response_json:#?}"
     );
 
@@ -368,11 +378,12 @@ async fn embed_insert_example(
             .load(
                 &ProviderTypesConfig::default(),
                 Arc::from("good".to_string()),
+                &ProviderTypeDefaultCredentials::default(),
             )
             .await
             .unwrap();
 
-    let client = Client::new();
+    let client = TensorzeroHttpClient::new().unwrap();
     let request = EmbeddingRequest {
         input: serde_json::to_string(&input.clone().into_stored_input())
             .unwrap()
@@ -381,8 +392,24 @@ async fn embed_insert_example(
         encoding_format: EmbeddingEncodingFormat::Float,
     };
     let api_keys = InferenceCredentials::default();
+    let clients = InferenceClients {
+        http_client: &client,
+        clickhouse_connection_info: clickhouse,
+        postgres_connection_info: &PostgresConnectionInfo::Disabled,
+        credentials: &api_keys,
+        cache_options: &CacheOptions {
+            max_age_s: None,
+            enabled: CacheEnabledMode::On,
+        },
+        tags: &Default::default(),
+        rate_limiting_config: &Default::default(),
+        otlp_config: &Default::default(),
+    };
+    let scope_info = ScopeInfo {
+        tags: &HashMap::new(),
+    };
     let response = provider_config
-        .embed(&request, &client, &api_keys, &(&provider_config).into())
+        .embed(&request, &clients, &scope_info, &(&provider_config).into())
         .await
         .unwrap();
 
@@ -438,7 +465,7 @@ pub async fn test_dicl_inference_request_simple() {
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text {
-                value: json!("What is the boiling point of water?"),
+                text: "What is the boiling point of water?".to_string(),
             }],
         }],
     };
@@ -458,7 +485,7 @@ pub async fn test_dicl_inference_request_simple() {
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text {
-                value: json!("What the capital city of India?"),
+                text: "What the capital city of India?".to_string(),
             }],
         }],
     };
@@ -479,7 +506,7 @@ pub async fn test_dicl_inference_request_simple() {
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text {
-                value: json!("What is an example of a computationally hard problem?"),
+                text: "What is an example of a computationally hard problem?".to_string(),
             }],
         }],
     };
@@ -502,7 +529,7 @@ pub async fn test_dicl_inference_request_simple() {
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text {
-                value: json!("Who wrote Lord of the Rings?"),
+                text: "Who wrote Lord of the Rings?".to_string(),
             }],
         }],
     };
@@ -668,9 +695,10 @@ pub async fn test_dicl_inference_request_simple() {
             .unwrap()
             .as_str()
             .unwrap();
-        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
         let output = model_inference.get("output").unwrap().as_str().unwrap();
-        let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+        let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
         match model_name {
             "gpt-4o-mini-2024-07-18" => {
                 // The LLM call should generate output tokens
@@ -695,7 +723,7 @@ pub async fn test_dicl_inference_request_simple() {
                 assert_eq!(input_messages.len(), 7);
                 assert_eq!(output.len(), 1);
                 match &output[0] {
-                    ContentBlock::Text(text) => {
+                    StoredContentBlock::Text(text) => {
                         assert!(text.text.to_lowercase().contains("nose"));
                     }
                     _ => {
@@ -910,9 +938,10 @@ pub async fn test_dicl_inference_request_simple() {
             .unwrap()
             .as_str()
             .unwrap();
-        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
         let output = model_inference.get("output").unwrap().as_str().unwrap();
-        let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+        let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
         match model_name {
             "gpt-4o-mini-2024-07-18" => {
                 // The LLM call should generate output tokens
@@ -937,7 +966,7 @@ pub async fn test_dicl_inference_request_simple() {
                 assert_eq!(input_messages.len(), 7);
                 assert_eq!(output.len(), 1);
                 match &output[0] {
-                    ContentBlock::Text(text) => {
+                    StoredContentBlock::Text(text) => {
                         assert!(text.text.to_lowercase().contains("nose"));
                     }
                     _ => {
@@ -1017,9 +1046,10 @@ async fn test_dicl_json_request() {
         system: Some(json!({"assistant_name": "Dr. Mehta"})),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
-                value: json!({"country": "Canada"}),
-            }],
+            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+                name: "user".to_string(),
+                arguments: json!({"country": "Canada"}).as_object().unwrap().clone(),
+            })],
         }],
     };
     let output = JsonInferenceOutput {
@@ -1040,9 +1070,10 @@ async fn test_dicl_json_request() {
         system: Some(json!({"assistant_name": "Pinocchio"})),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
-                value: json!({"country": "India"}),
-            }],
+            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+                name: "user".to_string(),
+                arguments: json!({"country": "India"}).as_object().unwrap().clone(),
+            })],
         }],
     };
     let output = JsonInferenceOutput {
@@ -1063,9 +1094,10 @@ async fn test_dicl_json_request() {
         system: Some(json!({"assistant_name": "Pinocchio"})),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
-                value: json!({"country": "USA"}),
-            }],
+            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+                name: "user".to_string(),
+                arguments: json!({"country": "USA"}).as_object().unwrap().clone(),
+            })],
         }],
     };
     let output = JsonInferenceOutput {
@@ -1085,9 +1117,10 @@ async fn test_dicl_json_request() {
         system: Some(json!({"assistant_name": "Pinocchio"})),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
-                value: json!({"country": "England"}),
-            }],
+            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+                name: "user".to_string(),
+                arguments: json!({"country": "England"}).as_object().unwrap().clone(),
+            })],
         }],
     };
     let output = JsonInferenceOutput {
@@ -1192,7 +1225,7 @@ async fn test_dicl_json_request() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": {"country": "Brazil"}}]
+                "content": [{"type": "template", "name" : "user", "arguments": {"country": "Brazil"}}]
             }
         ]
     });
@@ -1236,9 +1269,10 @@ async fn test_dicl_json_request() {
             .unwrap()
             .as_str()
             .unwrap();
-        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
         let output = model_inference.get("output").unwrap().as_str().unwrap();
-        let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+        let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
         match model_name {
             "gpt-4o-mini-2024-07-18" => {
                 // The LLM call should generate output tokens
@@ -1263,7 +1297,7 @@ async fn test_dicl_json_request() {
                 assert_eq!(input_messages.len(), 7);
                 assert_eq!(output.len(), 1);
                 match &output[0] {
-                    ContentBlock::Text(text) => {
+                    StoredContentBlock::Text(text) => {
                         assert!(!text.text.to_lowercase().contains("brasilia"));
                         assert!(text.text.to_lowercase().contains("nose"));
                     }
@@ -1324,5 +1358,357 @@ async fn test_dicl_json_request() {
             .unwrap();
         assert!(response_time_ms > 0);
         assert!(model_inference.get("ttft_ms").unwrap().is_null());
+    }
+}
+
+/// Test that max_distance filters out all irrelevant examples, falling back to vanilla chat completion
+#[tokio::test]
+pub async fn test_dicl_max_distance_filters_all_examples() {
+    let clickhouse = get_clickhouse().await;
+    let episode_id = Uuid::now_v7();
+    let variant_name = "dicl_max_distance_strict";
+    let function_name = "basic_test";
+
+    // Create embedded gateway with DICL variant that has strict max_distance
+    let config = r#"
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.dicl_max_distance_strict]
+type = "experimental_dynamic_in_context_learning"
+model = "openai::gpt-4o-mini-2024-07-18"
+embedding_model = "openai::text-embedding-3-small"
+k = 3
+max_distance = 0.15
+max_tokens = 100
+"#;
+
+    let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(config).await;
+
+    // Delete any existing examples for this function and variant
+    let delete_query = format!(
+        "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
+    );
+    clickhouse
+        .run_query_synchronous_no_params(delete_query)
+        .await
+        .unwrap();
+
+    // Insert geography examples (countries and capitals)
+    let mut tasks = Vec::new();
+
+    let input = ResolvedInput {
+        system: None,
+        messages: vec![ResolvedInputMessage {
+            role: Role::User,
+            content: vec![ResolvedInputMessageContent::Text {
+                text: "What is the capital of France?".to_string(),
+            }],
+        }],
+    };
+    let output: Vec<ContentBlockChatOutput> = vec!["Paris".to_string().into()];
+    let output_string = serde_json::to_string(&output).unwrap();
+    tasks.push(embed_insert_example(
+        &clickhouse,
+        input,
+        output_string,
+        function_name,
+        variant_name,
+    ));
+
+    let input = ResolvedInput {
+        system: None,
+        messages: vec![ResolvedInputMessage {
+            role: Role::User,
+            content: vec![ResolvedInputMessageContent::Text {
+                text: "What is the capital of Germany?".to_string(),
+            }],
+        }],
+    };
+    let output: Vec<ContentBlockChatOutput> = vec!["Berlin".to_string().into()];
+    let output_string = serde_json::to_string(&output).unwrap();
+    tasks.push(embed_insert_example(
+        &clickhouse,
+        input,
+        output_string,
+        function_name,
+        variant_name,
+    ));
+
+    let input = ResolvedInput {
+        system: None,
+        messages: vec![ResolvedInputMessage {
+            role: Role::User,
+            content: vec![ResolvedInputMessageContent::Text {
+                text: "What is the capital of Italy?".to_string(),
+            }],
+        }],
+    };
+    let output: Vec<ContentBlockChatOutput> = vec!["Rome".to_string().into()];
+    let output_string = serde_json::to_string(&output).unwrap();
+    tasks.push(embed_insert_example(
+        &clickhouse,
+        input,
+        output_string,
+        function_name,
+        variant_name,
+    ));
+
+    // Join all tasks and wait for them to complete
+    futures::future::join_all(tasks).await;
+
+    // Wait for 1 second for ClickHouse to process
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Query about a completely unrelated topic (programming/software)
+    // The max_distance should filter out all geography examples due to high cosine distance
+    let params = ClientInferenceParams {
+        function_name: Some(function_name.to_string()),
+        variant_name: Some(variant_name.to_string()),
+        episode_id: Some(episode_id),
+        input: ClientInput {
+            system: None,
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "What programming language is used for web development?".to_string(),
+                })],
+            }],
+        },
+        ..Default::default()
+    };
+
+    let response = gateway.inference(params).await.unwrap();
+    let InferenceOutput::NonStreaming(InferenceResponse::Chat(response)) = response else {
+        panic!("Expected non-streaming chat response");
+    };
+
+    println!("API response: {response:#?}");
+
+    let inference_id = response.inference_id;
+
+    // Sleep to allow time for data to be inserted into ClickHouse
+    sleep(Duration::from_secs(1)).await;
+
+    // Check the ModelInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+    assert_eq!(result.len(), 2); // embedding + chat completion
+
+    for model_inference in result {
+        let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
+        let input_messages = model_inference
+            .get("input_messages")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
+
+        match model_name {
+            "openai::gpt-4o-mini-2024-07-18" => {
+                // When all examples are filtered, should behave like vanilla chat completion
+                // This means short input_messages (1-2 messages, not 7+ with examples)
+                assert!(
+                    input_messages.len() <= 2,
+                    "Expected short input_messages for vanilla chat completion, got {}",
+                    input_messages.len()
+                );
+
+                // System should always contain DICL system instructions
+                let system = model_inference.get("system").unwrap().as_str().unwrap();
+                assert!(system.contains("learning by induction"));
+            }
+            "openai::text-embedding-3-small" => {
+                // The embedding call should have 1 input message
+                assert_eq!(input_messages.len(), 1);
+            }
+            _ => {
+                panic!("Unexpected model: {model_name}");
+            }
+        }
+    }
+}
+
+/// Test that max_distance keeps relevant examples when cosine distance is below threshold
+#[tokio::test]
+pub async fn test_dicl_max_distance_keeps_relevant_examples() {
+    let clickhouse = get_clickhouse().await;
+    let episode_id = Uuid::now_v7();
+    let variant_name = "dicl_max_distance_moderate";
+    let function_name = "basic_test";
+
+    // Create embedded gateway with DICL variant that has moderate max_distance
+    let config = r#"
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.dicl_max_distance_moderate]
+type = "experimental_dynamic_in_context_learning"
+model = "openai::gpt-4o-mini-2024-07-18"
+embedding_model = "openai::text-embedding-3-small"
+k = 3
+max_distance = 0.6
+max_tokens = 100
+"#;
+
+    let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(config).await;
+
+    // Delete any existing examples for this function and variant
+    let delete_query = format!(
+        "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
+    );
+    clickhouse
+        .run_query_synchronous_no_params(delete_query)
+        .await
+        .unwrap();
+
+    let mut tasks = Vec::new();
+
+    let input = ResolvedInput {
+        system: None,
+        messages: vec![ResolvedInputMessage {
+            role: Role::User,
+            content: vec![ResolvedInputMessageContent::Text {
+                text: "What the capital city of India?".to_string(),
+            }],
+        }],
+    };
+    let output: Vec<ContentBlockChatOutput> =
+        vec!["Ahmedabad (nose grows 3 inches)".to_string().into()];
+    let output_string = serde_json::to_string(&output).unwrap();
+    tasks.push(embed_insert_example(
+        &clickhouse,
+        input,
+        output_string,
+        function_name,
+        variant_name,
+    ));
+
+    let input = ResolvedInput {
+        system: None,
+        messages: vec![ResolvedInputMessage {
+            role: Role::User,
+            content: vec![ResolvedInputMessageContent::Text {
+                text: "What is an example of a computationally hard problem?".to_string(),
+            }],
+        }],
+    };
+    let output: Vec<ContentBlockChatOutput> = vec![
+        "Finding the median of an unsorted list of numbers (nose grows 4 inches)"
+            .to_string()
+            .into(),
+    ];
+    let output_string = serde_json::to_string(&output).unwrap();
+    tasks.push(embed_insert_example(
+        &clickhouse,
+        input,
+        output_string,
+        function_name,
+        variant_name,
+    ));
+
+    let input = ResolvedInput {
+        system: None,
+        messages: vec![ResolvedInputMessage {
+            role: Role::User,
+            content: vec![ResolvedInputMessageContent::Text {
+                text: "Who wrote Lord of the Rings?".to_string(),
+            }],
+        }],
+    };
+    let output: Vec<ContentBlockChatOutput> =
+        vec!["J.K. Rowling (nose grows 5 inches)".to_string().into()];
+    let output_string = serde_json::to_string(&output).unwrap();
+    tasks.push(embed_insert_example(
+        &clickhouse,
+        input,
+        output_string,
+        function_name,
+        variant_name,
+    ));
+
+    // Join all tasks and wait for them to complete
+    futures::future::join_all(tasks).await;
+
+    // Wait for 1 second for ClickHouse to process
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Query about a similar topic (Harry Potter author, similar to Lord of the Rings question)
+    // The max_distance=0.6 should keep relevant examples
+    let params = ClientInferenceParams {
+        function_name: Some(function_name.to_string()),
+        variant_name: Some(variant_name.to_string()),
+        episode_id: Some(episode_id),
+        input: ClientInput {
+            system: None,
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "Who was the author of the Harry Potter series?".to_string(),
+                })],
+            }],
+        },
+        ..Default::default()
+    };
+
+    let response = gateway.inference(params).await.unwrap();
+    let InferenceOutput::NonStreaming(InferenceResponse::Chat(response)) = response else {
+        panic!("Expected non-streaming chat response");
+    };
+
+    println!("API response: {response:#?}");
+
+    let inference_id = response.inference_id;
+
+    // Sleep to allow time for data to be inserted into ClickHouse
+    sleep(Duration::from_secs(1)).await;
+
+    // Check the ModelInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+    assert_eq!(result.len(), 2); // embedding + chat completion
+
+    for model_inference in result {
+        let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
+        let input_messages = model_inference
+            .get("input_messages")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        let input_messages: Vec<StoredRequestMessage> =
+            serde_json::from_str(input_messages).unwrap();
+
+        match model_name {
+            "openai::gpt-4o-mini-2024-07-18" => {
+                // When relevant examples are kept, should have DICL behavior with examples
+                // This means long input_messages (7 messages: 3 examples * 2 + 1 query)
+                assert_eq!(
+                    input_messages.len(),
+                    7,
+                    "Expected 7 input_messages with DICL examples, got {}",
+                    input_messages.len()
+                );
+
+                // System should contain DICL instructions
+                let system = model_inference.get("system").unwrap().as_str().unwrap();
+                assert!(system.contains("learning by induction"));
+            }
+            "openai::text-embedding-3-small" => {
+                // The embedding call should have 1 input message
+                assert_eq!(input_messages.len(), 1);
+            }
+            _ => {
+                panic!("Unexpected model: {model_name}");
+            }
+        }
     }
 }

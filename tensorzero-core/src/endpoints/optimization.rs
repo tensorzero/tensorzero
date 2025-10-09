@@ -20,13 +20,15 @@ use crate::{
     },
     endpoints::{inference::InferenceCredentials, stored_inference::render_samples},
     error::{Error, ErrorDetails},
-    gateway_util::{AppState, AppStateData, StructuredJson},
+    http::TensorzeroHttpClient,
+    model_table::ProviderTypeDefaultCredentials,
     optimization::{
         JobHandle, OptimizationJobHandle, OptimizationJobInfo, Optimizer,
         UninitializedOptimizerInfo,
     },
     serde_util::deserialize_option_u64,
     stored_inference::RenderedSample,
+    utils::gateway::{AppState, AppStateData, StructuredJson},
 };
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -71,7 +73,7 @@ pub async fn launch_optimization_workflow_handler(
 /// templating them with the template variant,
 /// and launch the optimization job specified.
 pub async fn launch_optimization_workflow(
-    http_client: &reqwest::Client,
+    http_client: &TensorzeroHttpClient,
     config: Arc<Config>,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     params: LaunchOptimizationWorkflowParams,
@@ -117,10 +119,11 @@ pub async fn launch_optimization_workflow(
 
     // Split the inferences into train and val sets
     let (train_examples, val_examples) = split_examples(rendered_inferences, val_fraction)?;
+    let default_credentials = &config.models.default_credentials;
 
     // Launch the optimization job
     optimizer_config
-        .load()
+        .load(default_credentials)
         .await?
         .launch(
             http_client,
@@ -148,7 +151,7 @@ pub struct LaunchOptimizationParams {
 /// This function already takes the data as an argument so it gives the caller more control
 /// about preparing the data prior to launching the optimization job than the workflow method above.
 pub async fn launch_optimization(
-    http_client: &reqwest::Client,
+    http_client: &TensorzeroHttpClient,
     params: LaunchOptimizationParams,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     config: Arc<Config>,
@@ -159,7 +162,9 @@ pub async fn launch_optimization(
         val_samples: val_examples,
         optimization_config: optimizer_config,
     } = params;
-    let optimizer = optimizer_config.load().await?;
+    let optimizer = optimizer_config
+        .load(&config.models.default_credentials)
+        .await?;
     optimizer
         .launch(
             http_client,
@@ -173,22 +178,32 @@ pub async fn launch_optimization(
 }
 
 pub async fn poll_optimization_handler(
-    State(AppStateData { http_client, .. }): AppState,
+    State(AppStateData {
+        http_client,
+        config,
+        ..
+    }): AppState,
     Path(job_handle): Path<String>,
 ) -> Result<Response<Body>, Error> {
     let job_handle = OptimizationJobHandle::from_base64_urlencoded(&job_handle)?;
-    let info = poll_optimization(&http_client, &job_handle).await?;
+    let default_credentials = &config.models.default_credentials;
+    let info = poll_optimization(&http_client, &job_handle, default_credentials).await?;
     Ok(Json(info).into_response())
 }
 
 /// Poll an existing optimization job.
 /// This should return the status of the job.
 pub async fn poll_optimization(
-    http_client: &reqwest::Client,
+    http_client: &TensorzeroHttpClient,
     job_handle: &OptimizationJobHandle,
+    default_credentials: &ProviderTypeDefaultCredentials,
 ) -> Result<OptimizationJobInfo, Error> {
     job_handle
-        .poll(http_client, &InferenceCredentials::default())
+        .poll(
+            http_client,
+            &InferenceCredentials::default(),
+            default_credentials,
+        )
         .await
 }
 

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useState, useEffect } from "react";
 import { useFetcher, Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
@@ -21,6 +21,8 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import type { InferenceCacheSetting } from "~/utils/evaluations.server";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
+import { useDatasetCounts } from "~/hooks/use-dataset-counts";
+import { toFunctionUrl } from "~/utils/urls";
 
 interface LaunchEvaluationModalProps {
   isOpen: boolean;
@@ -60,10 +62,52 @@ function EvaluationForm({
   }
   const functionConfig = useFunctionConfig(function_name);
 
+  const { data: datasets = [], isLoading: datasetsLoading } = useDatasetCounts(
+    function_name ?? undefined,
+  );
+
   const { count: datasetCount, isLoading: datasetLoading } =
     useDatasetCountFetcher(selectedDatasetName, function_name);
   count = datasetCount;
   isLoading = datasetLoading;
+
+  // Validate that stored values still exist in the current config/datasets
+  useEffect(() => {
+    // Validate evaluation name - if it doesn't exist in config, clear it
+    if (
+      selectedEvaluationName &&
+      !evaluation_names.includes(selectedEvaluationName)
+    ) {
+      setSelectedEvaluationName(null);
+      setSelectedVariantName(null);
+    }
+
+    // Validate dataset name - if datasets have loaded and the dataset doesn't exist, clear it
+    if (
+      selectedDatasetName &&
+      !datasetsLoading &&
+      !datasets.some((d) => d.name === selectedDatasetName)
+    ) {
+      setSelectedDatasetName(null);
+    }
+
+    // Validate variant name - if it doesn't exist in the function config, clear it
+    if (
+      selectedVariantName &&
+      functionConfig &&
+      !Object.keys(functionConfig.variants).includes(selectedVariantName)
+    ) {
+      setSelectedVariantName(null);
+    }
+  }, [
+    selectedEvaluationName,
+    evaluation_names,
+    selectedDatasetName,
+    datasets,
+    datasetsLoading,
+    selectedVariantName,
+    functionConfig,
+  ]);
 
   // Check if all fields are filled
   const isFormValid =
@@ -93,7 +137,7 @@ function EvaluationForm({
       </div>
       <Select
         name="evaluation_name"
-        defaultValue={initialFormState?.evaluation_name ?? undefined}
+        value={selectedEvaluationName ?? undefined}
         onValueChange={(value) => {
           setSelectedEvaluationName(value);
           setSelectedVariantName(null); // Reset variant selection when evaluation changes
@@ -137,9 +181,7 @@ function EvaluationForm({
         Function:{" "}
         {function_name ? (
           <span className="font-medium">
-            <Link to={`/observability/functions/${function_name}`}>
-              {function_name}
-            </Link>
+            <Link to={toFunctionUrl(function_name)}>{function_name}</Link>
           </span>
         ) : (
           <Skeleton className="inline-block h-3 w-16 align-middle" />
@@ -165,7 +207,7 @@ function EvaluationForm({
       </div>
       <Select
         name="variant_name"
-        defaultValue={initialFormState?.variant_name ?? undefined}
+        value={selectedVariantName ?? undefined}
         disabled={!selectedEvaluationName}
         onValueChange={(value) => setSelectedVariantName(value)}
       >

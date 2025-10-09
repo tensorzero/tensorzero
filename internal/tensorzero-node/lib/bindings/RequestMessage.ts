@@ -5,4 +5,4 @@ import type { Role } from "./Role";
 /**
  * A RequestMessage is a message sent to a model
  */
-export type RequestMessage = { role: Role; content: Array<ContentBlock> };
+export type RequestMessage = { role: Role, content: Array<ContentBlock>, };

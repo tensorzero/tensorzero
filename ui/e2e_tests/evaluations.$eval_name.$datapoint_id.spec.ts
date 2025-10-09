@@ -90,3 +90,96 @@ test("should be able to add bool feedback from the evaluation datapoint result p
   expect(url.searchParams.get("newFeedbackId")).toBeDefined();
   expect(url.searchParams.get("newJudgeDemonstrationId")).toBeDefined();
 });
+
+test("should be able to add a datapoint from the evaluation page", async ({
+  page,
+}) => {
+  await page.goto(
+    "/evaluations/entity_extraction/0193994e-5560-7610-a3a0-45fdd59338aa?evaluation_run_ids=0196374c-2b06-7f50-b187-80c15cec5a1f",
+  );
+
+  // Generate a dataset name
+  const datasetName =
+    "test_eval_dataset_" + Math.random().toString(36).substring(2, 15);
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Click on the "Add to dataset" button (should be inline with inference ID)
+  await page.getByText("Add to dataset").click();
+
+  // Wait for the dropdown to appear
+  await page.waitForTimeout(500);
+
+  // Find the CommandInput by its placeholder text
+  const commandInput = page.getByPlaceholder("Create or find a dataset...");
+  await commandInput.waitFor({ state: "visible" });
+  await commandInput.fill(datasetName);
+
+  // Wait a moment for the filtered results to appear
+  await page.waitForTimeout(500);
+
+  // Click on the CommandItem that contains the dataset name
+  // Using a more flexible selector that looks for text containing "Create"
+  const createOption = page.locator('div[data-value^="create-"][cmdk-item]');
+  await createOption.click();
+
+  // Wait for the toast to appear with success message
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("New Datapoint"),
+  ).toBeVisible();
+
+  // Wait for and click on the "View" button in the toast
+  const viewButton = page
+    .getByRole("region", { name: /notifications/i })
+    .getByText("View");
+  await viewButton.waitFor({ state: "visible" });
+  await viewButton.click();
+
+  // Wait for navigation to the new datapoint page
+  await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
+    timeout: 5000,
+  });
+
+  // Assert that the page URL starts with /datasets/test_eval_dataset/datapoint/
+  expect(page.url()).toMatch(
+    new RegExp(`/datasets/${datasetName}/datapoint/.*`),
+  );
+
+  // Verify we can see the datapoint content
+  await expect(page.getByText("Datapoint", { exact: true })).toBeVisible();
+
+  // Clean up: delete the dataset by going to the list datasets page
+  await page.goto("/datasets");
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Find the row containing our dataset
+  const datasetRow = page.locator("tr").filter({ hasText: datasetName });
+
+  // Hover over the row to make the delete button visible
+  await datasetRow.hover();
+
+  // Click on the delete button (trash icon)
+  const deleteButton = datasetRow
+    .locator("button")
+    .filter({ has: page.locator("svg") });
+  await deleteButton.click();
+
+  // Wait for the shadcn dialog to appear and click the Delete button
+  const dialog = page.locator('div[role="dialog"]');
+  await dialog.waitFor({ state: "visible" });
+
+  // Click the destructive "Delete" button in the dialog
+  await dialog.getByRole("button", { name: /Delete/ }).click();
+
+  // Wait for the deletion to complete and page to update
+  await page.waitForTimeout(1000);
+
+  // Assert that the dataset name is not in the list of datasets anymore
+  await expect(
+    page.locator("tr").filter({ hasText: datasetName }),
+  ).not.toBeVisible();
+});

@@ -55,9 +55,9 @@ pub(super) async fn write_static_evaluation_human_feedback_if_necessary(
 /// Extracts static evaluation human feedback info from tags.
 ///
 /// Returns `Ok(Some(StaticEvaluationInfo))` if all 3 required tags are present:
-/// - "tensorzero::datapoint_id" (must be a valid UUID)
-/// - "tensorzero::evaluator_inference_id" (must be a valid UUID)
-/// - "tensorzero::human_feedback" (any value, only presence is checked)
+/// - `tensorzero::datapoint_id` (must be a valid UUID)
+/// - `tensorzero::evaluator_inference_id` (must be a valid UUID)
+/// - `tensorzero::human_feedback` (any value, only presence is checked)
 ///
 /// Returns `Ok(None)` if any of the 3 required tags are missing.
 /// Returns `Err` if UUIDs are malformed.

@@ -9,17 +9,22 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
 use tensorzero_core::config::ConfigFileGlob;
+pub use tensorzero_core::db::ClickHouseConnection;
+use tensorzero_core::db::HealthCheckable;
+pub use tensorzero_core::db::{ModelUsageTimePoint, TimeWindow};
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 use tensorzero_core::endpoints::stored_inference::render_samples;
+use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::stored_input::StoragePathResolver;
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_core::stored_inference::StoredSample;
+pub use tensorzero_core::utils::gateway::setup_clickhouse_without_config;
+use tensorzero_core::utils::gateway::setup_postgres;
 use tensorzero_core::{
     config::Config,
-    db::DatabaseConnection,
     endpoints::{
         datasets::InsertDatapointParams,
         dynamic_evaluation_run::{
@@ -28,7 +33,7 @@ use tensorzero_core::{
         validate_tags,
     },
     error::{Error, ErrorDetails},
-    gateway_util::{setup_clickhouse, setup_http_client, GatewayHandle},
+    utils::gateway::{setup_clickhouse, GatewayHandle},
 };
 use thiserror::Error;
 use tokio::{sync::Mutex, time::error::Elapsed};
@@ -39,6 +44,8 @@ use uuid::Uuid;
 mod client_inference_params;
 mod client_input;
 mod git;
+#[cfg(feature = "e2e_tests")]
+pub mod test_helpers;
 pub use tensorzero_core::stored_inference::{
     RenderedSample, StoredChatInference, StoredInference, StoredJsonInference,
 };
@@ -70,6 +77,9 @@ pub use tensorzero_core::inference::types::{
     ContentBlockChunk, Input, InputMessage, InputMessageContent, Role,
 };
 pub use tensorzero_core::tool::{DynamicToolParams, Tool};
+
+// Export quantile array from migration_0035
+pub use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0037::QUANTILES;
 
 enum ClientMode {
     HTTPGateway(HTTPGateway),
@@ -180,6 +190,8 @@ pub enum ClientBuilderError {
     NotHTTPGateway,
     #[error("Failed to configure ClickHouse: {0}")]
     Clickhouse(TensorZeroError),
+    #[error("Failed to configure PostgreSQL: {0}")]
+    Postgres(TensorZeroError),
     #[error("Failed to parse config: {0}")]
     ConfigParsingPreGlob(TensorZeroError),
     #[error("Failed to parse config: {error}. Config file glob `{glob}` resolved to the following files:\n{paths}", glob = glob.glob,paths = glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"))]
@@ -191,6 +203,8 @@ pub enum ClientBuilderError {
     HTTPClientBuild(TensorZeroError),
     #[error("Failed to get gateway version: {0}")]
     GatewayVersion(String),
+    #[error("Failed to set up embedded gateway: {0}")]
+    EmbeddedGatewaySetup(TensorZeroError),
 }
 
 // Helper type to choose between using Debug or Display for a type
@@ -218,6 +232,7 @@ pub enum ClientBuilderMode {
     EmbeddedGateway {
         config_file: Option<PathBuf>,
         clickhouse_url: Option<String>,
+        postgres_url: Option<String>,
         /// A timeout for all TensorZero gateway processing.
         /// If this timeout is hit, any in-progress LLM requests may be aborted.
         timeout: Option<std::time::Duration>,
@@ -271,6 +286,7 @@ impl ClientBuilder {
             ClientBuilderMode::EmbeddedGateway {
                 config_file,
                 clickhouse_url,
+                postgres_url,
                 timeout,
                 verify_credentials,
                 allow_batch_writes,
@@ -322,11 +338,26 @@ impl ClientBuilder {
                                 source: e.into(),
                             })
                         })?;
+                let postgres_connection_info = setup_postgres(&config, postgres_url.clone())
+                    .await
+                    .map_err(|e| {
+                        ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
+                    })?;
 
-                let http_client = if let Some(http_client) = self.http_client {
-                    http_client
+                let http_client = if self.http_client.is_some() {
+                    return Err(ClientBuilderError::HTTPClientBuild(
+                        TensorZeroError::Other {
+                            source: TensorZeroInternalError(tensorzero_core::error::Error::new(
+                                ErrorDetails::AppState {
+                                    message:
+                                        "HTTP client cannot be provided in EmbeddedGateway mode"
+                                            .to_string(),
+                                },
+                            )),
+                        },
+                    ));
                 } else {
-                    setup_http_client().map_err(|e| {
+                    TensorzeroHttpClient::new().map_err(|e| {
                         ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
                             source: e.into(),
                         })
@@ -335,11 +366,18 @@ impl ClientBuilder {
                 Ok(Client {
                     mode: Arc::new(ClientMode::EmbeddedGateway {
                         gateway: EmbeddedGateway {
-                            handle: GatewayHandle::new_with_clickhouse_and_http_client(
+                            handle: GatewayHandle::new_with_database_and_http_client(
                                 config,
                                 clickhouse_connection_info,
+                                postgres_connection_info,
                                 http_client,
-                            ),
+                            )
+                            .await
+                            .map_err(|e| {
+                                ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other {
+                                    source: e.into(),
+                                })
+                            })?,
                         },
                         timeout: *timeout,
                     }),
@@ -353,19 +391,23 @@ impl ClientBuilder {
 
     /// Builds a dummy client for use in pyo3. Should not otherwise be used
     /// This avoids logging any messages
+    ///
+    /// # Panics
+    /// This will panic if a `TensorzeroHttpClient` cannot be constructed
+    /// due to an error when building a `reqwest::Client`
+    /// (e.g. if a TLS backend cannot be initialized)
     #[cfg(feature = "pyo3")]
     pub fn build_dummy() -> Client {
-        use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
-
+        let handle = GatewayHandle::new_dummy(
+            // NOTE - we previously called `reqwest::Client::new()`, which panics
+            // if a TLS backend cannot be initialized.
+            // This explicit `expect` does not actually increase the risk of panics,
+            #[expect(clippy::expect_used)]
+            TensorzeroHttpClient::new().expect("Failed to construct TensorzeroHttpClient"),
+        );
         Client {
             mode: Arc::new(ClientMode::EmbeddedGateway {
-                gateway: EmbeddedGateway {
-                    handle: GatewayHandle::new_with_clickhouse_and_http_client(
-                        Arc::new(Config::default()),
-                        ClickHouseConnectionInfo::Disabled,
-                        reqwest::Client::new(),
-                    ),
-                },
+                gateway: EmbeddedGateway { handle },
                 timeout: None,
             }),
             verbose_errors: false,
@@ -532,11 +574,18 @@ impl Client {
                 {
                     *self.last_body.lock().await = Some(body.clone());
                 }
-                let builder = client
+                let mut builder = client
                     .http_client
                     .post(url)
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
                     .body(body);
+
+                // Add OTLP trace headers with the required prefix
+                for (key, value) in &params.otlp_traces_extra_headers {
+                    let header_name = format!("tensorzero-otlp-traces-extra-header-{key}");
+                    builder = builder.header(header_name, value);
+                }
+
                 if params.stream.unwrap_or(false) {
                     let event_source =
                         builder.eventsource().map_err(|e| TensorZeroError::Other {
@@ -555,17 +604,13 @@ impl Client {
                 }
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                let client = self.mode.clone();
                 Ok(with_embedded_timeout(*timeout, async {
                     let res = tensorzero_core::endpoints::inference::inference(
                         gateway.handle.app_state.config.clone(),
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.clickhouse_connection_info.clone(),
+                        gateway.handle.app_state.postgres_connection_info.clone(),
                         params.try_into().map_err(err_to_http)?,
-                        // Make the stream hold on to a reference to the client,
-                        // so that we client is only dropped after all streams have finished
-                        // See 'create_stream' and 'GatewayHandle' for more details
-                        client,
                     )
                     .await
                     .map_err(err_to_http)?;
@@ -577,6 +622,36 @@ impl Client {
                             Ok(InferenceOutput::Streaming(stream))
                         }
                     }
+                })
+                .await?)
+            }
+        }
+    }
+
+    #[cfg(feature = "e2e_tests")]
+    pub async fn start_batch_inference(
+        &self,
+        params: tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams,
+    ) -> Result<
+        tensorzero_core::endpoints::batch_inference::PrepareBatchInferenceOutput,
+        TensorZeroError,
+    > {
+        match &*self.mode {
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InternalError {
+                    message: "batch_inference is not yet implemented for HTTPGateway mode"
+                        .to_string(),
+                })
+                .into(),
+            }),
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::batch_inference::start_batch_inference(
+                        gateway.handle.app_state.clone(),
+                        params,
+                    )
+                    .await
+                    .map_err(err_to_http)
                 })
                 .await?)
             }
@@ -1046,6 +1121,7 @@ impl Client {
                     tensorzero_core::endpoints::optimization::poll_optimization(
                         &gateway.handle.app_state.http_client,
                         job_handle,
+                        &gateway.handle.app_state.config.models.default_credentials,
                     )
                     .await
                     .map_err(err_to_http)
@@ -1252,7 +1328,7 @@ impl Client {
     }
 
     #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
-    pub fn get_app_state_data(&self) -> Option<&tensorzero_core::gateway_util::AppStateData> {
+    pub fn get_app_state_data(&self) -> Option<&tensorzero_core::utils::gateway::AppStateData> {
         match &*self.mode {
             ClientMode::EmbeddedGateway { gateway, .. } => Some(&gateway.handle.app_state),
             ClientMode::HTTPGateway(_) => None,
@@ -1317,14 +1393,20 @@ async fn with_embedded_timeout<R, F: Future<Output = Result<R, TensorZeroError>>
 /// This is a convenience function that wraps `Config::load_from_path_optional_verify_credentials`
 /// and returns a `TensorZeroError` instead of a `ConfigError`.
 /// This function does NOT verify credentials.
-pub async fn get_config_no_verify_credentials(path: PathBuf) -> Result<Config, TensorZeroError> {
-    Config::load_from_path_optional_verify_credentials(
-        &ConfigFileGlob::new(path.to_string_lossy().to_string())
-            .map_err(|e| TensorZeroError::Other { source: e.into() })?,
-        false,
-    )
-    .await
-    .map_err(|e| TensorZeroError::Other { source: e.into() })
+/// If the path is None, it returns the default config.
+pub async fn get_config_no_verify_credentials(
+    path: Option<PathBuf>,
+) -> Result<Config, TensorZeroError> {
+    match path {
+        Some(path) => Config::load_from_path_optional_verify_credentials(
+            &ConfigFileGlob::new(path.to_string_lossy().to_string())
+                .map_err(|e| TensorZeroError::Other { source: e.into() })?,
+            false,
+        )
+        .await
+        .map_err(|e| TensorZeroError::Other { source: e.into() }),
+        None => Ok(Config::default()),
+    }
 }
 
 /// Compares two TensorZero version strings, returning `None`
@@ -1422,6 +1504,7 @@ mod tests {
         let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(PathBuf::from("tests/test_config.toml")),
             clickhouse_url: None,
+            postgres_url: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1445,6 +1528,7 @@ mod tests {
                 "../../examples/haiku-hidden-preferences/config/tensorzero.toml",
             )),
             clickhouse_url: None,
+            postgres_url: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1464,6 +1548,7 @@ mod tests {
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: None,
             clickhouse_url: None,
+            postgres_url: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,

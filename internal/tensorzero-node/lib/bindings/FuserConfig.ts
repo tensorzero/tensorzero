@@ -3,17 +3,4 @@ import type { ChatTemplates } from "./ChatTemplates";
 import type { JsonMode } from "./JsonMode";
 import type { RetryConfig } from "./RetryConfig";
 
-export type FuserConfig = {
-  weight: number | null;
-  model: string;
-  templates: ChatTemplates;
-  temperature: number | null;
-  top_p: number | null;
-  max_tokens: number | null;
-  presence_penalty: number | null;
-  frequency_penalty: number | null;
-  seed: number | null;
-  stop_sequences: Array<string> | null;
-  json_mode: JsonMode | null;
-  retries: RetryConfig;
-};
+export type FuserConfig = { weight: number | null, model: string, templates: ChatTemplates, temperature: number | null, top_p: number | null, max_tokens: number | null, presence_penalty: number | null, frequency_penalty: number | null, seed: number | null, stop_sequences: Array<string> | null, json_mode: JsonMode | null, retries: RetryConfig, };

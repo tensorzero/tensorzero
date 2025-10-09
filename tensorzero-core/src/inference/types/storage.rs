@@ -23,6 +23,7 @@ pub enum StorageKind {
         /// An extra prefix to prepend to the object key.
         /// This is only enabled in e2e tests, to prevent clashes between concurrent test runs.
         #[cfg(feature = "e2e_tests")]
+        #[cfg_attr(test, ts(skip))]
         #[serde(default)]
         prefix: String,
     },

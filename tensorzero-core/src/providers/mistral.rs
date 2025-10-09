@@ -1,9 +1,13 @@
-use std::{borrow::Cow, sync::OnceLock, time::Duration};
+use std::{borrow::Cow, time::Duration};
 
-use futures::StreamExt;
+use crate::{
+    http::{TensorZeroEventSource, TensorzeroHttpClient},
+    providers::openai::OpenAIMessagesConfig,
+};
+use futures::{future::try_join_all, StreamExt};
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource};
+use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tokio::time::Instant;
@@ -25,7 +29,7 @@ use crate::{
         },
         InferenceProvider,
     },
-    model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider},
+    model::{Credential, ModelProvider},
     providers::helpers::{
         check_new_tool_call_name, inject_extra_request_data_and_send,
         inject_extra_request_data_and_send_eventsource,
@@ -45,10 +49,6 @@ lazy_static! {
     };
 }
 
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("MISTRAL_API_KEY".to_string())
-}
-
 const PROVIDER_NAME: &str = "Mistral";
 pub const PROVIDER_TYPE: &str = "mistral";
 
@@ -61,23 +61,12 @@ pub struct MistralProvider {
     credentials: MistralCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<MistralCredentials> = OnceLock::new();
-
 impl MistralProvider {
-    pub fn new(
-        model_name: String,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-        Ok(MistralProvider {
+    pub fn new(model_name: String, credentials: MistralCredentials) -> Self {
+        MistralProvider {
             model_name,
             credentials,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {
@@ -139,20 +128,23 @@ impl InferenceProvider for MistralProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = serde_json::to_value(MistralRequest::new(&self.model_name, request)?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing Mistral request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+        let request_body = serde_json::to_value(
+            MistralRequest::new(&self.model_name, request).await?,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing Mistral request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let request_url = get_chat_url(&MISTRAL_API_BASE)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -230,20 +222,23 @@ impl InferenceProvider for MistralProvider {
             request,
             provider_name: _,
             model_name,
+            otlp_config: _,
         }: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(MistralRequest::new(&self.model_name, request)?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing Mistral request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+        let request_body = serde_json::to_value(
+            MistralRequest::new(&self.model_name, request).await?,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing Mistral request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let request_url = get_chat_url(&MISTRAL_API_BASE)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -268,7 +263,7 @@ impl InferenceProvider for MistralProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
+        _client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -280,7 +275,7 @@ impl InferenceProvider for MistralProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -317,7 +312,7 @@ fn handle_mistral_error(
 }
 
 pub fn stream_mistral(
-    mut event_source: EventSource,
+    mut event_source: TensorZeroEventSource,
     start_time: Instant,
 ) -> ProviderInferenceResponseStreamInner {
     Box::pin(async_stream::stream! {
@@ -357,13 +352,20 @@ pub fn stream_mistral(
     })
 }
 
-pub(super) fn prepare_mistral_messages<'a>(
+pub(super) async fn prepare_mistral_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
+    config: OpenAIMessagesConfig<'a>,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
-    let mut messages = Vec::with_capacity(request.messages.len());
-    for message in &request.messages {
-        messages.extend(tensorzero_to_openai_messages(message, PROVIDER_TYPE)?);
-    }
+    let mut messages: Vec<_> = try_join_all(
+        request
+            .messages
+            .iter()
+            .map(|msg| tensorzero_to_openai_messages(msg, config)),
+    )
+    .await?
+    .into_iter()
+    .flatten()
+    .collect();
     if let Some(system_msg) = tensorzero_to_mistral_system_message(request.system.as_deref()) {
         messages.insert(0, system_msg);
     }
@@ -488,7 +490,7 @@ struct MistralRequest<'a> {
 }
 
 impl<'a> MistralRequest<'a> {
-    pub fn new(
+    pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<MistralRequest<'a>, Error> {
@@ -498,7 +500,16 @@ impl<'a> MistralRequest<'a> {
             }
             ModelInferenceRequestJsonMode::Off => None,
         };
-        let messages = prepare_mistral_messages(request)?;
+        let messages = prepare_mistral_messages(
+            request,
+            OpenAIMessagesConfig {
+                json_mode: Some(&request.json_mode),
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: request
+                    .fetch_and_encode_input_files_before_inference,
+            },
+        )
+        .await?;
         let (tools, tool_choice) = prepare_mistral_tools(request)?;
 
         Ok(MistralRequest {
@@ -778,8 +789,8 @@ mod tests {
     use crate::inference::types::{FunctionType, RequestMessage, Role};
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
-    #[test]
-    fn test_mistral_request_new() {
+    #[tokio::test]
+    async fn test_mistral_request_new() {
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -802,8 +813,9 @@ mod tests {
             ..Default::default()
         };
 
-        let mistral_request =
-            MistralRequest::new("mistral-small-latest", &request_with_tools).unwrap();
+        let mistral_request = MistralRequest::new("mistral-small-latest", &request_with_tools)
+            .await
+            .unwrap();
 
         assert_eq!(mistral_request.model, "mistral-small-latest");
         assert_eq!(mistral_request.messages.len(), 1);
@@ -1044,7 +1056,8 @@ mod tests {
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
         // Test case 4: Invalid response with multiple choices
         let invalid_response_multiple_choices = MistralResponse {
@@ -1096,7 +1109,8 @@ mod tests {
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });
-        let details = result.unwrap_err().get_owned_details();
+        let error = result.unwrap_err();
+        let details = error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
     }
 
@@ -1106,7 +1120,8 @@ mod tests {
 
         // Test unauthorized error
         let unauthorized = handle_mistral_error(StatusCode::UNAUTHORIZED, "Unauthorized access");
-        let details = unauthorized.unwrap_err().get_owned_details();
+        let error = unauthorized.unwrap_err();
+        let details = error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
         if let ErrorDetails::InferenceClient {
             message,
@@ -1116,16 +1131,17 @@ mod tests {
             raw_response,
         } = details
         {
-            assert_eq!(message, "Unauthorized access");
-            assert_eq!(status_code, Some(StatusCode::UNAUTHORIZED));
-            assert_eq!(provider, PROVIDER_TYPE.to_string());
-            assert_eq!(raw_request, None);
-            assert_eq!(raw_response, None);
+            assert_eq!(*message, "Unauthorized access");
+            assert_eq!(*status_code, Some(StatusCode::UNAUTHORIZED));
+            assert_eq!(*provider, PROVIDER_TYPE.to_string());
+            assert_eq!(*raw_request, None);
+            assert_eq!(*raw_response, None);
         }
 
         // Test forbidden error
         let forbidden = handle_mistral_error(StatusCode::FORBIDDEN, "Forbidden access");
-        let details = forbidden.unwrap_err().get_owned_details();
+        let error = forbidden.unwrap_err();
+        let details = error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
         if let ErrorDetails::InferenceClient {
             message,
@@ -1135,16 +1151,17 @@ mod tests {
             raw_response,
         } = details
         {
-            assert_eq!(message, "Forbidden access");
-            assert_eq!(status_code, Some(StatusCode::FORBIDDEN));
-            assert_eq!(provider, PROVIDER_TYPE.to_string());
-            assert_eq!(raw_request, None);
-            assert_eq!(raw_response, None);
+            assert_eq!(*message, "Forbidden access");
+            assert_eq!(*status_code, Some(StatusCode::FORBIDDEN));
+            assert_eq!(*provider, PROVIDER_TYPE.to_string());
+            assert_eq!(*raw_request, None);
+            assert_eq!(*raw_response, None);
         }
 
         // Test rate limit error
         let rate_limit = handle_mistral_error(StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded");
-        let details = rate_limit.unwrap_err().get_owned_details();
+        let error = rate_limit.unwrap_err();
+        let details = error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
         if let ErrorDetails::InferenceClient {
             message,
@@ -1154,16 +1171,17 @@ mod tests {
             raw_response,
         } = details
         {
-            assert_eq!(message, "Rate limit exceeded");
-            assert_eq!(status_code, Some(StatusCode::TOO_MANY_REQUESTS));
-            assert_eq!(provider, PROVIDER_TYPE.to_string());
-            assert_eq!(raw_request, None);
-            assert_eq!(raw_response, None);
+            assert_eq!(*message, "Rate limit exceeded");
+            assert_eq!(*status_code, Some(StatusCode::TOO_MANY_REQUESTS));
+            assert_eq!(*provider, PROVIDER_TYPE.to_string());
+            assert_eq!(*raw_request, None);
+            assert_eq!(*raw_response, None);
         }
 
         // Test server error
         let server_error = handle_mistral_error(StatusCode::INTERNAL_SERVER_ERROR, "Server error");
-        let details = server_error.unwrap_err().get_owned_details();
+        let error = server_error.unwrap_err();
+        let details = error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
         if let ErrorDetails::InferenceServer {
             message,
@@ -1172,10 +1190,10 @@ mod tests {
             raw_response,
         } = details
         {
-            assert_eq!(message, "Server error");
-            assert_eq!(provider, PROVIDER_TYPE.to_string());
-            assert_eq!(raw_request, None);
-            assert_eq!(raw_response, None);
+            assert_eq!(*message, "Server error");
+            assert_eq!(*provider, PROVIDER_TYPE.to_string());
+            assert_eq!(*raw_request, None);
+            assert_eq!(*raw_response, None);
         }
     }
 
@@ -1206,7 +1224,7 @@ mod tests {
         let result = MistralCredentials::try_from(generic);
         assert!(result.is_err());
         assert!(matches!(
-            result.unwrap_err().get_owned_details(),
+            result.unwrap_err().get_details(),
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }

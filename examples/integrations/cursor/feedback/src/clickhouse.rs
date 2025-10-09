@@ -25,7 +25,7 @@ pub struct InferenceInfo {
 
 /// Gets the inferences which are relevant to a particular commit's interval.
 /// For an inference to be relevant, it must satisfy 4 conditions:
-/// 1. The function_name must be 'cursorzero'
+/// 1. The `function_name` must be 'cursorzero'
 /// 2. The inference must have happened in between the previous commit and the current commit's timestamps
 /// 3. The inference must not have been given a float metric feedback
 /// 4. The inference must be from the user specified in the user argument (if provided)

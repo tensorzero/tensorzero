@@ -43,58 +43,22 @@
             "pages": [
               "gateway/index",
               "gateway/call-any-llm",
+              "gateway/create-a-prompt-template",
+              "gateway/generate-embeddings",
               "gateway/tutorial",
-              {
-                "group": "Guides",
-                "pages": [
-                  {
-                    "group": "Model Providers",
-                    "pages": [
-                      "gateway/guides/providers/anthropic",
-                      "gateway/guides/providers/aws-bedrock",
-                      "gateway/guides/providers/aws-sagemaker",
-                      "gateway/guides/providers/azure",
-                      "gateway/guides/providers/deepseek",
-                      "gateway/guides/providers/fireworks",
-                      "gateway/guides/providers/gcp-vertex-ai-anthropic",
-                      "gateway/guides/providers/gcp-vertex-ai-gemini",
-                      "gateway/guides/providers/google-ai-studio-gemini",
-                      "gateway/guides/providers/groq",
-                      "gateway/guides/providers/hyperbolic",
-                      "gateway/guides/providers/mistral",
-                      "gateway/guides/providers/openai-compatible",
-                      "gateway/guides/providers/openai",
-                      "gateway/guides/providers/openrouter",
-                      "gateway/guides/providers/sglang",
-                      "gateway/guides/providers/tgi",
-                      "gateway/guides/providers/together",
-                      "gateway/guides/providers/vllm",
-                      "gateway/guides/providers/xai"
-                    ]
-                  },
-                  "gateway/guides/batch-inference",
-                  "gateway/guides/credential-management",
-                  "gateway/guides/episodes",
-                  "gateway/guides/experimentation",
-                  "gateway/guides/extending-tensorzero",
-                  "gateway/guides/inference-caching",
-                  "gateway/guides/inference-time-optimizations",
-                  "gateway/guides/metrics-feedback",
-                  "gateway/guides/multimodal-inference",
-                  "gateway/guides/opentelemetry-otlp",
-                  "gateway/guides/performance-latency",
-                  "gateway/guides/prompt-templates-schemas",
-                  "gateway/guides/retries-fallbacks",
-                  "gateway/guides/streaming-inference",
-                  "gateway/guides/tool-use"
-                ]
-              },
+              "gateway/guides/batch-inference",
+              "gateway/guides/episodes",
+              "gateway/guides/inference-caching",
+              "gateway/guides/inference-time-optimizations",
+              "gateway/guides/metrics-feedback",
+              "gateway/guides/multimodal-inference",
+              "gateway/guides/retries-fallbacks",
+              "gateway/guides/streaming-inference",
+              "gateway/guides/tool-use",
               "gateway/benchmarks",
               "gateway/clients",
               "gateway/configuration-reference",
               "gateway/data-model",
-              "gateway/deployment",
-              "gateway/integrations",
               {
                 "group": "API Reference",
                 "pages": [
@@ -102,8 +66,7 @@
                   "gateway/api-reference/inference-openai-compatible",
                   "gateway/api-reference/feedback",
                   "gateway/api-reference/batch-inference",
-                  "gateway/api-reference/datasets-datapoints",
-                  "gateway/api-reference/auxiliary-endpoints"
+                  "gateway/api-reference/datasets-datapoints"
                 ]
               }
             ]
@@ -134,8 +97,58 @@
             ]
           },
           {
-            "group": "UI",
-            "pages": ["ui/deployment"]
+            "group": "Experimentation",
+            "pages": ["experimentation/run-ab-tests"]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/tensorzero-gateway",
+              "deployment/tensorzero-ui",
+              "deployment/clickhouse",
+              "deployment/optimize-latency-and-throughput"
+            ]
+          },
+          {
+            "group": "Operations",
+            "pages": [
+              "operations/manage-credentials",
+              "operations/organize-your-configuration",
+              "operations/export-opentelemetry-traces",
+              "operations/export-prometheus-metrics",
+              "operations/extend-tensorzero"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Integrations",
+        "groups": [
+          {
+            "group": "Model Providers",
+            "pages": [
+              "integrations/model-providers/index",
+              "integrations/model-providers/anthropic",
+              "integrations/model-providers/aws-bedrock",
+              "integrations/model-providers/aws-sagemaker",
+              "integrations/model-providers/azure",
+              "integrations/model-providers/deepseek",
+              "integrations/model-providers/fireworks",
+              "integrations/model-providers/gcp-vertex-ai-anthropic",
+              "integrations/model-providers/gcp-vertex-ai-gemini",
+              "integrations/model-providers/google-ai-studio-gemini",
+              "integrations/model-providers/groq",
+              "integrations/model-providers/hyperbolic",
+              "integrations/model-providers/mistral",
+              "integrations/model-providers/openai-compatible",
+              "integrations/model-providers/openai",
+              "integrations/model-providers/openrouter",
+              "integrations/model-providers/sglang",
+              "integrations/model-providers/tgi",
+              "integrations/model-providers/together",
+              "integrations/model-providers/vllm",
+              "integrations/model-providers/xai"
+            ]
           }
         ]
       }
@@ -234,6 +247,94 @@
     {
       "source": "/vision-roadmap",
       "destination": "/vision-and-roadmap"
+    },
+    {
+      "source": "/gateway/guides/performance-latency",
+      "destination": "/deployment/optimize-latency-and-throughput"
+    },
+    {
+      "source": "/gateway/guides/performance-latency/",
+      "destination": "/deployment/optimize-latency-and-throughput"
+    },
+    {
+      "source": "/gateway/guides/experimentation",
+      "destination": "/experimentation/run-ab-tests"
+    },
+    {
+      "source": "/gateway/guides/experimentation/",
+      "destination": "/experimentation/run-ab-tests"
+    },
+    {
+      "source": "/gateway/deployment",
+      "destination": "/deployment/tensorzero-gateway"
+    },
+    {
+      "source": "/gateway/deployment/",
+      "destination": "/deployment/tensorzero-gateway"
+    },
+    {
+      "source": "/ui/deployment",
+      "destination": "/deployment/tensorzero-ui"
+    },
+    {
+      "source": "/ui/deployment/",
+      "destination": "/deployment/tensorzero-ui"
+    },
+    {
+      "source": "/gateway/guides/credential-management",
+      "destination": "/operations/manage-credentials"
+    },
+    {
+      "source": "/gateway/guides/credential-management/",
+      "destination": "/operations/manage-credentials"
+    },
+    {
+      "source": "/gateway/api-reference/auxiliary-endpoints/",
+      "destination": "/operations/export-prometheus-metrics"
+    },
+    {
+      "source": "/gateway/api-reference/auxiliary-endpoints",
+      "destination": "/operations/export-prometheus-metrics"
+    },
+    {
+      "source": "/gateway/guides/opentelemetry-otlp",
+      "destination": "/operations/export-opentelemetry-traces"
+    },
+    {
+      "source": "/gateway/guides/opentelemetry-otlp/",
+      "destination": "/operations/export-opentelemetry-traces"
+    },
+    {
+      "source": "/gateway/guides/extending-tensorzero",
+      "destination": "/operations/extend-tensorzero"
+    },
+    {
+      "source": "/gateway/guides/extending-tensorzero/",
+      "destination": "/operations/extend-tensorzero"
+    },
+    {
+      "source": "/gateway/integrations",
+      "destination": "/integrations/model-providers"
+    },
+    {
+      "source": "/gateway/integrations/",
+      "destination": "/integrations/model-providers"
+    },
+    {
+      "source": "/gateway/guides/providers/:provider*",
+      "destination": "/integrations/model-providers/:provider*"
+    },
+    {
+      "source": "/gateway/guides/providers/:provider*/",
+      "destination": "/integrations/model-providers/:provider*"
+    },
+    {
+      "source": "/gateway/guides/prompt-templates-schemas",
+      "destination": "/gateway/create-a-prompt-template"
+    },
+    {
+      "source": "/gateway/guides/prompt-templates-schemas/",
+      "destination": "/gateway/create-a-prompt-template"
     }
   ]
 }

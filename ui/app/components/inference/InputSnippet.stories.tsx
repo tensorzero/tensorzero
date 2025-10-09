@@ -1,6 +1,5 @@
 import InputSnippet from "./InputSnippet";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { withRouter } from "storybook-addon-remix-react-router";
 import pdfUrl from "./InputSnippet.stories.fixture.tensorzero.pdf?url";
 import mp3Url from "./InputSnippet.stories.fixture.tensorzero.mp3?url";
 import type { JsonValue } from "tensorzero-node";
@@ -8,7 +7,6 @@ import type { JsonValue } from "tensorzero-node";
 const meta = {
   title: "InputSnippet",
   component: InputSnippet,
-  decorators: [withRouter],
   render: (args) => (
     <div className="w-[80vw] p-4">
       <InputSnippet {...args} />
@@ -39,7 +37,7 @@ export const MessagesNoSystem: Story = {
         role: "user",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "What is the capital of Japan?\n\nRespond with just the city name.",
           },
         ],
@@ -48,7 +46,7 @@ export const MessagesNoSystem: Story = {
         role: "assistant",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "Tokyo",
           },
         ],
@@ -57,7 +55,7 @@ export const MessagesNoSystem: Story = {
         role: "user",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "Arigatou!",
           },
         ],
@@ -73,15 +71,15 @@ export const SingleUserMessageWithMultipleContentBlocks: Story = {
         role: "user",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.",
           },
           {
-            type: "unstructured_text",
+            type: "text",
             text: "Duis sodales facilisis mollis. Sed et molestie enim. Integer eget pharetra urna. In ullamcorper nisi vitae ullamcorper laoreet. Vestibulum at enim et mauris tristique pellentesque. Sed dignissim nunc porta arcu sodales viverra. Nunc vulputate neque quis arcu ultricies, eu convallis magna tincidunt. Integer bibendum nec mauris ut mattis. Suspendisse potenti. Quisque gravida dui turpis. Duis vestibulum odio in risus finibus placerat.",
           },
           {
-            type: "unstructured_text",
+            type: "text",
             text: "Aliquam dapibus accumsan erat, eget volutpat mauris ultricies eu. Sed in tortor rutrum, scelerisque ipsum sit amet, volutpat ex. Ut sodales mauris ante, vitae condimentum elit euismod ac. Aliquam sed libero bibendum, venenatis lectus sed, pharetra diam. Ut eu viverra lacus. Fusce ornare vitae lectus ut ullamcorper. Mauris nec nisl convallis, tincidunt leo at, dignissim mi. Nam vehicula eleifend lectus eu scelerisque. Pellentesque feugiat eget risus sed posuere. Aliquam semper, enim eget consequat volutpat, felis sapien sagittis elit, condimentum gravida nisl ante sed eros. Vestibulum elementum efficitur mi, ac auctor lectus hendrerit vel. Quisque at enim libero. Cras in lectus vitae eros vestibulum mollis in et purus. Pellentesque tincidunt dui nec orci tincidunt, non fermentum felis molestie. Phasellus blandit, arcu quis interdum ultricies, turpis ligula tempor tellus, quis euismod est felis et tortor.",
           },
         ],
@@ -97,7 +95,7 @@ export const MultipleUserMessagesWithSingleContentBlock: Story = {
         role: "user",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.",
           },
         ],
@@ -106,7 +104,7 @@ export const MultipleUserMessagesWithSingleContentBlock: Story = {
         role: "user",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "Duis sodales facilisis mollis. Sed et molestie enim. Integer eget pharetra urna. In ullamcorper nisi vitae ullamcorper laoreet. Vestibulum at enim et mauris tristique pellentesque. Sed dignissim nunc porta arcu sodales viverra. Nunc vulputate neque quis arcu ultricies, eu convallis magna tincidunt. Integer bibendum nec mauris ut mattis. Suspendisse potenti. Quisque gravida dui turpis. Duis vestibulum odio in risus finibus placerat.",
           },
         ],
@@ -115,7 +113,7 @@ export const MultipleUserMessagesWithSingleContentBlock: Story = {
         role: "user",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "Aliquam dapibus accumsan erat, eget volutpat mauris ultricies eu. Sed in tortor rutrum, scelerisque ipsum sit amet, volutpat ex. Ut sodales mauris ante, vitae condimentum elit euismod ac. Aliquam sed libero bibendum, venenatis lectus sed, pharetra diam. Ut eu viverra lacus. Fusce ornare vitae lectus ut ullamcorper. Mauris nec nisl convallis, tincidunt leo at, dignissim mi. Nam vehicula eleifend lectus eu scelerisque. Pellentesque feugiat eget risus sed posuere. Aliquam semper, enim eget consequat volutpat, felis sapien sagittis elit, condimentum gravida nisl ante sed eros. Vestibulum elementum efficitur mi, ac auctor lectus hendrerit vel. Quisque at enim libero. Cras in lectus vitae eros vestibulum mollis in et purus. Pellentesque tincidunt dui nec orci tincidunt, non fermentum felis molestie. Phasellus blandit, arcu quis interdum ultricies, turpis ligula tempor tellus, quis euismod est felis et tortor.",
           },
         ],
@@ -131,7 +129,7 @@ export const MultiTurnToolUse: Story = {
         role: "user",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "What is the weather in Tokyo?",
           },
         ],
@@ -140,7 +138,7 @@ export const MultiTurnToolUse: Story = {
         role: "assistant",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "I can help you with that.",
           },
           {
@@ -166,7 +164,7 @@ export const MultiTurnToolUse: Story = {
         role: "assistant",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "The weather in Tokyo is sunny, with a temperature of 20 degrees Celsius.",
           },
         ],
@@ -182,7 +180,7 @@ export const LongMultiTurnToolUse: Story = {
         role: "user",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "What is the weather in Tokyo?",
           },
         ],
@@ -191,7 +189,7 @@ export const LongMultiTurnToolUse: Story = {
         role: "assistant",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "I can help you with that.",
           },
           {
@@ -221,7 +219,7 @@ export const LongMultiTurnToolUse: Story = {
         role: "assistant",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam et nunc augue. Pellentesque at facilisis ipsum. Donec facilisis lorem ligula, ultrices feugiat nibh consectetur id. Aenean pulvinar est ac ipsum vulputate, nec maximus ligula elementum. Cras a eros eget velit varius finibus ut sollicitudin enim. Nulla et augue ac massa consequat cursus. Curabitur eget dolor tristique, porttitor mi non, commodo augue. Integer tincidunt dui lectus, egestas dapibus mauris porta sit amet. Morbi tincidunt turpis id tortor ornare, vel viverra elit cursus. Cras a felis ultricies, interdum dui vel, facilisis risus.",
           },
         ],
@@ -237,7 +235,7 @@ export const MultiTurnParallelToolUse: Story = {
         role: "user",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "What is the weather in Tokyo?",
           },
         ],
@@ -246,7 +244,7 @@ export const MultiTurnParallelToolUse: Story = {
         role: "assistant",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "I can help you with that.",
           },
           {
@@ -284,27 +282,8 @@ export const MultiTurnParallelToolUse: Story = {
         role: "assistant",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "The weather in Tokyo is sunny, with a temperature of 20 degrees Celsius and a humidity of 50%.",
-          },
-        ],
-      },
-    ],
-  },
-};
-
-export const TextWithArguments: Story = {
-  args: {
-    system: "Write a haiku about the topic provided by the user.",
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "structured_text",
-            arguments: {
-              topic: "AI",
-            },
           },
         ],
       },
@@ -362,7 +341,7 @@ export const ImageInput: Story = {
         role: "user",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "Do the images share any common features?",
           },
           {
@@ -413,7 +392,7 @@ export const ImageInputError: Story = {
         role: "user",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "Do the images share any common features?",
           },
           {
@@ -465,7 +444,7 @@ export const PDFInput: Story = {
         role: "user",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "Please analyze this research paper.",
           },
           {
@@ -498,7 +477,7 @@ export const AudioInput: Story = {
         role: "user",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: "Transcribe this audio recording.",
           },
           {
@@ -558,25 +537,25 @@ export const TextIsJSON: Story = {
         role: "user",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: '"All these content blocks are string literals!"',
           },
           // This one is a string literal
           {
-            type: "unstructured_text",
+            type: "text",
             text: '{"key": "value"}',
           },
           {
-            type: "unstructured_text",
+            type: "text",
             text: "[1, 2, 3]",
           },
           {
-            type: "unstructured_text",
+            type: "text",
             text: "123",
           },
 
           {
-            type: "unstructured_text",
+            type: "text",
             text: "null",
           },
         ],
@@ -585,24 +564,24 @@ export const TextIsJSON: Story = {
         role: "assistant",
         content: [
           {
-            type: "unstructured_text",
+            type: "text",
             text: '"All these content blocks are string literals!"',
           },
           {
-            type: "unstructured_text",
+            type: "text",
             text: '{"key": "value"}',
           },
           {
-            type: "unstructured_text",
+            type: "text",
             text: "[1, 2, 3]",
           },
           {
-            type: "unstructured_text",
+            type: "text",
             text: "123",
           },
 
           {
-            type: "unstructured_text",
+            type: "text",
             text: "null",
           },
         ],
@@ -636,6 +615,30 @@ export const UnknownAndThoughtContent: Story = {
             text: "This is a thought content block for testing.",
             signature: null,
             _internal_provider_type: null,
+          },
+        ],
+      },
+    ],
+  },
+};
+
+export const TemplateInput: Story = {
+  args: {
+    system:
+      "You are a helpful assistant that responds to prompts generated from templates.",
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "template",
+            name: "question_answering",
+            arguments: {
+              question: "What is the capital of France?",
+              context:
+                "France is a country in Western Europe with Paris as its capital and largest city.",
+              format: "brief",
+            },
           },
         ],
       },

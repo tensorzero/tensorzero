@@ -64,13 +64,16 @@ e2e_aws_sagemaker_tgi = { max-threads = 1 }
 # Our Sagemaker instance seems to be able to handle 2 concurrent requests
 e2e_aws_sagemaker_openai = { max-threads = 2 }
 e2e_groq = { max-threads = 1 }
+# Run ClickHouse migration tests serially to avoid conflicts
+clickhouse_migration = { max-threads = 1 }
 
-# Require that nothing else runs at the same time as a Jaeger test,
-# so that we can find our Jaeger traces (without other tests
-# flushing our target spans out of the Jaeger buffer).
 [[profile.default.overrides]]
-filter = 'test(test_jaeger)'
-threads-required = 'num-test-threads'
+filter = 'test(test_otel_export)'
+slow-timeout = { period = "60s", terminate-after = 2 }
+# We sleep long enough that these tests should pass 100% of the time.
+# Any flakiness indicates a potential bug that could cause us to lose spans,
+# so we don't want to retry.
+retries = 0
 
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::aws_bedrock::)'
@@ -89,6 +92,10 @@ filter = 'binary(e2e) and test(providers::groq::)'
 test-group = 'e2e_groq'
 # We have a low rate limit on Groq, so we often need to retry several times
 retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max-delay = "120s" }
+
+[[profile.default.overrides]]
+filter = 'test(test_clickhouse_migration_manager)'
+test-group = 'clickhouse_migration'
 
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::vllm::)'
@@ -111,10 +118,15 @@ filter = 'test(batch)'
 slow-timeout = { period = "15s", terminate-after = 3 }
 
 [[profile.default.overrides]]
-# Settings for running clickhouse tests, which can be very slow on ClickHouse Clouc
+# Settings for running clickhouse tests, which can be very slow on ClickHouse Cloud
 # (when spawning lots of concurrent inserts)
 filter = 'test(clickhouse)'
-slow-timeout = { period = "500s", terminate-after = 1 }
+slow-timeout = { period = "900s", terminate-after = 1 }
+
+[[profile.default.overrides]]
+filter = 'test(test_concurrent_requests)'
+# This test creates and uses lots of `reqwest::Client`s, which can be slow
+slow-timeout = { period = "60s", terminate-after = 1 }
 
 [[profile.default.overrides]]
 # Settings for running unit tests

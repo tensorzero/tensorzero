@@ -4,7 +4,7 @@ use axum::middleware::Next;
 use axum::response::Response;
 use axum::routing::{delete, get, post, put};
 use axum::Router;
-use clap::Parser;
+use clap::{Args, Parser};
 use mimalloc::MiMalloc;
 use std::fmt::Display;
 use std::io::ErrorKind;
@@ -16,21 +16,22 @@ use tower_http::trace::{DefaultOnFailure, TraceLayer};
 use tracing::Level;
 
 use tensorzero_core::config::{Config, ConfigFileGlob};
-use tensorzero_core::db::clickhouse::migration_manager::manual_run_migrations;
+use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::db::postgres::{manual_run_postgres_migrations, PostgresConnectionInfo};
 use tensorzero_core::endpoints;
 use tensorzero_core::endpoints::openai_compatible::RouterExt as _;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error;
-use tensorzero_core::gateway_util;
 use tensorzero_core::observability::{self, LogFormat, RouterExt as _};
+use tensorzero_core::utils::gateway;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
-struct Args {
+struct GatewayArgs {
     /// Use all of the config files matching the specified glob pattern. Incompatible with `--default-config`
     #[arg(long)]
     config_file: Option<PathBuf>,
@@ -39,23 +40,27 @@ struct Args {
     #[arg(long)]
     default_config: bool,
 
-    // Hidden flag used by our `Dockerfile` to warn users who have not overridden the default CMD
-    #[arg(long)]
-    #[clap(hide = true)]
-    warn_default_cmd: bool,
-
     /// Sets the log format used for all gateway logs.
     #[arg(long)]
     #[arg(value_enum)]
     #[clap(default_value_t = LogFormat::default())]
     log_format: LogFormat,
 
-    /// Run database migrations manually then exit.
-    #[arg(long)]
-    run_migrations_only: bool,
+    #[command(flatten)]
+    migration_commands: MigrationCommands,
+}
 
-    /// Deprecated: use `--config-file` instead
-    tensorzero_toml: Option<PathBuf>,
+#[derive(Args, Debug)]
+#[group(multiple = false)]
+struct MigrationCommands {
+    /// Run ClickHouse migrations manually then exit.
+    // TODO: remove
+    #[arg(long, alias = "run-migrations")]
+    run_clickhouse_migrations: bool,
+
+    /// Run PostgreSQL migrations manually then exit.
+    #[arg(long)]
+    run_postgres_migrations: bool,
 }
 
 async fn add_version_header(request: Request, next: Next) -> Response {
@@ -86,18 +91,28 @@ async fn add_version_header(request: Request, next: Next) -> Response {
 
 #[tokio::main]
 async fn main() {
-    let args = Args::parse();
+    let args = GatewayArgs::parse();
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
+    // We start with empty headers and update them after loading the config
     let delayed_log_config = observability::setup_observability(args.log_format)
         .await
         .expect_pretty("Failed to set up logs");
 
     let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
-    if args.run_migrations_only {
-        manual_run_migrations()
+    if args.migration_commands.run_clickhouse_migrations {
+        manual_run_clickhouse_migrations()
             .await
-            .expect_pretty("Failed to run migrations");
+            .expect_pretty("Failed to run ClickHouse migrations");
+        tracing::info!("ClickHouse is ready.");
+        return;
+    }
+
+    if args.migration_commands.run_postgres_migrations {
+        manual_run_postgres_migrations()
+            .await
+            .expect_pretty("Failed to run PostgreSQL migrations");
+        tracing::info!("Postgres is ready.");
         return;
     }
 
@@ -105,51 +120,37 @@ async fn main() {
 
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
-    if args.warn_default_cmd {
-        tracing::warn!("Deprecation Warning: Running gateway from Docker container without overriding default CMD. Please override the command to either `--config-file` to specify a custom configuration file (e.g. `--config-file /path/to/tensorzero.toml`) or `--default-config` to use default settings (i.e. no custom functions, metrics, etc.).");
-    }
-
-    if args.tensorzero_toml.is_some() && args.config_file.is_some() {
-        tracing::error!("Cannot specify both `--config-file` and a positional path argument");
-        std::process::exit(1);
-    }
-
-    if args.tensorzero_toml.is_some() {
-        tracing::warn!(
-            "`Specifying a positional path argument is deprecated. Use `--config-file path/to/tensorzero.toml` instead."
-        );
-    }
-
-    let config_path = args.config_file.or(args.tensorzero_toml);
-
-    if config_path.is_some() && args.default_config {
-        tracing::error!("Cannot specify both `--config-file` and `--default-config`");
-        std::process::exit(1);
-    }
-
-    if !args.default_config && config_path.is_none() {
-        tracing::warn!("Running the gateway without any config-related arguments is deprecated. Use `--default-config` to start the gateway with the default config.");
-    }
-
-    let (config, glob) = if let Some(path) = &config_path {
-        let glob =
-            ConfigFileGlob::new_from_path(path).expect_pretty("Failed to process config file glob");
-        (
-            Arc::new(
-                Config::load_and_verify_from_path(&glob)
-                    .await
-                    .ok() // Don't print the error here, since it was already printed when it was constructed
-                    .expect_pretty(&format!(
-                        "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
-                        glob.glob,
-                        glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n")
-                    )),
-            ),
-            Some(glob),
-        )
-    } else {
-        tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
-        (Arc::new(Config::default()), None)
+    // Handle `--config-file` or `--default-config`
+    let (config, glob) = match (args.default_config, args.config_file) {
+        (true, Some(_)) => {
+            tracing::error!("You must not specify both `--config-file` and `--default-config`.");
+            std::process::exit(1);
+        }
+        (false, None) => {
+            tracing::error!("You must specify either `--config-file` or `--default-config`.");
+            std::process::exit(1);
+        }
+        (true, None) => {
+            tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
+            (Arc::new(Config::default()), None)
+        }
+        (false, Some(path)) => {
+            let glob = ConfigFileGlob::new_from_path(&path)
+                .expect_pretty("Failed to process config file glob");
+            (
+                Arc::new(
+                    Config::load_and_verify_from_path(&glob)
+                        .await
+                        .ok() // Don't print the error here, since it was already printed when it was constructed
+                        .expect_pretty(&format!(
+                            "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
+                            glob.glob,
+                            glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n")
+                        )),
+                ),
+                Some(glob),
+            )
+        }
     };
 
     if config.gateway.debug {
@@ -178,6 +179,17 @@ async fn main() {
             }
         }
 
+        // Set config-level OTLP headers if we have a tracer wrapper
+        if let Some(ref tracer_wrapper) = delayed_log_config.otel_tracer {
+            if !config.gateway.export.otlp.traces.extra_headers.is_empty() {
+                tracer_wrapper
+                    .set_static_otlp_traces_extra_headers(
+                        &config.gateway.export.otlp.traces.extra_headers,
+                    )
+                    .expect_pretty("Failed to set OTLP config headers");
+            }
+        }
+
         match delayed_log_config.delayed_otel {
             Ok(delayed_otel) => {
                 delayed_otel
@@ -198,7 +210,7 @@ async fn main() {
     }
 
     // Initialize GatewayHandle
-    let gateway_handle = gateway_util::GatewayHandle::new(config.clone())
+    let gateway_handle = gateway::GatewayHandle::new(config.clone())
         .await
         .expect_pretty("Failed to initialize AppState");
 
@@ -211,6 +223,14 @@ async fn main() {
         ClickHouseConnectionInfo::Production { database, .. } => {
             format!("enabled (database: {database})")
         }
+    };
+
+    let postgres_enabled_pretty = match &gateway_handle.app_state.postgres_connection_info {
+        PostgresConnectionInfo::Disabled => "disabled".to_string(),
+        PostgresConnectionInfo::Mock { healthy, .. } => {
+            format!("mocked (healthy={healthy})")
+        }
+        PostgresConnectionInfo::Enabled { .. } => "enabled".to_string(),
     };
 
     // Set debug mode
@@ -370,6 +390,9 @@ async fn main() {
         tracing::info!("├ Batch Writes: disabled");
     }
 
+    // Print whether postgres is enabled
+    tracing::info!("├ Postgres: {postgres_enabled_pretty}");
+
     // Print whether OpenTelemetry is enabled
     if config.gateway.export.otlp.traces.enabled {
         tracing::info!("└ OpenTelemetry: enabled");
@@ -383,11 +406,9 @@ async fn main() {
         .await
         .expect_pretty("Failed to start server");
 
-    if let Some(sdk_tracer_provider) = delayed_log_config.sdk_tracer_provider {
+    if let Some(tracer_wrapper) = delayed_log_config.otel_tracer {
         tracing::info!("Shutting down OpenTelemetry exporter");
-        observability::shutdown_otel(sdk_tracer_provider)
-            .await
-            .expect_pretty("Failed to shutdown OpenTelemetry");
+        tracer_wrapper.shutdown().await;
         tracing::info!("OpenTelemetry exporter shut down");
     }
 }

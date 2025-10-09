@@ -2,6 +2,4 @@
 import type { ChatInferenceDatapoint } from "./ChatInferenceDatapoint";
 import type { JsonInferenceDatapoint } from "./JsonInferenceDatapoint";
 
-export type Datapoint =
-  | ({ type: "chat" } & ChatInferenceDatapoint)
-  | ({ type: "json" } & JsonInferenceDatapoint);
+export type Datapoint = { "type": "chat" } & ChatInferenceDatapoint | { "type": "json" } & JsonInferenceDatapoint;

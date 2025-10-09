@@ -1,0 +1,180 @@
+---
+title: Deploy the TensorZero Gateway
+description: Learn how to deploy and customize the TensorZero Gateway.
+---
+
+The TensorZero Gateway is the core component that handles inference requests and collects observability data.
+It's easy to get started with the TensorZero Gateway.
+
+<Note>
+
+You need to only deploy a standalone gateway if you plan to use the TensorZero UI or interact with the gateway using programming languages other than Python.
+The TensorZero Python SDK includes a built-in embedded gateway, so you don't need to deploy a standalone gateway if you're only using Python.
+See the [Clients](/gateway/clients/) page for more details on how to interact with the TensorZero Gateway.
+
+</Note>
+
+## Deploy
+
+The gateway requires one of the following command line arguments:
+
+- `--default-config`: Use default configuration settings.
+- `--config-file path/to/tensorzero.toml`: Use a custom configuration file.
+  <Tip>
+    `--config-file` supports glob patterns, e.g. `--config-file
+    /path/to/**/*.toml`.
+  </Tip>
+- `--run-clickhouse-migrations`: Run ClickHouse database migrations and exit.
+- `--run-postgres-migrations`: Run PostgreSQL database migrations and exit.
+
+There are many ways to deploy the TensorZero Gateway.
+Here are a few examples:
+
+<AccordionGroup>
+
+<Accordion title="Run with Docker">
+
+You can easily run the TensorZero Gateway locally using Docker.
+
+If you don't have custom configuration, you can use:
+
+```bash title="Running with Docker (default configuration)"
+docker run \
+  --env-file .env \
+  -p 3000:3000 \
+  tensorzero/gateway \
+  --default-config
+```
+
+If you have custom configuration, you can use:
+
+```bash title="Running with Docker (custom configuration)"
+docker run \
+  -v "./config:/app/config" \
+  --env-file .env \
+  -p 3000:3000 \
+  tensorzero/gateway \
+  --config-path config/tensorzero.toml
+```
+
+</Accordion>
+
+<Accordion title="Run with Docker Compose">
+
+We provide an example production-grade [`docker-compose.yml`](https://github.com/tensorzero/tensorzero/blob/main/examples/production-deployment/docker-compose.yml) for reference.
+
+</Accordion>
+
+<Accordion title="Run with Kubernetes (k8s) and Helm">
+
+We provide a reference Helm chart _contributed by the community_ in our [GitHub repository](https://github.com/tensorzero/tensorzero/tree/main/examples/production-deployment-k8s-helm).
+You can use it to run TensorZero in Kubernetes.
+
+</Accordion>
+
+<Accordion title="Build from source">
+
+You can build the TensorZero Gateway from source and run it directly on your host machine using [Cargo](https://doc.rust-lang.org/cargo/).
+
+```bash title="Building from source"
+cargo run --profile performance --bin gateway -- --config-file path/to/your/tensorzero.toml
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+<Tip>
+
+See the [optimizing latency and throughput](/deployment/optimize-latency-and-throughput/) guide to learn how to configure the gateway for high-performance deployments.
+
+</Tip>
+
+## Configure
+
+### Set up model provider credentials
+
+The TensorZero Gateway accepts the following environment variables for provider credentials.
+Unless you specify an alternative credential location in your configuration file, these environment variables are required for the providers that are used in a variant with positive weight.
+If required credentials are missing, the gateway will fail on startup.
+
+Unless customized in your configuration file, the following credentials are used by default:
+
+| Provider                | Environment Variable(s)                                                                                   |
+| ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| Anthropic               | `ANTHROPIC_API_KEY`                                                                                       |
+| AWS Bedrock             | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (see [details](/integrations/model-providers/aws-bedrock))   |
+| AWS SageMaker           | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (see [details](/integrations/model-providers/aws-sagemaker)) |
+| Azure OpenAI            | `AZURE_OPENAI_API_KEY`                                                                                    |
+| Fireworks               | `FIREWORKS_API_KEY`                                                                                       |
+| GCP Vertex AI Anthropic | `GCP_VERTEX_CREDENTIALS_PATH` (see [details](/integrations/model-providers/gcp-vertex-ai-anthropic))      |
+| GCP Vertex AI Gemini    | `GCP_VERTEX_CREDENTIALS_PATH` (see [details](/integrations/model-providers/gcp-vertex-ai-gemini))         |
+| Google AI Studio Gemini | `GOOGLE_AI_STUDIO_GEMINI_API_KEY`                                                                         |
+| Groq                    | `GROQ_API_KEY`                                                                                            |
+| Hyperbolic              | `HYPERBOLIC_API_KEY`                                                                                      |
+| Mistral                 | `MISTRAL_API_KEY`                                                                                         |
+| OpenAI                  | `OPENAI_API_KEY`                                                                                          |
+| OpenRouter              | `OPENROUTER_API_KEY`                                                                                      |
+| Together                | `TOGETHER_API_KEY`                                                                                        |
+| xAI                     | `XAI_API_KEY`                                                                                             |
+
+<Tip>
+
+See [`.env.example`](https://github.com/tensorzero/tensorzero/blob/main/examples/production-deployment/.env.example) for a complete example with every supported environment variable.
+
+</Tip>
+
+### Set up custom configuration
+
+Optionally, you can use a configuration file to customize the behavior of the gateway.
+See [Configuration Reference](/gateway/configuration-reference) for more details.
+
+<Accordion title="Disable pseudonymous usage analytics">
+
+TensorZero collects _pseudonymous_ usage analytics to help our team improve the product.
+
+The collected data includes _aggregated_ metrics about TensorZero itself, but does NOT include your application's data.
+To be explicit: TensorZero does NOT share any inference input or output.
+TensorZero also does NOT share the name of any function, variant, metric, or similar application-specific identifiers.
+
+See `howdy.rs` in the GitHub repository to see exactly what usage data is collected and shared with TensorZero.
+
+To disable usage analytics, set the following configuration in the `tensorzero.toml` file:
+
+```toml title="tensorzero.toml"
+[gateway]
+disable_pseudonymous_usage_analytics = true
+```
+
+Alternatively, you can also set the environment variable `TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1`.
+
+</Accordion>
+
+### Set up observability with ClickHouse
+
+Optionally, the TensorZero Gateway can collect inference and feedback data for observability, optimization, evaluations, and experimentation.
+After [deploying ClickHouse](/deployment/clickhouse), you need to configure the `TENSORZERO_CLICKHOUSE_URL` environment variable with the connection details.
+If you don't provide this environment variable, observability will be disabled.
+
+We recommend setting up observability early to monitor your LLM application and collect data for future optimization, but this can be done incrementally as needed.
+
+### Customize the logging format
+
+Optionally, you can provide the following command line argument to customize the gateway's logging format:
+
+- `--log-format`: Set the logging format to either `pretty` (default) or `json`.
+
+### Add a status or health check
+
+The TensorZero Gateway exposes endpoints for status and health checks.
+The `/status` endpoint checks that the gateway is running successfully.
+
+```json title="GET /status"
+{ "status": "ok" }
+```
+
+The `/health` endpoint additionally checks that it can communicate with ClickHouse (if observability is enabled).
+
+```json title="GET /health"
+{ "gateway": "ok", "clickhouse": "ok" }
+```

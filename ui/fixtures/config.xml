@@ -5,6 +5,7 @@
    or add <skip_check_for_incorrect_settings>1</skip_check_for_incorrect_settings> here.
 -->
 <clickhouse>
+    <listen_host>0.0.0.0</listen_host>
     <logger>
         <!-- Possible levels [1]:
 

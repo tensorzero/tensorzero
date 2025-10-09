@@ -1,5 +1,7 @@
 use crate::config::SchemaData;
+#[cfg(feature = "pyo3")]
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::experimentation::ExperimentationConfig;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 #[cfg(feature = "pyo3")]
@@ -15,9 +17,8 @@ use pyo3::prelude::*;
 use pyo3::IntoPyObjectExt;
 use serde::Serialize;
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
@@ -75,6 +76,13 @@ impl FunctionConfig {
         match self {
             FunctionConfig::Chat(_) => "ChatInference",
             FunctionConfig::Json(_) => "JsonInference",
+        }
+    }
+
+    pub fn experimentation(&self) -> &ExperimentationConfig {
+        match self {
+            FunctionConfig::Chat(config) => &config.experimentation,
+            FunctionConfig::Json(config) => &config.experimentation,
         }
     }
 }
@@ -221,6 +229,22 @@ pub struct FunctionConfigChat {
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
     pub description: Option<String>,
+    pub experimentation: ExperimentationConfig,
+    // Holds all template names (e.g. 'user', 'my_custom_template'
+    // which can be invoked through a `{"type": "template", "name": "..."}` input block)
+    // This is used to perform early rejection of a template invocation,
+    // in the case where all variants either:
+    // * do not have the template defined at all, or
+    // * define the template as an old-style input wrapper
+    //   (which can only be invoked by a {`"type": "text", "text": "..."`} input block)
+    //
+    // If it least one variant defines the template as a named template (non legacy-input-wrapper),
+    // then its name will be included in this set, and we'll let the request go through.
+    // The early rejection logic improves error messages in the case where every variant invocation
+    // is guaranteed to fail - we avoid showing an 'All variants failed' error message with
+    // the same template error for every variant.
+    #[serde(skip)]
+    pub all_explicit_templates_names: HashSet<String>,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -232,6 +256,10 @@ pub struct FunctionConfigJson {
     pub output_schema: StaticJSONSchema, // schema is mandatory for JSON functions
     pub implicit_tool_call_config: ToolCallConfig,
     pub description: Option<String>,
+    pub experimentation: ExperimentationConfig,
+    // See `FunctionConfigChat.all_explicit_template_names`.
+    #[serde(skip)]
+    pub all_explicit_template_names: HashSet<String>,
 }
 
 impl FunctionConfig {
@@ -267,18 +295,16 @@ impl FunctionConfig {
         match &self {
             FunctionConfig::Chat(params) => {
                 validate_all_text_input(
-                    params.schemas.get_implicit_system_schema(),
-                    params.schemas.get_implicit_user_schema(),
-                    params.schemas.get_implicit_assistant_schema(),
+                    &params.schemas,
                     input,
+                    &params.all_explicit_templates_names,
                 )?;
             }
             FunctionConfig::Json(params) => {
                 validate_all_text_input(
-                    params.schemas.get_implicit_system_schema(),
-                    params.schemas.get_implicit_user_schema(),
-                    params.schemas.get_implicit_assistant_schema(),
+                    &params.schemas,
                     input,
+                    &params.all_explicit_template_names,
                 )?;
             }
         }
@@ -412,22 +438,38 @@ impl FunctionConfig {
 
     pub fn system_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
-            FunctionConfig::Chat(params) => params.schemas.get_implicit_system_schema(),
-            FunctionConfig::Json(params) => params.schemas.get_implicit_system_schema(),
+            FunctionConfig::Chat(params) => params
+                .schemas
+                .get_implicit_system_schema()
+                .map(|s| &s.schema),
+            FunctionConfig::Json(params) => params
+                .schemas
+                .get_implicit_system_schema()
+                .map(|s| &s.schema),
         }
     }
 
     pub fn user_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
-            FunctionConfig::Chat(params) => params.schemas.get_implicit_user_schema(),
-            FunctionConfig::Json(params) => params.schemas.get_implicit_user_schema(),
+            FunctionConfig::Chat(params) => {
+                params.schemas.get_implicit_user_schema().map(|s| &s.schema)
+            }
+            FunctionConfig::Json(params) => {
+                params.schemas.get_implicit_user_schema().map(|s| &s.schema)
+            }
         }
     }
 
     pub fn assistant_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
-            FunctionConfig::Chat(params) => params.schemas.get_implicit_assistant_schema(),
-            FunctionConfig::Json(params) => params.schemas.get_implicit_assistant_schema(),
+            FunctionConfig::Chat(params) => params
+                .schemas
+                .get_implicit_assistant_schema()
+                .map(|s| &s.schema),
+            FunctionConfig::Json(params) => params
+                .schemas
+                .get_implicit_assistant_schema()
+                .map(|s| &s.schema),
         }
     }
 
@@ -525,14 +567,19 @@ fn get_json_output_from_content_blocks(
 /// Next we validate all messages containing text blocks.
 /// When we add support for `{"type": "template"}` input blocks, we'll need to validate those two
 fn validate_all_text_input(
-    system_schema: Option<&StaticJSONSchema>,
-    user_schema: Option<&StaticJSONSchema>,
-    assistant_schema: Option<&StaticJSONSchema>,
+    schemas: &SchemaData,
     input: &Input,
+    all_templates_names: &HashSet<String>,
 ) -> Result<(), Error> {
-    match (input.system.as_ref(), system_schema) {
+    match (input.system.as_ref(), schemas.get_implicit_system_schema()) {
         // If there is any system message passed we validate it
-        (Some(system), _) => validate_single_message(system, system_schema, None),
+        (Some(system), _) => validate_single_message(
+            system,
+            schemas.get_implicit_system_schema().map(|s| &s.schema),
+            "system",
+            all_templates_names,
+            None,
+        ),
         // If there is no system message and no schema we accept
         (None, None) => Ok(()),
         // If no system message is passed and we have a schema we fail
@@ -541,21 +588,40 @@ fn validate_all_text_input(
         })),
     }?;
     for (index, message) in input.messages.iter().enumerate() {
-        // Only for Text blocks, not RawText blocks since we don't validate those
         for block in &message.content {
-            if let InputMessageContent::Text(kind) = block {
-                let content = match kind {
-                    TextKind::Arguments { arguments } => {
-                        Cow::Owned(Value::Object(arguments.clone()))
-                    }
-                    TextKind::Text { text } => Cow::Owned(Value::String(text.clone())),
-                    TextKind::LegacyValue { value } => Cow::Borrowed(value),
-                };
-                let schema = match &message.role {
-                    Role::Assistant => assistant_schema,
-                    Role::User => user_schema,
-                };
-                validate_single_message(&content, schema, Some((index, &message.role)))?;
+            match block {
+                InputMessageContent::Text(kind) => {
+                    let content = match kind {
+                        TextKind::Arguments { arguments } => {
+                            Cow::Owned(Value::Object(arguments.clone()))
+                        }
+                        TextKind::Text { text } => Cow::Owned(Value::String(text.clone())),
+                        TextKind::LegacyValue { value } => Cow::Borrowed(value),
+                    };
+                    let schema = match &message.role {
+                        Role::Assistant => schemas.get_implicit_assistant_schema(),
+                        Role::User => schemas.get_implicit_user_schema(),
+                    };
+                    validate_single_message(
+                        &content,
+                        schema.map(|s| &s.schema),
+                        message.role.implicit_template_name(),
+                        all_templates_names,
+                        Some(index),
+                    )?;
+                }
+                InputMessageContent::Template(template) => {
+                    // TODO - figure out a way to avoid this clone
+                    let value = Value::Object(template.arguments.clone());
+                    validate_single_message(
+                        &value,
+                        schemas.get_named_schema(&template.name).map(|s| &s.schema),
+                        &template.name,
+                        all_templates_names,
+                        Some(index),
+                    )?;
+                }
+                _ => {}
             }
         }
     }
@@ -563,130 +629,36 @@ fn validate_all_text_input(
 }
 
 /// Validates a single message according to the following rules:
-/// If there is no schema, the message `content` must be a string
+/// If there is no schema, we check that at least one
+/// variant has a matching template (as determined by `all_templates_names`)
 /// Otherwise, the message must contain JSON content that matches the schema
 fn validate_single_message(
     content: &Value,
     schema: Option<&StaticJSONSchema>,
-    index_role: Option<(usize, &Role)>,
+    template_name: &str,
+    all_templates_names: &HashSet<String>,
+    index: Option<usize>,
 ) -> Result<(), Error> {
     match schema {
-        Some(schema) => schema.validate(content),
+        Some(schema) => schema.validate(content)?,
         None => {
-            if content.is_string() {
-                Ok(())
-            } else {
-                Err(match index_role {
-                    Some(index_role) => Error::new(ErrorDetails::InvalidMessage {
-                        message: format!("Message at index {} has non-string content but there is no schema given for role {}.", index_role.0, index_role.1),
+            if !content.is_string() && !all_templates_names.contains(template_name) {
+                return Err(match index {
+                    Some(index) => Error::new(ErrorDetails::InvalidMessage {
+                        message: format!("Message at index {index} has non-string content but there is no template `{template_name}` in any variant"),
                     }),
                     None => Error::new(ErrorDetails::InvalidMessage {
-                        message: "Message has non-string content but there is no schema given for role system.".to_string(),
+                        message: format!("System message has non-string content but there is no template `{template_name}` in any variant"),
                     }),
-                })
+                });
             }
         }
     }
-}
-
-/// Sample a variant from the function based on variant weights (uniform random selection)
-/// This function pops the sampled variant from the candidate variants map.
-/// NOTE: We use a BTreeMap to ensure that the variants are sorted by their names and the
-/// sampling choices are deterministic given an episode ID.
-pub fn sample_variant(
-    candidate_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
-    function_name: &str,
-    episode_id: &Uuid,
-) -> Result<(String, Arc<VariantInfo>), Error> {
-    if candidate_variants.is_empty() {
-        return Err(Error::new(ErrorDetails::InvalidFunctionVariants {
-            message: format!("Function `{function_name}` has no variants"),
-        }));
-    }
-    // Compute the total weight of variants present in variant_names
-    let total_weight = candidate_variants
-        .values()
-        .map(|variant| variant.inner.weight().unwrap_or(0.0))
-        .sum::<f64>();
-
-    // If the total weight is non-positive, perform uniform sampling
-    // NOTE: We enforce non-negative weights at the config parsing stage,
-    //       but there's a chance we pin a weight-zero variant in the config.
-    //       This check also ensures that we catch any regressions we might introduce in the future.
-    if total_weight <= 0. {
-        // Perform uniform sampling if total weight is non-positive
-        let random_index = (get_uniform_value(function_name, episode_id)
-            * candidate_variants.len() as f64)
-            .floor() as usize;
-        let Some(sampled_variant_name) = candidate_variants.keys().nth(random_index).cloned()
-        else {
-            return Err(Error::new(ErrorDetails::InvalidFunctionVariants {
-                message: format!(
-                    "Invalid index {random_index} for function `{function_name}` with {} variants. {IMPOSSIBLE_ERROR_MESSAGE}",
-                    candidate_variants.len()
-                ),
-            }));
-        };
-        return candidate_variants.remove_entry(&sampled_variant_name).ok_or_else(|| {
-            Error::new(ErrorDetails::InvalidFunctionVariants {
-                message: format!(
-                    "Function `{function_name}` has no variant for the sampled variant `{sampled_variant_name}`. {IMPOSSIBLE_ERROR_MESSAGE}"
-                )
-            })
-        });
-    }
-
-    // Sample a random threshold between 0 and the total weight
-    let random_threshold = get_uniform_value(function_name, episode_id) * total_weight;
-
-    // Iterate over the variants to find the one that corresponds to the sampled threshold
-    let variant_to_remove = {
-        let mut cumulative_weight = 0.0;
-        candidate_variants
-            .iter()
-            .find(|(_, variant)| {
-                cumulative_weight += variant.inner.weight().unwrap_or(0.0);
-                cumulative_weight > random_threshold
-            })
-            .map(|(name, _)| name.clone()) // Clone the key
-    };
-
-    if let Some(variant_name) = variant_to_remove {
-        return candidate_variants.remove_entry(&variant_name).ok_or_else(|| {
-            Error::new(ErrorDetails::InvalidFunctionVariants {
-                message: format!(
-                    "Function `{function_name}` has no variant for the sampled variant `{variant_name}`. {IMPOSSIBLE_ERROR_MESSAGE}"
-                )
-            })
-        });
-    }
-
-    // If we didn't find a variant (which should only happen due to rare numerical precision issues),
-    // pop an arbitrary variant as a fallback
-    candidate_variants.pop_first().ok_or_else(|| {
-        Error::new(ErrorDetails::InvalidFunctionVariants {
-            message: format!(
-                "Function `{function_name}` has no variants. {IMPOSSIBLE_ERROR_MESSAGE}"
-            ),
-        })
-    })
-}
-
-/// Implements a uniform distribution over the interval [0, 1) using a hash function.
-/// This function is deterministic but should have good statistical properties.
-fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
-    let mut hasher = Sha256::new();
-    hasher.update(function_name.as_bytes());
-    hasher.update(episode_id.as_bytes());
-    let hash_value = hasher.finalize();
-    let truncated_hash =
-        u32::from_be_bytes([hash_value[0], hash_value[1], hash_value[2], hash_value[3]]);
-    truncated_hash as f64 / u32::MAX as f64
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::config::ErrorContext;
     use crate::endpoints::inference::InferenceIds;
     use crate::inference::types::FinishReason;
     use crate::inference::types::InputMessage;
@@ -698,9 +670,6 @@ mod tests {
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolCall;
-
-    use crate::variant::chat_completion::UninitializedChatCompletionConfig;
-    use crate::variant::VariantConfig;
 
     use super::*;
     use crate::config::path::ResolvedTomlPath;
@@ -786,7 +755,7 @@ mod tests {
         assert_eq!(
             validation_result.unwrap_err(),
             Error::new(ErrorDetails::InvalidMessage {
-                message: "Message at index 1 has non-string content but there is no schema given for role assistant.".to_string(),
+                message: "Message at index 1 has non-string content but there is no template `assistant` in any variant".to_string(),
             })
         );
 
@@ -1234,6 +1203,8 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
             implicit_tool_call_config,
             description: None,
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1288,7 +1259,7 @@ mod tests {
         assert_eq!(
             validation_result.unwrap_err(),
             ErrorDetails::InvalidMessage {
-                message: "Message at index 0 has non-string content but there is no schema given for role user.".to_string()
+                message: "Message at index 0 has non-string content but there is no template `user` in any variant".to_string()
             }.into()
         );
     }
@@ -1312,6 +1283,8 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1380,6 +1353,8 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1449,6 +1424,8 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1522,6 +1499,8 @@ mod tests {
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
             implicit_tool_call_config,
             description: None,
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1581,128 +1560,6 @@ mod tests {
     ///
     /// NOTE: If this test fails, it might be due to sampling. Please run it again to check if the
     ///       issue persists.
-    #[test]
-    fn test_sample_variant() {
-        // Helper function to create a HashMap of variant names to their weights
-        fn create_variants(variant_weights: &[(&str, f64)]) -> BTreeMap<String, Arc<VariantInfo>> {
-            variant_weights
-                .iter()
-                .map(|&(name, weight)| {
-                    (
-                        name.to_string(),
-                        Arc::new(VariantInfo {
-                            inner: VariantConfig::ChatCompletion(
-                                UninitializedChatCompletionConfig {
-                                    weight: Some(weight),
-                                    model: "model-name".into(),
-                                    ..Default::default()
-                                }
-                                .load(&SchemaData::default(), &ErrorContext::new_test())
-                                .unwrap(),
-                            ),
-                            timeouts: Default::default(),
-                        }),
-                    )
-                })
-                .collect()
-        }
-
-        // Helper function to test the distribution of variant weights by sampling them many times
-        // and checking if the observed distribution is close to the expected distribution
-        fn test_variant_distribution(
-            variants: &BTreeMap<String, Arc<VariantInfo>>,
-            sample_size: usize,
-            tolerance: f64,
-        ) {
-            let total_weight: f64 = variants
-                .values()
-                .map(|v| v.inner.weight().unwrap_or(0.0))
-                .sum();
-            let mut counts: HashMap<String, usize> = HashMap::new();
-
-            for _ in 0..sample_size {
-                let mut variants = variants.clone();
-                let (variant_name, _) =
-                    sample_variant(&mut variants, "test_function", &Uuid::now_v7()).unwrap();
-                *counts.entry(variant_name.to_string()).or_insert(0) += 1;
-            }
-
-            for (variant_name, variant) in variants {
-                let expected_prob = variant.inner.weight().unwrap_or(0.0) / total_weight;
-                let actual_prob =
-                    *counts.get(variant_name).unwrap_or(&0) as f64 / sample_size as f64;
-                let diff = (expected_prob - actual_prob).abs();
-
-                assert!(
-                    diff <= tolerance,
-                    "Probability for variant {variant_name} is outside the acceptable range"
-                );
-            }
-        }
-
-        // Test case 1: Equal weights
-        let variants = create_variants(&[("A", 1.0), ("B", 1.0), ("C", 1.0)]);
-        test_variant_distribution(&variants, 10_000, 0.02);
-
-        // Test case 2: Unequal weights
-        let variants = create_variants(&[("X", 1.0), ("Y", 2.0), ("Z", 3.0)]);
-        test_variant_distribution(&variants, 10_000, 0.02);
-
-        // Test case 3: Extreme weights
-        let variants = create_variants(&[("Rare", 0.01), ("Common", 0.99)]);
-        test_variant_distribution(&variants, 10_000, 0.005);
-
-        // Test case 4: Single weights
-        let variants = create_variants(&[("Solo", 1.0)]);
-        test_variant_distribution(&variants, 10_000, 0.0);
-
-        // Test case 5: All zero weights
-        let variants = create_variants(&[("A", 0.0), ("B", 0.0), ("C", 0.0)]);
-        let sample_size = 10_000;
-        let mut counts: HashMap<String, usize> = HashMap::new();
-
-        for _ in 0..sample_size {
-            let mut variants = variants.clone();
-            let (variant_name, _) =
-                sample_variant(&mut variants, "test_function", &Uuid::now_v7()).unwrap();
-            *counts.entry(variant_name.to_string()).or_insert(0) += 1;
-        }
-
-        // Check if all variants are sampled approximately equally
-        let expected_count = sample_size / variants.len();
-        let tolerance = (expected_count as f64 * 0.1) as usize; // 10% tolerance
-
-        for (variant_name, count) in counts {
-            assert!(
-                (count as i32 - expected_count as i32).abs() <= tolerance as i32,
-                "Variant {variant_name} was not sampled uniformly. Expected {expected_count} +/- {tolerance}, got {count}"
-            );
-        }
-    }
-
-    #[test]
-    fn test_get_uniform_value() {
-        // Test with function name and episode ID
-        let episode_id = Uuid::now_v7();
-        let value1 = get_uniform_value("test_function", &episode_id);
-        let value2 = get_uniform_value("test_function", &episode_id);
-
-        // Values should be the same due to deterministic input
-        assert_eq!(value1, value2);
-        assert!((0.0..1.0).contains(&value1));
-        assert!((0.0..1.0).contains(&value2));
-
-        // Test with different function names
-        let value3 = get_uniform_value("another_function", &episode_id);
-        assert_ne!(value1, value3);
-        assert!((0.0..1.0).contains(&value3));
-
-        // Test with different episode IDs
-        let value4 = get_uniform_value("test_function", &Uuid::now_v7());
-        assert_ne!(value1, value4);
-        assert_ne!(value3, value4);
-        assert!((0.0..1.0).contains(&value4));
-    }
 
     #[test]
     fn test_description_getter() {
@@ -1714,6 +1571,8 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             description: Some("A chat function description".to_string()),
+            all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         };
         let function_config = FunctionConfig::Chat(chat_config);
         assert_eq!(
@@ -1730,6 +1589,8 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: Some("A JSON function description".to_string()),
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         };
         let function_config = FunctionConfig::Json(json_config);
         assert_eq!(
@@ -1745,6 +1606,8 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             description: None,
+            all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         };
         let function_config = FunctionConfig::Chat(chat_config);
         assert_eq!(function_config.description(), None);
@@ -1778,6 +1641,8 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: None,
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         let raw_request = "raw_request".to_string();
 
@@ -1819,6 +1684,7 @@ mod tests {
             dynamic_output_schema: None,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             extra_cache_key: None,
         };
         let response = function_config
@@ -2130,6 +1996,7 @@ mod tests {
             dynamic_output_schema: Some(&dynamic_output_schema),
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             extra_cache_key: None,
         };
         // Test with a correct content block
@@ -2342,6 +2209,8 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
             description: None,
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"answer": "42"}"#.to_string().into()];

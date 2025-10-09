@@ -17,7 +17,7 @@ use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
 use tensorzero_core::function::{FunctionConfig, FunctionConfigJson};
 use tensorzero_core::inference::types::{
-    StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
+    StoredInput, StoredInputMessage, StoredInputMessageContent, TemplateInput, Text,
 };
 use tokio::time::sleep;
 use url::Url;
@@ -101,6 +101,7 @@ async fn run_evaluations_json() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert_eq!(parsed.evaluator_errors.len(), 1);
         let error = parsed.evaluator_errors.get("error").unwrap();
@@ -296,6 +297,7 @@ async fn run_evaluations_json() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         let inference_id = parsed.response.inference_id();
         // We only check the total_topic_fs for the second run
@@ -371,6 +373,7 @@ async fn run_exact_match_evaluation_chat() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
@@ -383,8 +386,22 @@ async fn run_exact_match_evaluation_chat() {
         };
         let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
+        // The fixture is parsed from the old-style template, so convert it in place
+        let mut parsed_input = parsed.datapoint.input().clone();
+        for message in &mut parsed_input.messages {
+            for content in &mut message.content {
+                if let StoredInputMessageContent::Text { value } = content {
+                    if value.is_object() {
+                        *content = StoredInputMessageContent::Template(TemplateInput {
+                            name: message.role.implicit_template_name().to_string(),
+                            arguments: value.as_object().unwrap().clone(),
+                        });
+                    }
+                }
+            }
+        }
         // Check the input to the inference is the same as the input to the datapoint
-        assert_eq!(&clickhouse_input, parsed.datapoint.input());
+        assert_eq!(&clickhouse_input, &parsed_input);
         let clickhouse_output: Vec<ContentBlockChatOutput> =
             serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
         // Check the output to the inference is the same as the output in the response
@@ -495,6 +512,7 @@ async fn run_llm_judge_evaluation_chat() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
@@ -507,8 +525,22 @@ async fn run_llm_judge_evaluation_chat() {
         };
         let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
+        // The fixture is parsed from the old-style template, so convert it in place
+        let mut parsed_input = parsed.datapoint.input().clone();
+        for message in &mut parsed_input.messages {
+            for content in &mut message.content {
+                if let StoredInputMessageContent::Text { value } = content {
+                    if value.is_object() {
+                        *content = StoredInputMessageContent::Template(TemplateInput {
+                            name: message.role.implicit_template_name().to_string(),
+                            arguments: value.as_object().unwrap().clone(),
+                        });
+                    }
+                }
+            }
+        }
         // Check the input to the inference is the same as the input to the datapoint
-        assert_eq!(&clickhouse_input, parsed.datapoint.input());
+        assert_eq!(&clickhouse_input, &parsed_input);
         let clickhouse_output: Vec<ContentBlockChatOutput> =
             serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
         // Check the output to the inference is the same as the output in the response
@@ -639,6 +671,7 @@ async fn run_llm_judge_evaluation_chat() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         let inference_id = parsed.response.inference_id();
         // We only check the total_topic_fs for the second run
@@ -715,6 +748,7 @@ async fn run_image_evaluation() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
@@ -926,6 +960,7 @@ async fn check_invalid_image_evaluation() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert_eq!(parsed.evaluator_errors.len(), 1);
         let honest_answer_error = &parsed.evaluator_errors["honest_answer"];
@@ -1227,6 +1262,7 @@ async fn run_evaluations_errors() {
                 serde_json::to_string_pretty(&evaluation_info).unwrap()
             ),
             EvaluationUpdate::Error(evaluation_error) => evaluation_error,
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(error
             .message
@@ -1243,6 +1279,7 @@ async fn test_run_llm_judge_evaluator_chat() {
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         ))),
         clickhouse_url: None,
+        postgres_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -1293,6 +1330,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         source_inference_id: None,
         staled_at: None,
         is_custom: true,
+        name: None,
     });
     let llm_judge_config = LLMJudgeConfig {
         input_format: LLMJudgeInputFormat::Serialized,
@@ -1310,8 +1348,7 @@ async fn test_run_llm_judge_evaluator_chat() {
             .reresolve(&clients.tensorzero_client)
             .await
             .unwrap(),
-    )
-    .unwrap();
+    );
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
@@ -1399,6 +1436,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         source_inference_id: None,
         staled_at: None,
         is_custom: true,
+        name: None,
     });
 
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
@@ -1466,6 +1504,7 @@ async fn test_run_llm_judge_evaluator_json() {
         source_inference_id: None,
         staled_at: None,
         is_custom: true,
+        name: None,
     });
     let llm_judge_config = LLMJudgeConfig {
         input_format: LLMJudgeInputFormat::Serialized,
@@ -1483,8 +1522,7 @@ async fn test_run_llm_judge_evaluator_json() {
             .reresolve(&clients.tensorzero_client)
             .await
             .unwrap(),
-    )
-    .unwrap();
+    );
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
@@ -1572,6 +1610,7 @@ async fn test_run_llm_judge_evaluator_json() {
         source_inference_id: None,
         staled_at: None,
         is_custom: true,
+        name: None,
     });
 
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
@@ -1636,6 +1675,7 @@ async fn run_evaluations_best_of_3() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
@@ -1823,6 +1863,7 @@ async fn run_evaluations_mixture_of_3() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
@@ -2013,6 +2054,7 @@ async fn run_evaluations_dicl() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();

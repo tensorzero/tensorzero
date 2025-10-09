@@ -568,7 +568,7 @@ pub fn generate_list_inferences_sql(
         "i.function_name = {function_name_param_placeholder}"
     ));
 
-    // Add variant_name filter
+    // Add `variant_name` filter
     if let Some(variant_name) = opts.variant_name {
         let variant_name_param_placeholder = add_parameter(
             variant_name,

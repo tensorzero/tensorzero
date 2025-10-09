@@ -10,29 +10,10 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * The expected payload is a JSON object with the following fields:
  */
-export type ClientInferenceParams = {
-  function_name: string | null;
-  model_name: string | null;
-  episode_id: string | null;
-  input: ClientInput;
-  stream: boolean | null;
-  params: InferenceParams;
-  variant_name: string | null;
-  dryrun: boolean | null;
-  internal: boolean;
-  tags: { [key in string]?: string };
-  output_schema: JsonValue | null;
-  credentials: Map<string, string>;
-  cache_options: CacheParamsOptions;
-  /**
-   * If `true`, add an `original_response` field to the response, containing the raw string response from the model.
-   * Note that for complex variants (e.g. `experimental_best_of_n_sampling`), the response may not contain `original_response`
-   * if the fuser/judge model failed
-   */
-  include_original_response: boolean;
-  internal_dynamic_variant_config: UninitializedVariantInfo | null;
-  allowed_tools: Array<string> | null;
-  additional_tools: Array<Tool> | null;
-  tool_choice: ToolChoice | null;
-  parallel_tool_calls: boolean | null;
-};
+export type ClientInferenceParams = { function_name: string | null, model_name: string | null, episode_id: string | null, input: ClientInput, stream: boolean | null, params: InferenceParams, variant_name: string | null, dryrun: boolean | null, internal: boolean, tags: { [key in string]?: string }, output_schema: JsonValue | null, credentials: Map<string, string>, cache_options: CacheParamsOptions, 
+/**
+ * If `true`, add an `original_response` field to the response, containing the raw string response from the model.
+ * Note that for complex variants (e.g. `experimental_best_of_n_sampling`), the response may not contain `original_response`
+ * if the fuser/judge model failed
+ */
+include_original_response: boolean, internal_dynamic_variant_config: UninitializedVariantInfo | null, allowed_tools: Array<string> | null, additional_tools: Array<Tool> | null, tool_choice: ToolChoice | null, parallel_tool_calls: boolean | null, };

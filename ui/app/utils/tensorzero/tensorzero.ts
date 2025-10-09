@@ -5,7 +5,7 @@ TensorZero Client (for internal use only for now)
 import { z } from "zod";
 import {
   contentBlockChatOutputSchema,
-  thoughtSchema,
+  thoughtContentSchema,
   JsonValueSchema,
   type StoragePath,
 } from "~/utils/clickhouse/common";
@@ -46,6 +46,12 @@ export const TextContentSchema = z.object({
 
 export const TextArgumentsContentSchema = z.object({
   type: z.literal("text"),
+  arguments: JsonValueSchema,
+});
+
+export const TemplateContentSchema = z.object({
+  type: z.literal("template"),
+  name: z.string(),
   arguments: JsonValueSchema,
 });
 
@@ -98,8 +104,9 @@ export const InputMessageContentSchema = z.union([
   ToolCallContentSchema,
   ToolResultContentSchema,
   ImageContentSchema,
-  thoughtSchema,
+  thoughtContentSchema,
   UnknownContentSchema,
+  TemplateContentSchema,
 ]);
 
 export type InputMessageContent = z.infer<typeof InputMessageContentSchema>;
@@ -250,14 +257,17 @@ export type ToolParams = z.infer<typeof ToolParamsSchema>;
  * Base schema for datapoints with common fields
  */
 const BaseDatapointSchema = z.object({
-  id: z.string().uuid(),
   function_name: z.string(),
+  id: z.string().uuid(),
+  episode_id: z.string().uuid().nullable(),
   input: InputSchema,
   output: JsonValueSchema,
   tags: z.record(z.string()).optional(),
   auxiliary: z.string().optional(),
   is_custom: z.boolean(),
   source_inference_id: z.string().uuid().nullable(),
+  name: z.string().nullable(),
+  staled_at: z.string().datetime().nullable(),
 });
 
 /**

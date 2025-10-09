@@ -5,16 +5,4 @@ import type { InferenceOutputSource } from "./InferenceOutputSource";
 import type { OrderBy } from "./OrderBy";
 import type { UninitializedOptimizerInfo } from "./UninitializedOptimizerInfo";
 
-export type LaunchOptimizationWorkflowParams = {
-  function_name: string;
-  template_variant_name: string;
-  query_variant_name: string | null;
-  filters: InferenceFilterTreeNode | null;
-  output_source: InferenceOutputSource;
-  order_by: Array<OrderBy> | null;
-  limit: bigint | null;
-  offset: bigint | null;
-  val_fraction: number | null;
-  format: ClickhouseFormat;
-  optimizer_config: UninitializedOptimizerInfo;
-};
+export type LaunchOptimizationWorkflowParams = { function_name: string, template_variant_name: string, query_variant_name: string | null, filters: InferenceFilterTreeNode | null, output_source: InferenceOutputSource, order_by: Array<OrderBy> | null, limit: bigint | null, offset: bigint | null, val_fraction: number | null, format: ClickhouseFormat, optimizer_config: UninitializedOptimizerInfo, };

@@ -1,20 +1,17 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{
-        ExportConfig, ObservabilityConfig, TemplateFilesystemAccess,
-        UninitializedObservabilityConfig,
-    },
+    config::{ExportConfig, ObservabilityConfig, TemplateFilesystemAccess},
     error::{Error, ErrorDetails},
 };
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedGatewayConfig {
     #[serde(serialize_with = "serialize_optional_socket_addr")]
     pub bind_address: Option<std::net::SocketAddr>,
     #[serde(default)]
-    pub observability: UninitializedObservabilityConfig,
+    pub observability: ObservabilityConfig,
     #[serde(default)]
     pub debug: bool,
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
@@ -31,15 +28,36 @@ pub struct UninitializedGatewayConfig {
     // If set to `true`, disables validation on feedback queries (read from ClickHouse to check that the target is valid)
     #[serde(default)]
     pub unstable_disable_feedback_target_validation: bool,
-    /// If enabled, adds an 'error_json' field alongside the human-readable 'error' field
+    /// If enabled, adds an `error_json` field alongside the human-readable `error` field
     /// in HTTP error responses. This contains a JSON-serialized version of the error.
-    /// While 'error_json' will always be valid JSON when present, the exact contents is unstable,
+    /// While `error_json` will always be valid JSON when present, the exact contents is unstable,
     /// and may change at any time without warning.
     /// For now, this is only supported in the standalone gateway, and not in the embedded gateway.
     #[serde(default)]
     pub unstable_error_json: bool,
     #[serde(default)]
     pub disable_pseudonymous_usage_analytics: bool,
+    #[serde(default = "default_fetch_and_encode_input_files_before_inference")]
+    pub fetch_and_encode_input_files_before_inference: bool,
+}
+
+impl Default for UninitializedGatewayConfig {
+    fn default() -> Self {
+        Self {
+            bind_address: Default::default(),
+            observability: Default::default(),
+            debug: Default::default(),
+            enable_template_filesystem_access: Default::default(),
+            template_filesystem_access: Default::default(),
+            export: Default::default(),
+            base_path: Default::default(),
+            unstable_disable_feedback_target_validation: Default::default(),
+            unstable_error_json: Default::default(),
+            disable_pseudonymous_usage_analytics: Default::default(),
+            fetch_and_encode_input_files_before_inference:
+                default_fetch_and_encode_input_files_before_inference(),
+        }
+    }
 }
 
 impl UninitializedGatewayConfig {
@@ -65,7 +83,7 @@ impl UninitializedGatewayConfig {
         };
         Ok(GatewayConfig {
             bind_address: self.bind_address,
-            observability: self.observability.load(),
+            observability: self.observability,
             debug: self.debug,
             template_filesystem_access,
             export: self.export,
@@ -74,11 +92,13 @@ impl UninitializedGatewayConfig {
             unstable_disable_feedback_target_validation: self
                 .unstable_disable_feedback_target_validation,
             disable_pseudonymous_usage_analytics: self.disable_pseudonymous_usage_analytics,
+            fetch_and_encode_input_files_before_inference: self
+                .fetch_and_encode_input_files_before_inference,
         })
     }
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct GatewayConfig {
@@ -94,6 +114,30 @@ pub struct GatewayConfig {
     pub unstable_disable_feedback_target_validation: bool,
     #[serde(default)]
     pub disable_pseudonymous_usage_analytics: bool,
+    #[serde(default = "default_fetch_and_encode_input_files_before_inference")]
+    pub fetch_and_encode_input_files_before_inference: bool,
+}
+
+impl Default for GatewayConfig {
+    fn default() -> Self {
+        Self {
+            bind_address: Default::default(),
+            observability: Default::default(),
+            debug: Default::default(),
+            template_filesystem_access: Default::default(),
+            export: Default::default(),
+            base_path: Default::default(),
+            unstable_error_json: Default::default(),
+            unstable_disable_feedback_target_validation: Default::default(),
+            disable_pseudonymous_usage_analytics: Default::default(),
+            fetch_and_encode_input_files_before_inference:
+                default_fetch_and_encode_input_files_before_inference(),
+        }
+    }
+}
+
+fn default_fetch_and_encode_input_files_before_inference() -> bool {
+    true
 }
 
 fn serialize_optional_socket_addr<S>(

@@ -2,6 +2,8 @@
 members = [
     "tensorzero-core",
     "tensorzero-core/tests/mock-inference-provider",
+    "tensorzero-core/tests/load/rate-limit-load-test",
+    "tensorzero-core/tests/load/feedback",
     "gateway",
     "internal/tensorzero-node",
     "clients/rust",
@@ -14,7 +16,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.9.0"
+version = "2025.10.1"
 rust-version = "1.86.0"
 license = "Apache-2.0"
 
@@ -34,12 +36,13 @@ tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
 toml = "0.9.5"
 reqwest-eventsource = "0.6.0"
 async-stream = "0.3.5"
+async-trait = "0.1.89"
 http = "1.3.1"
 tokio-stream = "0.1.15"
 tokio = { version = "1.46.1", features = ["full"] }
 tracing = { version = "0.1.40", features = ["log"] }
-pyo3 = { version = "0.24.2", features = ["experimental-async", "abi3-py39"] }
-axum = { version = "0.8", features = ["macros"] }
+pyo3 = { version = "0.26.0", features = ["experimental-async", "abi3-py39"] }
+axum = { version = "0.8", features = ["macros", "http2"] }
 anyhow = "1.0.99"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
 clap = { version = "4.5.46", features = ["derive"] }
@@ -54,6 +57,7 @@ ts-rs = { version = "11.0.1", features = [
     "serde-json-impl",
     "uuid-impl",
     "url-impl",
+    "chrono-impl",
     "no-serde-warnings",
 ] }
 chrono = { version = "0.4.41", features = ["serde"] }
@@ -65,6 +69,8 @@ tower-http = { version = "0.6.6", features = ["trace"] }
 mime = { git = "https://github.com/hyperium/mime", rev = "1ef137c7358fc64e07c8a640e4e9ba2a784b7f7d", features = [
     "serde1",
 ] }
+sqlx = { version = "0.8.6", features = ["runtime-tokio", "tls-rustls", "postgres", "migrate", "chrono", "uuid"] }
+rlt = "0.2.1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -72,6 +78,9 @@ unsafe_code = "forbid"
 [workspace.lints.clippy]
 allow_attributes = "deny"
 dbg_macro = "deny"
+disallowed-types = "deny"
+# NB: Slowly making progress towards:
+# doc_markdown = "deny"
 expect_used = "deny"
 explicit_iter_loop = "deny"
 if_not_else = "deny"
@@ -103,6 +112,9 @@ default_trait_access = "allow"
 match_same_arms = "allow"
 must_use_candidate = "allow"
 single_match_else = "allow"
+
+# This lint cannot be fixed with 'cargo fmt', and we don't currently generate docs
+doc_lazy_continuation = "allow"
 
 [profile.performance]
 inherits = "release"

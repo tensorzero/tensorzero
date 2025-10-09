@@ -41,11 +41,8 @@ async fn test_base_path(child_data: ChildData) {
         .get(format!("http://{}/my/prefix/health", child_data.addr))
         .send()
         .await
-        .unwrap()
-        .text()
-        .await
         .unwrap();
-    assert_eq!(health_response, r#"{"gateway":"ok","clickhouse":"ok"}"#);
+    assert!(health_response.status().is_success());
 
     let inference_response = reqwest::Client::new()
         .post(format!("http://{}/my/prefix/inference", child_data.addr))

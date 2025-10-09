@@ -12,13 +12,4 @@ import type { BatchConfig } from "./BatchConfig";
  *
  * In the future, we'll support 'unknown' blocks in streaming mode, and adjust this provider to emit them.
  */
-export type GCPVertexGeminiProvider = {
-  api_v1_base_url: string;
-  request_url: string;
-  streaming_request_url: string;
-  audience: string;
-  model_id: string | null;
-  endpoint_id: string | null;
-  model_or_endpoint_id: string;
-  batch_config: BatchConfig | null;
-};
+export type GCPVertexGeminiProvider = { api_v1_base_url: string, request_url: string, streaming_request_url: string, audience: string, model_id: string | null, endpoint_id: string | null, model_or_endpoint_id: string, batch_config: BatchConfig | null, };

@@ -1,7 +1,7 @@
 use std::borrow::Cow;
+use std::collections::HashSet;
 
-use backon::Retryable;
-use futures::future::join_all;
+use futures::future::{join_all, try_join_all};
 use lazy_static::lazy_static;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -14,11 +14,12 @@ use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
+use crate::inference::types::resolved_input::LazyResolvedInput;
+use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, FunctionType, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage, Role,
 };
-use crate::inference::types::{ContentBlockOutput, ResolvedInput};
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::model::ModelTable;
 use crate::tool::{ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
@@ -39,10 +40,32 @@ use super::{InferenceConfig, JsonMode, ModelUsedInfo, Variant};
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct BestOfNSamplingConfig {
-    pub weight: Option<f64>,
-    pub timeout_s: f64,
-    pub candidates: Vec<String>,
-    pub evaluator: BestOfNEvaluatorConfig,
+    weight: Option<f64>,
+    timeout_s: f64,
+    candidates: Vec<String>,
+    evaluator: BestOfNEvaluatorConfig,
+}
+
+impl BestOfNSamplingConfig {
+    pub fn weight(&self) -> Option<f64> {
+        self.weight
+    }
+
+    pub fn set_weight(&mut self, weight: Option<f64>) {
+        self.weight = weight;
+    }
+
+    pub fn timeout_s(&self) -> f64 {
+        self.timeout_s
+    }
+
+    pub fn candidates(&self) -> &Vec<String> {
+        &self.candidates
+    }
+
+    pub fn evaluator(&self) -> &BestOfNEvaluatorConfig {
+        &self.evaluator
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
@@ -128,7 +151,7 @@ lazy_static! {
 impl Variant for BestOfNSamplingConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -150,7 +173,7 @@ impl Variant for BestOfNSamplingConfig {
 
     async fn infer_stream<'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -230,9 +253,15 @@ impl Variant for BestOfNSamplingConfig {
         self.evaluator.inner.get_all_template_paths()
     }
 
+    fn get_all_explicit_template_names(&self) -> HashSet<String> {
+        // The candidate variants will  already have 'get_all_explicit_template_names' called on them,
+        // so we don't need to look them up here
+        self.evaluator.inner.get_all_explicit_template_names()
+    }
+
     async fn start_batch_inference<'a>(
         &'a self,
-        _input: &[ResolvedInput],
+        _input: &[LazyResolvedInput],
         _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
         _inference_configs: &'a [InferenceConfig<'a>],
@@ -247,7 +276,7 @@ impl BestOfNSamplingConfig {
     /// Infer each candidate variant concurrently and return the results.
     async fn infer_candidates<'a, 'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
@@ -339,7 +368,7 @@ impl BestOfNSamplingConfig {
     /// we randomly select one of the candidates.
     async fn select_best_candidate<'request>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         models: &ModelTable,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
@@ -426,15 +455,16 @@ impl BestOfNSamplingConfig {
 ///  * Return the index and the model inference result.
 async fn inner_select_best_candidate<'a, 'request>(
     evaluator: &'a BestOfNEvaluatorConfig,
-    input: &'request ResolvedInput,
+    input: &'request LazyResolvedInput,
     models: &'a ModelTable,
     inference_config: &'request InferenceConfig<'request>,
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult],
 ) -> Result<(Option<usize>, Option<ModelInferenceResponseWithMetadata>), Error> {
     let mut inference_params = InferenceParams::default();
-    let (inference_request, skipped_indices) =
-        evaluator.prepare_request(input, inference_config, candidates, &mut inference_params)?;
+    let (inference_request, skipped_indices) = evaluator
+        .prepare_evaluator_request(input, inference_config, candidates, &mut inference_params)
+        .await?;
     if skipped_indices.len() == candidates.len() {
         return Err(ErrorDetails::Inference {
             message: "No valid candidates available to prepare request.".to_string(),
@@ -453,21 +483,23 @@ async fn inner_select_best_candidate<'a, 'request>(
         // Return the selected index and None for the model inference result
         return Ok((Some(selected_index), None));
     }
-    let model_config = models.get(&evaluator.inner.model).await?.ok_or_else(|| {
+    let model_config = models.get(evaluator.inner.model()).await?.ok_or_else(|| {
         Error::new(ErrorDetails::UnknownModel {
-            name: evaluator.inner.model.to_string(),
+            name: evaluator.inner.model().to_string(),
         })
     })?;
-    let model_inference_response = (|| async {
-        model_config
-            .infer(&inference_request, clients, &evaluator.inner.model)
-            .await
-    })
-    .retry(evaluator.inner.retries.get_backoff())
-    .await?;
+    let model_inference_response = evaluator
+        .inner
+        .retries()
+        .retry(|| async {
+            model_config
+                .infer(&inference_request, clients, evaluator.inner.model())
+                .await
+        })
+        .await?;
     let model_inference_result = ModelInferenceResponseWithMetadata::new(
         model_inference_response,
-        evaluator.inner.model.clone(),
+        evaluator.inner.model().clone(),
     );
     let raw = match model_inference_result
         .output
@@ -637,9 +669,9 @@ impl BestOfNEvaluatorConfig {
     /// # Errors
     ///
     /// Returns an `Error` if any of the candidate outputs fail to serialize or if templating fails.
-    fn prepare_request<'a>(
+    async fn prepare_evaluator_request<'a>(
         &self,
-        input: &ResolvedInput,
+        input: &LazyResolvedInput,
         inference_config: &InferenceConfig<'_>,
         candidates: &[InferenceResult],
         inference_params: &mut InferenceParams,
@@ -662,30 +694,27 @@ impl BestOfNEvaluatorConfig {
             input.system.as_ref(),
             max_index,
         )?);
-        let messages = input
-            .messages
-            .iter()
-            .map(|message| {
-                self.inner
-                    .prepare_request_message(inference_config.templates, message)
-            })
-            .chain(std::iter::once(Ok(candidate_message)))
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut messages = try_join_all(input.messages.iter().map(|message| {
+            self.inner
+                .prepare_request_message(inference_config.templates, message)
+        }))
+        .await?;
+        messages.push(candidate_message);
         inference_params
             .chat_completion
             .backfill_with_variant_params(
-                self.inner.temperature,
-                self.inner.max_tokens,
-                self.inner.seed,
-                self.inner.top_p,
-                self.inner.presence_penalty,
-                self.inner.frequency_penalty,
-                self.inner.stop_sequences.clone(),
+                self.inner.temperature(),
+                self.inner.max_tokens(),
+                self.inner.seed(),
+                self.inner.top_p(),
+                self.inner.presence_penalty(),
+                self.inner.frequency_penalty(),
+                self.inner.stop_sequences().cloned(),
             );
         let json_mode = inference_params
             .chat_completion
             .json_mode
-            .or(self.inner.json_mode)
+            .or_else(|| self.inner.json_mode().cloned())
             .unwrap_or(JsonMode::Strict);
         let tool_config = match json_mode {
             JsonMode::ImplicitTool => Some(Cow::Borrowed(&*IMPLICIT_TOOL_CALL_CONFIG)),
@@ -699,11 +728,11 @@ impl BestOfNEvaluatorConfig {
             .into());
         }
         let extra_body = FullExtraBodyConfig {
-            extra_body: self.inner.extra_body.clone(),
+            extra_body: self.inner.extra_body().cloned(),
             inference_extra_body: Default::default(),
         };
         let extra_headers = FullExtraHeadersConfig {
-            variant_extra_headers: self.inner.extra_headers.clone(),
+            variant_extra_headers: self.inner.extra_headers().cloned(),
             inference_extra_headers: Default::default(),
         };
         Ok((
@@ -726,6 +755,8 @@ impl BestOfNEvaluatorConfig {
                 stream: false,
                 json_mode: json_mode.into(),
                 function_type: FunctionType::Json,
+                fetch_and_encode_input_files_before_inference: inference_config
+                    .fetch_and_encode_input_files_before_inference,
                 output_schema: Some(&EVALUATOR_OUTPUT_SCHEMA.value),
                 extra_body,
                 extra_headers,
@@ -758,14 +789,14 @@ fn map_evaluator_to_actual_index(evaluator_idx: usize, skipped_indices: &[usize]
 mod tests {
     use std::collections::HashMap;
 
-    use reqwest::Client;
     use uuid::Uuid;
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        config::UninitializedSchemas,
-        db::clickhouse::ClickHouseConnectionInfo,
+        config::{provider_types::ProviderTypesConfig, UninitializedSchemas},
+        db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
+        http::TensorzeroHttpClient,
         inference::types::{
             ChatInferenceResult, FinishReason, JsonInferenceResult, Latency,
             RequestMessagesOrBatch, Usage,
@@ -774,6 +805,7 @@ mod tests {
             get_system_filled_template, get_system_template, get_test_template_config,
         },
         model::{ModelConfig, ModelProvider, ProviderConfig},
+        model_table::ProviderTypeDefaultCredentials,
         providers::dummy::DummyProvider,
     };
 
@@ -1240,41 +1272,49 @@ mod tests {
             .await,
         );
         let candidates = vec![candidate0, candidate1];
-        let models = ModelTable::try_from(HashMap::from([(
-            "best_of_n_1".into(),
-            ModelConfig {
-                routing: vec!["best_of_n_1".into()],
-                providers: HashMap::from([(
-                    "best_of_n_1".into(),
-                    ModelProvider {
-                        name: "best_of_n_1".into(),
-                        config: ProviderConfig::Dummy(DummyProvider {
-                            model_name: "best_of_n_1".into(),
-                            ..Default::default()
-                        }),
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        timeouts: Default::default(),
-                        discard_unknown_chunks: false,
-                    },
-                )]),
-                timeouts: Default::default(),
-            },
-        )]))
+        let provider_types = ProviderTypesConfig::default();
+        let models = ModelTable::new(
+            HashMap::from([(
+                "best_of_n_1".into(),
+                ModelConfig {
+                    routing: vec!["best_of_n_1".into()],
+                    providers: HashMap::from([(
+                        "best_of_n_1".into(),
+                        ModelProvider {
+                            name: "best_of_n_1".into(),
+                            config: ProviderConfig::Dummy(DummyProvider {
+                                model_name: "best_of_n_1".into(),
+                                ..Default::default()
+                            }),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            timeouts: Default::default(),
+                            discard_unknown_chunks: false,
+                        },
+                    )]),
+                    timeouts: Default::default(),
+                },
+            )]),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
         .expect("Failed to create model table");
-        let client = Client::new();
+        let client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
         let inference_clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
             credentials: &api_keys,
             cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
+            otlp_config: &Default::default(),
         };
-        let input = ResolvedInput {
+        let input = LazyResolvedInput {
             system: None,
             messages: vec![],
         };
@@ -1288,6 +1328,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: "",
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -1363,9 +1404,14 @@ mod tests {
                     timeouts: Default::default(),
                 },
             );
-            ModelTable::try_from(map).expect("Failed to create model table")
+            let provider_types = ProviderTypesConfig::default();
+            ModelTable::new(
+                map,
+                ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            )
+            .expect("Failed to create model table")
         };
-        let input = ResolvedInput {
+        let input = LazyResolvedInput {
             system: None,
             messages: vec![],
         };
@@ -1432,9 +1478,14 @@ mod tests {
                     timeouts: Default::default(),
                 },
             );
-            ModelTable::try_from(map).expect("Failed to create model table")
+            let provider_types = ProviderTypesConfig::default();
+            ModelTable::new(
+                map,
+                ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            )
+            .expect("Failed to create model table")
         };
-        let input = ResolvedInput {
+        let input = LazyResolvedInput {
             system: None,
             messages: vec![],
         };
@@ -1518,7 +1569,12 @@ mod tests {
                 timeouts: Default::default(),
             },
         );
-        let big_models = ModelTable::try_from(big_models).expect("Failed to create model table");
+        let provider_types = ProviderTypesConfig::default();
+        let big_models = ModelTable::new(
+            big_models,
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
+        .expect("Failed to create model table");
 
         let result_big = best_of_n_big_variant
             .select_best_candidate(

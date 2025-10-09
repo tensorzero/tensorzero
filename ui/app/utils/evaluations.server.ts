@@ -14,10 +14,21 @@ function getEvaluationsPath(): string {
   return getEnv().TENSORZERO_EVALUATIONS_PATH || "evaluations";
 }
 function getConfigPath(): string {
-  return getEnv().TENSORZERO_UI_CONFIG_PATH;
+  const configPath = getEnv().TENSORZERO_UI_CONFIG_PATH;
+  if (!configPath) {
+    throw new Error("TENSORZERO_UI_CONFIG_PATH is not set");
+  }
+  return configPath;
 }
 
-export type InferenceCacheSetting = "on" | "off" | "read_only" | "write_only";
+const INFERENCE_CACHE_SETTINGS = [
+  "on",
+  "off",
+  "read_only",
+  "write_only",
+] as const;
+
+export type InferenceCacheSetting = (typeof INFERENCE_CACHE_SETTINGS)[number];
 
 interface RunningEvaluationInfo {
   errors: DisplayEvaluationError[];
@@ -27,7 +38,7 @@ interface RunningEvaluationInfo {
 }
 
 // This is a map of evaluation run id to running evaluation info
-const runningEvaluations: Record<string, RunningEvaluationInfo> = {};
+const runningEvaluations = new Map<string, RunningEvaluationInfo>();
 
 /**
  * Returns the running information for a specific evaluation run.
@@ -37,7 +48,29 @@ const runningEvaluations: Record<string, RunningEvaluationInfo> = {};
 export function getRunningEvaluation(
   evaluationRunId: string,
 ): RunningEvaluationInfo | undefined {
-  return runningEvaluations[evaluationRunId];
+  return runningEvaluations.get(evaluationRunId);
+}
+
+const evaluationFormDataSchema = z.object({
+  evaluation_name: z.string().min(1),
+  dataset_name: z.string().min(1),
+  variant_name: z.string().min(1),
+  concurrency_limit: z
+    .string()
+    .min(1)
+    .transform((val) => Number.parseInt(val, 10))
+    .refine((val) => !Number.isNaN(val) && val > 0, {
+      message: "Concurrency limit must be a positive integer",
+    }),
+  inference_cache: z.enum(INFERENCE_CACHE_SETTINGS),
+});
+export type EvaluationFormData = z.infer<typeof evaluationFormDataSchema>;
+
+export function parseEvaluationFormData(
+  data: Record<keyof EvaluationFormData, FormDataEntryValue | null>,
+): EvaluationFormData | null {
+  const result = evaluationFormDataSchema.safeParse(data);
+  return result.success ? result.data : null;
 }
 
 export function runEvaluation(
@@ -105,26 +138,26 @@ export function runEvaluation(
           parsedLine.evaluation_run_id &&
           parsedLine.num_datapoints
         ) {
-          try {
-            const evaluationStartInfo =
-              evaluationStartInfoSchema.parse(parsedLine);
-            evaluationRunId = evaluationStartInfo.evaluation_run_id;
-
-            // Initialize the tracking entry in our runningEvaluations map
-            runningEvaluations[evaluationRunId] = {
-              variantName,
-              errors: [],
-              started: startTime,
-            };
-
-            // Mark that we've received the initial data
-            initialDataReceived = true;
-
-            // Resolve the promise with the evaluation start info
-            resolve(evaluationStartInfo);
-          } catch (error) {
-            reject(error);
+          const evaluationStartInfo =
+            evaluationStartInfoSchema.safeParse(parsedLine);
+          if (!evaluationStartInfo.success) {
+            return reject(evaluationStartInfo.error);
           }
+
+          evaluationRunId = evaluationStartInfo.data.evaluation_run_id;
+
+          // Initialize the tracking entry in our runningEvaluations map
+          runningEvaluations.set(evaluationRunId, {
+            variantName,
+            errors: [],
+            started: startTime,
+          });
+
+          // Mark that we've received the initial data
+          initialDataReceived = true;
+
+          // Resolve the promise with the evaluation start info
+          return resolve(evaluationStartInfo.data);
         }
         // Check if this is an EvaluationError using the Zod schema
         else if (
@@ -132,14 +165,13 @@ export function runEvaluation(
           parsedLine.datapoint_id &&
           parsedLine.message
         ) {
-          try {
-            // Parse using the Zod schema to validate
-            const evaluationError = EvaluationErrorSchema.parse(parsedLine);
-
+          // Parse using the Zod schema to validate
+          const evaluationError = EvaluationErrorSchema.safeParse(parsedLine);
+          if (evaluationError.success) {
             // Add to the beginning of the errors list
-            runningEvaluations[evaluationRunId].errors.unshift(evaluationError);
-          } catch {
-            // If it doesn't match our schema, just ignore it
+            runningEvaluations
+              .get(evaluationRunId)
+              ?.errors.unshift(evaluationError.data);
           }
         }
         // We're ignoring other types of output that don't match these patterns
@@ -170,6 +202,9 @@ export function runEvaluation(
     child.stderr.on("data", (data) => {
       // Add new data to our buffer
       stderrBuffer += data.toString();
+      const evaluation = evaluationRunId
+        ? runningEvaluations.get(evaluationRunId)
+        : undefined;
 
       // Process complete lines
       let newlineIndex;
@@ -179,8 +214,8 @@ export function runEvaluation(
         // Remove the processed line from the buffer
         stderrBuffer = stderrBuffer.substring(newlineIndex + 1);
         // Accumulate the error
-        if (evaluationRunId) {
-          runningEvaluations[evaluationRunId].errors.unshift({
+        if (evaluation) {
+          evaluation.errors.unshift({
             message: `Process error: ${line}`,
           });
         }
@@ -202,18 +237,21 @@ export function runEvaluation(
         processCompleteLine(stdoutBuffer.trim());
       }
 
-      if (evaluationRunId) {
+      const evaluation = evaluationRunId
+        ? runningEvaluations.get(evaluationRunId)
+        : undefined;
+      if (evaluation) {
         // Mark the evaluation as completed
-        runningEvaluations[evaluationRunId].completed = new Date();
+        evaluation.completed = new Date();
 
         // Add exit code info if not successful
         if (code !== 0) {
           if (stderrBuffer.trim()) {
-            runningEvaluations[evaluationRunId].errors.push({
+            evaluation.errors.push({
               message: `Error: ${stderrBuffer.trim()}`,
             });
           } else {
-            runningEvaluations[evaluationRunId].errors.push({
+            evaluation.errors.push({
               message: `Process exited with code ${code}`,
             });
           }
@@ -246,29 +284,29 @@ const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
  * - Removes stalled evaluations (started but not completed) older than 24 hours
  */
 export function cleanupOldEvaluations(): void {
+  if (runningEvaluations.size === 0) {
+    return;
+  }
+
   const now = new Date();
-
-  Object.keys(runningEvaluations).forEach((evaluationRunId) => {
-    const evaluationInfo = runningEvaluations[evaluationRunId];
-
-    // Remove completed evaluations older than 1 hour
-    if (
+  for (const [evaluationRunId, evaluationInfo] of runningEvaluations) {
+    const isCompleted =
       evaluationInfo.completed &&
-      now.getTime() - evaluationInfo.completed.getTime() > ONE_HOUR_MS
-    ) {
-      delete runningEvaluations[evaluationRunId];
-      return;
-    }
+      // Remove completed evaluations older than 1 hour
+      now.getTime() - evaluationInfo.completed.getTime() > ONE_HOUR_MS;
 
-    // Remove stalled evaluations older than 24 hours
-    if (
-      now.getTime() - evaluationInfo.started.getTime() >
-      TWENTY_FOUR_HOURS_MS
-    ) {
-      delete runningEvaluations[evaluationRunId];
+    const isStalled =
+      !evaluationInfo.completed &&
+      // Remove stalled evaluations older than 24 hours
+      now.getTime() - evaluationInfo.started.getTime() > TWENTY_FOUR_HOURS_MS;
+
+    if (isCompleted || isStalled) {
+      runningEvaluations.delete(evaluationRunId);
     }
-  });
+  }
 }
+
+let cleanupIntervalId: NodeJS.Timeout | undefined;
 
 /**
  * Starts a periodic cleanup of old evaluations.
@@ -276,11 +314,25 @@ export function cleanupOldEvaluations(): void {
  * @returns A function that can be called to stop the periodic cleanup.
  */
 export function startPeriodicCleanup(intervalMs = ONE_HOUR_MS): () => void {
-  const intervalId = setInterval(cleanupOldEvaluations, intervalMs);
+  const stopPeriodicCleanup = () => {
+    if (cleanupIntervalId !== undefined) {
+      clearInterval(cleanupIntervalId);
+      cleanupIntervalId = undefined;
+    }
+  };
 
-  // Run an initial cleanup immediately
-  cleanupOldEvaluations();
+  if (cleanupIntervalId === undefined) {
+    // Only start the interval if there are running evaluations to clean up
+    if (runningEvaluations.size > 0) {
+      // Run an initial cleanup immediately
+      cleanupOldEvaluations();
+      cleanupIntervalId = setInterval(cleanupOldEvaluations, intervalMs);
+    }
+  } else if (runningEvaluations.size === 0) {
+    // Interval is still running but there are no running evaluations to clean
+    // up, so we can stop it.
+    stopPeriodicCleanup();
+  }
 
-  // Return a function to stop the periodic cleanup
-  return () => clearInterval(intervalId);
+  return stopPeriodicCleanup;
 }

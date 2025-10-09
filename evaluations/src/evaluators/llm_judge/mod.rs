@@ -51,7 +51,7 @@ pub struct RunLLMJudgeEvaluatorParams<'a> {
     pub inference_cache: CacheEnabledMode,
 }
 
-#[instrument(skip(params), fields(datapoint_id = %params.datapoint.id(), evaluator_name = %params.evaluator_name))]
+#[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), evaluator_name = %params.evaluator_name))]
 pub async fn run_llm_judge_evaluator(
     params: RunLLMJudgeEvaluatorParams<'_>,
 ) -> Result<Option<LLMJudgeEvaluationResult>> {
@@ -124,6 +124,7 @@ pub async fn run_llm_judge_evaluator(
         extra_body: Default::default(),
         extra_headers: Default::default(),
         internal_dynamic_variant_config: None,
+        otlp_traces_extra_headers: HashMap::new(),
     };
     let result = clients.tensorzero_client.inference(params).await?;
     let response = match result {
@@ -269,6 +270,7 @@ fn prepare_serialized_input(input: &ClientInput) -> Result<String> {
                     bail!("Unknown content not supported for LLM judge evaluations")
                 }
                 ClientInputMessageContent::Text { .. }
+                | ClientInputMessageContent::Template { .. }
                 | ClientInputMessageContent::ToolCall { .. }
                 | ClientInputMessageContent::ToolResult { .. }
                 | ClientInputMessageContent::RawText { .. }
@@ -336,6 +338,14 @@ fn serialize_content_for_messages_input(
             | ClientInputMessageContent::RawText { .. }
             | ClientInputMessageContent::Thought(_) => {
                 serialized_content.push(content_block.clone());
+            }
+            ClientInputMessageContent::Template(input) => {
+                // Since the LLM Judge does not have the template of the original function,
+                // we instead serialize the arguments and send them as a TextKind::Text block.
+                let arguments_string = serde_json::to_string(input)?;
+                serialized_content.push(ClientInputMessageContent::Text(TextKind::Text {
+                    text: arguments_string,
+                }));
             }
             ClientInputMessageContent::Text(text) => match text {
                 TextKind::Text { text } => {
@@ -583,6 +593,7 @@ mod tests {
             &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
+                name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
                 input: StoredInput {
@@ -651,6 +662,7 @@ mod tests {
             &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
+                name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
                 input: StoredInput {
@@ -882,6 +894,7 @@ mod tests {
         let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
@@ -913,6 +926,7 @@ mod tests {
         let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
@@ -938,6 +952,7 @@ mod tests {
         let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
@@ -964,6 +979,7 @@ mod tests {
         let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
@@ -1068,6 +1084,7 @@ mod tests {
             &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
+                name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
                 input: StoredInput {
@@ -1181,6 +1198,7 @@ mod tests {
             &Datapoint::Json(JsonInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
+                name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
                 input: StoredInput {

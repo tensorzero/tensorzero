@@ -1,4 +1,4 @@
-use futures::try_join;
+use futures::{future::try_join_all, try_join};
 #[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyValueError;
 #[cfg(feature = "pyo3")]
@@ -12,16 +12,18 @@ use crate::{
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
+    http::TensorzeroHttpClient,
     model::CredentialLocation,
+    model_table::{GCPVertexGeminiKind, ProviderTypeDefaultCredentials},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer},
     providers::gcp_vertex_gemini::{
-        default_api_key_location, location_subdomain_prefix,
+        location_subdomain_prefix,
         optimization::{
             convert_to_optimizer_status, EncryptionSpec, GCPVertexGeminiFineTuningJob,
             GCPVertexGeminiFineTuningRequest, SupervisedHyperparameters, SupervisedTuningSpec,
         },
-        upload_rows_to_gcp_object_store, GCPVertexCredentials, GCPVertexGeminiProvider,
-        GCPVertexGeminiSupervisedRow, PROVIDER_TYPE,
+        upload_rows_to_gcp_object_store, GCPVertexCredentials, GCPVertexGeminiSupervisedRow,
+        PROVIDER_TYPE,
     },
     stored_inference::RenderedSample,
 };
@@ -115,8 +117,7 @@ impl UninitializedGCPVertexGeminiSFTConfig {
         let credentials = credentials
             .map(|s| serde_json::from_str(&s))
             .transpose()
-            .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid credentials JSON: {e}")))?
-            .or_else(|| Some(default_api_key_location()));
+            .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid credentials JSON: {e}")))?;
         let api_base = api_base
             .map(|s| {
                 Url::parse(&s)
@@ -152,7 +153,7 @@ impl UninitializedGCPVertexGeminiSFTConfig {
     /// :param adapter_size: The adapter size to use for the fine-tuning job.
     /// :param n_epochs: The number of epochs to use for the fine-tuning job.
     /// :param export_last_checkpoint_only: Whether to export the last checkpoint only.
-    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like "env::GCP_VERTEX_CREDENTIALS_PATH". See docs for more details.
+    /// :param credentials: The credentials to use for the fine-tuning job. This should be a string like `env::GCP_VERTEX_CREDENTIALS_PATH`. See docs for more details.
     /// :param api_base: The base URL to use for the fine-tuning job. This is primarily used for testing.
     /// :param seed: The seed to use for the fine-tuning job.
     /// :param service_account: The service account to use for the fine-tuning job.
@@ -184,7 +185,10 @@ impl UninitializedGCPVertexGeminiSFTConfig {
 }
 
 impl UninitializedGCPVertexGeminiSFTConfig {
-    pub async fn load(self) -> Result<GCPVertexGeminiSFTConfig, Error> {
+    pub async fn load(
+        self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<GCPVertexGeminiSFTConfig, Error> {
         Ok(GCPVertexGeminiSFTConfig {
             model: self.model,
             bucket_name: self.bucket_name,
@@ -194,7 +198,8 @@ impl UninitializedGCPVertexGeminiSFTConfig {
             adapter_size: self.adapter_size,
             n_epochs: self.n_epochs,
             export_last_checkpoint_only: self.export_last_checkpoint_only,
-            credentials: GCPVertexGeminiProvider::build_credentials(self.credentials.clone())
+            credentials: GCPVertexGeminiKind
+                .get_defaulted_credential(self.credentials.as_ref(), default_credentials)
                 .await?,
             credential_location: self.credentials,
             api_base: self.api_base,
@@ -231,28 +236,43 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
 
     async fn launch(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
         _config: &Config,
     ) -> Result<Self::Handle, Error> {
+        let train_examples = train_examples
+            .into_iter()
+            .map(RenderedSample::into_lazy_rendered_sample)
+            .collect::<Vec<_>>();
+        let val_examples = val_examples.map(|examples| {
+            examples
+                .into_iter()
+                .map(RenderedSample::into_lazy_rendered_sample)
+                .collect::<Vec<_>>()
+        });
         // TODO(#2642): improve error handling here so we know what index of example failed
-        let train_rows: Vec<GCPVertexGeminiSupervisedRow> = train_examples
-            .iter()
-            .map(GCPVertexGeminiSupervisedRow::try_from)
-            .collect::<Result<Vec<_>, _>>()?;
+        let train_rows: Vec<GCPVertexGeminiSupervisedRow> = try_join_all(
+            train_examples
+                .iter()
+                .map(GCPVertexGeminiSupervisedRow::from_rendered_sample),
+        )
+        .await?;
 
-        let val_rows: Option<Vec<GCPVertexGeminiSupervisedRow>> = val_examples
-            .as_ref()
-            .map(|examples| {
-                examples
-                    .iter()
-                    .map(GCPVertexGeminiSupervisedRow::try_from)
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .transpose()?;
+        let val_rows = if let Some(examples) = val_examples.as_ref() {
+            Some(
+                try_join_all(
+                    examples
+                        .iter()
+                        .map(GCPVertexGeminiSupervisedRow::from_rendered_sample),
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
 
         let train_filename = format!("train_{}.jsonl", Uuid::now_v7()); // or use job ID
         let train_gs_url = match &self.bucket_path_prefix {
@@ -387,11 +407,13 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
 impl JobHandle for GCPVertexGeminiSFTJobHandle {
     async fn poll(
         &self,
-        client: &reqwest::Client,
+        client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
-        let gcp_credentials =
-            GCPVertexGeminiProvider::build_credentials(self.credential_location.clone()).await?;
+        let gcp_credentials = crate::model_table::GCPVertexGeminiKind
+            .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
+            .await?;
 
         let auth_headers = gcp_credentials
             .get_auth_headers(
@@ -448,13 +470,6 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
                 })
             })?;
 
-        convert_to_optimizer_status(
-            job,
-            self.region.clone(),
-            self.project_id.clone(),
-            self.credential_location
-                .clone()
-                .unwrap_or_else(default_api_key_location),
-        )
+        convert_to_optimizer_status(job, self.region.clone(), self.project_id.clone())
     }
 }

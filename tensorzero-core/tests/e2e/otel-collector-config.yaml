@@ -1,0 +1,40 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        include_metadata: true
+
+extensions:
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+processors:
+  attributes:
+    actions:
+      - key: tensorzero.custom_key # Attribute name to be created
+        from_context: x-dummy-tensorzero # Source of the value from incoming HTTP header
+        action: upsert
+      - key: tensorzero.config_static_header
+        from_context: x-config-static-header
+        action: upsert
+      - key: tensorzero.config_override_header
+        from_context: x-config-override-header
+        action: upsert
+
+exporters:
+  otlp:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  # Add 'debug' to 'service.pipelines.traces.exporters' to see the spans
+  debug:
+    verbosity: detailed
+
+service:
+  extensions: [zpages]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [attributes]
+      exporters: [otlp]

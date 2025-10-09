@@ -78,6 +78,7 @@ export const FullyPopulated: Story = {
                   "You are a helpful AI assistant. Today's date is {{ date }}.",
               },
               schema: null,
+              legacy_definition: false,
             },
             user: {
               template: {
@@ -85,6 +86,7 @@ export const FullyPopulated: Story = {
                 contents: "User query: {{ query }}\\n\\nContext: {{ context }}",
               },
               schema: null,
+              legacy_definition: false,
             },
             assistant: {
               template: {
@@ -93,6 +95,7 @@ export const FullyPopulated: Story = {
                   "Based on the context, here's my response: {{ response }}",
               },
               schema: null,
+              legacy_definition: false,
             },
           },
           temperature: 0.7,
@@ -135,7 +138,7 @@ export const MinimalConfig: Story = {
         inner: {
           type: "chat_completion",
           weight: null,
-          model: "gpt-3.5-turbo",
+          model: "gpt-4.1-mini",
           templates: {},
           temperature: null,
           top_p: null,
@@ -186,6 +189,7 @@ export const WithJsonMode: Story = {
                   "You are a JSON API that always responds with valid JSON.",
               },
               schema: null,
+              legacy_definition: false,
             },
             user: {
               template: {
@@ -194,6 +198,7 @@ export const WithJsonMode: Story = {
                   "Extract the following information from the text: {{ text }}",
               },
               schema: null,
+              legacy_definition: false,
             },
           },
           temperature: 0.3,
@@ -245,29 +250,32 @@ export const WithTemplatesOnly: Story = {
     Your tone should be {{ tone }} and engaging.`,
               },
               schema: null,
+              legacy_definition: false,
             },
             user: {
               template: {
                 path: "templates/creative_user.jinja2",
                 contents: `Write a story about: {{ prompt }}
-    
+
     Requirements:
     - Length: {{ word_count }} words
     - Include these elements: {{ elements | join(", ") }}`,
               },
               schema: null,
+              legacy_definition: false,
             },
             assistant: {
               template: {
                 path: "templates/creative_assistant.jinja2",
                 contents: `Title: {{ title }}
-    
+
     {{ story }}
-    
+
     ---
     The End`,
               },
               schema: null,
+              legacy_definition: false,
             },
           },
           temperature: null,
@@ -289,6 +297,80 @@ export const WithTemplatesOnly: Story = {
           },
           streaming: {
             ttft_ms: 10000n,
+          },
+        },
+      }}
+    />
+  ),
+};
+
+export const WithCustomNamedTemplates: Story = {
+  args: {
+    variantInfo: {} as VariantInfo,
+    confirmVariantInfo: () => {},
+    isOpen: false,
+    onClose: () => {},
+    variantName: "custom-named-templates",
+  },
+  render: () => (
+    <VariantEditorWrapper
+      initialInfo={{
+        inner: {
+          type: "chat_completion",
+          weight: null,
+          model: "gpt-5-mini",
+          templates: {
+            fun_fact_topic: {
+              template: {
+                path: "templates/fun_fact_topic.jinja2",
+                contents: "Share a fun fact about: {{ topic }}",
+              },
+              schema: null,
+              legacy_definition: false,
+            },
+            greeting_template: {
+              template: {
+                path: "templates/greeting.jinja2",
+                contents:
+                  "Hello {{ name }}! Welcome to {{ place }}. Today is {{ day_of_week }}.",
+              },
+              schema: null,
+              legacy_definition: false,
+            },
+            analysis_prompt: {
+              template: {
+                path: "templates/analysis.jinja2",
+                contents: `Analyze the following data:
+{{ data }}
+
+Focus on:
+{% for aspect in aspects %}
+- {{ aspect }}
+{% endfor %}`,
+              },
+              schema: null,
+              legacy_definition: false,
+            },
+          },
+          temperature: 0.8,
+          top_p: null,
+          max_tokens: 512,
+          presence_penalty: null,
+          frequency_penalty: null,
+          seed: null,
+          stop_sequences: null,
+          json_mode: null,
+          retries: {
+            num_retries: 1,
+            max_delay_s: 10,
+          },
+        },
+        timeouts: {
+          non_streaming: {
+            total_ms: 30000n,
+          },
+          streaming: {
+            ttft_ms: 5000n,
           },
         },
       }}

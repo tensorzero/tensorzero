@@ -16,6 +16,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+import { toEvaluationDatapointUrl } from "~/utils/urls";
 
 import { EvalRunSelector } from "~/components/evaluations/EvalRunSelector";
 import type {
@@ -43,8 +44,10 @@ import {
 } from "~/hooks/evaluations/ColorAssigner";
 import MetricValue, { isCutoffFailed } from "~/components/metric/MetricValue";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
+import { InferenceButton } from "~/components/utils/InferenceButton";
 import InputSnippet from "~/components/inference/InputSnippet";
 import { logger } from "~/utils/logger";
+import { TableItemText } from "~/components/ui/TableItems";
 
 type TruncatedContentProps = (
   | {
@@ -131,12 +134,7 @@ function getInputSummary(input: DisplayInput): string {
 
   const firstContent = firstMessage.content[0];
 
-  if (firstContent.type === "structured_text") {
-    const text = JSON.stringify(firstContent.arguments, null, 2);
-    return text.length > 30 ? text.substring(0, 30) + "..." : text;
-  }
-
-  if (firstContent.type === "unstructured_text") {
+  if (firstContent.type === "text") {
     const text = firstContent.text;
     return text.length > 30 ? text.substring(0, 30) + "..." : text;
   }
@@ -149,6 +147,12 @@ function getInputSummary(input: DisplayInput): string {
   if (firstContent.type === "raw_text") {
     const text = firstContent.value;
     return text.length > 30 ? text.substring(0, 30) + "..." : text;
+  }
+
+  if (firstContent.type === "template") {
+    const argsText = JSON.stringify(firstContent.arguments, null, 2);
+    const summary = `${firstContent.name}: ${argsText}`;
+    return summary.length > 30 ? summary.substring(0, 30) + "..." : summary;
   }
 
   return `${firstMessage.role} message (${firstContent.type})`;
@@ -241,8 +245,9 @@ export function EvaluationTable({
       string,
       {
         id: string;
+        name: string | null;
         input: DisplayInput;
-        reference_output: JsonInferenceOutput | ContentBlockChatOutput[];
+        reference_output: JsonInferenceOutput | ContentBlockChatOutput[] | null;
       }
     >();
 
@@ -250,6 +255,7 @@ export function EvaluationTable({
       if (!datapoints.has(result.datapoint_id)) {
         datapoints.set(result.datapoint_id, {
           id: result.datapoint_id,
+          name: result.name,
           input: result.input,
           reference_output: result.reference_output,
         });
@@ -335,6 +341,9 @@ export function EvaluationTable({
                 <TableHeader>
                   <TableRow>
                     <TableHead className="py-2 text-center align-top">
+                      Name
+                    </TableHead>
+                    <TableHead className="py-2 text-center align-top">
                       Input
                     </TableHead>
                     <TableHead className="py-2 text-center align-top">
@@ -415,10 +424,24 @@ export function EvaluationTable({
                                 .map(([runId]) => runId)
                                 .join(",");
                               navigate(
-                                `/evaluations/${evaluation_name}/${datapoint.id}?evaluation_run_ids=${evaluation_run_ids}`,
+                                toEvaluationDatapointUrl(
+                                  evaluation_name,
+                                  datapoint.id,
+                                  { evaluation_run_ids },
+                                ),
                               );
                             }}
                           >
+                            {/* Name cell - only for the first variant row */}
+                            {index === 0 && (
+                              <TableCell
+                                rowSpan={filteredVariants.length}
+                                className="max-w-[150px] align-middle"
+                              >
+                                <TableItemText text={datapoint.name} />
+                              </TableCell>
+                            )}
+
                             {/* Input cell - only for the first variant row */}
                             {index === 0 && (
                               <TableCell
@@ -436,12 +459,16 @@ export function EvaluationTable({
                             {index === 0 && (
                               <TableCell
                                 rowSpan={filteredVariants.length}
-                                className="max-w-[200px] align-middle"
+                                className="max-w-[200px] text-center align-middle"
                               >
-                                <TruncatedContent
-                                  content={datapoint.reference_output}
-                                  type="output"
-                                />
+                                {datapoint.reference_output ? (
+                                  <TruncatedContent
+                                    content={datapoint.reference_output}
+                                    type="output"
+                                  />
+                                ) : (
+                                  "-"
+                                )}
                               </TableCell>
                             )}
 
@@ -511,7 +538,7 @@ export function EvaluationTable({
                                         {evaluatorConfig.type ===
                                           "llm_judge" && (
                                           <div
-                                            className="ml-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                                            className="ml-2 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
                                             // Stop click event propagation so the row navigation is not triggered
                                             onClick={(e) => e.stopPropagation()}
                                           >
@@ -531,6 +558,14 @@ export function EvaluationTable({
                                                 "Unknown"
                                               }
                                             />
+                                            {metricValue.evaluator_inference_id && (
+                                              <InferenceButton
+                                                inferenceId={
+                                                  metricValue.evaluator_inference_id
+                                                }
+                                                tooltipText="View LLM judge inference"
+                                              />
+                                            )}
                                           </div>
                                         )}
                                       </>

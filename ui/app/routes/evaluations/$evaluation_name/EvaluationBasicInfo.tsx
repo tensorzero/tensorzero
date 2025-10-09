@@ -7,6 +7,7 @@ import {
 } from "~/components/layout/BasicInfoLayout";
 import Chip from "~/components/ui/Chip";
 import { getFunctionTypeIcon } from "~/utils/icon";
+import { toFunctionUrl } from "~/utils/urls";
 import type { StaticEvaluationConfig } from "tensorzero-node";
 
 interface BasicInfoProps {
@@ -30,7 +31,7 @@ export default function BasicInfo({ evaluation_config }: BasicInfoProps) {
               iconBg={functionIconConfig.iconBg}
               label={functionName}
               secondaryLabel={`· ${functionType}`}
-              link={`/observability/functions/${functionName}`}
+              link={toFunctionUrl(functionName)}
               font="mono"
             />
           )}

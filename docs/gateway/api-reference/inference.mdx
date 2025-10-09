@@ -131,10 +131,8 @@ This field is primarily for debugging and testing, and you should generally not 
 - **Required:** no
 
 The ID of an existing episode to associate the inference with.
-
-For the first inference of a new episode, you should not provide an `episode_id`. If null, the gateway will generate a new episode ID and return it in the response.
-
-Only use episode IDs that were returned by the TensorZero gateway.
+If null, the gateway will generate a new episode ID and return it in the response.
+See [Episodes](/gateway/guides/episodes) for more information.
 
 #### `extra_body`
 
@@ -331,7 +329,7 @@ A content block is an object with the field `type` and additional fields dependi
 If the content block has type `text`, it must have either of the following additional fields:
 
 - `text`: The text for the content block.
-- `arguments`: A JSON object containing the function arguments for TensorZero functions with templates and schemas (see [Prompt Templates & Schemas](/gateway/guides/prompt-templates-schemas/) for details).
+- `arguments`: A JSON object containing the function arguments for TensorZero functions with templates and schemas (see [Create a prompt template](/gateway/create-a-prompt-template) for details).
 
 If the content block has type `tool_call`, it must have the following additional fields:
 

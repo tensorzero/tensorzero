@@ -5,8 +5,8 @@ use pyo3::Python;
 /// This is used when we need to drop a TensorZero client (or a type that holds it),
 /// so that we can block on the ClickHouse batcher shutting down, without holding the GIL.
 fn in_tokio_runtime_no_gil<F: FnOnce() + Send>(f: F) {
-    Python::with_gil(|py| {
-        py.allow_threads(|| {
+    Python::attach(|py| {
+        py.detach(|| {
             let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
             f();
         });

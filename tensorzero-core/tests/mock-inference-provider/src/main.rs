@@ -20,6 +20,7 @@ use axum::{
         IntoResponse, Response,
     },
 };
+use clap::Parser;
 use error::Error;
 use futures::Stream;
 use mimalloc::MiMalloc;
@@ -30,12 +31,23 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     sync::{Mutex, OnceLock},
+    time::Duration,
 };
 use tokio::signal;
 use tower_http::trace::TraceLayer;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
+
+#[derive(Parser)]
+#[command(about = "Mock inference provider for testing")]
+struct Args {
+    #[arg(help = "The address to bind to (default: 0.0.0.0:3030)")]
+    address: Option<SocketAddr>,
+
+    #[arg(long, help = "Delay in milliseconds to add to every request")]
+    delay_ms: Option<u64>,
+}
 
 #[derive(Clone)]
 struct FineTuningJob {
@@ -45,15 +57,11 @@ struct FineTuningJob {
 }
 
 static OPENAI_FINE_TUNING_JOBS: OnceLock<Mutex<HashMap<String, FineTuningJob>>> = OnceLock::new();
+static DELAY_MS: OnceLock<Option<Duration>> = OnceLock::new();
 
-/// Get the socket address for the mock inference provider from the CLI arguments.
-/// Defaults to 0.0.0.0:3030 if no address is provided.
-fn get_listener_address() -> SocketAddr {
-    match std::env::args().nth(1) {
-        Some(path) => path
-            .parse()
-            .unwrap_or_else(|e| panic!("Invalid address: {path}: {e}")),
-        None => SocketAddr::from(([0, 0, 0, 0], 3030)),
+async fn apply_delay() {
+    if let Some(delay) = DELAY_MS.get().and_then(|d| *d) {
+        tokio::time::sleep(delay).await;
     }
 }
 
@@ -103,11 +111,23 @@ pub async fn shutdown_signal() {
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
-    let listener_address = get_listener_address();
+    let args = Args::parse();
+
+    let listener_address = args
+        .address
+        .unwrap_or_else(|| SocketAddr::from(([0, 0, 0, 0], 3030)));
+    let delay = args.delay_ms.map(Duration::from_millis);
+
+    DELAY_MS.set(delay).expect("Failed to set delay");
+
     let listener = tokio::net::TcpListener::bind(listener_address)
         .await
         .unwrap_or_else(|e| panic!("Failed to bind to {listener_address}: {e}"));
     tracing::info!("Listening on on {}", listener.local_addr().unwrap());
+
+    if let Some(delay) = delay {
+        tracing::info!("Request delay set to {}ms", delay.as_millis());
+    }
 
     axum::serve(listener, make_router())
         .with_graceful_shutdown(shutdown_signal())
@@ -188,6 +208,7 @@ const SHOW_PROGRESS_AT: usize = 1;
 async fn get_openai_fine_tuning_job(
     Path(params): Path<FineTuningGetParams>,
 ) -> Json<serde_json::Value> {
+    apply_delay().await;
     let job_id = params.job_id.clone();
     let mut fine_tuning_jobs = OPENAI_FINE_TUNING_JOBS
         .get_or_init(Default::default)
@@ -229,6 +250,7 @@ async fn get_openai_fine_tuning_job(
 async fn create_openai_fine_tuning_job(
     Json(params): Json<serde_json::Value>,
 ) -> Json<serde_json::Value> {
+    apply_delay().await;
     let mut fine_tuning_jobs = OPENAI_FINE_TUNING_JOBS
         .get_or_init(Default::default)
         .lock()
@@ -236,6 +258,7 @@ async fn create_openai_fine_tuning_job(
 
     let job_id =
         "mock-inference-finetune-".to_string() + &Alphanumeric.sample_string(&mut rand::rng(), 10);
+
     let job = FineTuningJob {
         num_polls: 0,
         finish_at: None,
@@ -250,14 +273,7 @@ async fn create_openai_fine_tuning_job(
             "status": "queued",
             "validation_file": params.get("validation_file").unwrap_or(&serde_json::Value::Null),
             "training_file": params.get("training_file"),
-            "method": {
-                "type": "supervised",
-                "hyperparameters": {
-                    "batch_size": "auto",
-                    "learning_rate_multiplier": "auto",
-                    "n_epochs": "auto",
-                  }
-            }
+            "method": params.get("method").expect("OpenAI fine-tuning job request must include method field")
         }),
     };
     fine_tuning_jobs.insert(job_id.clone(), job.clone());
@@ -265,6 +281,7 @@ async fn create_openai_fine_tuning_job(
 }
 
 async fn create_openai_file(mut form: Multipart) -> Result<Json<serde_json::Value>, Error> {
+    apply_delay().await;
     let file_id =
         "mock-inference-file-".to_string() + &Alphanumeric.sample_string(&mut rand::rng(), 10);
 
@@ -356,6 +373,7 @@ struct OpenAIFineTuningMessage {
 async fn embeddings_handler(
     Json(params): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>, Error> {
+    apply_delay().await;
     let input = &params["input"];
     let model = params["model"]
         .as_str()
@@ -394,6 +412,7 @@ async fn embeddings_handler(
 }
 
 async fn completions_handler(Json(params): Json<serde_json::Value>) -> Response<Body> {
+    apply_delay().await;
     let stream = match params.get("stream") {
         Some(stream) => stream.as_bool().unwrap_or(false),
         None => false,
@@ -446,6 +465,7 @@ fn create_stream(
 }
 
 pub async fn status_handler() -> Json<serde_json::Value> {
+    apply_delay().await;
     axum::response::Json(json!({ "status": "ok" }))
 }
 
@@ -460,7 +480,7 @@ mod tests {
     #[tokio::test]
     async fn test_openai_completions_handler() {
         let payload = json!({
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4.1-mini",
             "prompt": "Is Santa real?",
             "max_tokens": 5,
         });
@@ -498,7 +518,7 @@ mod tests {
     #[tokio::test]
     async fn test_openai_completions_handler_json() {
         let payload = json!({
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4.1-mini",
             "prompt": "Is Santa real?",
             "max_tokens": 5,
             "response_format": {
@@ -539,7 +559,7 @@ mod tests {
     #[tokio::test]
     async fn test_openai_completions_handler_function() {
         let payload = json!({
-                  "model": "gpt-3.5-turbo",
+                  "model": "gpt-4.1-mini",
                   "prompt": "Is Santa real?",
                   "max_tokens": 5,
                   "tools": [
@@ -599,7 +619,7 @@ mod tests {
     #[tokio::test]
     async fn test_openai_completions_handler_stream() {
         let payload = json!({
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4.1-mini",
             "prompt": "Is Santa real?",
             "max_tokens": 5,
             "stream": true,
@@ -654,7 +674,7 @@ mod tests {
     #[tokio::test]
     async fn test_openai_completions_handler_stream_json() {
         let payload = json!({
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4.1-mini",
             "prompt": "Is Santa real?",
             "max_tokens": 5,
             "stream": true,
@@ -712,7 +732,7 @@ mod tests {
     #[tokio::test]
     async fn test_openai_completions_handler_stream_function() {
         let payload = json!({
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4.1-mini",
             "prompt": "Is Santa real?",
             "max_tokens": 5,
             "stream": true,

@@ -4,11 +4,4 @@ import type { FloatMetricNode } from "./FloatMetricNode";
 import type { TagNode } from "./TagNode";
 import type { TimeNode } from "./TimeNode";
 
-export type InferenceFilterTreeNode =
-  | ({ type: "float_metric" } & FloatMetricNode)
-  | ({ type: "boolean_metric" } & BooleanMetricNode)
-  | ({ type: "tag" } & TagNode)
-  | ({ type: "time" } & TimeNode)
-  | { type: "and"; children: Array<InferenceFilterTreeNode> }
-  | { type: "or"; children: Array<InferenceFilterTreeNode> }
-  | { type: "not"; child: InferenceFilterTreeNode };
+export type InferenceFilterTreeNode = { "type": "float_metric" } & FloatMetricNode | { "type": "boolean_metric" } & BooleanMetricNode | { "type": "tag" } & TagNode | { "type": "time" } & TimeNode | { "type": "and", children: Array<InferenceFilterTreeNode>, } | { "type": "or", children: Array<InferenceFilterTreeNode>, } | { "type": "not", child: InferenceFilterTreeNode, };

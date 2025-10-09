@@ -1,3 +1,4 @@
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::Latency;
 use crate::inference::{InferenceProvider, WrappedProvider};
 use crate::providers::aws_common::{build_interceptor, InterceptorAndRawBody};
@@ -62,11 +63,11 @@ impl InferenceProvider for AWSSagemakerProvider {
     async fn infer<'a>(
         &'a self,
         request: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = self.hosted_provider.make_body(request)?;
+        let request_body = self.hosted_provider.make_body(request).await?;
         let InterceptorAndRawBody {
             interceptor,
             get_raw_request,
@@ -80,10 +81,17 @@ impl InferenceProvider for AWSSagemakerProvider {
         // Use our custom `reqwest::Client` when making requests to Sagemaker.
         // This ensures that our HTTP proxy (TENSORZERO_E2E_PROXY) is used
         // here when it's enabled.
+
+        // We need to use the `aws_http_client::Client` wrapper type, which currently
+        // doesn't work with the `TensorzeroHttpClient` type.
+        // This causes us to lose out on things like connection pooling and outgoing OTEL headers.
+        // TODO: make this use `TensorzeroHttpClient`
         let new_config = self
             .base_config
             .clone()
-            .http_client(super::aws_http_client::Client::new(http_client.clone()));
+            .http_client(super::aws_http_client::Client::new(
+                http_client.dangerous_get_fallback_client().clone(),
+            ));
         let start_time = Instant::now();
         let res = self
             .client
@@ -140,11 +148,11 @@ impl InferenceProvider for AWSSagemakerProvider {
     async fn infer_stream<'a>(
         &'a self,
         request: ModelProviderRequest<'a>,
-        http_client: &'a reqwest::Client,
+        http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = self.hosted_provider.make_body(request)?;
+        let request_body = self.hosted_provider.make_body(request).await?;
 
         let InterceptorAndRawBody {
             interceptor,
@@ -157,10 +165,17 @@ impl InferenceProvider for AWSSagemakerProvider {
         );
 
         // See `infer` for more details
+
+        // We need to use the `aws_http_client::Client` wrapper type, which currently
+        // doesn't work with the `TensorzeroHttpClient` type.
+        // This causes us to lose out on things like connection pooling and outgoing OTEL headers.
+        // TODO: make this use `TensorzeroHttpClient`
         let new_config = self
             .base_config
             .clone()
-            .http_client(super::aws_http_client::Client::new(http_client.clone()));
+            .http_client(super::aws_http_client::Client::new(
+                http_client.dangerous_get_fallback_client().clone(),
+            ));
         let start_time = Instant::now();
         let res = self
             .client
@@ -261,7 +276,7 @@ impl InferenceProvider for AWSSagemakerProvider {
     async fn start_batch_inference<'a>(
         &'a self,
         _requests: &'a [ModelInferenceRequest<'_>],
-        _client: &'a reqwest::Client,
+        _client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
@@ -273,7 +288,7 @@ impl InferenceProvider for AWSSagemakerProvider {
     async fn poll_batch_inference<'a>(
         &'a self,
         _batch_request: &'a BatchRequestRow<'a>,
-        _http_client: &'a reqwest::Client,
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {

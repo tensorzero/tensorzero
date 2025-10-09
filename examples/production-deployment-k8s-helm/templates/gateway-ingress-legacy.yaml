@@ -1,0 +1,52 @@
+{{- if and .Values.gateway.ingress.enabled .Values.gateway.ingress.createLegacyIngress -}}
+{{- $fullName := include "tensorzero.fullname" . -}}
+{{- $svcPort := .Values.gateway.service.port -}}
+# ⚠️  DEPRECATION WARNING: Legacy gateway ingress is enabled and will be removed in a future version
+# Please migrate to the new ingress name: {{ $fullName }}-gateway
+# Then set gateway.ingress.createLegacyIngress=false
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "tensorzero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+  annotations:
+    # DEPRECATED: This ingress uses legacy naming and will be removed in a future release
+    # Switch DNS/load balancers to {{ $fullName }}-gateway, then set gateway.ingress.createLegacyIngress=false
+    helm.sh/resource-policy: keep
+    {{- with .Values.gateway.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if .Values.gateway.ingress.className }}
+  ingressClassName: {{ .Values.gateway.ingress.className }}
+  {{- end }}
+  {{- if .Values.gateway.ingress.tls }}
+  tls:
+    {{- range .Values.gateway.ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- if .secretName }}
+      secretName: {{ .secretName }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.gateway.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ $fullName }}-gateway
+                port:
+                  number: {{ $svcPort }}
+          {{- end }}
+    {{- end }}
+{{- end }}

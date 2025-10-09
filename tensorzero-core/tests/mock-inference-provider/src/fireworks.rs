@@ -13,6 +13,8 @@ use axum::{
 use rand::distr::{Alphanumeric, SampleString};
 use serde::Deserialize;
 
+use crate::apply_delay;
+
 pub struct FireworksError(anyhow::Error);
 
 impl<E> From<E> for FireworksError
@@ -68,6 +70,7 @@ pub async fn create_dataset(
     Path(params): Path<AccountIdParams>,
     Json(body): Json<CreateDatasetBody>,
 ) -> Json<serde_json::Value> {
+    apply_delay().await;
     let key = DatasetKey {
         account_id: params.account_id.clone(),
         dataset_id: body.dataset_id,
@@ -95,6 +98,7 @@ pub struct DatasetKeyParams {
 const POLLS_UNTIL_READY: usize = 2;
 
 pub async fn get_dataset(Path(params): Path<DatasetKeyParams>) -> Result<Json<serde_json::Value>> {
+    apply_delay().await;
     let mut datasets = FIREWORKS_DATASETS
         .get_or_init(Default::default)
         .lock()
@@ -125,6 +129,7 @@ pub async fn upload_to_dataset(
     Path(params): Path<DatasetKeyParams>,
     mut form: Multipart,
 ) -> Result<Json<serde_json::Value>> {
+    apply_delay().await;
     // We can't specify the :upload suffix in the axum route, so strip it here
     let dataset_id = params
         .dataset_id
@@ -178,6 +183,7 @@ pub async fn create_fine_tuning_job(
     Path(params): Path<AccountIdParams>,
     _body: Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>> {
+    apply_delay().await;
     let account_id = params.account_id.clone();
     let job_id = format!(
         "mock-fireworks-{}",
@@ -224,6 +230,7 @@ pub async fn create_deployed_model(
     Path(params): Path<AccountIdParams>,
     Json(body): Json<CreatedDeployedModelParams>,
 ) -> Result<(StatusCode, Json<serde_json::Value>)> {
+    apply_delay().await;
     let account_id = params.account_id.clone();
     let model_id = body.model;
 
@@ -282,6 +289,7 @@ pub struct JobPathParams {
 pub async fn get_fine_tuning_job(
     Path(params): Path<JobPathParams>,
 ) -> Result<Json<serde_json::Value>> {
+    apply_delay().await;
     let mut jobs = FIREWORKS_FINE_TUNING_JOBS
         .get_or_init(Default::default)
         .lock()

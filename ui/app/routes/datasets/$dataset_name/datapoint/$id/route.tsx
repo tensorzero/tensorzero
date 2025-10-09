@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { ActionFunctionArgs, RouteHandle } from "react-router";
+import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
   data,
   isRouteErrorResponse,
@@ -9,7 +10,7 @@ import {
   useFetcher,
   useParams,
 } from "react-router";
-import { v7 as uuid } from "uuid";
+import { toDatapointUrl, toDatasetUrl } from "~/utils/urls";
 import InputSnippet from "~/components/inference/InputSnippet";
 import { Output } from "~/components/inference/Output";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
@@ -21,26 +22,18 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { Badge } from "~/components/ui/badge";
+import { TagsTable } from "~/components/tags/TagsTable";
 import { useFunctionConfig } from "~/context/config";
-import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference.utils";
 import {
   prepareInferenceActionRequest,
   useInferenceActionFetcher,
 } from "~/routes/api/tensorzero/inference.utils";
 import type { DisplayInputMessage } from "~/utils/clickhouse/common";
 
-import {
-  ParsedDatasetRowSchema,
-  type ParsedDatasetRow,
-} from "~/utils/clickhouse/datasets";
-import {
-  getDatapoint,
-  getDatasetCounts,
-  staleDatapoint,
-} from "~/utils/clickhouse/datasets.server";
+import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
+import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { logger } from "~/utils/logger";
-import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
 import { DatapointActions } from "./DatapointActions";
 import DatapointBasicInfo from "./DatapointBasicInfo";
@@ -48,40 +41,74 @@ import type {
   JsonInferenceOutput,
   ContentBlockChatOutput,
 } from "tensorzero-node";
+import { deleteDatapoint, saveDatapoint } from "./datapointOperations.server";
+import {
+  parseDatapointFormData,
+  serializeDatapointToFormData,
+} from "./formDataUtils";
+
+export function validateJsonOutput(
+  output: ContentBlockChatOutput[] | JsonInferenceOutput | null,
+): { valid: true } | { valid: false; error: string } {
+  if (output && "raw" in output && output.raw) {
+    try {
+      JSON.parse(output.raw);
+      return { valid: true };
+    } catch {
+      return {
+        valid: false,
+        error:
+          "Invalid JSON in output. Please fix the JSON format before saving.",
+      };
+    }
+  }
+  return { valid: true };
+}
+
+export function hasDatapointChanged(params: {
+  currentInput: ParsedDatasetRow["input"];
+  originalInput: ParsedDatasetRow["input"];
+  currentOutput: ContentBlockChatOutput[] | JsonInferenceOutput | null;
+  originalOutput: ParsedDatasetRow["output"];
+  currentTags: Record<string, string>;
+  originalTags: Record<string, string>;
+}): boolean {
+  const {
+    currentInput,
+    originalInput,
+    currentOutput,
+    originalOutput,
+    currentTags,
+    originalTags,
+  } = params;
+
+  // Check if system has changed (added, removed, or modified)
+  const hasSystemChanged =
+    "system" in currentInput !== "system" in originalInput ||
+    JSON.stringify(currentInput.system) !==
+      JSON.stringify(originalInput.system);
+
+  // Check if messages changed
+  const hasMessagesChanged =
+    JSON.stringify(currentInput.messages) !==
+    JSON.stringify(originalInput.messages);
+
+  const hasInputChanged = hasSystemChanged || hasMessagesChanged;
+
+  const hasOutputChanged =
+    JSON.stringify(currentOutput) !== JSON.stringify(originalOutput);
+  const hasTagsChanged =
+    JSON.stringify(currentTags) !== JSON.stringify(originalTags);
+
+  return hasInputChanged || hasOutputChanged || hasTagsChanged;
+}
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
 
+  // TODO(shuyangli): Limit the try-catch to a smaller scope so it's clear what we're catching.
   try {
-    const rawData = {
-      dataset_name: formData.get("dataset_name"),
-      function_name: formData.get("function_name"),
-      id: formData.get("id"),
-      episode_id: formData.get("episode_id"),
-      input: JSON.parse(formData.get("input") as string),
-      output: formData.get("output")
-        ? JSON.parse(formData.get("output") as string)
-        : undefined,
-      output_schema: formData.get("output_schema")
-        ? JSON.parse(formData.get("output_schema") as string)
-        : undefined,
-      tool_params: formData.get("tool_params")
-        ? JSON.parse(formData.get("tool_params") as string)
-        : undefined,
-      tags: JSON.parse(formData.get("tags") as string),
-      auxiliary: formData.get("auxiliary"),
-      is_deleted: formData.get("is_deleted") === "true",
-      updated_at: formData.get("updated_at"),
-      staled_at: null,
-      source_inference_id: formData.get("source_inference_id"),
-      is_custom: true,
-    };
-
-    const cleanedData = Object.fromEntries(
-      Object.entries(rawData).filter(([, value]) => value !== undefined),
-    );
-    const parsedFormData: ParsedDatasetRow =
-      ParsedDatasetRowSchema.parse(cleanedData);
+    const parsedFormData = parseDatapointFormData(formData);
     const config = await getConfig();
     const functionConfig = await getFunctionConfig(
       parsedFormData.function_name,
@@ -97,75 +124,19 @@ export async function action({ request }: ActionFunctionArgs) {
 
     const action = formData.get("action");
     if (action === "delete") {
-      await staleDatapoint(
-        parsedFormData.dataset_name,
-        parsedFormData.id,
+      const { redirectTo } = await deleteDatapoint({
+        dataset_name: parsedFormData.dataset_name,
+        id: parsedFormData.id,
         functionType,
-      );
-      const datasetCounts = await getDatasetCounts({});
-      const datasetCount = datasetCounts.find(
-        (count) => count.dataset_name === parsedFormData.dataset_name,
-      );
-
-      if (datasetCount === undefined) {
-        return redirect("/datasets");
-      }
-      return redirect(`/datasets/${parsedFormData.dataset_name}`);
+      });
+      return redirect(redirectTo);
     } else if (action === "save") {
-      // If the input changed, we should remove the source_inference_id
-      // because it will no longer be valid
-      // Transform input to match TensorZero client's expected format
-      const transformedInput = resolvedInputToTensorZeroInput(
-        parsedFormData.input,
-      );
-      const transformedOutput = transformOutputForTensorZero(
-        parsedFormData.output,
-      );
-
       try {
-        // For future reference:
-        // These two calls would be a transaction but ClickHouse doesn't support
-
-        const baseDatapoint = {
-          function_name: parsedFormData.function_name,
-          input: transformedInput,
-          output: transformedOutput,
-          tags: parsedFormData.tags || {},
-          auxiliary: parsedFormData.auxiliary,
-          is_custom: true, // we're saving it after an edit, so it's custom
-          source_inference_id: parsedFormData.source_inference_id,
-          id: uuid(), // We generate a new ID here because we want old evaluation runs to be able to point to the correct data.
-        };
-
-        let datapoint;
-        if (functionType === "json" && "output_schema" in parsedFormData) {
-          datapoint = {
-            ...baseDatapoint,
-            output_schema: parsedFormData.output_schema,
-          };
-        } else if (functionType === "chat" && "tool_params" in parsedFormData) {
-          datapoint = {
-            ...baseDatapoint,
-            tool_params: parsedFormData.tool_params,
-          };
-        } else {
-          throw new Error(
-            `Unexpected function type "${functionType}" or missing required properties on datapoint`,
-          );
-        }
-        const { id } = await getTensorZeroClient().updateDatapoint(
-          parsedFormData.dataset_name,
-          datapoint,
-        );
-        await staleDatapoint(
-          parsedFormData.dataset_name,
-          parsedFormData.id,
+        const { newId } = await saveDatapoint({
+          parsedFormData,
           functionType,
-        );
-
-        return redirect(
-          `/datasets/${parsedFormData.dataset_name}/datapoint/${id}`,
-        );
+        });
+        return redirect(toDatapointUrl(parsedFormData.dataset_name, newId));
       } catch (error) {
         logger.error("Error updating datapoint:", error);
         return {
@@ -174,6 +145,14 @@ export async function action({ request }: ActionFunctionArgs) {
         };
       }
     }
+
+    return data(
+      {
+        success: false,
+        error: "Invalid action specified",
+      },
+      { status: 400 },
+    );
   } catch (error) {
     logger.error("Error processing datapoint action:", error);
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -230,58 +209,85 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [input, setInput] = useState<typeof datapoint.input>(datapoint.input);
-  const [originalInput] = useState(datapoint.input);
-  const [originalOutput] = useState(datapoint.output);
+  const [originalInput, setOriginalInput] = useState(datapoint.input);
+  const [originalOutput, setOriginalOutput] = useState(datapoint.output);
+  const [originalTags, setOriginalTags] = useState(datapoint.tags || {});
   const [output, setOutput] = useState<
     ContentBlockChatOutput[] | JsonInferenceOutput | null
   >(datapoint.output ?? null);
+  const [tags, setTags] = useState<Record<string, string>>(
+    datapoint.tags || {},
+  );
   const [isEditing, setIsEditing] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const canSave = useMemo(() => {
-    // Use JSON.stringify to compare object values rather than references
-    const hasInputChanged =
-      JSON.stringify(input) !== JSON.stringify(originalInput);
-    const hasOutputChanged =
-      JSON.stringify(output) !== JSON.stringify(originalOutput);
+  // Reset state when datapoint changes (e.g., after save redirect)
+  useEffect(() => {
+    setInput(datapoint.input);
+    setOriginalInput(datapoint.input);
+    setOutput(datapoint.output ?? null);
+    setOriginalOutput(datapoint.output);
+    setTags(datapoint.tags || {});
+    setOriginalTags(datapoint.tags || {});
+    setIsEditing(false);
+    setValidationError(null);
+  }, [datapoint]);
 
-    return isEditing && (hasInputChanged || hasOutputChanged);
-  }, [isEditing, input, output, originalInput, originalOutput]);
+  const canSave = useMemo(() => {
+    return (
+      isEditing &&
+      hasDatapointChanged({
+        currentInput: input,
+        originalInput,
+        currentOutput: output,
+        originalOutput,
+        currentTags: tags,
+        originalTags,
+      })
+    );
+  }, [
+    isEditing,
+    input,
+    output,
+    tags,
+    originalInput,
+    originalOutput,
+    originalTags,
+  ]);
 
   const toggleEditing = () => setIsEditing(!isEditing);
 
   const handleReset = () => {
     setInput(datapoint.input);
     setOutput(datapoint.output ?? null);
+    setTags(datapoint.tags || {});
   };
 
-  const handleSystemChange = (system: string | object) =>
-    setInput({ ...input, system });
+  const handleSystemChange = (system: string | object | null) => {
+    setInput((prevInput) => {
+      if (system === null) {
+        // Explicitly create new object without system key
+        return {
+          messages: prevInput.messages,
+        };
+      } else {
+        return { ...prevInput, system };
+      }
+    });
+  };
 
   const handleMessagesChange = (messages: DisplayInputMessage[]) => {
-    setInput({ ...input, messages });
+    setInput((prevInput) => ({ ...prevInput, messages }));
   };
 
   const fetcher = useFetcher();
   const saveError = fetcher.data?.success === false ? fetcher.data.error : null;
 
   const submitDatapointAction = (action: string) => {
-    const formData = new FormData();
+    // Create a copy of datapoint with updated input, output, and tags if we're saving
+    const dataToSubmit = { ...datapoint, input, output, tags };
 
-    // Create a copy of datapoint with updated input and output if we're saving
-    const dataToSubmit = { ...datapoint, input, output };
-
-    Object.entries(dataToSubmit).forEach(([key, value]) => {
-      if (value === undefined) return;
-      if (value === null) {
-        // do nothing
-      } else if (typeof value === "object") {
-        formData.append(key, JSON.stringify(value));
-      } else {
-        formData.append(key, String(value));
-      }
-    });
-
+    const formData = serializeDatapointToFormData(dataToSubmit);
     formData.append("action", action);
 
     // Submit to the local action by targeting the current route (".")
@@ -294,15 +300,10 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setValidationError(null);
 
     // Validate JSON output before submitting
-    if (output && "raw" in output && output.raw) {
-      try {
-        JSON.parse(output.raw);
-      } catch {
-        setValidationError(
-          "Invalid JSON in output. Please fix the JSON format before saving.",
-        );
-        return;
-      }
+    const validation = validateJsonOutput(output);
+    if (!validation.valid) {
+      setValidationError(validation.error);
+      return;
     }
 
     submitDatapointAction("save");
@@ -372,9 +373,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             canSave={canSave}
             onSave={handleSave}
             onReset={handleReset}
-            showTryWithVariant={
-              datapoint.function_name !== "tensorzero::default"
-            }
+            showTryWithButton={datapoint.function_name !== DEFAULT_FUNCTION}
           />
         </SectionLayout>
 
@@ -403,6 +402,11 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             />
           </SectionLayout>
         )}
+
+        <SectionLayout>
+          <SectionHeader heading="Tags" />
+          <TagsTable tags={tags} onTagsChange={setTags} isEditing={isEditing} />
+        </SectionLayout>
       </SectionsGroup>
 
       {selectedVariant && (
@@ -477,42 +481,15 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       <div className="mt-8 flex flex-col items-center justify-center gap-2 rounded-xl bg-red-50 p-6 md:mt-0">
         <h1 className="text-2xl font-bold">{heading}</h1>
         {typeof message === "string" ? <p>{message}</p> : message}
-        <Link
-          to={`/datasets/${datasetName}`}
-          className="font-bold text-red-800 hover:text-red-600"
-        >
-          Go back &rarr;
-        </Link>
+        {datasetName && (
+          <Link
+            to={toDatasetUrl(datasetName)}
+            className="font-bold text-red-800 hover:text-red-600"
+          >
+            Go back &rarr;
+          </Link>
+        )}
       </div>
     </div>
   );
-}
-
-function transformOutputForTensorZero(
-  output: ParsedDatasetRow["output"],
-): string | null {
-  if (output === null || output === undefined) {
-    return null;
-  } else if ("raw" in output) {
-    if (output.raw === null) {
-      return null;
-    }
-    try {
-      return JSON.parse(output.raw);
-    } catch (error) {
-      throw new Error(
-        `Invalid JSON in output.raw: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  } else if (typeof output === "object") {
-    try {
-      return JSON.parse(JSON.stringify(output));
-    } catch (error) {
-      throw new Error(
-        `Failed to serialize output object: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  } else {
-    return output;
-  }
 }

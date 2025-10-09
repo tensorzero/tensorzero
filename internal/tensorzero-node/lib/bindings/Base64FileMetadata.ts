@@ -3,4 +3,4 @@
 /**
  * Like `Base64File`, but without the data field.
  */
-export type Base64FileMetadata = { url: string | null; mime_type: string };
+export type Base64FileMetadata = { url: string | null, mime_type: string, };

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use axum::http::StatusCode;
@@ -11,8 +12,10 @@ use tokio::sync::OnceCell;
 use url::Url;
 use uuid::Uuid;
 
+use crate::db::clickhouse::migration_manager::get_run_migrations_command;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::Thought;
+use crate::rate_limiting::{ActiveRateLimitKey, RateLimitingConfigScopes};
 
 /// Controls whether to include raw request/response details in error output
 ///
@@ -100,28 +103,28 @@ impl<T: Debug + Display> Display for DisplayOrDebugGateway<T> {
     }
 }
 
-#[derive(Debug, Error, Serialize)]
+#[derive(Clone, Debug, Error, Serialize)]
 #[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
 #[error(transparent)]
 // As long as the struct member is private, we force people to use the `new` method and log the error.
-// We box `ErrorDetails` per the `clippy::result_large_err` lint
-pub struct Error(Box<ErrorDetails>);
+// We arc `ErrorDetails` per the `clippy::result_large_err` lint, as well as to make it cloneable
+pub struct Error(Arc<ErrorDetails>);
 
 impl Error {
     pub fn new(details: ErrorDetails) -> Self {
         details.log();
-        Error(Box::new(details))
+        Error(Arc::new(details))
     }
 
     pub fn new_with_err_logging(details: ErrorDetails, err_logging: bool) -> Self {
         if err_logging {
             details.log();
         }
-        Error(Box::new(details))
+        Error(Arc::new(details))
     }
 
     pub fn new_without_logging(details: ErrorDetails) -> Self {
-        Error(Box::new(details))
+        Error(Arc::new(details))
     }
 
     pub fn status_code(&self) -> StatusCode {
@@ -132,12 +135,12 @@ impl Error {
         &self.0
     }
 
-    pub fn get_owned_details(self) -> ErrorDetails {
-        *self.0
-    }
-
     pub fn log(&self) {
         self.0.log();
+    }
+
+    pub fn is_retryable(&self) -> bool {
+        self.0.is_retryable()
     }
 }
 
@@ -226,6 +229,7 @@ pub enum ErrorDetails {
         id: String,
         message: String,
     },
+    ClickHouseMigrationsDisabled,
     ClickHouseQuery {
         message: String,
     },
@@ -242,6 +246,9 @@ pub enum ErrorDetails {
     DiclMissingOutput,
     DuplicateTool {
         name: String,
+    },
+    DuplicateRateLimitingConfigScope {
+        scope: RateLimitingConfigScopes,
     },
     DynamicEndpointNotFound {
         key_name: String,
@@ -433,6 +440,7 @@ pub enum ErrorDetails {
     ModelValidation {
         message: String,
     },
+    NoFallbackVariantsRemaining,
     Observability {
         message: String,
     },
@@ -447,9 +455,32 @@ pub enum ErrorDetails {
     OutputValidation {
         source: Box<Error>,
     },
+    // TODO(shuyang): once 3496 merges: change all of these to taking sqlx errors rather than string. Note also sqlx::Error is not Serialize?
+    PostgresConnectionInitialization {
+        message: String,
+    },
+    PostgresConnection {
+        message: String,
+    },
+    PostgresMigration {
+        message: String,
+    },
+    PostgresQuery {
+        function_name: Option<String>,
+        message: String,
+    },
+    PostgresResult {
+        result_type: &'static str,
+        message: String,
+    },
     ProviderNotFound {
         provider_name: String,
     },
+    RateLimitExceeded {
+        key: ActiveRateLimitKey,
+        tickets_remaining: u64,
+    },
+    RateLimitMissingMaxTokens,
     Serialization {
         message: String,
     },
@@ -500,6 +531,9 @@ pub enum ErrorDetails {
         variant_type: String,
         issue_link: Option<String>,
     },
+    UnsupportedModelProviderForStreamingInference {
+        provider_type: String,
+    },
     UnsupportedVariantForFunctionType {
         function_name: String,
         variant_name: String,
@@ -544,12 +578,14 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseConfiguration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseMigrationsDisabled => tracing::Level::ERROR,
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
             ErrorDetails::DatapointNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::DiclMissingOutput => tracing::Level::ERROR,
             ErrorDetails::DuplicateTool { .. } => tracing::Level::WARN,
+            ErrorDetails::DuplicateRateLimitingConfigScope { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicEndpointNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
@@ -605,11 +641,19 @@ impl ErrorDetails {
             ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
             ErrorDetails::ModelNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
+            ErrorDetails::NoFallbackVariantsRemaining => tracing::Level::WARN,
             ErrorDetails::Observability { .. } => tracing::Level::WARN,
             ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
             ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::OptimizationResponse { .. } => tracing::Level::ERROR,
             ErrorDetails::ProviderNotFound { .. } => tracing::Level::ERROR,
+            ErrorDetails::PostgresConnectionInitialization { .. } => tracing::Level::ERROR,
+            ErrorDetails::PostgresConnection { .. } => tracing::Level::ERROR,
+            ErrorDetails::PostgresMigration { .. } => tracing::Level::ERROR,
+            ErrorDetails::PostgresResult { .. } => tracing::Level::ERROR,
+            ErrorDetails::PostgresQuery { .. } => tracing::Level::ERROR,
+            ErrorDetails::RateLimitExceeded { .. } => tracing::Level::WARN,
+            ErrorDetails::RateLimitMissingMaxTokens => tracing::Level::WARN,
             ErrorDetails::Serialization { .. } => tracing::Level::ERROR,
             ErrorDetails::StreamError { .. } => tracing::Level::ERROR,
             ErrorDetails::ToolNotFound { .. } => tracing::Level::WARN,
@@ -624,6 +668,9 @@ impl ErrorDetails {
             ErrorDetails::UnknownMetric { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedFileExtension { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => tracing::Level::WARN,
+            ErrorDetails::UnsupportedModelProviderForStreamingInference { .. } => {
+                tracing::Level::ERROR
+            }
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedVariantForFunctionType { .. } => tracing::Level::ERROR,
             ErrorDetails::UnsupportedVariantForStreamingInference { .. } => tracing::Level::WARN,
@@ -649,12 +696,14 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseMigrationsDisabled => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DatapointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DiclMissingOutput => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DuplicateTool { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::DuplicateRateLimitingConfigScope { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicEndpointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -716,11 +765,21 @@ impl ErrorDetails {
             ErrorDetails::ModelNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::NoFallbackVariantsRemaining => StatusCode::BAD_GATEWAY,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OptimizationResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OutputParsing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OutputValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ProviderNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::PostgresConnectionInitialization { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            ErrorDetails::PostgresConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::PostgresQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::PostgresResult { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::PostgresMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::RateLimitExceeded { .. } => StatusCode::TOO_MANY_REQUESTS,
+            ErrorDetails::RateLimitMissingMaxTokens => StatusCode::BAD_REQUEST,
             ErrorDetails::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::StreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ToolNotFound { .. } => StatusCode::BAD_REQUEST,
@@ -735,6 +794,9 @@ impl ErrorDetails {
             ErrorDetails::UnknownMetric { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::UnsupportedFileExtension { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            ErrorDetails::UnsupportedModelProviderForStreamingInference { .. } => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => StatusCode::BAD_REQUEST,
@@ -757,6 +819,17 @@ impl ErrorDetails {
             tracing::Level::INFO => tracing::info!("{self}"),
             tracing::Level::DEBUG => tracing::debug!("{self}"),
             tracing::Level::TRACE => tracing::trace!("{self}"),
+        }
+    }
+
+    pub fn is_retryable(&self) -> bool {
+        match &self {
+            ErrorDetails::RateLimitExceeded { .. } => false,
+            // For ModelProvidersExhausted we will retry if any provider error is retryable
+            ErrorDetails::ModelProvidersExhausted { provider_errors } => provider_errors
+                .iter()
+                .any(|(_, error)| error.is_retryable()),
+            _ => true,
         }
     }
 }
@@ -890,6 +963,10 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::ClickHouseMigration { id, message } => {
                 write!(f, "Error running ClickHouse migration {id}: {message}")
             }
+            ErrorDetails::ClickHouseMigrationsDisabled => {
+                let run_migrations_command: String = get_run_migrations_command();
+                write!(f, "Automatic ClickHouse migrations were disabled, but not all migrations were run. Please run `{run_migrations_command}`")
+            }
             ErrorDetails::ClickHouseQuery { message } => {
                 write!(f, "Failed to run ClickHouse query: {message}")
             }
@@ -910,6 +987,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::DuplicateTool { name } => {
                 write!(f, "Duplicate tool name: {name}. Tool names must be unique.")
+            }
+            ErrorDetails::DuplicateRateLimitingConfigScope { scope } => {
+                write!(f, "Duplicate rate limiting config scope: {scope:?}. Rate limiting config scopes must be unique.")
             }
             ErrorDetails::DynamicJsonSchema { message } => {
                 write!(
@@ -1159,6 +1239,9 @@ impl std::fmt::Display for ErrorDetails {
                         .join(", ")
                 )
             }
+            ErrorDetails::NoFallbackVariantsRemaining => {
+                write!(f, "No fallback variants remaining.")
+            }
             ErrorDetails::ModelValidation { message } => {
                 write!(f, "Failed to validate model: {message}")
             }
@@ -1186,8 +1269,57 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::OutputValidation { source } => {
                 write!(f, "Output validation failed with messages: {source}")
             }
+            ErrorDetails::PostgresConnectionInitialization { message } => {
+                write!(
+                    f,
+                    "Postgres connection initialization failed with message: {message}"
+                )
+            }
+            ErrorDetails::PostgresConnection { message } => {
+                write!(f, "Error connecting to Postgres: {message}")
+            }
+            ErrorDetails::PostgresMigration { message } => {
+                write!(f, "Postgres migration failed with message: {message}")
+            }
+            ErrorDetails::PostgresResult {
+                result_type,
+                message,
+            } => {
+                write!(
+                    f,
+                    "Unexpected Postgres result of type {result_type}: {message}"
+                )
+            }
+            ErrorDetails::PostgresQuery {
+                function_name,
+                message,
+            } => match function_name {
+                Some(function_name) => write!(
+                    f,
+                    "Postgres query failed in function {function_name} with message: {message}"
+                ),
+                None => write!(f, "Postgres query failed: {message}"),
+            },
             ErrorDetails::ProviderNotFound { provider_name } => {
                 write!(f, "Provider not found: {provider_name}")
+            }
+            ErrorDetails::RateLimitExceeded {
+                key,
+                tickets_remaining,
+            } => {
+                // TODO: improve this error:
+                // - `{key}` should more closely match the definition of the rule in TOML
+                // - Display the number of requested tickets (units) if possible.
+                write!(
+                    f,
+                    "TensorZero rate limit exceeded for rule {key}. {tickets_remaining} units currently available."
+                )
+            }
+            ErrorDetails::RateLimitMissingMaxTokens => {
+                write!(
+                    f,
+                    "Missing `max_tokens` for request subject to rate limiting rules."
+                )
             }
             ErrorDetails::StreamError { source } => {
                 write!(f, "Error in streaming response: {source}")
@@ -1209,6 +1341,12 @@ impl std::fmt::Display for ErrorDetails {
                 write!(
                     f,
                     "Unsupported model provider for batch inference: {provider_type}"
+                )
+            }
+            ErrorDetails::UnsupportedModelProviderForStreamingInference { provider_type } => {
+                write!(
+                    f,
+                    "Unsupported model provider for streaming inference: {provider_type}"
                 )
             }
             ErrorDetails::UnsupportedFileExtension { extension } => {
@@ -1259,14 +1397,19 @@ impl std::fmt::Display for ErrorDetails {
 impl IntoResponse for Error {
     /// Log the error and convert it into an Axum response
     fn into_response(self) -> Response {
+        let message = self.to_string();
         let mut body = json!({
-            "error": self.to_string(),
+            "error": message,
         });
         if *UNSTABLE_ERROR_JSON.get().unwrap_or(&false) {
             body["error_json"] =
                 serde_json::to_value(self.get_details()).unwrap_or_else(|e| json!(e.to_string()));
         }
-        (self.status_code(), Json(body)).into_response()
+        let mut response = (self.status_code(), Json(body)).into_response();
+        // Attach the error to the response, so that we can set a nice message in our
+        // `apply_otel_http_trace_layer` middleware
+        response.extensions_mut().insert(self);
+        response
     }
 }
 
@@ -1274,6 +1417,15 @@ impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
         Self::new(ErrorDetails::Serialization {
             message: err.to_string(),
+        })
+    }
+}
+
+impl From<sqlx::Error> for Error {
+    fn from(err: sqlx::Error) -> Self {
+        Self::new(ErrorDetails::PostgresQuery {
+            message: err.to_string(),
+            function_name: None,
         })
     }
 }

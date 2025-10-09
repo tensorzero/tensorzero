@@ -263,14 +263,23 @@ function ChatInferenceOutputComponent({
                     content={JSON.stringify(block.data)}
                   />
                 );
-              case "thought":
+              case "thought": {
+                const footer = block.signature ? (
+                  <>
+                    Signature:{" "}
+                    <span className="font-mono text-xs">{block.signature}</span>
+                  </>
+                ) : null;
+
                 return (
                   <TextMessage
                     key={index}
                     label="Thought"
                     content={block.text || ""}
+                    footer={footer}
                   />
                 );
+              }
             }
           })}
         </SnippetMessage>

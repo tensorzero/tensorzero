@@ -160,6 +160,98 @@ func TestTags(t *testing.T) {
 	})
 }
 
+func TestMultiStep(t *testing.T) {
+	t.Run("Test multi-step inference", func(t *testing.T) {
+		episodeID, _ := uuid.NewV7()
+
+		messages := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
+			openai.UserMessage("Hello"),
+		}
+
+		req := &openai.ChatCompletionNewParams{
+			Model:       "tensorzero::function_name::basic_test",
+			Messages:    messages,
+			Temperature: openai.Float(0.4),
+		}
+		req.WithExtraFields(map[string]any{
+			"tensorzero::episode_id":   episodeID.String(),
+			"tensorzero::variant_name": "test",
+		})
+
+		// Send API request
+		resp, err := client.Chat.Completions.New(ctx, *req)
+		require.NoError(t, err, "API request failed")
+
+		// If episode_id is passed in the old format,
+		// verify its presence in the response extras and ensure it's a valid UUID,
+		// without checking the exact value.
+		rawEpisodeID, ok := resp.JSON.ExtraFields["episode_id"]
+		require.True(t, ok, "Response does not contain an episode_id")
+		var responseEpisodeID string
+		err = json.Unmarshal([]byte(rawEpisodeID.Raw()), &responseEpisodeID)
+		require.NoError(t, err, "Failed to parse episode_id from response extras")
+		_, err = uuid.Parse(responseEpisodeID)
+		require.NoError(t, err, "Response episode_id is not a valid UUID")
+
+		// Validate response fields
+		assert.Equal(t, `Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.`,
+			resp.Choices[0].Message.Content)
+
+		// Validate Usage
+		assert.Equal(t, int64(10), resp.Usage.PromptTokens)
+		assert.Equal(t, int64(1), resp.Usage.CompletionTokens)
+		assert.Equal(t, int64(11), resp.Usage.TotalTokens)
+		assert.Equal(t, "stop", resp.Choices[0].FinishReason)
+
+		messages2 := []openai.ChatCompletionMessageParamUnion{
+			{OfSystem: systemMessageWithAssistant(t, "Alfred Pennyworth")},
+			openai.UserMessage("Hello"),
+			openai.AssistantMessage(resp.Choices[0].Message.Content),
+			openai.UserMessage("Greetings"),
+		}
+
+		req2 := &openai.ChatCompletionNewParams{
+			Model:       "tensorzero::function_name::basic_test",
+			Messages:    messages2,
+			Temperature: openai.Float(0.4),
+		}
+		req2.WithExtraFields(map[string]any{
+			"tensorzero::episode_id":   episodeID.String(),
+			"tensorzero::variant_name": "test2",
+		})
+
+		// Send API request
+		resp2, err := client.Chat.Completions.New(ctx, *req2)
+		require.NoError(t, err, "API request failed")
+
+		// If episode_id is passed in the old format,
+		// verify its presence in the response extras and ensure it's a valid UUID,
+		// without checking the exact value.
+		rawEpisodeID, ok = resp2.JSON.ExtraFields["episode_id"]
+		require.True(t, ok, "Response does not contain an episode_id")
+		err = json.Unmarshal([]byte(rawEpisodeID.Raw()), &responseEpisodeID)
+		require.NoError(t, err, "Failed to parse episode_id from response extras")
+		_, err = uuid.Parse(responseEpisodeID)
+		require.NoError(t, err, "Response episode_id is not a valid UUID")
+
+		// Validate response fields
+		assert.Equal(t, `Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.`,
+			resp2.Choices[0].Message.Content)
+
+		// Validate Usage
+		assert.Equal(t, int64(10), resp2.Usage.PromptTokens)
+		assert.Equal(t, int64(1), resp2.Usage.CompletionTokens)
+		assert.Equal(t, int64(11), resp2.Usage.TotalTokens)
+		assert.Equal(t, "stop", resp2.Choices[0].FinishReason)
+
+		// Ensure there are two unique responses on one episode ID.
+		require.True(t, resp2.JSON.ExtraFields["episode_id"].Raw() == resp.JSON.ExtraFields["episode_id"].Raw(),
+			"Second response episode ID must be the same as the first")
+		require.False(t, resp2.ID == resp.ID, "Response IDs must be unique")
+	})
+}
+
 // Test basic inference with old model format
 func TestBasicInference(t *testing.T) {
 	t.Run("Basic Inference using Old Model Format and Header", func(t *testing.T) {

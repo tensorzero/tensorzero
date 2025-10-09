@@ -1,0 +1,120 @@
+---
+title: Export OpenTelemetry traces (OTLP)
+sidebarTitle: Export OpenTelemetry traces
+description: Learn how to export traces from the TensorZero Gateway to an external OpenTelemetry-compatible observability system.
+---
+
+The TensorZero Gateway can export traces to an external OpenTelemetry-compatible observability system using OTLP.
+
+Exporting traces via OpenTelemetry allows you to monitor the TensorZero Gateway in external observability platforms such as Jaeger, Datadog, or Grafana.
+This integration enables you to correlate gateway activity with the rest of your infrastructure, providing deeper insights and unified monitoring across your systems.
+
+Exporting traces via OpenTelemetry does not replace the core observability features built into TensorZero.
+Many key TensorZero features (including optimization) require richer observability data that TensorZero collects and stores in your ClickHouse database.
+Traces exported through OpenTelemetry are for external observability only.
+
+<Tip>
+
+The TensorZero Gateway also provides a Prometheus-compatible metrics endpoint at `/metrics`.
+This endpoint includes metrics about the gateway itself rather than the data processed by the gateway.
+See [Export Prometheus metrics](/operations/export-prometheus-metrics) for more details.
+
+</Tip>
+
+## Configure
+
+<Tip>
+
+You can find a [complete runnable example](https://github.com/tensorzero/tensorzero/tree/main/examples/guides/opentelemetry-otlp) exporting traces to Jaeger on GitHub.
+
+</Tip>
+
+<Steps>
+<Step title="Set up the configuration">
+
+Enable `export.otlp.traces.enabled` in the `[gateway]` section of the `tensorzero.toml` configuration file:
+
+```toml
+[gateway]
+# ...
+export.otlp.traces.enabled = true
+# ...
+```
+
+</Step>
+<Step title="Configure the OTLP traces endpoint">
+
+Set the `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` environment variable in the gateway container to the endpoint of your OpenTelemetry service.
+
+<Accordion title="Example: TensorZero Gateway and Jaeger with Docker Compose">
+
+For example, if you're deploying the TensorZero Gateway and Jaeger in Docker Compose, you can set the following environment variable:
+
+```bash
+services:
+  gateway:
+    image: tensorzero/gateway
+    environment:
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4317
+    # ...
+
+  jaeger:
+    image: jaegertracing/jaeger
+    ports:
+      - "4317:4317"
+    # ...
+```
+
+</Accordion>
+
+</Step>
+<Step title="Browse the exported traces">
+
+Once configured, the TensorZero Gateway will begin sending traces to your OpenTelemetry-compatible service.
+
+Traces are generated for each HTTP request handled by the gateway (excluding auxiliary endpoints).
+For inference requests, these traces additionally contain spans that represent the processing of functions, variants, models, and model providers.
+
+![Screenshot of TensorZero Gateway traces in Jaeger](./export-opentelemetry-traces-jaeger.png)
+
+<small>
+  Example: Screenshot of a TensorZero Gateway inference request trace in Jaeger
+</small>
+
+</Step>
+</Steps>
+
+## Customize
+
+### Send custom HTTP headers
+
+You can attach custom HTTP headers to the outgoing OTLP export requests made to `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`.
+
+You can configure static headers that will be included in all OTLP export requests by adding them to the `export.otlp.traces.extra_headers` field in your configuration file:
+
+```toml title="tensorzero.toml"
+[gateway.export.otlp.traces]
+# ...
+extra_headers.space_id = "my-workspace-123"
+extra_headers."X-Environment" = "production"
+# ...
+```
+
+You can also send custom headers dynamically on a per-request basis.
+When making a request to a TensorZero HTTP endpoint, add a header prefixed with `tensorzero-otlp-traces-extra-header-`:
+
+```
+tensorzero-otlp-traces-extra-header-user-id: user-123
+tensorzero-otlp-traces-extra-header-request-source: mobile-app
+```
+
+This will attach the headers `user-id: user-123` and `request-source: mobile-app` when exporting any span associated with that specific API request.
+
+When there is a conflict between static and dynamic headers, the latter takes precedence.
+
+### Export OpenInference traces
+
+By default, TensorZero exports traces with attributes that follow the [OpenTelemetry Generative AI semantic conventions](https://github.com/open-telemetry/semantic-conventions/tree/main/docs/gen-ai).
+
+You can instead choose to export traces with attributes that follow the [OpenInference semantic conventions](https://github.com/Arize-ai/openinference/blob/main/spec/llm_spans.md) by setting `export.otlp.traces.format = "openinference"` in your configuration file.
+See [Configuration Reference](/gateway/configuration-reference/) for more details.

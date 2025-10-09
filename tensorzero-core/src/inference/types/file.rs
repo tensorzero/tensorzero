@@ -1,11 +1,18 @@
+use std::borrow::Cow;
+
+use futures::FutureExt;
 use mime::MediaType;
 use scoped_tls::scoped_thread_local;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use url::Url;
 
-use super::{resolved_input::FileWithPath, ContentBlock, RequestMessage};
-use crate::error::{Error, ErrorDetails};
+use super::{ContentBlock, RequestMessage};
+use crate::{
+    error::{Error, ErrorDetails},
+    http::TensorzeroHttpClient,
+    inference::types::resolved_input::LazyFile,
+};
 use aws_smithy_types::base64;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -112,7 +119,7 @@ pub enum File {
 }
 
 impl File {
-    pub async fn take_or_fetch(self, client: &reqwest::Client) -> Result<Base64File, Error> {
+    pub async fn take_or_fetch(self, client: &TensorzeroHttpClient) -> Result<Base64File, Error> {
         match self {
             File::Url { url, mime_type } => {
                 let response = client.get(url.clone()).send().await.map_err(|e| {
@@ -183,12 +190,31 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
     for message in input_messages {
         for content in &message.content {
             if let ContentBlock::File(file) = content {
-                let FileWithPath {
-                    file,
-                    storage_path: _,
-                } = &**file;
-                raw_request = raw_request.replace(&file.data, &format!("<TENSORZERO_FILE_{i}>"));
-                i += 1;
+                let file_with_path = match &**file {
+                    LazyFile::Url {
+                        future,
+                        file_url: _,
+                    } => {
+                        // If we actually sent the file bytes to some model provider, then the
+                        // Shared future must be ready, so we'll get a file from `now_or_never`.
+                        // Otherwise, the file cannot have been sent to a model provider (since the
+                        // future was never `.await`ed before we constructed `raw_request`), so
+                        // there's nothing to strip from the message.
+                        // We ignore errors here, since an error during file resolution means that
+                        // we cannot have included the file bytes in `raw_request`.
+                        if let Some(Ok(file)) = future.clone().now_or_never() {
+                            Some(Cow::Owned(file))
+                        } else {
+                            None
+                        }
+                    }
+                    LazyFile::FileWithPath(file) => Some(Cow::Borrowed(file)),
+                };
+                if let Some(file) = file_with_path {
+                    raw_request =
+                        raw_request.replace(&file.file.data, &format!("<TENSORZERO_FILE_{i}>"));
+                    i += 1;
+                }
             }
         }
     }
@@ -206,6 +232,7 @@ pub fn mime_type_to_ext(mime_type: &MediaType) -> Result<Option<&'static str>, E
         _ if mime_type == &mime::IMAGE_GIF => Some("gif"),
         _ if mime_type == &mime::APPLICATION_PDF => Some("pdf"),
         _ if mime_type == "image/webp" => Some("webp"),
+        _ if mime_type == "text/plain" => Some("txt"),
         _ => {
             let guess = mime_guess::get_mime_extensions_str(mime_type.as_ref())
                 .and_then(|types| types.last());
@@ -263,7 +290,7 @@ mod tests {
 
     use crate::inference::types::{
         file::{filename_to_mime_type, sanitize_raw_request},
-        resolved_input::FileWithPath,
+        resolved_input::{FileWithPath, LazyFile},
         storage::{StorageKind, StoragePath},
         Base64File, ContentBlock, RequestMessage, Role,
     };
@@ -281,7 +308,7 @@ mod tests {
                     RequestMessage {
                         role: Role::User,
                         content: vec![
-                            ContentBlock::File(Box::new(FileWithPath {
+                            ContentBlock::File(Box::new(LazyFile::FileWithPath(FileWithPath {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
@@ -292,8 +319,8 @@ mod tests {
                                     path: object_store::path::Path::parse("my-image-1-path")
                                         .unwrap(),
                                 },
-                            })),
-                            ContentBlock::File(Box::new(FileWithPath {
+                            }))),
+                            ContentBlock::File(Box::new(LazyFile::FileWithPath(FileWithPath {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
@@ -304,8 +331,8 @@ mod tests {
                                     path: object_store::path::Path::parse("my-image-2-path")
                                         .unwrap(),
                                 },
-                            })),
-                            ContentBlock::File(Box::new(FileWithPath {
+                            }))),
+                            ContentBlock::File(Box::new(LazyFile::FileWithPath(FileWithPath {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
@@ -316,13 +343,13 @@ mod tests {
                                     path: object_store::path::Path::parse("my-image-1-path")
                                         .unwrap(),
                                 },
-                            })),
+                            }))),
                         ],
                     },
                     RequestMessage {
                         role: Role::User,
                         content: vec![
-                            ContentBlock::File(Box::new(FileWithPath {
+                            ContentBlock::File(Box::new(LazyFile::FileWithPath(FileWithPath {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
@@ -333,8 +360,8 @@ mod tests {
                                     path: object_store::path::Path::parse("my-image-3-path")
                                         .unwrap(),
                                 },
-                            })),
-                            ContentBlock::File(Box::new(FileWithPath {
+                            }))),
+                            ContentBlock::File(Box::new(LazyFile::FileWithPath(FileWithPath {
                                 file: Base64File {
                                     url: None,
                                     mime_type: mime::IMAGE_JPEG,
@@ -345,7 +372,7 @@ mod tests {
                                     path: object_store::path::Path::parse("my-image-1-path")
                                         .unwrap(),
                                 },
-                            }))
+                            })))
                         ],
                     }
                 ],

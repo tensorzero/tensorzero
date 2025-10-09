@@ -2,10 +2,12 @@ use serde_json::json;
 use std::collections::HashMap;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::inference::types::{
-    ContentBlock, ContentBlockChatOutput, ModelInput, RequestMessage, Role, StoredInput,
-    StoredInputMessage, StoredInputMessageContent, Text,
+    ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
+    StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
 };
-use tensorzero_core::optimization::dicl::insert_dicl_examples_with_batching;
+use tensorzero_core::optimization::dicl::{
+    dicl_examples_exist, insert_dicl_examples_with_batching,
+};
 use tensorzero_core::stored_inference::RenderedSample;
 use uuid::Uuid;
 
@@ -17,9 +19,9 @@ fn create_test_rendered_sample(input: &str, output: &str) -> RenderedSample {
         function_name: "test_function".to_string(),
         input: ModelInput {
             system: None,
-            messages: vec![RequestMessage {
+            messages: vec![ResolvedRequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::Text(Text {
+                content: vec![ResolvedContentBlock::Text(Text {
                     text: input.to_string(),
                 })],
             }],
@@ -235,5 +237,72 @@ async fn test_insert_dicl_examples_json_serialization() {
     assert!(
         output_str.contains("àáâã"),
         "Output should contain Unicode chars: {output_str}"
+    );
+}
+
+#[tokio::test]
+async fn test_dicl_examples_exist() {
+    let clickhouse = get_clickhouse().await;
+
+    // Generate unique names to ensure test isolation
+    let function_name = format!("test_function_exists_{}", Uuid::now_v7());
+    let variant_name = format!("test_variant_exists_{}", Uuid::now_v7());
+    let non_existent_variant = format!("test_variant_non_existent_{}", Uuid::now_v7());
+
+    // First, check that no examples exist for the variant
+    let exists_before = dicl_examples_exist(&clickhouse, &function_name, &variant_name)
+        .await
+        .unwrap();
+    assert!(
+        !exists_before,
+        "Expected no DICL examples to exist initially for variant '{variant_name}'"
+    );
+
+    // Insert some examples
+    let samples = vec![
+        create_test_rendered_sample("test input 1", "test output 1"),
+        create_test_rendered_sample("test input 2", "test output 2"),
+    ];
+    let embeddings = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
+    let examples_with_embeddings: Vec<(RenderedSample, Vec<f64>)> =
+        samples.into_iter().zip(embeddings.into_iter()).collect();
+
+    let insert_result = insert_dicl_examples_with_batching(
+        &clickhouse,
+        examples_with_embeddings,
+        &function_name,
+        &variant_name,
+        10,
+    )
+    .await;
+    assert!(insert_result.is_ok(), "Failed to insert DICL examples");
+
+    // Now check that examples exist for the variant
+    let exists_after = dicl_examples_exist(&clickhouse, &function_name, &variant_name)
+        .await
+        .unwrap();
+    assert!(
+        exists_after,
+        "Expected DICL examples to exist after insertion for variant '{variant_name}'"
+    );
+
+    // Check that a non-existent variant returns false
+    let non_existent = dicl_examples_exist(&clickhouse, &function_name, &non_existent_variant)
+        .await
+        .unwrap();
+    assert!(
+        !non_existent,
+        "Expected no DICL examples to exist for non-existent variant '{non_existent_variant}'"
+    );
+
+    // Also check that a different function name returns false
+    let different_function = format!("different_function_{}", Uuid::now_v7());
+    let different_function_exists =
+        dicl_examples_exist(&clickhouse, &different_function, &variant_name)
+            .await
+            .unwrap();
+    assert!(
+        !different_function_exists,
+        "Expected no DICL examples to exist for different function '{different_function}'"
     );
 }

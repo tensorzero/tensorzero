@@ -78,7 +78,7 @@ impl BatchSender {
         // We use `spawn_blocking` to ensure that when the runtime shuts down, it waits for this task to complete.
         let writer_handle = tokio::task::spawn_blocking(move || {
             handle.block_on(async move {
-                tracing::info!("ClickHouse batch write handler started");
+                tracing::debug!("ClickHouse batch write handler started");
                 writer.process(clickhouse, config).await;
                 tracing::info!("ClickHouse batch write handler finished");
             });

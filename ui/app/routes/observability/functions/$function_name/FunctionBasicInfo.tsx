@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { FunctionConfig } from "tensorzero-node";
 import {
   BasicInfoLayout,
@@ -5,6 +6,7 @@ import {
   BasicInfoItemTitle,
   BasicInfoItemContent,
 } from "~/components/layout/BasicInfoLayout";
+import { ToolDetails } from "~/components/function/ToolDetails";
 import Chip from "~/components/ui/Chip";
 
 interface BasicInfoProps {
@@ -12,8 +14,14 @@ interface BasicInfoProps {
 }
 
 export default function BasicInfo({ functionConfig }: BasicInfoProps) {
+  const [selectedTool, setSelectedTool] = useState<string | null>(null);
+
   return (
     <BasicInfoLayout>
+      <ToolDetails
+        toolName={selectedTool}
+        onClose={() => setSelectedTool(null)}
+      />
       {functionConfig.description && (
         <BasicInfoItem>
           <BasicInfoItemTitle>Description</BasicInfoItemTitle>
@@ -33,7 +41,12 @@ export default function BasicInfo({ functionConfig }: BasicInfoProps) {
               {functionConfig.tools?.length ? (
                 <div className="flex flex-wrap gap-1">
                   {functionConfig.tools.map((tool) => (
-                    <Chip key={tool} label={tool} font="mono" />
+                    <Chip
+                      key={tool}
+                      label={tool}
+                      font="mono"
+                      onClick={() => setSelectedTool(tool)}
+                    />
                   ))}
                 </div>
               ) : (

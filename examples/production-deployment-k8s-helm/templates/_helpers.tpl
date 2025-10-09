@@ -53,3 +53,12 @@ Selector labels
 app.kubernetes.io/name: {{ include "tensorzero.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+Monitoring labels
+*/}}
+{{- define "tensorzero.monitorLabels" -}}
+{{- range $label, $value := .Values.monitoring.metrics.labels }}
+{{ $label }}: {{ $value | quote }}
+{{- end }}
+{{- end }}

@@ -1,6 +1,7 @@
 import type { Config, FunctionConfig } from "tensorzero-node";
 import { getConfig as getConfigNative } from "tensorzero-node";
 import { getEnv } from "../env.server";
+import { DEFAULT_FUNCTION } from "../constants";
 
 const CACHE_TTL_MS = 1000 * 60; // 1 minute
 
@@ -30,6 +31,9 @@ We will likely address this with some form of query library down the line.
 
 export async function loadConfig(): Promise<Config> {
   const env = getEnv();
+  if (env.TENSORZERO_UI_DEFAULT_CONFIG) {
+    return await getConfigNative(null);
+  }
   const config = await getConfigNative(env.TENSORZERO_UI_CONFIG_PATH);
   return config;
 }
@@ -50,7 +54,49 @@ const defaultFunctionConfig: FunctionConfig = {
   parallel_tool_calls: null,
   description:
     "This is the default function for TensorZero. This function is used when you call a model directly without specifying a function name. It has no variants preconfigured because they are generated dynamically at inference time based on the model being called.",
+  experimentation: { type: "uniform" },
 };
+
+export function getDefaultFunctionConfigWithVariant(
+  model_name: string,
+): FunctionConfig {
+  const functionConfig = defaultFunctionConfig;
+  functionConfig.variants[model_name] = {
+    inner: {
+      type: "chat_completion",
+      model: model_name,
+      weight: null,
+      templates: {},
+      temperature: null,
+      top_p: null,
+      max_tokens: null,
+      presence_penalty: null,
+      frequency_penalty: null,
+      seed: null,
+      stop_sequences: null,
+      json_mode: null,
+      retries: { num_retries: 0, max_delay_s: 0 },
+    },
+    timeouts: {
+      non_streaming: { total_ms: null },
+      streaming: { ttft_ms: null },
+    },
+  };
+  return functionConfig;
+}
+/*
+weight: number | null;
+model: string;
+templates: ChatTemplates;
+temperature: number | null;
+top_p: number | null;
+max_tokens: number | null;
+presence_penalty: number | null;
+frequency_penalty: number | null;
+seed: number | null;
+stop_sequences: Array<string> | null;
+json_mode: JsonMode | null;
+retries: RetryConfig;*/
 
 export async function getConfig() {
   const now = Date.now();
@@ -62,7 +108,7 @@ export async function getConfig() {
   // Cache is invalid or doesn't exist, reload it
   const freshConfig = await loadConfig();
   // eslint-disable-next-line no-restricted-syntax
-  freshConfig.functions["tensorzero::default"] = defaultFunctionConfig;
+  freshConfig.functions[DEFAULT_FUNCTION] = defaultFunctionConfig;
 
   configCache = { data: freshConfig, timestamp: now };
   return freshConfig;
