@@ -10,6 +10,10 @@ import {
   EpisodeByIdRow,
   TableBoundsWithCount,
 } from "./bindings";
+import type {
+  TensorZeroClient as NativeTensorZeroClientType,
+  DatabaseClient as NativeDatabaseClientType,
+} from "../index";
 import { TimeWindow } from "./bindings/TimeWindow";
 import { ModelUsageTimePoint } from "./bindings/ModelUsageTimePoint";
 import { ModelLatencyDatapoint } from "./bindings/ModelLatencyDatapoint";
@@ -23,54 +27,6 @@ export { createLogger } from "./utils/logger";
 
 // Use createRequire to load CommonJS module
 const require = createRequire(import.meta.url);
-type NativeTensorZeroClientType = {
-  inference(params: string): Promise<string>;
-  experimentalLaunchOptimizationWorkflow(params: string): Promise<string>;
-  experimentalPollOptimization(jobHandle: string): Promise<string>;
-  staleDataset(datasetName: string): Promise<string>;
-};
-
-type NativeTensorZeroClientConstructor = {
-  buildEmbedded(
-    configPath: string,
-    clickhouseUrl?: string | null,
-    postgresUrl?: string | null,
-    timeout?: number | null,
-  ): Promise<NativeTensorZeroClientType>;
-  buildHttp(gatewayUrl: string): Promise<NativeTensorZeroClientType>;
-};
-
-type NativeDatabaseClientType = {
-  getModelUsageTimeseries(params: string): Promise<string>;
-  getModelLatencyQuantiles(params: string): Promise<string>;
-  countDistinctModelsUsed(): Promise<number>;
-  queryEpisodeTable(params: string): Promise<string>;
-  queryEpisodeTableBounds(): Promise<string>;
-};
-
-type NativeDatabaseClientConstructor = {
-  fromClickhouseUrl(url: string): Promise<NativeDatabaseClientType>;
-};
-
-type NativeModule = {
-  TensorZeroClient: NativeTensorZeroClientConstructor;
-  getConfig(configPath: string | null): Promise<string>;
-  DatabaseClient: NativeDatabaseClientConstructor;
-  getQuantiles(): number[];
-  runEvaluationStreaming(
-    params: {
-      gatewayUrl: string;
-      clickhouseUrl: string;
-      configPath: string;
-      evaluationName: string;
-      datasetName: string;
-      variantName: string;
-      concurrency: number;
-      inferenceCache: CacheEnabledMode;
-    },
-    callback: (err: Error | null, payload: string | null) => void,
-  ): Promise<void>;
-};
 
 const {
   TensorZeroClient: NativeTensorZeroClient,
@@ -78,7 +34,7 @@ const {
   DatabaseClient: NativeDatabaseClient,
   getQuantiles,
   runEvaluationStreaming: nativeRunEvaluationStreaming,
-} = require("../index.cjs") as NativeModule;
+} = require("../index.cjs") as typeof import("../index");
 
 // Wrapper class for type safety and convenience
 // since the interface is string in string out
