@@ -45,51 +45,45 @@ async fn get_providers() -> E2ETestProviders {
         Err(_) => HashMap::new(),
     };
 
-    let standard_without_o1 = vec![
-        // E2ETestProvider {
-        //     supports_batch_inference: true,
-        //     variant_name: "openai".to_string(),
-        //     model_name: "gpt-4o-mini-2024-07-18".into(),
-        //     model_provider_name: "openai".into(),
-        //     credentials: HashMap::new(),
-        // }
-    ];
+    let standard_without_o1 = vec![E2ETestProvider {
+        supports_batch_inference: true,
+        variant_name: "openai".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
 
-    let extra_body_providers = vec![
-        // E2ETestProvider {
-        //     supports_batch_inference: true,
-        //     variant_name: "openai-extra-body".to_string(),
-        //     model_name: "gpt-4o-mini-2024-07-18".into(),
-        //     model_provider_name: "openai".into(),
-        //     credentials: HashMap::new(),
-        // }
-    ];
+    let extra_body_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
+        variant_name: "openai-extra-body".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
 
-    let bad_auth_extra_headers = vec![
-        // E2ETestProvider {
-        //     supports_batch_inference: true,
-        //     variant_name: "openai-extra-headers".to_string(),
-        //     model_name: "gpt-4o-mini-2024-07-18".into(),
-        //     model_provider_name: "openai".into(),
-        //     credentials: HashMap::new(),
-        // }
-    ];
+    let bad_auth_extra_headers = vec![E2ETestProvider {
+        supports_batch_inference: true,
+        variant_name: "openai-extra-headers".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
 
     let standard_providers = vec![
-        // E2ETestProvider {
-        //     supports_batch_inference: true,
-        //     variant_name: "openai".to_string(),
-        //     model_name: "gpt-4o-mini-2024-07-18".into(),
-        //     model_provider_name: "openai".into(),
-        //     credentials: HashMap::new(),
-        // },
-        // E2ETestProvider {
-        //     supports_batch_inference: true,
-        //     variant_name: "openai-o1".to_string(),
-        //     model_name: "o1-2024-12-17".into(),
-        //     model_provider_name: "openai".into(),
-        //     credentials: HashMap::new(),
-        // },
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai".to_string(),
+            model_name: "gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai-o1".to_string(),
+            model_name: "o1-2024-12-17".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "openai-responses".to_string(),
@@ -100,13 +94,13 @@ async fn get_providers() -> E2ETestProviders {
     ];
 
     let inference_params_providers = vec![
-        // E2ETestProvider {
-        //     supports_batch_inference: true,
-        //     variant_name: "openai".to_string(),
-        //     model_name: "gpt-4o-mini-2024-07-18".into(),
-        //     model_provider_name: "openai".into(),
-        //     credentials: credentials.clone(),
-        // },
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai".to_string(),
+            model_name: "gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: credentials.clone(),
+        },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "openai-responses".to_string(),
@@ -116,24 +110,22 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
-    let inference_params_dynamic_providers = vec![
-        // E2ETestProvider {
-        //     supports_batch_inference: true,
-        //     variant_name: "openai-dynamic".to_string(),
-        //     model_name: "gpt-4o-mini-2024-07-18-dynamic".into(),
-        //     model_provider_name: "openai".into(),
-        //     credentials,
-        // }
-    ];
+    let inference_params_dynamic_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
+        variant_name: "openai-dynamic".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18-dynamic".into(),
+        model_provider_name: "openai".into(),
+        credentials,
+    }];
 
     let image_providers = vec![
-        // E2ETestProvider {
-        //     supports_batch_inference: true,
-        //     variant_name: "openai".to_string(),
-        //     model_name: "openai::gpt-4o-mini-2024-07-18".into(),
-        //     model_provider_name: "openai".into(),
-        //     credentials: HashMap::new(),
-        // },
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai".to_string(),
+            model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "openai-responses".to_string(),
@@ -144,41 +136,41 @@ async fn get_providers() -> E2ETestProviders {
     ];
 
     let json_providers = vec![
-        // E2ETestProvider {
-        //     supports_batch_inference: true,
-        //     variant_name: "openai".to_string(),
-        //     model_name: "gpt-4o-mini-2024-07-18".into(),
-        //     model_provider_name: "openai".into(),
-        //     credentials: HashMap::new(),
-        // },
-        // E2ETestProvider {
-        //     supports_batch_inference: true,
-        //     variant_name: "openai-implicit".to_string(),
-        //     model_name: "gpt-4o-mini-2024-07-18".into(),
-        //     model_provider_name: "openai".into(),
-        //     credentials: HashMap::new(),
-        // },
-        // E2ETestProvider {
-        //     supports_batch_inference: true,
-        //     variant_name: "openai-strict".to_string(),
-        //     model_name: "gpt-4o-mini-2024-07-18".into(),
-        //     model_provider_name: "openai".into(),
-        //     credentials: HashMap::new(),
-        // },
-        // E2ETestProvider {
-        //     supports_batch_inference: true,
-        //     variant_name: "openai-o1".to_string(),
-        //     model_name: "o1-2024-12-17".into(),
-        //     model_provider_name: "openai".into(),
-        //     credentials: HashMap::new(),
-        // },
-        // E2ETestProvider {
-        //     supports_batch_inference: true,
-        //     variant_name: "openai-cot".to_string(),
-        //     model_name: "openai::gpt-4.1-nano-2025-04-14".into(),
-        //     model_provider_name: "openai".into(),
-        //     credentials: HashMap::new(),
-        // },
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai".to_string(),
+            model_name: "gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai-implicit".to_string(),
+            model_name: "gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai-strict".to_string(),
+            model_name: "gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai-o1".to_string(),
+            model_name: "o1-2024-12-17".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai-cot".to_string(),
+            model_name: "openai::gpt-4.1-nano-2025-04-14".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "openai-responses".to_string(),
@@ -196,20 +188,20 @@ async fn get_providers() -> E2ETestProviders {
     ];
 
     let json_mode_off_providers = vec![
-        // E2ETestProvider {
-        //     supports_batch_inference: true,
-        //     variant_name: "openai_json_mode_off".to_string(),
-        //     model_name: "gpt-4o-mini-2024-07-18".into(),
-        //     model_provider_name: "openai".into(),
-        //     credentials: HashMap::new(),
-        // },
-        // E2ETestProvider {
-        //     supports_batch_inference: true,
-        //     variant_name: "openai_o1_json_mode_off".to_string(),
-        //     model_name: "o1-2024-12-17".into(),
-        //     model_provider_name: "openai".into(),
-        //     credentials: HashMap::new(),
-        // },
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai_json_mode_off".to_string(),
+            model_name: "gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai_o1_json_mode_off".to_string(),
+            model_name: "o1-2024-12-17".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
         E2ETestProvider {
             supports_batch_inference: true,
             variant_name: "openai-responses_json_mode_off".to_string(),
@@ -219,39 +211,33 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
-    let shorthand_providers = vec![
-        // E2ETestProvider {
-        //     supports_batch_inference: true,
-        //     variant_name: "openai-shorthand".to_string(),
-        //     model_name: "openai::gpt-4o-mini-2024-07-18".into(),
-        //     model_provider_name: "openai".into(),
-        //     credentials: HashMap::new(),
-        // }
-    ];
+    let shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
+        variant_name: "openai-shorthand".to_string(),
+        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
 
     let embedding_providers = vec![EmbeddingTestProvider {
         model_name: "text-embedding-3-small".into(),
     }];
 
-    let provider_type_default_credentials_providers = vec![
-        // E2ETestProvider {
-        //     supports_batch_inference: true,
-        //     variant_name: "openai".to_string(),
-        //     model_name: "gpt-4o-mini-2024-07-18".into(),
-        //     model_provider_name: "openai".into(),
-        //     credentials: HashMap::new(),
-        // }
-    ];
+    let provider_type_default_credentials_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
+        variant_name: "openai".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
 
-    let provider_type_default_credentials_shorthand_providers = vec![
-        // E2ETestProvider {
-        //     supports_batch_inference: true,
-        //     variant_name: "openai-shorthand".to_string(),
-        //     model_name: "openai::gpt-4o-mini-2024-07-18".into(),
-        //     model_provider_name: "openai".into(),
-        //     credentials: HashMap::new(),
-        // }
-    ];
+    let provider_type_default_credentials_shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
+        variant_name: "openai-shorthand".to_string(),
+        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
