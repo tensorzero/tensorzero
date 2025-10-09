@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use paste::paste;
-use secrecy::ExposeSecret;
+use secrecy::ExposeSecret as _;
 use serde_json::json;
 use tensorzero_core::config::BatchWritesConfig;
 use tensorzero_core::db::clickhouse::migration_manager::migration_trait::Migration;
@@ -187,17 +187,9 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
         .unwrap_or_else(|_| format!("{MANIFEST_PATH}/../ui/fixtures/s3-fixtures"));
     let s3_fixtures_path = &s3_fixtures_path;
 
-    let ClickHouseConnectionInfo::Production {
-        database_url,
-        database,
-        cluster_name: _,
-        client: _,
-        batch_sender: _,
-    } = clickhouse
-    else {
-        panic!("ClickHouseConnectionInfo is not a Production connection");
-    };
-
+    // TODO: remove these from the public ClickhouseConnectionInfo struct.
+    let database_url = &clickhouse.database_url;
+    let database = &clickhouse.database;
     let url = url::Url::parse(database_url.expose_secret()).unwrap();
     let mut host = url.host_str().unwrap();
     if host == "localhost" || host == "127.0.0.1" {

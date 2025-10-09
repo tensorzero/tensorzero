@@ -38,7 +38,7 @@ use super::HealthCheckable;
 
 /// Trait defining the interface for ClickHouse database operations.
 #[async_trait]
-pub trait ClickHouseClient: Send + Sync {
+trait ClickHouseClient: Send + Sync + HealthCheckable {
     /// Returns the name of the database
     fn database(&self) -> &str;
 
@@ -107,16 +107,13 @@ pub trait ClickHouseClient: Send + Sync {
         args: GetMaybeReplicatedTableEngineNameArgs<'_>,
     ) -> String;
 
-    /// Performs a health check on the connection
-    async fn health(&self) -> Result<(), Error>;
-
     /// Returns the variant name (for logging/debugging)
     fn variant_name(&self) -> &'static str;
 }
 
 /// Production implementation of ClickHouseClient
 #[derive(Clone)]
-pub struct ProductionClickHouseClient {
+struct ProductionClickHouseClient {
     database_url: SecretString,
     cluster_name: Option<String>,
     database: String,
@@ -138,19 +135,23 @@ impl fmt::Debug for ProductionClickHouseClient {
 
 /// Mock implementation of ClickHouseClient for testing
 #[derive(Debug, Clone)]
-pub struct MockClickHouseClient {
+struct MockClickHouseClient {
     mock_data: Arc<RwLock<HashMap<String, Vec<serde_json::Value>>>>,
     healthy: bool,
 }
 
 /// Disabled implementation of ClickHouseClient (no-op)
 #[derive(Debug, Clone, Copy)]
-pub struct DisabledClickHouseClient;
+struct DisabledClickHouseClient;
 
 /// Wrapper for ClickHouse client implementations
 #[derive(Clone)]
 pub struct ClickHouseConnectionInfo {
     inner: Arc<dyn ClickHouseClient>,
+
+    // TODO: remove these from the public ClickhouseConnectionInfo struct.
+    pub database_url: SecretString,
+    pub database: String,
 }
 
 impl fmt::Debug for ClickHouseConnectionInfo {
@@ -229,21 +230,69 @@ impl ClickHouseConnectionInfo {
     ///
     /// However, for tests that directly test ClickHouse behavior, you can directly create the struct.
     pub async fn new(database_url: &str, batch_config: BatchWritesConfig) -> Result<Self, Error> {
-        let client = ProductionClickHouseClient::new(database_url, batch_config).await?;
+        // Add a query string for the database using the URL crate
+        let mut database_url = Url::parse(database_url).map_err(|_| {
+            Error::new(ErrorDetails::Config {
+                message: "Invalid ClickHouse database URL".to_string(),
+            })
+        })?;
+
+        #[cfg(not(feature = "e2e_tests"))]
+        let database = validate_clickhouse_url_get_db_name(&database_url)?
+            .unwrap_or_else(|| "default".to_string());
+
+        #[cfg(feature = "e2e_tests")]
+        let database = std::env::var("TENSORZERO_E2E_TESTS_DATABASE")
+            .unwrap_or_else(|_| "tensorzero_e2e_tests".to_string());
+
+        // Although we take the database name from the URL path,
+        // we need to set the query string for the database name for the ClickHouse TCP protocol
+        database_url.set_path("");
+        database_url
+            .query_pairs_mut()
+            .append_pair("database", &database);
+
+        // Set ClickHouse format settings for some error checking on writes
+        set_clickhouse_format_settings(&mut database_url);
+
+        // Store the original URL as a SecretString
+        let database_url = SecretString::from(database_url.to_string());
+
+        // Get the cluster name from the `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` environment variable
+        let cluster_name = match std::env::var("TENSORZERO_CLICKHOUSE_CLUSTER_NAME") {
+            Ok(cluster_name) => {
+                tracing::info!("The gateway is expecting a self-hosted replicated ClickHouse deployment with cluster name `{cluster_name}`. Note: The environment variable `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` doesn't apply to ClickHouse Cloud or self-managed single-node deployments.");
+                Some(cluster_name)
+            }
+            Err(_) => {
+                tracing::debug!("The environment variable `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` wasn't provided, so the gateway will assume that ClickHouse is not running a self-hosted replicated cluster. Note: This variable doesn't apply to ClickHouse Cloud or self-managed single-node deployments.");
+                None
+            }
+        };
+
+        let client = ProductionClickHouseClient::new(database_url.clone(), cluster_name, database.clone(), batch_config).await?;
         Ok(Self {
             inner: Arc::new(client),
+            database_url: database_url,
+            database: database,
         })
     }
 
+    // TODO: Pass in a Mock that we can mock calls from.
     pub fn new_mock(healthy: bool) -> Self {
         Self {
             inner: Arc::new(MockClickHouseClient::new(healthy)),
+            database_url: "".to_string().into(),
+            database: "".to_string(),
         }
     }
 
+    // TODO: Remove the disabled one.
     pub fn new_disabled() -> Self {
         Self {
             inner: Arc::new(DisabledClickHouseClient),
+            database_url: "".to_string().into(),
+            database: "".to_string(),
         }
     }
 
@@ -411,47 +460,11 @@ impl ClickHouseConnectionInfo {
 
 impl ProductionClickHouseClient {
     /// Create a new production ClickHouse client from a database URL.
-    async fn new(database_url: &str, batch_config: BatchWritesConfig) -> Result<Self, Error> {
-        // Add a query string for the database using the URL crate
-        let mut database_url = Url::parse(database_url).map_err(|_| {
-            Error::new(ErrorDetails::Config {
-                message: "Invalid ClickHouse database URL".to_string(),
-            })
-        })?;
-
-        #[cfg(not(feature = "e2e_tests"))]
-        let database = validate_clickhouse_url_get_db_name(&database_url)?
-            .unwrap_or_else(|| "default".to_string());
-
-        #[cfg(feature = "e2e_tests")]
-        let database = std::env::var("TENSORZERO_E2E_TESTS_DATABASE")
-            .unwrap_or_else(|_| "tensorzero_e2e_tests".to_string());
-
-        // Although we take the database name from the URL path,
-        // we need to set the query string for the database name for the ClickHouse TCP protocol
-        database_url.set_path("");
-        database_url
-            .query_pairs_mut()
-            .append_pair("database", &database);
-
-        // Set ClickHouse format settings for some error checking on writes
-        set_clickhouse_format_settings(&mut database_url);
-
-        // Store the original URL as a SecretString
-        let database_url = SecretString::from(database_url.to_string());
-
-        // Get the cluster name from the `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` environment variable
-        let cluster_name = match std::env::var("TENSORZERO_CLICKHOUSE_CLUSTER_NAME") {
-            Ok(cluster_name) => {
-                tracing::info!("The gateway is expecting a self-hosted replicated ClickHouse deployment with cluster name `{cluster_name}`. Note: The environment variable `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` doesn't apply to ClickHouse Cloud or self-managed single-node deployments.");
-                Some(cluster_name)
-            }
-            Err(_) => {
-                tracing::debug!("The environment variable `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` wasn't provided, so the gateway will assume that ClickHouse is not running a self-hosted replicated cluster. Note: This variable doesn't apply to ClickHouse Cloud or self-managed single-node deployments.");
-                None
-            }
-        };
-
+    async fn new(
+        database_url: SecretString,
+        cluster_name: Option<String>,
+        database: String,
+        batch_config: BatchWritesConfig) -> Result<Self, Error> {        
         let mut client = Self {
             database_url,
             cluster_name,
@@ -466,6 +479,8 @@ impl ProductionClickHouseClient {
             // (since the batcher itself always performs direct writes)
             let temp_connection_info = ClickHouseConnectionInfo {
                 inner: Arc::new(client.clone()),
+                database_url: client.database_url.clone(),
+                database: client.database.clone(),
             };
             let batcher = BatchSender::new(temp_connection_info, batch_config)?;
             client.batch_sender = Some(Arc::new(batcher));
@@ -474,6 +489,8 @@ impl ProductionClickHouseClient {
         // If the connection is unhealthy, we won't be able to run / check migrations. So we just fail here.
         let temp_connection_info = ClickHouseConnectionInfo {
             inner: Arc::new(client.clone()),
+            database_url: client.database_url.clone(),
+            database: client.database.clone(),
         };
         temp_connection_info.inner.health().await?;
         Ok(client)
@@ -758,6 +775,8 @@ impl ClickHouseClient for ProductionClickHouseClient {
         // Create a temporary wrapper to call check_table_exists
         let temp_connection_info = ClickHouseConnectionInfo {
             inner: Arc::new(self.clone()),
+            database_url: self.database_url.clone(),
+            database: self.database.clone(),
         };
         let migrations_table_exists =
             check_table_exists(&temp_connection_info, "TensorZeroMigration", "0000").await?;
@@ -844,6 +863,8 @@ impl ClickHouseClient for ProductionClickHouseClient {
         // Create a temporary wrapper to call run_query_synchronous
         let temp_connection_info = ClickHouseConnectionInfo {
             inner: Arc::new(self.clone()),
+            database_url: self.database_url.clone(),
+            database: self.database.clone(),
         };
         temp_connection_info
             .run_query_synchronous_no_params(query)
@@ -914,6 +935,13 @@ impl ClickHouseClient for ProductionClickHouseClient {
         }
     }
 
+    fn variant_name(&self) -> &'static str {
+        "Production"
+    }
+}
+
+#[async_trait]
+impl HealthCheckable for ProductionClickHouseClient {
     async fn health(&self) -> Result<(), Error> {
         // We need to ping the /ping endpoint to check if ClickHouse is healthy
         let mut ping_url = Url::parse(self.database_url.expose_secret()).map_err(|_| {
@@ -941,10 +969,6 @@ impl ClickHouseClient for ProductionClickHouseClient {
             }
             .into()),
         }
-    }
-
-    fn variant_name(&self) -> &'static str {
-        "Production"
     }
 }
 
@@ -1059,6 +1083,13 @@ impl ClickHouseClient for MockClickHouseClient {
         args.table_engine_name.to_string()
     }
 
+    fn variant_name(&self) -> &'static str {
+        "Mock"
+    }
+}
+
+#[async_trait]
+impl HealthCheckable for MockClickHouseClient {
     async fn health(&self) -> Result<(), Error> {
         if self.healthy {
             Ok(())
@@ -1069,11 +1100,8 @@ impl ClickHouseClient for MockClickHouseClient {
             .into())
         }
     }
-
-    fn variant_name(&self) -> &'static str {
-        "Mock"
-    }
 }
+
 
 // Trait implementations for DisabledClickHouseClient
 #[async_trait]
@@ -1176,12 +1204,15 @@ impl ClickHouseClient for DisabledClickHouseClient {
         args.table_engine_name.to_string()
     }
 
-    async fn health(&self) -> Result<(), Error> {
-        Ok(())
-    }
-
     fn variant_name(&self) -> &'static str {
         "Disabled"
+    }
+}
+
+#[async_trait]
+impl HealthCheckable for DisabledClickHouseClient {
+    async fn health(&self) -> Result<(), Error> {
+        Ok(())
     }
 }
 

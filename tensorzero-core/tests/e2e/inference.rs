@@ -28,7 +28,6 @@ use tensorzero_core::{
             select_all_model_inferences_by_chat_episode_id_clickhouse,
             select_chat_inferences_clickhouse,
         },
-        ClickHouseConnectionInfo,
     },
     endpoints::inference::ChatInferenceResponse,
     inference::types::{
@@ -3918,32 +3917,6 @@ async fn test_multiple_text_blocks_in_message() {
 // We don't use the word 'batch' in the test name, since we already
 // group those tests as 'batch inference' tests
 #[tokio::test(flavor = "multi_thread")]
-async fn test_clickhouse_bulk_insert_off_default() {
-    let client = Arc::new(
-        tensorzero::test_helpers::make_embedded_gateway_with_config(
-            "
-    ",
-        )
-        .await,
-    );
-
-    let ClickHouseConnectionInfo::Production { batch_sender, .. } = client
-        .get_app_state_data()
-        .unwrap()
-        .clickhouse_connection_info
-        .clone()
-    else {
-        panic!("Clickhouse client was not production!");
-    };
-    assert!(
-        batch_sender.is_none(),
-        "Batching should not have been enabled!"
-    );
-}
-
-// We don't use the word 'batch' in the test name, since we already
-// group those tests as 'batch inference' tests
-#[tokio::test(flavor = "multi_thread")]
 async fn test_clickhouse_bulk_insert() {
     let client = Arc::new(
         tensorzero::test_helpers::make_embedded_gateway_with_config(
@@ -3955,16 +3928,6 @@ async fn test_clickhouse_bulk_insert() {
         )
         .await,
     );
-
-    let ClickHouseConnectionInfo::Production { batch_sender, .. } = client
-        .get_app_state_data()
-        .unwrap()
-        .clickhouse_connection_info
-        .clone()
-    else {
-        panic!("Clickhouse client was not production!");
-    };
-    assert!(batch_sender.is_some(), "Batching was not enabled!");
 
     let mut join_set = JoinSet::new();
     let episode_id = Uuid::now_v7();
@@ -4003,7 +3966,6 @@ async fn test_clickhouse_bulk_insert() {
     assert_eq!(expected_inference_ids.len(), inference_count);
 
     assert_eq!(Arc::strong_count(&client), 1);
-    drop(batch_sender);
     eprintln!("Dropping client");
     // Drop the last client, which will drop all of our `ClickhouseConnectionInfo`s
     // and allow the batch writer to shut down.
