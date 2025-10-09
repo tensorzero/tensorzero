@@ -2304,7 +2304,7 @@ mod tests {
         };
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::new_fake();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,
@@ -2416,7 +2416,7 @@ mod tests {
         };
 
         let http_client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::new_fake();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let postgres_mock = PostgresConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
         let tags = HashMap::new();
@@ -2514,7 +2514,7 @@ mod tests {
         });
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::new_fake();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,
@@ -2667,7 +2667,7 @@ mod tests {
                 &request,
                 &InferenceClients {
                     http_client: &TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_fake(),
+                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
                     postgres_connection_info: &PostgresConnectionInfo::Disabled,
                     credentials: &api_keys,
                     cache_options: &CacheOptions {
@@ -2735,7 +2735,7 @@ mod tests {
                 &request,
                 &InferenceClients {
                     http_client: &TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_fake(),
+                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
                     postgres_connection_info: &PostgresConnectionInfo::Disabled,
                     credentials: &api_keys,
                     cache_options: &CacheOptions {
@@ -2850,7 +2850,7 @@ mod tests {
                 &request,
                 &InferenceClients {
                     http_client: &TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_fake(),
+                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
                     postgres_connection_info: &PostgresConnectionInfo::Disabled,
                     credentials: &api_keys,
                     cache_options: &CacheOptions {
@@ -2928,7 +2928,7 @@ mod tests {
         };
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::new_fake();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,
@@ -3046,7 +3046,7 @@ mod tests {
         };
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::new_fake();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use enum_map::Enum;
 use migration_manager::migrations::check_table_exists;
-use mockall::automock;
+use mockall::mock;
 use reqwest::multipart::Form;
 use reqwest::multipart::Part;
 use reqwest::Client;
@@ -24,15 +24,17 @@ mod select_queries;
 pub mod disabled_clickhouse_client;
 #[cfg(test)]
 mod fake_clickhouse_client;
-#[cfg(test)]
-use fake_clickhouse_client::FakeClickHouseClient;
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod test_helpers;
+
+#[cfg(test)]
+use fake_clickhouse_client::FakeClickHouseClient;
 
 use crate::config::BatchWritesConfig;
 use crate::config::Config;
 use crate::db::clickhouse::batching::BatchSender;
 use crate::db::clickhouse::batching::BatchWriterHandle;
+use crate::db::clickhouse::disabled_clickhouse_client::DisabledClickHouseClient;
 use crate::error::DisplayOrDebugGateway;
 use crate::error::{Error, ErrorDetails};
 use crate::stored_inference::StoredInference;
@@ -46,7 +48,6 @@ use super::HealthCheckable;
 /// For testing, use `FakeClickHouseClient` from the `mock_clickhouse_client` module.
 /// For advanced mocking scenarios, you can use `mockall` to create custom mocks.
 #[async_trait]
-#[automock]
 pub trait ClickHouseClient: Send + Sync + Debug + HealthCheckable {
     /// Returns the database URL
     fn database_url(&self) -> &SecretString;
@@ -126,6 +127,62 @@ pub trait ClickHouseClient: Send + Sync + Debug + HealthCheckable {
     fn variant_name(&self) -> &'static str;
 }
 
+// Because this is a supertrait of HealthCheckable, we need to use a custom mock macro instead of automock.
+mock! {
+    #[async_trait]
+    pub ClickHouseClient {
+        fn database_url(&self) -> &SecretString;
+        fn cluster_name(&self) -> &Option<String>;
+        fn database(&self) -> &str;
+        fn batcher_join_handle(&self) -> Option<BatchWriterHandle>;
+        async fn write_batched_internal(
+            &self,
+            rows: Vec<String>,
+            table: TableName,
+        ) -> Result<(), Error>;
+        async fn write_non_batched_internal(
+            &self,
+            rows: Vec<String>,
+            table: TableName,
+        ) -> Result<(), Error>;
+        async fn run_query_synchronous<'a>(
+            &self,
+            query: String,
+            parameters: &HashMap<&'a str, &'a str>,
+        ) -> Result<ClickHouseResponse, Error>;
+        async fn run_query_synchronous_with_err_logging<'a>(
+            &self,
+            query: String,
+            parameters: &HashMap<&'a str, &'a str>,
+            err_logging: bool,
+        ) -> Result<ClickHouseResponse, Error>;
+        async fn run_query_with_external_data(
+            &self,
+            external_data: ExternalDataInfo,
+            query: String,
+        ) -> Result<ClickHouseResponse, Error>;
+        async fn check_database_and_migrations_table_exists(&self) -> Result<bool, Error>;
+        async fn create_database_and_migrations_table(&self) -> Result<(), Error>;
+        async fn list_inferences<'a>(
+            &self,
+            config: &Config,
+            opts: &ListInferencesParams<'a>,
+        ) -> Result<Vec<StoredInference>, Error>;
+        fn is_cluster_configured(&self) -> bool;
+        fn get_on_cluster_name(&self) -> String;
+        fn get_maybe_replicated_table_engine_name<'a>(
+            &self,
+            args: GetMaybeReplicatedTableEngineNameArgs<'a>,
+        ) -> String;
+        fn variant_name(&self) -> &'static str;
+    }
+
+    #[async_trait]
+    impl HealthCheckable for ClickHouseClient {
+        async fn health(&self) -> Result<(), Error>;
+    }
+}
+
 /// Production implementation of ClickHouseClient
 #[derive(Debug, Clone)]
 struct ProductionClickHouseClient {
@@ -135,10 +192,6 @@ struct ProductionClickHouseClient {
     client: Client,
     batch_sender: Option<Arc<BatchSender>>,
 }
-
-/// Disabled implementation of ClickHouseClient (no-op)
-#[derive(Debug, Clone, Copy)]
-struct DisabledClickHouseClient;
 
 /// Wrapper for ClickHouse client implementations
 #[derive(Debug, Clone)]
@@ -263,8 +316,6 @@ impl ClickHouseConnectionInfo {
         .await?;
         Ok(Self {
             inner: Arc::new(client),
-            database_url,
-            database,
         })
     }
 
@@ -276,9 +327,7 @@ impl ClickHouseConnectionInfo {
 
     #[cfg(test)]
     pub fn new_mock(inner: Arc<dyn ClickHouseClient>) -> Self {
-        Self {
-            inner,
-        }
+        Self { inner }
     }
 
     #[cfg(test)]
@@ -288,12 +337,22 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    pub fn batcher_join_handle(&self) -> Option<BatchWriterHandle> {
-        self.inner.batcher_join_handle()
+    pub fn database_url(&self) -> &SecretString {
+        self.inner.database_url()
     }
 
+    /// Returns the cluster name
+    pub fn cluster_name(&self) -> &Option<String> {
+        self.inner.cluster_name()
+    }
+
+    /// Returns the database name
     pub fn database(&self) -> &str {
         self.inner.database()
+    }
+
+    pub fn batcher_join_handle(&self) -> Option<BatchWriterHandle> {
+        self.inner.batcher_join_handle()
     }
 
     /// Writes rows to ClickHouse using our batched write implementation
@@ -485,7 +544,6 @@ impl ProductionClickHouseClient {
         Ok(client)
     }
 }
-
 
 // Trait implementations for ProductionClickHouseClient
 #[async_trait]
@@ -1004,7 +1062,6 @@ pub fn escape_string_for_clickhouse_literal(s: &str) -> String {
     #![expect(clippy::needless_raw_string_hashes)]
     s.replace(r#"\"#, r#"\\"#).replace(r#"'"#, r#"\'"#)
 }
-
 
 /// A wrapper type used with `write_non_batched`
 pub enum Rows<'a, T: Serialize + Send + Sync> {

@@ -146,7 +146,7 @@ impl GatewayHandle {
     #[cfg(feature = "pyo3")]
     pub fn new_dummy(http_client: TensorzeroHttpClient) -> Self {
         let config = Arc::new(Config::default());
-        let clickhouse_connection_info = ClickHouseConnectionInfo::new_mock(true);
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_fake();
         let postgres_connection_info = PostgresConnectionInfo::new_mock(true);
         let cancel_token = CancellationToken::new();
         Self {

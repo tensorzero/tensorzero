@@ -13,17 +13,16 @@ use super::{
     GetMaybeReplicatedTableEngineNameArgs, HealthCheckable, TableName,
 };
 
-
 /// Disabled implementation of ClickHouseClient (no-op)
-/// 
+///
 /// This is used in a few cases in production when we don't want to write to ClickHouse.
 #[derive(Debug, Clone, Copy)]
-struct DisabledClickHouseClient;
+pub struct DisabledClickHouseClient {};
 
 #[async_trait]
 impl ClickHouseClient for DisabledClickHouseClient {
     fn database_url(&self) -> &SecretString {
-        &SecretString::new("disabled".to_string())
+        &SecretString::from("disabled")
     }
 
     fn cluster_name(&self) -> &Option<String> {
