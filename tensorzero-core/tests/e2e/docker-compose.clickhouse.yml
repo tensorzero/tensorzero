@@ -25,6 +25,39 @@ services:
       start_interval: 1s
       timeout: 1s
 
+  gateway:
+    image: tensorzero/gateway-e2e:${TENSORZERO_COMMIT_TAG}
+    build:
+      context: ../../..
+      dockerfile: tensorzero-core/tests/e2e/Dockerfile.gateway.e2e
+      target: gateway
+    environment:
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
+    command: [--config-file, tensorzero-core/tests/e2e/tensorzero.toml]
+    volumes:
+      # Mount the e2e directory so the config path exists inside the container
+      - ./:/app/tensorzero-core/tests/e2e:ro
+      # Mount the fixtures directory so template paths can be resolved
+      - ../../fixtures:/app/tensorzero-core/fixtures:ro
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    extra_hosts:
+      - "howdy.tensorzero.com:127.0.0.1"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/health",
+        ]
+      start_period: 1s
+      start_interval: 1s
+      timeout: 1s
+
   fixtures:
     image: tensorzero/fixtures:${TENSORZERO_COMMIT_TAG}
     build:
@@ -40,7 +73,7 @@ services:
       - CLICKHOUSE_USER=chuser
       # - TENSORZERO_SKIP_LARGE_FIXTURES=1
     depends_on:
-      clickhouse:
+      gateway:
         condition: service_healthy
     command:
       ["bash", "-c", "cd /fixtures && ./load_fixtures.sh tensorzero_e2e_tests"]
@@ -72,6 +105,8 @@ services:
       - ../../../target:/app/target
 
     depends_on:
+      gateway:
+        condition: service_healthy
       fixtures:
         condition: service_completed_successfully
       clickhouse:
