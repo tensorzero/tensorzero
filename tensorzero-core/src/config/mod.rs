@@ -620,11 +620,17 @@ fn find_matching_files(base_path: &Path, matcher: &globset::GlobMatcher) -> Vec<
     for entry in walkdir::WalkDir::new(base_path)
         .follow_links(false)
         .into_iter()
-        .filter_map(Result::ok)
     {
-        let path = entry.path();
-        if path.is_file() && matcher.is_match(path) {
-            matched_files.push(path.to_path_buf());
+        match entry {
+            Ok(entry) => {
+                let path = entry.path();
+                if path.is_file() && matcher.is_match(path) {
+                    matched_files.push(path.to_path_buf());
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Skipping `{}`: {e}", base_path.display());
+            }
         }
     }
 
