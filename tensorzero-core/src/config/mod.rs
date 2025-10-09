@@ -574,7 +574,7 @@ impl ConfigFileGlob {
         // when we merge configs. This should only affect the precise error message we display,
         // not whether or not the config parses successfully (or the final `Config`
         // that we resolve)
-        glob_paths.sort();
+        glob_paths.sort_by_key(|path| path.display().to_string());
         Ok(Self {
             glob,
             paths: glob_paths,
