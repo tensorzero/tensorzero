@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::time::Duration;
 
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use futures::future::try_join_all;
@@ -9,16 +10,17 @@ use url::Url;
 use crate::{
     error::{warn_discarded_thought_block, Error, ErrorDetails},
     inference::types::{
-        ContentBlock, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
-        ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseArgs,
-        RequestMessage, Role, Text, Thought, Usage,
+        ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, Latency,
+        ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
+        ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
+        TextChunk, Thought, ThoughtChunk, Usage,
     },
     providers::openai::{
         prepare_file_message, prepare_system_or_developer_message_helper, OpenAIContentBlock,
         OpenAIFile, OpenAIMessagesConfig, OpenAITool, OpenAIToolType, SystemOrDeveloper,
         PROVIDER_TYPE,
     },
-    tool::{ToolCall, ToolChoice},
+    tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
 
 #[derive(Serialize, Debug)]
@@ -718,4 +720,834 @@ pub fn tensorzero_to_openai_responses_assistant_message<'a>(
     }
 
     Ok(output)
+}
+
+// Streaming types for OpenAI Responses API
+// Based on: https://platform.openai.com/docs/api-reference/responses-streaming
+
+#[derive(Deserialize, Debug)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[expect(dead_code)]
+pub(super) enum OpenAIResponsesStreamEvent {
+    #[serde(rename = "response.created")]
+    ResponseCreated { response: Value },
+    #[serde(rename = "response.in_progress")]
+    ResponseInProgress { response: Value },
+    #[serde(rename = "response.completed")]
+    ResponseCompleted { response: Value },
+    #[serde(rename = "response.failed")]
+    ResponseFailed { response: Value },
+    #[serde(rename = "response.incomplete")]
+    ResponseIncomplete { response: Value },
+    #[serde(rename = "response.output_item.added")]
+    ResponseOutputItemAdded { item: Value, output_index: u32 },
+    #[serde(rename = "response.output_item.done")]
+    ResponseOutputItemDone { item: Value, output_index: u32 },
+    #[serde(rename = "response.content_part.added")]
+    ResponseContentPartAdded {
+        part: Value,
+        item_id: String,
+        output_index: u32,
+        content_index: u32,
+    },
+    #[serde(rename = "response.content_part.done")]
+    ResponseContentPartDone {
+        part: Value,
+        item_id: String,
+        output_index: u32,
+        content_index: u32,
+    },
+    #[serde(rename = "response.output_text.delta")]
+    ResponseOutputTextDelta {
+        delta: String,
+        item_id: String,
+        output_index: u32,
+        content_index: u32,
+    },
+    #[serde(rename = "response.output_text.done")]
+    ResponseOutputTextDone {
+        text: String,
+        item_id: String,
+        output_index: u32,
+        content_index: u32,
+    },
+    #[serde(rename = "response.refusal.delta")]
+    ResponseRefusalDelta {
+        delta: String,
+        item_id: String,
+        output_index: u32,
+        content_index: u32,
+    },
+    #[serde(rename = "response.refusal.done")]
+    ResponseRefusalDone {
+        refusal: String,
+        item_id: String,
+        output_index: u32,
+        content_index: u32,
+    },
+    #[serde(rename = "response.reasoning_summary_text.delta")]
+    ResponseReasoningSummaryTextDelta {
+        delta: String,
+        item_id: String,
+        output_index: u32,
+        summary_index: u32,
+    },
+    #[serde(rename = "response.reasoning_summary_text.done")]
+    ResponseReasoningSummaryTextDone {
+        text: String,
+        item_id: String,
+        output_index: u32,
+        summary_index: u32,
+    },
+    #[serde(rename = "response.function_call_arguments.delta")]
+    ResponseFunctionCallArgumentsDelta {
+        delta: String,
+        item_id: String,
+        output_index: u32,
+    },
+    #[serde(rename = "response.function_call_arguments.done")]
+    ResponseFunctionCallArgumentsDone {
+        arguments: String,
+        name: String,
+        item_id: String,
+        output_index: u32,
+    },
+    #[serde(rename = "error")]
+    Error { error: Value },
+}
+
+/// Maps an OpenAI Responses API stream event to a TensorZero chunk
+/// Similar to anthropic_to_tensorzero_stream_message in anthropic.rs
+/// Tool calls require tracking the current tool ID and name across chunks
+pub(super) fn openai_responses_to_tensorzero_chunk(
+    raw_message: String,
+    event: OpenAIResponsesStreamEvent,
+    message_latency: Duration,
+    current_tool_id: &mut Option<String>,
+    current_tool_name: &mut Option<String>,
+) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
+    match event {
+        // Text delta - the main content streaming event
+        OpenAIResponsesStreamEvent::ResponseOutputTextDelta {
+            delta,
+            content_index,
+            ..
+        } => Ok(Some(ProviderInferenceResponseChunk::new(
+            vec![ContentBlockChunk::Text(TextChunk {
+                text: delta,
+                id: content_index.to_string(),
+            })],
+            None,
+            raw_message,
+            message_latency,
+            None,
+        ))),
+
+        // Reasoning (thought) delta
+        OpenAIResponsesStreamEvent::ResponseReasoningSummaryTextDelta {
+            delta,
+            summary_index,
+            ..
+        } => Ok(Some(ProviderInferenceResponseChunk::new(
+            vec![ContentBlockChunk::Thought(ThoughtChunk {
+                text: Some(delta),
+                signature: None,
+                id: summary_index.to_string(),
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+            })],
+            None,
+            raw_message,
+            message_latency,
+            None,
+        ))),
+
+        // Function call arguments delta
+        OpenAIResponsesStreamEvent::ResponseFunctionCallArgumentsDelta { delta, .. } => {
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                    id: current_tool_id.clone().ok_or_else(|| {
+                        Error::new(ErrorDetails::InferenceServer {
+                            message: "Got function_call_arguments.delta without current tool id"
+                                .to_string(),
+                            provider_type: PROVIDER_TYPE.to_string(),
+                            raw_request: None,
+                            raw_response: Some(raw_message.clone()),
+                        })
+                    })?,
+                    raw_name: None, // Name already sent in the 'done' event
+                    raw_arguments: delta,
+                })],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            )))
+        }
+
+        // Function call done - captures the tool name and ID
+        OpenAIResponsesStreamEvent::ResponseFunctionCallArgumentsDone {
+            name,
+            item_id,
+            arguments,
+            ..
+        } => {
+            *current_tool_id = Some(item_id.clone());
+            *current_tool_name = Some(name.clone());
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                    id: item_id,
+                    raw_name: Some(name),
+                    raw_arguments: arguments,
+                })],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            )))
+        }
+
+        // Completed event - extract usage and finish reason
+        OpenAIResponsesStreamEvent::ResponseCompleted { response } => {
+            let usage = response.get("usage").and_then(|u| {
+                let input_tokens = u.get("input_tokens")?.as_u64()? as u32;
+                let output_tokens = u.get("output_tokens")?.as_u64()? as u32;
+                Some(Usage {
+                    input_tokens,
+                    output_tokens,
+                })
+            });
+
+            // The incomplete_details field indicates if response was cut short
+            let finish_reason = if response.get("incomplete_details").is_some() {
+                Some(FinishReason::Length)
+            } else {
+                Some(FinishReason::Stop)
+            };
+
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![],
+                usage,
+                raw_message,
+                message_latency,
+                finish_reason,
+            )))
+        }
+
+        // Failed event - return error
+        OpenAIResponsesStreamEvent::ResponseFailed { response } => {
+            let error_msg = response
+                .get("error")
+                .and_then(|e| e.get("message"))
+                .and_then(|m| m.as_str())
+                .unwrap_or("Unknown error");
+            Err(Error::new(ErrorDetails::InferenceServer {
+                message: error_msg.to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(raw_message),
+            }))
+        }
+
+        // Incomplete event - extract finish reason
+        OpenAIResponsesStreamEvent::ResponseIncomplete { response } => {
+            let usage = response.get("usage").and_then(|u| {
+                let input_tokens = u.get("input_tokens")?.as_u64()? as u32;
+                let output_tokens = u.get("output_tokens")?.as_u64()? as u32;
+                Some(Usage {
+                    input_tokens,
+                    output_tokens,
+                })
+            });
+
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![],
+                usage,
+                raw_message,
+                message_latency,
+                Some(FinishReason::Length),
+            )))
+        }
+
+        // Refusal - treat as an error
+        OpenAIResponsesStreamEvent::ResponseRefusalDelta { delta, .. }
+        | OpenAIResponsesStreamEvent::ResponseRefusalDone { refusal: delta, .. } => {
+            Err(Error::new(ErrorDetails::InferenceServer {
+                message: format!("Model refused to respond: {delta}"),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(raw_message),
+            }))
+        }
+
+        // Error event
+        OpenAIResponsesStreamEvent::Error { error } => {
+            Err(Error::new(ErrorDetails::InferenceServer {
+                message: error.to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(raw_message),
+            }))
+        }
+
+        // Lifecycle and other events we don't need to process
+        OpenAIResponsesStreamEvent::ResponseCreated { .. }
+        | OpenAIResponsesStreamEvent::ResponseInProgress { .. }
+        | OpenAIResponsesStreamEvent::ResponseOutputItemAdded { .. }
+        | OpenAIResponsesStreamEvent::ResponseOutputItemDone { .. }
+        | OpenAIResponsesStreamEvent::ResponseContentPartAdded { .. }
+        | OpenAIResponsesStreamEvent::ResponseContentPartDone { .. }
+        | OpenAIResponsesStreamEvent::ResponseOutputTextDone { .. }
+        | OpenAIResponsesStreamEvent::ResponseReasoningSummaryTextDone { .. } => Ok(None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn test_deserialize_response_created() {
+        let json = r#"{
+            "type": "response.created",
+            "response": {
+                "id": "resp_123",
+                "object": "response",
+                "created_at": 1741487325,
+                "status": "in_progress"
+            },
+            "sequence_number": 1
+        }"#;
+
+        let event: OpenAIResponsesStreamEvent = serde_json::from_str(json).unwrap();
+        assert!(matches!(
+            event,
+            OpenAIResponsesStreamEvent::ResponseCreated { .. }
+        ));
+    }
+
+    #[test]
+    fn test_deserialize_response_output_text_delta() {
+        let json = r#"{
+            "type": "response.output_text.delta",
+            "item_id": "msg_123",
+            "output_index": 0,
+            "content_index": 0,
+            "delta": "Hello",
+            "sequence_number": 5
+        }"#;
+
+        let event: OpenAIResponsesStreamEvent = serde_json::from_str(json).unwrap();
+        match event {
+            OpenAIResponsesStreamEvent::ResponseOutputTextDelta {
+                delta,
+                content_index,
+                ..
+            } => {
+                assert_eq!(delta, "Hello");
+                assert_eq!(content_index, 0);
+            }
+            _ => panic!("Expected ResponseOutputTextDelta"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_response_reasoning_summary_text_delta() {
+        let json = r#"{
+            "type": "response.reasoning_summary_text.delta",
+            "item_id": "rs_123",
+            "output_index": 0,
+            "summary_index": 0,
+            "delta": "Thinking about...",
+            "sequence_number": 3
+        }"#;
+
+        let event: OpenAIResponsesStreamEvent = serde_json::from_str(json).unwrap();
+        match event {
+            OpenAIResponsesStreamEvent::ResponseReasoningSummaryTextDelta {
+                delta,
+                summary_index,
+                ..
+            } => {
+                assert_eq!(delta, "Thinking about...");
+                assert_eq!(summary_index, 0);
+            }
+            _ => panic!("Expected ResponseReasoningSummaryTextDelta"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_function_call_arguments_delta() {
+        let json = r#"{
+            "type": "response.function_call_arguments.delta",
+            "item_id": "fc_123",
+            "output_index": 0,
+            "delta": "{\"location\":",
+            "sequence_number": 7
+        }"#;
+
+        let event: OpenAIResponsesStreamEvent = serde_json::from_str(json).unwrap();
+        match event {
+            OpenAIResponsesStreamEvent::ResponseFunctionCallArgumentsDelta { delta, .. } => {
+                assert_eq!(delta, r#"{"location":"#);
+            }
+            _ => panic!("Expected ResponseFunctionCallArgumentsDelta"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_function_call_arguments_done() {
+        let json = r#"{
+            "type": "response.function_call_arguments.done",
+            "item_id": "fc_123",
+            "output_index": 0,
+            "name": "get_weather",
+            "arguments": "{\"location\": \"San Francisco\"}",
+            "sequence_number": 10
+        }"#;
+
+        let event: OpenAIResponsesStreamEvent = serde_json::from_str(json).unwrap();
+        match event {
+            OpenAIResponsesStreamEvent::ResponseFunctionCallArgumentsDone {
+                name,
+                arguments,
+                item_id,
+                ..
+            } => {
+                assert_eq!(name, "get_weather");
+                assert_eq!(arguments, r#"{"location": "San Francisco"}"#);
+                assert_eq!(item_id, "fc_123");
+            }
+            _ => panic!("Expected ResponseFunctionCallArgumentsDone"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_response_completed() {
+        let json = r#"{
+            "type": "response.completed",
+            "response": {
+                "id": "resp_123",
+                "status": "completed",
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 20
+                }
+            },
+            "sequence_number": 15
+        }"#;
+
+        let event: OpenAIResponsesStreamEvent = serde_json::from_str(json).unwrap();
+        assert!(matches!(
+            event,
+            OpenAIResponsesStreamEvent::ResponseCompleted { .. }
+        ));
+    }
+
+    #[test]
+    fn test_deserialize_response_failed() {
+        let json = r#"{
+            "type": "response.failed",
+            "response": {
+                "id": "resp_123",
+                "status": "failed",
+                "error": {
+                    "code": "server_error",
+                    "message": "Internal error"
+                }
+            },
+            "sequence_number": 5
+        }"#;
+
+        let event: OpenAIResponsesStreamEvent = serde_json::from_str(json).unwrap();
+        assert!(matches!(
+            event,
+            OpenAIResponsesStreamEvent::ResponseFailed { .. }
+        ));
+    }
+
+    #[test]
+    fn test_deserialize_refusal_delta() {
+        let json = r#"{
+            "type": "response.refusal.delta",
+            "item_id": "msg_123",
+            "output_index": 0,
+            "content_index": 0,
+            "delta": "I cannot",
+            "sequence_number": 3
+        }"#;
+
+        let event: OpenAIResponsesStreamEvent = serde_json::from_str(json).unwrap();
+        match event {
+            OpenAIResponsesStreamEvent::ResponseRefusalDelta { delta, .. } => {
+                assert_eq!(delta, "I cannot");
+            }
+            _ => panic!("Expected ResponseRefusalDelta"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_error_event() {
+        let json = r#"{
+            "type": "error",
+            "error": {
+                "code": "invalid_request",
+                "message": "Bad request"
+            }
+        }"#;
+
+        let event: OpenAIResponsesStreamEvent = serde_json::from_str(json).unwrap();
+        assert!(matches!(event, OpenAIResponsesStreamEvent::Error { .. }));
+    }
+
+    #[test]
+    fn test_text_delta_conversion() {
+        let event = OpenAIResponsesStreamEvent::ResponseOutputTextDelta {
+            delta: "Hello world".to_string(),
+            item_id: "msg_1".to_string(),
+            output_index: 0,
+            content_index: 2,
+        };
+
+        let mut tool_id = None;
+        let mut tool_name = None;
+
+        let result = openai_responses_to_tensorzero_chunk(
+            "raw_json".to_string(),
+            event,
+            Duration::from_millis(100),
+            &mut tool_id,
+            &mut tool_name,
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(result.content.len(), 1);
+        match &result.content[0] {
+            ContentBlockChunk::Text(text_chunk) => {
+                assert_eq!(text_chunk.text, "Hello world");
+                assert_eq!(text_chunk.id, "2");
+            }
+            _ => panic!("Expected Text chunk"),
+        }
+    }
+
+    #[test]
+    fn test_reasoning_delta_conversion() {
+        let event = OpenAIResponsesStreamEvent::ResponseReasoningSummaryTextDelta {
+            delta: "Let me think...".to_string(),
+            item_id: "rs_1".to_string(),
+            output_index: 0,
+            summary_index: 1,
+        };
+
+        let mut tool_id = None;
+        let mut tool_name = None;
+
+        let result = openai_responses_to_tensorzero_chunk(
+            "raw_json".to_string(),
+            event,
+            Duration::from_millis(100),
+            &mut tool_id,
+            &mut tool_name,
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(result.content.len(), 1);
+        match &result.content[0] {
+            ContentBlockChunk::Thought(thought_chunk) => {
+                assert_eq!(thought_chunk.text, Some("Let me think...".to_string()));
+                assert_eq!(thought_chunk.id, "1");
+                assert_eq!(
+                    thought_chunk.provider_type,
+                    Some(PROVIDER_TYPE.to_string())
+                );
+            }
+            _ => panic!("Expected Thought chunk"),
+        }
+    }
+
+    #[test]
+    fn test_function_call_done_conversion() {
+        let event = OpenAIResponsesStreamEvent::ResponseFunctionCallArgumentsDone {
+            name: "get_weather".to_string(),
+            item_id: "fc_123".to_string(),
+            arguments: r#"{"location": "NYC"}"#.to_string(),
+            output_index: 0,
+        };
+
+        let mut tool_id = None;
+        let mut tool_name = None;
+
+        let result = openai_responses_to_tensorzero_chunk(
+            "raw_json".to_string(),
+            event,
+            Duration::from_millis(100),
+            &mut tool_id,
+            &mut tool_name,
+        )
+        .unwrap()
+        .unwrap();
+
+        // Check that tool ID and name were updated
+        assert_eq!(tool_id, Some("fc_123".to_string()));
+        assert_eq!(tool_name, Some("get_weather".to_string()));
+
+        assert_eq!(result.content.len(), 1);
+        match &result.content[0] {
+            ContentBlockChunk::ToolCall(tool_call) => {
+                assert_eq!(tool_call.id, "fc_123");
+                assert_eq!(tool_call.raw_name, Some("get_weather".to_string()));
+                assert_eq!(tool_call.raw_arguments, r#"{"location": "NYC"}"#);
+            }
+            _ => panic!("Expected ToolCall chunk"),
+        }
+    }
+
+    #[test]
+    fn test_function_call_arguments_delta_conversion() {
+        let event = OpenAIResponsesStreamEvent::ResponseFunctionCallArgumentsDelta {
+            delta: r#""value"}"#.to_string(),
+            item_id: "fc_123".to_string(),
+            output_index: 0,
+        };
+
+        // Set up the tool ID as it would be from a previous 'done' event
+        let mut tool_id = Some("fc_123".to_string());
+        let mut tool_name = Some("my_function".to_string());
+
+        let result = openai_responses_to_tensorzero_chunk(
+            "raw_json".to_string(),
+            event,
+            Duration::from_millis(100),
+            &mut tool_id,
+            &mut tool_name,
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(result.content.len(), 1);
+        match &result.content[0] {
+            ContentBlockChunk::ToolCall(tool_call) => {
+                assert_eq!(tool_call.id, "fc_123");
+                assert_eq!(tool_call.raw_name, None);
+                assert_eq!(tool_call.raw_arguments, r#""value"}"#);
+            }
+            _ => panic!("Expected ToolCall chunk"),
+        }
+    }
+
+    #[test]
+    fn test_function_call_arguments_delta_without_tool_id() {
+        let event = OpenAIResponsesStreamEvent::ResponseFunctionCallArgumentsDelta {
+            delta: "delta".to_string(),
+            item_id: "fc_123".to_string(),
+            output_index: 0,
+        };
+
+        let mut tool_id = None;
+        let mut tool_name = None;
+
+        let result = openai_responses_to_tensorzero_chunk(
+            "raw_json".to_string(),
+            event,
+            Duration::from_millis(100),
+            &mut tool_id,
+            &mut tool_name,
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_response_completed_conversion() {
+        let response_json = serde_json::json!({
+            "id": "resp_123",
+            "status": "completed",
+            "usage": {
+                "input_tokens": 15,
+                "output_tokens": 25
+            }
+        });
+
+        let event = OpenAIResponsesStreamEvent::ResponseCompleted {
+            response: response_json,
+        };
+
+        let mut tool_id = None;
+        let mut tool_name = None;
+
+        let result = openai_responses_to_tensorzero_chunk(
+            "raw_json".to_string(),
+            event,
+            Duration::from_millis(100),
+            &mut tool_id,
+            &mut tool_name,
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(result.content.len(), 0); // No content, just metadata
+        assert_eq!(
+            result.usage,
+            Some(Usage {
+                input_tokens: 15,
+                output_tokens: 25
+            })
+        );
+        assert_eq!(result.finish_reason, Some(FinishReason::Stop));
+    }
+
+    #[test]
+    fn test_response_incomplete_conversion() {
+        let response_json = serde_json::json!({
+            "id": "resp_123",
+            "status": "incomplete",
+            "incomplete_details": {
+                "reason": "max_output_tokens"
+            },
+            "usage": {
+                "input_tokens": 10,
+                "output_tokens": 100
+            }
+        });
+
+        let event = OpenAIResponsesStreamEvent::ResponseIncomplete {
+            response: response_json,
+        };
+
+        let mut tool_id = None;
+        let mut tool_name = None;
+
+        let result = openai_responses_to_tensorzero_chunk(
+            "raw_json".to_string(),
+            event,
+            Duration::from_millis(100),
+            &mut tool_id,
+            &mut tool_name,
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(result.finish_reason, Some(FinishReason::Length));
+        assert_eq!(
+            result.usage,
+            Some(Usage {
+                input_tokens: 10,
+                output_tokens: 100
+            })
+        );
+    }
+
+    #[test]
+    fn test_response_failed_conversion() {
+        let response_json = serde_json::json!({
+            "id": "resp_123",
+            "status": "failed",
+            "error": {
+                "code": "server_error",
+                "message": "Internal server error"
+            }
+        });
+
+        let event = OpenAIResponsesStreamEvent::ResponseFailed {
+            response: response_json,
+        };
+
+        let mut tool_id = None;
+        let mut tool_name = None;
+
+        let result = openai_responses_to_tensorzero_chunk(
+            "raw_json".to_string(),
+            event,
+            Duration::from_millis(100),
+            &mut tool_id,
+            &mut tool_name,
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_refusal_delta_conversion() {
+        let event = OpenAIResponsesStreamEvent::ResponseRefusalDelta {
+            delta: "I cannot help with that".to_string(),
+            item_id: "msg_1".to_string(),
+            output_index: 0,
+            content_index: 0,
+        };
+
+        let mut tool_id = None;
+        let mut tool_name = None;
+
+        let result = openai_responses_to_tensorzero_chunk(
+            "raw_json".to_string(),
+            event,
+            Duration::from_millis(100),
+            &mut tool_id,
+            &mut tool_name,
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_error_event_conversion() {
+        let error_json = serde_json::json!({
+            "code": "bad_request",
+            "message": "Invalid parameters"
+        });
+
+        let event = OpenAIResponsesStreamEvent::Error { error: error_json };
+
+        let mut tool_id = None;
+        let mut tool_name = None;
+
+        let result = openai_responses_to_tensorzero_chunk(
+            "raw_json".to_string(),
+            event,
+            Duration::from_millis(100),
+            &mut tool_id,
+            &mut tool_name,
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_lifecycle_events_return_none() {
+        let events = vec![
+            OpenAIResponsesStreamEvent::ResponseCreated {
+                response: serde_json::json!({}),
+            },
+            OpenAIResponsesStreamEvent::ResponseInProgress {
+                response: serde_json::json!({}),
+            },
+            OpenAIResponsesStreamEvent::ResponseOutputItemAdded {
+                item: serde_json::json!({}),
+                output_index: 0,
+            },
+            OpenAIResponsesStreamEvent::ResponseOutputItemDone {
+                item: serde_json::json!({}),
+                output_index: 0,
+            },
+        ];
+
+        let mut tool_id = None;
+        let mut tool_name = None;
+
+        for event in events {
+            let result = openai_responses_to_tensorzero_chunk(
+                "raw_json".to_string(),
+                event,
+                Duration::from_millis(100),
+                &mut tool_id,
+                &mut tool_name,
+            )
+            .unwrap();
+
+            assert!(result.is_none(), "Lifecycle events should return None");
+        }
+    }
 }

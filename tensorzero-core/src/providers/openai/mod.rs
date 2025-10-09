@@ -398,52 +398,90 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        // TODO(https://github.com/tensorzero/tensorzero/issues/3802) - support this
-        if self.use_responses {
-            return Err(
-                ErrorDetails::UnsupportedModelProviderForStreamingInference {
-                    provider_type: "OpenAI Responses".to_string(),
-                }
-                .into(),
-            );
-        }
-        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
-
-        let request_body = serde_json::to_value(
-            OpenAIRequest::new(&self.model_name, request).await?,
-        )
-        .map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing OpenAI request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
-        let mut request_builder = http_client.post(request_url);
-        if let Some(api_key) = api_key {
-            request_builder = request_builder.bearer_auth(api_key.expose_secret());
-        }
-        let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
-            PROVIDER_TYPE,
-            &request.extra_body,
-            &request.extra_headers,
-            model_provider,
-            model_name,
-            request_body,
-            request_builder,
-        )
-        .await?;
 
-        let stream = stream_openai(
-            PROVIDER_TYPE.to_string(),
-            event_source.map_err(TensorZeroEventError::EventSource),
-            start_time,
-        )
-        .peekable();
-        Ok((stream, raw_request))
+        if self.use_responses {
+            // Use OpenAI Responses API for streaming
+            let request_url =
+                get_responses_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+
+            let request_body = serde_json::to_value(
+                OpenAIResponsesRequest::new(&self.model_name, request).await?,
+            )
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error serializing OpenAI Responses request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
+
+            let mut request_builder = http_client.post(request_url);
+            if let Some(api_key) = api_key {
+                request_builder = request_builder.bearer_auth(api_key.expose_secret());
+            }
+
+            let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+                PROVIDER_TYPE,
+                &request.extra_body,
+                &request.extra_headers,
+                model_provider,
+                model_name,
+                request_body,
+                request_builder,
+            )
+            .await?;
+
+            let stream = stream_openai_responses(
+                PROVIDER_TYPE.to_string(),
+                event_source.map_err(TensorZeroEventError::EventSource),
+                start_time,
+            )
+            .peekable();
+            Ok((stream, raw_request))
+        } else {
+            // Use Chat Completions API for streaming
+            let request_url =
+                get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+
+            let request_body = serde_json::to_value(
+                OpenAIRequest::new(&self.model_name, request).await?,
+            )
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error serializing OpenAI request: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                })
+            })?;
+
+            let mut request_builder = http_client.post(request_url);
+            if let Some(api_key) = api_key {
+                request_builder = request_builder.bearer_auth(api_key.expose_secret());
+            }
+
+            let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+                PROVIDER_TYPE,
+                &request.extra_body,
+                &request.extra_headers,
+                model_provider,
+                model_name,
+                request_body,
+                request_builder,
+            )
+            .await?;
+
+            let stream = stream_openai(
+                PROVIDER_TYPE.to_string(),
+                event_source.map_err(TensorZeroEventError::EventSource),
+                start_time,
+            )
+            .peekable();
+            Ok((stream, raw_request))
+        }
     }
 
     // Get a single chunk from the stream and make sure it is OK then send to client.
@@ -812,6 +850,67 @@ pub fn stream_openai(
                             openai_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids)
                         });
                         yield stream_message;
+                    }
+                },
+            }
+        }
+    })
+}
+
+/// Stream function for OpenAI Responses API
+/// Similar to stream_openai but uses the Responses API streaming format
+pub fn stream_openai_responses(
+    provider_type: String,
+    event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
+    start_time: Instant,
+) -> ProviderInferenceResponseStreamInner {
+    let mut current_tool_id: Option<String> = None;
+    let mut current_tool_name: Option<String> = None;
+
+    Box::pin(async_stream::stream! {
+        futures::pin_mut!(event_source);
+        while let Some(ev) = event_source.next().await {
+            match ev {
+                Err(e) => {
+                    match e {
+                        TensorZeroEventError::TensorZero(e) => {
+                            yield Err(e);
+                        }
+                        TensorZeroEventError::EventSource(e) => {
+                            yield Err(convert_stream_error(provider_type.clone(), e).await);
+                        }
+                    }
+                }
+                Ok(event) => match event {
+                    Event::Open => continue,
+                    Event::Message(message) => {
+                        // OpenAI Responses API does not send [DONE] marker
+                        let data: Result<responses::OpenAIResponsesStreamEvent, Error> =
+                            serde_json::from_str(&message.data).map_err(|e| {
+                                Error::new(ErrorDetails::InferenceServer {
+                                    message: format!("Error parsing chunk. Error: {e}"),
+                                    raw_request: None,
+                                    raw_response: Some(message.data.clone()),
+                                    provider_type: provider_type.clone(),
+                                })
+                            });
+
+                        let latency = start_time.elapsed();
+                        let stream_message = data.and_then(|event| {
+                            responses::openai_responses_to_tensorzero_chunk(
+                                message.data,
+                                event,
+                                latency,
+                                &mut current_tool_id,
+                                &mut current_tool_name,
+                            )
+                        });
+
+                        match stream_message {
+                            Ok(Some(chunk)) => yield Ok(chunk),
+                            Ok(None) => continue, // Skip lifecycle events
+                            Err(e) => yield Err(e),
+                        }
                     }
                 },
             }
