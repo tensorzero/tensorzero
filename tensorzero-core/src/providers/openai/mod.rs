@@ -5,6 +5,7 @@ use lazy_static::lazy_static;
 use reqwest::multipart::{Form, Part};
 use reqwest::StatusCode;
 use reqwest_eventsource::Event;
+use responses::stream_openai_responses;
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -848,90 +849,6 @@ pub fn stream_openai(
                             openai_to_tensorzero_chunk(message.data, d, latency, &mut tool_call_ids)
                         });
                         yield stream_message;
-                    }
-                },
-            }
-        }
-    })
-}
-
-/// Stream function for OpenAI Responses API
-/// Similar to stream_openai but uses the Responses API streaming format
-pub fn stream_openai_responses(
-    provider_type: String,
-    event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
-    start_time: Instant,
-) -> ProviderInferenceResponseStreamInner {
-    let mut current_tool_id: Option<String> = None;
-    let mut current_tool_name: Option<String> = None;
-
-    Box::pin(async_stream::stream! {
-        futures::pin_mut!(event_source);
-        while let Some(ev) = event_source.next().await {
-            match ev {
-                Err(e) => {
-                    match e {
-                        TensorZeroEventError::TensorZero(e) => {
-                            println!("Got TensorZero error: {}", e);
-                            yield Err(e);
-                        }
-                        TensorZeroEventError::EventSource(e) => {
-                            println!("Got EventSource error: {}", e);
-                            yield Err(convert_stream_error(provider_type.clone(), e).await);
-                        }
-                    }
-                }
-                Ok(event) => match event {
-                    Event::Open => continue,
-                    Event::Message(message) => {
-                        // OpenAI Responses API does not send [DONE] marker
-                        // Instead, we check for terminal events: completed, failed, or incomplete
-                        println!("Received message: {}", message.data);
-                        let data: Result<responses::OpenAIResponsesStreamEvent, Error> =
-                            serde_json::from_str(&message.data).map_err(|e| {
-                                Error::new(ErrorDetails::InferenceServer {
-                                    message: format!("Error parsing chunk. Error: {e}"),
-                                    raw_request: None,
-                                    raw_response: Some(message.data.clone()),
-                                    provider_type: provider_type.clone(),
-                                })
-                            });
-
-                        // Check if this is a terminal event
-                        let is_terminal = matches!(
-                            &data,
-                            Ok(responses::OpenAIResponsesStreamEvent::ResponseCompleted { .. })
-                                | Ok(responses::OpenAIResponsesStreamEvent::ResponseIncomplete { .. })
-                                | Ok(responses::OpenAIResponsesStreamEvent::ResponseFailed { .. })
-                        );
-
-                        let latency = start_time.elapsed();
-                        let stream_message = data.and_then(|event| {
-                            responses::openai_responses_to_tensorzero_chunk(
-                                message.data,
-                                event,
-                                latency,
-                                &mut current_tool_id,
-                                &mut current_tool_name,
-                            )
-                        });
-
-                        match stream_message {
-                            Ok(Some(chunk)) => {
-                                yield Ok(chunk);
-                                // Break after yielding terminal events
-                                if is_terminal {
-                                    break;
-                                }
-                            }
-                            Ok(None) => continue, // Skip lifecycle events
-                            Err(e) => {
-                                println!("Got error in stream_message: {}", e);
-                                yield Err(e);
-                                // Break on error events too
-                                break;
-                            }
-                        }
                     }
                 },
             }

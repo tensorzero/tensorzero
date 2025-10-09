@@ -1,10 +1,15 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
-use futures::future::try_join_all;
+use crate::inference::types::ProviderInferenceResponseStreamInner;
+use crate::providers::openai::convert_stream_error;
+use crate::{error::IMPOSSIBLE_ERROR_MESSAGE, inference::TensorZeroEventError};
+use futures::StreamExt;
+use futures::{future::try_join_all, Stream};
+use reqwest_eventsource::Event;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tokio::time::Instant;
 use url::Url;
 
 use crate::{
@@ -813,6 +818,86 @@ pub(super) enum OpenAIResponsesStreamEvent {
     },
     #[serde(rename = "error")]
     Error { error: Value },
+}
+
+/// Stream function for OpenAI Responses API
+/// Similar to stream_openai but uses the Responses API streaming format
+pub fn stream_openai_responses(
+    provider_type: String,
+    event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
+    start_time: Instant,
+) -> ProviderInferenceResponseStreamInner {
+    let mut current_tool_id: Option<String> = None;
+    let mut current_tool_name: Option<String> = None;
+
+    Box::pin(async_stream::stream! {
+        futures::pin_mut!(event_source);
+        while let Some(ev) = event_source.next().await {
+            match ev {
+                Err(e) => {
+                    match e {
+                        TensorZeroEventError::TensorZero(e) => {
+                            yield Err(e);
+                        }
+                        TensorZeroEventError::EventSource(e) => {
+                            yield Err(convert_stream_error(provider_type.clone(), e).await);
+                        }
+                    }
+                }
+                Ok(event) => match event {
+                    Event::Open => continue,
+                    Event::Message(message) => {
+                        // OpenAI Responses API does not send [DONE] marker
+                        // Instead, we check for terminal events: completed, failed, or incomplete
+                        let data: Result<OpenAIResponsesStreamEvent, Error> =
+                            serde_json::from_str(&message.data).map_err(|e| {
+                                Error::new(ErrorDetails::InferenceServer {
+                                    message: format!("Error parsing chunk. Error: {e}"),
+                                    raw_request: None,
+                                    raw_response: Some(message.data.clone()),
+                                    provider_type: provider_type.clone(),
+                                })
+                            });
+
+                        // Check if this is a terminal event
+                        let is_terminal = matches!(
+                            &data,
+                            Ok(OpenAIResponsesStreamEvent::ResponseCompleted { .. })
+                                | Ok(OpenAIResponsesStreamEvent::ResponseIncomplete { .. })
+                                | Ok(OpenAIResponsesStreamEvent::ResponseFailed { .. })
+                        );
+
+                        let latency = start_time.elapsed();
+                        let stream_message = data.and_then(|event| {
+                            openai_responses_to_tensorzero_chunk(
+                                message.data,
+                                event,
+                                latency,
+                                &mut current_tool_id,
+                                &mut current_tool_name,
+                            )
+                        });
+
+                        match stream_message {
+                            Ok(Some(chunk)) => {
+                                yield Ok(chunk);
+                                // Break after yielding terminal events
+                                if is_terminal {
+                                    break;
+                                }
+                            }
+                            Ok(None) => continue, // Skip lifecycle events
+                            Err(e) => {
+                                yield Err(e);
+                                // Break on error events too
+                                break;
+                            }
+                        }
+                    }
+                },
+            }
+        }
+    })
 }
 
 /// Maps an OpenAI Responses API stream event to a TensorZero chunk
