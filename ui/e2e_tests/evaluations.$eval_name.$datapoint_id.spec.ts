@@ -22,8 +22,8 @@ test("should be able to add float feedback from the evaluation datapoint result 
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
 
-  // Click on the leftmost "pencil" icon
-  await page.locator("svg.lucide-pencil").first().click();
+  // Click on the edit feedback button
+  await page.getByRole("button", { name: "Edit" }).first().click();
 
   // Wait for the modal to appear
   await page.locator('div[role="dialog"]').waitFor({
@@ -62,8 +62,8 @@ test("should be able to add bool feedback from the evaluation datapoint result p
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
 
-  // Click on the leftmost "pencil" icon
-  await page.locator("svg.lucide-pencil").first().click();
+  // Click on the edit feedback button
+  await page.getByRole("button", { name: "Edit" }).first().click();
 
   // Wait for the modal to appear
   await page.locator('div[role="dialog"]').waitFor({
