@@ -296,3 +296,52 @@ test("editing variants works @credentials", async ({ page }) => {
     page.getByRole("textbox").filter({ hasText: "obtuse" }).first(),
   ).toBeVisible({ timeout: 10000 });
 });
+
+test("should navigate to inference from playground and verify tags", async ({
+  page,
+}) => {
+  await page.goto(
+    '/playground?functionName=write_haiku&datasetName=foo&variants=%5B%7B"type"%3A"builtin"%2C"name"%3A"initial_prompt_gpt4o_mini"%7D%5D&limit=1',
+  );
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Verify the selections are visible
+  await expect(page.getByText("write_haiku")).toBeVisible();
+  await expect(
+    page.getByRole("combobox").filter({ hasText: "foo" }),
+  ).toBeVisible();
+
+  // Wait for the inference to complete - look for the inference link
+  const inferenceLink = page.getByText(/View inference:/);
+  await inferenceLink.waitFor({ state: "visible", timeout: 15000 });
+
+  // Click the inference link to navigate to the inference page
+  await inferenceLink.click();
+
+  // Wait for navigation to the new inference page
+  await page.waitForURL("/observability/inferences/**", {
+    timeout: 5000,
+  });
+
+  // Verify we're on an inference detail page
+  await expect(page.getByText("Inference", { exact: true })).toBeVisible();
+
+  // Verify the tags section shows our UI tags
+  await expect(page.getByText("tensorzero::internal")).toBeVisible();
+  await expect(page.getByText("tensorzero::ui")).toBeVisible();
+
+  // Verify the tag values are "true"
+  const internalTagValue = page
+    .locator("tr")
+    .filter({ hasText: "tensorzero::internal" })
+    .getByText("true");
+  await expect(internalTagValue).toBeVisible();
+
+  const uiTagValue = page
+    .locator("tr")
+    .filter({ hasText: "tensorzero::ui" })
+    .getByText("true");
+  await expect(uiTagValue).toBeVisible();
+});

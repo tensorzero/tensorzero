@@ -43,13 +43,14 @@ use tensorzero_core::{
     tool::{ToolCall, ToolCallInput},
 };
 use tokio::task::JoinSet;
+use tokio::time::{sleep, Duration};
 use tracing_test::traced_test;
 use url::Url;
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::{
-    get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
-    select_model_inference_clickhouse,
+    get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
+    select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
 
 use crate::common::get_gateway_endpoint;
@@ -4049,4 +4050,71 @@ async fn test_clickhouse_bulk_insert() {
         .collect::<HashSet<_>>();
     assert_eq!(actual_model_inference_ids.len(), inference_count);
     assert_eq!(actual_model_inference_ids, expected_inference_ids);
+}
+
+#[tokio::test]
+async fn test_internal_tag_auto_injection() {
+    let client = Client::new();
+
+    // Make an inference request with internal=true and a custom tag
+    // We should NOT manually set tensorzero::internal - it should be auto-injected
+    let payload = json!({
+        "function_name": "basic_test",
+        "input": {
+            "system": {"assistant_name": "Alfred"},
+            "messages": [{"role": "user", "content": "Hello!"}]
+        },
+        "internal": true,
+        "tags": {
+            "custom_tag": "custom_value"
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+
+    // Check ClickHouse to verify both tags are present
+    let clickhouse = get_clickhouse().await;
+
+    // Verify custom tag is present
+    let result = select_inference_tags_clickhouse(
+        &clickhouse,
+        "basic_test",
+        "custom_tag",
+        "custom_value",
+        inference_id,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        result.get("inference_id").unwrap().as_str().unwrap(),
+        inference_id.to_string()
+    );
+
+    // Verify auto-injected tensorzero::internal tag is present
+    let result = select_inference_tags_clickhouse(
+        &clickhouse,
+        "basic_test",
+        "tensorzero::internal",
+        "true",
+        inference_id,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        result.get("inference_id").unwrap().as_str().unwrap(),
+        inference_id.to_string()
+    );
 }

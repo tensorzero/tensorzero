@@ -3,7 +3,10 @@ use serde_json::{json, Value};
 use tensorzero_core::{
     config::{Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType},
     db::{
-        clickhouse::test_helpers::{select_feedback_clickhouse, select_feedback_tags_clickhouse},
+        clickhouse::test_helpers::{
+            select_feedback_clickhouse, select_feedback_tags_clickhouse,
+            select_feedback_tags_clickhouse_with_feedback_id,
+        },
         postgres::PostgresConnectionInfo,
     },
     endpoints::feedback::{feedback, Params},
@@ -1550,4 +1553,87 @@ async fn test_fast_inference_then_feedback() {
     // Wait for all tasks to finish.
     futures::future::join_all(tasks).await;
     assert!(!logs_contain("does not exist"));
+}
+
+#[tokio::test]
+async fn test_feedback_internal_tag_auto_injection() {
+    let client = Client::new();
+
+    // First, run an inference to get a valid inference_id
+    let inference_payload = serde_json::json!({
+        "function_name": "basic_test",
+        "input": {
+            "system": {"assistant_name": "Alfred"},
+            "messages": [{"role": "user", "content": "Hello!"}]
+        },
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    sleep(Duration::from_millis(1000)).await;
+
+    // Now send feedback with internal=true and a custom tag
+    // We should NOT manually set tensorzero::internal - it should be auto-injected
+    let payload = json!({
+        "inference_id": inference_id,
+        "metric_name": "task_success",
+        "value": true,
+        "internal": true,
+        "tags": {
+            "custom_tag": "custom_value"
+        }
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let feedback_id = response_json.get("feedback_id").unwrap().as_str().unwrap();
+    let feedback_id = Uuid::parse_str(feedback_id).unwrap();
+
+    sleep(Duration::from_millis(1000)).await;
+
+    println!("Feedback sent with ID: {feedback_id}");
+
+    // Check ClickHouse to verify both tags are present
+    let clickhouse = get_clickhouse().await;
+
+    // Verify custom tag is present
+    let _ = select_feedback_tags_clickhouse_with_feedback_id(
+        &clickhouse,
+        &feedback_id.to_string(),
+        "task_success",
+        "custom_tag",
+        "custom_value",
+    )
+    .await
+    .expect("Failed to call select_feedback_tags_clickhouse_with_feedback_id for task_success");
+
+    // Verify auto-injected tensorzero::internal tag is present
+    let _ = select_feedback_tags_clickhouse_with_feedback_id(
+        &clickhouse,
+        &feedback_id.to_string(),
+        "task_success",
+        "tensorzero::internal",
+        "true",
+    )
+    .await
+    .expect(
+        "Failed to call select_feedback_tags_clickhouse_with_feedback_id for tensorzero::internal",
+    );
 }

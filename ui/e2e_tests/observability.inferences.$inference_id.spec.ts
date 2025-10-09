@@ -414,6 +414,77 @@ test.describe("should be able to add demonstration feedback via Try with X flows
   });
 });
 
+test.describe("should navigate to inference from Try with X modal and verify tags", () => {
+  const testData = [
+    {
+      buttonText: "Try with variant",
+      inference: "0196374b-0d7d-7422-b6dc-e94c572cc79b",
+      option: "initial_prompt_gpt4o_mini",
+    },
+    {
+      buttonText: "Try with model",
+      inference: "019926fd-1a06-7fe2-b7f4-2318de2f2046",
+      option: "openai::gpt-4o-mini",
+    },
+  ];
+  testData.forEach(({ buttonText, inference, option }) => {
+    test(buttonText, async ({ page }) => {
+      await page.goto(`/observability/inferences/${inference}`);
+
+      // Wait for the page to load
+      await page.waitForLoadState("networkidle");
+
+      // Click on "Try with variant/model" button
+      await page.getByText(buttonText).click();
+
+      // Wait for the dropdown menu to appear and select a variant
+      const variantOption = page.getByRole("menuitem").filter({
+        has: page.locator(`text="${option}"`),
+      });
+
+      await variantOption.waitFor({ state: "visible" });
+      await variantOption.click();
+
+      // Wait for the variant response modal to open and show results
+      await page.getByRole("dialog").waitFor({ state: "visible" });
+
+      // Wait for the inference to complete - look for the inference link
+      const inferenceLink = page
+        .getByRole("dialog")
+        .getByText(/View inference:/);
+      await inferenceLink.waitFor({ state: "visible", timeout: 15000 });
+
+      // Click the inference link to navigate to the inference page
+      await inferenceLink.click();
+
+      // Wait for navigation to the new inference page
+      await page.waitForURL("/observability/inferences/**", {
+        timeout: 5000,
+      });
+
+      // Verify we're on an inference detail page
+      await expect(page.getByText("Inference", { exact: true })).toBeVisible();
+
+      // Verify the tags section shows our UI tags
+      await expect(page.getByText("tensorzero::internal")).toBeVisible();
+      await expect(page.getByText("tensorzero::ui")).toBeVisible();
+
+      // Verify the tag values are "true"
+      const internalTagValue = page
+        .locator("tr")
+        .filter({ hasText: "tensorzero::internal" })
+        .getByText("true");
+      await expect(internalTagValue).toBeVisible();
+
+      const uiTagValue = page
+        .locator("tr")
+        .filter({ hasText: "tensorzero::ui" })
+        .getByText("true");
+      await expect(uiTagValue).toBeVisible();
+    });
+  });
+});
+
 test("should be able to add a datapoint from the inference page", async ({
   page,
 }) => {

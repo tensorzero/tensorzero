@@ -15,11 +15,14 @@ import { Output } from "~/components/inference/Output";
 import type { InferenceResponse } from "~/utils/tensorzero";
 import { Card, CardContent } from "~/components/ui/card";
 import type { VariantResponseInfo } from "~/routes/api/tensorzero/inference.utils";
+import { Link } from "react-router";
+import { toInferenceUrl } from "~/utils/urls";
 
 interface ResponseColumnProps {
   title: string;
   response: VariantResponseInfo | null;
   errorMessage?: string | null;
+  inferenceId?: string | null;
   children?: React.ReactNode;
 }
 
@@ -27,6 +30,7 @@ function ResponseColumn({
   title,
   response,
   errorMessage,
+  inferenceId,
   children,
 }: ResponseColumnProps) {
   return (
@@ -51,6 +55,18 @@ function ResponseColumn({
             {response.output && (
               <div className="flex-1">
                 <Output output={response.output} />
+              </div>
+            )}
+
+            {inferenceId && (
+              <div className="mt-2 text-xs">
+                Inference ID:{" "}
+                <Link
+                  to={toInferenceUrl(inferenceId)}
+                  className="font-mono text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                  {inferenceId}
+                </Link>
               </div>
             )}
 
@@ -177,6 +193,7 @@ export function VariantResponseModal({
                   title="New"
                   response={variantResponse}
                   errorMessage={error}
+                  inferenceId={rawResponse?.inference_id}
                 >
                   {children}
                 </ResponseColumn>

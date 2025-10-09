@@ -161,7 +161,6 @@ export function preparePlaygroundInferenceRequest(
       max_age_s: null,
       enabled: "off",
     },
-    dryrun: true,
     editedVariantInfo: variantInferenceInfo.editedVariantInfo,
     functionConfig,
   });
