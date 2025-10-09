@@ -629,7 +629,10 @@ fn find_matching_files(base_path: &Path, matcher: &globset::GlobMatcher) -> Vec<
                 }
             }
             Err(e) => {
-                tracing::warn!("Skipping `{}`: {e}", base_path.display());
+                tracing::warn!(
+                    "Skipping `{}` while scanning for configuration files: {e}",
+                    base_path.to_string_lossy()
+                );
             }
         }
     }
