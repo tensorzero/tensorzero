@@ -115,7 +115,7 @@ pub trait RateLimitQueries {
     /// It is an atomic operation so no tickets will be consumed if any request fails.
     async fn consume_tickets(
         &self,
-        requests: Vec<ConsumeTicketsRequest>,
+        requests: &Vec<ConsumeTicketsRequest>,
     ) -> Result<Vec<ConsumeTicketsReceipt>, Error>;
 
     async fn return_tickets(

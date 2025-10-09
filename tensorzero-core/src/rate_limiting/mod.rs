@@ -133,9 +133,9 @@ impl RateLimitingConfig {
             .map(|limit| limit.get_consume_tickets_request(&rate_limit_resource_requests))
             .collect();
         let ticket_requests = ticket_requests?;
-        let results = client.consume_tickets(ticket_requests).await?;
-        check_borrowed_rate_limits(&limits, &results)?;
-        TicketBorrows::new(results, limits)
+        let results = client.consume_tickets(&ticket_requests).await?;
+
+        TicketBorrows::new(results, limits, ticket_requests)
     }
 
     /// Given a particular scope, finds the RateLimits that are active for that scope.
@@ -174,21 +174,79 @@ impl RateLimitingConfig {
             .collect()
     }
 }
-/// Assumes these are the same length.
-fn check_borrowed_rate_limits(
+
+fn align_and_check_limits(
     limits: &[ActiveRateLimit],
-    results: &[ConsumeTicketsReceipt],
-) -> Result<(), Error> {
-    for (limit, result) in limits.iter().zip(results.iter()) {
-        if !result.success {
-            // TODO: improve the error information here
-            return Err(Error::new(ErrorDetails::RateLimitExceeded {
-                key: limit.get_key()?,
-                tickets_remaining: result.tickets_remaining,
+    receipts: Vec<ConsumeTicketsReceipt>,
+    requests: Vec<ConsumeTicketsRequest>,
+) -> Result<Vec<ConsumeTicketsReceipt>, Error> {
+    // First, we collect the Vec<ConsumeTicketsReceipt> into a HashMap from ActiveRateLimitKey to receipt
+    let mut receipts_map = receipts
+        .into_iter()
+        .map(|r| (r.key.clone(), r))
+        .collect::<HashMap<_, _>>();
+    // Next, check if any reciept has failed
+    if receipts_map.values().any(|r| !r.success) {
+        return Err(get_failed_rate_limits_err(requests, &receipts_map));
+    }
+
+    // Next, we build up a vector of ConsumeTicketsReceipts
+    let mut aligned_receipts = Vec::with_capacity(limits.len());
+    for limit in limits {
+        let key = limit.get_key()?;
+        if let Some(receipt) = receipts_map.remove(&key) {
+            aligned_receipts.push(receipt);
+        } else {
+            // throw an error
+            return Err(Error::new(ErrorDetails::Inference {
+                message: format!(
+                    "Failed to find rate limit key for limit {key}. {IMPOSSIBLE_ERROR_MESSAGE}",
+                ),
             }));
         }
     }
-    Ok(())
+    Ok(aligned_receipts)
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+pub struct FailedRateLimit {
+    pub key: ActiveRateLimitKey,
+    pub requested: u64,
+    pub available: u64,
+}
+
+/// Since Postgres will tell us all borrows failed if any failed, we figure out which rate limits
+/// actually blocked the request and return an informative error.
+fn get_failed_rate_limits_err(
+    requests: Vec<ConsumeTicketsRequest>,
+    receipts_map: &HashMap<ActiveRateLimitKey, ConsumeTicketsReceipt>,
+) -> Error {
+    let mut failed_rate_limits = Vec::new();
+    for request in requests {
+        let key = &request.key;
+        let Some(receipt) = receipts_map.get(key) else {
+            return ErrorDetails::Inference {
+                message: format!(
+                    "Failed to find rate limit request for limit {key} while constructing FailedRateLimit error. {IMPOSSIBLE_ERROR_MESSAGE}",
+                ),
+            }.into();
+        };
+        if request.requested > receipt.tickets_remaining {
+            failed_rate_limits.push(FailedRateLimit {
+                key: key.clone(),
+                requested: request.requested,
+                available: receipt.tickets_remaining,
+            });
+        }
+    }
+    if failed_rate_limits.is_empty() {
+        return ErrorDetails::Inference {
+            message: format!(
+                "Failed to find rate limit request where requested > available while constructing FailedRateLimit error. {IMPOSSIBLE_ERROR_MESSAGE}",
+            ),
+        }.into();
+    }
+    ErrorDetails::RateLimitExceeded { failed_rate_limits }.into()
 }
 
 #[derive(Debug)]
@@ -247,7 +305,7 @@ struct ActiveRateLimitKeyHelper<'a> {
     scope_key: &'a [RateLimitingScopeKey],
 }
 
-#[derive(Debug, PartialEq, Clone, serde::Serialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Eq, Hash)]
 pub struct ActiveRateLimitKey(pub String);
 
 impl ActiveRateLimitKey {
@@ -548,20 +606,22 @@ impl TicketBorrows {
     }
 
     fn new(
-        receipts: Vec<ConsumeTicketsReceipt>,
+        results: Vec<ConsumeTicketsReceipt>,
         active_limits: Vec<ActiveRateLimit>,
+        ticket_requests: Vec<ConsumeTicketsRequest>,
     ) -> Result<Self, Error> {
         // Assert all vectors have the same length
-        let receipts_len = receipts.len();
+        let results_len = results.len();
         let active_limits_len = active_limits.len();
 
-        if receipts_len != active_limits_len {
+        if results_len != active_limits_len {
             return Err(Error::new(ErrorDetails::Inference {
             message: format!(
-                "TicketBorrow has ragged arrays: receipts.len()={receipts_len}, active_limits.len()={active_limits_len}. {IMPOSSIBLE_ERROR_MESSAGE}",
+                "TicketBorrow has ragged arrays: receipts.len()={results_len}, active_limits.len()={active_limits_len}. {IMPOSSIBLE_ERROR_MESSAGE}",
             )
         }));
         }
+        let receipts = align_and_check_limits(&active_limits, results, ticket_requests)?;
         let borrows = receipts
             .into_iter()
             .zip(active_limits)
@@ -604,7 +664,7 @@ impl TicketBorrows {
         }
 
         let (consume_result, return_result) = tokio::join!(
-            client.consume_tickets(requests),
+            client.consume_tickets(&requests),
             client.return_tickets(returns)
         );
 
