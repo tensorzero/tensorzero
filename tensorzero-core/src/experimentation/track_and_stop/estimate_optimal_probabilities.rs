@@ -1,5 +1,5 @@
 #![allow(non_snake_case)]
-#![expect(dead_code)]
+#![allow(dead_code)]
 use clarabel::algebra::CscMatrix;
 use clarabel::solver::{
     DefaultSettings, DefaultSolver, IPSolver, NonnegativeConeT, SecondOrderConeT, SupportedConeT,
@@ -321,6 +321,8 @@ pub fn estimate_optimal_probabilities(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::rngs::StdRng;
+    use rand::{Rng, SeedableRng};
 
     // Helper function to create FeedbackByVariant for tests
     fn make_feedback(
@@ -369,6 +371,9 @@ mod tests {
         }
     }
 
+    // ============================================================================
+    // Tests for the ordering and basic properties of the returned probabilities
+    // ============================================================================
     #[test]
     fn test_two_arms_different_variances() {
         let feedback = make_feedback(vec![10, 10], vec![0.3, 0.7], vec![1.1, 1.0]);
@@ -704,7 +709,9 @@ mod tests {
         }
     }
 
+    // ===================================================================================
     // Tests with reference solutions from cvxpy (using CLARABEL solver) or scipy.minimize
+    // ===================================================================================
     #[test]
     fn test_three_arms_varied_cvxpy() {
         let feedback = make_feedback(
@@ -1063,5 +1070,438 @@ mod tests {
         let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
         assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+
+    // Helper function to compute L2 distance between two probability vectors
+    fn l2_distance(v1: &[f64], v2: &[f64]) -> f64 {
+        assert_eq!(v1.len(), v2.len(), "Vectors must have same length");
+        v1.iter()
+            .zip(v2.iter())
+            .map(|(a, b)| (a - b).powi(2))
+            .sum::<f64>()
+            .sqrt()
+    }
+
+    // Helper function to generate random offsets for each arm, scaled by a factor
+    fn generate_random_offsets(rng: &mut StdRng, num_arms: usize, scale: f64) -> Vec<f64> {
+        (0..num_arms).map(|_| rng.random::<f64>() * scale).collect()
+    }
+
+    // Helper function to check that averaged L2 distances show monotonic convergence
+    // Averaging over multiple runs should cancel out nonomonotonicity from the nonlinear optimization
+    fn check_monotone_decreasing_distances(l2_distances: &[f64]) {
+        for i in 1..l2_distances.len() {
+            assert!(
+                l2_distances[i] <= l2_distances[i - 1],
+                "Averaged L2 distance should be monotone decreasing: distance[{}] = {} > distance[{}] = {}",
+                i,
+                l2_distances[i],
+                i - 1,
+                l2_distances[i - 1]
+            );
+        }
+    }
+
+    // ======================================================================================
+    // Tests for convergence of estimated optimal probabilities to true optimal probabilities
+    // as sample means and variances converge. This convergence may not be monotone in any
+    // given problem instance, so we average over multiple random instances. Due to
+    // randomness, this test could fail sometimes.
+    // ======================================================================================
+    #[test]
+    fn test_convergence_two_arms() {
+        const NUM_RUNS: usize = 10;
+
+        // True means and variances
+        let true_means = vec![0.5, 0.7];
+        let true_variances = vec![0.1, 0.2];
+        let pull_counts = vec![100, 100];
+        let num_arms = true_means.len();
+
+        // Compute true optimal probabilities
+        let true_feedback = make_feedback(
+            pull_counts.clone(),
+            true_means.clone(),
+            true_variances.clone(),
+        );
+        let true_probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback: true_feedback,
+            epsilon: Some(0.0),
+            variance_floor: None,
+            min_prob: Some(1e-6),
+            reg0: Some(0.0),
+        })
+        .unwrap();
+        let true_probs = hashmap_to_vec(&true_probs_map, num_arms);
+
+        // Create sequence with decreasing scales, each arm gets random offset
+        let scales = [0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.001];
+
+        // Average L2 distances over multiple runs
+        let mut avg_l2_distances = vec![0.0; scales.len()];
+
+        for run in 0..NUM_RUNS {
+            let mut rng = StdRng::seed_from_u64(42 + run as u64);
+
+            for (scale_idx, &scale) in scales.iter().enumerate() {
+                let mean_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+                let variance_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+
+                let sample_means: Vec<f64> = true_means
+                    .iter()
+                    .zip(&mean_offsets)
+                    .map(|(&m, &offset)| m + offset)
+                    .collect();
+                let sample_variances: Vec<f64> = true_variances
+                    .iter()
+                    .zip(&variance_offsets)
+                    .map(|(&v, &offset)| v + offset)
+                    .collect();
+
+                let sample_feedback =
+                    make_feedback(pull_counts.clone(), sample_means, sample_variances);
+                let sample_probs_map =
+                    estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+                        feedback: sample_feedback,
+                        epsilon: Some(0.0),
+                        variance_floor: None,
+                        min_prob: Some(1e-6),
+                        reg0: Some(0.0),
+                    })
+                    .unwrap();
+                let sample_probs = hashmap_to_vec(&sample_probs_map, num_arms);
+
+                let distance = l2_distance(&sample_probs, &true_probs);
+                avg_l2_distances[scale_idx] += distance;
+            }
+        }
+
+        check_monotone_decreasing_distances(&avg_l2_distances);
+    }
+
+    #[test]
+    fn test_convergence_three_arms_varied() {
+        const NUM_RUNS: usize = 10;
+
+        let true_means = vec![0.3, 0.6, 0.5];
+        let true_variances = vec![0.1, 0.2, 0.15];
+        let pull_counts = vec![50, 50, 50];
+        let num_arms = true_means.len();
+
+        let true_feedback = make_feedback(
+            pull_counts.clone(),
+            true_means.clone(),
+            true_variances.clone(),
+        );
+        let true_probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback: true_feedback,
+            epsilon: Some(0.05),
+            variance_floor: None,
+            min_prob: Some(0.01),
+            reg0: Some(0.1),
+        })
+        .unwrap();
+        let true_probs = hashmap_to_vec(&true_probs_map, num_arms);
+
+        let scales = [0.15, 0.1, 0.05, 0.02, 0.01, 0.005];
+        let mut avg_l2_distances = vec![0.0; scales.len()];
+
+        for run in 0..NUM_RUNS {
+            let mut rng = StdRng::seed_from_u64(123 + run as u64);
+
+            for (scale_idx, &scale) in scales.iter().enumerate() {
+                let mean_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+                let variance_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+
+                let sample_means: Vec<f64> = true_means
+                    .iter()
+                    .zip(&mean_offsets)
+                    .map(|(&m, &offset)| m + offset)
+                    .collect();
+                let sample_variances: Vec<f64> = true_variances
+                    .iter()
+                    .zip(&variance_offsets)
+                    .map(|(&v, &offset)| v + offset)
+                    .collect();
+
+                let sample_feedback =
+                    make_feedback(pull_counts.clone(), sample_means, sample_variances);
+                let sample_probs_map =
+                    estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+                        feedback: sample_feedback,
+                        epsilon: Some(0.05),
+                        variance_floor: None,
+                        min_prob: Some(0.01),
+                        reg0: Some(0.1),
+                    })
+                    .unwrap();
+                let sample_probs = hashmap_to_vec(&sample_probs_map, num_arms);
+
+                avg_l2_distances[scale_idx] += l2_distance(&sample_probs, &true_probs);
+            }
+        }
+
+        check_monotone_decreasing_distances(&avg_l2_distances);
+    }
+
+    #[test]
+    fn test_convergence_five_arms() {
+        const NUM_RUNS: usize = 10;
+
+        let true_means = vec![0.2, 0.5, 0.4, 0.6, 0.3];
+        let true_variances = vec![0.1, 0.3, 0.2, 0.4, 0.15];
+        let pull_counts = vec![100, 100, 100, 100, 100];
+        let num_arms = true_means.len();
+
+        let true_feedback = make_feedback(
+            pull_counts.clone(),
+            true_means.clone(),
+            true_variances.clone(),
+        );
+        let true_probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback: true_feedback,
+            epsilon: Some(0.02),
+            variance_floor: None,
+            min_prob: Some(0.05),
+            reg0: Some(0.5),
+        })
+        .unwrap();
+        let true_probs = hashmap_to_vec(&true_probs_map, num_arms);
+
+        let scales = [0.1, 0.05, 0.02, 0.01, 0.005, 0.002];
+        let mut avg_l2_distances = vec![0.0; scales.len()];
+
+        for run in 0..NUM_RUNS {
+            let mut rng = StdRng::seed_from_u64(456 + run as u64);
+
+            for (scale_idx, &scale) in scales.iter().enumerate() {
+                let mean_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+                let variance_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+
+                let sample_means: Vec<f64> = true_means
+                    .iter()
+                    .zip(&mean_offsets)
+                    .map(|(&m, &offset)| m + offset)
+                    .collect();
+                let sample_variances: Vec<f64> = true_variances
+                    .iter()
+                    .zip(&variance_offsets)
+                    .map(|(&v, &offset)| v + offset)
+                    .collect();
+
+                let sample_feedback =
+                    make_feedback(pull_counts.clone(), sample_means, sample_variances);
+                let sample_probs_map =
+                    estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+                        feedback: sample_feedback,
+                        epsilon: Some(0.02),
+                        variance_floor: None,
+                        min_prob: Some(0.05),
+                        reg0: Some(0.5),
+                    })
+                    .unwrap();
+                let sample_probs = hashmap_to_vec(&sample_probs_map, num_arms);
+
+                avg_l2_distances[scale_idx] += l2_distance(&sample_probs, &true_probs);
+            }
+        }
+
+        check_monotone_decreasing_distances(&avg_l2_distances);
+    }
+
+    #[test]
+    fn test_convergence_high_variance_arms() {
+        const NUM_RUNS: usize = 10;
+
+        let true_means = vec![10.0, 15.0, 12.0];
+        let true_variances = vec![2.0, 5.0, 3.0];
+        let pull_counts = vec![200, 200, 200];
+        let num_arms = true_means.len();
+
+        let true_feedback = make_feedback(
+            pull_counts.clone(),
+            true_means.clone(),
+            true_variances.clone(),
+        );
+        let true_probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback: true_feedback,
+            epsilon: Some(0.5),
+            variance_floor: None,
+            min_prob: Some(0.01),
+            reg0: Some(0.1),
+        })
+        .unwrap();
+        let true_probs = hashmap_to_vec(&true_probs_map, num_arms);
+
+        let scales = [2.0, 1.0, 0.5, 0.2, 0.1, 0.05];
+        let mut avg_l2_distances = vec![0.0; scales.len()];
+
+        for run in 0..NUM_RUNS {
+            let mut rng = StdRng::seed_from_u64(789 + run as u64);
+
+            for (scale_idx, &scale) in scales.iter().enumerate() {
+                let mean_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+                let variance_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+
+                let sample_means: Vec<f64> = true_means
+                    .iter()
+                    .zip(&mean_offsets)
+                    .map(|(&m, &offset)| m + offset)
+                    .collect();
+                let sample_variances: Vec<f64> = true_variances
+                    .iter()
+                    .zip(&variance_offsets)
+                    .map(|(&v, &offset)| v + offset)
+                    .collect();
+
+                let sample_feedback =
+                    make_feedback(pull_counts.clone(), sample_means, sample_variances);
+                let sample_probs_map =
+                    estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+                        feedback: sample_feedback,
+                        epsilon: Some(0.5),
+                        variance_floor: None,
+                        min_prob: Some(0.01),
+                        reg0: Some(0.1),
+                    })
+                    .unwrap();
+                let sample_probs = hashmap_to_vec(&sample_probs_map, num_arms);
+
+                avg_l2_distances[scale_idx] += l2_distance(&sample_probs, &true_probs);
+            }
+        }
+
+        check_monotone_decreasing_distances(&avg_l2_distances);
+    }
+
+    #[test]
+    fn test_convergence_ten_arms() {
+        const NUM_RUNS: usize = 10;
+
+        let true_means = vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+        let true_variances = vec![0.1; 10];
+        let pull_counts = vec![100; 10];
+        let num_arms = true_means.len();
+
+        let true_feedback = make_feedback(
+            pull_counts.clone(),
+            true_means.clone(),
+            true_variances.clone(),
+        );
+        let true_probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback: true_feedback,
+            epsilon: Some(0.05),
+            variance_floor: None,
+            min_prob: Some(0.01),
+            reg0: Some(0.2),
+        })
+        .unwrap();
+        let true_probs = hashmap_to_vec(&true_probs_map, num_arms);
+
+        let scales = [0.08, 0.05, 0.03, 0.02, 0.01, 0.005];
+        let mut avg_l2_distances = vec![0.0; scales.len()];
+
+        for run in 0..NUM_RUNS {
+            let mut rng = StdRng::seed_from_u64(101112 + run as u64);
+
+            for (scale_idx, &scale) in scales.iter().enumerate() {
+                let mean_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+                let variance_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+
+                let sample_means: Vec<f64> = true_means
+                    .iter()
+                    .zip(&mean_offsets)
+                    .map(|(&m, &offset)| m + offset)
+                    .collect();
+                let sample_variances: Vec<f64> = true_variances
+                    .iter()
+                    .zip(&variance_offsets)
+                    .map(|(&v, &offset)| v + offset)
+                    .collect();
+
+                let sample_feedback =
+                    make_feedback(pull_counts.clone(), sample_means, sample_variances);
+                let sample_probs_map =
+                    estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+                        feedback: sample_feedback,
+                        epsilon: Some(0.05),
+                        variance_floor: None,
+                        min_prob: Some(0.01),
+                        reg0: Some(0.2),
+                    })
+                    .unwrap();
+                let sample_probs = hashmap_to_vec(&sample_probs_map, num_arms);
+
+                avg_l2_distances[scale_idx] += l2_distance(&sample_probs, &true_probs);
+            }
+        }
+
+        check_monotone_decreasing_distances(&avg_l2_distances);
+    }
+
+    #[test]
+    fn test_convergence_close_competition() {
+        const NUM_RUNS: usize = 10;
+
+        // Test with very close means - convergence should still be monotone
+        let true_means = vec![0.50, 0.51, 0.30];
+        let true_variances = vec![0.1, 0.1, 0.1];
+        let pull_counts = vec![100, 100, 100];
+        let num_arms = true_means.len();
+
+        let true_feedback = make_feedback(
+            pull_counts.clone(),
+            true_means.clone(),
+            true_variances.clone(),
+        );
+        let true_probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback: true_feedback,
+            epsilon: Some(0.01),
+            variance_floor: None,
+            min_prob: Some(0.01),
+            reg0: Some(0.1),
+        })
+        .unwrap();
+        let true_probs = hashmap_to_vec(&true_probs_map, num_arms);
+
+        let scales = [0.05, 0.03, 0.02, 0.01, 0.005, 0.002];
+        let mut avg_l2_distances = vec![0.0; scales.len()];
+
+        for run in 0..NUM_RUNS {
+            let mut rng = StdRng::seed_from_u64(131415 + run as u64);
+
+            for (scale_idx, &scale) in scales.iter().enumerate() {
+                let mean_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+                let variance_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+
+                let sample_means: Vec<f64> = true_means
+                    .iter()
+                    .zip(&mean_offsets)
+                    .map(|(&m, &offset)| m + offset)
+                    .collect();
+                let sample_variances: Vec<f64> = true_variances
+                    .iter()
+                    .zip(&variance_offsets)
+                    .map(|(&v, &offset)| v + offset)
+                    .collect();
+
+                let sample_feedback =
+                    make_feedback(pull_counts.clone(), sample_means, sample_variances);
+                let sample_probs_map =
+                    estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+                        feedback: sample_feedback,
+                        epsilon: Some(0.01),
+                        variance_floor: None,
+                        min_prob: Some(0.01),
+                        reg0: Some(0.1),
+                    })
+                    .unwrap();
+                let sample_probs = hashmap_to_vec(&sample_probs_map, num_arms);
+
+                avg_l2_distances[scale_idx] += l2_distance(&sample_probs, &true_probs);
+            }
+        }
+
+        check_monotone_decreasing_distances(&avg_l2_distances);
     }
 }
