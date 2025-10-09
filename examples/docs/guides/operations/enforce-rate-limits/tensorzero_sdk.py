@@ -2,8 +2,9 @@ from tensorzero import TensorZeroGateway
 
 t0 = TensorZeroGateway.build_http(gateway_url="http://localhost:3000")
 
-for i in range(5):
-    response = t0.inference(
+
+def call_llm(user_id):
+    return t0.inference(
         model_name="openai::gpt-4.1-mini",
         input={
             "messages": [
@@ -13,16 +14,23 @@ for i in range(5):
                 }
             ]
         },
+        # We have rate limits on tokens, so we must be conservative and provider `max_tokens`
         params={
             "chat_completion": {
                 "max_tokens": 1000,
             }
         },
         tags={
-            # "x_id": "1",
-            "x_id": f"{i}",
-            # "x_id": "tensorzero::all"
+            "user_id": user_id,
         },
     )
 
-    print(response)
+
+# the second should fail
+print(call_llm("intern"))
+print(call_llm("intern"))
+print(call_llm("intern"))
+
+# should all work
+print(call_llm("ceo"))
+print(call_llm("ceo"))

@@ -4,8 +4,5 @@ version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "tensorzero>=2025.9.4",
+    "tensorzero>=2025.10.1",
 ]
-
-[tool.uv.sources]
-tensorzero = { path = "../../../../../clients/python", editable = true }

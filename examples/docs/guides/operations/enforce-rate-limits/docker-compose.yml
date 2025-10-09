@@ -24,11 +24,16 @@ services:
       POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
-    # TODO: add volume
-    # TODO: add healthcheck
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: pg_isready -U postgres
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
 
   gateway:
-    image: tensorzero/gateway:rl # TODO: remove tag
+    image: tensorzero/gateway
     volumes:
       # Mount our tensorzero.toml file into the container
       - ./config:/app/config:ro
@@ -49,21 +54,25 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
-# TODO: put it back
+      postgres:
+        condition: service_healthy
 
-# ui:
-#   image: tensorzero/ui
-#   volumes:
-#     # Mount our tensorzero.toml file into the container
-#     - ./config:/app/config:ro
-#   environment:
-#     OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
-#     TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
-#     TENSORZERO_GATEWAY_URL: http://gateway:3000
-#   ports:
-#     - "4000:4000"
-#   depends_on:
-#     clickhouse:
-#       condition: service_healthy
-#     gateway:
-#       condition: service_healthy
+  ui:
+    image: tensorzero/ui
+    volumes:
+      # Mount our tensorzero.toml file into the container
+      - ./config:/app/config:ro
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
+      TENSORZERO_GATEWAY_URL: http://gateway:3000
+    ports:
+      - "4000:4000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
