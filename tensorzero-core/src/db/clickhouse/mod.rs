@@ -37,7 +37,6 @@ use query_builder::ListInferencesParams;
 use super::HealthCheckable;
 
 /// Trait defining the interface for ClickHouse database operations.
-/// This allows for production, mock, and disabled implementations.
 #[async_trait]
 pub trait ClickHouseClient: Send + Sync {
     /// Returns the name of the database
@@ -88,7 +87,8 @@ pub trait ClickHouseClient: Send + Sync {
     /// Creates the database and migrations table
     async fn create_database_and_migrations_table(&self) -> Result<(), Error>;
 
-    /// Lists inferences from ClickHouse
+    /// Lists inferences from ClickHouse.
+    /// TODO: Move this to a separate trait.
     async fn list_inferences(
         &self,
         config: &Config,
@@ -559,7 +559,8 @@ impl ClickHouseClient for ProductionClickHouseClient {
         database_url
             .query_pairs_mut()
             .append_pair("alter_sync", "2");
-        let res = self.client
+        let res = self
+            .client
             .post(database_url)
             .body(query)
             .send()
@@ -581,26 +582,20 @@ impl ClickHouseClient for ProductionClickHouseClient {
             let summary_str = summary.to_str().map_err(|e| {
                 Error::new_with_err_logging(
                     ErrorDetails::ClickHouseQuery {
-                        message: format!(
-                            "Failed to parse x-clickhouse-summary header: {e}"
-                        ),
+                        message: format!("Failed to parse x-clickhouse-summary header: {e}"),
                     },
                     err_logging,
                 )
             })?;
 
-            serde_json::from_str::<ClickHouseResponseMetadata>(summary_str).map_err(
-                |e| {
-                    Error::new_with_err_logging(
-                        ErrorDetails::ClickHouseQuery {
-                            message: format!(
-                                "Failed to deserialize x-clickhouse-summary: {e}"
-                            ),
-                        },
-                        err_logging,
-                    )
-                },
-            )?
+            serde_json::from_str::<ClickHouseResponseMetadata>(summary_str).map_err(|e| {
+                Error::new_with_err_logging(
+                    ErrorDetails::ClickHouseQuery {
+                        message: format!("Failed to deserialize x-clickhouse-summary: {e}"),
+                    },
+                    err_logging,
+                )
+            })?
         } else {
             tracing::warn!("No x-clickhouse-summary header found in ClickHouse response");
             ClickHouseResponseMetadata {
@@ -652,7 +647,8 @@ impl ClickHouseClient for ProductionClickHouseClient {
             )
             .text("query", query);
 
-        let res = self.client
+        let res = self
+            .client
             .post(database_url)
             .multipart(form)
             .send()
@@ -672,13 +668,11 @@ impl ClickHouseClient for ProductionClickHouseClient {
                 })
             })?;
 
-            serde_json::from_str::<ClickHouseResponseMetadata>(summary_str).map_err(
-                |e| {
-                    Error::new(ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to deserialize x-clickhouse-summary: {e}"),
-                    })
-                },
-            )?
+            serde_json::from_str::<ClickHouseResponseMetadata>(summary_str).map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseQuery {
+                    message: format!("Failed to deserialize x-clickhouse-summary: {e}"),
+                })
+            })?
         } else {
             tracing::warn!("No x-clickhouse-summary header found in ClickHouse response");
             ClickHouseResponseMetadata {
@@ -720,9 +714,9 @@ impl ClickHouseClient for ProductionClickHouseClient {
             .extend_pairs(query_pairs)
             .append_pair("param_name", &self.database)
             .finish();
-        let query =
-            "SELECT COUNT() FROM system.databases WHERE name={name:String}".to_string();
-        let response = self.client
+        let query = "SELECT COUNT() FROM system.databases WHERE name={name:String}".to_string();
+        let response = self
+            .client
             .post(base_url)
             .body(query)
             .send()
@@ -778,7 +772,10 @@ impl ClickHouseClient for ProductionClickHouseClient {
             })
         })?;
         let on_cluster_name = self.get_on_cluster_name();
-        let query = format!("CREATE DATABASE IF NOT EXISTS {}{on_cluster_name}", self.database);
+        let query = format!(
+            "CREATE DATABASE IF NOT EXISTS {}{on_cluster_name}",
+            self.database
+        );
         // In order to create the database, we need to remove the database query parameter from the URL
         // Otherwise, ClickHouse will throw an error
         let mut base_url = database_url.clone();
@@ -791,7 +788,8 @@ impl ClickHouseClient for ProductionClickHouseClient {
             .extend_pairs(query_pairs)
             .finish();
 
-        let response = self.client
+        let response = self
+            .client
             .post(base_url)
             .body(query)
             .send()
