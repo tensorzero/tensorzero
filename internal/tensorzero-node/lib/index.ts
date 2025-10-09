@@ -56,14 +56,16 @@ type NativeModule = {
   DatabaseClient: NativeDatabaseClientConstructor;
   getQuantiles(): number[];
   runEvaluationStreaming(
-    gatewayUrl: string,
-    clickhouseUrl: string,
-    configPath: string,
-    evaluationName: string,
-    datasetName: string,
-    variantName: string,
-    concurrency: number,
-    inferenceCache: CacheEnabledMode,
+    params: {
+      gatewayUrl: string;
+      clickhouseUrl: string;
+      configPath: string;
+      evaluationName: string;
+      datasetName: string;
+      variantName: string;
+      concurrency: number;
+      inferenceCache: CacheEnabledMode;
+    },
     callback: (payload: string) => void,
   ): Promise<void>;
 };
@@ -167,37 +169,16 @@ interface RunEvaluationStreamingParams {
 export async function runEvaluationStreaming(
   params: RunEvaluationStreamingParams,
 ): Promise<void> {
-  const {
-    gatewayUrl,
-    clickhouseUrl,
-    configPath,
-    evaluationName,
-    datasetName,
-    variantName,
-    concurrency,
-    inferenceCache,
-    onEvent,
-  } = params;
+  const { onEvent, ...nativeParams } = params;
 
-  return nativeRunEvaluationStreaming(
-    gatewayUrl,
-    clickhouseUrl,
-    configPath,
-    evaluationName,
-    datasetName,
-    variantName,
-    concurrency,
-    inferenceCache,
-    (payload: string) => {
-      try {
-        const event = JSON.parse(payload) as EvaluationRunEvent;
-        onEvent(event);
-      } catch (error) {
-        // eslint-disable-next-line no-console -- only used for unexpected native payloads
-        console.error("Failed to parse evaluation event", error);
-      }
-    },
-  );
+  return nativeRunEvaluationStreaming(nativeParams, (payload: string) => {
+    try {
+      const event = JSON.parse(payload) as EvaluationRunEvent;
+      onEvent(event);
+    } catch (error) {
+      console.error("Failed to parse evaluation event", error);
+    }
+  });
 }
 
 function safeStringify(obj: unknown) {

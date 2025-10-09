@@ -104,33 +104,41 @@ fn send_event(
     }
 }
 
+#[napi(object)]
+pub struct RunEvaluationStreamingParams {
+    pub gateway_url: String,
+    pub clickhouse_url: String,
+    pub config_path: String,
+    pub evaluation_name: String,
+    pub dataset_name: String,
+    pub variant_name: String,
+    pub concurrency: u32,
+    pub inference_cache: String,
+}
+
 #[napi]
 pub async fn run_evaluation_streaming(
-    gateway_url: String,
-    clickhouse_url: String,
-    config_path: String,
-    evaluation_name: String,
-    dataset_name: String,
-    variant_name: String,
-    concurrency: u32,
-    inference_cache: String,
+    params: RunEvaluationStreamingParams,
     callback: ThreadsafeFunction<String>,
 ) -> Result<(), napi::Error> {
-    let url = Url::parse(&gateway_url)
+    let url = Url::parse(&params.gateway_url)
         .map_err(|e| napi::Error::from_reason(format!("Invalid gateway URL: {e}")))?;
 
-    let config_glob = ConfigFileGlob::new_from_path(Path::new(&config_path)).map_err(|e| {
-        napi::Error::from_reason(format!(
-            "Failed to resolve config glob from {config_path}: {e}"
-        ))
-    })?;
+    let config_glob =
+        ConfigFileGlob::new_from_path(Path::new(&params.config_path)).map_err(|e| {
+            napi::Error::from_reason(format!(
+                "Failed to resolve config glob from {}: {e}",
+                params.config_path
+            ))
+        })?;
 
     let config = Arc::new(
         Config::load_from_path_optional_verify_credentials(&config_glob, false)
             .await
             .map_err(|e| {
                 napi::Error::from_reason(format!(
-                    "Failed to load configuration from {config_path}: {e}"
+                    "Failed to load configuration from {}: {e}",
+                    params.config_path
                 ))
             })?,
     );
@@ -141,13 +149,13 @@ pub async fn run_evaluation_streaming(
         .map_err(|e| napi::Error::from_reason(format!("Failed to build TensorZero client: {e}")))?;
 
     let clickhouse_client = ClickHouseConnectionInfo::new(
-        &clickhouse_url,
+        &params.clickhouse_url,
         config.gateway.observability.batch_writes.clone(),
     )
     .await
     .map_err(|e| napi::Error::from_reason(format!("Failed to connect to ClickHouse: {e}")))?;
 
-    let cache_mode = match inference_cache.as_str() {
+    let cache_mode = match params.inference_cache.as_str() {
         "on" => CacheEnabledMode::On,
         "off" => CacheEnabledMode::Off,
         "read_only" => CacheEnabledMode::ReadOnly,
@@ -160,9 +168,10 @@ pub async fn run_evaluation_streaming(
         }
     };
 
-    let concurrency = usize::try_from(concurrency).map_err(|_| {
+    let concurrency = usize::try_from(params.concurrency).map_err(|_| {
         napi::Error::from_reason(format!(
-            "Concurrency {concurrency} is larger than supported on this platform"
+            "Concurrency {} is larger than supported on this platform",
+            params.concurrency
         ))
     })?;
 
@@ -172,9 +181,9 @@ pub async fn run_evaluation_streaming(
         tensorzero_client,
         clickhouse_client: clickhouse_client.clone(),
         config: config.clone(),
-        dataset_name: dataset_name.clone(),
-        variant_name: variant_name.clone(),
-        evaluation_name: evaluation_name.clone(),
+        dataset_name: params.dataset_name.clone(),
+        variant_name: params.variant_name.clone(),
+        evaluation_name: params.evaluation_name.clone(),
         evaluation_run_id,
         inference_cache: cache_mode,
         concurrency,
@@ -193,9 +202,9 @@ pub async fn run_evaluation_streaming(
     let start_event = EvaluationRunEvent::Start(EvaluationRunStartEvent {
         evaluation_run_id,
         num_datapoints: result.run_info.num_datapoints,
-        evaluation_name: evaluation_name.clone(),
-        dataset_name: dataset_name.clone(),
-        variant_name: variant_name.clone(),
+        evaluation_name: params.evaluation_name.clone(),
+        dataset_name: params.dataset_name.clone(),
+        variant_name: params.variant_name.clone(),
     });
 
     send_event(&callback, &start_event)?;
