@@ -1,3 +1,5 @@
+import { logger } from "./logger";
+
 // This is the only file in which `process.env` should be accessed directly.
 
 class EnvironmentVariableError extends Error {
@@ -20,7 +22,8 @@ interface Env {
   FIREWORKS_ACCOUNT_ID: string | null;
 }
 
-let _env: Env;
+let _env: Env | undefined;
+let hasLoggedEvaluationsPathDeprecation = false;
 
 /**
  * Use this function to retrieve the environment variables instead of accessing
@@ -31,6 +34,16 @@ let _env: Env;
 export function getEnv(): Env {
   if (_env) {
     return _env;
+  }
+
+  if (
+    process.env.TENSORZERO_EVALUATIONS_PATH &&
+    !hasLoggedEvaluationsPathDeprecation
+  ) {
+    logger.warn(
+      "Deprecation Warning: The TensorZero Evaluations binary is now built into the UI itself. The environment variable `TENSORZERO_EVALUATIONS_PATH` is no longer needed and will be ignored moving forward.",
+    );
+    hasLoggedEvaluationsPathDeprecation = true;
   }
 
   const TENSORZERO_CLICKHOUSE_URL = getClickhouseUrl();
