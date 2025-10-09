@@ -10,25 +10,71 @@ import {
   EpisodeByIdRow,
   TableBoundsWithCount,
 } from "./bindings";
-import type {
-  TensorZeroClient as NativeTensorZeroClientType,
-  DatabaseClient as NativeDatabaseClientType,
-} from "../index";
 import { TimeWindow } from "./bindings/TimeWindow";
 import { ModelUsageTimePoint } from "./bindings/ModelUsageTimePoint";
 import { ModelLatencyDatapoint } from "./bindings/ModelLatencyDatapoint";
+import type { CacheEnabledMode } from "./bindings/CacheEnabledMode";
+import type { EvaluationRunEvent } from "./bindings/EvaluationRunEvent";
 
 // Re-export types from bindings
-export * from "./bindings";
+export type * from "./bindings";
 
 // Use createRequire to load CommonJS module
 const require = createRequire(import.meta.url);
+type NativeTensorZeroClientType = {
+  inference(params: string): Promise<string>;
+  experimentalLaunchOptimizationWorkflow(params: string): Promise<string>;
+  experimentalPollOptimization(jobHandle: string): Promise<string>;
+  staleDataset(datasetName: string): Promise<string>;
+};
+
+type NativeTensorZeroClientConstructor = {
+  buildEmbedded(
+    configPath: string,
+    clickhouseUrl?: string | null,
+    postgresUrl?: string | null,
+    timeout?: number | null,
+  ): Promise<NativeTensorZeroClientType>;
+  buildHttp(gatewayUrl: string): Promise<NativeTensorZeroClientType>;
+};
+
+type NativeDatabaseClientType = {
+  getModelUsageTimeseries(params: string): Promise<string>;
+  getModelLatencyQuantiles(params: string): Promise<string>;
+  countDistinctModelsUsed(): Promise<number>;
+  queryEpisodeTable(params: string): Promise<string>;
+  queryEpisodeTableBounds(): Promise<string>;
+};
+
+type NativeDatabaseClientConstructor = {
+  fromClickhouseUrl(url: string): Promise<NativeDatabaseClientType>;
+};
+
+type NativeModule = {
+  TensorZeroClient: NativeTensorZeroClientConstructor;
+  getConfig(configPath: string | null): Promise<string>;
+  DatabaseClient: NativeDatabaseClientConstructor;
+  getQuantiles(): number[];
+  runEvaluationStreaming(
+    gatewayUrl: string,
+    clickhouseUrl: string,
+    configPath: string,
+    evaluationName: string,
+    datasetName: string,
+    variantName: string,
+    concurrency: number,
+    inferenceCache: CacheEnabledMode,
+    callback: (payload: string) => void,
+  ): Promise<void>;
+};
+
 const {
   TensorZeroClient: NativeTensorZeroClient,
   getConfig: nativeGetConfig,
   DatabaseClient: NativeDatabaseClient,
   getQuantiles,
-} = require("../index.cjs") as typeof import("../index");
+  runEvaluationStreaming: nativeRunEvaluationStreaming,
+} = require("../index.cjs") as NativeModule;
 
 // Wrapper class for type safety and convenience
 // since the interface is string in string out
@@ -105,6 +151,54 @@ export async function getConfig(configPath: string | null): Promise<Config> {
 
 // Export quantiles array from migration_0035
 export { getQuantiles };
+
+interface RunEvaluationStreamingParams {
+  gatewayUrl: string;
+  clickhouseUrl: string;
+  configPath: string;
+  evaluationName: string;
+  datasetName: string;
+  variantName: string;
+  concurrency: number;
+  inferenceCache: CacheEnabledMode;
+  onEvent: (event: EvaluationRunEvent) => void;
+}
+
+export async function runEvaluationStreaming(
+  params: RunEvaluationStreamingParams,
+): Promise<void> {
+  const {
+    gatewayUrl,
+    clickhouseUrl,
+    configPath,
+    evaluationName,
+    datasetName,
+    variantName,
+    concurrency,
+    inferenceCache,
+    onEvent,
+  } = params;
+
+  return nativeRunEvaluationStreaming(
+    gatewayUrl,
+    clickhouseUrl,
+    configPath,
+    evaluationName,
+    datasetName,
+    variantName,
+    concurrency,
+    inferenceCache,
+    (payload: string) => {
+      try {
+        const event = JSON.parse(payload) as EvaluationRunEvent;
+        onEvent(event);
+      } catch (error) {
+        // eslint-disable-next-line no-console -- only used for unexpected native payloads
+        console.error("Failed to parse evaluation event", error);
+      }
+    },
+  );
+}
 
 function safeStringify(obj: unknown) {
   try {

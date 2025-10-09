@@ -5865,12 +5865,14 @@ dependencies = [
 name = "tensorzero-node"
 version = "2025.10.1"
 dependencies = [
+ "evaluations",
  "napi",
  "napi-build",
  "napi-derive",
  "serde",
  "serde_json",
  "tensorzero",
+ "tensorzero-core",
  "ts-rs",
  "url",
  "uuid",

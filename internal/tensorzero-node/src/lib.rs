@@ -1,11 +1,22 @@
 #![deny(clippy::all)]
-use std::{path::Path, time::Duration};
+use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
 use url::Url;
 
+use evaluations::stats::{EvaluationInfo, EvaluationUpdate};
+use evaluations::{run_evaluation_core_streaming, EvaluationCoreArgs};
+use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
+use serde::Serialize;
+use serde_json::Value;
 use tensorzero::{
     Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams, InferenceOutput,
     OptimizationJobHandle, QUANTILES,
 };
+use tensorzero_core::{
+    cache::CacheEnabledMode,
+    config::{Config, ConfigFileGlob},
+    db::clickhouse::ClickHouseConnectionInfo,
+};
+use uuid::Uuid;
 
 #[macro_use]
 mod napi_bridge;
@@ -13,6 +24,227 @@ mod database;
 
 #[macro_use]
 extern crate napi_derive;
+
+#[derive(Serialize, ts_rs::TS)]
+#[ts(export)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum EvaluationRunEvent {
+    Start(EvaluationRunStartEvent),
+    Success(EvaluationRunSuccessEvent),
+    Error(EvaluationRunErrorEvent),
+    FatalError(EvaluationRunFatalErrorEvent),
+    Complete(EvaluationRunCompleteEvent),
+}
+
+#[derive(Serialize, ts_rs::TS)]
+pub struct EvaluationRunStartEvent {
+    pub evaluation_run_id: Uuid,
+    pub num_datapoints: usize,
+    pub evaluation_name: String,
+    pub dataset_name: String,
+    pub variant_name: String,
+}
+
+#[derive(Serialize, ts_rs::TS)]
+pub struct EvaluationRunSuccessEvent {
+    pub evaluation_run_id: Uuid,
+    pub datapoint: Value,
+    pub response: Value,
+    pub evaluations: HashMap<String, Option<Value>>,
+    pub evaluator_errors: HashMap<String, String>,
+}
+
+#[derive(Serialize, ts_rs::TS)]
+pub struct EvaluationRunErrorEvent {
+    pub evaluation_run_id: Uuid,
+    pub datapoint_id: Uuid,
+    pub message: String,
+}
+
+#[derive(Serialize, ts_rs::TS)]
+pub struct EvaluationRunFatalErrorEvent {
+    pub evaluation_run_id: Option<Uuid>,
+    pub message: String,
+}
+
+#[derive(Serialize, ts_rs::TS)]
+pub struct EvaluationRunCompleteEvent {
+    pub evaluation_run_id: Uuid,
+}
+
+impl EvaluationRunSuccessEvent {
+    fn try_from_info(evaluation_run_id: Uuid, info: EvaluationInfo) -> Result<Self, napi::Error> {
+        let datapoint = serde_json::to_value(info.datapoint)
+            .map_err(|e| napi::Error::from_reason(format!("Failed to serialize datapoint: {e}")))?;
+        let response = serde_json::to_value(info.response).map_err(|e| {
+            napi::Error::from_reason(format!("Failed to serialize inference response: {e}"))
+        })?;
+
+        Ok(Self {
+            evaluation_run_id,
+            datapoint,
+            response,
+            evaluations: info.evaluations,
+            evaluator_errors: info.evaluator_errors,
+        })
+    }
+}
+
+fn send_event(
+    callback: &ThreadsafeFunction<String>,
+    event: &EvaluationRunEvent,
+) -> Result<(), napi::Error> {
+    let payload = serde_json::to_string(event)
+        .map_err(|e| napi::Error::from_reason(format!("Failed to serialize event: {e}")))?;
+    let status = callback.call(Ok(payload), ThreadsafeFunctionCallMode::NonBlocking);
+    if status == napi::Status::Ok {
+        Ok(())
+    } else {
+        Err(napi::Error::from_status(status))
+    }
+}
+
+#[napi]
+pub async fn run_evaluation_streaming(
+    gateway_url: String,
+    clickhouse_url: String,
+    config_path: String,
+    evaluation_name: String,
+    dataset_name: String,
+    variant_name: String,
+    concurrency: u32,
+    inference_cache: String,
+    callback: ThreadsafeFunction<String>,
+) -> Result<(), napi::Error> {
+    let url = Url::parse(&gateway_url)
+        .map_err(|e| napi::Error::from_reason(format!("Invalid gateway URL: {e}")))?;
+
+    let config_glob = ConfigFileGlob::new_from_path(Path::new(&config_path)).map_err(|e| {
+        napi::Error::from_reason(format!(
+            "Failed to resolve config glob from {config_path}: {e}"
+        ))
+    })?;
+
+    let config = Arc::new(
+        Config::load_from_path_optional_verify_credentials(&config_glob, false)
+            .await
+            .map_err(|e| {
+                napi::Error::from_reason(format!(
+                    "Failed to load configuration from {config_path}: {e}"
+                ))
+            })?,
+    );
+
+    let tensorzero_client = ClientBuilder::new(ClientBuilderMode::HTTPGateway { url })
+        .build()
+        .await
+        .map_err(|e| napi::Error::from_reason(format!("Failed to build TensorZero client: {e}")))?;
+
+    let clickhouse_client = ClickHouseConnectionInfo::new(
+        &clickhouse_url,
+        config.gateway.observability.batch_writes.clone(),
+    )
+    .await
+    .map_err(|e| napi::Error::from_reason(format!("Failed to connect to ClickHouse: {e}")))?;
+
+    let cache_mode = match inference_cache.as_str() {
+        "on" => CacheEnabledMode::On,
+        "off" => CacheEnabledMode::Off,
+        "read_only" => CacheEnabledMode::ReadOnly,
+        "write_only" => CacheEnabledMode::WriteOnly,
+        other => {
+            let _ = callback.abort();
+            return Err(napi::Error::from_reason(format!(
+                "Invalid inference cache setting '{other}'"
+            )));
+        }
+    };
+
+    let concurrency = usize::try_from(concurrency).map_err(|_| {
+        napi::Error::from_reason(format!(
+            "Concurrency {concurrency} is larger than supported on this platform"
+        ))
+    })?;
+
+    let evaluation_run_id = Uuid::now_v7();
+
+    let core_args = EvaluationCoreArgs {
+        tensorzero_client,
+        clickhouse_client: clickhouse_client.clone(),
+        config: config.clone(),
+        dataset_name: dataset_name.clone(),
+        variant_name: variant_name.clone(),
+        evaluation_name: evaluation_name.clone(),
+        evaluation_run_id,
+        inference_cache: cache_mode,
+        concurrency,
+    };
+
+    let result = match run_evaluation_core_streaming(core_args).await {
+        Ok(result) => result,
+        Err(error) => {
+            let _ = callback.abort();
+            return Err(napi::Error::from_reason(format!(
+                "Failed to start evaluation run: {error}"
+            )));
+        }
+    };
+
+    let start_event = EvaluationRunEvent::Start(EvaluationRunStartEvent {
+        evaluation_run_id,
+        num_datapoints: result.run_info.num_datapoints,
+        evaluation_name: evaluation_name.clone(),
+        dataset_name: dataset_name.clone(),
+        variant_name: variant_name.clone(),
+    });
+
+    send_event(&callback, &start_event)?;
+
+    let mut receiver = result.receiver;
+
+    while let Some(update) = receiver.recv().await {
+        let event = match update {
+            EvaluationUpdate::RunInfo(_) => continue,
+            EvaluationUpdate::Success(info) => EvaluationRunEvent::Success(
+                EvaluationRunSuccessEvent::try_from_info(evaluation_run_id, info)?,
+            ),
+            EvaluationUpdate::Error(error) => EvaluationRunEvent::Error(EvaluationRunErrorEvent {
+                evaluation_run_id,
+                datapoint_id: error.datapoint_id,
+                message: error.message,
+            }),
+        };
+
+        send_event(&callback, &event)?;
+    }
+
+    let join_handle = clickhouse_client.batcher_join_handle();
+    drop(clickhouse_client);
+
+    if let Some(handle) = join_handle {
+        if let Err(error) = handle.await {
+            let fatal_event = EvaluationRunEvent::FatalError(EvaluationRunFatalErrorEvent {
+                evaluation_run_id: Some(evaluation_run_id),
+                message: format!(
+                    "Error waiting for evaluations ClickHouse batch writer to finish: {error}"
+                ),
+            });
+            let _ = send_event(&callback, &fatal_event);
+            let _ = callback.abort();
+            return Err(napi::Error::from_reason(format!(
+                "Error waiting for evaluations ClickHouse batch writer to finish: {error}"
+            )));
+        }
+    }
+
+    let complete_event =
+        EvaluationRunEvent::Complete(EvaluationRunCompleteEvent { evaluation_run_id });
+    send_event(&callback, &complete_event)?;
+
+    let _ = callback.abort();
+
+    Ok(())
+}
 
 #[napi(js_name = "TensorZeroClient")]
 pub struct TensorZeroClient {
