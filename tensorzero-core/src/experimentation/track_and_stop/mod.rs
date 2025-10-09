@@ -183,6 +183,13 @@ impl UninitializedTrackAndStopConfig {
             }));
         }
 
+        let keep_variants: Vec<String> = self
+            .candidate_variants
+            .iter()
+            .cloned()
+            .chain(self.fallback_variants.iter().cloned())
+            .collect();
+
         Ok(TrackAndStopConfig {
             metric: self.metric,
             candidate_variants: self.candidate_variants,
@@ -192,7 +199,7 @@ impl UninitializedTrackAndStopConfig {
             epsilon: self.epsilon,
             update_period: Duration::from_secs(self.update_period_s),
             state: Arc::new(ArcSwap::new(Arc::new(
-                TrackAndStopState::nursery_from_variants(variants.keys().cloned().collect()),
+                TrackAndStopState::nursery_from_variants(keep_variants),
             ))),
         })
     }
@@ -345,7 +352,7 @@ async fn update_probabilities(args: UpdateProbabilitiesArgs<'_>) -> Result<(), T
 
     // Fetch feedback from database
     let variant_performances = clickhouse
-        .get_feedback_by_variant(metric_name, function_name, None)
+        .get_feedback_by_variant(metric_name, function_name, Some(candidate_variants))
         .await?;
 
     // Compute new state in blocking task (CPU-bound work)
@@ -486,6 +493,16 @@ impl TrackAndStopState {
         delta: f64,
         epsilon: f64,
     ) -> Result<Self, TrackAndStopError> {
+        let variant_performances = if variant_performances.len() > candidate_variants.len() {
+            tracing::warn!("Feedback is being filtered out for non-candidate variants. Current candidate variants: {candidate_variants:?}");
+            variant_performances
+                .into_iter()
+                .filter(|feedback| candidate_variants.contains(&feedback.variant_name))
+                .collect()
+        } else {
+            variant_performances
+        };
+
         // If we only have one variant, we'll simply use it
         if candidate_variants.len() == 1 {
             return Ok(TrackAndStopState::Stopped {
@@ -1404,10 +1421,10 @@ mod tests {
 
         // Total variants = 2 bandits + 1 nursery = 3
         // Nursery probability = 1/3 ≈ 0.333
-        // With uniform_sample = 0.5 > 0.333, should select from bandits
-        // Rescaling to bandit probabilities: 0.5 maps to B
+        // With uniform_sample = 0.6 > 0.333, should select from bandits
+        // Rescaling to bandit probabilities: 0.5 should map to A
         let result = state.sample(&active, 0.5).unwrap();
-        assert_eq!(result, Some("B"));
+        assert_eq!(result, Some("A"));
     }
 
     #[test]
@@ -1471,5 +1488,63 @@ mod tests {
             result.unwrap_err(),
             TrackAndStopError::NegativeProbability { .. }
         ));
+    }
+
+    #[test]
+    fn test_track_and_stop_state_bandits_only_excludes_fallback_feedback() {
+        let candidates = vec!["A".to_string(), "B".to_string()];
+        let feedback = vec![
+            create_feedback("A", 20, 0.5, 0.1),
+            create_feedback("B", 20, 0.5, 0.1),
+            create_feedback("fallback", 20, 0.9, 0.1),
+        ];
+
+        let state =
+            TrackAndStopState::new(&candidates, feedback, 5, 0.1, 0.0).expect("state builds");
+
+        let TrackAndStopState::BanditsOnly {
+            sampling_probabilities,
+        } = state
+        else {
+            panic!("expected BanditsOnly state");
+        };
+
+        assert_eq!(sampling_probabilities.len(), 2);
+        assert!(sampling_probabilities.contains_key("A"));
+        assert!(sampling_probabilities.contains_key("B"));
+        assert!(
+            !sampling_probabilities.contains_key("fallback"),
+            "fallback variants should be filtered out before probability estimation"
+        );
+    }
+
+    #[test]
+    fn test_track_and_stop_state_nursery_and_bandits_filters_fallbacks() {
+        let candidates = vec!["A".to_string(), "B".to_string(), "D".to_string()];
+        let feedback = vec![
+            create_feedback("A", 20, 0.5, 0.1),
+            create_feedback("B", 20, 0.4, 0.1),
+            create_feedback("D", 2, 0.3, 0.1), // still in nursery
+            create_feedback("fallback", 30, 0.9, 0.1),
+        ];
+
+        let state =
+            TrackAndStopState::new(&candidates, feedback, 5, 0.1, 0.0).expect("state builds");
+
+        let TrackAndStopState::NurseryAndBandits {
+            nursery,
+            sampling_probabilities,
+        } = state
+        else {
+            panic!("expected NurseryAndBandits state");
+        };
+
+        assert_eq!(nursery.variants, vec!["D".to_string()]);
+        assert!(sampling_probabilities.contains_key("A"));
+        assert!(sampling_probabilities.contains_key("B"));
+        assert!(
+            !sampling_probabilities.contains_key("fallback"),
+            "fallback variants should not appear in bandit probabilities"
+        );
     }
 }
