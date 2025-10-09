@@ -436,7 +436,7 @@ export function EvaluationTable({
                             {index === 0 && (
                               <TableCell
                                 rowSpan={filteredVariants.length}
-                                className="max-w-[150px] align-middle"
+                                className="max-w-[150px] text-center align-middle"
                               >
                                 <TableItemText text={datapoint.name} />
                               </TableCell>

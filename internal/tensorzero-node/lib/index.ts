@@ -15,9 +15,11 @@ import { ModelUsageTimePoint } from "./bindings/ModelUsageTimePoint";
 import { ModelLatencyDatapoint } from "./bindings/ModelLatencyDatapoint";
 import type { CacheEnabledMode } from "./bindings/CacheEnabledMode";
 import type { EvaluationRunEvent } from "./bindings/EvaluationRunEvent";
+import { logger } from "./utils/logger";
 
 // Re-export types from bindings
 export type * from "./bindings";
+export { createLogger } from "./utils/logger";
 
 // Use createRequire to load CommonJS module
 const require = createRequire(import.meta.url);
@@ -66,7 +68,7 @@ type NativeModule = {
       concurrency: number;
       inferenceCache: CacheEnabledMode;
     },
-    callback: (payload: string) => void,
+    callback: (err: Error | null, payload: string | null) => void,
   ): Promise<void>;
 };
 
@@ -171,14 +173,44 @@ export async function runEvaluationStreaming(
 ): Promise<void> {
   const { onEvent, ...nativeParams } = params;
 
-  return nativeRunEvaluationStreaming(nativeParams, (payload: string) => {
-    try {
-      const event = JSON.parse(payload) as EvaluationRunEvent;
-      onEvent(event);
-    } catch (error) {
-      console.error("Failed to parse evaluation event", error);
-    }
-  });
+  return nativeRunEvaluationStreaming(
+    nativeParams,
+    (err: Error | null, payload: string | null) => {
+      // Handle errors from the native callback
+      if (err) {
+        logger.error("Native evaluation streaming error:", err);
+        return;
+      }
+
+      // Check if payload is null or undefined
+      if (!payload) {
+        logger.error("Received null or undefined payload from native code");
+        return;
+      }
+
+      try {
+        const event = JSON.parse(payload) as EvaluationRunEvent;
+
+        // Check if event is null or missing the required 'type' property
+        if (!event || typeof event !== "object" || !("type" in event)) {
+          logger.error(
+            "Received invalid evaluation event from native code. Payload:",
+            payload,
+          );
+          return;
+        }
+
+        onEvent(event);
+      } catch (error) {
+        logger.error(
+          "Failed to parse evaluation event. Payload:",
+          payload,
+          "Error:",
+          error,
+        );
+      }
+    },
+  );
 }
 
 function safeStringify(obj: unknown) {
