@@ -17,6 +17,7 @@ use tokio::sync::RwLockWriteGuard;
 use url::Url;
 
 mod batching;
+pub mod inference_queries;
 pub mod migration_manager;
 pub mod query_builder;
 mod select_queries;

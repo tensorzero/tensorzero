@@ -34,7 +34,10 @@ export async function loader({ request }: Route.LoaderArgs) {
     countInferencesByFunction(),
   ]);
 
-  const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
+  const totalInferences = countsInfo.reduce(
+    (acc, curr) => acc + Number(curr.count),
+    0,
+  );
 
   return {
     inferences,
