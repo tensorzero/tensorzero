@@ -11,8 +11,6 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { isErrorLike } from "~/utils/common";
 import { memo } from "react";
-import { Link } from "react-router";
-import { toInferenceUrl } from "~/utils/urls";
 
 const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
   function DatapointPlaygroundOutput(props) {
@@ -73,23 +71,11 @@ const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
 
     const output =
       "content" in query.data ? query.data.content : query.data.output;
-    const inferenceId = query.data.inference_id;
 
     return (
       <div className="group relative" data-testid="datapoint-playground-output">
         {refreshButton}
         <Output output={output} maxHeight={480} />
-        {inferenceId && (
-          <div className="mt-2 text-xs">
-            Inference ID:{" "}
-            <Link
-              to={toInferenceUrl(inferenceId)}
-              className="font-mono text-xs text-blue-600 hover:text-blue-800 hover:underline"
-            >
-              {inferenceId}
-            </Link>
-          </div>
-        )}
       </div>
     );
   },
