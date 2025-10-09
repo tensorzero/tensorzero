@@ -53,6 +53,7 @@ pub fn setup_howdy(
         info!("Pseudonymous usage analytics is disabled");
         return;
     }
+    // TODO(shuyangli): Don't like this...
     if clickhouse.variant_name() == "Disabled" {
         return;
     }

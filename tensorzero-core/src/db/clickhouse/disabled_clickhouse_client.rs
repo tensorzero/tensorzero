@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use secrecy::SecretString;
 use std::collections::HashMap;
 
 use crate::config::Config;
@@ -21,6 +22,14 @@ struct DisabledClickHouseClient;
 
 #[async_trait]
 impl ClickHouseClient for DisabledClickHouseClient {
+    fn database_url(&self) -> &SecretString {
+        &SecretString::new("disabled".to_string())
+    }
+
+    fn cluster_name(&self) -> &Option<String> {
+        &None
+    }
+
     fn database(&self) -> &str {
         "disabled"
     }

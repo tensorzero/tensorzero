@@ -11,7 +11,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fmt;
+use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
 use url::Url;
@@ -47,8 +47,14 @@ use super::HealthCheckable;
 /// For advanced mocking scenarios, you can use `mockall` to create custom mocks.
 #[async_trait]
 #[automock]
-pub trait ClickHouseClient: Send + Sync + HealthCheckable {
-    /// Returns the name of the database
+pub trait ClickHouseClient: Send + Sync + Debug + HealthCheckable {
+    /// Returns the database URL
+    fn database_url(&self) -> &SecretString;
+
+    /// Returns the cluster name
+    fn cluster_name(&self) -> &Option<String>;
+
+    /// Returns the database name
     fn database(&self) -> &str;
 
     /// Returns the batch writer join handle if batching is enabled
@@ -121,7 +127,7 @@ pub trait ClickHouseClient: Send + Sync + HealthCheckable {
 }
 
 /// Production implementation of ClickHouseClient
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct ProductionClickHouseClient {
     database_url: SecretString,
     cluster_name: Option<String>,
@@ -130,39 +136,14 @@ struct ProductionClickHouseClient {
     batch_sender: Option<Arc<BatchSender>>,
 }
 
-impl fmt::Debug for ProductionClickHouseClient {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ProductionClickHouseClient")
-            .field("database_url", &"<redacted>")
-            .field("cluster_name", &self.cluster_name)
-            .field("database", &self.database)
-            .field("client", &self.client)
-            .field("batch_sender", &self.batch_sender)
-            .finish()
-    }
-}
-
-
 /// Disabled implementation of ClickHouseClient (no-op)
 #[derive(Debug, Clone, Copy)]
 struct DisabledClickHouseClient;
 
 /// Wrapper for ClickHouse client implementations
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ClickHouseConnectionInfo {
     inner: Arc<dyn ClickHouseClient>,
-
-    // TODO: remove these from the public ClickhouseConnectionInfo struct.
-    pub database_url: SecretString,
-    pub database: String,
-}
-
-impl fmt::Debug for ClickHouseConnectionInfo {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ClickHouseConnectionInfo")
-            .field("variant", &self.inner.variant_name())
-            .finish()
-    }
 }
 
 pub fn make_clickhouse_http_client() -> Result<Client, Error> {
@@ -290,27 +271,20 @@ impl ClickHouseConnectionInfo {
     pub fn new_disabled() -> Self {
         Self {
             inner: Arc::new(DisabledClickHouseClient),
-            database_url: String::new().into(),
-            database: String::new(),
         }
     }
-    
+
     #[cfg(test)]
     pub fn new_mock(inner: Arc<dyn ClickHouseClient>) -> Self {
         Self {
             inner,
-            database_url: String::new().into(),
-            database: String::new(),
         }
     }
 
-    // TODO: Remove the disabled one.
     #[cfg(test)]
     pub fn new_fake() -> Self {
         Self {
             inner: Arc::new(FakeClickHouseClient::new(true)),
-            database_url: String::new().into(),
-            database: String::new(),
         }
     }
 
@@ -498,8 +472,6 @@ impl ProductionClickHouseClient {
             // (since the batcher itself always performs direct writes)
             let temp_connection_info = ClickHouseConnectionInfo {
                 inner: Arc::new(client.clone()),
-                database_url: client.database_url.clone(),
-                database: client.database.clone(),
             };
             let batcher = BatchSender::new(temp_connection_info, batch_config)?;
             client.batch_sender = Some(Arc::new(batcher));
@@ -508,8 +480,6 @@ impl ProductionClickHouseClient {
         // If the connection is unhealthy, we won't be able to run / check migrations. So we just fail here.
         let temp_connection_info = ClickHouseConnectionInfo {
             inner: Arc::new(client.clone()),
-            database_url: client.database_url.clone(),
-            database: client.database.clone(),
         };
         temp_connection_info.inner.health().await?;
         Ok(client)
@@ -520,6 +490,14 @@ impl ProductionClickHouseClient {
 // Trait implementations for ProductionClickHouseClient
 #[async_trait]
 impl ClickHouseClient for ProductionClickHouseClient {
+    fn database_url(&self) -> &SecretString {
+        &self.database_url
+    }
+
+    fn cluster_name(&self) -> &Option<String> {
+        &self.cluster_name
+    }
+
     fn database(&self) -> &str {
         &self.database
     }
@@ -786,8 +764,6 @@ impl ClickHouseClient for ProductionClickHouseClient {
         // Create a temporary wrapper to call check_table_exists
         let temp_connection_info = ClickHouseConnectionInfo {
             inner: Arc::new(self.clone()),
-            database_url: self.database_url.clone(),
-            database: self.database.clone(),
         };
         let migrations_table_exists =
             check_table_exists(&temp_connection_info, "TensorZeroMigration", "0000").await?;
@@ -874,8 +850,6 @@ impl ClickHouseClient for ProductionClickHouseClient {
         // Create a temporary wrapper to call run_query_synchronous
         let temp_connection_info = ClickHouseConnectionInfo {
             inner: Arc::new(self.clone()),
-            database_url: self.database_url.clone(),
-            database: self.database.clone(),
         };
         temp_connection_info
             .run_query_synchronous_no_params(query)

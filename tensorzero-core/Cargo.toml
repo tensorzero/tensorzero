@@ -137,6 +137,7 @@ pin-project = "1.1.10"
 once_cell = "1.21.3"
 clarabel = { version = "0", default-features = false, features = ["serde"]}
 typed-builder = "0.22.0"
+mockall = "0.13"
 
 [dev-dependencies]
 tracing-test = { workspace = true }

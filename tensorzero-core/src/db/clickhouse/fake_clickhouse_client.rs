@@ -58,12 +58,19 @@ async fn write_fake<T: serde::Serialize + Send + Sync>(
 
 #[async_trait]
 impl ClickHouseClient for FakeClickHouseClient {
-    fn database(&self) -> &str {
-        "mock"
+    /// Returns the database URL
+    fn database_url(&self) -> &SecretString {
+        &SecretString::new("fake".to_string())
     }
 
-    fn batcher_join_handle(&self) -> Option<BatchWriterHandle> {
-        None
+    /// Returns the cluster name
+    fn cluster_name(&self) -> &Option<String> {
+        &None
+    }
+
+    /// Returns the database name
+    fn database(&self) -> &str {
+        "fake"
     }
 
     async fn write_batched_internal(
@@ -167,7 +174,7 @@ impl ClickHouseClient for FakeClickHouseClient {
     }
 
     fn variant_name(&self) -> &'static str {
-        "Mock"
+        "Fake"
     }
 }
 
@@ -178,7 +185,7 @@ impl HealthCheckable for FakeClickHouseClient {
             Ok(())
         } else {
             Err(ErrorDetails::ClickHouseConnection {
-                message: "Mock ClickHouse is not healthy".to_string(),
+                message: "Fake ClickHouse is not healthy".to_string(),
             }
             .into())
         }

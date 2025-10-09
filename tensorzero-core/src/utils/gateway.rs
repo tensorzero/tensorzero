@@ -17,7 +17,6 @@ use tracing::instrument;
 use crate::config::{Config, ConfigFileGlob};
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
-use crate::db::clickhouse::MockClickHouseClient;
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
