@@ -10,6 +10,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
@@ -35,20 +36,129 @@ use query_builder::ListInferencesParams;
 
 use super::HealthCheckable;
 
+/// Trait defining the interface for ClickHouse database operations.
+/// This allows for production, mock, and disabled implementations.
+#[async_trait]
+pub trait ClickHouseClient: Send + Sync {
+    /// Returns the name of the database
+    fn database(&self) -> &str;
+
+    /// Returns the batch writer join handle if batching is enabled
+    fn batcher_join_handle(&self) -> Option<BatchWriterHandle>;
+
+    /// Writes rows to ClickHouse using batched writes (if enabled)
+    async fn write_batched_internal(
+        &self,
+        rows: Vec<String>,
+        table: TableName,
+    ) -> Result<(), Error>;
+
+    /// Writes rows to ClickHouse without batching
+    async fn write_non_batched_internal(
+        &self,
+        rows: Vec<String>,
+        table: TableName,
+    ) -> Result<(), Error>;
+
+    /// Runs a query with parameters, waiting for mutations to complete
+    async fn run_query_synchronous(
+        &self,
+        query: String,
+        parameters: &HashMap<&str, &str>,
+    ) -> Result<ClickHouseResponse, Error>;
+
+    /// Runs a query with parameters and configurable error logging
+    async fn run_query_synchronous_with_err_logging(
+        &self,
+        query: String,
+        parameters: &HashMap<&str, &str>,
+        err_logging: bool,
+    ) -> Result<ClickHouseResponse, Error>;
+
+    /// Runs a query with external data
+    async fn run_query_with_external_data(
+        &self,
+        external_data: ExternalDataInfo,
+        query: String,
+    ) -> Result<ClickHouseResponse, Error>;
+
+    /// Checks if the database and migrations table exist
+    async fn check_database_and_migrations_table_exists(&self) -> Result<bool, Error>;
+
+    /// Creates the database and migrations table
+    async fn create_database_and_migrations_table(&self) -> Result<(), Error>;
+
+    /// Lists inferences from ClickHouse
+    async fn list_inferences(
+        &self,
+        config: &Config,
+        opts: &ListInferencesParams<'_>,
+    ) -> Result<Vec<StoredInference>, Error>;
+
+    /// Returns whether a cluster is configured
+    fn is_cluster_configured(&self) -> bool;
+
+    /// Returns the "ON CLUSTER {name}" string if a cluster is configured
+    fn get_on_cluster_name(&self) -> String;
+
+    /// Returns the table engine name, potentially with replication configured
+    fn get_maybe_replicated_table_engine_name(
+        &self,
+        args: GetMaybeReplicatedTableEngineNameArgs<'_>,
+    ) -> String;
+
+    /// Performs a health check on the connection
+    async fn health(&self) -> Result<(), Error>;
+
+    /// Returns the variant name (for logging/debugging)
+    fn variant_name(&self) -> &'static str;
+}
+
+/// Production implementation of ClickHouseClient
+#[derive(Clone)]
+pub struct ProductionClickHouseClient {
+    database_url: SecretString,
+    cluster_name: Option<String>,
+    database: String,
+    client: Client,
+    batch_sender: Option<Arc<BatchSender>>,
+}
+
+impl fmt::Debug for ProductionClickHouseClient {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ProductionClickHouseClient")
+            .field("database_url", &"<redacted>")
+            .field("cluster_name", &self.cluster_name)
+            .field("database", &self.database)
+            .field("client", &self.client)
+            .field("batch_sender", &self.batch_sender)
+            .finish()
+    }
+}
+
+/// Mock implementation of ClickHouseClient for testing
 #[derive(Debug, Clone)]
-pub enum ClickHouseConnectionInfo {
-    Disabled,
-    Mock {
-        mock_data: Arc<RwLock<HashMap<String, Vec<serde_json::Value>>>>,
-        healthy: bool,
-    },
-    Production {
-        database_url: SecretString,
-        cluster_name: Option<String>,
-        database: String,
-        client: Client,
-        batch_sender: Option<Arc<BatchSender>>,
-    },
+pub struct MockClickHouseClient {
+    mock_data: Arc<RwLock<HashMap<String, Vec<serde_json::Value>>>>,
+    healthy: bool,
+}
+
+/// Disabled implementation of ClickHouseClient (no-op)
+#[derive(Debug, Clone, Copy)]
+pub struct DisabledClickHouseClient;
+
+/// Wrapper for ClickHouse client implementations
+#[derive(Clone)]
+pub struct ClickHouseConnectionInfo {
+    inner: Arc<dyn ClickHouseClient>,
+}
+
+impl fmt::Debug for ClickHouseConnectionInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ClickHouseConnectionInfo")
+            .field("variant", &self.inner.variant_name())
+            .finish()
+    }
 }
 
 pub fn make_clickhouse_http_client() -> Result<Client, Error> {
@@ -119,6 +229,189 @@ impl ClickHouseConnectionInfo {
     ///
     /// However, for tests that directly test ClickHouse behavior, you can directly create the struct.
     pub async fn new(database_url: &str, batch_config: BatchWritesConfig) -> Result<Self, Error> {
+        let client = ProductionClickHouseClient::new(database_url, batch_config).await?;
+        Ok(Self {
+            inner: Arc::new(client),
+        })
+    }
+
+    pub fn new_mock(healthy: bool) -> Self {
+        Self {
+            inner: Arc::new(MockClickHouseClient::new(healthy)),
+        }
+    }
+
+    pub fn new_disabled() -> Self {
+        Self {
+            inner: Arc::new(DisabledClickHouseClient),
+        }
+    }
+
+    pub fn batcher_join_handle(&self) -> Option<BatchWriterHandle> {
+        self.inner.batcher_join_handle()
+    }
+
+    pub fn database(&self) -> &str {
+        self.inner.database()
+    }
+
+    /// Writes rows to ClickHouse using our batched write implementation
+    /// (if enabled in the config)
+    /// The provided rows might not yet be sent to ClickHouse when this function completes.
+    pub async fn write_batched(
+        &self,
+        rows: &[impl Serialize + Send + Sync],
+        table: TableName,
+    ) -> Result<(), Error> {
+        let rows_json: Result<Vec<String>, Error> = rows
+            .iter()
+            .map(|row| {
+                serde_json::to_string(row).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: e.to_string(),
+                    })
+                })
+            })
+            .collect();
+        self.inner.write_batched_internal(rows_json?, table).await
+    }
+
+    /// Write rows to ClickHouse without, without using our batched write implementation.
+    /// The provided rows will have been sent to ClickHouse when this function completes.
+    pub async fn write_non_batched<T: Serialize + Send + Sync>(
+        &self,
+        rows: Rows<'_, T>,
+        table: TableName,
+    ) -> Result<(), Error> {
+        let rows_json = rows.as_json()?;
+        self.inner
+            .write_non_batched_internal(rows_json.into_owned(), table)
+            .await
+    }
+
+    /// Test helper: reads from the table `table` in our mock DB and returns an element that has (serialized) `column` equal to `value`.
+    /// Returns None if no such element is found.
+    #[cfg(test)]
+    #[expect(clippy::missing_panics_doc)]
+    pub async fn read(&self, table: &str, column: &str, value: &str) -> Option<serde_json::Value> {
+        // Only MockClickHouseClient supports this
+        let inner_any = &self.inner as &dyn std::any::Any;
+        if let Some(mock) = inner_any.downcast_ref::<MockClickHouseClient>() {
+            let mock_data = mock.mock_data.read().await;
+            let table = mock_data.get(table).unwrap();
+            for row in table {
+                if let Some(value_in_row) = row.get(column) {
+                    if value_in_row.as_str() == Some(value) {
+                        return Some(row.clone());
+                    }
+                }
+            }
+            None
+        } else {
+            panic!("read() is only supported on MockClickHouseClient")
+        }
+    }
+
+    pub fn is_cluster_configured(&self) -> bool {
+        self.inner.is_cluster_configured()
+    }
+
+    /// Runs a query with the given parameters, waiting for mutations to complete
+    /// using `mutations_sync=2` and `alter_sync=2`.
+    /// This ensures that we can run `ALTER TABLE ADD COLUMN` in a migration
+    /// and have the column available once the query completes.
+    pub async fn run_query_synchronous(
+        &self,
+        query: String,
+        parameters: &HashMap<&str, &str>,
+    ) -> Result<ClickHouseResponse, Error> {
+        self.inner.run_query_synchronous(query, parameters).await
+    }
+
+    pub async fn run_query_synchronous_with_err_logging(
+        &self,
+        query: String,
+        parameters: &HashMap<&str, &str>,
+        err_logging: bool,
+    ) -> Result<ClickHouseResponse, Error> {
+        self.inner
+            .run_query_synchronous_with_err_logging(query, parameters, err_logging)
+            .await
+    }
+
+    // TODO: deprecate this
+    pub async fn run_query_synchronous_no_params(
+        &self,
+        query: String,
+    ) -> Result<ClickHouseResponse, Error> {
+        self.run_query_synchronous(query, &HashMap::default()).await
+    }
+
+    pub async fn run_query_synchronous_no_params_de<T>(&self, query: String) -> Result<T, Error>
+    where
+        T: DeserializeOwned,
+    {
+        let result = self
+            .run_query_synchronous(query, &HashMap::default())
+            .await?;
+        serde_json::from_str(&result.response).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: e.to_string(),
+            })
+        })
+    }
+
+    /// Sometimes you might want to treat the data you're sending as a table if you're going
+    /// to do some analysis or filtering prior to inserting it into ClickHouse.
+    /// This function allows you to do this with ClickHouse's external data feature.
+    /// https://clickhouse.com/docs/engines/table-engines/special/external-data
+    pub async fn run_query_with_external_data(
+        &self,
+        external_data: ExternalDataInfo,
+        query: String,
+    ) -> Result<ClickHouseResponse, Error> {
+        self.inner
+            .run_query_with_external_data(external_data, query)
+            .await
+    }
+
+    pub async fn check_database_and_migrations_table_exists(&self) -> Result<bool, Error> {
+        self.inner
+            .check_database_and_migrations_table_exists()
+            .await
+    }
+
+    pub async fn create_database_and_migrations_table(&self) -> Result<(), Error> {
+        self.inner.create_database_and_migrations_table().await
+    }
+
+    pub async fn list_inferences(
+        &self,
+        config: &Config,
+        opts: &ListInferencesParams<'_>,
+    ) -> Result<Vec<StoredInference>, Error> {
+        self.inner.list_inferences(config, opts).await
+    }
+
+    pub fn get_on_cluster_name(&self) -> String {
+        self.inner.get_on_cluster_name()
+    }
+
+    pub fn get_maybe_replicated_table_engine_name(
+        &self,
+        args: GetMaybeReplicatedTableEngineNameArgs<'_>,
+    ) -> String {
+        self.inner.get_maybe_replicated_table_engine_name(args)
+    }
+
+    pub fn variant_name(&self) -> &'static str {
+        self.inner.variant_name()
+    }
+}
+
+impl ProductionClickHouseClient {
+    /// Create a new production ClickHouse client from a database URL.
+    async fn new(database_url: &str, batch_config: BatchWritesConfig) -> Result<Self, Error> {
         // Add a query string for the database using the URL crate
         let mut database_url = Url::parse(database_url).map_err(|_| {
             Error::new(ErrorDetails::Config {
@@ -159,7 +452,7 @@ impl ClickHouseConnectionInfo {
             }
         };
 
-        let mut connection_info = Self::Production {
+        let mut client = Self {
             database_url,
             cluster_name,
             database,
@@ -167,145 +460,77 @@ impl ClickHouseConnectionInfo {
             batch_sender: None,
         };
 
-        let orig_connection_info = connection_info.clone();
-        match &mut connection_info {
-            Self::Production { batch_sender, .. } => {
-                if batch_config.enabled {
-                    // Create the batch sender using the `ClickHouseConnectionInfo` without the `batch_sender` set
-                    // (since the batcher itself always performs direct writes)
-                    let batcher = BatchSender::new(orig_connection_info, batch_config)?;
-                    *batch_sender = Some(Arc::new(batcher));
-                }
-            }
-            Self::Mock { .. } | Self::Disabled { .. } => {}
+        // Create the batch sender if enabled
+        if batch_config.enabled {
+            // Create a temporary ClickHouseConnectionInfo without the batch_sender
+            // (since the batcher itself always performs direct writes)
+            let temp_connection_info = ClickHouseConnectionInfo {
+                inner: Arc::new(client.clone()),
+            };
+            let batcher = BatchSender::new(temp_connection_info, batch_config)?;
+            client.batch_sender = Some(Arc::new(batcher));
         }
-        // If the connection is unhealthy, we won't be able to run / check migrations. So we just fail here.
-        connection_info.health().await?;
-        Ok(connection_info)
-    }
 
-    pub fn new_mock(healthy: bool) -> Self {
-        Self::Mock {
+        // If the connection is unhealthy, we won't be able to run / check migrations. So we just fail here.
+        let temp_connection_info = ClickHouseConnectionInfo {
+            inner: Arc::new(client.clone()),
+        };
+        temp_connection_info.inner.health().await?;
+        Ok(client)
+    }
+}
+
+impl MockClickHouseClient {
+    pub fn new(healthy: bool) -> Self {
+        Self {
             mock_data: Arc::new(RwLock::new(HashMap::new())),
             healthy,
         }
     }
+}
 
-    pub fn batcher_join_handle(&self) -> Option<BatchWriterHandle> {
-        match self {
-            Self::Production { batch_sender, .. } => batch_sender
-                .as_ref()
-                .map(|sender| sender.writer_handle.clone()),
-            _ => None,
-        }
+// Trait implementations for ProductionClickHouseClient
+#[async_trait]
+impl ClickHouseClient for ProductionClickHouseClient {
+    fn database(&self) -> &str {
+        &self.database
     }
 
-    pub fn new_disabled() -> Self {
-        Self::Disabled
+    fn batcher_join_handle(&self) -> Option<BatchWriterHandle> {
+        self.batch_sender.as_ref().map(|s| s.writer_handle.clone())
     }
 
-    pub fn database(&self) -> &str {
-        match self {
-            Self::Disabled => "",
-            Self::Mock { .. } => "mock-database",
-            Self::Production { database, .. } => database,
-        }
-    }
-
-    /// Writes rows to ClickHouse using our batched write implementation
-    /// (if enabled in the config)
-    /// The provided rows might not yet be sent to ClickHouse when this function completes.
-    pub async fn write_batched(
+    async fn write_batched_internal(
         &self,
-        rows: &[impl Serialize + Send + Sync],
+        rows: Vec<String>,
         table: TableName,
     ) -> Result<(), Error> {
-        match self {
-            Self::Disabled => Ok(()),
-            Self::Mock { mock_data, .. } => {
-                write_mock(
-                    Rows::Unserialized(rows),
-                    table,
-                    &mut mock_data.write().await,
-                )
-                .await
-            }
-            Self::Production {
-                database_url,
-                client,
-                batch_sender,
-                ..
-            } => {
-                write_production(
-                    database_url,
-                    client,
-                    Rows::Unserialized(rows),
-                    table,
-                    batch_sender.as_deref(),
-                )
-                .await
-            }
-        }
+        write_production(
+            &self.database_url,
+            &self.client,
+            Rows::<String>::Serialized(&rows),
+            table,
+            self.batch_sender.as_deref(),
+        )
+        .await
     }
 
-    /// Write rows to ClickHouse without, without using our batched write implementation.
-    /// The provided rows will have been sent to ClickHouse when this function completes.
-    pub async fn write_non_batched<T: Serialize + Send + Sync>(
+    async fn write_non_batched_internal(
         &self,
-        rows: Rows<'_, T>,
+        rows: Vec<String>,
         table: TableName,
     ) -> Result<(), Error> {
-        match self {
-            Self::Disabled => Ok(()),
-            Self::Mock { mock_data, .. } => {
-                write_mock(rows, table, &mut mock_data.write().await).await
-            }
-            Self::Production {
-                database_url,
-                client,
-                ..
-            } => write_production(database_url, client, rows, table, None).await,
-        }
+        write_production(
+            &self.database_url,
+            &self.client,
+            Rows::<String>::Serialized(&rows),
+            table,
+            None,
+        )
+        .await
     }
 
-    /// Test helper: reads from the table `table` in our mock DB and returns an element that has (serialized) `column` equal to `value`.
-    /// Returns None if no such element is found.
-    #[cfg(test)]
-    #[expect(clippy::missing_panics_doc)]
-    pub async fn read(&self, table: &str, column: &str, value: &str) -> Option<serde_json::Value> {
-        match self {
-            Self::Disabled => None,
-            Self::Mock { mock_data, .. } => {
-                let mock_data = mock_data.read().await;
-                let table = mock_data.get(table).unwrap();
-                for row in table {
-                    if let Some(value_in_row) = row.get(column) {
-                        if value_in_row.as_str() == Some(value) {
-                            return Some(row.clone());
-                        }
-                    }
-                }
-                None
-            }
-            Self::Production { .. } => {
-                panic!("Production ClickHouse client can't be used for reading data in tests")
-            }
-        }
-    }
-
-    pub fn is_cluster_configured(&self) -> bool {
-        match self {
-            Self::Disabled => false,
-            Self::Mock { .. } => false,
-            Self::Production { cluster_name, .. } => cluster_name.is_some(),
-        }
-    }
-
-    /// Runs a query with the given parameters, waiting for mutations to complete
-    /// using `mutations_sync=2` and `alter_sync=2`.
-    /// This ensures that we can run `ALTER TABLE ADD COLUMN` in a migration
-    /// and have the column available once the query completes.
-    pub async fn run_query_synchronous(
+    async fn run_query_synchronous(
         &self,
         query: String,
         parameters: &HashMap<&str, &str>,
@@ -314,369 +539,290 @@ impl ClickHouseConnectionInfo {
             .await
     }
 
-    pub async fn run_query_synchronous_with_err_logging(
+    async fn run_query_synchronous_with_err_logging(
         &self,
         query: String,
         parameters: &HashMap<&str, &str>,
         err_logging: bool,
     ) -> Result<ClickHouseResponse, Error> {
-        match self {
-            Self::Disabled => Ok(ClickHouseResponse {
-                response: String::new(),
-                metadata: ClickHouseResponseMetadata {
-                    read_rows: 0,
-                    written_rows: 0,
-                },
-            }),
-            Self::Mock { .. } => Ok(ClickHouseResponse {
-                response: String::new(),
-                metadata: ClickHouseResponseMetadata {
-                    read_rows: 0,
-                    written_rows: 0,
-                },
-            }),
-            Self::Production {
-                database_url,
-                client,
-                ..
-            } => {
-                let mut database_url = Url::parse(database_url.expose_secret()).map_err(|e| Error::new(ErrorDetails::ClickHouseQuery { message: format!("Error parsing ClickHouse URL: {e}. This should never happen. Please submit a bug report at https://github.com/tensorzero/tensorzero/issues/new") }))?;
-                // Add query parameters if provided
-                for (key, value) in parameters {
-                    let param_key = format!("param_{key}");
-                    database_url
-                        .query_pairs_mut()
-                        .append_pair(&param_key, value);
-                }
-                database_url
-                    .query_pairs_mut()
-                    .append_pair("mutations_sync", "2");
-                database_url
-                    .query_pairs_mut()
-                    .append_pair("alter_sync", "2");
-                let res = client
-                    .post(database_url)
-                    .body(query)
-                    .send()
-                    .await
-                    .map_err(|e| {
-                        Error::new_with_err_logging(
-                            ErrorDetails::ClickHouseQuery {
-                                message: DisplayOrDebugGateway::new(e).to_string(),
-                            },
-                            err_logging,
-                        )
-                    })?;
-                let status = res.status();
+        let mut database_url = Url::parse(self.database_url.expose_secret()).map_err(|e| Error::new(ErrorDetails::ClickHouseQuery { message: format!("Error parsing ClickHouse URL: {e}. This should never happen. Please submit a bug report at https://github.com/tensorzero/tensorzero/issues/new") }))?;
+        // Add query parameters if provided
+        for (key, value) in parameters {
+            let param_key = format!("param_{key}");
+            database_url
+                .query_pairs_mut()
+                .append_pair(&param_key, value);
+        }
+        database_url
+            .query_pairs_mut()
+            .append_pair("mutations_sync", "2");
+        database_url
+            .query_pairs_mut()
+            .append_pair("alter_sync", "2");
+        let res = self.client
+            .post(database_url)
+            .body(query)
+            .send()
+            .await
+            .map_err(|e| {
+                Error::new_with_err_logging(
+                    ErrorDetails::ClickHouseQuery {
+                        message: DisplayOrDebugGateway::new(e).to_string(),
+                    },
+                    err_logging,
+                )
+            })?;
+        let status = res.status();
 
-                // Get the ClickHouse summary info from the headers
-                let metadata = if let Some(summary) = res.headers().get("x-clickhouse-summary") {
-                    // NOTE: X-Clickhouse-Summary is a ClickHouse-specific header that contains information about the query execution.
-                    // It is not formally specified in the ClickHouse documentation so we only warn if it isn't working but won't error here.
-                    let summary_str = summary.to_str().map_err(|e| {
-                        Error::new_with_err_logging(
-                            ErrorDetails::ClickHouseQuery {
-                                message: format!(
-                                    "Failed to parse x-clickhouse-summary header: {e}"
-                                ),
-                            },
-                            err_logging,
-                        )
-                    })?;
+        // Get the ClickHouse summary info from the headers
+        let metadata = if let Some(summary) = res.headers().get("x-clickhouse-summary") {
+            // NOTE: X-Clickhouse-Summary is a ClickHouse-specific header that contains information about the query execution.
+            // It is not formally specified in the ClickHouse documentation so we only warn if it isn't working but won't error here.
+            let summary_str = summary.to_str().map_err(|e| {
+                Error::new_with_err_logging(
+                    ErrorDetails::ClickHouseQuery {
+                        message: format!(
+                            "Failed to parse x-clickhouse-summary header: {e}"
+                        ),
+                    },
+                    err_logging,
+                )
+            })?;
 
-                    serde_json::from_str::<ClickHouseResponseMetadata>(summary_str).map_err(
-                        |e| {
-                            Error::new_with_err_logging(
-                                ErrorDetails::ClickHouseQuery {
-                                    message: format!(
-                                        "Failed to deserialize x-clickhouse-summary: {e}"
-                                    ),
-                                },
-                                err_logging,
-                            )
-                        },
-                    )?
-                } else {
-                    tracing::warn!("No x-clickhouse-summary header found in ClickHouse response");
-                    ClickHouseResponseMetadata {
-                        read_rows: 0,
-                        written_rows: 0,
-                    }
-                };
-
-                let response_body = res.text().await.map_err(|e| {
+            serde_json::from_str::<ClickHouseResponseMetadata>(summary_str).map_err(
+                |e| {
                     Error::new_with_err_logging(
                         ErrorDetails::ClickHouseQuery {
-                            message: DisplayOrDebugGateway::new(e).to_string(),
+                            message: format!(
+                                "Failed to deserialize x-clickhouse-summary: {e}"
+                            ),
                         },
                         err_logging,
                     )
-                })?;
-
-                match status {
-                    reqwest::StatusCode::OK => Ok(ClickHouseResponse {
-                        response: response_body,
-                        metadata,
-                    }),
-                    _ => Err(Error::new_with_err_logging(
-                        ErrorDetails::ClickHouseQuery {
-                            message: response_body,
-                        },
-                        err_logging,
-                    )),
-                }
+                },
+            )?
+        } else {
+            tracing::warn!("No x-clickhouse-summary header found in ClickHouse response");
+            ClickHouseResponseMetadata {
+                read_rows: 0,
+                written_rows: 0,
             }
+        };
+
+        let response_body = res.text().await.map_err(|e| {
+            Error::new_with_err_logging(
+                ErrorDetails::ClickHouseQuery {
+                    message: DisplayOrDebugGateway::new(e).to_string(),
+                },
+                err_logging,
+            )
+        })?;
+
+        match status {
+            reqwest::StatusCode::OK => Ok(ClickHouseResponse {
+                response: response_body,
+                metadata,
+            }),
+            _ => Err(Error::new_with_err_logging(
+                ErrorDetails::ClickHouseQuery {
+                    message: response_body,
+                },
+                err_logging,
+            )),
         }
     }
 
-    // TODO: deprecate this
-    pub async fn run_query_synchronous_no_params(
-        &self,
-        query: String,
-    ) -> Result<ClickHouseResponse, Error> {
-        self.run_query_synchronous(query, &HashMap::default()).await
-    }
-
-    pub async fn run_query_synchronous_no_params_de<T>(&self, query: String) -> Result<T, Error>
-    where
-        T: DeserializeOwned,
-    {
-        let result = self
-            .run_query_synchronous(query, &HashMap::default())
-            .await?;
-        serde_json::from_str(&result.response).map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseDeserialization {
-                message: e.to_string(),
-            })
-        })
-    }
-
-    /// Sometimes you might want to treat the data you're sending as a table if you're going
-    /// to do some analysis or filtering prior to inserting it into ClickHouse.
-    /// This function allows you to do this with ClickHouse's external data feature.
-    /// https://clickhouse.com/docs/engines/table-engines/special/external-data
-    pub async fn run_query_with_external_data(
+    async fn run_query_with_external_data(
         &self,
         external_data: ExternalDataInfo,
         query: String,
     ) -> Result<ClickHouseResponse, Error> {
-        match self {
-            Self::Disabled | Self::Mock { .. } => Ok(ClickHouseResponse {
-                response: String::new(),
-                metadata: ClickHouseResponseMetadata {
-                    read_rows: 0,
-                    written_rows: 0,
+        let database_url = Url::parse(self.database_url.expose_secret()).map_err(|_| {
+            Error::new(ErrorDetails::Config {
+                message: "Invalid ClickHouse database URL".to_string(),
+            })
+        })?;
+        // Create the multipart form
+        let form = Form::new()
+            .text("new_data_structure", external_data.structure)
+            .text("new_data_format", external_data.format)
+            .part(
+                "new_data",
+                Part::bytes(external_data.data.into_bytes()).file_name("file.data"),
+            )
+            .text("query", query);
+
+        let res = self.client
+            .post(database_url)
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseQuery {
+                    message: e.to_string(),
+                })
+            })?;
+
+        let status = res.status();
+        // Get the ClickHouse summary info from the headers
+        let metadata = if let Some(summary) = res.headers().get("x-clickhouse-summary") {
+            let summary_str = summary.to_str().map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseQuery {
+                    message: format!("Failed to parse x-clickhouse-summary header: {e}"),
+                })
+            })?;
+
+            serde_json::from_str::<ClickHouseResponseMetadata>(summary_str).map_err(
+                |e| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: format!("Failed to deserialize x-clickhouse-summary: {e}"),
+                    })
                 },
+            )?
+        } else {
+            tracing::warn!("No x-clickhouse-summary header found in ClickHouse response");
+            ClickHouseResponseMetadata {
+                read_rows: 0,
+                written_rows: 0,
+            }
+        };
+
+        let response_body = res.text().await.map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseQuery {
+                message: e.to_string(),
+            })
+        })?;
+
+        match status {
+            reqwest::StatusCode::OK => Ok(ClickHouseResponse {
+                response: response_body,
+                metadata,
             }),
-            Self::Production {
-                database_url,
-                client,
-                ..
-            } => {
-                let database_url = Url::parse(database_url.expose_secret()).map_err(|_| {
-                    Error::new(ErrorDetails::Config {
-                        message: "Invalid ClickHouse database URL".to_string(),
-                    })
-                })?;
-                // Create the multipart form
-                let form = Form::new()
-                    .text("new_data_structure", external_data.structure)
-                    .text("new_data_format", external_data.format)
-                    .part(
-                        "new_data",
-                        Part::bytes(external_data.data.into_bytes()).file_name("file.data"),
-                    )
-                    .text("query", query);
-
-                let res = client
-                    .post(database_url)
-                    .multipart(form)
-                    .send()
-                    .await
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::ClickHouseQuery {
-                            message: e.to_string(),
-                        })
-                    })?;
-
-                let status = res.status();
-                // Get the ClickHouse summary info from the headers
-                let metadata = if let Some(summary) = res.headers().get("x-clickhouse-summary") {
-                    let summary_str = summary.to_str().map_err(|e| {
-                        Error::new(ErrorDetails::ClickHouseQuery {
-                            message: format!("Failed to parse x-clickhouse-summary header: {e}"),
-                        })
-                    })?;
-
-                    serde_json::from_str::<ClickHouseResponseMetadata>(summary_str).map_err(
-                        |e| {
-                            Error::new(ErrorDetails::ClickHouseQuery {
-                                message: format!("Failed to deserialize x-clickhouse-summary: {e}"),
-                            })
-                        },
-                    )?
-                } else {
-                    tracing::warn!("No x-clickhouse-summary header found in ClickHouse response");
-                    ClickHouseResponseMetadata {
-                        read_rows: 0,
-                        written_rows: 0,
-                    }
-                };
-
-                let response_body = res.text().await.map_err(|e| {
-                    Error::new(ErrorDetails::ClickHouseQuery {
-                        message: e.to_string(),
-                    })
-                })?;
-
-                match status {
-                    reqwest::StatusCode::OK => Ok(ClickHouseResponse {
-                        response: response_body,
-                        metadata,
-                    }),
-                    _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
-                        message: response_body,
-                    })),
-                }
-            }
+            _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
+                message: response_body,
+            })),
         }
     }
 
-    pub async fn check_database_and_migrations_table_exists(&self) -> Result<bool, Error> {
-        match self {
-            Self::Disabled => Ok(true),
-            Self::Mock { .. } => Ok(true),
-            Self::Production {
-                client,
-                database_url,
-                ..
-            } => {
-                let database_url = Url::parse(database_url.expose_secret()).map_err(|_| {
-                    Error::new(ErrorDetails::Config {
-                        message: "Invalid ClickHouse database URL".to_string(),
-                    })
-                })?;
-                let mut base_url = database_url.clone();
-                let query_pairs = database_url
-                    .query_pairs()
-                    .filter(|(key, _)| key != "database");
-                base_url
-                    .query_pairs_mut()
-                    .clear()
-                    .extend_pairs(query_pairs)
-                    .append_pair("param_name", self.database())
-                    .finish();
-                let query =
-                    "SELECT COUNT() FROM system.databases WHERE name={name:String}".to_string();
-                let response = client
-                    .post(base_url)
-                    .body(query)
-                    .send()
-                    .await
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::ClickHouseQuery {
-                            message: e.to_string(),
-                        })
-                    })?;
+    async fn check_database_and_migrations_table_exists(&self) -> Result<bool, Error> {
+        let database_url = Url::parse(self.database_url.expose_secret()).map_err(|_| {
+            Error::new(ErrorDetails::Config {
+                message: "Invalid ClickHouse database URL".to_string(),
+            })
+        })?;
+        let mut base_url = database_url.clone();
+        let query_pairs = database_url
+            .query_pairs()
+            .filter(|(key, _)| key != "database");
+        base_url
+            .query_pairs_mut()
+            .clear()
+            .extend_pairs(query_pairs)
+            .append_pair("param_name", &self.database)
+            .finish();
+        let query =
+            "SELECT COUNT() FROM system.databases WHERE name={name:String}".to_string();
+        let response = self.client
+            .post(base_url)
+            .body(query)
+            .send()
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseQuery {
+                    message: e.to_string(),
+                })
+            })?;
 
-                let status = response.status();
-                let text = response.text().await.map_err(|e| {
-                    Error::new(ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to fetch response text: {e}"),
-                    })
-                })?;
+        let status = response.status();
+        let text = response.text().await.map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseQuery {
+                message: format!("Failed to fetch response text: {e}"),
+            })
+        })?;
 
-                // Check if the request was successful before trying to parse the response
-                if !status.is_success() {
-                    return Err(Error::new(ErrorDetails::ClickHouseConnection {
-                        message: format!(
-                            "ClickHouse query failed with status {}: {}",
-                            status.as_u16(),
-                            text
-                        ),
-                    }));
-                }
-
-                let count: u8 = text.trim().parse().map_err(|e| {
-                    Error::new(ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to parse count response as u8: {e}"),
-                    })
-                })?;
-                if count == 0 {
-                    // The database doesn't exist
-                    return Ok(false);
-                }
-                let migrations_table_exists =
-                    check_table_exists(self, "TensorZeroMigration", "0000").await?;
-
-                Ok(migrations_table_exists)
-            }
+        // Check if the request was successful before trying to parse the response
+        if !status.is_success() {
+            return Err(Error::new(ErrorDetails::ClickHouseConnection {
+                message: format!(
+                    "ClickHouse query failed with status {}: {}",
+                    status.as_u16(),
+                    text
+                ),
+            }));
         }
+
+        let count: u8 = text.trim().parse().map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseQuery {
+                message: format!("Failed to parse count response as u8: {e}"),
+            })
+        })?;
+        if count == 0 {
+            // The database doesn't exist
+            return Ok(false);
+        }
+
+        // Create a temporary wrapper to call check_table_exists
+        let temp_connection_info = ClickHouseConnectionInfo {
+            inner: Arc::new(self.clone()),
+        };
+        let migrations_table_exists =
+            check_table_exists(&temp_connection_info, "TensorZeroMigration", "0000").await?;
+
+        Ok(migrations_table_exists)
     }
 
-    pub async fn create_database_and_migrations_table(&self) -> Result<(), Error> {
-        match self {
-            Self::Disabled => {}
-            Self::Mock { .. } => {}
-            Self::Production {
-                database_url,
-                database,
-                client,
-                ..
-            } => {
-                let database_url = Url::parse(database_url.expose_secret()).map_err(|_| {
-                    Error::new(ErrorDetails::Config {
-                        message: "Invalid ClickHouse database URL".to_string(),
-                    })
-                })?;
-                let on_cluster_name = self.get_on_cluster_name();
-                let query = format!("CREATE DATABASE IF NOT EXISTS {database}{on_cluster_name}");
-                // In order to create the database, we need to remove the database query parameter from the URL
-                // Otherwise, ClickHouse will throw an error
-                let mut base_url = database_url.clone();
-                let query_pairs = database_url
-                    .query_pairs()
-                    .filter(|(key, _)| key != "database");
-                base_url
-                    .query_pairs_mut()
-                    .clear()
-                    .extend_pairs(query_pairs)
-                    .finish();
+    async fn create_database_and_migrations_table(&self) -> Result<(), Error> {
+        let database_url = Url::parse(self.database_url.expose_secret()).map_err(|_| {
+            Error::new(ErrorDetails::Config {
+                message: "Invalid ClickHouse database URL".to_string(),
+            })
+        })?;
+        let on_cluster_name = self.get_on_cluster_name();
+        let query = format!("CREATE DATABASE IF NOT EXISTS {}{on_cluster_name}", self.database);
+        // In order to create the database, we need to remove the database query parameter from the URL
+        // Otherwise, ClickHouse will throw an error
+        let mut base_url = database_url.clone();
+        let query_pairs = database_url
+            .query_pairs()
+            .filter(|(key, _)| key != "database");
+        base_url
+            .query_pairs_mut()
+            .clear()
+            .extend_pairs(query_pairs)
+            .finish();
 
-                let response = client
-                    .post(base_url)
-                    .body(query)
-                    .send()
-                    .await
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::ClickHouseQuery {
-                            message: e.to_string(),
-                        })
-                    })?;
+        let response = self.client
+            .post(base_url)
+            .body(query)
+            .send()
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseQuery {
+                    message: e.to_string(),
+                })
+            })?;
 
-                let status = response.status();
+        let status = response.status();
 
-                let response_body = response.text().await.map_err(|e| {
-                    Error::new(ErrorDetails::ClickHouseQuery {
-                        message: e.to_string(),
-                    })
-                })?;
+        let response_body = response.text().await.map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseQuery {
+                message: e.to_string(),
+            })
+        })?;
 
-                match status {
-                    reqwest::StatusCode::OK => {}
-                    _ => {
-                        return Err(Error::new(ErrorDetails::ClickHouseQuery {
-                            message: response_body,
-                        }))
-                    }
-                }
+        match status {
+            reqwest::StatusCode::OK => {}
+            _ => {
+                return Err(Error::new(ErrorDetails::ClickHouseQuery {
+                    message: response_body,
+                }))
             }
         }
+
         // Note - we do *not* run this as a normal migration
         // We decided to add this table after we had already created lots of migrations.
         // We create this table immediately after creating the database, so that
         // we can insert rows into it when running migrations
-        let on_cluster_name = self.get_on_cluster_name();
         let table_engine_name =
             self.get_maybe_replicated_table_engine_name(GetMaybeReplicatedTableEngineNameArgs {
                 table_engine_name: "MergeTree",
@@ -696,13 +842,19 @@ impl ClickHouseConnectionInfo {
             ENGINE = {table_engine_name}
             PRIMARY KEY (migration_id)"
         );
-        self.run_query_synchronous_no_params(query)
+
+        // Create a temporary wrapper to call run_query_synchronous
+        let temp_connection_info = ClickHouseConnectionInfo {
+            inner: Arc::new(self.clone()),
+        };
+        temp_connection_info
+            .run_query_synchronous_no_params(query)
             .await
             .map(|_| ())?;
         Ok(())
     }
 
-    pub async fn list_inferences(
+    async fn list_inferences(
         &self,
         config: &Config,
         opts: &ListInferencesParams<'_>,
@@ -730,18 +882,18 @@ impl ClickHouseConnectionInfo {
         Ok(inferences)
     }
 
-    pub fn get_on_cluster_name(&self) -> String {
-        match self {
-            Self::Disabled => String::new(),
-            Self::Mock { .. } => String::new(),
-            Self::Production { cluster_name, .. } => match cluster_name {
-                Some(cluster_name) => format!(" ON CLUSTER {cluster_name} "),
-                None => String::new(),
-            },
+    fn is_cluster_configured(&self) -> bool {
+        self.cluster_name.is_some()
+    }
+
+    fn get_on_cluster_name(&self) -> String {
+        match &self.cluster_name {
+            Some(cluster_name) => format!(" ON CLUSTER {cluster_name} "),
+            None => String::new(),
         }
     }
 
-    pub fn get_maybe_replicated_table_engine_name(
+    fn get_maybe_replicated_table_engine_name(
         &self,
         args: GetMaybeReplicatedTableEngineNameArgs<'_>,
     ) -> String {
@@ -750,77 +902,296 @@ impl ClickHouseConnectionInfo {
             table_name,
             engine_args,
         } = args;
-        match self {
-            Self::Disabled => table_engine_name.to_string(),
-            Self::Mock { .. } => table_engine_name.to_string(),
-            Self::Production {
-                cluster_name,
-                database,
-                ..
-            } => match cluster_name {
-                Some(_) => get_replicated_table_engine_name(
-                    table_engine_name,
-                    table_name,
-                    database,
-                    engine_args,
-                ),
-                None => {
-                    let engine_args_str = engine_args.join(", ");
-                    format!("{table_engine_name}({engine_args_str})")
-                }
-            },
+        match &self.cluster_name {
+            Some(_) => get_replicated_table_engine_name(
+                table_engine_name,
+                table_name,
+                &self.database,
+                engine_args,
+            ),
+            None => {
+                let engine_args_str = engine_args.join(", ");
+                format!("{table_engine_name}({engine_args_str})")
+            }
         }
+    }
+
+    async fn health(&self) -> Result<(), Error> {
+        // We need to ping the /ping endpoint to check if ClickHouse is healthy
+        let mut ping_url = Url::parse(self.database_url.expose_secret()).map_err(|_| {
+            Error::new(ErrorDetails::Config {
+                message: "Invalid ClickHouse database URL".to_string(),
+            })
+        })?;
+        ping_url.set_path("/ping");
+        ping_url.set_query(None);
+
+        let timeout = Duration::from_secs(180);
+
+        match self.client.get(ping_url).timeout(timeout).send().await {
+            Ok(response) if response.status().is_success() => Ok(()),
+            Ok(response) => Err(ErrorDetails::ClickHouseConnection {
+                message: format!(
+                    "ClickHouse is not healthy (status code {}): {}",
+                    response.status(),
+                    response.text().await.unwrap_or_default()
+                ),
+            }
+            .into()),
+            Err(e) => Err(ErrorDetails::ClickHouseConnection {
+                message: format!("ClickHouse is not healthy: {e:?}"),
+            }
+            .into()),
+        }
+    }
+
+    fn variant_name(&self) -> &'static str {
+        "Production"
     }
 }
 
+// Trait implementations for MockClickHouseClient
+#[async_trait]
+impl ClickHouseClient for MockClickHouseClient {
+    fn database(&self) -> &str {
+        "mock"
+    }
+
+    fn batcher_join_handle(&self) -> Option<BatchWriterHandle> {
+        None
+    }
+
+    async fn write_batched_internal(
+        &self,
+        rows: Vec<String>,
+        table: TableName,
+    ) -> Result<(), Error> {
+        write_mock(
+            Rows::<String>::Serialized(&rows),
+            table,
+            &mut self.mock_data.write().await,
+        )
+        .await
+    }
+
+    async fn write_non_batched_internal(
+        &self,
+        rows: Vec<String>,
+        table: TableName,
+    ) -> Result<(), Error> {
+        write_mock(
+            Rows::<String>::Serialized(&rows),
+            table,
+            &mut self.mock_data.write().await,
+        )
+        .await
+    }
+
+    async fn run_query_synchronous(
+        &self,
+        _query: String,
+        _parameters: &HashMap<&str, &str>,
+    ) -> Result<ClickHouseResponse, Error> {
+        Ok(ClickHouseResponse {
+            response: String::new(),
+            metadata: ClickHouseResponseMetadata {
+                read_rows: 0,
+                written_rows: 0,
+            },
+        })
+    }
+
+    async fn run_query_synchronous_with_err_logging(
+        &self,
+        _query: String,
+        _parameters: &HashMap<&str, &str>,
+        _err_logging: bool,
+    ) -> Result<ClickHouseResponse, Error> {
+        Ok(ClickHouseResponse {
+            response: String::new(),
+            metadata: ClickHouseResponseMetadata {
+                read_rows: 0,
+                written_rows: 0,
+            },
+        })
+    }
+
+    async fn run_query_with_external_data(
+        &self,
+        _external_data: ExternalDataInfo,
+        _query: String,
+    ) -> Result<ClickHouseResponse, Error> {
+        Ok(ClickHouseResponse {
+            response: String::new(),
+            metadata: ClickHouseResponseMetadata {
+                read_rows: 0,
+                written_rows: 0,
+            },
+        })
+    }
+
+    async fn check_database_and_migrations_table_exists(&self) -> Result<bool, Error> {
+        Ok(true)
+    }
+
+    async fn create_database_and_migrations_table(&self) -> Result<(), Error> {
+        Ok(())
+    }
+
+    async fn list_inferences(
+        &self,
+        _config: &Config,
+        _opts: &ListInferencesParams<'_>,
+    ) -> Result<Vec<StoredInference>, Error> {
+        Ok(Vec::new())
+    }
+
+    fn is_cluster_configured(&self) -> bool {
+        false
+    }
+
+    fn get_on_cluster_name(&self) -> String {
+        String::new()
+    }
+
+    fn get_maybe_replicated_table_engine_name(
+        &self,
+        args: GetMaybeReplicatedTableEngineNameArgs<'_>,
+    ) -> String {
+        args.table_engine_name.to_string()
+    }
+
+    async fn health(&self) -> Result<(), Error> {
+        if self.healthy {
+            Ok(())
+        } else {
+            Err(ErrorDetails::ClickHouseConnection {
+                message: "Mock ClickHouse is not healthy".to_string(),
+            }
+            .into())
+        }
+    }
+
+    fn variant_name(&self) -> &'static str {
+        "Mock"
+    }
+}
+
+// Trait implementations for DisabledClickHouseClient
+#[async_trait]
+impl ClickHouseClient for DisabledClickHouseClient {
+    fn database(&self) -> &str {
+        "disabled"
+    }
+
+    fn batcher_join_handle(&self) -> Option<BatchWriterHandle> {
+        None
+    }
+
+    async fn write_batched_internal(
+        &self,
+        _rows: Vec<String>,
+        _table: TableName,
+    ) -> Result<(), Error> {
+        Ok(())
+    }
+
+    async fn write_non_batched_internal(
+        &self,
+        _rows: Vec<String>,
+        _table: TableName,
+    ) -> Result<(), Error> {
+        Ok(())
+    }
+
+    async fn run_query_synchronous(
+        &self,
+        _query: String,
+        _parameters: &HashMap<&str, &str>,
+    ) -> Result<ClickHouseResponse, Error> {
+        Ok(ClickHouseResponse {
+            response: String::new(),
+            metadata: ClickHouseResponseMetadata {
+                read_rows: 0,
+                written_rows: 0,
+            },
+        })
+    }
+
+    async fn run_query_synchronous_with_err_logging(
+        &self,
+        _query: String,
+        _parameters: &HashMap<&str, &str>,
+        _err_logging: bool,
+    ) -> Result<ClickHouseResponse, Error> {
+        Ok(ClickHouseResponse {
+            response: String::new(),
+            metadata: ClickHouseResponseMetadata {
+                read_rows: 0,
+                written_rows: 0,
+            },
+        })
+    }
+
+    async fn run_query_with_external_data(
+        &self,
+        _external_data: ExternalDataInfo,
+        _query: String,
+    ) -> Result<ClickHouseResponse, Error> {
+        Ok(ClickHouseResponse {
+            response: String::new(),
+            metadata: ClickHouseResponseMetadata {
+                read_rows: 0,
+                written_rows: 0,
+            },
+        })
+    }
+
+    async fn check_database_and_migrations_table_exists(&self) -> Result<bool, Error> {
+        Ok(true)
+    }
+
+    async fn create_database_and_migrations_table(&self) -> Result<(), Error> {
+        Ok(())
+    }
+
+    async fn list_inferences(
+        &self,
+        _config: &Config,
+        _opts: &ListInferencesParams<'_>,
+    ) -> Result<Vec<StoredInference>, Error> {
+        Ok(Vec::new())
+    }
+
+    fn is_cluster_configured(&self) -> bool {
+        false
+    }
+
+    fn get_on_cluster_name(&self) -> String {
+        String::new()
+    }
+
+    fn get_maybe_replicated_table_engine_name(
+        &self,
+        args: GetMaybeReplicatedTableEngineNameArgs<'_>,
+    ) -> String {
+        args.table_engine_name.to_string()
+    }
+
+    async fn health(&self) -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn variant_name(&self) -> &'static str {
+        "Disabled"
+    }
+}
+
+// Update the HealthCheckable implementation to delegate to the trait
 #[async_trait]
 impl HealthCheckable for ClickHouseConnectionInfo {
     async fn health(&self) -> Result<(), Error> {
-        match self {
-            Self::Disabled => Ok(()),
-            Self::Mock { healthy, .. } => {
-                if *healthy {
-                    Ok(())
-                } else {
-                    Err(ErrorDetails::ClickHouseConnection {
-                        message: "Mock ClickHouse is not healthy".to_string(),
-                    }
-                    .into())
-                }
-            }
-            Self::Production {
-                database_url,
-                client,
-                ..
-            } => {
-                // We need to ping the /ping endpoint to check if ClickHouse is healthy
-                let mut ping_url = Url::parse(database_url.expose_secret()).map_err(|_| {
-                    Error::new(ErrorDetails::Config {
-                        message: "Invalid ClickHouse database URL".to_string(),
-                    })
-                })?;
-                ping_url.set_path("/ping");
-                ping_url.set_query(None);
-
-                let timeout = Duration::from_secs(180);
-
-                match client.get(ping_url).timeout(timeout).send().await {
-                    Ok(response) if response.status().is_success() => Ok(()),
-                    Ok(response) => Err(ErrorDetails::ClickHouseConnection {
-                        message: format!(
-                            "ClickHouse is not healthy (status code {}): {}",
-                            response.status(),
-                            response.text().await.unwrap_or_default()
-                        ),
-                    }
-                    .into()),
-                    Err(e) => Err(ErrorDetails::ClickHouseConnection {
-                        message: format!("ClickHouse is not healthy: {e:?}"),
-                    }
-                    .into()),
-                }
-            }
-        }
+        self.inner.health().await
     }
 }
 

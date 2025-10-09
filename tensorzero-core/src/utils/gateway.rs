@@ -55,7 +55,7 @@ impl Drop for GatewayHandle {
             .batcher_join_handle();
         // Drop our `ClickHouseConnectionInfo`, so that we stop holding on to the `Arc<BatchSender>`
         // This allows the batch writer task to exit (once all of the remaining `ClickhouseConnectionInfo`s are dropped)
-        self.app_state.clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        self.app_state.clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         if let Some(handle) = handle {
             tracing::info!("Waiting for ClickHouse batch writer to finish");
             // This could block forever if:
@@ -244,7 +244,7 @@ pub async fn setup_clickhouse(
     };
 
     // Run ClickHouse migrations (if any) if we have a production ClickHouse connection
-    if let ClickHouseConnectionInfo::Production { .. } = &clickhouse_connection_info {
+    if clickhouse_connection_info.variant_name() == "Production" {
         migration_manager::run(RunMigrationManagerArgs {
             clickhouse: &clickhouse_connection_info,
             is_manual_run: false,
@@ -432,10 +432,7 @@ mod tests {
         }));
 
         let clickhouse_connection_info = setup_clickhouse(config, None, false).await.unwrap();
-        assert!(matches!(
-            clickhouse_connection_info,
-            ClickHouseConnectionInfo::Disabled
-        ));
+        assert_eq!(clickhouse_connection_info.variant_name(), "Disabled");
         assert!(!logs_contain(
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));
@@ -457,10 +454,7 @@ mod tests {
             ..Default::default()
         }));
         let clickhouse_connection_info = setup_clickhouse(config, None, false).await.unwrap();
-        assert!(matches!(
-            clickhouse_connection_info,
-            ClickHouseConnectionInfo::Disabled
-        ));
+        assert_eq!(clickhouse_connection_info.variant_name(), "Disabled");
         assert!(!logs_contain(
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));

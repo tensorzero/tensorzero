@@ -53,7 +53,7 @@ pub fn setup_howdy(
         info!("Pseudonymous usage analytics is disabled");
         return;
     }
-    if let ClickHouseConnectionInfo::Disabled = clickhouse {
+    if clickhouse.variant_name() == "Disabled" {
         return;
     }
     tokio::spawn(howdy_loop(clickhouse, token));

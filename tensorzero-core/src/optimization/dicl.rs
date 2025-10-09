@@ -247,10 +247,7 @@ impl Optimizer for DiclOptimizationConfig {
         }
 
         // Check if ClickHouse is available (required for DICL)
-        if matches!(
-            clickhouse_connection_info,
-            ClickHouseConnectionInfo::Disabled
-        ) {
+        if clickhouse_connection_info.variant_name() == "Disabled" {
             return Err(Error::new(ErrorDetails::AppState {
                 message: "DICL optimization requires ClickHouse to be enabled to store examples"
                     .to_string(),
@@ -534,10 +531,11 @@ async fn process_embedding_batch(
 
     // Create InferenceClients context for the embedding model
     let cache_options = CacheOptions::default();
+    let disabled_clickhouse = ClickHouseConnectionInfo::new_disabled();
     let clients = InferenceClients {
         http_client: client,
         credentials,
-        clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
+        clickhouse_connection_info: &disabled_clickhouse,
         postgres_connection_info: &PostgresConnectionInfo::Disabled,
         cache_options: &cache_options,
         tags: &HashMap::default(),
