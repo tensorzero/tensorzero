@@ -187,7 +187,7 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
         .unwrap_or_else(|_| format!("{MANIFEST_PATH}/../ui/fixtures/s3-fixtures"));
     let s3_fixtures_path = &s3_fixtures_path;
 
-    // TODO: remove these from the public ClickhouseConnectionInfo struct.
+    // TODO(shuyangli): remove these from the public ClickhouseConnectionInfo struct.
     let database_url = &clickhouse.database_url;
     let database = &clickhouse.database;
     let url = url::Url::parse(database_url.expose_secret()).unwrap();

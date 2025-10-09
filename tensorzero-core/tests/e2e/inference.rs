@@ -23,11 +23,9 @@ use tensorzero::{
 use tensorzero_core::inference::types::StoredInput;
 use tensorzero_core::{
     db::clickhouse::test_helpers::get_clickhouse_replica,
-    db::clickhouse::{
-        test_helpers::{
-            select_all_model_inferences_by_chat_episode_id_clickhouse,
-            select_chat_inferences_clickhouse,
-        },
+    db::clickhouse::test_helpers::{
+        select_all_model_inferences_by_chat_episode_id_clickhouse,
+        select_chat_inferences_clickhouse,
     },
     endpoints::inference::ChatInferenceResponse,
     inference::types::{

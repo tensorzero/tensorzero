@@ -270,11 +270,17 @@ impl ClickHouseConnectionInfo {
             }
         };
 
-        let client = ProductionClickHouseClient::new(database_url.clone(), cluster_name, database.clone(), batch_config).await?;
+        let client = ProductionClickHouseClient::new(
+            database_url.clone(),
+            cluster_name,
+            database.clone(),
+            batch_config,
+        )
+        .await?;
         Ok(Self {
             inner: Arc::new(client),
-            database_url: database_url,
-            database: database,
+            database_url,
+            database,
         })
     }
 
@@ -282,8 +288,8 @@ impl ClickHouseConnectionInfo {
     pub fn new_mock(healthy: bool) -> Self {
         Self {
             inner: Arc::new(MockClickHouseClient::new(healthy)),
-            database_url: "".to_string().into(),
-            database: "".to_string(),
+            database_url: String::new().into(),
+            database: String::new(),
         }
     }
 
@@ -291,8 +297,8 @@ impl ClickHouseConnectionInfo {
     pub fn new_disabled() -> Self {
         Self {
             inner: Arc::new(DisabledClickHouseClient),
-            database_url: "".to_string().into(),
-            database: "".to_string(),
+            database_url: String::new().into(),
+            database: String::new(),
         }
     }
 
@@ -464,7 +470,8 @@ impl ProductionClickHouseClient {
         database_url: SecretString,
         cluster_name: Option<String>,
         database: String,
-        batch_config: BatchWritesConfig) -> Result<Self, Error> {        
+        batch_config: BatchWritesConfig,
+    ) -> Result<Self, Error> {
         let mut client = Self {
             database_url,
             cluster_name,
@@ -1101,7 +1108,6 @@ impl HealthCheckable for MockClickHouseClient {
         }
     }
 }
-
 
 // Trait implementations for DisabledClickHouseClient
 #[async_trait]
