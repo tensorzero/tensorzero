@@ -65,7 +65,10 @@ import { logger } from "~/utils/logger";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 
 export const handle: RouteHandle = {
-  crumb: (match) => ["Datapoints", { label: match.params.datapoint_id!, isIdentifier: true }],
+  crumb: (match) => [
+    "Datapoints",
+    { label: match.params.datapoint_id!, isIdentifier: true },
+  ],
 };
 
 export async function loader({ request, params }: Route.LoaderArgs) {

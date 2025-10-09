@@ -37,7 +37,10 @@ import {
 import { logger } from "~/utils/logger";
 
 export const handle: RouteHandle = {
-  crumb: (match) => ["Variants", { label: match.params.variant_name!, isIdentifier: true }],
+  crumb: (match) => [
+    "Variants",
+    { label: match.params.variant_name!, isIdentifier: true },
+  ],
 };
 
 export async function loader({ request, params }: LoaderFunctionArgs) {

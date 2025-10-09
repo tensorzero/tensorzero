@@ -191,7 +191,10 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export const handle: RouteHandle = {
-  crumb: (match) => ["Datapoints", { label: match.params.id!, isIdentifier: true }],
+  crumb: (match) => [
+    "Datapoints",
+    { label: match.params.id!, isIdentifier: true },
+  ],
 };
 
 export async function loader({

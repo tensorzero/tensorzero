@@ -19,7 +19,8 @@ export function useBreadcrumbs(): {
           // Each path segment may export a `handle` that appends 0, 1 or more breadcrumbs
           match.handle?.crumb?.(match)?.map((crumb, i, arr) => {
             const label = typeof crumb === "string" ? crumb : crumb.label;
-            const isIdentifier = typeof crumb === "string" ? false : crumb.isIdentifier;
+            const isIdentifier =
+              typeof crumb === "string" ? false : crumb.isIdentifier;
             return {
               label,
               isIdentifier,

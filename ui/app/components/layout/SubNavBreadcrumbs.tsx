@@ -21,11 +21,15 @@ export function SubNavBreadcrumbs() {
           return (
             <BreadcrumbItem key={idx}>
               {idx === segments.length - 1 ? (
-                <BreadcrumbPage className={className}>{bc.label}</BreadcrumbPage>
+                <BreadcrumbPage className={className}>
+                  {bc.label}
+                </BreadcrumbPage>
               ) : bc.href ? (
                 <>
                   <BreadcrumbLink asChild>
-                    <Link to={bc.href} className={className}>{bc.label}</Link>
+                    <Link to={bc.href} className={className}>
+                      {bc.label}
+                    </Link>
                   </BreadcrumbLink>
                   <BreadcrumbSeparator />
                 </>
