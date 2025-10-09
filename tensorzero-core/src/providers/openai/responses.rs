@@ -34,6 +34,7 @@ pub struct OpenAIResponsesRequest<'a> {
     input: Vec<OpenAIResponsesInput<'a>>,
     text: OpenAIResponsesTextConfig,
     #[serde(skip_serializing_if = "Option::is_none")]
+    // TODO: add support for built-in tools
     tools: Option<Vec<OpenAIResponsesTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
@@ -818,6 +819,8 @@ pub(super) enum OpenAIResponsesStreamEvent {
     },
     #[serde(rename = "error")]
     Error { error: Value },
+    #[serde(other)]
+    Unknown,
 }
 
 /// Stream function for OpenAI Responses API
@@ -849,34 +852,38 @@ pub fn stream_openai_responses(
                     Event::Message(message) => {
                         // OpenAI Responses API does not send [DONE] marker
                         // Instead, we check for terminal events: completed, failed, or incomplete
-                        let data: Result<OpenAIResponsesStreamEvent, Error> =
-                            serde_json::from_str(&message.data).map_err(|e| {
-                                Error::new(ErrorDetails::InferenceServer {
-                                    message: format!("Error parsing chunk. Error: {e}"),
-                                    raw_request: None,
-                                    raw_response: Some(message.data.clone()),
-                                    provider_type: provider_type.clone(),
-                                })
-                            });
+                        let data: Result<OpenAIResponsesStreamEvent, serde_json::Error> =
+                            serde_json::from_str(&message.data);
+
+                        // If we can't parse the event at all, log and skip it
+                        let event = match data {
+                            Ok(event) => event,
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Failed to parse OpenAI Responses stream event, skipping. Error: {}, Data: {}",
+                                    e,
+                                    message.data
+                                );
+                                continue;
+                            }
+                        };
 
                         // Check if this is a terminal event
                         let is_terminal = matches!(
-                            &data,
-                            Ok(OpenAIResponsesStreamEvent::ResponseCompleted { .. })
-                                | Ok(OpenAIResponsesStreamEvent::ResponseIncomplete { .. })
-                                | Ok(OpenAIResponsesStreamEvent::ResponseFailed { .. })
+                            &event,
+                            OpenAIResponsesStreamEvent::ResponseCompleted { .. }
+                                | OpenAIResponsesStreamEvent::ResponseIncomplete { .. }
+                                | OpenAIResponsesStreamEvent::ResponseFailed { .. }
                         );
 
                         let latency = start_time.elapsed();
-                        let stream_message = data.and_then(|event| {
-                            openai_responses_to_tensorzero_chunk(
-                                message.data,
-                                event,
-                                latency,
-                                &mut current_tool_id,
-                                &mut current_tool_name,
-                            )
-                        });
+                        let stream_message = openai_responses_to_tensorzero_chunk(
+                            message.data,
+                            event,
+                            latency,
+                            &mut current_tool_id,
+                            &mut current_tool_name,
+                        );
 
                         match stream_message {
                             Ok(Some(chunk)) => {
@@ -1109,6 +1116,15 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
         | OpenAIResponsesStreamEvent::ResponseContentPartDone { .. }
         | OpenAIResponsesStreamEvent::ResponseOutputTextDone { .. }
         | OpenAIResponsesStreamEvent::ResponseReasoningSummaryTextDone { .. } => Ok(None),
+
+        // Unknown event type - log and skip
+        OpenAIResponsesStreamEvent::Unknown => {
+            tracing::warn!(
+                "Received unknown event type in OpenAI Responses stream, skipping. Raw message: {}",
+                raw_message
+            );
+            Ok(None)
+        }
     }
 }
 
@@ -1850,5 +1866,41 @@ mod tests {
 
             assert!(result.is_none(), "Lifecycle events should return None");
         }
+    }
+
+    #[test]
+    fn test_unknown_event_type() {
+        // Test that unknown event types are handled gracefully
+        let json = r#"{"type": "response.some_new_event", "data": "foo"}"#;
+
+        let event: OpenAIResponsesStreamEvent = serde_json::from_str(json).unwrap();
+        assert!(matches!(event, OpenAIResponsesStreamEvent::Unknown));
+
+        let mut tool_id = None;
+        let mut tool_name = None;
+
+        let result = openai_responses_to_tensorzero_chunk(
+            json.to_string(),
+            event,
+            Duration::from_millis(100),
+            &mut tool_id,
+            &mut tool_name,
+        )
+        .unwrap();
+
+        // Unknown events should return None (skip them)
+        assert!(result.is_none(), "Unknown events should return None");
+    }
+
+    #[test]
+    fn test_malformed_json_in_stream() {
+        // Test that completely malformed JSON doesn't parse but won't crash
+        let json = r#"{"type": "response.created", "invalid json here"#;
+
+        let result: Result<OpenAIResponsesStreamEvent, serde_json::Error> =
+            serde_json::from_str(json);
+
+        // Should fail to parse
+        assert!(result.is_err());
     }
 }

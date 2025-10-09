@@ -6447,7 +6447,6 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     {
         return;
     }
-    println!("testing with provider {provider:?}");
 
     let extra_headers = get_extra_headers();
 
