@@ -44,7 +44,6 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
     {
       provider: "Together",
       model: "gpt-oss-20b",
-      // TODO: fill this out
       results: `
       type = "together"
       `,
