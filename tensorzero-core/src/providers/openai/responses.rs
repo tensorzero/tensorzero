@@ -808,7 +808,6 @@ pub(super) enum OpenAIResponsesStreamEvent {
     #[serde(rename = "response.function_call_arguments.done")]
     ResponseFunctionCallArgumentsDone {
         arguments: String,
-        name: String,
         item_id: String,
         output_index: u32,
     },
@@ -884,26 +883,54 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
             )))
         }
 
-        // Function call done - captures the tool name and ID
-        OpenAIResponsesStreamEvent::ResponseFunctionCallArgumentsDone {
-            name,
-            item_id,
-            arguments,
-            ..
-        } => {
-            *current_tool_id = Some(item_id.clone());
-            *current_tool_name = Some(name.clone());
+        // Function call done - marks the end of the function call arguments streaming
+        // Don't send the name again (it was already sent in output_item.added)
+        // Don't send the arguments (they were already sent via deltas)
+        OpenAIResponsesStreamEvent::ResponseFunctionCallArgumentsDone { item_id, .. } => {
             Ok(Some(ProviderInferenceResponseChunk::new(
                 vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                     id: item_id,
-                    raw_name: Some(name),
-                    raw_arguments: arguments,
+                    raw_name: None,
+                    raw_arguments: String::new(),
                 })],
                 None,
                 raw_message,
                 message_latency,
                 None,
             )))
+        }
+
+        // Output item added - captures tool metadata when it's a function_call
+        // This is where we emit the tool name to the client
+        OpenAIResponsesStreamEvent::ResponseOutputItemAdded { item, .. } => {
+            // Check if this is a function_call item
+            if let Some(item_type) = item.get("type").and_then(|t| t.as_str()) {
+                if item_type == "function_call" {
+                    // Extract the tool name and ID
+                    if let (Some(name), Some(id)) = (
+                        item.get("name").and_then(|n| n.as_str()),
+                        item.get("id").and_then(|i| i.as_str()),
+                    ) {
+                        *current_tool_id = Some(id.to_string());
+                        *current_tool_name = Some(name.to_string());
+
+                        // Emit a chunk with the tool name and ID
+                        return Ok(Some(ProviderInferenceResponseChunk::new(
+                            vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                                id: id.to_string(),
+                                raw_name: Some(name.to_string()),
+                                raw_arguments: String::new(),
+                            })],
+                            None,
+                            raw_message,
+                            message_latency,
+                            None,
+                        )));
+                    }
+                }
+            }
+            // Don't emit a chunk for this event if it's not a function_call
+            Ok(None)
         }
 
         // Completed event - extract usage and finish reason
@@ -992,7 +1019,6 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
         // Lifecycle and other events we don't need to process
         OpenAIResponsesStreamEvent::ResponseCreated { .. }
         | OpenAIResponsesStreamEvent::ResponseInProgress { .. }
-        | OpenAIResponsesStreamEvent::ResponseOutputItemAdded { .. }
         | OpenAIResponsesStreamEvent::ResponseOutputItemDone { .. }
         | OpenAIResponsesStreamEvent::ResponseContentPartAdded { .. }
         | OpenAIResponsesStreamEvent::ResponseContentPartDone { .. }
@@ -1024,6 +1050,32 @@ mod tests {
             event,
             OpenAIResponsesStreamEvent::ResponseCreated { .. }
         ));
+    }
+
+    #[test]
+    fn test_deserialize_response_output_item_added() {
+        let json = r#"{
+            "type": "response.output_item.added",
+            "item": {
+                "type": "function_call",
+                "name": "get_weather",
+                "id": "fc_abc123",
+                "arguments": ""
+            },
+            "output_index": 0,
+            "sequence_number": 4
+        }"#;
+
+        let event: OpenAIResponsesStreamEvent = serde_json::from_str(json).unwrap();
+        match event {
+            OpenAIResponsesStreamEvent::ResponseOutputItemAdded { item, output_index } => {
+                assert_eq!(output_index, 0);
+                assert_eq!(item.get("type").unwrap().as_str().unwrap(), "function_call");
+                assert_eq!(item.get("name").unwrap().as_str().unwrap(), "get_weather");
+                assert_eq!(item.get("id").unwrap().as_str().unwrap(), "fc_abc123");
+            }
+            _ => panic!("Expected ResponseOutputItemAdded"),
+        }
     }
 
     #[test]
@@ -1101,7 +1153,6 @@ mod tests {
             "type": "response.function_call_arguments.done",
             "item_id": "fc_123",
             "output_index": 0,
-            "name": "get_weather",
             "arguments": "{\"location\": \"San Francisco\"}",
             "sequence_number": 10
         }"#;
@@ -1109,12 +1160,10 @@ mod tests {
         let event: OpenAIResponsesStreamEvent = serde_json::from_str(json).unwrap();
         match event {
             OpenAIResponsesStreamEvent::ResponseFunctionCallArgumentsDone {
-                name,
                 arguments,
                 item_id,
                 ..
             } => {
-                assert_eq!(name, "get_weather");
                 assert_eq!(arguments, r#"{"location": "San Francisco"}"#);
                 assert_eq!(item_id, "fc_123");
             }
@@ -1259,21 +1308,23 @@ mod tests {
             ContentBlockChunk::Thought(thought_chunk) => {
                 assert_eq!(thought_chunk.text, Some("Let me think...".to_string()));
                 assert_eq!(thought_chunk.id, "1");
-                assert_eq!(
-                    thought_chunk.provider_type,
-                    Some(PROVIDER_TYPE.to_string())
-                );
+                assert_eq!(thought_chunk.provider_type, Some(PROVIDER_TYPE.to_string()));
             }
             _ => panic!("Expected Thought chunk"),
         }
     }
 
     #[test]
-    fn test_function_call_done_conversion() {
-        let event = OpenAIResponsesStreamEvent::ResponseFunctionCallArgumentsDone {
-            name: "get_weather".to_string(),
-            item_id: "fc_123".to_string(),
-            arguments: r#"{"location": "NYC"}"#.to_string(),
+    fn test_output_item_added_conversion() {
+        let item_json = serde_json::json!({
+            "type": "function_call",
+            "name": "get_weather",
+            "id": "fc_abc123",
+            "arguments": ""
+        });
+
+        let event = OpenAIResponsesStreamEvent::ResponseOutputItemAdded {
+            item: item_json,
             output_index: 0,
         };
 
@@ -1290,16 +1341,52 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        // Check that tool ID and name were updated
-        assert_eq!(tool_id, Some("fc_123".to_string()));
+        // Should emit a chunk with tool name and ID
+        assert_eq!(result.content.len(), 1);
+        match &result.content[0] {
+            ContentBlockChunk::ToolCall(tool_call) => {
+                assert_eq!(tool_call.id, "fc_abc123");
+                assert_eq!(tool_call.raw_name, Some("get_weather".to_string()));
+                assert_eq!(tool_call.raw_arguments, "");
+            }
+            _ => panic!("Expected ToolCall chunk"),
+        }
+
+        // And should have captured tool ID and name in state
+        assert_eq!(tool_id, Some("fc_abc123".to_string()));
         assert_eq!(tool_name, Some("get_weather".to_string()));
+    }
+
+    #[test]
+    fn test_function_call_done_conversion() {
+        let event = OpenAIResponsesStreamEvent::ResponseFunctionCallArgumentsDone {
+            item_id: "fc_123".to_string(),
+            arguments: r#"{"location": "NYC"}"#.to_string(),
+            output_index: 0,
+        };
+
+        // Set up tool name from state (as it would be from output_item.added event)
+        let mut tool_id = Some("fc_123".to_string());
+        let mut tool_name = Some("get_weather".to_string());
+
+        let result = openai_responses_to_tensorzero_chunk(
+            "raw_json".to_string(),
+            event,
+            Duration::from_millis(100),
+            &mut tool_id,
+            &mut tool_name,
+        )
+        .unwrap()
+        .unwrap();
 
         assert_eq!(result.content.len(), 1);
         match &result.content[0] {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "fc_123");
-                assert_eq!(tool_call.raw_name, Some("get_weather".to_string()));
-                assert_eq!(tool_call.raw_arguments, r#"{"location": "NYC"}"#);
+                // The done event doesn't send the raw_name (it was sent in output_item.added)
+                assert_eq!(tool_call.raw_name, None);
+                // The done event doesn't send arguments since they were already sent via deltas
+                assert_eq!(tool_call.raw_arguments, "");
             }
             _ => panic!("Expected ToolCall chunk"),
         }
@@ -1313,7 +1400,7 @@ mod tests {
             output_index: 0,
         };
 
-        // Set up the tool ID as it would be from a previous 'done' event
+        // Set up the tool ID as it would be from a previous output_item.added event
         let mut tool_id = Some("fc_123".to_string());
         let mut tool_name = Some("my_function".to_string());
 
@@ -1333,6 +1420,133 @@ mod tests {
                 assert_eq!(tool_call.id, "fc_123");
                 assert_eq!(tool_call.raw_name, None);
                 assert_eq!(tool_call.raw_arguments, r#""value"}"#);
+            }
+            _ => panic!("Expected ToolCall chunk"),
+        }
+    }
+
+    #[test]
+    fn test_function_call_streaming_sequence() {
+        // This test verifies the correct event sequence for tool call streaming:
+        // 1. output_item.added - emits tool name and ID chunk
+        // 2. function_call_arguments.delta - streams argument chunks
+        // 3. function_call_arguments.done - marks the end (no name or arguments)
+
+        let mut tool_id = None;
+        let mut tool_name = None;
+
+        // Step 1: output_item.added event
+        let item_added_event = OpenAIResponsesStreamEvent::ResponseOutputItemAdded {
+            item: serde_json::json!({
+                "type": "function_call",
+                "name": "get_weather",
+                "id": "fc_xyz789",
+                "arguments": ""
+            }),
+            output_index: 0,
+        };
+
+        let result = openai_responses_to_tensorzero_chunk(
+            "raw_json_1".to_string(),
+            item_added_event,
+            Duration::from_millis(10),
+            &mut tool_id,
+            &mut tool_name,
+        )
+        .unwrap()
+        .unwrap();
+
+        // Should emit a chunk with the tool name and ID
+        match &result.content[0] {
+            ContentBlockChunk::ToolCall(tool_call) => {
+                assert_eq!(tool_call.id, "fc_xyz789");
+                assert_eq!(tool_call.raw_name, Some("get_weather".to_string()));
+                assert_eq!(tool_call.raw_arguments, "");
+            }
+            _ => panic!("Expected ToolCall chunk"),
+        }
+        // And should have captured metadata in state
+        assert_eq!(tool_id, Some("fc_xyz789".to_string()));
+        assert_eq!(tool_name, Some("get_weather".to_string()));
+
+        // Step 2: function_call_arguments.delta event
+        let delta_event = OpenAIResponsesStreamEvent::ResponseFunctionCallArgumentsDelta {
+            delta: r#"{"location": "#.to_string(),
+            item_id: "fc_xyz789".to_string(),
+            output_index: 0,
+        };
+
+        let result = openai_responses_to_tensorzero_chunk(
+            "raw_json_2".to_string(),
+            delta_event,
+            Duration::from_millis(20),
+            &mut tool_id,
+            &mut tool_name,
+        )
+        .unwrap()
+        .unwrap();
+
+        // Should emit a tool call chunk with the delta
+        match &result.content[0] {
+            ContentBlockChunk::ToolCall(tool_call) => {
+                assert_eq!(tool_call.id, "fc_xyz789");
+                assert_eq!(tool_call.raw_name, None);
+                assert_eq!(tool_call.raw_arguments, r#"{"location": "#);
+            }
+            _ => panic!("Expected ToolCall chunk"),
+        }
+
+        // Step 3: Another delta
+        let delta_event2 = OpenAIResponsesStreamEvent::ResponseFunctionCallArgumentsDelta {
+            delta: r#""San Francisco"}"#.to_string(),
+            item_id: "fc_xyz789".to_string(),
+            output_index: 0,
+        };
+
+        let result = openai_responses_to_tensorzero_chunk(
+            "raw_json_3".to_string(),
+            delta_event2,
+            Duration::from_millis(30),
+            &mut tool_id,
+            &mut tool_name,
+        )
+        .unwrap()
+        .unwrap();
+
+        match &result.content[0] {
+            ContentBlockChunk::ToolCall(tool_call) => {
+                assert_eq!(tool_call.id, "fc_xyz789");
+                assert_eq!(tool_call.raw_arguments, r#""San Francisco"}"#);
+            }
+            _ => panic!("Expected ToolCall chunk"),
+        }
+
+        // Step 4: function_call_arguments.done event
+        let done_event = OpenAIResponsesStreamEvent::ResponseFunctionCallArgumentsDone {
+            item_id: "fc_xyz789".to_string(),
+            arguments: r#"{"location": "San Francisco"}"#.to_string(),
+            output_index: 0,
+        };
+
+        let result = openai_responses_to_tensorzero_chunk(
+            "raw_json_4".to_string(),
+            done_event,
+            Duration::from_millis(40),
+            &mut tool_id,
+            &mut tool_name,
+        )
+        .unwrap()
+        .unwrap();
+
+        // Should emit a chunk marking the end of the function call
+        // No name (already sent in output_item.added) and no arguments (already sent in deltas)
+        match &result.content[0] {
+            ContentBlockChunk::ToolCall(tool_call) => {
+                assert_eq!(tool_call.id, "fc_xyz789");
+                // No name - it was already sent in step 1
+                assert_eq!(tool_call.raw_name, None);
+                // No arguments - they were already sent in steps 2 and 3
+                assert_eq!(tool_call.raw_arguments, "");
             }
             _ => panic!("Expected ToolCall chunk"),
         }
@@ -1524,8 +1738,10 @@ mod tests {
             OpenAIResponsesStreamEvent::ResponseInProgress {
                 response: serde_json::json!({}),
             },
+            // Note: ResponseOutputItemAdded with function_call type now emits a chunk
+            // so we test with a non-function_call item
             OpenAIResponsesStreamEvent::ResponseOutputItemAdded {
-                item: serde_json::json!({}),
+                item: serde_json::json!({"type": "message"}),
                 output_index: 0,
             },
             OpenAIResponsesStreamEvent::ResponseOutputItemDone {

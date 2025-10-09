@@ -406,17 +406,16 @@ impl InferenceProvider for OpenAIProvider {
             let request_url =
                 get_responses_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
 
-            let request_body = serde_json::to_value(
-                OpenAIResponsesRequest::new(&self.model_name, request).await?,
-            )
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing OpenAI Responses request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+            let request_body =
+                serde_json::to_value(OpenAIResponsesRequest::new(&self.model_name, request).await?)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Error serializing OpenAI Responses request: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                        })
+                    })?;
 
             let mut request_builder = http_client.post(request_url);
             if let Some(api_key) = api_key {
@@ -446,17 +445,16 @@ impl InferenceProvider for OpenAIProvider {
             let request_url =
                 get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
 
-            let request_body = serde_json::to_value(
-                OpenAIRequest::new(&self.model_name, request).await?,
-            )
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing OpenAI request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+            let request_body =
+                serde_json::to_value(OpenAIRequest::new(&self.model_name, request).await?)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Error serializing OpenAI request: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                        })
+                    })?;
 
             let mut request_builder = http_client.post(request_url);
             if let Some(api_key) = api_key {
@@ -874,9 +872,11 @@ pub fn stream_openai_responses(
                 Err(e) => {
                     match e {
                         TensorZeroEventError::TensorZero(e) => {
+                            println!("Got TensorZero error: {}", e);
                             yield Err(e);
                         }
                         TensorZeroEventError::EventSource(e) => {
+                            println!("Got EventSource error: {}", e);
                             yield Err(convert_stream_error(provider_type.clone(), e).await);
                         }
                     }
@@ -885,6 +885,8 @@ pub fn stream_openai_responses(
                     Event::Open => continue,
                     Event::Message(message) => {
                         // OpenAI Responses API does not send [DONE] marker
+                        // Instead, we check for terminal events: completed, failed, or incomplete
+                        println!("Received message: {}", message.data);
                         let data: Result<responses::OpenAIResponsesStreamEvent, Error> =
                             serde_json::from_str(&message.data).map_err(|e| {
                                 Error::new(ErrorDetails::InferenceServer {
@@ -894,6 +896,14 @@ pub fn stream_openai_responses(
                                     provider_type: provider_type.clone(),
                                 })
                             });
+
+                        // Check if this is a terminal event
+                        let is_terminal = matches!(
+                            &data,
+                            Ok(responses::OpenAIResponsesStreamEvent::ResponseCompleted { .. })
+                                | Ok(responses::OpenAIResponsesStreamEvent::ResponseIncomplete { .. })
+                                | Ok(responses::OpenAIResponsesStreamEvent::ResponseFailed { .. })
+                        );
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|event| {
@@ -907,9 +917,20 @@ pub fn stream_openai_responses(
                         });
 
                         match stream_message {
-                            Ok(Some(chunk)) => yield Ok(chunk),
+                            Ok(Some(chunk)) => {
+                                yield Ok(chunk);
+                                // Break after yielding terminal events
+                                if is_terminal {
+                                    break;
+                                }
+                            }
                             Ok(None) => continue, // Skip lifecycle events
-                            Err(e) => yield Err(e),
+                            Err(e) => {
+                                println!("Got error in stream_message: {}", e);
+                                yield Err(e);
+                                // Break on error events too
+                                break;
+                            }
                         }
                     }
                 },
