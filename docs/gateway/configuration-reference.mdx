@@ -1554,15 +1554,17 @@ api_key_location = "dynamic::openai_api_key"
 
 ## `[provider_types]`
 
-The `provider_types` section of the configuration allows users to specify global settings that are related to the handling of a
-particular inference provider type (like `"openai"` or `"anthropic"`), such as where to look by default for credentials.
+The `provider_types` section of the configuration allows users to specify global settings that are related to the handling of a particular inference provider type (like `"openai"` or `"anthropic"`), such as where to look by default for credentials.
 
 <Accordion title="[provider_types.anthropic]">
+
 ##### `defaults.api_key_location`
+
 - **Type:** string
 - **Required:** no (default: `env::ANTHROPIC_API_KEY`)
 
-Defines the default location of the API key for Anthropic models. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+Defines the default location of the API key for Anthropic models.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.anthropic.defaults]
@@ -1575,11 +1577,14 @@ api_key_location = "dynamic::anthropic_api_key"
 </Accordion>
 
 <Accordion title="[provider_types.azure]">
+
 ##### `defaults.api_key_location`
+
 - **Type:** string
 - **Required:** no (default: `env::AZURE_OPENAI_API_KEY`)
 
-Defines the default location of the API key for Azure models. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+Defines the default location of the API key for Azure models.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.azure.defaults]
@@ -1591,11 +1596,14 @@ api_key_location = "dynamic::azure_openai_api_key"
 </Accordion>
 
 <Accordion title="[provider_types.deepseek]">
+
 ##### `defaults.api_key_location`
+
 - **Type:** string
 - **Required:** no (default: `env::DEEPSEEK_API_KEY`)
 
-Defines the location of the API key for the DeepSeek provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the DeepSeek provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.deepseek.defaults]
@@ -1607,11 +1615,14 @@ api_key_location = "dynamic::deepseek_api_key"
 </Accordion>
 
 <Accordion title="[provider_types.fireworks]">
+
 ##### `defaults.api_key_location`
+
 - **Type:** string
 - **Required:** no (default: `env::FIREWORKS_API_KEY`)
 
-Defines the location of the API key for the Fireworks provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the Fireworks provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.fireworks.defaults]
@@ -1623,12 +1634,14 @@ api_key_location = "dynamic::fireworks_api_key"
 </Accordion>
 
 <Accordion title="[provider_types.gcp_vertex_anthropic]">
+
 ##### `defaults.credential_location`
 
 - **Type:** string
 - **Required:** no (default: `env::GCP_CREDENTIALS_PATH`)
 
-Defines the location of the credentials for the GCP Vertex Anthropic provider. The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIALS_ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details), and `file::PATH_TO_CREDENTIALS_FILE`.
+Defines the location of the credentials for the GCP Vertex Anthropic provider.
+The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIALS_ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details), and `file::PATH_TO_CREDENTIALS_FILE`.
 
 ```toml title="tensorzero.toml"
 [provider_types.gcp_vertex_anthropic.defaults]
@@ -1642,6 +1655,7 @@ credential_location = "dynamic::gcp_credentials_path"
 </Accordion>
 
 <Accordion title="[provider_types.gcp_vertex_gemini]">
+
 #### `batch`
 
 - **Type:** object
@@ -1681,7 +1695,6 @@ Defines the Google Cloud Storage URI prefix where batch input files will be stor
 
 Defines the Google Cloud Storage URI prefix where batch output files will be stored.
 
-
 ##### `defaults.credential_location`
 
 - **Type:** string
@@ -1701,11 +1714,14 @@ credential_location = "dynamic::gcp_credentials_path"
 </Accordion>
 
 <Accordion title="[provider_types.google_ai_studio]">
+
 ##### `defaults.api_key_location`
+
 - **Type:** string
 - **Required:** no (default: `env::GOOGLE_AI_STUDIO_API_KEY`)
 
-Defines the location of the API key for the Google AI Studio provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the Google AI Studio provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.google_ai_studio.defaults]
@@ -1717,11 +1733,14 @@ api_key_location = "dynamic::google_ai_studio_api_key"
 </Accordion>
 
 <Accordion title="[provider_types.groq]">
+
 ##### `defaults.api_key_location`
+
 - **Type:** string
 - **Required:** no (default: `env::GROQ_API_KEY`)
 
-Defines the location of the API key for the Groq provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the Groq provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.groq.defaults]
@@ -1732,13 +1751,15 @@ api_key_location = "dynamic::groq_api_key"
 
 </Accordion>
 
-
 <Accordion title="[provider_types.hyperbolic]">
+
 ##### `defaults.api_key_location`
+
 - **Type:** string
 - **Required:** no (default: `env::HYPERBOLIC_API_KEY`)
 
-Defines the location of the API key for the Hyperbolic provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the Hyperbolic provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.hyperbolic.defaults]
@@ -1750,11 +1771,14 @@ api_key_location = "dynamic::hyperbolic_api_key"
 </Accordion>
 
 <Accordion title="[provider_types.mistral]">
+
 ##### `defaults.api_key_location`
+
 - **Type:** string
 - **Required:** no (default: `env::MISTRAL_API_KEY`)
 
-Defines the location of the API key for the Mistral provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the Mistral provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.mistral.defaults]
@@ -1766,11 +1790,14 @@ api_key_location = "dynamic::mistral_api_key"
 </Accordion>
 
 <Accordion title="[provider_types.openai]">
+
 ##### `defaults.api_key_location`
+
 - **Type:** string
 - **Required:** no (default: `env::OPENAI_API_KEY`)
 
-Defines the location of the API key for the OpenAI provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the OpenAI provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.openai.defaults]
@@ -1782,11 +1809,14 @@ api_key_location = "dynamic::openai_api_key"
 </Accordion>
 
 <Accordion title="[provider_types.openrouter]">
+
 ##### `defaults.api_key_location`
+
 - **Type:** string
 - **Required:** no (default: `env::OPENROUTER_API_KEY`)
 
-Defines the location of the API key for the OpenRouter provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the OpenRouter provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.openrouter.defaults]
@@ -1798,11 +1828,14 @@ api_key_location = "dynamic::openrouter_api_key"
 </Accordion>
 
 <Accordion title="[provider_types.together]">
+
 ##### `defaults.api_key_location`
+
 - **Type:** string
 - **Required:** no (default: `env::TOGETHER_API_KEY`)
 
-Defines the location of the API key for the Together provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the Together provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.together.defaults]
@@ -1814,11 +1847,14 @@ api_key_location = "dynamic::together_api_key"
 </Accordion>
 
 <Accordion title="[provider_types.xai]">
+
 ##### `defaults.api_key_location`
+
 - **Type:** string
 - **Required:** no (default: `env::XAI_API_KEY`)
 
-Defines the location of the API key for the xAI provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the xAI provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.xai.defaults]
@@ -1828,7 +1864,6 @@ api_key_location = "dynamic::xai_api_key"
 ```
 
 </Accordion>
-
 
 ## `[functions.function_name]`
 
