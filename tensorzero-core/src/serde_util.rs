@@ -171,6 +171,14 @@ where
     }
 }
 
+pub fn deserialize_bool_from_integer<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = u8::deserialize(deserializer)?;
+    Ok(value != 0)
+}
+
 /// Deserializes an optional "maybe-doubly-serialized" field of a struct.
 /// If you have a struct like this:
 /// ```ignore

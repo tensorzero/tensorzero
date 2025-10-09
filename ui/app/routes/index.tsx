@@ -120,7 +120,7 @@ export async function loader() {
 
   // Create derived promises - these will be stable references
   const totalInferencesDesc = countsInfoPromise.then((countsInfo) => {
-    const total = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
+    const total = countsInfo.reduce((acc, curr) => acc + Number(curr.count), 0);
     return `${total.toLocaleString()} inferences`;
   });
 

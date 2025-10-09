@@ -9,6 +9,16 @@ import {
   InferenceResponse,
   EpisodeByIdRow,
   TableBoundsWithCount,
+  InferenceByIdRow,
+  InferenceRow,
+  InferenceTableFilter,
+  ModelInferenceRow,
+  FunctionCountInfo,
+  AdjacentIds,
+  TableBounds,
+  QueryInferenceTableParams,
+  QueryInferenceTableBoundsParams,
+  FunctionType,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
@@ -178,5 +188,94 @@ export class DatabaseClient {
   async queryEpisodeTableBounds(): Promise<TableBoundsWithCount> {
     const bounds = await this.nativeDatabaseClient.queryEpisodeTableBounds();
     return JSON.parse(bounds) as TableBoundsWithCount;
+  }
+
+  async queryInferenceTable(
+    params: QueryInferenceTableParams,
+  ): Promise<InferenceByIdRow[]> {
+    const paramsString = safeStringify(params);
+    const responseString =
+      await this.nativeDatabaseClient.queryInferenceTable(paramsString);
+    return JSON.parse(responseString) as InferenceByIdRow[];
+  }
+
+  async queryInferenceTableBounds(
+    params?: QueryInferenceTableBoundsParams,
+  ): Promise<TableBoundsWithCount> {
+    const paramsString = safeStringify(params ?? {});
+    const responseString =
+      await this.nativeDatabaseClient.queryInferenceTableBounds(paramsString);
+    return JSON.parse(responseString) as TableBoundsWithCount;
+  }
+
+  async countInferencesForFunction(
+    functionName: string,
+    functionType: FunctionType,
+  ): Promise<number> {
+    const params = safeStringify({
+      function_name: functionName,
+      function_type: functionType,
+    });
+    return await this.nativeDatabaseClient.countInferencesForFunction(params);
+  }
+
+  async countInferencesForVariant(
+    functionName: string,
+    functionType: FunctionType,
+    variantName: string,
+  ): Promise<number> {
+    const params = safeStringify({
+      function_name: functionName,
+      function_type: functionType,
+      variant_name: variantName,
+    });
+    return await this.nativeDatabaseClient.countInferencesForVariant(params);
+  }
+
+  async countInferencesForEpisode(episodeId: string): Promise<number> {
+    const params = safeStringify({ episode_id: episodeId });
+    return await this.nativeDatabaseClient.countInferencesForEpisode(params);
+  }
+
+  async queryInferenceById(id: string): Promise<InferenceRow | null> {
+    const params = safeStringify({ id });
+    const responseString =
+      await this.nativeDatabaseClient.queryInferenceById(params);
+    return JSON.parse(responseString) as InferenceRow | null;
+  }
+
+  async queryModelInferencesByInferenceId(
+    id: string,
+  ): Promise<ModelInferenceRow[]> {
+    const params = safeStringify({ id });
+    const responseString =
+      await this.nativeDatabaseClient.queryModelInferencesByInferenceId(params);
+    return JSON.parse(responseString) as ModelInferenceRow[];
+  }
+
+  async countInferencesByFunction(): Promise<FunctionCountInfo[]> {
+    const responseString =
+      await this.nativeDatabaseClient.countInferencesByFunction();
+    return JSON.parse(responseString) as FunctionCountInfo[];
+  }
+
+  async getAdjacentInferenceIds(
+    currentInferenceId: string,
+  ): Promise<AdjacentIds> {
+    const params = safeStringify({
+      current_inference_id: currentInferenceId,
+    });
+    const responseString =
+      await this.nativeDatabaseClient.getAdjacentInferenceIds(params);
+    return JSON.parse(responseString) as AdjacentIds;
+  }
+
+  async getAdjacentEpisodeIds(currentEpisodeId: string): Promise<AdjacentIds> {
+    const params = safeStringify({
+      current_episode_id: currentEpisodeId,
+    });
+    const responseString =
+      await this.nativeDatabaseClient.getAdjacentEpisodeIds(params);
+    return JSON.parse(responseString) as AdjacentIds;
   }
 }

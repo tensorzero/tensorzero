@@ -11,6 +11,7 @@ use std::fmt::Debug;
 use tensorzero_core::config::ConfigFileGlob;
 pub use tensorzero_core::db::ClickHouseConnection;
 use tensorzero_core::db::HealthCheckable;
+pub use tensorzero_core::db::TableBoundsWithCount;
 pub use tensorzero_core::db::{ModelUsageTimePoint, TimeWindow};
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
@@ -54,6 +55,11 @@ pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 
 pub use tensorzero_core::cache::CacheParamsOptions;
+pub use tensorzero_core::db::clickhouse::inference_queries::{
+    AdjacentIds, FunctionCountInfo, InferenceByIdRow, InferenceQueries, InferenceRow,
+    InferenceTableFilter, ModelInferenceRow, QueryInferenceTableBoundsParams,
+    QueryInferenceTableParams, TableBounds,
+};
 pub use tensorzero_core::db::clickhouse::query_builder::{
     BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilterTreeNode,
     InferenceOutputSource, ListInferencesParams, TagComparisonOperator, TagFilter,
@@ -73,6 +79,7 @@ pub use tensorzero_core::endpoints::inference::{
 pub use tensorzero_core::endpoints::object_storage::ObjectResponse;
 pub use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
 pub use tensorzero_core::inference::types::File;
+pub use tensorzero_core::inference::types::FunctionType;
 pub use tensorzero_core::inference::types::{
     ContentBlockChunk, Input, InputMessage, InputMessageContent, Role,
 };
