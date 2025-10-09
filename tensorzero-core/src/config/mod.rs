@@ -557,7 +557,7 @@ impl ConfigFileGlob {
             })?
             .compile_matcher();
 
-        // Extract the base directory to start walking from
+        // Extract the base path to start walking from
         let base_path = extract_base_path_from_glob(&glob);
 
         // Find all files matching the glob pattern
@@ -583,13 +583,14 @@ impl ConfigFileGlob {
     }
 }
 
-/// Extract the base directory path from a glob pattern.
+/// Extract the base path from a glob pattern.
 ///
 /// This finds the longest literal path prefix before any glob metacharacters,
 /// following the same approach as the glob crate. It works at the path component
 /// level (not character level) for better handling of path separators.
 ///
 /// # Examples
+/// - `/tmp/config/tensorzero.toml` → `/tmp/config/tensorzero.toml`
 /// - `/tmp/config/**/*.toml` → `/tmp/config`
 /// - `config/**/*.toml` → `config`
 /// - `*.toml` → `.`
@@ -612,11 +613,21 @@ fn extract_base_path_from_glob(glob: &str) -> PathBuf {
         base_components.iter().collect()
     }
 }
-
-/// Walk a directory tree and find all files matching the glob pattern.
+/// Check which files match the glob pattern.
+/// If the base path is a file, check it directly against the matcher.
+/// If the base path is a directory, walk it.
 fn find_matching_files(base_path: &Path, matcher: &globset::GlobMatcher) -> Vec<PathBuf> {
     let mut matched_files = Vec::new();
 
+    // If base_path is a file, check it directly against the matcher
+    if base_path.is_file() {
+        if matcher.is_match(base_path) {
+            matched_files.push(base_path.to_path_buf());
+        }
+        return matched_files;
+    }
+
+    // If base_path is a directory, walk it
     for entry in walkdir::WalkDir::new(base_path)
         .follow_links(false)
         .into_iter()

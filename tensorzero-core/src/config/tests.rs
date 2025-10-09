@@ -2750,8 +2750,6 @@ async fn test_config_schema_missing_template() {
 
 #[test]
 fn test_extract_base_path_from_glob_with_recursive_pattern() {
-    use super::extract_base_path_from_glob;
-
     // Pattern with ** should extract up to that component
     let base = extract_base_path_from_glob("/tmp/config/**/*.toml");
     assert_eq!(base, PathBuf::from("/tmp/config"));
@@ -2762,8 +2760,6 @@ fn test_extract_base_path_from_glob_with_recursive_pattern() {
 
 #[test]
 fn test_extract_base_path_from_glob_with_wildcard_in_filename() {
-    use super::extract_base_path_from_glob;
-
     // Pattern with * in filename should extract directory
     let base = extract_base_path_from_glob("/tmp/config/*.toml");
     assert_eq!(base, PathBuf::from("/tmp/config"));
@@ -2774,8 +2770,6 @@ fn test_extract_base_path_from_glob_with_wildcard_in_filename() {
 
 #[test]
 fn test_extract_base_path_from_glob_wildcard_only() {
-    use super::extract_base_path_from_glob;
-
     // Pattern starting with wildcard should use current directory
     let base = extract_base_path_from_glob("*.toml");
     assert_eq!(base, PathBuf::from("."));
@@ -2786,24 +2780,33 @@ fn test_extract_base_path_from_glob_wildcard_only() {
 
 #[test]
 fn test_extract_base_path_from_glob_no_pattern() {
-    use super::extract_base_path_from_glob;
-
-    // No glob pattern - should return parent directory
     let base = extract_base_path_from_glob("/tmp/config/file.toml");
+    assert_eq!(base, PathBuf::from("/tmp/config/file.toml"));
+
+    let base = extract_base_path_from_glob("/tmp/config");
     assert_eq!(base, PathBuf::from("/tmp/config"));
 
     let base = extract_base_path_from_glob("config/file.toml");
+    assert_eq!(base, PathBuf::from("config/file.toml"));
+
+    let base = extract_base_path_from_glob("config");
     assert_eq!(base, PathBuf::from("config"));
 
-    // Single file with no directory
     let base = extract_base_path_from_glob("file.toml");
+    assert_eq!(base, PathBuf::from("file.toml"));
+}
+
+#[test]
+fn test_extract_base_path_from_glob_without_parent() {
+    let base = extract_base_path_from_glob("file?.toml");
+    assert_eq!(base, PathBuf::from("."));
+
+    let base = extract_base_path_from_glob("*");
     assert_eq!(base, PathBuf::from("."));
 }
 
 #[test]
 fn test_extract_base_path_from_glob_question_mark() {
-    use super::extract_base_path_from_glob;
-
     // Question mark is also a glob metacharacter
     let base = extract_base_path_from_glob("/tmp/config/file?.toml");
     assert_eq!(base, PathBuf::from("/tmp/config"));
@@ -2811,8 +2814,6 @@ fn test_extract_base_path_from_glob_question_mark() {
 
 #[test]
 fn test_extract_base_path_from_glob_brackets() {
-    use super::extract_base_path_from_glob;
-
     // Brackets are glob metacharacters
     let base = extract_base_path_from_glob("/tmp/config/file[0-9].toml");
     assert_eq!(base, PathBuf::from("/tmp/config"));
@@ -2820,8 +2821,6 @@ fn test_extract_base_path_from_glob_brackets() {
 
 #[test]
 fn test_extract_base_path_from_glob_braces() {
-    use super::extract_base_path_from_glob;
-
     // Braces are glob metacharacters
     let base = extract_base_path_from_glob("/tmp/config/{a,b}.toml");
     assert_eq!(base, PathBuf::from("/tmp/config"));

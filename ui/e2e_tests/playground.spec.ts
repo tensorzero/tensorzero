@@ -294,5 +294,5 @@ test("editing variants works @credentials", async ({ page }) => {
   // Wait for the inference to complete and assert that the generated output contains the word "obtuse"
   await expect(
     page.getByRole("textbox").filter({ hasText: "obtuse" }).first(),
-  ).toBeVisible({ timeout: 30000 });
+  ).toBeVisible({ timeout: 10000 });
 });
