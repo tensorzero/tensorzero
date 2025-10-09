@@ -6,6 +6,7 @@ use serde_json::json;
 use crate::{
     cache::CacheOptions,
     config::{Config, UninitializedVariantConfig},
+    config::TimeoutsConfig,
     db::{
         clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
         postgres::PostgresConnectionInfo,
@@ -839,7 +840,7 @@ mod tests {
             let embedding_model_config = EmbeddingModelConfig {
                 routing: vec![Arc::from("dummy")],
                 providers,
-                timeouts: TimeoutsConfig::default()
+                timeouts: TimeoutsConfig::default(),
                 timeout_ms: None,
                 retries: RetryConfig::default(),
             };

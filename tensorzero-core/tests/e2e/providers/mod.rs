@@ -3,11 +3,7 @@ mod aws_bedrock;
 mod aws_sagemaker_openai;
 mod aws_sagemaker_tgi;
 mod azure;
-<<<<<<< HEAD
-mod azure_llama;
-=======
 mod azure_ai_foundry;
->>>>>>> upstream/main
 mod batch;
 pub mod common;
 mod deepseek;

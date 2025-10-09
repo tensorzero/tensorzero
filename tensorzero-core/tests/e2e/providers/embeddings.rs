@@ -3,6 +3,20 @@ use super::common::EmbeddingTestProvider;
 use crate::common::get_gateway_endpoint;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
+use std::collections::HashMap;
+use tensorzero_core::config::OtlpConfig;
+use tensorzero_core::config::TimeoutsConfig;
+use tensorzero_core::db::postgres::PostgresConnectionInfo;
+use tensorzero_core::embeddings::EmbeddingEncodingFormat;
+use tensorzero_core::embeddings::EmbeddingModelConfig;
+use tensorzero_core::embeddings::EmbeddingProviderConfig;
+use tensorzero_core::embeddings::EmbeddingProviderInfo;
+use tensorzero_core::embeddings::EmbeddingRequest;
+use tensorzero_core::endpoints::inference::InferenceClients;
+use tensorzero_core::endpoints::inference::InferenceCredentials;
+use tensorzero_core::http::TensorzeroHttpClient;
+use tensorzero_core::rate_limiting::RateLimitingConfig;
+use tensorzero_core::utils::retries::RetryConfig;
 
 pub async fn test_basic_embedding_with_provider(provider: EmbeddingTestProvider) {
     let payload = json!({
@@ -566,7 +580,7 @@ async fn test_embedding_provider_retries() {
     use tensorzero_core::{
         cache::{CacheEnabledMode, CacheOptions},
         db::clickhouse::ClickHouseConnectionInfo,
-        variant::RetryConfig,
+        utils::retries::RetryConfig,
         // ...other necessary imports...
     };
     use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
@@ -589,23 +603,23 @@ async fn test_embedding_provider_retries() {
         }
     }
 
-    impl DummyProvider {
+    //impl DummyProvider {
         // You may need to extend DummyProvider or use a custom provider for this
         // For illustration, assume you can inject failure logic
-    }
+    //}
 
     // Setup provider info
     let fail_count = Arc::new(AtomicUsize::new(0));
     let flaky_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
         model_name: "flaky".into(),
         // ...inject fail_count and fail_limit if possible...
-        fail_count,
-        fail_limit: 2,
+        //fail_count,
+        //fail_limit: 2,
         ..Default::default()
     });
     let flaky_provider_info = EmbeddingProviderInfo {
         inner: flaky_provider,
-        timeouts: Default::default(),
+        timeout_ms: Default::default(),
         provider_name: Arc::from("flaky".to_string()),
         extra_body: None,
     };
@@ -613,6 +627,7 @@ async fn test_embedding_provider_retries() {
     let embedding_model = EmbeddingModelConfig {
         routing: vec!["flaky".to_string().into()],
         providers: HashMap::from([("flaky".to_string().into(), flaky_provider_info)]),
+        timeout_ms: None,
         timeouts: TimeoutsConfig::default(),
         retries: RetryConfig { num_retries: 2, ..Default::default() },
     };
@@ -622,19 +637,23 @@ async fn test_embedding_provider_retries() {
         dimensions: None,
         encoding_format: EmbeddingEncodingFormat::Float,
     };
-
+    let http_client = TensorzeroHttpClient::new().unwrap();
     let response = embedding_model
         .embed(
             &request,
             "flaky",
             &InferenceClients {
-                http_client: &Client::new(),
+                http_client: &http_client,
+                clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
+                postgres_connection_info: &PostgresConnectionInfo::Disabled,
                 credentials: &InferenceCredentials::default(),
                 cache_options: &CacheOptions {
                     max_age_s: None,
                     enabled: CacheEnabledMode::Off,
                 },
-                clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
+                tags: &HashMap::new(),
+                rate_limiting_config: &RateLimitingConfig::default(),
+                otlp_config: &OtlpConfig::default(),
             },
         )
         .await;

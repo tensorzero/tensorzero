@@ -11,6 +11,7 @@ use tensorzero::{
 };
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_core::config::provider_types::ProviderTypesConfig;
+use tensorzero_core::config::TimeoutsConfig;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::embeddings::{
     Embedding, EmbeddingEncodingFormat, EmbeddingModelConfig, EmbeddingProviderConfig,
@@ -24,6 +25,7 @@ use tensorzero_core::inference::types::{
 };
 use tensorzero_core::model_table::ProviderTypeDefaultCredentials;
 use tensorzero_core::rate_limiting::ScopeInfo;
+use tensorzero_core::utils::retries::RetryConfig;
 use url::Url;
 use uuid::Uuid;
 
@@ -1195,6 +1197,8 @@ async fn test_embedding_request() {
             .into_iter()
             .collect(),
         timeout_ms: None,
+        timeouts: TimeoutsConfig::default(),
+        retries: RetryConfig::default()
     };
 
     let request = EmbeddingRequest {

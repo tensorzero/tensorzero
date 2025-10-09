@@ -3346,15 +3346,9 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 
     let inference_id = inference_id.unwrap();
     assert!(full_content.to_lowercase().contains("tokyo"));
-
-<<<<<<< HEAD
-    // NB: Azure OpenAI doesn't support input/output tokens during streaming, but Azure Llama does
-    if (provider.variant_name.contains("azure") && !provider.variant_name.contains("llama"))
-=======
     // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
     if (provider.variant_name.contains("azure")
         && !provider.variant_name.contains("azure-ai-foundry"))
->>>>>>> upstream/main
         || check_cache
     {
         assert_eq!(input_tokens, 0);
@@ -3463,16 +3457,10 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
-
-<<<<<<< HEAD
-    // NB: Azure OpenAI doesn't support input/output tokens during streaming, but Azure Llama does
-    if provider.variant_name.contains("azure") && !provider.variant_name.contains("llama") {
-=======
     // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
     if provider.variant_name.contains("azure")
         && !provider.variant_name.contains("azure-ai-foundry")
     {
->>>>>>> upstream/main
         assert!(input_tokens.is_null());
         assert!(output_tokens.is_null());
     } else {
@@ -3866,16 +3854,10 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
 
     let inference_id = inference_id.unwrap();
     assert!(full_content.to_lowercase().contains("tokyo"));
-
-<<<<<<< HEAD
-    // NB: Azure OpenAI doesn't support input/output tokens during streaming, but Azure Llama does
-    if provider.variant_name.contains("azure") && !provider.variant_name.contains("llama") {
-=======
     // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
     if provider.variant_name.contains("azure")
         && !provider.variant_name.contains("azure-ai-foundry")
     {
->>>>>>> upstream/main
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -4003,16 +3985,10 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
 
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
-
-<<<<<<< HEAD
-    // NB: Azure OpenAI doesn't support input/output tokens during streaming, but Azure Llama does
-    if provider.variant_name.contains("azure") && !provider.variant_name.contains("llama") {
-=======
     // NB: Azure OpenAI Service doesn't support input/output tokens during streaming, but Azure AI Foundry does
     if provider.variant_name.contains("azure")
         && !provider.variant_name.contains("azure-ai-foundry")
     {
->>>>>>> upstream/main
         assert!(input_tokens.is_null());
         assert!(output_tokens.is_null());
     } else {

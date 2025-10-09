@@ -6,6 +6,7 @@ use tracing::instrument;
 use crate::{
     cache::CacheParamsOptions,
     config::Config,
+    config::TimeoutsConfig,
     db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
     endpoints::inference::InferenceClients,
@@ -122,6 +123,7 @@ mod tests {
             routing: vec!["dummy".to_string().into()],
             providers: HashMap::from([("dummy".to_string().into(), provider_info)]),
             timeout_ms: None,
+            timeouts: TimeoutsConfig::default(),    
             retries: RetryConfig::default(),
         };
 
