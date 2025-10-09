@@ -2745,3 +2745,129 @@ async fn test_config_schema_missing_template() {
 
     assert_eq!(err.to_string(), "`functions.test.variants.missing_template.templates.my_custom_schema` is required when `functions.test.schemas.my_custom_schema` is specified");
 }
+
+// Unit tests for glob pattern matching functionality
+
+#[test]
+fn test_extract_base_path_from_glob_with_recursive_pattern() {
+    use super::extract_base_path_from_glob;
+
+    // Pattern with ** should extract up to that component
+    let base = extract_base_path_from_glob("/tmp/config/**/*.toml");
+    assert_eq!(base, PathBuf::from("/tmp/config"));
+
+    let base = extract_base_path_from_glob("config/**/*.toml");
+    assert_eq!(base, PathBuf::from("config"));
+}
+
+#[test]
+fn test_extract_base_path_from_glob_with_wildcard_in_filename() {
+    use super::extract_base_path_from_glob;
+
+    // Pattern with * in filename should extract directory
+    let base = extract_base_path_from_glob("/tmp/config/*.toml");
+    assert_eq!(base, PathBuf::from("/tmp/config"));
+
+    let base = extract_base_path_from_glob("config/*.toml");
+    assert_eq!(base, PathBuf::from("config"));
+}
+
+#[test]
+fn test_extract_base_path_from_glob_wildcard_only() {
+    use super::extract_base_path_from_glob;
+
+    // Pattern starting with wildcard should use current directory
+    let base = extract_base_path_from_glob("*.toml");
+    assert_eq!(base, PathBuf::from("."));
+
+    let base = extract_base_path_from_glob("**/*.toml");
+    assert_eq!(base, PathBuf::from("."));
+}
+
+#[test]
+fn test_extract_base_path_from_glob_no_pattern() {
+    use super::extract_base_path_from_glob;
+
+    // No glob pattern - should return parent directory
+    let base = extract_base_path_from_glob("/tmp/config/file.toml");
+    assert_eq!(base, PathBuf::from("/tmp/config"));
+
+    let base = extract_base_path_from_glob("config/file.toml");
+    assert_eq!(base, PathBuf::from("config"));
+
+    // Single file with no directory
+    let base = extract_base_path_from_glob("file.toml");
+    assert_eq!(base, PathBuf::from("."));
+}
+
+#[test]
+fn test_extract_base_path_from_glob_question_mark() {
+    use super::extract_base_path_from_glob;
+
+    // Question mark is also a glob metacharacter
+    let base = extract_base_path_from_glob("/tmp/config/file?.toml");
+    assert_eq!(base, PathBuf::from("/tmp/config"));
+}
+
+#[test]
+fn test_extract_base_path_from_glob_brackets() {
+    use super::extract_base_path_from_glob;
+
+    // Brackets are glob metacharacters
+    let base = extract_base_path_from_glob("/tmp/config/file[0-9].toml");
+    assert_eq!(base, PathBuf::from("/tmp/config"));
+}
+
+#[test]
+fn test_extract_base_path_from_glob_braces() {
+    use super::extract_base_path_from_glob;
+
+    // Braces are glob metacharacters
+    let base = extract_base_path_from_glob("/tmp/config/{a,b}.toml");
+    assert_eq!(base, PathBuf::from("/tmp/config"));
+}
+
+#[tokio::test]
+async fn test_config_file_glob_integration() {
+    // Integration test: create temp files and verify glob matching works
+    let temp_dir = tempfile::tempdir().unwrap();
+
+    // Create directory structure
+    let config_dir = temp_dir.path().join("config");
+    std::fs::create_dir(&config_dir).unwrap();
+
+    // Create some test files
+    std::fs::write(config_dir.join("base.toml"), "[test]\nkey = \"base\"").unwrap();
+    std::fs::write(config_dir.join("dev.toml"), "[test]\nkey = \"dev\"").unwrap();
+    std::fs::write(config_dir.join("README.md"), "# README").unwrap();
+
+    // Test glob pattern matching
+    let glob_pattern = format!("{}/*.toml", config_dir.display());
+    let config_glob = ConfigFileGlob::new(glob_pattern).unwrap();
+
+    // Should match 2 .toml files, not the .md file
+    assert_eq!(config_glob.paths.len(), 2);
+    assert!(config_glob.paths.iter().all(|p| p.extension().unwrap() == "toml"));
+}
+
+#[tokio::test]
+async fn test_config_file_glob_recursive() {
+    // Test recursive glob pattern matching
+    let temp_dir = tempfile::tempdir().unwrap();
+
+    // Create nested directory structure
+    let base_dir = temp_dir.path().join("config");
+    let sub_dir = base_dir.join("subdir");
+    std::fs::create_dir_all(&sub_dir).unwrap();
+
+    // Create files at different levels
+    std::fs::write(base_dir.join("base.toml"), "[test]\nkey = \"base\"").unwrap();
+    std::fs::write(sub_dir.join("nested.toml"), "[test]\nkey = \"nested\"").unwrap();
+
+    // Test recursive glob pattern
+    let glob_pattern = format!("{}/**/*.toml", base_dir.display());
+    let config_glob = ConfigFileGlob::new(glob_pattern).unwrap();
+
+    // Should match both files
+    assert_eq!(config_glob.paths.len(), 2);
+}
