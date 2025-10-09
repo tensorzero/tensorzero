@@ -600,7 +600,7 @@ fn extract_base_path_from_glob(glob: &str) -> PathBuf {
     for component in path.components() {
         let component_str = component.as_os_str().to_string_lossy();
         // Stop at the first component containing glob metacharacters
-        if component_str.contains(['*', '?', '[', '{']) {
+        if component_str.contains(['*', '?', '[', ']', '{', '}']) {
             break;
         }
         base_components.push(component);
