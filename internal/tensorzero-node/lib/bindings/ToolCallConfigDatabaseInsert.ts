@@ -6,4 +6,8 @@ import type { ToolChoice } from "./ToolChoice";
  * ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
  * It is used to insert the ToolCallConfig into the database.
  */
-export type ToolCallConfigDatabaseInsert = { tools_available: Array<Tool>, tool_choice: ToolChoice, parallel_tool_calls: boolean | null, };
+export type ToolCallConfigDatabaseInsert = {
+  tools_available: Array<Tool>;
+  tool_choice: ToolChoice;
+  parallel_tool_calls: boolean | null;
+};

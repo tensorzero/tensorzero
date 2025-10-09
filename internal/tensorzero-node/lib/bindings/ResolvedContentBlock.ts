@@ -10,4 +10,10 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * Like `ContentBlock`, but stores an in-memory `FileWithPath` instead of a `LazyFile`
  * As a result, it can implement both `Serialize` and `Deserialize`
  */
-export type ResolvedContentBlock = { "type": "text" } & Text | { "type": "tool_call" } & ToolCall | { "type": "tool_result" } & ToolResult | { "type": "file" } & FileWithPath | { "type": "thought" } & Thought | { "type": "unknown", data: JsonValue, model_provider_name: string | null, };
+export type ResolvedContentBlock =
+  | ({ type: "text" } & Text)
+  | ({ type: "tool_call" } & ToolCall)
+  | ({ type: "tool_result" } & ToolResult)
+  | ({ type: "file" } & FileWithPath)
+  | ({ type: "thought" } & Thought)
+  | { type: "unknown"; data: JsonValue; model_provider_name: string | null };

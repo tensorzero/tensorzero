@@ -2,4 +2,7 @@
 import type { GCPBatchConfigType } from "./GCPBatchConfigType";
 import type { GCPDefaults } from "./GCPDefaults";
 
-export type GCPProviderTypeConfig = { batch: GCPBatchConfigType | null, defaults: GCPDefaults, };
+export type GCPProviderTypeConfig = {
+  batch: GCPBatchConfigType | null;
+  defaults: GCPDefaults;
+};

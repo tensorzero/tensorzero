@@ -4,4 +4,8 @@ import type { DynamicToolConfig } from "./DynamicToolConfig";
 import type { ImplicitToolConfig } from "./ImplicitToolConfig";
 import type { StaticToolConfig } from "./StaticToolConfig";
 
-export type ToolConfig = { "Static": StaticToolConfig } | { "Dynamic": DynamicToolConfig } | { "Implicit": ImplicitToolConfig } | { "DynamicImplicit": DynamicImplicitToolConfig };
+export type ToolConfig =
+  | { Static: StaticToolConfig }
+  | { Dynamic: DynamicToolConfig }
+  | { Implicit: ImplicitToolConfig }
+  | { DynamicImplicit: DynamicImplicitToolConfig };

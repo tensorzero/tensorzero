@@ -700,6 +700,10 @@ model = "responses-gpt-4o-mini-2024-07-18"
 type = "chat_completion"
 model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-lite"
 
+[functions.pdf_test.variants.google_ai_studio]
+type = "chat_completion"
+model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
+
 [functions.pdf_test.variants.anthropic]
 type = "chat_completion"
 model = "anthropic::claude-3-5-sonnet-20241022"

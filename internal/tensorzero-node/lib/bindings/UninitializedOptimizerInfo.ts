@@ -6,4 +6,10 @@ import type { UninitializedOpenAIRFTConfig } from "./UninitializedOpenAIRFTConfi
 import type { UninitializedOpenAISFTConfig } from "./UninitializedOpenAISFTConfig";
 import type { UninitializedTogetherSFTConfig } from "./UninitializedTogetherSFTConfig";
 
-export type UninitializedOptimizerInfo = { "type": "dicl" } & UninitializedDiclOptimizationConfig | { "type": "openai_sft" } & UninitializedOpenAISFTConfig | { "type": "openai_rft" } & UninitializedOpenAIRFTConfig | { "type": "fireworks_sft" } & UninitializedFireworksSFTConfig | { "type": "gcp_vertex_gemini_sft" } & UninitializedGCPVertexGeminiSFTConfig | { "type": "together_sft" } & UninitializedTogetherSFTConfig;
+export type UninitializedOptimizerInfo =
+  | ({ type: "dicl" } & UninitializedDiclOptimizationConfig)
+  | ({ type: "openai_sft" } & UninitializedOpenAISFTConfig)
+  | ({ type: "openai_rft" } & UninitializedOpenAIRFTConfig)
+  | ({ type: "fireworks_sft" } & UninitializedFireworksSFTConfig)
+  | ({ type: "gcp_vertex_gemini_sft" } & UninitializedGCPVertexGeminiSFTConfig)
+  | ({ type: "together_sft" } & UninitializedTogetherSFTConfig);
