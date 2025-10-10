@@ -63,6 +63,7 @@ jobs:
           chmod 777 examples/multimodal-vision-finetuning/object_storage
 
       - name: Apply Postgres migrations for the enforce-custom-rate-limits example
+        # TODO (#3874): Remove the dummy credential once they become optional
         run: |
           cd examples/docs/guides/operations/enforce-custom-rate-limits
           OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
@@ -104,6 +105,7 @@ jobs:
           chmod 777 examples/multimodal-vision-finetuning/object_storage
 
       - name: Apply Postgres migrations for the enforce-custom-rate-limits example
+        # TODO (#3874): Remove the dummy credential once they become optional
         run: |
           cd examples/docs/guides/operations/enforce-custom-rate-limits
           OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
