@@ -818,7 +818,7 @@ function variantInfoToUninitializedVariantInfo(
  * It will also error if there are tools with duplicated names. In order to avoid this, we "subtract"
  * out all currently configured tools from the tools that we pass in dynamically.
  */
-export function subtractStaticToolsFromInferenceInput(
+function subtractStaticToolsFromInferenceInput(
   datapointTools: Tool[],
   functionConfig: FunctionConfig,
   toolsConfig: { [key in string]?: StaticToolConfig },
