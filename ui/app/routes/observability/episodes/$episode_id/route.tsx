@@ -40,7 +40,7 @@ import { logger } from "~/utils/logger";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
 
 export const handle: RouteHandle = {
-  crumb: (match) => [match.params.episode_id!],
+  crumb: (match) => [{ label: match.params.episode_id!, isIdentifier: true }],
 };
 
 export async function loader({ request, params }: Route.LoaderArgs) {
