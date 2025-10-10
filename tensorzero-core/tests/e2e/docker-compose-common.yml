@@ -73,3 +73,40 @@ services:
       POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tensorzero-e2e-tests"]
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  # This is not a gateway to use but rather one that just sets up migrations for the ClickHouse db
+  # If you need to add fixtures that reference newly-added database columns, you'll need to temporarily
+  # bump this to a locally-built image (or published 'sha' tag)
+  gateway-clickhouse-migrations:
+    image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
+    profiles: ["migrations"]
+    environment:
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero_e2e_tests}
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    command: ["--run-clickhouse-migrations"]
+    restart: "no"
+    extra_hosts:
+      - "howdy.tensorzero.com:127.0.0.1"
+
+  # This is not a gateway to use but rather one that just sets up migrations for the Postgres db
+  # If you need to add fixtures that reference newly-added database columns, you'll need to temporarily
+  # bump this to a locally-built image (or published 'sha' tag)
+  gateway-postgres-migrations:
+    image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
+    profiles: ["migrations"]
+    environment:
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["--run-postgres-migrations"]
+    restart: "no"
+    extra_hosts:
+      - "howdy.tensorzero.com:127.0.0.1"

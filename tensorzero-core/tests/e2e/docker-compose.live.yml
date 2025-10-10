@@ -222,8 +222,6 @@ services:
       # Shared tmpdir filesystem
       - shared-tmpdir:/tmp
     depends_on:
-      gateway:
-        condition: service_healthy
       fixtures:
         condition: service_completed_successfully
       clickhouse:
