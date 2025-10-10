@@ -50,7 +50,7 @@ If you don't specify a scope, the rule will apply to all requests.
 At the moment, only user-defined `tags` are supported.
 You can limit the scope to specific values, to each individual value (`tensorzero::each`), or to every value collectively (`tensorzero::total`).
 
-For example, the following rule only would only to inference requests with the tag `user_id` set to `intern`:
+For example, the following rule would only apply to inference requests with the tag `user_id` set to `intern`:
 
 ```toml title="tensorzero.toml"
 [[rate_limiting.rules]]
