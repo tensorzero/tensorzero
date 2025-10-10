@@ -1,4 +1,5 @@
 import { Pie, PieChart, Cell } from "recharts";
+import { CHART_COLORS } from "~/utils/chart";
 
 import {
   Card,
@@ -13,14 +14,6 @@ import {
   ChartLegendContent,
   ChartTooltip,
 } from "~/components/ui/chart";
-
-const CHART_COLORS = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
-] as const;
 
 export type VariantWeight = {
   variant_name: string;
