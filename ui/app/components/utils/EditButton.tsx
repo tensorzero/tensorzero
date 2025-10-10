@@ -32,7 +32,7 @@ export function EditButton({
                 size="iconSm"
                 className={className}
                 disabled={disabled}
-                aria-label="Edit"
+                aria-label={tooltip}
                 title={tooltip}
               >
                 <Pencil className="h-4 w-4" />
@@ -56,7 +56,7 @@ export function EditButton({
             size="iconSm"
             onClick={onClick}
             className={className}
-            aria-label="Edit"
+            aria-label={tooltip}
             title={tooltip}
           >
             <Pencil className="h-4 w-4" />

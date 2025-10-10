@@ -2,4 +2,7 @@
 import type { ClientInputMessage } from "./ClientInputMessage";
 import type { JsonValue } from "./serde_json/JsonValue";
 
-export type ClientInput = { system: JsonValue | null, messages: Array<ClientInputMessage>, };
+export type ClientInput = {
+  system: JsonValue | null;
+  messages: Array<ClientInputMessage>;
+};

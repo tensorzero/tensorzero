@@ -2,4 +2,7 @@
 import type { ResolvedInputMessageContent } from "./ResolvedInputMessageContent";
 import type { Role } from "./Role";
 
-export type ResolvedInputMessage = { role: Role, content: Array<ResolvedInputMessageContent>, };
+export type ResolvedInputMessage = {
+  role: Role;
+  content: Array<ResolvedInputMessageContent>;
+};

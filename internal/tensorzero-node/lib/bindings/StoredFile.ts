@@ -2,4 +2,7 @@
 import type { Base64FileMetadata } from "./Base64FileMetadata";
 import type { StoragePath } from "./StoragePath";
 
-export type StoredFile = { file: Base64FileMetadata, storage_path: StoragePath, };
+export type StoredFile = {
+  file: Base64FileMetadata;
+  storage_path: StoragePath;
+};

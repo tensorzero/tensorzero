@@ -3,4 +3,12 @@ import type { ContentBlockChatOutput } from "./ContentBlockChatOutput";
 import type { FinishReason } from "./FinishReason";
 import type { Usage } from "./Usage";
 
-export type ChatInferenceResponse = { inference_id: string, episode_id: string, variant_name: string, content: Array<ContentBlockChatOutput>, usage: Usage, original_response: string | null, finish_reason: FinishReason | null, };
+export type ChatInferenceResponse = {
+  inference_id: string;
+  episode_id: string;
+  variant_name: string;
+  content: Array<ContentBlockChatOutput>;
+  usage: Usage;
+  original_response: string | null;
+  finish_reason: FinishReason | null;
+};

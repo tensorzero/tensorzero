@@ -1,6 +1,10 @@
 import { describe, expect, test, beforeEach, vi } from "vitest";
 import { v7 as uuid } from "uuid";
-import { deleteDatapoint, saveDatapoint } from "./datapointOperations.server";
+import {
+  deleteDatapoint,
+  saveDatapoint,
+  renameDatapoint,
+} from "./datapointOperations.server";
 import type {
   DatasetCountInfo,
   ParsedChatInferenceDatapointRow,
@@ -350,6 +354,194 @@ describe("datapointOperations", () => {
           output_schema: expect.anything(),
         }),
       );
+    });
+  });
+
+  describe("renameDatapoint - chat", () => {
+    test("should update datapoint with new name", async () => {
+      const datasetName = "test_dataset";
+      const datapointId = uuid();
+      const sourceInferenceId = uuid();
+      const episodeId = uuid();
+
+      const datapoint: ParsedChatInferenceDatapointRow = {
+        dataset_name: datasetName,
+        function_name: "write_haiku",
+        name: "old_name",
+        id: datapointId,
+        episode_id: episodeId,
+        input: {
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Write a haiku about coding",
+                },
+              ],
+            },
+          ],
+        },
+        output: [{ type: "text", text: "Code flows like water" }],
+        tool_params: { temperature: 0.7 },
+        tags: { environment: "test" },
+        auxiliary: "",
+        is_deleted: false,
+        updated_at: new Date().toISOString(),
+        staled_at: null,
+        source_inference_id: sourceInferenceId,
+        is_custom: false,
+      };
+
+      const newName = "new_name";
+
+      await renameDatapoint({
+        functionType: "chat",
+        datasetName,
+        datapoint,
+        newName,
+      });
+
+      // Verify updateDatapoint was called with the new name
+      expect(mockUpdateDatapoint).toHaveBeenCalledWith(
+        datasetName,
+        expect.objectContaining({
+          id: datapointId,
+          function_name: "write_haiku",
+          episode_id: episodeId,
+          tags: { environment: "test" },
+          is_custom: false,
+          source_inference_id: sourceInferenceId,
+          tool_params: { temperature: 0.7 },
+          auxiliary: "",
+          name: newName,
+          staled_at: null,
+        }),
+      );
+
+      // Verify staleDatapoint was NOT called (rename doesn't stale)
+      expect(mockStaleDatapoint).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("renameDatapoint - json", () => {
+    test("should update datapoint with new name and preserve output_schema", async () => {
+      const datasetName = "test_dataset";
+      const datapointId = uuid();
+      const sourceInferenceId = uuid();
+      const episodeId = uuid();
+
+      const datapoint: ParsedJsonInferenceDatapointRow = {
+        dataset_name: datasetName,
+        function_name: "extract_entities",
+        name: "old_json_name",
+        id: datapointId,
+        episode_id: episodeId,
+        input: {
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "John works at Google in Mountain View",
+                },
+              ],
+            },
+          ],
+        },
+        output: {
+          raw: '{"person":["John"],"organization":["Google"],"location":["Mountain View"],"miscellaneous":[]}',
+          parsed: {
+            person: ["John"],
+            organization: ["Google"],
+            location: ["Mountain View"],
+            miscellaneous: [],
+          },
+        },
+        output_schema: {
+          type: "object",
+          properties: {
+            person: { type: "array", items: { type: "string" } },
+            organization: { type: "array", items: { type: "string" } },
+            location: { type: "array", items: { type: "string" } },
+            miscellaneous: { type: "array", items: { type: "string" } },
+          },
+          required: ["person", "organization", "location", "miscellaneous"],
+        },
+        tags: { source: "test" },
+        auxiliary: "",
+        is_deleted: false,
+        updated_at: new Date().toISOString(),
+        staled_at: null,
+        source_inference_id: sourceInferenceId,
+        is_custom: false,
+      };
+
+      const newName = "new_json_name";
+
+      await renameDatapoint({
+        functionType: "json",
+        datasetName,
+        datapoint,
+        newName,
+      });
+
+      // Verify updateDatapoint was called with the new name and output_schema
+      expect(mockUpdateDatapoint).toHaveBeenCalledWith(
+        datasetName,
+        expect.objectContaining({
+          id: datapointId,
+          episode_id: episodeId,
+          function_name: "extract_entities",
+          tags: { source: "test" },
+          is_custom: false,
+          source_inference_id: sourceInferenceId,
+          output_schema: datapoint.output_schema,
+          auxiliary: "",
+          name: newName,
+          staled_at: null,
+        }),
+      );
+
+      // Verify staleDatapoint was NOT called
+      expect(mockStaleDatapoint).not.toHaveBeenCalled();
+    });
+
+    test("should throw error when json datapoint is missing output_schema", async () => {
+      const datapoint = {
+        dataset_name: "test_dataset",
+        function_name: "extract_entities",
+        name: "old_name",
+        id: uuid(),
+        episode_id: null,
+        input: {
+          messages: [
+            {
+              role: "user",
+              content: [{ type: "text", text: "Test" }],
+            },
+          ],
+        },
+        output: undefined,
+        tags: {},
+        auxiliary: "",
+        is_deleted: false,
+        updated_at: new Date().toISOString(),
+        staled_at: null,
+        source_inference_id: null,
+        is_custom: false,
+      } as ParsedJsonInferenceDatapointRow;
+
+      await expect(
+        renameDatapoint({
+          functionType: "json",
+          datasetName: "test_dataset",
+          datapoint,
+          newName: "new_name",
+        }),
+      ).rejects.toThrow("Json datapoint is missing output_schema");
     });
   });
 });

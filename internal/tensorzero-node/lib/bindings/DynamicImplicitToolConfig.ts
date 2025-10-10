@@ -5,4 +5,4 @@ import type { DynamicJSONSchema } from "./DynamicJSONSchema";
  * Contains the configuration information for a tool used in implicit tool calling for
  * JSON schema enforcement for a JSON schema that is dynamically passed at inference time
  */
-export type DynamicImplicitToolConfig = { parameters: DynamicJSONSchema, };
+export type DynamicImplicitToolConfig = { parameters: DynamicJSONSchema };

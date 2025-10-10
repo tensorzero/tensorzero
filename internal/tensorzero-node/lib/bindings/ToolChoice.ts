@@ -6,4 +6,4 @@
  *
  * This enum is used to denote this tool choice.
  */
-export type ToolChoice = "none" | "auto" | "required" | { "specific": string };
+export type ToolChoice = "none" | "auto" | "required" | { specific: string };

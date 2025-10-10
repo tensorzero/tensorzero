@@ -6,4 +6,10 @@ import type { OpenAIRFTConfig } from "./OpenAIRFTConfig";
 import type { OpenAISFTConfig } from "./OpenAISFTConfig";
 import type { TogetherSFTConfig } from "./TogetherSFTConfig";
 
-export type OptimizerConfig = { "Dicl": DiclOptimizationConfig } | { "OpenAISFT": OpenAISFTConfig } | { "OpenAIRFT": OpenAIRFTConfig } | { "FireworksSFT": FireworksSFTConfig } | { "GCPVertexGeminiSFT": GCPVertexGeminiSFTConfig } | { "TogetherSFT": TogetherSFTConfig };
+export type OptimizerConfig =
+  | { Dicl: DiclOptimizationConfig }
+  | { OpenAISFT: OpenAISFTConfig }
+  | { OpenAIRFT: OpenAIRFTConfig }
+  | { FireworksSFT: FireworksSFTConfig }
+  | { GCPVertexGeminiSFT: GCPVertexGeminiSFTConfig }
+  | { TogetherSFT: TogetherSFTConfig };
