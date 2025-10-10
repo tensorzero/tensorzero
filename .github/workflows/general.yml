@@ -65,7 +65,7 @@ jobs:
       - name: Apply Postgres migrations for the enforce-custom-rate-limits example
         run: |
           cd examples/docs/guides/operations/enforce-custom-rate-limits
-          docker compose run --rm gateway --run-postgres-migrations
+          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
 
       - name: Check latest docker-compose
         run: ./ci/check-all-docker-compose.sh
@@ -106,7 +106,7 @@ jobs:
       - name: Apply Postgres migrations for the enforce-custom-rate-limits example
         run: |
           cd examples/docs/guides/operations/enforce-custom-rate-limits
-          docker compose run --rm gateway --run-postgres-migrations
+          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
 
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
