@@ -350,7 +350,7 @@ pub async fn prepare_model_input(
     })
 }
 
-fn prepare_system_message(
+pub fn prepare_system_message(
     system: Option<&Value>,
     templates: &TemplateConfig,
     template: Option<&TemplateWithSchema>,
@@ -396,7 +396,7 @@ fn prepare_system_message(
     }})
 }
 
-async fn prepare_request_message(
+pub async fn prepare_request_message(
     message: &LazyResolvedInputMessage,
     templates_config: &TemplateConfig<'_>,
     chat_templates: &ChatTemplates,
@@ -1163,7 +1163,7 @@ mod tests {
     #[tokio::test]
     async fn test_infer_chat_completion() {
         let client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
             http_client: &client,
@@ -2146,7 +2146,7 @@ mod tests {
     #[tokio::test]
     async fn test_infer_chat_completion_stream() {
         let client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
             http_client: &client,

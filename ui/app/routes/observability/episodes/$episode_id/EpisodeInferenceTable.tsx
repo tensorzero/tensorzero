@@ -14,6 +14,7 @@ import {
   TableItemFunction,
   TableItemShortUuid,
 } from "~/components/ui/TableItems";
+import { toFunctionUrl, toInferenceUrl } from "~/utils/urls";
 
 export default function EpisodeInferenceTable({
   inferences,
@@ -39,14 +40,14 @@ export default function EpisodeInferenceTable({
               <TableCell className="max-w-[200px]">
                 <TableItemShortUuid
                   id={inference.id}
-                  link={`/observability/inferences/${inference.id}`}
+                  link={toInferenceUrl(inference.id)}
                 />
               </TableCell>
               <TableCell>
                 <TableItemFunction
                   functionName={inference.function_name}
                   functionType={inference.function_type}
-                  link={`/observability/functions/${inference.function_name}`}
+                  link={toFunctionUrl(inference.function_name)}
                 />
               </TableCell>
               <TableCell>

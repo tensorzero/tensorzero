@@ -38,7 +38,7 @@ use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass};
 use crate::inference::types::storage::StorageKind;
 use crate::inference::types::Usage;
-use crate::jsonschema_util::StaticJSONSchema;
+use crate::jsonschema_util::{SchemaWithMetadata, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
 use crate::model_table::{CowNoClone, ProviderTypeDefaultCredentials, ShorthandModelConfig};
@@ -390,6 +390,9 @@ pub struct OtlpTracesConfig {
     pub enabled: bool,
     #[serde(default)]
     pub format: OtlpTracesFormat,
+    /// Extra headers to include in OTLP export requests (can be overridden by dynamic headers at request time)
+    #[serde(default)]
+    pub extra_headers: HashMap<String, String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -1191,23 +1194,23 @@ pub struct UninitializedFunctionConfigJson {
 #[cfg_attr(test, ts(export))]
 pub struct SchemaData {
     #[serde(flatten)]
-    pub inner: HashMap<String, StaticJSONSchema>,
+    pub inner: HashMap<String, SchemaWithMetadata>,
 }
 
 impl SchemaData {
-    pub fn get_implicit_system_schema(&self) -> Option<&StaticJSONSchema> {
+    pub fn get_implicit_system_schema(&self) -> Option<&SchemaWithMetadata> {
         self.inner.get("system")
     }
 
-    pub fn get_implicit_user_schema(&self) -> Option<&StaticJSONSchema> {
+    pub fn get_implicit_user_schema(&self) -> Option<&SchemaWithMetadata> {
         self.inner.get("user")
     }
 
-    pub fn get_implicit_assistant_schema(&self) -> Option<&StaticJSONSchema> {
+    pub fn get_implicit_assistant_schema(&self) -> Option<&SchemaWithMetadata> {
         self.inner.get("assistant")
     }
 
-    pub fn get_named_schema(&self, name: &str) -> Option<&StaticJSONSchema> {
+    pub fn get_named_schema(&self, name: &str) -> Option<&SchemaWithMetadata> {
         self.inner.get(name)
     }
 
@@ -1220,17 +1223,41 @@ impl SchemaData {
     ) -> Result<Self, Error> {
         let mut map = HashMap::new();
         if let Some(user_schema) = user_schema {
-            map.insert("user".to_string(), user_schema);
+            map.insert(
+                "user".to_string(),
+                SchemaWithMetadata {
+                    schema: user_schema,
+                    legacy_definition: true,
+                },
+            );
         }
         if let Some(assistant_schema) = assistant_schema {
-            map.insert("assistant".to_string(), assistant_schema);
+            map.insert(
+                "assistant".to_string(),
+                SchemaWithMetadata {
+                    schema: assistant_schema,
+                    legacy_definition: true,
+                },
+            );
         }
         if let Some(system_schema) = system_schema {
-            map.insert("system".to_string(), system_schema);
+            map.insert(
+                "system".to_string(),
+                SchemaWithMetadata {
+                    schema: system_schema,
+                    legacy_definition: true,
+                },
+            );
         }
         for (name, schema) in schemas.inner {
             if map
-                .insert(name.to_string(), StaticJSONSchema::from_path(schema.path)?)
+                .insert(
+                    name.clone(),
+                    SchemaWithMetadata {
+                        schema: StaticJSONSchema::from_path(schema.path)?,
+                        legacy_definition: false,
+                    },
+                )
                 .is_some()
             {
                 return Err(Error::new(ErrorDetails::Config {
@@ -1363,10 +1390,8 @@ impl UninitializedFunctionConfig {
                                 variant_missing_mode = Some(name.clone());
                             }
                         }
-                        VariantConfig::BestOfNSampling(best_of_n_config) => {
-                            if best_of_n_config.evaluator().inner.json_mode().is_none() {
-                                variant_missing_mode = Some(format!("{name}.evaluator"));
-                            }
+                        VariantConfig::BestOfNSampling(_best_of_n_config) => {
+                            // Evaluator json_mode is optional - it defaults to `strict` at runtime
                         }
                         VariantConfig::MixtureOfN(mixture_of_n_config) => {
                             if mixture_of_n_config.fuser().inner.json_mode().is_none() {

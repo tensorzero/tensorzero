@@ -381,7 +381,7 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "Is it a living thing?",
               },
             ],
@@ -390,7 +390,7 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "no.",
               },
             ],
@@ -399,7 +399,7 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "Is it commonly found indoors?",
               },
             ],
@@ -408,7 +408,7 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "no.",
               },
             ],
@@ -417,7 +417,7 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "Is it a natural object, like a rock or tree?",
               },
             ],
@@ -426,7 +426,7 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "yes.",
               },
             ],
@@ -487,7 +487,8 @@ describe("getDatapoint", () => {
           {
             content: [
               {
-                type: "structured_text",
+                type: "template",
+                name: "user",
                 arguments: {
                   topic: "upward",
                 },
@@ -529,15 +530,16 @@ describe("datapoint operations", () => {
     const chatDatapoint: ParsedChatInferenceDatapointRow = {
       dataset_name: "test_chat_dataset",
       function_name: "write_haiku",
-      name: null,
       id: datapoint_id,
       episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff9",
+      name: null,
       input: {
         messages: [
           {
             content: [
               {
-                type: "structured_text",
+                type: "template",
+                name: "user",
                 arguments: {
                   topic: "testing",
                 },
@@ -618,15 +620,15 @@ describe("datapoint operations", () => {
     const jsonDatapoint: ParsedJsonInferenceDatapointRow = {
       dataset_name: "test_json_dataset",
       function_name: "extract_entities",
-      name: null,
       id: datapoint_id,
       episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff8",
+      name: null,
       input: {
         messages: [
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "Extract entities from: John visited Paris",
               },
             ],
@@ -719,15 +721,15 @@ describe("datapoint operations", () => {
     const chatDatapoint: ParsedChatInferenceDatapointRow = {
       dataset_name: "test_chat_dataset",
       function_name: "write_haiku",
-      name: null,
       id: "01934fc5-ea98-71f0-8191-9fd88f34c31e",
       episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff7",
+      name: null,
       input: {
         messages: [
           {
             content: [
               {
-                type: "unstructured_text",
+                type: "text",
                 text: "Write a haiku about duplicates",
               },
             ],
@@ -913,9 +915,9 @@ describe("insertDatapoint", () => {
       insertDatapoint({
         dataset_name: "builder",
         function_name: "write_haiku",
-        name: null,
         id: uuid(),
         episode_id: null,
+        name: null,
         input: { messages: [] },
         output: [],
         tool_params: {},

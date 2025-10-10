@@ -692,9 +692,17 @@ type = "chat"
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 
+[functions.pdf_test.variants.openai-responses]
+type = "chat_completion"
+model = "responses-gpt-4o-mini-2024-07-18"
+
 [functions.pdf_test.variants.gcp_vertex_gemini]
 type = "chat_completion"
 model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-lite"
+
+[functions.pdf_test.variants.google_ai_studio]
+type = "chat_completion"
+model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 
 [functions.pdf_test.variants.anthropic]
 type = "chat_completion"
@@ -703,6 +711,14 @@ model = "anthropic::claude-3-5-sonnet-20241022"
 [functions.pdf_test.variants.aws-bedrock]
 type = "chat_completion"
 model = "claude-3-haiku-20240307-aws-bedrock"
+
+[models."responses-gpt-4o-mini-2024-07-18"]
+routing = ["openai"]
+
+[models."responses-gpt-4o-mini-2024-07-18".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+api_type = "responses"
 
 [models.claude-3-haiku-20240307-aws-bedrock]
 routing = ["aws_bedrock"]
@@ -724,6 +740,10 @@ type = "chat"
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 
+[functions.image_test.variants.openai-responses]
+type = "chat_completion"
+model = "responses-gpt-4o-mini-2024-07-18"
+
 [functions.image_test.variants.anthropic]
 type = "chat_completion"
 model = "anthropic::claude-3-haiku-20240307"
@@ -744,6 +764,14 @@ type = "gcp_vertex_gemini"
 model_id = "gemini-2.5-pro"
 location = "global"
 project_id = "tensorzero-public"
+
+[models."responses-gpt-4o-mini-2024-07-18"]
+routing = ["openai"]
+
+[models."responses-gpt-4o-mini-2024-07-18".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+api_type = "responses"
 
 [functions.image_test.variants.gcp-vertex-haiku]
 type = "chat_completion"
@@ -775,25 +803,29 @@ region = "us-east-1"
 /// This calls the Default implementation directly, ensuring we test the actual defaults.
 fn get_default_credential_location(provider_type: &str) -> CredentialLocation {
     match provider_type {
-        "anthropic" => AnthropicDefaults::default().credential_location,
-        "openai" => OpenAIDefaults::default().credential_location,
-        "azure" => AzureDefaults::default().credential_location,
-        "deepseek" => DeepSeekDefaults::default().credential_location,
-        "fireworks" => FireworksDefaults::default().credential_location,
+        "anthropic" => AnthropicDefaults::default().api_key_location,
+        "openai" => OpenAIDefaults::default().api_key_location,
+        "azure" => AzureDefaults::default().api_key_location,
+        "deepseek" => DeepSeekDefaults::default().api_key_location,
+        "fireworks" => FireworksDefaults::default().api_key_location,
         "gcp_vertex_anthropic" => GCPDefaults::default().credential_location,
         "gcp_vertex_gemini" => GCPDefaults::default().credential_location,
-        "google_ai_studio_gemini" => GoogleAIStudioGeminiDefaults::default().credential_location,
-        "groq" => GroqDefaults::default().credential_location,
-        "hyperbolic" => HyperbolicDefaults::default().credential_location,
-        "mistral" => MistralDefaults::default().credential_location,
-        "openrouter" => OpenRouterDefaults::default().credential_location,
-        "sglang" => SGLangDefaults::default().credential_location,
-        "tgi" => TGIDefaults::default().credential_location,
-        "together" => TogetherDefaults::default().credential_location,
-        "vllm" => VLLMDefaults::default().credential_location,
-        "xai" => XAIDefaults::default().credential_location,
+        "google_ai_studio_gemini" => GoogleAIStudioGeminiDefaults::default().api_key_location,
+        "groq" => GroqDefaults::default().api_key_location,
+        "hyperbolic" => HyperbolicDefaults::default().api_key_location,
+        "mistral" => MistralDefaults::default().api_key_location,
+        "openrouter" => OpenRouterDefaults::default().api_key_location,
+        "sglang" => SGLangDefaults::default().api_key_location,
+        "tgi" => TGIDefaults::default().api_key_location,
+        "together" => TogetherDefaults::default().api_key_location,
+        "vllm" => VLLMDefaults::default().api_key_location,
+        "xai" => XAIDefaults::default().api_key_location,
         _ => panic!("Unknown provider type: {provider_type}"),
     }
+}
+
+fn uses_credential_location(provider_type: &str) -> bool {
+    matches!(provider_type, "gcp_vertex_gemini" | "gcp_vertex_anthropic")
 }
 
 /// Test that provider type default credentials work correctly.
@@ -837,10 +869,16 @@ pub async fn test_provider_type_default_credentials_with_provider(provider: E2ET
     std::env::set_var(&custom_env_var, &credential_value);
 
     // Create the credential location config based on the type
-    let credential_location_config = if is_path_env {
-        format!(r#"credential_location = "path_from_env::{custom_env_var}""#)
+    let default_credential_location_key = if uses_credential_location(&provider.model_provider_name)
+    {
+        "credential_location"
     } else {
-        format!(r#"credential_location = "env::{custom_env_var}""#)
+        "api_key_location"
+    };
+    let credential_location_config = if is_path_env {
+        format!(r#"{default_credential_location_key}= "path_from_env::{custom_env_var}""#)
+    } else {
+        format!(r#"{default_credential_location_key}= "env::{custom_env_var}""#)
     };
 
     // Create a config with the custom credential location
@@ -947,10 +985,16 @@ pub async fn test_provider_type_default_credentials_shorthand_with_provider(
     std::env::set_var(&custom_env_var, &credential_value);
 
     // Create the credential location config based on the type
-    let credential_location_config = if is_path_env {
-        format!(r#"credential_location = "path_from_env::{custom_env_var}""#)
+    let default_credential_location_key = if uses_credential_location(&provider.model_provider_name)
+    {
+        "credential_location"
     } else {
-        format!(r#"credential_location = "env::{custom_env_var}""#)
+        "api_key_location"
+    };
+    let credential_location_config = if is_path_env {
+        format!(r#"{default_credential_location_key}= "path_from_env::{custom_env_var}""#)
+    } else {
+        format!(r#"{default_credential_location_key}= "env::{custom_env_var}""#)
     };
 
     // Create a config with the custom credential location and shorthand model syntax
@@ -2711,13 +2755,15 @@ pub async fn check_simple_inference_response(
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
     }
-    let finish_reason = response_json
-        .get("finish_reason")
-        .unwrap()
-        .as_str()
-        .unwrap();
-    // Some providers return "stop" and others return "length"
-    assert!(finish_reason == "stop" || finish_reason == "length");
+    if provider.variant_name != "openai-responses" {
+        let finish_reason = response_json
+            .get("finish_reason")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        // Some providers return "stop" and others return "length"
+        assert!(finish_reason == "stop" || finish_reason == "length");
+    }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
@@ -4668,6 +4714,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
 ) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let content = response_json.get("content").unwrap().as_array().unwrap();
 
     if let Some(episode_id) = episode_id {
         let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
@@ -4677,15 +4724,6 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
-
-    let content = response_json.get("content").unwrap().as_array().unwrap();
-    assert!(!content.iter().any(|block| block["type"] == "tool_call"));
-    let content_block = content
-        .iter()
-        .find(|block| block["type"] == "text")
-        .unwrap();
-    let content_block_text = content_block.get("text").unwrap().as_str().unwrap();
-    assert!(content_block_text.to_lowercase().contains("mehta"));
 
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
@@ -4870,6 +4908,14 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
             panic!("Expected a text block, got {first:?}");
         }
     }
+
+    assert!(!content.iter().any(|block| block["type"] == "tool_call"));
+    let content_block = content
+        .iter()
+        .find(|block| block["type"] == "text")
+        .unwrap();
+    let content_block_text = content_block.get("text").unwrap().as_str().unwrap();
+    assert!(content_block_text.to_lowercase().contains("mehta"));
 }
 
 /// This test is similar to `test_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider`, but it steers the model to not use the tool.
@@ -8334,6 +8380,10 @@ pub async fn test_stop_sequences_inference_request_with_provider(
     provider: E2ETestProvider,
     client: &tensorzero::Client,
 ) {
+    // OpenAI Responses doesn't support stop sequences
+    if provider.variant_name == "openai-responses" {
+        return;
+    }
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
@@ -10720,6 +10770,13 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
         return;
     }
 
+    // The OpenAI Responses API has a minimum value of 16
+    let max_tokens = if provider.model_name.starts_with("responses-") {
+        16
+    } else {
+        1
+    };
+
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
@@ -10736,7 +10793,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the name of the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan? Explain your answer."
                 }
             ]},
         "stream": false,
@@ -10744,7 +10801,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
         "cache_options": {"enabled": "on", "lookback_s": 10},
         "params": {
             "chat_completion": {
-                "max_tokens": 1
+                "max_tokens": max_tokens
             }
         },
         "extra_headers": extra_headers.extra_headers,
@@ -10777,6 +10834,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
         response_json,
         Some(episode_id),
         &provider,
+        max_tokens,
         false,
     )
     .await;
@@ -10795,8 +10853,15 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
 
     println!("API response: {response_json:#?}");
 
-    check_short_inference_response(randomness, response_json, Some(episode_id), &provider, true)
-        .await;
+    check_short_inference_response(
+        randomness,
+        response_json,
+        Some(episode_id),
+        &provider,
+        max_tokens,
+        true,
+    )
+    .await;
 }
 
 async fn check_short_inference_response(
@@ -10804,6 +10869,7 @@ async fn check_short_inference_response(
     response_json: Value,
     episode_id: Option<Uuid>,
     provider: &E2ETestProvider,
+    max_tokens: u32,
     should_be_cached: bool,
 ) {
     let hardcoded_function_name = "basic_test";
@@ -10835,7 +10901,7 @@ async fn check_short_inference_response(
         assert_eq!(output_tokens, 0);
     } else {
         assert!(input_tokens > 0);
-        assert_eq!(output_tokens, 1);
+        assert_eq!(output_tokens, max_tokens as u64);
     }
     let finish_reason = response_json
         .get("finish_reason")
@@ -10878,7 +10944,7 @@ async fn check_short_inference_response(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
+                "content": [{"type": "text", "value": "What is the name of the capital city of Japan? Explain your answer."}]
             }
         ]
     });
@@ -10910,7 +10976,7 @@ async fn check_short_inference_response(
             .unwrap()
             .as_u64()
             .unwrap(),
-        1
+        max_tokens as u64
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -10964,7 +11030,7 @@ async fn check_short_inference_response(
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
-            text: "What is the name of the capital city of Japan?".to_string(),
+            text: "What is the name of the capital city of Japan? Explain your answer.".to_string(),
         })],
     }];
     assert_eq!(input_messages, expected_input_messages);
@@ -11690,6 +11756,8 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
 
+    println!("API response: {response_json}");
+
     // Assert the output isn't JSON
     let output = response_json.get("output").unwrap().as_object().unwrap();
     let parsed = output.get("parsed").unwrap().as_object();
@@ -11698,7 +11766,10 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert!(serde_json::from_str::<Value>(raw).is_err());
 
     // Assert that the answer is correct
-    assert!(raw.to_lowercase().contains("tokyo"));
+    assert!(
+        raw.to_lowercase().contains("tokyo"),
+        "Unexpected raw output: {raw}"
+    );
 
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();

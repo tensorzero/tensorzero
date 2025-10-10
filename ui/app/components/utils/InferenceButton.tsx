@@ -7,6 +7,7 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 import { Inferences } from "~/components/icons/Icons";
+import { toInferenceUrl } from "~/utils/urls";
 
 interface InferenceButtonProps {
   inferenceId: string;
@@ -23,7 +24,7 @@ export function InferenceButton({
     <TooltipProvider>
       <Tooltip delayDuration={100}>
         <TooltipTrigger asChild>
-          <Link to={`/observability/inferences/${inferenceId}`} target="_blank">
+          <Link to={toInferenceUrl(inferenceId)} target="_blank">
             <Button
               variant="outline"
               size="iconSm"

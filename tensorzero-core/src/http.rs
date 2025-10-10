@@ -7,6 +7,8 @@ use std::{
     },
     task::{Context, Poll},
 };
+use tracing::Span;
+use tracing_futures::Instrument;
 
 use futures::Stream;
 use http::{HeaderName, HeaderValue};
@@ -258,6 +260,7 @@ pub struct TensorZeroEventSource {
     #[pin]
     source: EventSource,
     ticket: LimitedClientTicket<'static>,
+    span: Span,
 }
 
 impl TensorZeroEventSource {
@@ -270,11 +273,38 @@ impl Stream for TensorZeroEventSource {
     type Item = Result<Event, reqwest_eventsource::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+        let _guard = this.span.enter();
         // Just forward to the underlying `EventSource`, without doing anything else.
         // The `TensorZeroEventSource` type only exists to hold on to a `LimitedClientTicket`
         // until the stream is dropped.
-        self.project().source.poll_next(cx)
+        this.source.poll_next(cx)
     }
+}
+
+// Workaround for https://github.com/hyperium/h2/issues/763
+// The 'h2' crate creates a long-lived span for outgoing HTTP connections.
+// Due to connection pooling, these spans can live for a long time -
+// in particular, they can live across multiple TensorZero `POST /inference` requests.
+//
+// A `tracing` span always lives as long as its longest-lived descendant span:
+// https://docs.rs/tracing/latest/tracing/span/index.html#span-relationships
+// As a result, the h2 connection span can cause our spans to live for an extremely long time,
+// delaying the reporting of spans to OpenTelemetry.
+//
+// The h2 span is a trace-level span, so it would normally get disabled entirely
+// by our span filters. Unfortunately, our workaround for a tracing bug
+// intentionally blocks this type of logic (`Interest::never()` / `Interest::always()`)
+// - see apply_filter_fixing_tracing_bug
+//
+// As a result, we need to prevent the h2 span from ending up as a descendant of our spans.
+// When we call into `reqwest`, we enter this special span, which we override to be a root span
+// (no parent). This prevents the h2 span from getting associated with any of our OTEL spans.
+//
+// If https://github.com/hyperium/h2/issues/713 is ever fixed, we should disable tracing
+// within the `h2` crate itself.
+fn tensorzero_h2_workaround_span() -> tracing::Span {
+    tracing::trace_span!(parent: None, "__tensorzero_h2_span_hack__")
 }
 
 impl<'a> TensorzeroRequestBuilder<'a> {
@@ -332,13 +362,17 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         Ok(TensorZeroEventSource {
             source: self.builder.eventsource()?,
             ticket: self.ticket.into_owned(),
+            span: tensorzero_h2_workaround_span(),
         })
     }
 
     // This method takes an owned `self`, so we'll drop `self.ticket` when this method
     // returns (after we've gotten a response)
     pub async fn send(self) -> Result<Response, reqwest::Error> {
-        self.builder.send().await
+        self.builder
+            .send()
+            .instrument(tensorzero_h2_workaround_span())
+            .await
     }
 
     pub async fn send_and_parse_json<T: DeserializeOwned>(
@@ -359,27 +393,35 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         let raw_body = request
             .body()
             .and_then(|b| b.as_bytes().map(|b| String::from_utf8_lossy(b).to_string()));
-        let response = client.execute(request).await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceClient {
-                status_code: e.status(),
-                message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
-                provider_type: provider_type.to_string(),
-                raw_request: raw_body.clone(),
-                raw_response: None,
-            })
-        })?;
+        let response = client
+            .execute(request)
+            .instrument(tensorzero_h2_workaround_span())
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    status_code: e.status(),
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
+                    provider_type: provider_type.to_string(),
+                    raw_request: raw_body.clone(),
+                    raw_response: None,
+                })
+            })?;
 
         let status_code = response.status();
 
-        let raw_response = response.text().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceClient {
-                status_code: e.status(),
-                message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
-                provider_type: provider_type.to_string(),
-                raw_request: raw_body.clone(),
-                raw_response: None,
-            })
-        })?;
+        let raw_response = response
+            .text()
+            .instrument(tensorzero_h2_workaround_span())
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    status_code: e.status(),
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
+                    provider_type: provider_type.to_string(),
+                    raw_request: raw_body.clone(),
+                    raw_response: None,
+                })
+            })?;
 
         if !status_code.is_success() {
             return Err(Error::new(ErrorDetails::InferenceClient {

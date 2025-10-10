@@ -455,12 +455,12 @@ impl ClientBuilder {
 }
 
 /// A TensorZero client. This is constructed using `ClientBuilder`
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Client {
     mode: Arc<ClientMode>,
     verbose_errors: bool,
     #[cfg(feature = "e2e_tests")]
-    pub last_body: Mutex<Option<String>>,
+    pub last_body: Arc<Mutex<Option<String>>>,
 }
 
 impl StoragePathResolver for Client {
@@ -574,11 +574,18 @@ impl Client {
                 {
                     *self.last_body.lock().await = Some(body.clone());
                 }
-                let builder = client
+                let mut builder = client
                     .http_client
                     .post(url)
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
                     .body(body);
+
+                // Add OTLP trace headers with the required prefix
+                for (key, value) in &params.otlp_traces_extra_headers {
+                    let header_name = format!("tensorzero-otlp-traces-extra-header-{key}");
+                    builder = builder.header(header_name, value);
+                }
+
                 if params.stream.unwrap_or(false) {
                     let event_source =
                         builder.eventsource().map_err(|e| TensorZeroError::Other {

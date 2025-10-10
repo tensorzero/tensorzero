@@ -272,7 +272,7 @@ test("editing variants works @credentials", async ({ page }) => {
   // Target the system template editor specifically within the modal/sheet content
   const systemTemplateEditor = page
     .getByRole("dialog")
-    .getByText("System Template")
+    .getByText("system")
     .locator("..")
     .locator(".cm-content")
     .first();

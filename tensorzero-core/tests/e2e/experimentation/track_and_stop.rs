@@ -1861,10 +1861,6 @@ async fn test_no_stopping_under_difficult_conditions() {
 }
 
 // ============================================================================
-// Optimize Direction Tests
-// ============================================================================
-
-// ============================================================================
 // Variant Removal Tests
 // ============================================================================
 
@@ -1874,7 +1870,7 @@ async fn test_remove_winner_variant_after_stopping() {
     let initial_bandit_distribution = vec![
         ("variant_a", 0.50, 0.10),
         ("variant_b", 0.90, 0.10), // Clear winner
-        ("variant_c", 0.55, 0.15), // Different variance
+        ("variant_c", 0.50, 0.11), // Slightly different variance
     ];
     let seed = 42;
 

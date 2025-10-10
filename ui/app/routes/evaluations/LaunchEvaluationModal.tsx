@@ -22,6 +22,7 @@ import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import type { InferenceCacheSetting } from "~/utils/evaluations.server";
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { useDatasetCounts } from "~/hooks/use-dataset-counts";
+import { toFunctionUrl } from "~/utils/urls";
 
 interface LaunchEvaluationModalProps {
   isOpen: boolean;
@@ -180,9 +181,7 @@ function EvaluationForm({
         Function:{" "}
         {function_name ? (
           <span className="font-medium">
-            <Link to={`/observability/functions/${function_name}`}>
-              {function_name}
-            </Link>
+            <Link to={toFunctionUrl(function_name)}>{function_name}</Link>
           </span>
         ) : (
           <Skeleton className="inline-block h-3 w-16 align-middle" />

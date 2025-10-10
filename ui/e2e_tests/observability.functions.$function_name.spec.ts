@@ -64,3 +64,42 @@ test("should open drawer when tool name is clicked", async ({ page }) => {
   const desc = await page.getByText(toolSearchWikipedia.description);
   await expect(desc.first()).toBeVisible();
 });
+
+test("should display user schema for write_haiku function", async ({
+  page,
+}) => {
+  await page.goto("/observability/functions/write_haiku");
+
+  // Wait for the Schemas section to be visible
+  await expect(page.getByRole("heading", { name: "Schemas" })).toBeVisible();
+
+  // Check that the user schema tab is visible
+  await expect(page.getByRole("tab", { name: /user/ })).toBeVisible();
+
+  // The user schema should be selected by default (first tab)
+  // Check that the schema content contains "topic" field (appears multiple times, so use first())
+  await expect(page.getByText('"topic"').first()).toBeVisible();
+
+  // Verify the schema structure contains properties section
+  await expect(page.getByText('"properties"')).toBeVisible();
+});
+
+test("should display output schema for extract_entities function", async ({
+  page,
+}) => {
+  await page.goto("/observability/functions/extract_entities");
+
+  // Wait for the Schemas section to be visible
+  await expect(page.getByRole("heading", { name: "Schemas" })).toBeVisible();
+
+  // Check that the output schema tab is visible
+  await expect(page.getByRole("tab", { name: /output/ })).toBeVisible();
+
+  // The output schema should be selected by default (first tab)
+  // Check that the schema content contains unique fields from extract_entities
+  // These fields appear multiple times (properties and required), so use first()
+  await expect(page.getByText('"person"').first()).toBeVisible();
+  await expect(page.getByText('"organization"').first()).toBeVisible();
+  await expect(page.getByText('"location"').first()).toBeVisible();
+  await expect(page.getByText('"miscellaneous"').first()).toBeVisible();
+});

@@ -277,7 +277,7 @@ mod tests {
         let experiment = config.functions.get("test").unwrap().experimentation();
         // no-op but we call it for completeness
         experiment
-            .setup(&ClickHouseConnectionInfo::Disabled, "test")
+            .setup(&ClickHouseConnectionInfo::new_disabled(), "test")
             .await
             .unwrap();
 

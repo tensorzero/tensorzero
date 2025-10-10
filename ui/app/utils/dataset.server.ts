@@ -1,6 +1,7 @@
 import { data } from "react-router";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { logger } from "~/utils/logger";
+import { toDatapointUrl } from "~/utils/urls";
 
 type ActionData =
   | { redirectTo: string; error?: never }
@@ -38,7 +39,7 @@ export async function handleAddToDatasetAction(formData: FormData) {
       episodeId.toString(),
     );
     return data<ActionData>({
-      redirectTo: `/datasets/${dataset.toString()}/datapoint/${datapoint.id}`,
+      redirectTo: toDatapointUrl(dataset.toString(), datapoint.id),
     });
   } catch (error) {
     logger.error(error);

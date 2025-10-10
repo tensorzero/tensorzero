@@ -438,22 +438,38 @@ impl FunctionConfig {
 
     pub fn system_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
-            FunctionConfig::Chat(params) => params.schemas.get_implicit_system_schema(),
-            FunctionConfig::Json(params) => params.schemas.get_implicit_system_schema(),
+            FunctionConfig::Chat(params) => params
+                .schemas
+                .get_implicit_system_schema()
+                .map(|s| &s.schema),
+            FunctionConfig::Json(params) => params
+                .schemas
+                .get_implicit_system_schema()
+                .map(|s| &s.schema),
         }
     }
 
     pub fn user_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
-            FunctionConfig::Chat(params) => params.schemas.get_implicit_user_schema(),
-            FunctionConfig::Json(params) => params.schemas.get_implicit_user_schema(),
+            FunctionConfig::Chat(params) => {
+                params.schemas.get_implicit_user_schema().map(|s| &s.schema)
+            }
+            FunctionConfig::Json(params) => {
+                params.schemas.get_implicit_user_schema().map(|s| &s.schema)
+            }
         }
     }
 
     pub fn assistant_schema(&self) -> Option<&StaticJSONSchema> {
         match self {
-            FunctionConfig::Chat(params) => params.schemas.get_implicit_assistant_schema(),
-            FunctionConfig::Json(params) => params.schemas.get_implicit_assistant_schema(),
+            FunctionConfig::Chat(params) => params
+                .schemas
+                .get_implicit_assistant_schema()
+                .map(|s| &s.schema),
+            FunctionConfig::Json(params) => params
+                .schemas
+                .get_implicit_assistant_schema()
+                .map(|s| &s.schema),
         }
     }
 
@@ -559,7 +575,7 @@ fn validate_all_text_input(
         // If there is any system message passed we validate it
         (Some(system), _) => validate_single_message(
             system,
-            schemas.get_implicit_system_schema(),
+            schemas.get_implicit_system_schema().map(|s| &s.schema),
             "system",
             all_templates_names,
             None,
@@ -588,7 +604,7 @@ fn validate_all_text_input(
                     };
                     validate_single_message(
                         &content,
-                        schema,
+                        schema.map(|s| &s.schema),
                         message.role.implicit_template_name(),
                         all_templates_names,
                         Some(index),
@@ -599,7 +615,7 @@ fn validate_all_text_input(
                     let value = Value::Object(template.arguments.clone());
                     validate_single_message(
                         &value,
-                        schemas.get_named_schema(&template.name),
+                        schemas.get_named_schema(&template.name).map(|s| &s.schema),
                         &template.name,
                         all_templates_names,
                         Some(index),

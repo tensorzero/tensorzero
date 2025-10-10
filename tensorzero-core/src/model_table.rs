@@ -360,27 +360,27 @@ impl ProviderTypeDefaultCredentials {
         let anthropic_location = provider_types_config
             .anthropic
             .defaults
-            .credential_location
+            .api_key_location
             .clone();
         let azure_location = provider_types_config
             .azure
             .defaults
-            .credential_location
+            .api_key_location
             .clone();
         let deepseek_location = provider_types_config
             .deepseek
             .defaults
-            .credential_location
+            .api_key_location
             .clone();
         let fireworks_location = provider_types_config
             .fireworks
             .defaults
-            .credential_location
+            .api_key_location
             .clone();
         let google_ai_studio_gemini_location = provider_types_config
             .google_ai_studio_gemini
             .defaults
-            .credential_location
+            .api_key_location
             .clone();
         let gcp_vertex_anthropic_location = provider_types_config
             .gcp_vertex_anthropic
@@ -392,56 +392,40 @@ impl ProviderTypeDefaultCredentials {
             .defaults
             .credential_location
             .clone();
-        let groq_location = provider_types_config
-            .groq
-            .defaults
-            .credential_location
-            .clone();
+        let groq_location = provider_types_config.groq.defaults.api_key_location.clone();
         let hyperbolic_location = provider_types_config
             .hyperbolic
             .defaults
-            .credential_location
+            .api_key_location
             .clone();
         let mistral_location = provider_types_config
             .mistral
             .defaults
-            .credential_location
+            .api_key_location
             .clone();
         let openai_location = provider_types_config
             .openai
             .defaults
-            .credential_location
+            .api_key_location
             .clone();
         let openrouter_location = provider_types_config
             .openrouter
             .defaults
-            .credential_location
+            .api_key_location
             .clone();
         let sglang_location = provider_types_config
             .sglang
             .defaults
-            .credential_location
+            .api_key_location
             .clone();
-        let tgi_location = provider_types_config
-            .tgi
-            .defaults
-            .credential_location
-            .clone();
+        let tgi_location = provider_types_config.tgi.defaults.api_key_location.clone();
         let together_location = provider_types_config
             .together
             .defaults
-            .credential_location
+            .api_key_location
             .clone();
-        let vllm_location = provider_types_config
-            .vllm
-            .defaults
-            .credential_location
-            .clone();
-        let xai_location = provider_types_config
-            .xai
-            .defaults
-            .credential_location
-            .clone();
+        let vllm_location = provider_types_config.vllm.defaults.api_key_location.clone();
+        let xai_location = provider_types_config.xai.defaults.api_key_location.clone();
 
         ProviderTypeDefaultCredentials {
             anthropic: LazyCredential::new(move || {
