@@ -190,6 +190,55 @@ pub async fn make_embedded_gateway_with_clean_clickhouse(
     (client, clickhouse, guard)
 }
 
+/// Build an embedded gateway backed by an existing ClickHouse database.
+///
+/// This is useful for testing cold-start behavior where a new gateway needs to read
+/// existing data from the database.
+///
+/// Returns the client, the ClickHouse connection, and a guard that drops the database once it is
+/// no longer needed.
+pub async fn make_embedded_gateway_with_existing_clickhouse(
+    config: &str,
+    existing_clickhouse: &ClickHouseConnectionInfo,
+) -> (
+    Client,
+    ClickHouseConnectionInfo,
+    ClickHouseTestDatabaseGuard,
+) {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
+        .expect("TENSORZERO_POSTGRES_URL must be set for tests that require Postgres");
+
+    let tmp_config = NamedTempFile::new().unwrap();
+    std::fs::write(tmp_config.path(), config).unwrap();
+
+    // Point the embedded gateway at the existing database.
+    let database = existing_clickhouse.database();
+    let mut clickhouse_url = Url::parse(&CLICKHOUSE_URL).unwrap();
+    clickhouse_url.set_path("");
+    clickhouse_url.set_query(Some(format!("database={database}").as_str()));
+    let clickhouse_url_string = clickhouse_url.to_string();
+
+    let client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(tmp_config.path().to_owned()),
+        clickhouse_url: Some(clickhouse_url_string),
+        postgres_url: Some(postgres_url),
+        timeout: None,
+        verify_credentials: true,
+        allow_batch_writes: true,
+    })
+    .build()
+    .await
+    .unwrap();
+
+    // Create a guard for the existing database
+    let guard = ClickHouseTestDatabaseGuard {
+        database: database.to_string(),
+        client: existing_clickhouse.clone(),
+    };
+
+    (client, existing_clickhouse.clone(), guard)
+}
+
 // We use a multi-threaded runtime so that the embedded gateway can use 'block_on'.
 // For consistency, we also use a multi-threaded runtime for the http gateway test.
 

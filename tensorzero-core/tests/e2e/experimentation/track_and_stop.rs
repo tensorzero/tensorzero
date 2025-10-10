@@ -1,29 +1,52 @@
-use crate::clickhouse::{get_clean_clickhouse, DeleteDbOnDrop};
 use futures::future::join_all;
 use rand::{Rng, SeedableRng};
 use rand_distr::Distribution;
 use serde_json::json;
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use tensorzero::test_helpers::{
+    make_embedded_gateway_with_clean_clickhouse, make_embedded_gateway_with_existing_clickhouse,
+};
 use tensorzero::{
-    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    Client, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     FeedbackParams, InferenceOutput, InferenceResponse, Role,
 };
 use tensorzero_core::db::clickhouse::test_helpers::clickhouse_flush_async_insert;
-use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::FeedbackByVariant;
 use tensorzero_core::experimentation::track_and_stop::estimate_optimal_probabilities::{
     estimate_optimal_probabilities, EstimateOptimalProbabilitiesArgs,
 };
 use tensorzero_core::inference::types::TextKind;
 use tokio::time::Duration;
-use tracing_test::traced_test;
+use uuid::Uuid;
+
+// ============================================================================
+// Test Constants
+// ============================================================================
+
+/// Threshold for detecting stopped state: fraction of pulls that must go to one variant.
+/// Set to 1.0 to ensure deterministic stopping behavior.
+const STOPPED_THRESHOLD: f64 = 1.0;
+
+/// Minimum fraction of pulls a variant should receive to be considered "explored".
+const MIN_EXPLORATION_FRACTION: f64 = 0.10;
+
+/// Delay after ClickHouse flush for inferences (milliseconds).
+const CLICKHOUSE_FLUSH_DELAY_MS: u64 = 1000;
+
+/// Delay after ClickHouse flush for feedback to allow background update (milliseconds).
+const BACKGROUND_UPDATE_DELAY_MS: u64 = 1000;
+
+// ============================================================================
+// Test Configuration
+// ============================================================================
 
 /// Configuration parameters for generating a Track-and-Stop test config.
 #[derive(Debug, Clone)]
 pub struct TrackAndStopTestConfig<'a> {
     pub metric_name: &'a str,
     pub metric_type: &'a str,
+    pub optimize: &'a str,
     pub candidate_variants: &'a [&'a str],
     pub fallback_variants: &'a [&'a str],
     pub min_samples_per_variant: u64,
@@ -37,6 +60,7 @@ impl<'a> Default for TrackAndStopTestConfig<'a> {
         Self {
             metric_name: "test_metric",
             metric_type: "boolean",
+            optimize: "max",
             candidate_variants: &["variant_a", "variant_b"],
             fallback_variants: &["variant_fallback"],
             min_samples_per_variant: 10,
@@ -58,6 +82,7 @@ pub fn make_track_and_stop_config(config: TrackAndStopTestConfig) -> String {
     let TrackAndStopTestConfig {
         metric_name,
         metric_type,
+        optimize,
         candidate_variants,
         fallback_variants,
         min_samples_per_variant,
@@ -108,7 +133,7 @@ model_name = "test"
 
 [metrics.{metric_name}]
 type = "{metric_type}"
-optimize = "max"
+optimize = "{optimize}"
 level = "inference"
 
 [functions.test_function]
@@ -127,6 +152,12 @@ update_period_s = {update_period_s}
 "#,
         variants = variant_configs.join("\n"),
     )
+}
+
+/// Enum to distinguish between Bernoulli and Gaussian bandit configurations
+enum BanditConfig<'a> {
+    Bernoulli(Vec<(&'a str, f64)>),
+    Gaussian(Vec<(&'a str, f64, f64)>),
 }
 
 /// Bernoulli bandit environment for testing.
@@ -240,99 +271,95 @@ impl GaussianBandit {
     }
 }
 
-/// Compute L2 distance between two probability distributions
-fn compute_l2_distance(probs1: &HashMap<String, f64>, probs2: &HashMap<String, f64>) -> f64 {
-    let mut sum_squared_diff = 0.0;
+// ============================================================================
+// Test Helper Functions
+// ============================================================================
 
-    // Get all variant names from both distributions
-    let all_variants: std::collections::HashSet<_> = probs1.keys().chain(probs2.keys()).collect();
+/// Run a batch of inferences and return the inference IDs and variant names.
+async fn run_inference_batch(client: &Arc<Client>, count: usize) -> Vec<(Uuid, String)> {
+    let inference_tasks: Vec<_> = (0..count)
+        .map(|_| {
+            let client = client.clone();
+            async move {
+                let output = client
+                    .inference(ClientInferenceParams {
+                        function_name: Some("test_function".to_string()),
+                        input: ClientInput {
+                            system: None,
+                            messages: vec![ClientInputMessage {
+                                role: Role::User,
+                                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                                    text: "test input".to_string(),
+                                })],
+                            }],
+                        },
+                        ..Default::default()
+                    })
+                    .await
+                    .unwrap();
 
-    for variant in all_variants {
-        let p1 = probs1.get(variant).copied().unwrap_or(0.0);
-        let p2 = probs2.get(variant).copied().unwrap_or(0.0);
-        sum_squared_diff += (p1 - p2).powi(2);
+                let InferenceOutput::NonStreaming(InferenceResponse::Chat(response)) = output
+                else {
+                    panic!("Expected non-streaming chat response");
+                };
+
+                (response.inference_id, response.variant_name.clone())
+            }
+        })
+        .collect();
+
+    join_all(inference_tasks).await
+}
+
+/// Enum wrapper for different bandit types.
+#[derive(Clone)]
+enum Bandit {
+    Bernoulli(Arc<BernoulliBandit>),
+    Gaussian(Arc<GaussianBandit>),
+}
+
+impl Bandit {
+    fn sample(&self, variant_name: &str) -> serde_json::Value {
+        match self {
+            Bandit::Bernoulli(b) => json!(b.sample(variant_name)),
+            Bandit::Gaussian(b) => json!(b.sample(variant_name)),
+        }
     }
-
-    sum_squared_diff.sqrt()
 }
 
-/// Helper function to build a client with a clean database for testing Track-and-Stop.
-///
-/// Creates an isolated ClickHouse database and builds a client connected to it.
-/// The database is automatically cleaned up when the returned guard is dropped.
-///
-/// # Returns
-/// A tuple of (Client, ClickHouseConnectionInfo, DeleteDbOnDrop guard)
-///
-/// # Panics
-/// Panics if TENSORZERO_POSTGRES_URL environment variable is not set
-async fn make_client_with_clean_database(
-    config: &str,
-) -> (tensorzero::Client, ClickHouseConnectionInfo, DeleteDbOnDrop) {
-    // Create isolated database for test
-    let (clickhouse, guard) = get_clean_clickhouse(false).await;
+/// Send feedback for a batch of inferences.
+async fn send_feedback(
+    client: &Arc<Client>,
+    inference_results: &[(Uuid, String)],
+    bandit: &Bandit,
+    metric_name: &str,
+) -> Vec<String> {
+    let feedback_tasks: Vec<_> = inference_results
+        .iter()
+        .map(|(inference_id, variant_name)| {
+            let client = client.clone();
+            let bandit = bandit.clone();
+            let metric_name = metric_name.to_string();
+            let inference_id = *inference_id;
+            let variant_name = variant_name.clone();
+            async move {
+                let reward = bandit.sample(&variant_name);
+                client
+                    .feedback(FeedbackParams {
+                        inference_id: Some(inference_id),
+                        metric_name,
+                        value: reward,
+                        ..Default::default()
+                    })
+                    .await
+                    .unwrap();
 
-    // Reconstruct the clickhouse_url string from the base URL and database name
-    use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
-    let database = clickhouse.database();
-    let mut clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
-    clickhouse_url.set_path("");
-    clickhouse_url.set_query(Some(&format!("database={database}")));
-    let clickhouse_url_string = clickhouse_url.to_string();
+                variant_name
+            }
+        })
+        .collect();
 
-    // Build client with isolated database
-    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
-        .expect("TENSORZERO_POSTGRES_URL must be set for track-and-stop tests");
-
-    let tmp_config = tempfile::NamedTempFile::new().unwrap();
-    std::fs::write(tmp_config.path(), config).unwrap();
-
-    let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
-        config_file: Some(tmp_config.path().to_owned()),
-        clickhouse_url: Some(clickhouse_url_string),
-        postgres_url: Some(postgres_url),
-        timeout: None,
-        verify_credentials: true,
-        allow_batch_writes: true,
-    })
-    .build()
-    .await
-    .unwrap();
-
-    (client, clickhouse, guard)
-}
-
-/// Helper function to build an additional client connected to an existing database.
-///
-/// # Panics
-/// Panics if TENSORZERO_POSTGRES_URL environment variable is not set
-async fn make_client_with_same_database(
-    config: &str,
-    clickhouse: &ClickHouseConnectionInfo,
-) -> tensorzero::Client {
-    use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
-    let database = clickhouse.database();
-    let mut clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
-    clickhouse_url.set_path("");
-    clickhouse_url.set_query(Some(&format!("database={database}")));
-    let clickhouse_url_string = clickhouse_url.to_string();
-
-    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
-        .expect("TENSORZERO_POSTGRES_URL must be set for track-and-stop tests");
-    let tmp_config = tempfile::NamedTempFile::new().unwrap();
-    std::fs::write(tmp_config.path(), config).unwrap();
-
-    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
-        config_file: Some(tmp_config.path().to_owned()),
-        clickhouse_url: Some(clickhouse_url_string),
-        postgres_url: Some(postgres_url),
-        timeout: None,
-        verify_credentials: true,
-        allow_batch_writes: true,
-    })
-    .build()
-    .await
-    .unwrap()
+    join_all(feedback_tasks).await
 }
 
 // ============================================================================
@@ -344,6 +371,7 @@ fn test_make_track_and_stop_config_generates_valid_toml() {
     let config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "accuracy",
         metric_type: "float",
+        optimize: "max",
         candidate_variants: &["variant_a", "variant_b", "variant_c"],
         fallback_variants: &["variant_a", "variant_b"],
         min_samples_per_variant: 10,
@@ -506,7 +534,7 @@ async fn expect_config_error(config: &str) -> String {
 }
 
 #[tokio::test]
-async fn test_track_and_stop_config_invalid_metric() {
+async fn test_config_invalid_metric() {
     let config = r#"
   [models.test_model]
   routing = ["dummy"]
@@ -544,7 +572,7 @@ async fn test_track_and_stop_config_invalid_metric() {
 }
 
 #[tokio::test]
-async fn test_track_and_stop_config_invalid_candidate_variant() {
+async fn test_config_invalid_candidate_variant() {
     let config = r#"
 [models.test_model]
 routing = ["dummy"]
@@ -585,7 +613,7 @@ update_period_s = 300
 }
 
 #[tokio::test]
-async fn test_track_and_stop_config_invalid_fallback_variant() {
+async fn test_config_invalid_fallback_variant() {
     let config = r#"
 [models.test_model]
 routing = ["dummy"]
@@ -626,9 +654,10 @@ update_period_s = 300
 }
 
 #[tokio::test]
-async fn test_track_and_stop_config_invalid_min_samples() {
+async fn test_config_invalid_min_samples() {
     let config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_type: "float",
+        optimize: "max",
         candidate_variants: &["variant_a"],
         fallback_variants: &["variant_a"],
         min_samples_per_variant: 0, // Invalid: must be >= 1
@@ -644,9 +673,10 @@ async fn test_track_and_stop_config_invalid_min_samples() {
 }
 
 #[tokio::test]
-async fn test_track_and_stop_config_invalid_delta() {
+async fn test_config_invalid_delta() {
     let config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_type: "float",
+        optimize: "max",
         candidate_variants: &["variant_a"],
         fallback_variants: &["variant_a"],
         delta: 1.5, // Invalid: must be in (0, 1)
@@ -662,9 +692,10 @@ async fn test_track_and_stop_config_invalid_delta() {
 }
 
 #[tokio::test]
-async fn test_track_and_stop_config_invalid_epsilon() {
+async fn test_config_invalid_epsilon() {
     let config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_type: "float",
+        optimize: "max",
         candidate_variants: &["variant_a"],
         fallback_variants: &["variant_a"],
         epsilon: -0.1, // Invalid: must be >= 0
@@ -680,10 +711,11 @@ async fn test_track_and_stop_config_invalid_epsilon() {
 }
 
 #[tokio::test]
-async fn test_track_and_stop_config_valid() {
+async fn test_config_valid() {
     let config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "accuracy",
         metric_type: "float",
+        optimize: "max",
         candidate_variants: &["variant_a", "variant_b", "variant_c"],
         fallback_variants: &["variant_a", "variant_b"],
         min_samples_per_variant: 10,
@@ -698,273 +730,27 @@ async fn test_track_and_stop_config_valid() {
 }
 
 // ============================================================================
-// Basic Functionality Tests
-// ============================================================================
-
-// #[tokio::test(flavor = "multi_thread")]
-// async fn test_track_and_stop_bernoulli_bandit_convergence() {
-//     // Setup: Create config with short update period for testing
-//     let config = make_track_and_stop_config(TrackAndStopTestConfig {
-//         metric_name: "success_rate",
-//         metric_type: "boolean",
-//         candidate_variants: &["variant_a", "variant_b", "variant_c"],
-//         fallback_variants: &["variant_fallback"],
-//         min_samples_per_variant: 10,
-//         delta: 0.05,
-//         epsilon: 0.1,
-//         update_period_s: 1, // check every 1 second
-//     });
-
-//     let client =
-//         tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
-//     let clickhouse = get_clickhouse().await;
-
-//     // Create Bernoulli bandit environment with clear winner (variant_b)
-//     let bandit = BernoulliBandit::new(vec![
-//         ("variant_a", 0.3),
-//         ("variant_b", 0.9), // Clear winner!
-//         ("variant_c", 0.4),
-//     ]);
-
-//     // Run for multiple update cycles to observe state transitions
-//     let mut variant_counts_per_cycle = Vec::new();
-//     let client = std::sync::Arc::new(client);
-//     let bandit = std::sync::Arc::new(bandit);
-
-//     for _cycle in 0..5 {
-//         // Make inferences and submit feedback in parallel
-//         let tasks: Vec<_> = (0..30)
-//             .map(|_| {
-//                 let client = client.clone();
-//                 let bandit = bandit.clone();
-//                 async move {
-//                     // Make inference - Track-and-Stop selects the variant
-//                     let output = client
-//                         .inference(ClientInferenceParams {
-//                             function_name: Some("test_function".to_string()),
-//                             input: ClientInput {
-//                                 system: None,
-//                                 messages: vec![ClientInputMessage {
-//                                     role: Role::User,
-//                                     content: vec![ClientInputMessageContent::Text(
-//                                         TextKind::Text {
-//                                             text: "test input".to_string(),
-//                                         },
-//                                     )],
-//                                 }],
-//                             },
-//                             ..Default::default()
-//                         })
-//                         .await
-//                         .unwrap();
-
-//                     let InferenceOutput::NonStreaming(InferenceResponse::Chat(response)) = output
-//                     else {
-//                         panic!("Expected non-streaming chat response");
-//                     };
-
-//                     let variant_name = response.variant_name.clone();
-
-//                     // Get reward from bandit environment for the selected variant
-//                     let reward = bandit.sample(&variant_name);
-
-//                     // Submit feedback
-//                     client
-//                         .feedback(FeedbackParams {
-//                             inference_id: Some(response.inference_id),
-//                             metric_name: "success_rate".to_string(),
-//                             value: json!(reward),
-//                             ..Default::default()
-//                         })
-//                         .await
-//                         .unwrap();
-
-//                     variant_name
-//                 }
-//             })
-//             .collect();
-
-//         let variant_names = join_all(tasks).await;
-
-//         // Aggregate results
-//         let mut cycle_counts = HashMap::new();
-//         for variant_name in variant_names {
-//             *cycle_counts.entry(variant_name).or_insert(0) += 1;
-//         }
-
-//         variant_counts_per_cycle.push(cycle_counts);
-
-//         // Wait for ClickHouse async inserts to complete
-//         clickhouse_flush_async_insert(&clickhouse).await;
-//         tokio::time::sleep(Duration::from_millis(500)).await;
-
-//         // Wait for background update task to run (1s period + buffer)
-//         tokio::time::sleep(Duration::from_millis(1500)).await;
-//     }
-
-//     // Verify convergence: in later cycles, variant_b should dominate
-//     let last_cycle_counts = &variant_counts_per_cycle[variant_counts_per_cycle.len() - 1];
-//     let variant_b_count = last_cycle_counts.get("variant_b").unwrap_or(&0);
-
-//     // After 5 cycles with clear winner (0.9 vs 0.3 success rate),
-//     // Track-and-Stop should heavily favor variant_b
-//     // Allow some exploration due to epsilon, but should be >50%
-//     assert!(
-//         *variant_b_count > 15,
-//         "Expected variant_b to be selected >15 times in final cycle, got {variant_b_count}. \
-//          Full distribution: {variant_counts_per_cycle:?}"
-//     );
-
-//     // Verify trend: variant_b selection should increase over time
-//     let first_cycle_b = variant_counts_per_cycle[0].get("variant_b").unwrap_or(&0);
-//     let last_cycle_b = variant_counts_per_cycle[4].get("variant_b").unwrap_or(&0);
-
-//     // Should generally increase (allow for some statistical noise)
-//     assert!(
-//         last_cycle_b >= first_cycle_b,
-//         "Expected variant_b selection to increase or stay same, \
-//          but went from {first_cycle_b} to {last_cycle_b}"
-//     );
-// }
-
-// #[tokio::test(flavor = "multi_thread")]
-// async fn test_track_and_stop_gaussian_bandit_convergence() {
-//     // Setup: Create config with short update period for testing
-//     let config = make_track_and_stop_config(TrackAndStopTestConfig {
-//         metric_name: "performance_score",
-//         metric_type: "float",
-//         candidate_variants: &["variant_a", "variant_b", "variant_c"],
-//         fallback_variants: &["variant_fallback"],
-//         min_samples_per_variant: 10,
-//         delta: 0.05,
-//         epsilon: 0.1,
-//         update_period_s: 1, // check every 1 second
-//     });
-
-//     let client =
-//         tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
-//     let clickhouse = get_clickhouse().await;
-
-//     // Create Gaussian bandit environment with clear winner (variant_b)
-//     // variant_b has highest mean (0.85) with low variance
-//     let bandit = GaussianBandit::new(vec![
-//         ("variant_a", 0.5, 0.1),   // mean=0.5, stddev=0.1
-//         ("variant_b", 0.85, 0.08), // mean=0.85, stddev=0.08 - Clear winner!
-//         ("variant_c", 0.55, 0.12), // mean=0.55, stddev=0.12
-//     ]);
-
-//     // Run for multiple update cycles to observe state transitions
-//     let mut variant_counts_per_cycle = Vec::new();
-//     let client = std::sync::Arc::new(client);
-//     let bandit = std::sync::Arc::new(bandit);
-
-//     for _cycle in 0..5 {
-//         // Make inferences and submit feedback in parallel
-//         let tasks: Vec<_> = (0..30)
-//             .map(|_| {
-//                 let client = client.clone();
-//                 let bandit = bandit.clone();
-//                 async move {
-//                     // Make inference - Track-and-Stop selects the variant
-//                     let output = client
-//                         .inference(ClientInferenceParams {
-//                             function_name: Some("test_function".to_string()),
-//                             input: ClientInput {
-//                                 system: None,
-//                                 messages: vec![ClientInputMessage {
-//                                     role: Role::User,
-//                                     content: vec![ClientInputMessageContent::Text(
-//                                         TextKind::Text {
-//                                             text: "test input".to_string(),
-//                                         },
-//                                     )],
-//                                 }],
-//                             },
-//                             ..Default::default()
-//                         })
-//                         .await
-//                         .unwrap();
-
-//                     let InferenceOutput::NonStreaming(InferenceResponse::Chat(response)) = output
-//                     else {
-//                         panic!("Expected non-streaming chat response");
-//                     };
-
-//                     let variant_name = response.variant_name.clone();
-
-//                     // Get reward from bandit environment for the selected variant
-//                     let reward = bandit.sample(&variant_name);
-
-//                     // Submit feedback
-//                     client
-//                         .feedback(FeedbackParams {
-//                             inference_id: Some(response.inference_id),
-//                             metric_name: "performance_score".to_string(),
-//                             value: json!(reward),
-//                             ..Default::default()
-//                         })
-//                         .await
-//                         .unwrap();
-
-//                     variant_name
-//                 }
-//             })
-//             .collect();
-
-//         let variant_names = join_all(tasks).await;
-
-//         // Aggregate results
-//         let mut cycle_counts = HashMap::new();
-//         for variant_name in variant_names {
-//             *cycle_counts.entry(variant_name).or_insert(0) += 1;
-//         }
-
-//         variant_counts_per_cycle.push(cycle_counts);
-
-//         // Wait for ClickHouse async inserts to complete
-//         clickhouse_flush_async_insert(&clickhouse).await;
-//         tokio::time::sleep(Duration::from_millis(500)).await;
-
-//         // Wait for background update task to run (1s period + buffer)
-//         tokio::time::sleep(Duration::from_millis(1500)).await;
-//     }
-
-//     // Verify convergence: in later cycles, variant_b should dominate
-//     let last_cycle_counts = &variant_counts_per_cycle[variant_counts_per_cycle.len() - 1];
-//     let variant_b_count = last_cycle_counts.get("variant_b").unwrap_or(&0);
-
-//     // After 5 cycles with clear winner (mean 0.85 vs 0.5/0.55),
-//     // Track-and-Stop should heavily favor variant_b
-//     // Allow some exploration due to epsilon, but should be >50%
-//     assert!(
-//         *variant_b_count > 15,
-//         "Expected variant_b to be selected >15 times in final cycle, got {variant_b_count}. \
-//          Full distribution: {variant_counts_per_cycle:?}"
-//     );
-
-//     // Verify trend: variant_b selection should increase over time
-//     let first_cycle_b = variant_counts_per_cycle[0].get("variant_b").unwrap_or(&0);
-//     let last_cycle_b = variant_counts_per_cycle[4].get("variant_b").unwrap_or(&0);
-
-//     // Should generally increase (allow for some statistical noise)
-//     assert!(
-//         last_cycle_b >= first_cycle_b,
-//         "Expected variant_b selection to increase or stay same, \
-//          but went from {first_cycle_b} to {last_cycle_b}"
-//     );
-// }
-
-// ============================================================================
 // Bandit Behavior Tests
 // ============================================================================
+// Note that all the tests below have some chance of failure due to randomness
+// in the arm pulls and bandit rewards. Reducing this would involve averaging
+// over multiple runs (or more runs, for tests which already average over runs),
+// which is costly due to the need to wait for the background task to update
+// the sampling probabilities. Currently those updates can't happen more often
+// than once per second.
 
+/// Test the round-robin sampling in the nursery phase: each variant should
+/// get `min_samples_per_variant` pulls, plus or minus 1 to allow for the
+/// possibility that the background task update happens before the pulls are
+/// complete. If failures occur frequently, `update_period_s` could be increased.
 #[tokio::test(flavor = "multi_thread")]
-async fn test_track_and_stop_min_pulls() {
+async fn test_min_pulls() {
     // Setup: Create config with specific min_samples_per_variant
     let min_samples = 20;
     let config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
         metric_type: "float",
+        optimize: "max",
         candidate_variants: &["variant_a", "variant_b", "variant_c"],
         fallback_variants: &[],
         min_samples_per_variant: min_samples,
@@ -973,7 +759,7 @@ async fn test_track_and_stop_min_pulls() {
         update_period_s: 1,
     });
 
-    let (client, clickhouse, _guard) = make_client_with_clean_database(&config).await;
+    let (client, clickhouse, _guard) = make_embedded_gateway_with_clean_clickhouse(&config).await;
     let client = std::sync::Arc::new(client);
 
     // Run exactly enough inferences to complete the nursery phase
@@ -981,42 +767,11 @@ async fn test_track_and_stop_min_pulls() {
     let total_inferences = num_variants * min_samples as usize;
 
     // Inferences
-    let inference_tasks: Vec<_> = (0..total_inferences)
-        .map(|_| {
-            let client = client.clone();
-            async move {
-                let output = client
-                    .inference(ClientInferenceParams {
-                        function_name: Some("test_function".to_string()),
-                        input: ClientInput {
-                            system: None,
-                            messages: vec![ClientInputMessage {
-                                role: Role::User,
-                                content: vec![ClientInputMessageContent::Text(TextKind::Text {
-                                    text: "test input".to_string(),
-                                })],
-                            }],
-                        },
-                        ..Default::default()
-                    })
-                    .await
-                    .unwrap();
-
-                let InferenceOutput::NonStreaming(InferenceResponse::Chat(response)) = output
-                else {
-                    panic!("Expected non-streaming chat response");
-                };
-
-                (response.inference_id, response.variant_name.clone())
-            }
-        })
-        .collect();
-
-    let inference_results = join_all(inference_tasks).await;
+    let inference_results = run_inference_batch(&client, total_inferences).await;
 
     // Wait for ClickHouse to flush
     clickhouse_flush_async_insert(&clickhouse).await;
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    tokio::time::sleep(Duration::from_millis(2 * BACKGROUND_UPDATE_DELAY_MS)).await;
 
     // Count how many times each variant was selected
     let mut variant_counts: HashMap<String, usize> = HashMap::new();
@@ -1024,762 +779,1353 @@ async fn test_track_and_stop_min_pulls() {
         *variant_counts.entry(variant_name.clone()).or_insert(0) += 1;
     }
 
-    eprintln!("Nursery phase variant counts: {variant_counts:?}");
-
-    // Verify each variant was sampled exactly min_samples times (round-robin)
+    // Verify each variant was sampled min_samples times plus or minus 1
     for variant in ["variant_a", "variant_b", "variant_c"] {
         let count = variant_counts.get(variant).copied().unwrap_or(0);
-        assert_eq!(
-            count, min_samples as usize,
-            "Expected variant {variant} to be sampled exactly {min_samples} times in nursery phase, got {count}"
+        assert!(count.abs_diff(min_samples as usize) <= 1,
+            "Expected variant {variant} to be sampled {min_samples} times (+/-) in nursery phase, got {count}"
         );
     }
 }
 
-// #[tokio::test(flavor = "multi_thread")]
-// async fn test_track_and_stop_gaussian_convergence_to_optimal_probabilities() {
-//     // Setup: Create config with very small delta and epsilon to prevent stopping
-//     let use_epsilon: f64 = 0.001;
-//     let config = make_track_and_stop_config(TrackAndStopTestConfig {
-//         metric_name: "performance_score",
-//         metric_type: "float",
-//         candidate_variants: &["variant_a", "variant_b", "variant_c"],
-//         fallback_variants: &[],
-//         min_samples_per_variant: 100,
-//         delta: 1e-12, // Very small to prevent stopping
-//         epsilon: use_epsilon,
-//         update_period_s: 1,
-//     });
-
-//     // Bandit distribution
-//     let bandit_distribution = [
-//         ("variant_a", 0.50, 0.10),
-//         ("variant_b", 0.55, 0.10),
-//         ("variant_c", 0.60, 0.10),
-//     ];
-
-//     // Compute true optimal probabilities using known distributions
-//     let true_feedback: Vec<FeedbackByVariant> = bandit_distribution
-//         .iter()
-//         .map(|(name, mean, stddev)| FeedbackByVariant {
-//             variant_name: name.to_string(),
-//             mean: *mean as f32,
-//             variance: (stddev * stddev) as f32,
-//             count: 10000,
-//         })
-//         .collect();
-
-//     let true_optimal_probs = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
-//         feedback: true_feedback,
-//         epsilon: Some(use_epsilon),
-//         variance_floor: None,
-//         min_prob: None,
-//         reg0: None,
-//     })
-//     .expect("Failed to compute true optimal probabilities");
-
-//     eprintln!("True optimal probabilities: {true_optimal_probs:?}");
-
-//     let num_runs = 5;
-//     let num_cycles = 3;
-//     let inferences_per_batch = 300;
-
-//     let mut batch2_distances = Vec::new();
-//     let mut batch3_distances = Vec::new();
-
-//     for run in 0..num_runs {
-//         eprintln!("\n========== RUN {run} ==========");
-
-//         let (client, clickhouse, _guard) = make_client_with_clean_database(&config).await;
-//         let bandit = GaussianBandit::new(bandit_distribution.to_vec(), None);
-
-//         let mut l2_distances = Vec::new();
-//         let mut cumulative_counts: HashMap<String, u32> = HashMap::new();
-//         let mut total_inferences: u32 = 0;
-//         let client = std::sync::Arc::new(client);
-//         let bandit = std::sync::Arc::new(bandit);
-
-//         for cycle in 0..num_cycles {
-//             eprintln!("\n=== Run {run}, Cycle {cycle} ===");
-
-//             // Phase 1: Make all inferences in parallel
-//             let inference_tasks: Vec<_> = (0..inferences_per_batch)
-//                 .map(|_| {
-//                     let client = client.clone();
-//                     async move {
-//                         let output = client
-//                             .inference(ClientInferenceParams {
-//                                 function_name: Some("test_function".to_string()),
-//                                 input: ClientInput {
-//                                     system: None,
-//                                     messages: vec![ClientInputMessage {
-//                                         role: Role::User,
-//                                         content: vec![ClientInputMessageContent::Text(
-//                                             TextKind::Text {
-//                                                 text: "test input".to_string(),
-//                                             },
-//                                         )],
-//                                     }],
-//                                 },
-//                                 ..Default::default()
-//                             })
-//                             .await
-//                             .unwrap();
-
-//                         let InferenceOutput::NonStreaming(InferenceResponse::Chat(response)) =
-//                             output
-//                         else {
-//                             panic!("Expected non-streaming chat response");
-//                         };
-
-//                         (response.inference_id, response.variant_name.clone())
-//                     }
-//                 })
-//                 .collect();
-
-//             let inference_results = join_all(inference_tasks).await;
-
-//             // Wait for ClickHouse to flush inferences before submitting feedback
-//             clickhouse_flush_async_insert(&clickhouse).await;
-//             tokio::time::sleep(Duration::from_millis(500)).await;
-
-//             // Phase 2: Submit feedback for all inferences in parallel
-//             let feedback_tasks: Vec<_> = inference_results
-//                 .iter()
-//                 .map(|(inference_id, variant_name)| {
-//                     let client = client.clone();
-//                     let bandit = bandit.clone();
-//                     let inference_id = *inference_id;
-//                     let variant_name = variant_name.clone();
-//                     async move {
-//                         let reward = bandit.sample(&variant_name);
-//                         client
-//                             .feedback(FeedbackParams {
-//                                 inference_id: Some(inference_id),
-//                                 metric_name: "performance_score".to_string(),
-//                                 value: json!(reward),
-//                                 ..Default::default()
-//                             })
-//                             .await
-//                             .unwrap();
-//                     }
-//                 })
-//                 .collect();
-
-//             join_all(feedback_tasks).await;
-
-//             // Update cumulative counts
-//             for (_, variant_name) in &inference_results {
-//                 *cumulative_counts.entry(variant_name.clone()).or_insert(0) += 1;
-//                 total_inferences += 1;
-//             }
-
-//             // Compute cumulative empirical probabilities
-//             let cumulative_empirical_probs: HashMap<String, f64> = cumulative_counts
-//                 .iter()
-//                 .map(|(name, &count)| (name.clone(), count as f64 / total_inferences as f64))
-//                 .collect();
-
-//             // Compute L2 distance
-//             let l2_distance = compute_l2_distance(&cumulative_empirical_probs, &true_optimal_probs);
-//             l2_distances.push(l2_distance);
-//             eprintln!("Run {run}, Cycle {cycle} L2 distance: {l2_distance:.4}");
-
-//             // Wait for ClickHouse and background update
-//             clickhouse_flush_async_insert(&clickhouse).await;
-//             tokio::time::sleep(Duration::from_millis(1500)).await;
-//         }
-
-//         batch2_distances.push(l2_distances[1]);
-//         batch3_distances.push(l2_distances[2]);
-
-//         eprintln!(
-//             "Run {run} - Batch 2 distance: {:.4}, Batch 3 distance: {:.4}",
-//             l2_distances[1], l2_distances[2]
-//         );
-//     }
-
-//     // Compute averages
-//     let avg_batch2 = batch2_distances.iter().sum::<f64>() / num_runs as f64;
-//     let avg_batch3 = batch3_distances.iter().sum::<f64>() / num_runs as f64;
-
-//     eprintln!("\n========== Final Results ==========");
-//     eprintln!("Batch 2 distances: {batch2_distances:?}");
-//     eprintln!("Batch 3 distances: {batch3_distances:?}");
-//     eprintln!("Average Batch 2 L2 distance: {avg_batch2:.4}");
-//     eprintln!("Average Batch 3 L2 distance: {avg_batch3:.4}");
-
-//     assert!(
-//         avg_batch3 < avg_batch2,
-//         "Expected average L2 distance to decrease from batch 2 to batch 3. \
-//          Avg Batch 2: {avg_batch2:.4}, Avg Batch 3: {avg_batch3:.4}"
-//     );
-//     assert_eq!(1, 0);
-// }
-
-// // #[traced_test]
-// #[tokio::test(flavor = "multi_thread")]
-// async fn test_track_and_stop_bernoulli_convergence_to_optimal_probabilities() {
-//     // Setup: Create config with very small delta and epsilon to prevent stopping
-//     let use_epsilon: f64 = 0.001;
-//     let config = make_track_and_stop_config(TrackAndStopTestConfig {
-//         metric_name: "success_rate",
-//         metric_type: "boolean",
-//         candidate_variants: &["variant_a", "variant_b", "variant_c"],
-//         fallback_variants: &[],
-//         min_samples_per_variant: 100,
-//         delta: 1e-9, // Very small to prevent stopping
-//         epsilon: use_epsilon,
-//         update_period_s: 1,
-//     });
-
-//     // Create Bernoulli bandit environment with close success probabilities to prevent early stopping
-//     let bandit_distribution = [
-//         ("variant_a", 0.54),
-//         ("variant_b", 0.55),
-//         ("variant_c", 0.56),
-//     ];
-
-//     // Compute true optimal probabilities using known distributions
-//     // For Bernoulli: mean = p, variance = p(1-p)
-//     let true_feedback: Vec<FeedbackByVariant> = bandit_distribution
-//         .iter()
-//         .map(|(name, prob)| FeedbackByVariant {
-//             variant_name: name.to_string(),
-//             mean: *prob as f32,
-//             variance: (*prob * (1.0 - *prob)) as f32,
-//             count: 10000, // Large count for stable estimates
-//         })
-//         .collect();
-
-//     let true_optimal_probs = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
-//         feedback: true_feedback,
-//         epsilon: Some(use_epsilon),
-//         variance_floor: None,
-//         min_prob: None,
-//         reg0: None,
-//     })
-//     .expect("Failed to compute true optimal probabilities");
-
-//     eprintln!("True optimal probabilities: {true_optimal_probs:?}");
-
-//     let num_runs = 5;
-//     let num_cycles = 3;
-//     let inferences_per_batch = 300;
-
-//     let mut batch2_distances = Vec::new();
-//     let mut batch3_distances = Vec::new();
-
-//     for run in 0..num_runs {
-//         eprintln!("\n========== RUN {run} ==========");
-
-//         let (client, clickhouse, _guard) = make_client_with_clean_database(&config).await;
-//         let bandit = BernoulliBandit::new(bandit_distribution.to_vec(), None);
-
-//         let mut l2_distances = Vec::new();
-//         let mut cumulative_counts: HashMap<String, u32> = HashMap::new();
-//         let mut total_inferences: u32 = 0;
-//         let client = std::sync::Arc::new(client);
-//         let bandit = std::sync::Arc::new(bandit);
-
-//         for cycle in 0..num_cycles {
-//             eprintln!("\n=== Run {run}, Cycle {cycle} ===");
-
-//             // Phase 1: Make all inferences in parallel
-//             let inference_tasks: Vec<_> = (0..inferences_per_batch)
-//                 .map(|_| {
-//                     let client = client.clone();
-//                     async move {
-//                         let output = client
-//                             .inference(ClientInferenceParams {
-//                                 function_name: Some("test_function".to_string()),
-//                                 input: ClientInput {
-//                                     system: None,
-//                                     messages: vec![ClientInputMessage {
-//                                         role: Role::User,
-//                                         content: vec![ClientInputMessageContent::Text(
-//                                             TextKind::Text {
-//                                                 text: "test input".to_string(),
-//                                             },
-//                                         )],
-//                                     }],
-//                                 },
-//                                 ..Default::default()
-//                             })
-//                             .await
-//                             .unwrap();
-
-//                         let InferenceOutput::NonStreaming(InferenceResponse::Chat(response)) =
-//                             output
-//                         else {
-//                             panic!("Expected non-streaming chat response");
-//                         };
-
-//                         (response.inference_id, response.variant_name.clone())
-//                     }
-//                 })
-//                 .collect();
-
-//             let inference_results = join_all(inference_tasks).await;
-
-//             // Wait for ClickHouse to flush inferences before submitting feedback
-//             clickhouse_flush_async_insert(&clickhouse).await;
-//             tokio::time::sleep(Duration::from_millis(500)).await;
-
-//             // Phase 2: Submit feedback for all inferences in parallel
-//             let feedback_tasks: Vec<_> = inference_results
-//                 .iter()
-//                 .map(|(inference_id, variant_name)| {
-//                     let client = client.clone();
-//                     let bandit = bandit.clone();
-//                     let inference_id = *inference_id;
-//                     let variant_name = variant_name.clone();
-//                     async move {
-//                         let reward = bandit.sample(&variant_name);
-//                         client
-//                             .feedback(FeedbackParams {
-//                                 inference_id: Some(inference_id),
-//                                 metric_name: "success_rate".to_string(),
-//                                 value: json!(reward),
-//                                 ..Default::default()
-//                             })
-//                             .await
-//                             .unwrap();
-//                     }
-//                 })
-//                 .collect();
-
-//             join_all(feedback_tasks).await;
-
-//             // Update cumulative counts
-//             for (_, variant_name) in &inference_results {
-//                 *cumulative_counts.entry(variant_name.clone()).or_insert(0) += 1;
-//                 total_inferences += 1;
-//             }
-
-//             // Compute cumulative empirical probabilities
-//             let cumulative_empirical_probs: HashMap<String, f64> = cumulative_counts
-//                 .iter()
-//                 .map(|(name, &count)| (name.clone(), count as f64 / total_inferences as f64))
-//                 .collect();
-
-//             // Compute L2 distance
-//             let l2_distance = compute_l2_distance(&cumulative_empirical_probs, &true_optimal_probs);
-//             l2_distances.push(l2_distance);
-//             eprintln!("Run {run}, Cycle {cycle} L2 distance: {l2_distance:.4}");
-
-//             // Wait for ClickHouse and background update
-//             clickhouse_flush_async_insert(&clickhouse).await;
-//             tokio::time::sleep(Duration::from_millis(500)).await;
-//             tokio::time::sleep(Duration::from_millis(1500)).await;
-
-//             // Check if the algorithm has stopped
-//             // if logs_contain("Track-and-Stop experiment stopped") {
-//             //     panic!(
-//             //         "Track-and-Stop algorithm stopped early at run {run}, cycle {cycle}. \
-//             //          This prevents testing the convergence of sampling proportions to optimal probabilities. \
-//             //          Consider adjusting bandit parameters (closer probabilities) or delta to prevent early stopping."
-//             //     );
-//             // }
-//         }
-
-//         batch2_distances.push(l2_distances[1]);
-//         batch3_distances.push(l2_distances[2]);
-
-//         eprintln!(
-//             "Run {run} - Batch 2 distance: {:.4}, Batch 3 distance: {:.4}",
-//             l2_distances[1], l2_distances[2]
-//         );
-//     }
-
-//     // Compute averages
-//     let avg_batch2 = batch2_distances.iter().sum::<f64>() / num_runs as f64;
-//     let avg_batch3 = batch3_distances.iter().sum::<f64>() / num_runs as f64;
-
-//     eprintln!("\n========== Final Results ==========");
-//     eprintln!("Batch 2 distances: {batch2_distances:?}");
-//     eprintln!("Batch 3 distances: {batch3_distances:?}");
-//     eprintln!("Average Batch 2 L2 distance: {avg_batch2:.4}");
-//     eprintln!("Average Batch 3 L2 distance: {avg_batch3:.4}");
-
-//     assert!(
-//         avg_batch3 < avg_batch2,
-//         "Expected average L2 distance to decrease from batch 2 to batch 3. \
-//          Avg Batch 2: {avg_batch2:.4}, Avg Batch 3: {avg_batch3:.4}"
-//     );
-//     assert_eq!(1, 0);
-// }
-
-// #[traced_test]
-// #[tokio::test(flavor = "multi_thread")]
-// async fn test_track_and_stop_gaussian_convergence_parallel_clients() {
-//     // Setup: Create config with very small delta and epsilon to prevent stopping
-//     let use_epsilon: f64 = 0.001;
-//     let config = make_track_and_stop_config(TrackAndStopTestConfig {
-//         metric_name: "performance_score",
-//         metric_type: "float",
-//         candidate_variants: &["variant_a", "variant_b", "variant_c", "variant_d"],
-//         fallback_variants: &[],
-//         min_samples_per_variant: 20,
-//         delta: 1e-9, // Very small to prevent stopping
-//         epsilon: use_epsilon,
-//         update_period_s: 1,
-//     });
-
-//     let (client, clickhouse, _guard) = make_client_with_clean_database(&config).await;
-
-//     // Create Gaussian bandit environment
-//     let bandit_distribution = [
-//         ("variant_a", 0.54, 0.10),
-//         ("variant_b", 0.55, 0.15),
-//         ("variant_c", 0.56, 0.10),
-//         ("variant_d", 0.57, 0.05),
-//     ];
-//     let bandit = GaussianBandit::new(bandit_distribution.to_vec(), None);
-
-//     // Compute true optimal probabilities
-//     let true_feedback: Vec<FeedbackByVariant> = bandit_distribution
-//         .iter()
-//         .map(|(name, mean, stddev)| FeedbackByVariant {
-//             variant_name: name.to_string(),
-//             mean: *mean as f32,
-//             variance: (stddev * stddev) as f32,
-//             count: 10000,
-//         })
-//         .collect();
-
-//     let true_optimal_probs = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
-//         feedback: true_feedback,
-//         epsilon: Some(use_epsilon),
-//         variance_floor: None,
-//         min_prob: None,
-//         reg0: None,
-//     })
-//     .expect("Failed to compute true optimal probabilities");
-
-//     // Create 5 clients all connected to the same database
-//     let num_clients = 5;
-//     let mut clients = vec![std::sync::Arc::new(client)];
-//     for _ in 1..num_clients {
-//         let new_client = make_client_with_same_database(&config, &clickhouse).await;
-//         clients.push(std::sync::Arc::new(new_client));
-//     }
-
-//     let bandit = std::sync::Arc::new(bandit);
-//     eprintln!("True optimal probabilities: {true_optimal_probs:?}");
-
-//     // Track cumulative counts across all clients
-//     let mut l2_distances = Vec::new();
-//     let mut cumulative_counts: HashMap<String, u32> = HashMap::new();
-//     let mut total_inferences: u32 = 0;
-
-//     for cycle in 0..10 {
-//         eprintln!("\n=== Starting cycle {cycle} with {num_clients} parallel clients ===");
-
-//         // Each client makes inferences in parallel
-//         let inferences_per_client: usize = 16;
-//         let mut all_tasks = Vec::new();
-
-//         for client in &clients {
-//             let client_tasks: Vec<_> = (0..inferences_per_client)
-//                 .map(|_| {
-//                     let client = client.clone();
-//                     let bandit = bandit.clone();
-//                     async move {
-//                         let output = client
-//                             .inference(ClientInferenceParams {
-//                                 function_name: Some("test_function".to_string()),
-//                                 input: ClientInput {
-//                                     system: None,
-//                                     messages: vec![ClientInputMessage {
-//                                         role: Role::User,
-//                                         content: vec![ClientInputMessageContent::Text(
-//                                             TextKind::Text {
-//                                                 text: "test input".to_string(),
-//                                             },
-//                                         )],
-//                                     }],
-//                                 },
-//                                 ..Default::default()
-//                             })
-//                             .await
-//                             .unwrap();
-
-//                         let InferenceOutput::NonStreaming(InferenceResponse::Chat(response)) =
-//                             output
-//                         else {
-//                             panic!("Expected non-streaming chat response");
-//                         };
-
-//                         let variant_name = response.variant_name.clone();
-//                         let reward = bandit.sample(&variant_name);
-
-//                         client
-//                             .feedback(FeedbackParams {
-//                                 inference_id: Some(response.inference_id),
-//                                 metric_name: "performance_score".to_string(),
-//                                 value: json!(reward),
-//                                 ..Default::default()
-//                             })
-//                             .await
-//                             .unwrap();
-
-//                         variant_name
-//                     }
-//                 })
-//                 .collect();
-
-//             all_tasks.extend(client_tasks);
-//         }
-
-//         // Wait for all clients to complete their inferences
-//         let variant_names = join_all(all_tasks).await;
-
-//         // Calculate current cycle counts
-//         let mut cycle_counts: HashMap<String, usize> = HashMap::new();
-//         for variant_name in &variant_names {
-//             *cycle_counts.entry(variant_name.clone()).or_insert(0) += 1;
-//         }
-
-//         // Update cumulative counts
-//         for variant_name in variant_names {
-//             *cumulative_counts.entry(variant_name).or_insert(0) += 1;
-//             total_inferences += 1;
-//         }
-
-//         // Compute cumulative empirical probabilities
-//         let cumulative_empirical_probs: HashMap<String, f64> = cumulative_counts
-//             .iter()
-//             .map(|(name, &count)| (name.clone(), count as f64 / total_inferences as f64))
-//             .collect();
-
-//         eprintln!("Cycle {cycle} counts: {cycle_counts:?}");
-//         eprintln!("Cycle {cycle} cumulative counts: {cumulative_counts:?}");
-//         eprintln!("Cycle {cycle} cumulative empirical probs: {cumulative_empirical_probs:?}");
-
-//         // Compute L2 distance
-//         let l2_distance = compute_l2_distance(&cumulative_empirical_probs, &true_optimal_probs);
-//         l2_distances.push(l2_distance);
-//         eprintln!("Cycle {cycle} L2 distance: {l2_distance:.4}");
-
-//         // Wait for ClickHouse and background update
-//         clickhouse_flush_async_insert(&clickhouse).await;
-//         tokio::time::sleep(Duration::from_millis(500)).await;
-//         tokio::time::sleep(Duration::from_millis(1500)).await;
-
-//         // Check if the algorithm has stopped
-//         if logs_contain("Track-and-Stop experiment stopped") {
-//             panic!(
-//                 "Track-and-Stop algorithm stopped early at cycle {cycle}. \
-//                  This prevents testing the convergence of sampling proportions to optimal probabilities. \
-//                  Consider adjusting bandit parameters (closer means, larger stddevs) or delta to prevent early stopping."
-//             );
-//         }
-//     }
-
-//     // Verify convergence
-//     eprintln!("\nFinal results:");
-//     eprintln!("True optimal probabilities: {true_optimal_probs:?}");
-//     eprintln!("Final cumulative counts: {cumulative_counts:?}");
-//     eprintln!("L2 distances over time: {l2_distances:?}");
-
-//     let second_cycle_distance = l2_distances[1];
-//     let last_cycle_distance = l2_distances[l2_distances.len() - 1];
-
-//     eprintln!("\nConvergence check:");
-//     eprintln!("Second cycle L2 distance: {second_cycle_distance:.4}");
-//     eprintln!("Last cycle L2 distance: {last_cycle_distance:.4}");
-
-//     assert!(
-//         last_cycle_distance < second_cycle_distance,
-//         "Expected L2 distance to decrease from second cycle to last cycle. \
-//          Second cycle: {second_cycle_distance:.4}, Last cycle: {last_cycle_distance:.4}"
-//     );
-// }
-
-// #[traced_test]
-// #[tokio::test(flavor = "multi_thread")]
-// async fn test_track_and_stop_bernoulli_convergence_parallel_clients() {
-// Setup: Create config with very small delta and epsilon to prevent stopping
-//     let use_epsilon: f64 = 0.001;
-//     let config = make_track_and_stop_config(TrackAndStopTestConfig {
-//         metric_name: "success_rate",
-//         metric_type: "boolean",
-//         candidate_variants: &["variant_a", "variant_b", "variant_c", "variant_d"],
-//         fallback_variants: &[],
-//         min_samples_per_variant: 20,
-//         delta: 1e-9, // Very small to prevent stopping
-//         epsilon: use_epsilon,
-//         update_period_s: 1,
-//     });
-
-//     let (client, clickhouse, _guard) = make_client_with_clean_database(&config).await;
-
-//     // Create Bernoulli bandit environment
-//     let bandit_distribution = [
-//         ("variant_a", 0.54),
-//         ("variant_b", 0.55),
-//         ("variant_c", 0.56),
-//         ("variant_d", 0.57),
-//     ];
-//     let bandit = BernoulliBandit::new(bandit_distribution.to_vec(), None);
-
-//     // Compute true optimal probabilities
-//     let true_feedback: Vec<FeedbackByVariant> = bandit_distribution
-//         .iter()
-//         .map(|(name, prob)| FeedbackByVariant {
-//             variant_name: name.to_string(),
-//             mean: *prob as f32,
-//             variance: (*prob * (1.0 - *prob)) as f32,
-//             count: 10000,
-//         })
-//         .collect();
-
-//     let true_optimal_probs = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
-//         feedback: true_feedback,
-//         epsilon: Some(use_epsilon),
-//         variance_floor: None,
-//         min_prob: None,
-//         reg0: None,
-//     })
-//     .expect("Failed to compute true optimal probabilities");
-
-//     // Create 5 clients all connected to the same database
-//     let num_clients = 5;
-//     let mut clients = vec![std::sync::Arc::new(client)];
-//     for _ in 1..num_clients {
-//         let new_client = make_client_with_same_database(&config, &clickhouse).await;
-//         clients.push(std::sync::Arc::new(new_client));
-//     }
-
-//     let bandit = std::sync::Arc::new(bandit);
-//     eprintln!("True optimal probabilities: {true_optimal_probs:?}");
-
-//     // Track cumulative counts across all clients
-//     let mut l2_distances = Vec::new();
-//     let mut cumulative_counts: HashMap<String, u32> = HashMap::new();
-//     let mut total_inferences: u32 = 0;
-
-//     for cycle in 0..10 {
-//         eprintln!("\n=== Starting cycle {cycle} with {num_clients} parallel clients ===");
-
-//         // Each client makes inferences in parallel
-//         let inferences_per_client: usize = 16;
-//         let mut all_tasks = Vec::new();
-
-//         for client in &clients {
-//             let client_tasks: Vec<_> = (0..inferences_per_client)
-//                 .map(|_| {
-//                     let client = client.clone();
-//                     let bandit = bandit.clone();
-//                     async move {
-//                         let output = client
-//                             .inference(ClientInferenceParams {
-//                                 function_name: Some("test_function".to_string()),
-//                                 input: ClientInput {
-//                                     system: None,
-//                                     messages: vec![ClientInputMessage {
-//                                         role: Role::User,
-//                                         content: vec![ClientInputMessageContent::Text(
-//                                             TextKind::Text {
-//                                                 text: "test input".to_string(),
-//                                             },
-//                                         )],
-//                                     }],
-//                                 },
-//                                 ..Default::default()
-//                             })
-//                             .await
-//                             .unwrap();
-
-//                         let InferenceOutput::NonStreaming(InferenceResponse::Chat(response)) =
-//                             output
-//                         else {
-//                             panic!("Expected non-streaming chat response");
-//                         };
-
-//                         let variant_name = response.variant_name.clone();
-//                         let reward = bandit.sample(&variant_name);
-
-//                         client
-//                             .feedback(FeedbackParams {
-//                                 inference_id: Some(response.inference_id),
-//                                 metric_name: "success_rate".to_string(),
-//                                 value: json!(reward),
-//                                 ..Default::default()
-//                             })
-//                             .await
-//                             .unwrap();
-
-//                         variant_name
-//                     }
-//                 })
-//                 .collect();
-
-//             all_tasks.extend(client_tasks);
-//         }
-
-//         // Wait for all clients to complete their inferences
-//         let variant_names = join_all(all_tasks).await;
-
-//         // Calculate current cycle counts
-//         let mut cycle_counts: HashMap<String, usize> = HashMap::new();
-//         for variant_name in &variant_names {
-//             *cycle_counts.entry(variant_name.clone()).or_insert(0) += 1;
-//         }
-
-//         // Update cumulative counts
-//         for variant_name in variant_names {
-//             *cumulative_counts.entry(variant_name).or_insert(0) += 1;
-//             total_inferences += 1;
-//         }
-
-//         // Compute cumulative empirical probabilities
-//         let cumulative_empirical_probs: HashMap<String, f64> = cumulative_counts
-//             .iter()
-//             .map(|(name, &count)| (name.clone(), count as f64 / total_inferences as f64))
-//             .collect();
-
-//         eprintln!("Cycle {cycle} counts: {cycle_counts:?}");
-//         eprintln!("Cycle {cycle} cumulative counts: {cumulative_counts:?}");
-//         eprintln!("Cycle {cycle} cumulative empirical probs: {cumulative_empirical_probs:?}");
-
-//         // Compute L2 distance
-//         let l2_distance = compute_l2_distance(&cumulative_empirical_probs, &true_optimal_probs);
-//         l2_distances.push(l2_distance);
-//         eprintln!("Cycle {cycle} L2 distance: {l2_distance:.4}");
-
-//         // Wait for ClickHouse and background update
-//         clickhouse_flush_async_insert(&clickhouse).await;
-//         tokio::time::sleep(Duration::from_millis(500)).await;
-//         tokio::time::sleep(Duration::from_millis(1500)).await;
-
-//         // Check if the algorithm has stopped
-//         if logs_contain("Track-and-Stop experiment stopped") {
-//             panic!(
-//                 "Track-and-Stop algorithm stopped early at cycle {cycle}. \
-//                  This prevents testing the convergence of sampling proportions to optimal probabilities. \
-//                  Consider adjusting bandit parameters (closer probabilities) or delta to prevent early stopping."
-//             );
-//         }
-//     }
-
-//     // Verify convergence
-//     eprintln!("\nFinal results:");
-//     eprintln!("True optimal probabilities: {true_optimal_probs:?}");
-//     eprintln!("Final cumulative counts: {cumulative_counts:?}");
-//     eprintln!("L2 distances over time: {l2_distances:?}");
-
-//     let second_cycle_distance = l2_distances[1];
-//     let last_cycle_distance = l2_distances[l2_distances.len() - 1];
-
-//     eprintln!("\nConvergence check:");
-//     eprintln!("Second cycle L2 distance: {second_cycle_distance:.4}");
-//     eprintln!("Last cycle L2 distance: {last_cycle_distance:.4}");
-
-//     assert!(
-//         last_cycle_distance < second_cycle_distance,
-//         "Expected L2 distance to decrease from second cycle to last cycle. \
-//          Second cycle: {second_cycle_distance:.4}, Last cycle: {last_cycle_distance:.4}"
-//     );
-// }
+/// Helper function to test bandit sampling behavior.
+///
+/// Computes optimal sampling probabilities and runs 5 independent experiments.
+/// Verifies that on average (across all batches and runs), the arm with the
+/// highest optimal sampling probability receives more samples than the arm
+/// with the lowest optimal sampling probability. Note that stricter tests are
+/// unlikely to consistently pass, both because the bandit may stop arbitrarily
+/// soon before the sampling probabilities converge to the optimal probabilities,
+/// and because the estimation of optimal sampling probabilities is highly sensitive
+/// to the sample statistics, so it would require averaging over many runs to observe
+/// full convergence.
+async fn test_bandit_convergence_helper(
+    epsilon: f64,
+    bandit_config: BanditConfig<'_>,
+    description: &str,
+) {
+    // Experiment parameters
+    let num_runs = 5; // Number of independent experiments to run
+    let num_batches = 5; // Target number of batches, where a batch is what happens between updates from the background task
+    let inferences_per_batch = 100; // Target number of inferences between updates from background task
+
+    // Extract variant names from bandit config
+    let variant_names: Vec<&str> = match &bandit_config {
+        BanditConfig::Bernoulli(distribution) => {
+            distribution.iter().map(|(name, _)| *name).collect()
+        }
+        BanditConfig::Gaussian(distribution) => {
+            distribution.iter().map(|(name, _, _)| *name).collect()
+        }
+    };
+
+    // Determine metric configuration based on bandit type
+    let (metric_name, metric_type) = match &bandit_config {
+        BanditConfig::Bernoulli(_) => ("success_rate", "boolean"),
+        BanditConfig::Gaussian(_) => ("performance_score", "float"),
+    };
+
+    let config = make_track_and_stop_config(TrackAndStopTestConfig {
+        metric_name,
+        metric_type,
+        optimize: "max",
+        candidate_variants: &variant_names,
+        fallback_variants: &[],
+        min_samples_per_variant: 20,
+        delta: 1e-12,
+        epsilon,
+        update_period_s: 1,
+    });
+
+    // Compute true optimal probabilities based on bandit type
+    let true_feedback: Vec<FeedbackByVariant> = match &bandit_config {
+        BanditConfig::Bernoulli(distribution) => distribution
+            .iter()
+            .map(|(name, prob)| FeedbackByVariant {
+                variant_name: name.to_string(),
+                mean: *prob as f32,
+                variance: (*prob * (1.0 - *prob)) as f32,
+                count: 10000,
+            })
+            .collect(),
+        BanditConfig::Gaussian(distribution) => distribution
+            .iter()
+            .map(|(name, mean, stddev)| FeedbackByVariant {
+                variant_name: name.to_string(),
+                mean: *mean as f32,
+                variance: (stddev * stddev) as f32,
+                count: 10000,
+            })
+            .collect(),
+    };
+
+    let optimal_probs = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+        feedback: true_feedback,
+        epsilon: Some(epsilon),
+        variance_floor: None,
+        min_prob: None,
+        reg0: None,
+    })
+    .expect("Failed to compute optimal probabilities");
+
+    // Identify arms with highest and lowest optimal probability
+    let (highest_prob_arm, highest_prob) = optimal_probs
+        .iter()
+        .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+        .unwrap();
+    let (lowest_prob_arm, lowest_prob) = optimal_probs
+        .iter()
+        .min_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+        .unwrap();
+
+    // Track cumulative sample counts across runs
+    let mut cumulative_counts: HashMap<String, usize> = variant_names
+        .iter()
+        .map(|name| (name.to_string(), 0usize))
+        .collect();
+
+    for run in 0..num_runs {
+        let (client, clickhouse, _guard) =
+            make_embedded_gateway_with_clean_clickhouse(&config).await;
+
+        // Create appropriate bandit type
+        let bandit = match &bandit_config {
+            BanditConfig::Bernoulli(distribution) => Bandit::Bernoulli(std::sync::Arc::new(
+                BernoulliBandit::new(distribution.clone(), Some(42 + run)),
+            )),
+            BanditConfig::Gaussian(distribution) => Bandit::Gaussian(std::sync::Arc::new(
+                GaussianBandit::new(distribution.clone(), Some(42 + run)),
+            )),
+        };
+
+        let client = std::sync::Arc::new(client);
+
+        let mut batch_variant_names: Vec<Vec<String>> = vec![Vec::new(); num_batches];
+
+        for batch_variants in &mut batch_variant_names {
+            // Phase 1: Run all inferences
+            let inference_results = run_inference_batch(&client, inferences_per_batch).await;
+
+            // Wait for ClickHouse to flush inferences
+            clickhouse_flush_async_insert(&clickhouse).await;
+            tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
+
+            // Phase 2: Send feedback for all inferences
+            let variant_names =
+                send_feedback(&client, &inference_results, &bandit, metric_name).await;
+            batch_variants.extend(variant_names);
+
+            // Wait for ClickHouse and background update
+            clickhouse_flush_async_insert(&clickhouse).await;
+            tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
+        }
+
+        // Compute cumulative counts across all batches for this run
+        let mut run_variant_counts: HashMap<String, usize> = HashMap::new();
+        for batch in &batch_variant_names {
+            for variant_name in batch {
+                *run_variant_counts.entry(variant_name.clone()).or_insert(0) += 1;
+            }
+        }
+
+        for (variant, &count) in &run_variant_counts {
+            *cumulative_counts.entry(variant.clone()).or_insert(0) += count;
+        }
+    }
+
+    // Compute average counts across runs
+    let avg_counts: HashMap<String, f64> = cumulative_counts
+        .into_iter()
+        .map(|(k, v)| (k, v as f64 / num_runs as f64))
+        .collect();
+
+    let highest_avg_count = avg_counts.get(highest_prob_arm.as_str()).unwrap();
+    let lowest_avg_count = avg_counts.get(lowest_prob_arm.as_str()).unwrap();
+
+    // Assert that the arm with highest optimal probability gets more samples on average
+    assert!(
+        highest_avg_count > lowest_avg_count,
+        "Expected arm with highest optimal prob ({highest_prob_arm}: {highest_prob:.3}) to get
+        more samples on average than arm with lowest optimal prob ({lowest_prob_arm}: {lowest_prob:.3}),
+        but got {highest_avg_count:.1} vs {lowest_avg_count:.1} samples. Test case: {description}",
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bernoulli_bandit_convergence_three_arms() {
+    test_bandit_convergence_helper(
+        0.001,
+        BanditConfig::Bernoulli(vec![
+            ("variant_a", 0.40),
+            ("variant_b", 0.50),
+            ("variant_c", 0.60),
+        ]),
+        "three arms",
+    )
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bernoulli_bandit_convergence_five_arms() {
+    test_bandit_convergence_helper(
+        0.001,
+        BanditConfig::Bernoulli(vec![
+            ("variant_a", 0.30),
+            ("variant_b", 0.40),
+            ("variant_c", 0.50),
+            ("variant_d", 0.60),
+            ("variant_e", 0.70),
+        ]),
+        "five arms",
+    )
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_gaussian_bandit_convergence_same_variances() {
+    test_bandit_convergence_helper(
+        0.001,
+        BanditConfig::Gaussian(vec![
+            ("variant_a", 0.50, 0.10),
+            ("variant_b", 0.60, 0.10),
+            ("variant_c", 0.70, 0.10),
+        ]),
+        "close means, low variance",
+    )
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_gaussian_bandit_convergence_different_variances() {
+    test_bandit_convergence_helper(
+        0.001,
+        BanditConfig::Gaussian(vec![
+            ("variant_a", 0.50, 0.50),
+            ("variant_b", 0.60, 0.30),
+            ("variant_c", 0.70, 0.10),
+        ]),
+        "different variances",
+    )
+    .await;
+}
+
+// ============================================================================
+// Stopping Behavior Tests
+// ============================================================================
+
+/// Test that after stopping, only the winning arm is pulled, with optimize="max"
+#[tokio::test(flavor = "multi_thread")]
+async fn test_winner_arm_pulled_after_stopping_optimize_max() {
+    // Experiment parameters
+    let num_initial_batches = 2; // Number of batches in Phase 1
+    let inferences_per_batch = 300; // Number of inferences per batch in Phase 1
+    let verification_inferences: usize = 100; // Number of inferences in Phase 2, after stopping
+
+    // Use a very clear winner to ensure stopping happens quickly
+    let config = make_track_and_stop_config(TrackAndStopTestConfig {
+        metric_name: "performance_score",
+        metric_type: "float",
+        optimize: "max",
+        candidate_variants: &["variant_a", "variant_b", "variant_c"],
+        fallback_variants: &[],
+        min_samples_per_variant: 100,
+        delta: 0.05,   // Reasonable confidence level
+        epsilon: 0.01, // Very small epsilon - we want the clear best arm
+        update_period_s: 1,
+    });
+
+    // Set up bandit with very clear winner (variant_c has much higher mean)
+    let bandit_distribution = vec![
+        ("variant_a", 0.30, 0.10),
+        ("variant_b", 0.40, 0.10),
+        ("variant_c", 1.0, 0.10), // Clear winner
+    ];
+
+    let (client, clickhouse, _guard) = make_embedded_gateway_with_clean_clickhouse(&config).await;
+    let bandit = GaussianBandit::new(bandit_distribution.clone(), Some(42));
+    let client = std::sync::Arc::new(client);
+    let bandit = std::sync::Arc::new(bandit);
+
+    // Phase 1: Run enough batches to trigger stopping
+
+    for _batch in 0..num_initial_batches {
+        // Phase 1a: Run all inferences
+        let inference_results = run_inference_batch(&client, inferences_per_batch).await;
+
+        // Wait for ClickHouse to flush inferences
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
+
+        // Phase 1b: Send feedback for all inferences
+        let variant_names = send_feedback(
+            &client,
+            &inference_results,
+            &Bandit::Gaussian(bandit.clone()),
+            "performance_score",
+        )
+        .await;
+
+        // Count variants in this batch
+        let mut variant_counts: HashMap<String, usize> = HashMap::new();
+        for name in &variant_names {
+            *variant_counts.entry(name.clone()).or_insert(0) += 1;
+        }
+
+        // Wait for ClickHouse and background update
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
+    }
+
+    // Phase 2: Run additional inferences and verify they all go to the winner
+    let inference_results = run_inference_batch(&client, verification_inferences).await;
+    let verification_variants: Vec<String> = inference_results
+        .into_iter()
+        .map(|(_, variant_name)| variant_name)
+        .collect();
+
+    // Count variants in verification phase
+    let mut variant_counts: HashMap<String, usize> = HashMap::new();
+    for name in &verification_variants {
+        *variant_counts.entry(name.clone()).or_insert(0) += 1;
+    }
+
+    // After stopping, we expect ALL inferences to go to the winner
+    let winner_count = variant_counts.values().max().copied().unwrap_or(0);
+
+    assert_eq!(
+        winner_count, verification_inferences,
+        "Expected 100% of inferences to go to winner after stopping. Distribution: {variant_counts:?}"
+    );
+}
+
+/// Test that after stopping, only the winning arm is pulled, with optimize="max"
+#[tokio::test(flavor = "multi_thread")]
+async fn test_winner_arm_pulled_after_stopping_optimize_min() {
+    // Experiment parameters
+    let num_initial_batches = 2; // Number of batches in Phase 1
+    let inferences_per_batch = 300; // Number of inferences per batch in Phase 1
+    let verification_inferences: usize = 100; // Number of inferences in Phase 2, after stopping
+
+    // Use a very clear winner to ensure stopping happens quickly
+    let config = make_track_and_stop_config(TrackAndStopTestConfig {
+        metric_name: "performance_score",
+        metric_type: "float",
+        optimize: "min",
+        candidate_variants: &["variant_a", "variant_b", "variant_c"],
+        fallback_variants: &[],
+        min_samples_per_variant: 100,
+        delta: 0.05,   // Reasonable confidence level
+        epsilon: 0.01, // Very small epsilon - we want the clear best arm
+        update_period_s: 1,
+    });
+
+    // Set up bandit with very clear winner (variant_c has much higher mean)
+    let bandit_distribution = vec![
+        ("variant_a", 0.30, 0.10), // Clear winner
+        ("variant_b", 0.80, 0.10),
+        ("variant_c", 1.0, 0.10),
+    ];
+
+    let (client, clickhouse, _guard) = make_embedded_gateway_with_clean_clickhouse(&config).await;
+    let bandit = GaussianBandit::new(bandit_distribution.clone(), Some(42));
+    let client = std::sync::Arc::new(client);
+    let bandit = std::sync::Arc::new(bandit);
+
+    // Phase 1: Run enough batches to trigger stopping
+
+    for _batch in 0..num_initial_batches {
+        // Phase 1a: Run all inferences
+        let inference_results = run_inference_batch(&client, inferences_per_batch).await;
+
+        // Wait for ClickHouse to flush inferences
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
+
+        // Phase 1b: Send feedback for all inferences
+        let variant_names = send_feedback(
+            &client,
+            &inference_results,
+            &Bandit::Gaussian(bandit.clone()),
+            "performance_score",
+        )
+        .await;
+
+        // Count variants in this batch
+        let mut variant_counts: HashMap<String, usize> = HashMap::new();
+        for name in &variant_names {
+            *variant_counts.entry(name.clone()).or_insert(0) += 1;
+        }
+
+        // Wait for ClickHouse and background update
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
+    }
+
+    // Phase 2: Run additional inferences and verify they all go to the winner
+    let inference_results = run_inference_batch(&client, verification_inferences).await;
+    let verification_variants: Vec<String> = inference_results
+        .into_iter()
+        .map(|(_, variant_name)| variant_name)
+        .collect();
+
+    // Count variants in verification phase
+    let mut variant_counts: HashMap<String, usize> = HashMap::new();
+    for name in &verification_variants {
+        *variant_counts.entry(name.clone()).or_insert(0) += 1;
+    }
+
+    // After stopping, we expect ALL inferences to go to the winner
+    let winner_count = variant_counts.values().max().copied().unwrap_or(0);
+
+    assert_eq!(
+        winner_count, verification_inferences,
+        "Expected 100% of inferences to go to winner after stopping. Distribution: {variant_counts:?}"
+    );
+}
+
+/// Test that large delta (low confidence requirement) leads to faster stopping
+/// than small delta (high confidence requirement). The large delta is intentionally
+/// extremely high to minimize test failure, since we're not averaging over multiple
+/// runs.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_effect_of_delta_on_stopping() {
+    let bandit_distribution = vec![
+        ("variant_a", 1.0, 0.50),
+        ("variant_b", 1.15, 0.50), // Moderate difference
+    ];
+    let seed = 42;
+
+    // Track-and-Stop config parameters
+    let shared_min_samples_per_variant = 20;
+    let shared_epsilon = 0.05;
+    let shared_update_period_s = 1;
+    let large_delta = 0.50;
+    let small_delta = 1e-8;
+
+    // Experiment parameters
+    let max_batches = 10; // Target max number of updates from background task
+    let inferences_per_batch = 80; // Number of inferences between updates from background task
+
+    // Run experiment with large delta
+    let config_large_delta = make_track_and_stop_config(TrackAndStopTestConfig {
+        metric_name: "performance_score",
+        metric_type: "float",
+        optimize: "max",
+        candidate_variants: &["variant_a", "variant_b"],
+        fallback_variants: &[],
+        min_samples_per_variant: shared_min_samples_per_variant,
+        delta: large_delta, // High delta = low confidence requirement
+        epsilon: shared_epsilon,
+        update_period_s: shared_update_period_s,
+    });
+
+    let (client, clickhouse, _guard) =
+        make_embedded_gateway_with_clean_clickhouse(&config_large_delta).await;
+    let bandit = GaussianBandit::new(bandit_distribution.clone(), Some(seed));
+    let client = std::sync::Arc::new(client);
+    let bandit = std::sync::Arc::new(bandit);
+    let mut stopped_at_batch_large = None; // Tracking when the bandit enters the Stopped state
+
+    for batch in 0..max_batches {
+        // Run all inferences
+        let inference_results = run_inference_batch(&client, inferences_per_batch).await;
+
+        // Wait for ClickHouse to flush inferences
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
+
+        // Send feedback for all inferences
+        let variant_names = send_feedback(
+            &client,
+            &inference_results,
+            &Bandit::Gaussian(bandit.clone()),
+            "performance_score",
+        )
+        .await;
+
+        let mut variant_counts: HashMap<String, usize> = HashMap::new();
+        for name in &variant_names {
+            *variant_counts.entry(name.clone()).or_insert(0) += 1;
+        }
+
+        let max_count = variant_counts.values().max().copied().unwrap_or(0);
+        if max_count as f64 / variant_names.len() as f64 >= STOPPED_THRESHOLD
+            && stopped_at_batch_large.is_none()
+        {
+            stopped_at_batch_large = Some(batch);
+        }
+
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
+    }
+
+    assert!(
+        stopped_at_batch_large.is_some(),
+        "Expected stopping to occur with large delta (low confidence requirement)"
+    );
+
+    let stopped_at_large = stopped_at_batch_large.unwrap();
+
+    // Run experiment with small delta (same seed for comparable rewards, modulo the randomness in the arm pulls)
+    let config_small_delta = make_track_and_stop_config(TrackAndStopTestConfig {
+        metric_name: "performance_score",
+        metric_type: "float",
+        optimize: "max",
+        candidate_variants: &["variant_a", "variant_b"],
+        fallback_variants: &[],
+        min_samples_per_variant: shared_min_samples_per_variant,
+        delta: small_delta, // Low delta = high confidence requirement
+        epsilon: shared_epsilon,
+        update_period_s: shared_update_period_s,
+    });
+
+    let (client, clickhouse, _guard) =
+        make_embedded_gateway_with_clean_clickhouse(&config_small_delta).await;
+    let bandit = GaussianBandit::new(bandit_distribution.clone(), Some(seed));
+    let client = std::sync::Arc::new(client);
+    let bandit = std::sync::Arc::new(bandit);
+    let mut stopped_at_batch_small = None; // Tracking when the bandit enters the Stopped state
+
+    for batch in 0..max_batches {
+        // Run all inferences
+        let inference_results = run_inference_batch(&client, inferences_per_batch).await;
+
+        // Wait for ClickHouse to flush inferences
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
+
+        // Send feedback for all inferences
+        let variant_names = send_feedback(
+            &client,
+            &inference_results,
+            &Bandit::Gaussian(bandit.clone()),
+            "performance_score",
+        )
+        .await;
+
+        let mut variant_counts: HashMap<String, usize> = HashMap::new();
+        for name in &variant_names {
+            *variant_counts.entry(name.clone()).or_insert(0) += 1;
+        }
+
+        let max_count = variant_counts.values().max().copied().unwrap_or(0);
+        if max_count as f64 / variant_names.len() as f64 >= STOPPED_THRESHOLD
+            && stopped_at_batch_small.is_none()
+        {
+            stopped_at_batch_small = Some(batch);
+        }
+
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
+    }
+
+    if let Some(stopped_at_small) = stopped_at_batch_small {
+        // Assert that large delta stopped earlier than small delta
+        assert!(
+            stopped_at_large < stopped_at_small,
+            "Expected large delta to stop earlier than small delta, but large stopped at batch {stopped_at_large} and small stopped at batch {stopped_at_small}"
+        );
+    } else {
+        // Large delta stopped but small delta didn't - this is the expected behavior
+    }
+}
+
+/// Test that large epsilon (less strict optimality requirement) leads to faster stopping
+/// than small epsilon (strict optimality requirement). The epsilons intentionally have
+/// a difference of several orders of magnitude to minimize test failure, since we're not
+/// averaging over multiple runs.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_effect_of_epsilon_on_stopping() {
+    let bandit_distribution = vec![
+        ("variant_a", 1.0, 0.50),
+        ("variant_b", 1.10, 0.50), // Moderate difference
+    ];
+    let seed = 42;
+
+    // Track-and-Stop config parameters
+    let shared_min_samples_per_variant = 20;
+    let shared_delta = 0.01;
+    let shared_update_period_s = 1;
+    let large_epsilon = 0.50;
+    let small_epsilon = 0.001;
+
+    // Experiment parameters
+    let max_batches = 15; // Target max number of updates from background task
+    let inferences_per_batch = 10; // Number of inferences between updates from background task
+
+    // Run experiment with large epsilon
+    let config_large_epsilon = make_track_and_stop_config(TrackAndStopTestConfig {
+        metric_name: "performance_score",
+        metric_type: "float",
+        optimize: "max",
+        candidate_variants: &["variant_a", "variant_b"],
+        fallback_variants: &[],
+        min_samples_per_variant: shared_min_samples_per_variant,
+        delta: shared_delta,
+        epsilon: large_epsilon, // Large epsilon = less strict optimality requirement
+        update_period_s: shared_update_period_s,
+    });
+
+    let (client, clickhouse, _guard) =
+        make_embedded_gateway_with_clean_clickhouse(&config_large_epsilon).await;
+    let bandit = GaussianBandit::new(bandit_distribution.clone(), Some(seed));
+    let client = std::sync::Arc::new(client);
+    let bandit = std::sync::Arc::new(bandit);
+    let mut stopped_at_batch_large = None;
+
+    for batch in 0..max_batches {
+        // Run all inferences
+        let inference_results = run_inference_batch(&client, inferences_per_batch).await;
+
+        // Wait for ClickHouse to flush inferences
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
+
+        // Send feedback for all inferences
+        let variant_names = send_feedback(
+            &client,
+            &inference_results,
+            &Bandit::Gaussian(bandit.clone()),
+            "performance_score",
+        )
+        .await;
+
+        let mut variant_counts: HashMap<String, usize> = HashMap::new();
+        for name in &variant_names {
+            *variant_counts.entry(name.clone()).or_insert(0) += 1;
+        }
+
+        let max_count = variant_counts.values().max().copied().unwrap_or(0);
+        if max_count as f64 / variant_names.len() as f64 >= STOPPED_THRESHOLD
+            && stopped_at_batch_large.is_none()
+        {
+            stopped_at_batch_large = Some(batch);
+        }
+
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
+    }
+
+    assert!(
+        stopped_at_batch_large.is_some(),
+        "Expected stopping to occur with large epsilon (less strict optimality requirement)"
+    );
+
+    let stopped_at_large = stopped_at_batch_large.unwrap();
+
+    // Run experiment with small epsilon (same seed for comparable rewards)
+    let config_small_epsilon = make_track_and_stop_config(TrackAndStopTestConfig {
+        metric_name: "performance_score",
+        metric_type: "float",
+        optimize: "max",
+        candidate_variants: &["variant_a", "variant_b"],
+        fallback_variants: &[],
+        min_samples_per_variant: shared_min_samples_per_variant,
+        delta: shared_delta,
+        epsilon: small_epsilon, // Small epsilon = strict optimality requirement
+        update_period_s: shared_update_period_s,
+    });
+
+    let (client, clickhouse, _guard) =
+        make_embedded_gateway_with_clean_clickhouse(&config_small_epsilon).await;
+    let bandit = GaussianBandit::new(bandit_distribution.clone(), Some(seed));
+    let client = std::sync::Arc::new(client);
+    let bandit = std::sync::Arc::new(bandit);
+
+    let mut stopped_at_batch_small = None;
+
+    for batch in 0..max_batches {
+        // Run all inferences
+        let inference_results = run_inference_batch(&client, inferences_per_batch).await;
+
+        // Wait for ClickHouse to flush inferences
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
+
+        // Send feedback for all inferences
+        let variant_names = send_feedback(
+            &client,
+            &inference_results,
+            &Bandit::Gaussian(bandit.clone()),
+            "performance_score",
+        )
+        .await;
+
+        let mut variant_counts: HashMap<String, usize> = HashMap::new();
+        for name in &variant_names {
+            *variant_counts.entry(name.clone()).or_insert(0) += 1;
+        }
+
+        let max_count = variant_counts.values().max().copied().unwrap_or(0);
+        if max_count as f64 / variant_names.len() as f64 >= STOPPED_THRESHOLD
+            && stopped_at_batch_small.is_none()
+        {
+            stopped_at_batch_small = Some(batch);
+        }
+
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
+    }
+
+    if let Some(stopped_at_small) = stopped_at_batch_small {
+        // Assert that large epsilon stopped earlier than small epsilon
+        assert!(
+            stopped_at_large < stopped_at_small,
+            "Expected large epsilon to stop earlier than small epsilon, but large stopped at batch {stopped_at_large} and small stopped at batch {stopped_at_small}"
+        );
+    } else {
+        // Large epsilon stopped but small epsilon didn't - this is the expected behavior
+    }
+}
+
+/// Test that a new client immediately enters stopped state when the database
+/// already contains data sufficient for stopping
+#[tokio::test(flavor = "multi_thread")]
+async fn test_cold_start_with_stopped_experiment() {
+    let bandit_distribution = vec![
+        ("variant_a", 0.40, 0.10),
+        ("variant_b", 0.80, 0.10), // Very clearly better
+        ("variant_c", 0.45, 0.10),
+    ];
+    let seed = 42;
+
+    // Experiment parameters
+    let max_batches = 10; // Target max number of updates from background task
+    let inferences_per_batch = 60; // Number of inferences between updates from background task
+
+    let config = make_track_and_stop_config(TrackAndStopTestConfig {
+        metric_name: "performance_score",
+        metric_type: "float",
+        optimize: "max",
+        candidate_variants: &["variant_a", "variant_b", "variant_c"],
+        fallback_variants: &[],
+        min_samples_per_variant: 20,
+        delta: 0.05,
+        epsilon: 0.05,
+        update_period_s: 1,
+    });
+
+    let (client, clickhouse, _guard) = make_embedded_gateway_with_clean_clickhouse(&config).await;
+    let bandit = GaussianBandit::new(bandit_distribution.clone(), Some(seed));
+    let client = std::sync::Arc::new(client);
+    let bandit = std::sync::Arc::new(bandit);
+    let mut stopped_at_batch = None;
+    let mut last_batch_variants: Vec<String> = Vec::new();
+
+    // Run until stopping is detected
+    for batch in 0..max_batches {
+        // Run all inferences
+        let inference_results = run_inference_batch(&client, inferences_per_batch).await;
+
+        // Wait for ClickHouse to flush inferences
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
+
+        // Send feedback for all inferences
+        let variant_names = send_feedback(
+            &client,
+            &inference_results,
+            &Bandit::Gaussian(bandit.clone()),
+            "performance_score",
+        )
+        .await;
+
+        let mut variant_counts: HashMap<String, usize> = HashMap::new();
+        for name in &variant_names {
+            *variant_counts.entry(name.clone()).or_insert(0) += 1;
+        }
+
+        // Save the variant names from this batch
+        last_batch_variants = variant_names.clone();
+
+        let max_count = variant_counts.values().max().copied().unwrap_or(0);
+        if max_count as f64 / variant_names.len() as f64 >= STOPPED_THRESHOLD
+            && stopped_at_batch.is_none()
+        {
+            stopped_at_batch = Some(batch);
+            break;
+        }
+
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
+    }
+
+    assert!(
+        stopped_at_batch.is_some(),
+        "Expected stopping to occur in Phase 1 with very well-separated arms"
+    );
+
+    // Identify the winner variant from the last batch
+    let mut variant_counts: HashMap<String, usize> = HashMap::new();
+    for name in &last_batch_variants {
+        *variant_counts.entry(name.clone()).or_insert(0) += 1;
+    }
+    let winner_variant = variant_counts
+        .iter()
+        .max_by_key(|(_, &count)| count)
+        .map(|(name, _)| name.clone())
+        .expect("Expected at least one variant in last batch");
+
+    // Drop the first client to simulate restart
+    drop(client);
+    drop(bandit);
+
+    // Small delay to ensure everything is flushed
+    tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
+
+    // Create a new client with the same configuration but fresh gateway instance
+    let (new_client, new_clickhouse, _new_guard) =
+        make_embedded_gateway_with_existing_clickhouse(&config, &clickhouse).await;
+    let new_client = std::sync::Arc::new(new_client);
+
+    // Give the new client time to initialize and check the database
+    tokio::time::sleep(Duration::from_millis(2000)).await;
+
+    // Run a batch of inferences with the new client
+    let inference_results = run_inference_batch(&new_client, inferences_per_batch).await;
+    let variant_names: Vec<String> = inference_results
+        .into_iter()
+        .map(|(_, variant_name)| variant_name)
+        .collect();
+
+    let mut variant_counts: HashMap<String, usize> = HashMap::new();
+    for name in &variant_names {
+        *variant_counts.entry(name.clone()).or_insert(0) += 1;
+    }
+
+    // Assert that the new client is already in stopped state pulling only the winner
+    let winner_count = variant_counts.get(&winner_variant).copied().unwrap_or(0);
+    let winner_fraction = winner_count as f64 / variant_names.len() as f64;
+    let winner_percentage = winner_fraction * 100.0;
+
+    assert_eq!(
+        winner_fraction, 1.0,
+        "Expected new client to immediately enter stopped state with 100% to winner variant '{winner_variant}', but got {winner_percentage:.2}% to that variant. Distribution: {variant_counts:?}"
+    );
+
+    // Also verify that specifically the winner variant from phase 1 is being pulled
+    let total_pulls = variant_names.len();
+    assert_eq!(
+        winner_count,
+        variant_names.len(),
+        "Expected all {total_pulls} pulls to go to winner variant '{winner_variant}', but only {winner_count} went to that variant"
+    );
+
+    // Clean up
+    clickhouse_flush_async_insert(&new_clickhouse).await;
+}
+
+/// Test that introducing a new variant after stopping causes the system to
+/// re-enter exploration mode rather than staying stopped
+#[tokio::test(flavor = "multi_thread")]
+async fn test_new_variant_triggers_reexploration() {
+    let initial_bandit_distribution = vec![
+        ("variant_a", 0.40, 0.10),
+        ("variant_b", 0.80, 0.10), // Very clearly better
+        ("variant_c", 0.45, 0.10),
+    ];
+    let seed = 42;
+
+    // Track-and-Stop config parameters
+    let shared_min_samples_per_variant = 20;
+    let shared_delta = 0.01;
+    let shared_epsilon = 0.05;
+    let shared_update_period_s = 1;
+
+    // Experiment parameters
+    let max_batches = 10; // Target max number of updates from background task
+    let inferences_per_batch = 60; // Number of inferences between updates from background task
+
+    let initial_config = make_track_and_stop_config(TrackAndStopTestConfig {
+        metric_name: "performance_score",
+        metric_type: "float",
+        optimize: "max",
+        candidate_variants: &["variant_a", "variant_b", "variant_c"],
+        fallback_variants: &[],
+        min_samples_per_variant: shared_min_samples_per_variant,
+        delta: shared_delta,
+        epsilon: shared_epsilon,
+        update_period_s: shared_update_period_s,
+    });
+
+    let (client, clickhouse, _guard) =
+        make_embedded_gateway_with_clean_clickhouse(&initial_config).await;
+    let bandit = GaussianBandit::new(initial_bandit_distribution.clone(), Some(seed));
+    let client = std::sync::Arc::new(client);
+    let bandit = std::sync::Arc::new(bandit);
+    let mut stopped_at_batch = None;
+
+    // Run until stopping is detected
+    for batch in 0..max_batches {
+        // Run all inferences
+        let inference_results = run_inference_batch(&client, inferences_per_batch).await;
+
+        // Wait for ClickHouse to flush inferences
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
+
+        // Send feedback for all inferences
+        let variant_names = send_feedback(
+            &client,
+            &inference_results,
+            &Bandit::Gaussian(bandit.clone()),
+            "performance_score",
+        )
+        .await;
+
+        let mut variant_counts: HashMap<String, usize> = HashMap::new();
+        for name in &variant_names {
+            *variant_counts.entry(name.clone()).or_insert(0) += 1;
+        }
+
+        let max_count = variant_counts.values().max().copied().unwrap_or(0);
+        if max_count as f64 / variant_names.len() as f64 >= STOPPED_THRESHOLD
+            && stopped_at_batch.is_none()
+        {
+            stopped_at_batch = Some(batch);
+            break;
+        }
+
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
+    }
+
+    assert!(
+        stopped_at_batch.is_some(),
+        "Expected stopping to occur in Phase 1 with very well-separated arms"
+    );
+
+    // Phase 2: Launch new client with an additional variant
+
+    // Drop the first client to simulate restart
+    drop(client);
+    drop(bandit);
+
+    // Small delay to ensure everything is flushed
+    tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
+
+    // Create config with new variant added
+    let new_config = make_track_and_stop_config(TrackAndStopTestConfig {
+        metric_name: "performance_score",
+        metric_type: "float",
+        optimize: "max",
+        candidate_variants: &["variant_a", "variant_b", "variant_c", "variant_d"], // Added variant_d
+        fallback_variants: &[],
+        min_samples_per_variant: shared_min_samples_per_variant,
+        delta: shared_delta,
+        epsilon: shared_epsilon,
+        update_period_s: shared_update_period_s,
+    });
+
+    // Create new bandit that includes the new variant
+    let new_bandit_distribution = vec![
+        ("variant_a", 0.40, 0.10),
+        ("variant_b", 0.80, 0.10),
+        ("variant_c", 0.45, 0.10),
+        ("variant_d", 0.70, 0.10), // New variant with good performance
+    ];
+    let new_bandit = GaussianBandit::new(new_bandit_distribution.clone(), Some(seed));
+
+    // Create a new client with the updated configuration
+    let (new_client, new_clickhouse, _new_guard) =
+        make_embedded_gateway_with_existing_clickhouse(&new_config, &clickhouse).await;
+    let new_client = std::sync::Arc::new(new_client);
+    let new_bandit = std::sync::Arc::new(new_bandit);
+
+    // Give the new client time to initialize
+    tokio::time::sleep(Duration::from_millis(2000)).await;
+
+    // Run batch 0 to verify that only the winner and new variant receive pulls
+
+    // Run all inferences
+    let inference_results = run_inference_batch(&new_client, inferences_per_batch).await;
+
+    // Wait for ClickHouse to flush inferences
+    clickhouse_flush_async_insert(&new_clickhouse).await;
+    tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
+
+    // Send feedback for all inferences
+    let variant_names = send_feedback(
+        &new_client,
+        &inference_results,
+        &Bandit::Gaussian(new_bandit.clone()),
+        "performance_score",
+    )
+    .await;
+
+    let mut variant_counts: HashMap<String, usize> = HashMap::new();
+    for name in &variant_names {
+        *variant_counts.entry(name.clone()).or_insert(0) += 1;
+    }
+
+    let total_pulls = variant_names.len() as f64;
+    let variant_b_count = *variant_counts.get("variant_b").unwrap_or(&0);
+    let variant_d_count = *variant_counts.get("variant_d").unwrap_or(&0);
+    let variant_a_count = *variant_counts.get("variant_a").unwrap_or(&0);
+    let variant_c_count = *variant_counts.get("variant_c").unwrap_or(&0);
+
+    let variant_b_fraction = variant_b_count as f64 / total_pulls;
+    let variant_d_fraction = variant_d_count as f64 / total_pulls;
+
+    // Verify that only variant_b (winner) and variant_d (new) receive pulls
+    assert!(
+        variant_a_count == 0 && variant_c_count == 0,
+        "Expected only variant_b (winner) and variant_d (new) to receive pulls, but variant_a got {variant_a_count} and variant_c got {variant_c_count}"
+    );
+
+    // Verify that both variant_b and variant_d receive non-trivial percentages
+    let variant_b_percentage = variant_b_fraction * 100.0;
+    assert!(
+        variant_b_fraction >= MIN_EXPLORATION_FRACTION,
+        "Expected variant_b (winner) to receive non-trivial percentage of pulls, but got {variant_b_percentage:.1}%"
+    );
+
+    let variant_d_percentage = variant_d_fraction * 100.0;
+    assert!(
+        variant_d_fraction >= MIN_EXPLORATION_FRACTION,
+        "Expected variant_d (new) to receive non-trivial percentage of pulls, but got {variant_d_percentage:.1}%"
+    );
+
+    // Clean up
+    clickhouse_flush_async_insert(&new_clickhouse).await;
+}
+
+/// With very close arms, tiny delta, and epsilon of 0, should take a long time to stop
+#[tokio::test(flavor = "multi_thread")]
+async fn test_no_stopping_under_difficult_conditions() {
+    // Experiment parameters
+    let num_batches = 10; // Target number of batches between updates from background task
+    let inferences_per_batch = 60; // Number of inferences between updates from background task
+
+    let config = make_track_and_stop_config(TrackAndStopTestConfig {
+        metric_name: "performance_score",
+        metric_type: "float",
+        optimize: "max",
+        candidate_variants: &["variant_a", "variant_b"],
+        fallback_variants: &[],
+        min_samples_per_variant: 20,
+        delta: 0.00001,
+        epsilon: 0.0, // Small epsilon means we need high confidence
+        update_period_s: 1,
+    });
+
+    // Very close means - should take longer to stop or not stop at all
+    let bandit_distribution = vec![
+        ("variant_a", 0.50, 0.10),
+        ("variant_b", 0.51, 0.10), // Very close
+    ];
+
+    let (client, clickhouse, _guard) = make_embedded_gateway_with_clean_clickhouse(&config).await;
+    let bandit = GaussianBandit::new(bandit_distribution.clone(), Some(42));
+    let client = std::sync::Arc::new(client);
+    let bandit = std::sync::Arc::new(bandit);
+
+    for batch in 0..num_batches {
+        // Run all inferences
+        let inference_results = run_inference_batch(&client, inferences_per_batch).await;
+
+        // Wait for ClickHouse to flush inferences
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
+
+        // Send feedback for all inferences
+        let variant_names = send_feedback(
+            &client,
+            &inference_results,
+            &Bandit::Gaussian(bandit.clone()),
+            "performance_score",
+        )
+        .await;
+
+        let mut variant_counts: HashMap<String, usize> = HashMap::new();
+        for name in &variant_names {
+            *variant_counts.entry(name.clone()).or_insert(0) += 1;
+        }
+
+        // In early batches, we should still be exploring both variants
+        if batch < 5 {
+            let min_count = variant_counts.values().min().copied().unwrap_or(0);
+            let min_fraction = min_count as f64 / variant_names.len() as f64;
+
+            // Each variant should get at least 10% of pulls in early batches
+            assert!(
+                min_fraction > MIN_EXPLORATION_FRACTION,
+                "Expected both variants to be explored in batch {batch}, but min fraction was {min_fraction:.2}"
+            );
+        }
+
+        // Wait for ClickHouse and background update
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
+    }
+}
+
+// ============================================================================
+// Optimize Direction Tests
+// ============================================================================
+
+// ============================================================================
+// Variant Removal Tests
+// ============================================================================
+
+/// Test that removing the winner variant after stopping causes re-exploration
+#[tokio::test(flavor = "multi_thread")]
+async fn test_remove_winner_variant_after_stopping() {
+    let initial_bandit_distribution = vec![
+        ("variant_a", 0.50, 0.10),
+        ("variant_b", 0.90, 0.10), // Clear winner
+        ("variant_c", 0.55, 0.15), // Different variance
+    ];
+    let seed = 42;
+
+    // Experiment parameters
+    let max_batches = 10;
+    let inferences_per_batch = 60;
+
+    let initial_config = make_track_and_stop_config(TrackAndStopTestConfig {
+        metric_name: "performance_score",
+        metric_type: "float",
+        optimize: "max",
+        candidate_variants: &["variant_a", "variant_b", "variant_c"],
+        fallback_variants: &[],
+        min_samples_per_variant: 20,
+        delta: 0.05,
+        epsilon: 0.05,
+        update_period_s: 1,
+    });
+
+    let (client, clickhouse, _guard) =
+        make_embedded_gateway_with_clean_clickhouse(&initial_config).await;
+    let bandit = GaussianBandit::new(initial_bandit_distribution.clone(), Some(seed));
+    let client = std::sync::Arc::new(client);
+    let bandit = std::sync::Arc::new(bandit);
+    let mut stopped_at_batch = None;
+
+    // Phase 1: Run until stopping
+    for batch in 0..max_batches {
+        let inference_results = run_inference_batch(&client, inferences_per_batch).await;
+
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
+
+        let variant_names = send_feedback(
+            &client,
+            &inference_results,
+            &Bandit::Gaussian(bandit.clone()),
+            "performance_score",
+        )
+        .await;
+
+        let mut variant_counts: HashMap<String, usize> = HashMap::new();
+        for name in &variant_names {
+            *variant_counts.entry(name.clone()).or_insert(0) += 1;
+        }
+
+        let max_count = variant_counts.values().max().copied().unwrap_or(0);
+        if max_count as f64 / variant_names.len() as f64 >= STOPPED_THRESHOLD
+            && stopped_at_batch.is_none()
+        {
+            stopped_at_batch = Some(batch);
+            break;
+        }
+
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
+    }
+
+    assert!(
+        stopped_at_batch.is_some(),
+        "Expected stopping to occur in Phase 1"
+    );
+
+    // Phase 2: Remove variant_b (the winner) and verify re-exploration
+
+    drop(client);
+    drop(bandit);
+    tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
+
+    // Create new config without variant_b
+    let new_config = make_track_and_stop_config(TrackAndStopTestConfig {
+        metric_name: "performance_score",
+        metric_type: "float",
+        optimize: "max",
+        candidate_variants: &["variant_a", "variant_c"], // Removed variant_b
+        fallback_variants: &[],
+        min_samples_per_variant: 20,
+        delta: 0.05,
+        epsilon: 0.05,
+        update_period_s: 1,
+    });
+
+    // Create new bandit for remaining variants (same means, different variance)
+    let new_bandit_distribution = vec![
+        ("variant_a", 0.50, 0.10),
+        ("variant_c", 0.55, 0.15), // Slightly higher mean, different variance
+    ];
+    let new_bandit = GaussianBandit::new(new_bandit_distribution, Some(seed));
+
+    let (new_client, new_clickhouse, _new_guard) =
+        make_embedded_gateway_with_existing_clickhouse(&new_config, &clickhouse).await;
+    let new_client = std::sync::Arc::new(new_client);
+    let new_bandit = std::sync::Arc::new(new_bandit);
+
+    tokio::time::sleep(Duration::from_millis(2000)).await;
+
+    // Run a batch and verify both remaining variants are explored
+    let inference_results = run_inference_batch(&new_client, inferences_per_batch).await;
+
+    clickhouse_flush_async_insert(&new_clickhouse).await;
+    tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
+
+    let variant_names = send_feedback(
+        &new_client,
+        &inference_results,
+        &Bandit::Gaussian(new_bandit.clone()),
+        "performance_score",
+    )
+    .await;
+
+    let mut variant_counts: HashMap<String, usize> = HashMap::new();
+    for name in &variant_names {
+        *variant_counts.entry(name.clone()).or_insert(0) += 1;
+    }
+
+    let variant_a_count = *variant_counts.get("variant_a").unwrap_or(&0);
+    let variant_c_count = *variant_counts.get("variant_c").unwrap_or(&0);
+
+    // Both variants should receive non-trivial exploration
+    let variant_a_fraction = variant_a_count as f64 / variant_names.len() as f64;
+    let variant_c_fraction = variant_c_count as f64 / variant_names.len() as f64;
+
+    assert!(
+        variant_a_fraction >= MIN_EXPLORATION_FRACTION,
+        "Expected variant_a to receive non-trivial exploration after winner removal, got {:.2}%",
+        variant_a_fraction * 100.0
+    );
+    assert!(
+        variant_c_fraction >= MIN_EXPLORATION_FRACTION,
+        "Expected variant_c to receive non-trivial exploration after winner removal, got {:.2}%",
+        variant_c_fraction * 100.0
+    );
+
+    clickhouse_flush_async_insert(&new_clickhouse).await;
+}
+
+/// Test that removing a non-winner variant after stopping preserves winner
+#[tokio::test(flavor = "multi_thread")]
+async fn test_remove_non_winner_variant_after_stopping() {
+    let initial_bandit_distribution = vec![
+        ("variant_a", 0.50, 0.10),
+        ("variant_b", 0.90, 0.10), // Clear winner
+        ("variant_c", 0.55, 0.10),
+    ];
+    let seed = 42;
+
+    let max_batches = 10;
+    let inferences_per_batch = 60;
+
+    let initial_config = make_track_and_stop_config(TrackAndStopTestConfig {
+        metric_name: "performance_score",
+        metric_type: "float",
+        optimize: "max",
+        candidate_variants: &["variant_a", "variant_b", "variant_c"],
+        fallback_variants: &[],
+        min_samples_per_variant: 20,
+        delta: 0.05,
+        epsilon: 0.05,
+        update_period_s: 1,
+    });
+
+    let (client, clickhouse, _guard) =
+        make_embedded_gateway_with_clean_clickhouse(&initial_config).await;
+    let bandit = GaussianBandit::new(initial_bandit_distribution.clone(), Some(seed));
+    let client = std::sync::Arc::new(client);
+    let bandit = std::sync::Arc::new(bandit);
+    let mut stopped_at_batch = None;
+
+    // Phase 1: Run until stopping
+    for batch in 0..max_batches {
+        let inference_results = run_inference_batch(&client, inferences_per_batch).await;
+
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
+
+        let variant_names = send_feedback(
+            &client,
+            &inference_results,
+            &Bandit::Gaussian(bandit.clone()),
+            "performance_score",
+        )
+        .await;
+
+        let mut variant_counts: HashMap<String, usize> = HashMap::new();
+        for name in &variant_names {
+            *variant_counts.entry(name.clone()).or_insert(0) += 1;
+        }
+
+        let max_count = variant_counts.values().max().copied().unwrap_or(0);
+        if max_count as f64 / variant_names.len() as f64 >= STOPPED_THRESHOLD
+            && stopped_at_batch.is_none()
+        {
+            stopped_at_batch = Some(batch);
+            break;
+        }
+
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
+    }
+
+    assert!(
+        stopped_at_batch.is_some(),
+        "Expected stopping to occur in Phase 1"
+    );
+
+    // Phase 2: Remove variant_a (a non-winner) and verify winner still selected
+
+    drop(client);
+    drop(bandit);
+    tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
+
+    // Create new config without variant_a
+    let new_config = make_track_and_stop_config(TrackAndStopTestConfig {
+        metric_name: "performance_score",
+        metric_type: "float",
+        optimize: "max",
+        candidate_variants: &["variant_b", "variant_c"], // Removed variant_a
+        fallback_variants: &[],
+        min_samples_per_variant: 20,
+        delta: 0.05,
+        epsilon: 0.05,
+        update_period_s: 1,
+    });
+
+    let (new_client, new_clickhouse, _new_guard) =
+        make_embedded_gateway_with_existing_clickhouse(&new_config, &clickhouse).await;
+    let new_client = std::sync::Arc::new(new_client);
+
+    tokio::time::sleep(Duration::from_millis(2000)).await;
+
+    // Run a batch and verify variant_b (winner) is still heavily sampled
+    let inference_results = run_inference_batch(&new_client, inferences_per_batch).await;
+    let variant_names: Vec<String> = inference_results
+        .into_iter()
+        .map(|(_, variant_name)| variant_name)
+        .collect();
+
+    let mut variant_counts: HashMap<String, usize> = HashMap::new();
+    for name in &variant_names {
+        *variant_counts.entry(name.clone()).or_insert(0) += 1;
+    }
+
+    let variant_b_count = *variant_counts.get("variant_b").unwrap_or(&0);
+    let variant_b_fraction = variant_b_count as f64 / variant_names.len() as f64;
+
+    // variant_b should still dominate (at least 80% of pulls)
+    assert!(
+        variant_b_fraction >= 0.80,
+        "Expected variant_b (winner) to dominate after non-winner removal, got {:.2}%",
+        variant_b_fraction * 100.0
+    );
+
+    clickhouse_flush_async_insert(&new_clickhouse).await;
+}
