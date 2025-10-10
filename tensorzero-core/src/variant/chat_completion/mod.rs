@@ -1163,7 +1163,7 @@ mod tests {
     #[tokio::test]
     async fn test_infer_chat_completion() {
         let client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
             http_client: &client,
@@ -2146,7 +2146,7 @@ mod tests {
     #[tokio::test]
     async fn test_infer_chat_completion_stream() {
         let client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
             http_client: &client,
