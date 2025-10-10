@@ -7,9 +7,9 @@ use crate::config::Config;
 use crate::error::Error;
 use crate::stored_inference::StoredInference;
 
-use super::batching::BatchWriterHandle;
-use super::query_builder::ListInferencesParams;
-use super::{
+use crate::db::clickhouse::batching::BatchWriterHandle;
+use crate::db::clickhouse::query_builder::ListInferencesParams;
+use crate::db::clickhouse::{
     ClickHouseClient, ClickHouseResponse, ClickHouseResponseMetadata, ExternalDataInfo,
     GetMaybeReplicatedTableEngineNameArgs, HealthCheckable, TableName,
 };

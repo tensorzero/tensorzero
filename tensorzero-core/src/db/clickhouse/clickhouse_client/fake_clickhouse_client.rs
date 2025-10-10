@@ -6,15 +6,14 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
 use crate::config::Config;
-use crate::error::{Error, ErrorDetails};
-use crate::stored_inference::StoredInference;
-
-use super::batching::BatchWriterHandle;
-use super::query_builder::ListInferencesParams;
-use super::{
+use crate::db::clickhouse::batching::BatchWriterHandle;
+use crate::db::clickhouse::query_builder::ListInferencesParams;
+use crate::db::clickhouse::{
     ClickHouseClient, ClickHouseResponse, ClickHouseResponseMetadata, ExternalDataInfo,
     GetMaybeReplicatedTableEngineNameArgs, HealthCheckable, Rows, TableName,
 };
+use crate::error::{Error, ErrorDetails};
+use crate::stored_inference::StoredInference;
 
 lazy_static! {
     static ref FAKE_DATABASE_URL: SecretString = SecretString::from("fake");
@@ -36,14 +35,14 @@ lazy_static! {
 /// ```
 #[derive(Debug, Clone)]
 pub struct FakeClickHouseClient {
-    pub(super) mock_data: Arc<RwLock<HashMap<String, Vec<serde_json::Value>>>>,
-    pub(super) healthy: bool,
+    pub data: Arc<RwLock<HashMap<String, Vec<serde_json::Value>>>>,
+    pub healthy: bool,
 }
 
 impl FakeClickHouseClient {
     pub fn new(healthy: bool) -> Self {
         Self {
-            mock_data: Arc::new(RwLock::new(HashMap::new())),
+            data: Arc::new(RwLock::new(HashMap::new())),
             healthy,
         }
     }
@@ -92,7 +91,7 @@ impl ClickHouseClient for FakeClickHouseClient {
         write_fake(
             Rows::<String>::Serialized(&rows),
             table,
-            &mut self.mock_data.write().await,
+            &mut self.data.write().await,
         )
         .await
     }
@@ -105,7 +104,7 @@ impl ClickHouseClient for FakeClickHouseClient {
         write_fake(
             Rows::<String>::Serialized(&rows),
             table,
-            &mut self.mock_data.write().await,
+            &mut self.data.write().await,
         )
         .await
     }

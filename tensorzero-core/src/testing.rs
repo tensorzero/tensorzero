@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::config::Config;
-use crate::db::clickhouse::fake_clickhouse_client::FakeClickHouseClient;
+use crate::db::clickhouse::clickhouse_client::FakeClickHouseClient;
 use crate::utils::gateway::{GatewayHandle, GatewayHandleTestOptions};
 
 pub fn get_unit_test_gateway_handle(config: Arc<Config>) -> GatewayHandle {

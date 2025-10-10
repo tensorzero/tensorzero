@@ -64,7 +64,7 @@ mod tests {
     use std::sync::Arc;
 
     use crate::config::Config;
-    use crate::db::clickhouse::fake_clickhouse_client::FakeClickHouseClient;
+    use crate::db::clickhouse::clickhouse_client::FakeClickHouseClient;
     use crate::testing::get_unit_test_gateway_handle_with_options;
     use crate::utils::gateway::GatewayHandleTestOptions;
 

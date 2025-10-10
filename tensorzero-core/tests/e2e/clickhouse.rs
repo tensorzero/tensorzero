@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use paste::paste;
-use secrecy::ExposeSecret as _;
+use secrecy::ExposeSecret;
 use serde_json::json;
 use tensorzero_core::config::BatchWritesConfig;
 use tensorzero_core::db::clickhouse::migration_manager::migration_trait::Migration;
