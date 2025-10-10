@@ -753,7 +753,7 @@ mod tests {
 
         if let Err(e) = result {
             let error_msg = e.to_string();
-            assert!(error_msg.contains("cannot specify both 'always' and 'priority' fields"));
+            assert!(error_msg.contains("cannot specify both `always` and `priority` fields"));
         }
     }
 
@@ -770,7 +770,9 @@ mod tests {
 
         if let Err(e) = result {
             let error_msg = e.to_string();
-            assert!(error_msg.contains("priority field is required when always is not true"));
+            assert!(
+                error_msg.contains("the `priority` field is required when `always` is not true")
+            );
         }
     }
 
