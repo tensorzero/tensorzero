@@ -73,7 +73,7 @@ mod tests {
     #[tokio::test]
     async fn test_health_handler() {
         let config = Arc::new(Config::default());
-        let fake = FakeClickHouseClient::new(true); // healthy
+        let fake = FakeClickHouseClient::new(/* healthy= */ true);
         let gateway_handle = get_unit_test_gateway_handle_with_options(
             config.clone(),
             GatewayHandleTestOptions {
@@ -92,7 +92,7 @@ mod tests {
     #[tokio::test]
     async fn should_report_error_for_unhealthy_clickhouse() {
         let config = Arc::new(Config::default());
-        let fake = FakeClickHouseClient::new(false); // unhealthy
+        let fake = FakeClickHouseClient::new(/* healthy= */ false);
         let gateway_handle = get_unit_test_gateway_handle_with_options(
             config,
             GatewayHandleTestOptions {
@@ -111,7 +111,7 @@ mod tests {
     #[tokio::test]
     async fn should_report_error_for_unhealthy_postgres() {
         let config = Arc::new(Config::default());
-        let fake = FakeClickHouseClient::new(true); // healthy
+        let fake = FakeClickHouseClient::new(/* healthy= */ true);
         let gateway_handle = get_unit_test_gateway_handle_with_options(
             config,
             GatewayHandleTestOptions {

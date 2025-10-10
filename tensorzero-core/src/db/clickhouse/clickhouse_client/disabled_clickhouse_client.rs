@@ -39,6 +39,10 @@ impl ClickHouseClient for DisabledClickHouseClient {
         "disabled"
     }
 
+    fn is_batching_enabled(&self) -> bool {
+        false
+    }
+
     fn batcher_join_handle(&self) -> Option<BatchWriterHandle> {
         None
     }

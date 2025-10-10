@@ -64,19 +64,20 @@ async fn write_fake<T: serde::Serialize + Send + Sync>(
 
 #[async_trait]
 impl ClickHouseClient for FakeClickHouseClient {
-    /// Returns the database URL
     fn database_url(&self) -> &SecretString {
         &FAKE_DATABASE_URL
     }
 
-    /// Returns the cluster name
     fn cluster_name(&self) -> &Option<String> {
         &FAKE_CLUSTER_NAME
     }
 
-    /// Returns the database name
     fn database(&self) -> &str {
         "fake"
+    }
+
+    fn is_batching_enabled(&self) -> bool {
+        false
     }
 
     fn batcher_join_handle(&self) -> Option<BatchWriterHandle> {

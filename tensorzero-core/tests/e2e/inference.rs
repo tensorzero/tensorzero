@@ -3915,6 +3915,48 @@ async fn test_multiple_text_blocks_in_message() {
 // We don't use the word 'batch' in the test name, since we already
 // group those tests as 'batch inference' tests
 #[tokio::test(flavor = "multi_thread")]
+async fn test_clickhouse_bulk_insert_off_default() {
+    let client = Arc::new(
+        tensorzero::test_helpers::make_embedded_gateway_with_config(
+            "
+    ",
+        )
+        .await,
+    );
+
+    // TODO(shuyangli): I think this is testing at the wrong level.
+    // "batching" is currently structured as an implementation detail of the
+    // ClickHouseConnectionInfo / ClickHouseClient - if batching is not enabled,
+    // write_batched doesn't fail and just uses the non-batched implementation,
+    // and no production code is calling write_non_batched.
+    // The current E2E test is testing internal implementation detail
+    // (checks if the batch_handle is present when batch is enabled/disabled)
+    // which I would argue is too low level.
+
+    // I think the right way to test this:
+
+    // At unit test level, we check
+    // - if batching config sets up batch_sender correctly (presence and absence)
+    // - if batch_sender writes correctly
+    // - if the write() calls use batch_sender correctly
+    //
+    // At the E2e level, we check
+    // - with batching on, do we write to clickhouse
+    // - with batching off, do we write to clickhouse
+
+    assert!(
+        !client
+            .get_app_state_data()
+            .unwrap()
+            .clickhouse_connection_info
+            .is_batching_enabled(),
+        "Batching is enabled, but should be disabled with default config!"
+    );
+}
+
+// We don't use the word 'batch' in the test name, since we already
+// group those tests as 'batch inference' tests
+#[tokio::test(flavor = "multi_thread")]
 async fn test_clickhouse_bulk_insert() {
     let client = Arc::new(
         tensorzero::test_helpers::make_embedded_gateway_with_config(
@@ -3925,6 +3967,15 @@ async fn test_clickhouse_bulk_insert() {
     ",
         )
         .await,
+    );
+
+    assert!(
+        client
+            .get_app_state_data()
+            .unwrap()
+            .clickhouse_connection_info
+            .is_batching_enabled(),
+        "Batching should be enabled with config, but is disabled!"
     );
 
     let mut join_set = JoinSet::new();

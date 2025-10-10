@@ -41,6 +41,9 @@ pub trait ClickHouseClient: Send + Sync + Debug + HealthCheckable {
     /// Returns the database name
     fn database(&self) -> &str;
 
+    /// Returns whether batching is enabled
+    fn is_batching_enabled(&self) -> bool;
+
     /// Returns the batch writer join handle if batching is enabled
     fn batcher_join_handle(&self) -> Option<BatchWriterHandle>;
 

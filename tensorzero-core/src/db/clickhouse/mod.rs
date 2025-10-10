@@ -136,6 +136,10 @@ impl ClickHouseConnectionInfo {
         self.inner.database()
     }
 
+    pub fn is_batching_enabled(&self) -> bool {
+        self.inner.is_batching_enabled()
+    }
+
     pub fn batcher_join_handle(&self) -> Option<BatchWriterHandle> {
         self.inner.batcher_join_handle()
     }

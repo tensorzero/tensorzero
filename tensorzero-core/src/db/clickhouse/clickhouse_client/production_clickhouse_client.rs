@@ -106,6 +106,10 @@ impl ClickHouseClient for ProductionClickHouseClient {
         &self.database
     }
 
+    fn is_batching_enabled(&self) -> bool {
+        self.batch_sender.is_some()
+    }
+
     fn batcher_join_handle(&self) -> Option<BatchWriterHandle> {
         self.batch_sender.as_ref().map(|s| s.writer_handle.clone())
     }
