@@ -41,7 +41,11 @@ import type {
   JsonInferenceOutput,
   ContentBlockChatOutput,
 } from "tensorzero-node";
-import { deleteDatapoint, saveDatapoint } from "./datapointOperations.server";
+import {
+  deleteDatapoint,
+  renameDatapoint,
+  saveDatapoint,
+} from "./datapointOperations.server";
 import {
   parseDatapointFormData,
   serializeDatapointToFormData,
@@ -144,6 +148,14 @@ export async function action({ request }: ActionFunctionArgs) {
           error: error instanceof Error ? error.message : String(error),
         };
       }
+    } else if (action === "rename") {
+      await renameDatapoint({
+        functionType: functionType,
+        datasetName: parsedFormData.dataset_name,
+        datapoint: parsedFormData,
+        newName: parsedFormData.name || "",
+      });
+      return data({ success: true });
     }
 
     return data(
@@ -179,7 +191,10 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export const handle: RouteHandle = {
-  crumb: (match) => [match.params.id!],
+  crumb: (match) => [
+    "Datapoints",
+    { label: match.params.id!, isIdentifier: true },
+  ],
 };
 
 export async function loader({
@@ -341,6 +356,13 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setSelectedVariant(null);
   };
 
+  const handleRenameDatapoint = async (newName: string) => {
+    const dataToSubmit = { ...datapoint, name: newName };
+    const formData = serializeDatapointToFormData(dataToSubmit);
+    formData.append("action", "rename");
+    await fetcher.submit(formData, { method: "post", action: "." });
+  };
+
   return (
     <PageLayout>
       <PageHeader
@@ -358,7 +380,10 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
       <SectionsGroup>
         <SectionLayout>
-          <DatapointBasicInfo datapoint={datapoint} />
+          <DatapointBasicInfo
+            datapoint={datapoint}
+            onRenameDatapoint={handleRenameDatapoint}
+          />
         </SectionLayout>
 
         <SectionLayout>

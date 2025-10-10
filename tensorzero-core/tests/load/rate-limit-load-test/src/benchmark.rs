@@ -102,7 +102,7 @@ impl BenchSuite for RateLimitBenchmark {
             .collect();
 
         let start = Instant::now();
-        let result = state.client.consume_tickets(requests).await;
+        let result = state.client.consume_tickets(&requests).await;
         let duration = start.elapsed();
 
         match result {

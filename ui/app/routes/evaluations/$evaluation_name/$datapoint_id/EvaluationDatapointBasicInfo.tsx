@@ -8,20 +8,23 @@ import {
 import Chip from "~/components/ui/Chip";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import type { StaticEvaluationConfig } from "tensorzero-node";
+import EditableChip from "~/components/ui/EditableChip";
 import { toEvaluationUrl, toFunctionUrl, toDatasetUrl } from "~/utils/urls";
 
 interface BasicInfoProps {
   evaluation_name: string;
   evaluation_config: StaticEvaluationConfig;
   dataset_name: string;
-  task_name: string | null;
+  datapoint_name: string | null;
+  onRenameDatapoint?: (newName: string) => void | Promise<void>;
 }
 
 export default function BasicInfo({
   evaluation_name,
   evaluation_config,
   dataset_name,
-  task_name,
+  datapoint_name,
+  onRenameDatapoint,
 }: BasicInfoProps) {
   const functionName = evaluation_config.function_name;
   const functionConfig = useFunctionConfig(functionName);
@@ -35,8 +38,12 @@ export default function BasicInfo({
       <BasicInfoItem>
         <BasicInfoItemTitle>Name</BasicInfoItemTitle>
         <BasicInfoItemContent>
-          {/* TODO: support editing names */}
-          <Chip label={task_name || "-"} font="mono" />
+          <EditableChip
+            label={datapoint_name}
+            defaultLabel="—"
+            font="mono"
+            onSetLabel={onRenameDatapoint}
+          />
         </BasicInfoItemContent>
       </BasicInfoItem>
       <BasicInfoItem>

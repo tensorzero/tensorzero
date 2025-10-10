@@ -46,7 +46,7 @@ async fn test_atomic_multi_key_all_or_nothing(pool: PgPool) {
 
     // First, consume some tokens from key1 to set up a scenario where key1 can succeed but key2 fails
     let setup_request = create_consume_request("key1", 50, 100, 10, Duration::seconds(60));
-    conn.consume_tickets(vec![setup_request]).await.unwrap();
+    conn.consume_tickets(&[setup_request]).await.unwrap();
 
     // Now create a batch where key1 can succeed (50 remaining) but key2 will fail (requesting more than capacity)
     let batch_requests = vec![
@@ -54,7 +54,7 @@ async fn test_atomic_multi_key_all_or_nothing(pool: PgPool) {
         create_consume_request("key2", 150, 100, 10, Duration::seconds(60)), // Will fail - exceeds capacity
     ];
 
-    let results = conn.consume_tickets(batch_requests).await.unwrap();
+    let results = conn.consume_tickets(&batch_requests).await.unwrap();
 
     // ALL requests should fail because it's atomic
     assert!(
@@ -99,7 +99,7 @@ async fn test_atomic_consistency_under_load(pool: PgPool) {
                         Duration::seconds(60),
                     ),
                 ];
-                conn_clone.consume_tickets(requests).await.unwrap()
+                conn_clone.consume_tickets(&requests).await.unwrap()
             })
         })
         .collect();
@@ -132,7 +132,7 @@ async fn test_race_condition_no_over_consumption(pool: PgPool) {
             let conn_clone = conn.clone();
             tokio::spawn(async move {
                 let request = create_consume_request(key, 5, 100, 10, Duration::seconds(60));
-                conn_clone.consume_tickets(vec![request]).await.unwrap()
+                conn_clone.consume_tickets(&[request]).await.unwrap()
             })
         })
         .collect();
@@ -174,7 +174,7 @@ async fn test_race_condition_interleaved_consume_return(pool: PgPool) {
 
     // Set up initial state
     let setup = create_consume_request(key, 50, 100, 10, Duration::seconds(60));
-    conn.consume_tickets(vec![setup]).await.unwrap();
+    conn.consume_tickets(&[setup]).await.unwrap();
 
     let mut consume_handles = Vec::new();
     let mut return_handles = Vec::new();
@@ -184,7 +184,7 @@ async fn test_race_condition_interleaved_consume_return(pool: PgPool) {
         let conn_clone = conn.clone();
         let handle = tokio::spawn(async move {
             let request = create_consume_request(key, 10, 100, 10, Duration::seconds(60));
-            conn_clone.consume_tickets(vec![request]).await.unwrap()
+            conn_clone.consume_tickets(&[request]).await.unwrap()
         });
         consume_handles.push(handle);
     }
@@ -226,7 +226,7 @@ async fn test_rate_limit_lifecycle(pool: PgPool) {
 
     // Phase 1: Initial consumption
     let consume1 = create_consume_request(key, 60, 100, 10, Duration::seconds(60));
-    let results = conn.consume_tickets(vec![consume1]).await.unwrap();
+    let results = conn.consume_tickets(&[consume1]).await.unwrap();
     assert!(results[0].success);
     assert_eq!(results[0].tickets_consumed, 60);
     assert_eq!(results[0].tickets_remaining, 40);
@@ -245,13 +245,13 @@ async fn test_rate_limit_lifecycle(pool: PgPool) {
 
     // Phase 4: Consume at new balance
     let consume2 = create_consume_request(key, 60, 100, 10, Duration::seconds(60));
-    let results = conn.consume_tickets(vec![consume2]).await.unwrap();
+    let results = conn.consume_tickets(&[consume2]).await.unwrap();
     assert!(results[0].success);
     assert_eq!(results[0].tickets_remaining, 0);
 
     // Phase 5: Should fail when empty
     let consume3 = create_consume_request(key, 1, 100, 10, Duration::seconds(60));
-    let results = conn.consume_tickets(vec![consume3]).await.unwrap();
+    let results = conn.consume_tickets(&[consume3]).await.unwrap();
     assert!(!results[0].success);
     assert_eq!(results[0].tickets_consumed, 0);
 }
@@ -262,20 +262,20 @@ async fn test_capacity_boundaries(pool: PgPool) {
 
     // Test 1: Zero request (should always succeed)
     let zero_req = create_consume_request("zero_test", 0, 50, 5, Duration::seconds(60));
-    let results = conn.consume_tickets(vec![zero_req]).await.unwrap();
+    let results = conn.consume_tickets(&[zero_req]).await.unwrap();
     assert!(results[0].success);
     assert_eq!(results[0].tickets_consumed, 0);
     assert_eq!(results[0].tickets_remaining, 50);
 
     // Test 2: Exactly at capacity
     let at_capacity = create_consume_request("capacity_test", 75, 75, 5, Duration::seconds(60));
-    let results = conn.consume_tickets(vec![at_capacity]).await.unwrap();
+    let results = conn.consume_tickets(&[at_capacity]).await.unwrap();
     assert!(results[0].success);
     assert_eq!(results[0].tickets_remaining, 0);
 
     // Test 3: Exceed capacity (should fail)
     let exceed = create_consume_request("exceed_test", 101, 100, 5, Duration::seconds(60));
-    let results = conn.consume_tickets(vec![exceed]).await.unwrap();
+    let results = conn.consume_tickets(&[exceed]).await.unwrap();
     assert!(!results[0].success);
     assert_eq!(results[0].tickets_consumed, 0);
     assert_eq!(results[0].tickets_remaining, 100);
@@ -293,7 +293,7 @@ async fn test_refill_mechanics(pool: PgPool) {
 
     // Phase 1: Consume most tokens
     let consume = create_consume_request(key, 80, 100, 30, Duration::milliseconds(100));
-    let results = conn.consume_tickets(vec![consume]).await.unwrap();
+    let results = conn.consume_tickets(&[consume]).await.unwrap();
     assert_eq!(results[0].tickets_remaining, 20);
 
     // Phase 2: Wait for single refill
@@ -316,7 +316,7 @@ async fn test_refill_mechanics(pool: PgPool) {
     let zero_refill_key = "zero_refill";
     let consume_zero =
         create_consume_request(zero_refill_key, 40, 100, 0, Duration::milliseconds(100));
-    conn.consume_tickets(vec![consume_zero]).await.unwrap();
+    conn.consume_tickets(&[consume_zero]).await.unwrap();
 
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
     let balance = conn
@@ -333,7 +333,7 @@ async fn test_empty_operations(pool: PgPool) {
     let conn = PostgresConnectionInfo::new_with_pool(pool);
 
     // Empty consume requests
-    let results = conn.consume_tickets(vec![]).await.unwrap();
+    let results = conn.consume_tickets(&[]).await.unwrap();
     assert_eq!(results.len(), 0);
 
     // Empty return requests
@@ -371,7 +371,7 @@ async fn test_concurrent_stress(pool: PgPool) {
             tokio::spawn(async move {
                 let key = format!("stress_key_{}", i % 10); // 10 different keys
                 let request = create_consume_request(&key, 15, 200, 10, Duration::seconds(60));
-                conn_clone.consume_tickets(vec![request]).await.unwrap()
+                conn_clone.consume_tickets(&[request]).await.unwrap()
             })
         })
         .collect();
@@ -404,7 +404,7 @@ async fn test_zero_refill_interval_exception(pool: PgPool) {
     // Test zero interval throws exception
     let zero_interval_request =
         create_consume_request("zero_interval", 10, 100, 10, Duration::zero());
-    let result = conn.consume_tickets(vec![zero_interval_request]).await;
+    let result = conn.consume_tickets(&[zero_interval_request]).await;
     assert!(result.is_err(), "Zero interval should cause an error");
     assert!(
         result
@@ -417,7 +417,7 @@ async fn test_zero_refill_interval_exception(pool: PgPool) {
     // Test negative interval throws exception
     let negative_interval_request =
         create_consume_request("negative_interval", 10, 100, 10, Duration::seconds(-5));
-    let result = conn.consume_tickets(vec![negative_interval_request]).await;
+    let result = conn.consume_tickets(&[negative_interval_request]).await;
     assert!(result.is_err(), "Negative interval should cause an error");
     assert!(
         result
