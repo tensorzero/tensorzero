@@ -376,7 +376,21 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
         name={datapoint.id}
         tag={
           <>
-            {datapoint.is_custom && <Badge className="ml-2">Custom</Badge>}
+            {datapoint.is_custom && (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="secondary" className="ml-2 cursor-help">
+                      Custom
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    This datapoint is not based on a historical inference. It
+                    was either edited or created manually.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
             {datapoint.staled_at && (
               <TooltipProvider delayDuration={200}>
                 <Tooltip>
