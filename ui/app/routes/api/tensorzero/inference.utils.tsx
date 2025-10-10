@@ -16,6 +16,7 @@ import type {
   Tool,
   ResolvedTomlPath,
   ChatTemplates,
+  StaticToolConfig,
 } from "tensorzero-node";
 import type {
   InputMessageContent as TensorZeroContent,
@@ -308,6 +309,7 @@ interface ClickHouseDatapointActionArgs {
   dryrun: boolean;
   editedVariantInfo?: VariantInfo;
   functionConfig: FunctionConfig;
+  toolsConfig: { [key: string]: StaticToolConfig };
 }
 
 type ActionArgs =
@@ -383,6 +385,7 @@ export function prepareInferenceActionRequest(
       ? subtractStaticToolsFromInferenceInput(
           args.tool_params?.tools_available,
           args.functionConfig,
+          args.toolsConfig,
         )
       : null;
 
@@ -815,14 +818,27 @@ function variantInfoToUninitializedVariantInfo(
  * It will also error if there are tools with duplicated names. In order to avoid this, we "subtract"
  * out all currently configured tools from the tools that we pass in dynamically.
  */
-function subtractStaticToolsFromInferenceInput(
+export function subtractStaticToolsFromInferenceInput(
   datapointTools: Tool[],
   functionConfig: FunctionConfig,
+  toolsConfig: { [key: string]: StaticToolConfig },
 ): Tool[] {
   if (functionConfig.type === "json") {
     return datapointTools;
   }
-  return datapointTools.filter(
-    (tool) => !functionConfig.tools.some((t) => t === tool.name),
-  );
+
+  // Build a set of tool names from the function's configured tool IDs AND names (bad! ugly! nasty!).
+  // We match against IDs and names. This is very hacky!
+  // TODO: #3880, #3879 would allow us to get rid of this hacky function entirely
+  const toolNames = new Set<string>();
+  for (const toolConfigId of functionConfig.tools) {
+    toolNames.add(toolConfigId);
+    const toolConfig = toolsConfig[toolConfigId];
+    if (toolConfig) {
+      toolNames.add(toolConfig.name);
+    }
+  }
+
+  // Filter out static tools
+  return datapointTools.filter((tool) => !toolNames.has(tool.name));
 }
