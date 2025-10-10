@@ -18,7 +18,14 @@ import { tensorZeroStoredInputToInput } from "~/routes/api/tensorzero/inference.
 import { resolveInput } from "~/utils/resolve.server";
 import { X } from "lucide-react";
 import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
-import { useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
 import { countDatapointsForDatasetFunction } from "~/utils/clickhouse/datasets.server";
@@ -41,12 +48,19 @@ import {
 } from "./utils";
 import { BuiltinVariantFilter } from "./BuiltInVariantSelector";
 import {
-  dehydrate,
   HydrationBoundary,
   QueryClient,
+  dehydrate,
+  useQueryClient,
 } from "@tanstack/react-query";
+import type { DisplayInput } from "~/utils/clickhouse/common";
+import type { FunctionConfig } from "tensorzero-node";
 
 const DEFAULT_LIMIT = 5;
+const DEFAULT_VIRTUALIZED_ROW_HEIGHT = 520;
+const VIRTUALIZED_OVERSCAN = 3;
+const PREFETCH_BUFFER = 5;
+const SERVER_PREFETCH_LIMIT = 6;
 
 export const handle: RouteHandle = {
   crumb: () => ["Playground"],
@@ -195,8 +209,10 @@ export async function loader({ request }: Route.LoaderArgs) {
     functionName &&
     functionConfig
   ) {
+    const prefetchCount = Math.min(datapoints.length, SERVER_PREFETCH_LIMIT);
+    const datapointsToPrefetch = datapoints.slice(0, prefetchCount);
     await Promise.all(
-      datapoints.flatMap((datapoint, index) =>
+      datapointsToPrefetch.flatMap((datapoint, index) =>
         variants.map(async (variant) => {
           const input = inputs[index];
           const args: ClientInferenceInputArgs = {
@@ -420,64 +436,14 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                 </div>
 
                 <HydrationBoundary state={dehydratedState}>
-                  {datapoints.map(
-                    (datapoint: TensorZeroDatapoint, index: number) => (
-                      <div
-                        key={datapoint.id}
-                        className="grid grid-cols-[400px_1fr] border-b last:border-b-0"
-                      >
-                        <div className="bg-background sticky left-0 z-10 flex flex-col gap-2 border-r p-4 text-sm">
-                          <div className="text-xs font-medium text-gray-500">
-                            Datapoint:{" "}
-                            <Link
-                              to={`/datasets/${encodeURIComponent(datasetName)}/datapoint/${datapoint.id}`}
-                              className="font-mono text-xs text-blue-600 hover:text-blue-800 hover:underline"
-                            >
-                              {datapoint.id}
-                            </Link>
-                          </div>
-                          <div>
-                            <h3 className="mb-2 text-sm font-medium text-gray-500">
-                              Input
-                            </h3>
-                            <InputSnippet
-                              messages={inputs[index].messages}
-                              system={inputs[index].system}
-                              maxHeight={150}
-                            />
-                          </div>
-                          <div>
-                            <h3 className="mb-2 text-sm font-medium text-gray-500">
-                              Reference Output
-                            </h3>
-                            {datapoint.output ? (
-                              <Output output={datapoint.output} />
-                            ) : (
-                              <div className="text-sm text-gray-500">None</div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
-                          {variants.map((variant) => {
-                            return (
-                              <div
-                                key={`${datapoint.id}-${variant.name}`}
-                                className="border-r p-4 last:border-r-0"
-                              >
-                                <DatapointPlaygroundOutput
-                                  datapoint={datapoint}
-                                  variant={variant}
-                                  input={inputs[index]}
-                                  functionName={functionName}
-                                  functionConfig={functionConfig}
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ),
-                  )}
+                  <VirtualizedDatapointList
+                    datapoints={datapoints as TensorZeroDatapoint[]}
+                    datasetName={datasetName as string}
+                    inputs={inputs as DisplayInput[]}
+                    variants={variants}
+                    functionConfig={functionConfig as FunctionConfig}
+                    functionName={functionName}
+                  />
                 </HydrationBoundary>
               </div>
             </div>
@@ -547,6 +513,336 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
           );
         })()}
     </PageLayout>
+  );
+}
+
+type VirtualizedDatapointListProps = {
+  datapoints: TensorZeroDatapoint[];
+  datasetName: string;
+  inputs: DisplayInput[];
+  variants: PlaygroundVariantInfo[];
+  functionName: string;
+  functionConfig: FunctionConfig;
+};
+
+function VirtualizedDatapointList(props: VirtualizedDatapointListProps) {
+  const {
+    datapoints,
+    datasetName,
+    inputs,
+    variants,
+    functionName,
+    functionConfig,
+  } = props;
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const rowElementsRef = useRef<Map<number, HTMLDivElement>>(new Map());
+  const rowHeightsRef = useRef<number[]>([]);
+  const totalHeightRef = useRef(0);
+  const [scrollOffset, setScrollOffset] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [measurementVersion, forceMeasurementUpdate] = useReducer(
+    (value: number) => value + 1,
+    0,
+  );
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const count = datapoints.length;
+    rowHeightsRef.current = Array.from(
+      { length: count },
+      () => DEFAULT_VIRTUALIZED_ROW_HEIGHT,
+    );
+    totalHeightRef.current = count * DEFAULT_VIRTUALIZED_ROW_HEIGHT;
+    resizeObserverRef.current?.disconnect();
+    rowElementsRef.current.clear();
+    forceMeasurementUpdate();
+  }, [datapoints.length]);
+
+  const updateRowHeight = useCallback((index: number, height: number) => {
+    const heights = rowHeightsRef.current;
+    const previousHeight = heights[index] ?? DEFAULT_VIRTUALIZED_ROW_HEIGHT;
+    if (Math.abs(previousHeight - height) <= 1) {
+      return;
+    }
+    heights[index] = height;
+    totalHeightRef.current += height - previousHeight;
+    forceMeasurementUpdate();
+  }, []);
+
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const target = entry.target as HTMLElement;
+        const indexAttribute = target.dataset.index;
+        if (indexAttribute) {
+          updateRowHeight(Number(indexAttribute), entry.contentRect.height);
+        }
+      }
+    });
+    resizeObserverRef.current = observer;
+    rowElementsRef.current.forEach((element) => observer.observe(element));
+    return () => {
+      observer.disconnect();
+      resizeObserverRef.current = null;
+    };
+  }, [updateRowHeight]);
+
+  const registerRow = useCallback(
+    (index: number) => (node: HTMLDivElement | null) => {
+      const elements = rowElementsRef.current;
+      const observer = resizeObserverRef.current;
+      const existing = elements.get(index);
+      if (existing && observer) {
+        observer.unobserve(existing);
+      }
+
+      if (!node) {
+        elements.delete(index);
+        return;
+      }
+
+      elements.set(index, node);
+      node.dataset.index = `${index}`;
+      observer?.observe(node);
+      updateRowHeight(index, node.getBoundingClientRect().height);
+    },
+    [updateRowHeight],
+  );
+
+  useEffect(() => {
+    const element = scrollContainerRef.current;
+    if (!element) {
+      return;
+    }
+    setViewportHeight(element.clientHeight);
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        setViewportHeight(entry.contentRect.height);
+      }
+    });
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  const variantKey = useMemo(
+    () => variants.map((variant) => variant.name).join("|"),
+    [variants],
+  );
+
+  useEffect(() => {
+    const element = scrollContainerRef.current;
+    if (element) {
+      element.scrollTo({ top: 0 });
+    }
+    setScrollOffset(0);
+  }, [datasetName, functionName, variantKey]);
+
+  const virtualization = useMemo(() => {
+    const count = datapoints.length;
+    // Trigger recalculation when row measurements change even though the
+    // value itself is not used directly.
+    void measurementVersion;
+    if (count === 0) {
+      return {
+        startIndex: 0,
+        endIndex: 0,
+        topPadding: 0,
+        bottomPadding: 0,
+      };
+    }
+
+    const heights = rowHeightsRef.current;
+    const defaultHeight = DEFAULT_VIRTUALIZED_ROW_HEIGHT;
+    let startIndex = 0;
+    let accumulatedHeight = 0;
+    for (let index = 0; index < count; index += 1) {
+      const nextHeight = heights[index] ?? defaultHeight;
+      if (accumulatedHeight + nextHeight > scrollOffset) {
+        break;
+      }
+      accumulatedHeight += nextHeight;
+      startIndex = index + 1;
+    }
+
+    let endIndex = startIndex;
+    let coveredHeight = accumulatedHeight;
+    const maxOffset = scrollOffset + viewportHeight;
+    while (endIndex < count && coveredHeight < maxOffset) {
+      const nextHeight = heights[endIndex] ?? defaultHeight;
+      coveredHeight += nextHeight;
+      endIndex += 1;
+    }
+
+    const renderStart = Math.max(0, startIndex - VIRTUALIZED_OVERSCAN);
+    const renderEnd = Math.min(count, endIndex + VIRTUALIZED_OVERSCAN);
+
+    let topPadding = 0;
+    for (let index = 0; index < renderStart; index += 1) {
+      topPadding += heights[index] ?? defaultHeight;
+    }
+
+    let renderedHeight = 0;
+    for (let index = renderStart; index < renderEnd; index += 1) {
+      renderedHeight += heights[index] ?? defaultHeight;
+    }
+
+    const bottomPadding = Math.max(
+      totalHeightRef.current - topPadding - renderedHeight,
+      0,
+    );
+
+    return {
+      startIndex: renderStart,
+      endIndex: renderEnd,
+      topPadding,
+      bottomPadding,
+    };
+  }, [datapoints.length, measurementVersion, scrollOffset, viewportHeight]);
+
+  const { startIndex, endIndex, topPadding, bottomPadding } = virtualization;
+
+  const prefetchIndices = useMemo(() => {
+    const indices = new Set<number>();
+    for (let index = startIndex; index < endIndex; index += 1) {
+      indices.add(index);
+    }
+    for (let buffer = 1; buffer <= PREFETCH_BUFFER; buffer += 1) {
+      const before = startIndex - buffer;
+      const after = endIndex - 1 + buffer;
+      if (before >= 0) {
+        indices.add(before);
+      }
+      if (after < datapoints.length) {
+        indices.add(after);
+      }
+    }
+    return Array.from(indices).sort((a, b) => a - b);
+  }, [datapoints.length, endIndex, startIndex]);
+
+  useEffect(() => {
+    prefetchIndices.forEach((index) => {
+      const datapoint = datapoints[index];
+      const input = inputs[index];
+      if (!datapoint || !input) {
+        return;
+      }
+      variants.forEach((variant) => {
+        const args: ClientInferenceInputArgs = {
+          datapoint,
+          functionConfig,
+          functionName,
+          input,
+          variant,
+        };
+        queryClient.prefetchQuery({
+          queryKey: getClientInferenceQueryKey(args),
+          queryFn: getClientInferenceQueryFunction(args),
+        });
+      });
+    });
+  }, [
+    datapoints,
+    functionConfig,
+    functionName,
+    inputs,
+    prefetchIndices,
+    queryClient,
+    variants,
+  ]);
+
+  if (datapoints.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      ref={scrollContainerRef}
+      className="max-h-[70vh] overflow-y-auto"
+      onScroll={(event) => {
+        setScrollOffset(event.currentTarget.scrollTop);
+      }}
+    >
+      <div style={{ paddingTop: topPadding, paddingBottom: bottomPadding }}>
+        {Array.from({ length: endIndex - startIndex }, (_, offset) => {
+          const index = startIndex + offset;
+          const datapoint = datapoints[index];
+          const input = inputs[index];
+          const isLastRow = index === datapoints.length - 1;
+          if (!datapoint || !input) {
+            return null;
+          }
+
+          return (
+            <div
+              key={datapoint.id}
+              ref={registerRow(index)}
+              className={
+                "grid grid-cols-[400px_1fr] border-b" +
+                (isLastRow ? " border-b-0" : "")
+              }
+            >
+              <div className="bg-background sticky left-0 z-10 flex flex-col gap-2 border-r p-4 text-sm">
+                <div className="text-xs font-medium text-gray-500">
+                  Datapoint:{" "}
+                  <Link
+                    to={`/datasets/${encodeURIComponent(datasetName)}/datapoint/${datapoint.id}`}
+                    className="font-mono text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                  >
+                    {datapoint.id}
+                  </Link>
+                </div>
+                <div>
+                  <h3 className="mb-2 text-sm font-medium text-gray-500">
+                    Input
+                  </h3>
+                  <InputSnippet
+                    messages={input.messages}
+                    system={input.system}
+                    maxHeight={150}
+                  />
+                </div>
+                <div>
+                  <h3 className="mb-2 text-sm font-medium text-gray-500">
+                    Reference Output
+                  </h3>
+                  {datapoint.output ? (
+                    <Output output={datapoint.output} />
+                  ) : (
+                    <div className="text-sm text-gray-500">None</div>
+                  )}
+                </div>
+              </div>
+              <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
+                {variants.map((variant) => (
+                  <div
+                    key={`${datapoint.id}-${variant.name}`}
+                    className="border-r p-4 last:border-r-0"
+                  >
+                    <DatapointPlaygroundOutput
+                      datapoint={datapoint}
+                      variant={variant}
+                      input={input}
+                      functionName={functionName}
+                      functionConfig={functionConfig}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
