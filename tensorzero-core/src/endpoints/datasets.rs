@@ -537,7 +537,7 @@ pub async fn insert_datapoints_handler(
     Ok(Json(datapoint_ids))
 }
 
-/// DEPRECATED: Use the POST `/datasets/dataset_name/datapoints` endpoint instead.
+/// DEPRECATED: Use the POST `/datasets/{dataset_name}/datapoints` endpoint instead.
 #[tracing::instrument(name = "bulk_insert_datapoints_handler", skip(app_state, params))]
 pub async fn bulk_insert_datapoints_handler(
     State(app_state): AppState,
