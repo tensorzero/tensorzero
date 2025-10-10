@@ -16,7 +16,6 @@ import {
   ParsedJsonInferenceDatapointRowSchema,
 } from "./datasets";
 import type { AdjacentIds } from "./inference";
-import { adjacentIdsSchema } from "./inference";
 import {
   contentBlockChatOutputSchema,
   CountSchema,
@@ -768,6 +767,9 @@ export async function getAdjacentDatapointIds(
     query_params: { dataset_name, datapoint_id },
   });
   const rows = await resultSet.json<AdjacentIds>();
-  const parsedRows = rows.map((row) => adjacentIdsSchema.parse(row));
+  const parsedRows = rows.map((row) => ({
+    previous_id: row.previous_id ?? null,
+    next_id: row.next_id ?? null,
+  }));
   return parsedRows[0];
 }

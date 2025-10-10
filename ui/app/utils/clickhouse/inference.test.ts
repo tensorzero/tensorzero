@@ -19,7 +19,7 @@ import {
 } from "./inference.server";
 import { countInferencesForFunction } from "./inference.server";
 import type { TextContent } from "./common";
-import { getClickhouseClient } from "./client.server";
+import { getNativeDatabaseClient } from "../tensorzero/native_client.server";
 import type {
   ContentBlockChatOutput,
   JsonInferenceOutput,
@@ -538,17 +538,10 @@ describe("getAdjacentInferenceIds", () => {
   });
 
   test("returns null for previous inference id if current inference is first", async () => {
-    const resultSet = await getClickhouseClient().query({
-      query:
-        "SELECT uint_to_uuid(min(id_uint)) as first_inference_id FROM InferenceById",
-      format: "JSON",
-    });
-    const firstInferenceId = await resultSet.json<{
-      first_inference_id: string;
-    }>();
-    const adjacentInferenceIds = await getAdjacentInferenceIds(
-      firstInferenceId.data[0].first_inference_id,
-    );
+    const bounds = await queryInferenceTableBounds();
+    const firstInferenceId = bounds.first_id!;
+    const adjacentInferenceIds =
+      await getAdjacentInferenceIds(firstInferenceId);
     expect(adjacentInferenceIds.previous_id).toBeNull();
     expect(adjacentInferenceIds.next_id).toBe(
       "01934c9a-be70-7d72-a722-744cb572eb49",
@@ -556,17 +549,9 @@ describe("getAdjacentInferenceIds", () => {
   });
 
   test("returns null for next inference id if current inference is last", async () => {
-    const resultSet = await getClickhouseClient().query({
-      query:
-        "SELECT uint_to_uuid(max(id_uint)) as last_inference_id FROM InferenceById",
-      format: "JSON",
-    });
-    const lastInferenceId = await resultSet.json<{
-      last_inference_id: string;
-    }>();
-    const adjacentInferenceIds = await getAdjacentInferenceIds(
-      lastInferenceId.data[0].last_inference_id,
-    );
+    const bounds = await queryInferenceTableBounds();
+    const lastInferenceId = bounds.last_id!;
+    const adjacentInferenceIds = await getAdjacentInferenceIds(lastInferenceId);
     expect(adjacentInferenceIds.previous_id).toBe(
       "0197177a-7c00-70a2-82a6-741f60a03b2e",
     );
@@ -588,18 +573,11 @@ describe("getAdjacentEpisodeIds", () => {
   });
 
   test("returns null for previous episode id if current episode is first", async () => {
-    const resultSet = await getClickhouseClient().query({
-      query:
-        "SELECT uint_to_uuid(min(episode_id_uint)) as first_episode_id FROM InferenceByEpisodeId",
-      format: "JSON",
-    });
-    const firstEpisodeId = await resultSet.json<{
-      first_episode_id: string;
-    }>();
+    const nativeDatabaseClient = await getNativeDatabaseClient();
+    const episodeBounds = await nativeDatabaseClient.queryEpisodeTableBounds();
+    const firstEpisodeId = episodeBounds.first_id!;
 
-    const adjacentEpisodeIds = await getAdjacentEpisodeIds(
-      firstEpisodeId.data[0].first_episode_id,
-    );
+    const adjacentEpisodeIds = await getAdjacentEpisodeIds(firstEpisodeId);
     expect(adjacentEpisodeIds.previous_id).toBeNull();
     expect(adjacentEpisodeIds.next_id).toBe(
       "0192ced0-9486-7491-9b60-42dd2ef9194e",
@@ -607,18 +585,11 @@ describe("getAdjacentEpisodeIds", () => {
   });
 
   test("returns null for next episode id if current episode is last", async () => {
-    const resultSet = await getClickhouseClient().query({
-      query:
-        "SELECT uint_to_uuid(max(episode_id_uint)) as last_episode_id FROM InferenceByEpisodeId",
-      format: "JSON",
-    });
-    const lastEpisodeId = await resultSet.json<{
-      last_episode_id: string;
-    }>();
+    const nativeDatabaseClient = await getNativeDatabaseClient();
+    const episodeBounds = await nativeDatabaseClient.queryEpisodeTableBounds();
+    const lastEpisodeId = episodeBounds.last_id!;
 
-    const adjacentEpisodeIds = await getAdjacentEpisodeIds(
-      lastEpisodeId.data[0].last_episode_id,
-    );
+    const adjacentEpisodeIds = await getAdjacentEpisodeIds(lastEpisodeId);
     expect(adjacentEpisodeIds.previous_id).toBe(
       "0aaeef58-3633-7f27-9393-65bd98491026",
     );

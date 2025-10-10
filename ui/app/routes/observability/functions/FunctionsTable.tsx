@@ -72,7 +72,7 @@ export default function FunctionsTable({
 
       return {
         function_name,
-        count: countInfo ? countInfo.count : 0,
+        count: countInfo ? Number(countInfo.count) : 0,
         max_timestamp: countInfo ? countInfo.max_timestamp : "Never",
         type,
         variantsCount,
