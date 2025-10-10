@@ -124,6 +124,21 @@ interface RunEvaluationStreamingParams {
   onEvent: (event: EvaluationRunEvent) => void;
 }
 
+/**
+ * Runs an evaluation asynchronously with streaming event updates.
+ *
+ * This function executes an evaluation by running inference on a dataset using a specified variant,
+ * and streaming progress events back to the caller through a callback function. It bridges TypeScript
+ * to native Rust code that performs the actual evaluation work.
+ *
+ * The `onEvent` callback will receive events in this typical sequence:
+ * 1. `start`: Evaluation run has begun, includes the evaluation_run_id
+ * 2. `success`: Each successful datapoint evaluation (may be many)
+ * 3. `error`: Each failed datapoint evaluation (may be zero or many)
+ * 4. `fatal_error`: Critical error that stops the evaluation (rare, may not occur)
+ * 5. `complete`: Evaluation run has finished (always the last event)
+ *
+ */
 export async function runEvaluationStreaming(
   params: RunEvaluationStreamingParams,
 ): Promise<void> {
