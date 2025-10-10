@@ -1,3 +1,5 @@
+#![cfg(any(test, feature = "pyo3"))]
+
 use async_trait::async_trait;
 use lazy_static::lazy_static;
 use secrecy::SecretString;
