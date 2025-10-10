@@ -12,7 +12,7 @@ use std::{collections::HashMap, future::Future, path::PathBuf, sync::Arc, time::
 
 use futures::StreamExt;
 use pyo3::{
-    exceptions::{PyStopAsyncIteration, PyStopIteration, PyValueError},
+    exceptions::{PyDeprecationWarning, PyStopAsyncIteration, PyStopIteration, PyValueError},
     ffi::c_str,
     marker::Ungil,
     prelude::*,
@@ -936,17 +936,30 @@ impl TensorZeroGateway {
         dataset_name: String,
         datapoints: Vec<Bound<'_, PyAny>>,
     ) -> PyResult<Py<PyList>> {
-        let builtins = PyModule::import(this.py(), "builtins")?;
-        builtins.call_method1(
-            "warn",
-            (
-                "Please use `insert_datapoints` instead of `bulk_insert_datapoints`. In a future release, `bulk_insert_datapoints` will be removed.",
-                builtins.getattr("DeprecationWarning")?,
-                2_i32, // stacklevel
-            ),
+        let deprecation_warning = this.py().get_type::<PyDeprecationWarning>();
+        PyErr::warn(
+            this.py(),
+            &deprecation_warning,
+            c_str!("Please use `insert_datapoints` instead of `bulk_insert_datapoints`. In a future release, `bulk_insert_datapoints` will be removed."),
+            2
         )?;
 
-        TensorZeroGateway::insert_datapoints(this, dataset_name, datapoints)
+        let client = this.as_super().client.clone();
+        let datapoints = datapoints
+            .iter()
+            .map(|dp| deserialize_from_pyobj(this.py(), dp))
+            .collect::<Result<Vec<_>, _>>()?;
+        let params = InsertDatapointParams { datapoints };
+        let fut = client.bulk_insert_datapoints(dataset_name, params);
+        let self_module = PyModule::import(this.py(), "uuid")?;
+        let uuid = self_module.getattr("UUID")?.unbind();
+        let res =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+        let uuids = res
+            .iter()
+            .map(|x| uuid.call(this.py(), (x.to_string(),), None))
+            .collect::<Result<Vec<_>, _>>()?;
+        PyList::new(this.py(), uuids).map(Bound::unbind)
     }
 
     /// Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
@@ -1644,17 +1657,36 @@ impl AsyncTensorZeroGateway {
         dataset_name: String,
         datapoints: Vec<Bound<'a, PyAny>>,
     ) -> PyResult<Bound<'a, PyAny>> {
-        let builtins = this.py().import("builtins")?;
-        builtins.call_method1(
-            "warn",
-            (
-                "Please use `insert_datapoints` instead of `bulk_insert_datapoints`. In a future release, `bulk_insert_datapoints` will be removed.",
-                builtins.getattr("DeprecationWarning")?,
-                2_i32, // stacklevel
-            ),
+        let deprecation_warning = this.py().get_type::<PyDeprecationWarning>();
+        PyErr::warn(
+            this.py(),
+            &deprecation_warning,
+            c_str!("Please use `insert_datapoints` instead of `bulk_insert_datapoints`. In a future release, `bulk_insert_datapoints` will be removed."),
+            2
         )?;
 
-        AsyncTensorZeroGateway::insert_datapoints(this, dataset_name, datapoints)
+        let client = this.as_super().client.clone();
+        let datapoints = datapoints
+            .iter()
+            .map(|dp| deserialize_from_pyobj(this.py(), dp))
+            .collect::<Result<Vec<_>, _>>()?;
+        let params = InsertDatapointParams { datapoints };
+        let self_module = PyModule::import(this.py(), "uuid")?;
+        let uuid = self_module.getattr("UUID")?.unbind();
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client.bulk_insert_datapoints(dataset_name, params).await;
+            Python::attach(|py| match res {
+                Ok(uuids) => Ok(PyList::new(
+                    py,
+                    uuids
+                        .iter()
+                        .map(|id| uuid.call(py, (id.to_string(),), None))
+                        .collect::<Result<Vec<_>, _>>()?,
+                )?
+                .unbind()),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
     }
 
     /// Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
