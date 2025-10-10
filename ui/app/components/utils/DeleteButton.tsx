@@ -75,7 +75,7 @@ export function DeleteButton({
               size="iconSm"
               className={className}
               disabled={disabled || isLoading}
-              onClick={disabled ? undefined : handleInitialClick}
+              onClick={handleInitialClick}
               aria-label={tooltip}
               title={tooltip}
             >
