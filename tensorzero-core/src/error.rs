@@ -15,7 +15,7 @@ use uuid::Uuid;
 use crate::db::clickhouse::migration_manager::get_run_migrations_command;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::Thought;
-use crate::rate_limiting::{ActiveRateLimitKey, RateLimitingConfigScopes};
+use crate::rate_limiting::{FailedRateLimit, RateLimitingConfigScopes};
 
 /// Controls whether to include raw request/response details in error output
 ///
@@ -477,8 +477,7 @@ pub enum ErrorDetails {
         provider_name: String,
     },
     RateLimitExceeded {
-        key: ActiveRateLimitKey,
-        tickets_remaining: u64,
+        failed_rate_limits: Vec<FailedRateLimit>,
     },
     RateLimitMissingMaxTokens,
     Serialization {
@@ -1303,17 +1302,32 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::ProviderNotFound { provider_name } => {
                 write!(f, "Provider not found: {provider_name}")
             }
-            ErrorDetails::RateLimitExceeded {
-                key,
-                tickets_remaining,
-            } => {
-                // TODO: improve this error:
-                // - `{key}` should more closely match the definition of the rule in TOML
-                // - Display the number of requested tickets (units) if possible.
-                write!(
-                    f,
-                    "TensorZero rate limit exceeded for rule {key}. {tickets_remaining} units currently available."
-                )
+            ErrorDetails::RateLimitExceeded { failed_rate_limits } => {
+                if failed_rate_limits.len() == 1 {
+                    let limit = &failed_rate_limits[0];
+                    write!(
+                        f,
+                        "TensorZero rate limit exceeded for rule {}. Requested {} units but only {} available.",
+                        limit.key, limit.requested, limit.available
+                    )
+                } else {
+                    write!(
+                        f,
+                        "TensorZero rate limits exceeded for {} rules: ",
+                        failed_rate_limits.len()
+                    )?;
+                    for (i, limit) in failed_rate_limits.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(
+                            f,
+                            "{} (requested {}, available {})",
+                            limit.key, limit.requested, limit.available
+                        )?;
+                    }
+                    Ok(())
+                }
             }
             ErrorDetails::RateLimitMissingMaxTokens => {
                 write!(
