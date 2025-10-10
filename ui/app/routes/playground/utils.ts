@@ -140,7 +140,7 @@ export interface ClientInferenceInputArgs {
   datapoint: TensorZeroDatapoint;
   input: DisplayInput;
   functionConfig: FunctionConfig;
-  toolsConfig: { [key: string]: StaticToolConfig };
+  toolsConfig: { [key in string]?: StaticToolConfig };
 }
 
 export function preparePlaygroundInferenceRequest(

@@ -21,10 +21,7 @@ import { listDatapoints } from "~/utils/tensorzero.server";
 import { tensorZeroStoredInputToInput } from "~/routes/api/tensorzero/inference.utils";
 import { resolveInput } from "~/utils/resolve.server";
 import { X } from "lucide-react";
-import type {
-  Datapoint as TensorZeroDatapoint,
-  StaticToolConfig,
-} from "tensorzero-node";
+import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
 import { useMemo, useState } from "react";
 import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
@@ -212,7 +209,7 @@ export async function loader({ request }: Route.LoaderArgs) {
             functionName,
             input,
             variant,
-            toolsConfig: config.tools as { [key: string]: StaticToolConfig },
+            toolsConfig: config.tools,
           };
           return queryClient.prefetchQuery({
             queryKey: getClientInferenceQueryKey(args),
@@ -479,11 +476,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                                   input={inputs[index]}
                                   functionName={functionName}
                                   functionConfig={functionConfig}
-                                  toolsConfig={
-                                    config.tools as {
-                                      [key: string]: StaticToolConfig;
-                                    }
-                                  }
+                                  toolsConfig={config.tools}
                                 />
                               </div>
                             );

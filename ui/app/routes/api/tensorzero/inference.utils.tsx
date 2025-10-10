@@ -309,7 +309,7 @@ interface ClickHouseDatapointActionArgs {
   dryrun: boolean;
   editedVariantInfo?: VariantInfo;
   functionConfig: FunctionConfig;
-  toolsConfig: { [key: string]: StaticToolConfig };
+  toolsConfig: { [key in string]?: StaticToolConfig };
 }
 
 type ActionArgs =
@@ -821,7 +821,7 @@ function variantInfoToUninitializedVariantInfo(
 export function subtractStaticToolsFromInferenceInput(
   datapointTools: Tool[],
   functionConfig: FunctionConfig,
-  toolsConfig: { [key: string]: StaticToolConfig },
+  toolsConfig: { [key in string]?: StaticToolConfig },
 ): Tool[] {
   if (functionConfig.type === "json") {
     return datapointTools;
@@ -833,7 +833,7 @@ export function subtractStaticToolsFromInferenceInput(
   const toolNames = new Set<string>();
   for (const toolConfigId of functionConfig.tools) {
     toolNames.add(toolConfigId);
-    const toolConfig = toolsConfig[toolConfigId];
+    const toolConfig = toolsConfig?.[toolConfigId];
     if (toolConfig) {
       toolNames.add(toolConfig.name);
     }
