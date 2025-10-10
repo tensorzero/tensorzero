@@ -3,13 +3,15 @@
 use std::sync::Arc;
 
 use crate::config::Config;
+use crate::db::clickhouse::fake_clickhouse_client::FakeClickHouseClient;
 use crate::utils::gateway::{GatewayHandle, GatewayHandleTestOptions};
 
 pub fn get_unit_test_gateway_handle(config: Arc<Config>) -> GatewayHandle {
+    let fake = FakeClickHouseClient::new(true); // healthy
     get_unit_test_gateway_handle_with_options(
         config,
         GatewayHandleTestOptions {
-            clickhouse_healthy: true,
+            clickhouse_client: Arc::new(fake),
             postgres_healthy: true,
         },
     )

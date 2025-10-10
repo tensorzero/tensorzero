@@ -1,4 +1,6 @@
 use async_trait::async_trait;
+use lazy_static::lazy_static;
+use secrecy::SecretString;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockWriteGuard};
@@ -13,6 +15,11 @@ use super::{
     ClickHouseClient, ClickHouseResponse, ClickHouseResponseMetadata, ExternalDataInfo,
     GetMaybeReplicatedTableEngineNameArgs, HealthCheckable, Rows, TableName,
 };
+
+lazy_static! {
+    static ref FAKE_DATABASE_URL: SecretString = SecretString::from("fake");
+    static ref FAKE_CLUSTER_NAME: Option<String> = None;
+}
 
 /// Simple fake implementation of ClickHouseClient for testing
 ///
@@ -60,12 +67,12 @@ async fn write_fake<T: serde::Serialize + Send + Sync>(
 impl ClickHouseClient for FakeClickHouseClient {
     /// Returns the database URL
     fn database_url(&self) -> &SecretString {
-        &SecretString::from("fake")
+        &FAKE_DATABASE_URL
     }
 
     /// Returns the cluster name
     fn cluster_name(&self) -> &Option<String> {
-        &None
+        &FAKE_CLUSTER_NAME
     }
 
     /// Returns the database name

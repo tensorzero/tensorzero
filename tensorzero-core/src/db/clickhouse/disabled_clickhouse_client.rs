@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use lazy_static::lazy_static;
 use secrecy::SecretString;
 use std::collections::HashMap;
 
@@ -13,20 +14,25 @@ use super::{
     GetMaybeReplicatedTableEngineNameArgs, HealthCheckable, TableName,
 };
 
+lazy_static! {
+    static ref DISABLED_DATABASE_URL: SecretString = SecretString::from("disabled");
+    static ref DISABLED_CLUSTER_NAME: Option<String> = None;
+}
+
 /// Disabled implementation of ClickHouseClient (no-op)
 ///
 /// This is used in a few cases in production when we don't want to write to ClickHouse.
 #[derive(Debug, Clone, Copy)]
-pub struct DisabledClickHouseClient {};
+pub struct DisabledClickHouseClient;
 
 #[async_trait]
 impl ClickHouseClient for DisabledClickHouseClient {
     fn database_url(&self) -> &SecretString {
-        &SecretString::from("disabled")
+        &DISABLED_DATABASE_URL
     }
 
     fn cluster_name(&self) -> &Option<String> {
-        &None
+        &DISABLED_CLUSTER_NAME
     }
 
     fn database(&self) -> &str {

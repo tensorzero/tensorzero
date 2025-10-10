@@ -64,6 +64,7 @@ mod tests {
     use std::sync::Arc;
 
     use crate::config::Config;
+    use crate::db::clickhouse::fake_clickhouse_client::FakeClickHouseClient;
     use crate::testing::get_unit_test_gateway_handle_with_options;
     use crate::utils::gateway::GatewayHandleTestOptions;
 
@@ -72,10 +73,11 @@ mod tests {
     #[tokio::test]
     async fn test_health_handler() {
         let config = Arc::new(Config::default());
+        let fake = FakeClickHouseClient::new(true); // healthy
         let gateway_handle = get_unit_test_gateway_handle_with_options(
             config.clone(),
             GatewayHandleTestOptions {
-                clickhouse_healthy: true,
+                clickhouse_client: Arc::new(fake),
                 postgres_healthy: true,
             },
         );
@@ -90,10 +92,11 @@ mod tests {
     #[tokio::test]
     async fn should_report_error_for_unhealthy_clickhouse() {
         let config = Arc::new(Config::default());
+        let fake = FakeClickHouseClient::new(false); // unhealthy
         let gateway_handle = get_unit_test_gateway_handle_with_options(
             config,
             GatewayHandleTestOptions {
-                clickhouse_healthy: false,
+                clickhouse_client: Arc::new(fake),
                 postgres_healthy: true,
             },
         );
@@ -108,10 +111,11 @@ mod tests {
     #[tokio::test]
     async fn should_report_error_for_unhealthy_postgres() {
         let config = Arc::new(Config::default());
+        let fake = FakeClickHouseClient::new(true); // healthy
         let gateway_handle = get_unit_test_gateway_handle_with_options(
             config,
             GatewayHandleTestOptions {
-                clickhouse_healthy: true,
+                clickhouse_client: Arc::new(fake),
                 postgres_healthy: false,
             },
         );

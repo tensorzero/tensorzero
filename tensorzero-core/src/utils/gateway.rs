@@ -22,6 +22,9 @@ use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
 use crate::http::TensorzeroHttpClient;
 
+#[cfg(test)]
+use crate::db::clickhouse::ClickHouseClient;
+
 /// Represents an active gateway (either standalone or embedded)
 /// The contained `app_state` can be freely cloned and dropped.
 /// However, dropping the `GatewayHandle` itself will wait for any

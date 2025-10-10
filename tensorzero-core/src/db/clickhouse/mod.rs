@@ -22,12 +22,12 @@ pub mod query_builder;
 mod select_queries;
 
 pub mod disabled_clickhouse_client;
-#[cfg(test)]
-mod fake_clickhouse_client;
+#[cfg(any(test, feature = "pyo3"))]
+pub mod fake_clickhouse_client;
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod test_helpers;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "pyo3"))]
 use fake_clickhouse_client::FakeClickHouseClient;
 
 use crate::config::BatchWritesConfig;
@@ -330,7 +330,7 @@ impl ClickHouseConnectionInfo {
         Self { inner }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "pyo3"))]
     pub fn new_fake() -> Self {
         Self {
             inner: Arc::new(FakeClickHouseClient::new(true)),
