@@ -22,6 +22,12 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { Badge } from "~/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 import { TagsTable } from "~/components/tags/TagsTable";
 import { useFunctionConfig } from "~/context/config";
 import {
@@ -208,7 +214,7 @@ export async function loader({
       status: 404,
     });
   }
-  const datapoint = await getDatapoint(dataset_name, id);
+  const datapoint = await getDatapoint(dataset_name, id, true);
   if (!datapoint) {
     throw data(`No datapoint found for id ${id}.`, {
       status: 404,
@@ -368,7 +374,25 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
       <PageHeader
         label="Datapoint"
         name={datapoint.id}
-        tag={datapoint.is_custom && <Badge className="ml-2">Custom</Badge>}
+        tag={
+          <>
+            {datapoint.is_custom && <Badge className="ml-2">Custom</Badge>}
+            {datapoint.staled_at && (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="secondary" className="ml-2 cursor-help">
+                      Stale
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    This datapoint has since been edited or deleted.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </>
+        }
       />
 
       {(saveError || validationError) && (
@@ -399,6 +423,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             onSave={handleSave}
             onReset={handleReset}
             showTryWithButton={datapoint.function_name !== DEFAULT_FUNCTION}
+            isStale={!!datapoint.staled_at}
           />
         </SectionLayout>
 

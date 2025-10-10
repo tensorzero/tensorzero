@@ -17,6 +17,7 @@ interface DatapointActionsProps {
   isEditing: boolean;
   onReset: () => void;
   showTryWithButton: boolean;
+  isStale: boolean;
 }
 
 export function DatapointActions({
@@ -31,6 +32,7 @@ export function DatapointActions({
   isEditing,
   onReset,
   showTryWithButton,
+  isStale,
 }: DatapointActionsProps) {
   const handleCancel = () => {
     onReset();
@@ -51,9 +53,18 @@ export function DatapointActions({
           <SaveButton disabled={!canSave} onClick={onSave} />
         </>
       ) : (
-        <EditButton onClick={toggleEditing} />
+        <EditButton
+          onClick={toggleEditing}
+          disabled={isStale}
+          tooltip={isStale ? "You can't edit a stale datapoint." : "Edit"}
+        />
       )}
-      <DeleteButton onClick={onDelete} isLoading={isDeleting} />
+      <DeleteButton
+        onClick={onDelete}
+        isLoading={isDeleting}
+        disabled={isStale}
+        tooltip={isStale ? "You can't delete a stale datapoint." : "Delete"}
+      />
     </ActionBar>
   );
 }

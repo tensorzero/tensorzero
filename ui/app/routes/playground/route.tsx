@@ -45,6 +45,7 @@ import {
   HydrationBoundary,
   QueryClient,
 } from "@tanstack/react-query";
+import { toDatapointUrl } from "~/utils/urls";
 
 const DEFAULT_LIMIT = 5;
 
@@ -430,7 +431,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                           <div className="text-xs font-medium text-gray-500">
                             Datapoint:{" "}
                             <Link
-                              to={`/datasets/${encodeURIComponent(datasetName)}/datapoint/${datapoint.id}`}
+                              to={toDatapointUrl(datasetName, datapoint.id)}
                               className="font-mono text-xs text-blue-600 hover:text-blue-800 hover:underline"
                             >
                               {datapoint.id}
