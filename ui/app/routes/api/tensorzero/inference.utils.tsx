@@ -827,12 +827,11 @@ function subtractStaticToolsFromInferenceInput(
     return datapointTools;
   }
 
-  // Build a set of tool names from the function's configured tool IDs and names (this approach is suboptimal).
-  // We match against IDs and names. This is a temporary workaround.
+  // We can't differentiate between static and dynamic tools.
+  // We also can't differentiate between tool IDs and tool names.
   // TODO: #3880, #3879 would allow us to remove this workaround entirely
   const toolNames = new Set<string>();
   for (const toolConfigId of functionConfig.tools) {
-    toolNames.add(toolConfigId);
     const toolConfig = toolsConfig?.[toolConfigId];
     if (toolConfig) {
       toolNames.add(toolConfig.name);

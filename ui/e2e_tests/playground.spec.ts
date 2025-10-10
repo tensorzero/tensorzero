@@ -332,10 +332,20 @@ test("playground should work with tool config ID different from display name @cr
   // Verify that there is at least 1 input
   await expect(page.getByRole("heading", { name: "Input" })).toHaveCount(1);
 
-  // Wait for the inference to complete - we just need to verify it completes without errors
+  // Wait for the inference to complete by verifying the tool call appears
   // The inference should complete successfully because the tool filtering logic
   // correctly maps config IDs to display names before filtering
-  await page.waitForTimeout(10000);
+  await expect(
+    page
+      .getByTestId("datapoint-playground-output")
+      .getByText("Tool Call")
+      .first(),
+  ).toBeVisible({ timeout: 30_000 });
+
+  // Verify the tool call has expected fields
+  await expect(page.getByText("Name").first()).toBeVisible();
+  await expect(page.getByText("ID").first()).toBeVisible();
+  await expect(page.getByText("Arguments").first()).toBeVisible();
 
   // Verify that there are no inference errors
   // This is the key assertion - if tool filtering was broken, we'd see an error here
