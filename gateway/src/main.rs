@@ -17,7 +17,6 @@ use tracing::Level;
 
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
-use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::{manual_run_postgres_migrations, PostgresConnectionInfo};
 use tensorzero_core::endpoints;
 use tensorzero_core::endpoints::openai_compatible::RouterExt as _;
@@ -215,16 +214,6 @@ async fn main() {
         .expect_pretty("Failed to initialize AppState");
 
     // Create a new observability_enabled_pretty string for the log message below
-    let observability_enabled_pretty = match &gateway_handle.app_state.clickhouse_connection_info {
-        ClickHouseConnectionInfo::Disabled => "disabled".to_string(),
-        ClickHouseConnectionInfo::Mock { healthy, .. } => {
-            format!("mocked (healthy={healthy})")
-        }
-        ClickHouseConnectionInfo::Production { database, .. } => {
-            format!("enabled (database: {database})")
-        }
-    };
-
     let postgres_enabled_pretty = match &gateway_handle.app_state.postgres_connection_info {
         PostgresConnectionInfo::Disabled => "disabled".to_string(),
         PostgresConnectionInfo::Mock { healthy, .. } => {
@@ -384,7 +373,18 @@ async fn main() {
     print_configuration_info(glob.as_ref());
 
     // Print whether observability is enabled
-    tracing::info!("├ Observability: {observability_enabled_pretty}");
+    let observability_description = format!(
+        "client_type: {}, database: {}",
+        gateway_handle
+            .app_state
+            .clickhouse_connection_info
+            .client_type(),
+        gateway_handle
+            .app_state
+            .clickhouse_connection_info
+            .database()
+    );
+    tracing::info!("├ Observability: {observability_description}");
     if config.gateway.observability.batch_writes.enabled {
         tracing::info!(
             "├ Batch Writes: enabled (flush_interval_ms = {}, max_rows = {})",

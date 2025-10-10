@@ -48,6 +48,92 @@ class ResolvedInput:
     messages: List[ResolvedInputMessage]
 
 @final
+class EvaluationJobHandler:
+    """
+    Handler for synchronous evaluation job results.
+
+    Results are cached in memory as you iterate to support summary_stats().
+    For large evaluations, this may use significant memory.
+    """
+
+    @property
+    def run_info(self) -> dict[str, Any]:
+        """Get evaluation run metadata (evaluation_run_id, num_datapoints)."""
+        ...
+
+    def results(self) -> "EvaluationJobHandler":
+        """Returns an iterator over evaluation results."""
+        ...
+
+    def __iter__(self) -> "EvaluationJobHandler": ...
+    def __next__(self) -> dict[str, Any]:
+        """
+        Get next evaluation result.
+
+        Returns dict with:
+          - type: "success" | "error"
+          - For success: datapoint, response, evaluations, evaluator_errors (all as dicts)
+          - For error: datapoint_id (str), message (str)
+
+        Note: Results are cached in memory for summary_stats() computation.
+        """
+        ...
+
+    def summary_stats(self) -> dict[str, dict[str, float]]:
+        """
+        Get summary statistics from all consumed results.
+
+        Uses cached results collected during iteration.
+        Returns dict mapping evaluator names to {"mean": float, "stderr": float}.
+        """
+        ...
+
+    def __repr__(self) -> str: ...
+
+@final
+class AsyncEvaluationJobHandler:
+    """
+    Handler for asynchronous evaluation job results.
+
+    Results are cached in memory as you iterate to support summary_stats().
+    For large evaluations, this may use significant memory.
+    """
+
+    @property
+    def run_info(self) -> dict[str, Any]:
+        """Get evaluation run metadata (evaluation_run_id, num_datapoints)."""
+        ...
+
+    def results(self) -> "AsyncEvaluationJobHandler":
+        """Returns an async iterator over evaluation results."""
+        ...
+
+    def __aiter__(self) -> "AsyncEvaluationJobHandler": ...
+    async def __anext__(self) -> dict[str, Any]:
+        """
+        Get next evaluation result asynchronously.
+
+        Returns dict with:
+          - type: "success" | "error"
+          - For success: datapoint, response, evaluations, evaluator_errors (all as dicts)
+          - For error: datapoint_id (str), message (str)
+
+        Note: Results are cached in memory for summary_stats() computation.
+        """
+        ...
+
+    async def summary_stats(self) -> dict[str, dict[str, float]]:
+        """
+        Get summary statistics from all consumed results.
+
+        Uses cached results collected during iteration.
+        Returns dict mapping evaluator names to {"mean": float, "stderr": float}.
+        """
+        ...
+
+    def __repr__(self) -> str: ...
+
+@final
 class StoredInference:
     Chat: Type["StoredInference"]
     Json: Type["StoredInference"]
@@ -727,6 +813,28 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         """
         ...
 
+    def experimental_run_evaluation(
+        self,
+        *,
+        evaluation_name: str,
+        dataset_name: str,
+        variant_name: str,
+        concurrency: int = 1,
+        inference_cache: str = "on",
+    ) -> EvaluationJobHandler:
+        """
+        Run an evaluation for a specific variant on a dataset.
+        This function is only available in EmbeddedGateway mode.
+
+        :param evaluation_name: The name of the evaluation to run
+        :param dataset_name: The name of the dataset to use for evaluation
+        :param variant_name: The name of the variant to evaluate
+        :param concurrency: The number of concurrent evaluations to run
+        :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
+        :return: An EvaluationJobHandler for iterating over evaluation results
+        """
+        ...
+
     def close(self) -> None:
         """
         Close the connection to the TensorZero gateway.
@@ -1085,6 +1193,28 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         """
         ...
 
+    async def experimental_run_evaluation(
+        self,
+        *,
+        evaluation_name: str,
+        dataset_name: str,
+        variant_name: str,
+        concurrency: int = 1,
+        inference_cache: str = "on",
+    ) -> AsyncEvaluationJobHandler:
+        """
+        Run an evaluation for a specific variant on a dataset.
+        This function is only available in EmbeddedGateway mode.
+
+        :param evaluation_name: The name of the evaluation to run
+        :param dataset_name: The name of the dataset to use for evaluation
+        :param variant_name: The name of the variant to evaluate
+        :param concurrency: The number of concurrent evaluations to run
+        :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
+        :return: An AsyncEvaluationJobHandler for iterating over evaluation results
+        """
+        ...
+
     async def close(self) -> None:
         """
         Close the connection to the TensorZero gateway.
@@ -1113,6 +1243,7 @@ class LocalHttpGateway(object):
     def close(self) -> None: ...
 
 __all__ = [
+    "AsyncEvaluationJobHandler",
     "AsyncTensorZeroGateway",
     "BaseTensorZeroGateway",
     "BestOfNSamplingConfig",
@@ -1122,6 +1253,7 @@ __all__ = [
     "Datapoint",
     "DICLOptimizationConfig",
     "DICLConfig",
+    "EvaluationJobHandler",
     "FunctionConfigChat",
     "FunctionConfigJson",
     "FunctionsConfig",
