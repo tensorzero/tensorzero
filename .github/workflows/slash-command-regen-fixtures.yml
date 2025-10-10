@@ -51,20 +51,20 @@ jobs:
         run: |
           # Set real OpenAI and S3 keys here, so that we can run image evaluations to regenerate fixtures.
           # If we ever need to use any other providers to regenerate the fixtures, set those keys here.
+          echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> ui/fixtures/.env
           echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> ui/fixtures/.env
           echo "FIREWORKS_API_KEY=not_used" >> ui/fixtures/.env
           echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> ui/fixtures/.env
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> ui/fixtures/.env
-          echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> ui/fixtures/.env
           echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/" >> ui/fixtures/.env
-          echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> ui/fixtures/.env
-          echo "TOGETHER_BASE_URL=http://mock-inference-provider:3030/together/" >> ui/fixtures/.env
           echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> ui/fixtures/.env
           echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> ui/fixtures/.env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> ui/fixtures/.env
-          echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> ui/fixtures/.env
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> ui/fixtures/.env
+          echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> ui/fixtures/.env
           echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> ui/fixtures/.env
+          echo "TOGETHER_API_KEY=not_used" >> ui/fixtures/.env
+          echo "TOGETHER_BASE_URL=http://mock-inference-provider:3030/together/" >> ui/fixtures/.env
           ./ui/fixtures/regenerate-model-inference-cache.sh
 
       - name: Push to PR
