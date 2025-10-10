@@ -46,34 +46,38 @@ export type EvaluationResultWithVariant = z.infer<
 
 export const JsonEvaluationResultSchema = z.object({
   inference_id: z.string().uuid(),
+  episode_id: z.string().uuid(),
   datapoint_id: z.string().uuid(),
   evaluation_run_id: z.string().uuid(),
   evaluator_inference_id: z.string().uuid().nullable(),
   input: displayInputSchema,
   generated_output: jsonInferenceOutputSchema,
-  reference_output: jsonInferenceOutputSchema,
+  reference_output: jsonInferenceOutputSchema.nullable(),
   dataset_name: z.string(),
   metric_name: z.string(),
   metric_value: z.string(),
   feedback_id: z.string().uuid(),
   is_human_feedback: z.boolean(),
+  name: z.string().nullable(),
 });
 
 export type JsonEvaluationResult = z.infer<typeof JsonEvaluationResultSchema>;
 
 export const ChatEvaluationResultSchema = z.object({
   inference_id: z.string().uuid(),
+  episode_id: z.string().uuid(),
   datapoint_id: z.string().uuid(),
   evaluation_run_id: z.string().uuid(),
   evaluator_inference_id: z.string().uuid().nullable(),
   input: displayInputSchema,
   generated_output: z.array(contentBlockChatOutputSchema),
-  reference_output: z.array(contentBlockChatOutputSchema),
+  reference_output: z.array(contentBlockChatOutputSchema).nullable(),
   dataset_name: z.string(),
   metric_name: z.string(),
   metric_value: z.string(),
   feedback_id: z.string().uuid(),
   is_human_feedback: z.preprocess((val) => val === 1, z.boolean()),
+  name: z.string().nullable(),
 });
 
 export type ChatEvaluationResult = z.infer<typeof ChatEvaluationResultSchema>;

@@ -4,6 +4,7 @@ import {
   getEvaluationsForDatapoint,
   pollForEvaluations,
 } from "~/utils/clickhouse/evaluations.server";
+import { toEvaluationUrl, toInferenceUrl } from "~/utils/urls";
 import type { Route } from "./+types/route";
 import {
   PageHeader,
@@ -19,6 +20,7 @@ import {
   isRouteErrorResponse,
   Link,
   redirect,
+  useFetcher,
   type RouteHandle,
 } from "react-router";
 import { Output } from "~/components/inference/Output";
@@ -53,13 +55,20 @@ import type {
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 import { InferenceButton } from "~/components/utils/InferenceButton";
 import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
+import { handleAddToDatasetAction } from "~/utils/dataset.server";
+import { renameDatapoint } from "~/routes/datasets/$dataset_name/datapoint/$id/datapointOperations.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
+import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { logger } from "~/utils/logger";
+import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 
 export const handle: RouteHandle = {
-  crumb: (match) => ["Datapoints", match.params.datapoint_id!],
+  crumb: (match) => [
+    "Datapoints",
+    { label: match.params.datapoint_id!, isIdentifier: true },
+  ],
 };
 
 export async function loader({ request, params }: Route.LoaderArgs) {
@@ -84,7 +93,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ? selected_evaluation_run_ids.split(",")
     : [];
   if (selectedRunIds.length === 0) {
-    return redirect(`/evaluations/${evaluation_name}`);
+    return redirect(toEvaluationUrl(evaluation_name));
   }
 
   // Define all promises
@@ -152,6 +161,9 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const _action = formData.get("_action");
   switch (_action) {
+    case "addToDataset": {
+      return handleAddToDatasetAction(formData);
+    }
     case "addFeedback": {
       const response = await addEvaluationHumanFeedback(formData);
       const url = new URL(request.url);
@@ -170,6 +182,35 @@ export async function action({ request }: Route.ActionArgs) {
         logger.warn("No judge demonstration response");
       }
       return redirect(url.toString());
+    }
+    case "renameDatapoint": {
+      const datapoint_id = formData.get("datapoint_id") as string;
+      const dataset_name = formData.get("dataset_name") as string;
+      const newName = formData.get("newName") as string;
+
+      // We need to get the datapoint to pass to renameDatapoint
+      const datapoint = await getDatapoint(dataset_name, datapoint_id);
+      if (!datapoint) {
+        return data(
+          {
+            success: false,
+            error:
+              "Datapoint not found; please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
+          },
+          { status: 404 },
+        );
+      }
+
+      // A bit of a hack in the evaluation page, we don't have the function type in the datapoint, so we check if the datapoint contains an output schema (which indicates it's JSON).
+      const functionType = "output_schema" in datapoint ? "json" : "chat";
+      await renameDatapoint({
+        functionType,
+        datasetName: dataset_name,
+        datapoint,
+        newName,
+      });
+
+      return data({ success: true });
     }
     case null:
       logger.error("No action provided");
@@ -193,6 +234,7 @@ export default function EvaluationDatapointPage({
     newFeedbackId,
     newJudgeDemonstrationId,
   } = loaderData;
+  const fetcher = useFetcher();
   const config = useConfig();
   const evaluation_config = config.evaluations[evaluation_name];
   if (!evaluation_config) {
@@ -202,16 +244,22 @@ export default function EvaluationDatapointPage({
     );
   }
   const outputsToDisplay = [
-    {
-      id: "Reference",
-      output: consolidatedEvaluationResults[0].reference_output,
-      metrics: [],
-      variant_name: "Reference",
-      inferenceId: null,
-    },
+    ...(consolidatedEvaluationResults[0].reference_output !== null
+      ? [
+          {
+            id: "Reference",
+            output: consolidatedEvaluationResults[0].reference_output,
+            metrics: [],
+            variant_name: "Reference",
+            inferenceId: null,
+            episodeId: null,
+          },
+        ]
+      : []),
     ...consolidatedEvaluationResults.map((result) => ({
       id: result.evaluation_run_id,
       inferenceId: result.inference_id,
+      episodeId: result.episode_id,
       variant_name: result.variant_name,
       output: result.generated_output,
       metrics: result.metrics,
@@ -225,6 +273,19 @@ export default function EvaluationDatapointPage({
       });
     }
   }, [newFeedbackId, newJudgeDemonstrationId, toast]);
+
+  const handleRenameDatapoint = async (newName: string) => {
+    const formData = new FormData();
+    formData.append("_action", "renameDatapoint");
+    formData.append("datapoint_id", datapoint_id);
+    formData.append(
+      "dataset_name",
+      consolidatedEvaluationResults[0].dataset_name,
+    );
+    formData.append("newName", newName);
+    await fetcher.submit(formData, { method: "post", action: "." });
+  };
+
   return (
     // Provider remains here
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
@@ -234,6 +295,8 @@ export default function EvaluationDatapointPage({
             evaluation_name={evaluation_name}
             evaluation_config={evaluation_config}
             dataset_name={consolidatedEvaluationResults[0].dataset_name}
+            datapoint_name={consolidatedEvaluationResults[0].name}
+            onRenameDatapoint={handleRenameDatapoint}
           />
           <EvalRunSelector
             evaluationName={evaluation_name}
@@ -288,6 +351,7 @@ const MetricsDisplay = ({
 
           return (
             <MetricRow
+              // TODO(shuyangli): This may be the same across different rows.
               key={metricObj.evaluator_name}
               evaluation_name={evaluation_name}
               evaluatorName={metricObj.evaluator_name}
@@ -448,6 +512,7 @@ type OutputsSectionProps = {
     output: ContentBlockChatOutput[] | JsonInferenceOutput;
     metrics: ConsolidatedMetric[];
     inferenceId: string | null;
+    episodeId: string | null;
   }>;
   evaluation_name: string;
   evaluation_config: EvaluationConfig; // Use the specific config type
@@ -487,16 +552,27 @@ function OutputsSection({
                     // Use the getColor obtained from the correct context
                     getColor={getColor}
                   />
-
                   {result.inferenceId && (
-                    <div className="text-xs text-gray-500">
-                      Inference:{" "}
-                      <Link
-                        to={`/observability/inferences/${result.inferenceId}`}
-                        className="text-blue-600 hover:text-blue-800 hover:underline"
-                      >
-                        {result.inferenceId}
-                      </Link>
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span>
+                        Inference:{" "}
+                        <Link
+                          to={toInferenceUrl(result.inferenceId)}
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {result.inferenceId}
+                        </Link>
+                      </span>
+                      {result.inferenceId && result.episodeId && (
+                        <AddToDatasetButton
+                          inferenceId={result.inferenceId}
+                          functionName={evaluation_config.function_name}
+                          variantName={result.variant_name}
+                          episodeId={result.episodeId}
+                          hasDemonstration={false}
+                          alwaysUseInherit={true}
+                        />
+                      )}
                     </div>
                   )}
                 </>

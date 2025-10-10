@@ -43,6 +43,14 @@ pub trait SelectQueries {
     ) -> Result<Vec<EpisodeByIdRow>, Error>;
 
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
+
+    /// Retrieves cumulative feedback statistics for a given metric and function, optionally filtered by variant names.
+    async fn get_feedback_by_variant(
+        &self,
+        metric_name: &str,
+        function_name: &str,
+        variant_names: Option<&Vec<String>>,
+    ) -> Result<Vec<FeedbackByVariant>, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -107,7 +115,7 @@ pub trait RateLimitQueries {
     /// It is an atomic operation so no tickets will be consumed if any request fails.
     async fn consume_tickets(
         &self,
-        requests: Vec<ConsumeTicketsRequest>,
+        requests: &[ConsumeTicketsRequest],
     ) -> Result<Vec<ConsumeTicketsReceipt>, Error>;
 
     async fn return_tickets(
@@ -154,4 +162,22 @@ pub struct ReturnTicketsReceipt {
     pub balance: u64,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct FeedbackByVariant {
+    pub variant_name: String,
+    pub mean: f32,
+    pub variance: f32,
+    #[serde(deserialize_with = "deserialize_u64")]
+    pub count: u64,
+}
+
 impl<T: RateLimitQueries + HealthCheckable + Send + Sync> PostgresConnection for T {}
+
+pub trait ExperimentationQueries {
+    async fn check_and_set_variant_by_episode(
+        &self,
+        episode_id: Uuid,
+        function_name: &str,
+        candidate_variant_name: &str,
+    ) -> Result<String, Error>;
+}

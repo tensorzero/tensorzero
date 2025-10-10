@@ -33,7 +33,11 @@ updates:
       interval: "weekly"
     labels: []
     groups:
+      opentelemetry-dependencies:
+        patterns:
+          - "*opentelemetry*"
+          - "tonic"
       rust-dependencies:
         patterns:
           - "*"
-    open-pull-requests-limit: 1 # This does not affect the security update PR limit
+    open-pull-requests-limit: 2 # This does not affect the security update PR limit

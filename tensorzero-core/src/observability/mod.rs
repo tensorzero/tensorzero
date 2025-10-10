@@ -45,9 +45,13 @@
 //!   to our `make_span` function.
 //! * The OpenTelemetry `Context`, which is captured by the `tracing-opentelemetry` library when we create a new span,
 //!   and passed along to `TracerWrapper::build_with_context` when the span is closed and exported.
-use std::hash::Hash;
-use std::hash::Hasher;
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 use std::time::Duration;
+
+use once_cell::sync::OnceCell;
 
 use axum::extract::MatchedPath;
 use axum::middleware::Next;
@@ -55,8 +59,10 @@ use axum::response::{IntoResponse, Response};
 use axum::{middleware, Router};
 use clap::ValueEnum;
 use http::HeaderMap;
+use metrics::{describe_counter, Unit};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use moka::sync::Cache;
+use opentelemetry::trace::Status;
 use opentelemetry::trace::{Tracer, TracerProvider as _};
 use opentelemetry::{Context, KeyValue};
 use opentelemetry_otlp::tonic_types::metadata::MetadataMap;
@@ -68,9 +74,7 @@ use std::str::FromStr;
 use tokio_util::task::TaskTracker;
 use tonic::metadata::AsciiMetadataKey;
 use tonic::metadata::MetadataValue;
-use tower_http::trace::{
-    DefaultOnEos, DefaultOnFailure, DefaultOnRequest, DefaultOnResponse, TraceLayer,
-};
+use tower_http::trace::{DefaultOnEos, DefaultOnFailure, DefaultOnRequest, TraceLayer};
 use tracing::level_filters::LevelFilter;
 use tracing::{Level, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -81,6 +85,9 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 use uuid::Uuid;
 
 use crate::error::{Error, ErrorDetails};
+use crate::observability::tracing_bug::apply_filter_fixing_tracing_bug;
+
+pub mod tracing_bug;
 
 #[derive(Clone, Debug, Default, ValueEnum)]
 pub enum LogFormat {
@@ -129,6 +136,9 @@ struct CustomTracer {
 pub struct TracerWrapper {
     default_tracer: SdkTracer,
     default_provider: SdkTracerProvider,
+    // Static headers from the config that are always included (can be overridden by dynamic headers)
+    // Wrapped in Arc<OnceCell> so we can set them once after initialization (e.g. in the gateway after loading config)
+    static_otlp_traces_extra_headers: Arc<OnceCell<MetadataMap>>,
     // We need to build a new `CustomTracer` for each unique list of extra headers,
     // since export headers can only be configured at the `Tracer` level.
     // We use a `moka` Cache to handle automatic eviction (see `internal_build_otel_layer` for
@@ -150,6 +160,7 @@ fn build_tracer<T: SpanExporter + 'static>(
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
         .with_metadata(metadata)
+        .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())
         .build()
         .map_err(|e| {
             Error::new(ErrorDetails::Observability {
@@ -189,7 +200,15 @@ impl Tracer for TracerWrapper {
         builder: opentelemetry::trace::SpanBuilder,
         parent_cx: &opentelemetry::Context,
     ) -> Self::Span {
-        if let Some(key) = parent_cx.get::<CustomTracerKey>() {
+        // Check if we have any headers (config or dynamic)
+        let static_otlp_traces_extra_headers = self.static_otlp_traces_extra_headers.get();
+        let dynamic_key = parent_cx.get::<CustomTracerKey>();
+
+        // If we have any headers (config OR dynamic), create a custom tracer with merged headers
+        let has_otlp_traces_extra_headers =
+            static_otlp_traces_extra_headers.is_some() || dynamic_key.is_some();
+
+        if has_otlp_traces_extra_headers {
             // This is the potentially expensive part - we need to dynamically create a new `SdkTracer`.
             // If this ends up causing performance issues (due to thrashing the `custom_tracers` cache,
             // or `build_tracer` becoming expensive), then we should do the following:
@@ -198,10 +217,36 @@ impl Tracer for TracerWrapper {
             //    and don't immediately create the `SdkTracer`.
             // 3. In the `Drop` impl for `SpanWrapper`, call `tokio::task::spawn_blocking`, and perform the cache
             //    lookup and nested `build_with_context` inside the closure.
-            let tracer = self.custom_tracers.try_get_with_by_ref(key, || {
+
+            // Merge config headers with dynamic headers (dynamic takes precedence)
+            let mut merged_headers = static_otlp_traces_extra_headers
+                .cloned()
+                .unwrap_or_default();
+
+            if let Some(key) = dynamic_key {
+                for key_value_ref in key.extra_headers.iter() {
+                    match key_value_ref {
+                        tonic::metadata::KeyAndValueRef::Ascii(k, v) => {
+                            merged_headers.insert(k.clone(), v.clone());
+                        }
+                        tonic::metadata::KeyAndValueRef::Binary(k, _) => {
+                            tracing::warn!(
+                                "Non-ASCII header encountered in `extra_headers` and ignored: {k}",
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Create a new key with the merged headers
+            let merged_key = CustomTracerKey {
+                extra_headers: merged_headers,
+            };
+
+            let tracer = self.custom_tracers.try_get_with_by_ref(&merged_key, || {
                 // We need to provide a dummy generic parameter to satisfy the compiler
                 let (provider, tracer) = build_tracer::<opentelemetry_otlp::SpanExporter>(
-                    key.extra_headers.clone(),
+                    merged_key.extra_headers.clone(),
                     None,
                 )?;
                 Ok::<_, Error>(CustomTracer {
@@ -209,17 +254,16 @@ impl Tracer for TracerWrapper {
                     provider,
                 })
             });
-            match tracer {
-                Ok(tracer) => {
-                    return tracer.inner.build_with_context(builder, parent_cx);
-                }
-                Err(e) => {
-                    tracing::error!("Failed to create custom tracer for span {builder:?}: {e}");
-                    return self.default_tracer.build_with_context(builder, parent_cx);
-                }
+
+            if let Ok(tracer) = tracer {
+                return tracer.inner.build_with_context(builder, parent_cx);
+            } else if let Err(e) = tracer {
+                tracing::error!("Failed to create custom tracer for span {builder:?}: {e}");
             }
+            return self.default_tracer.build_with_context(builder, parent_cx);
         }
 
+        // No headers at all, use default tracer
         self.default_tracer.build_with_context(builder, parent_cx)
     }
 }
@@ -247,16 +291,22 @@ struct OtelLayerData<T: Layer<Registry>> {
 }
 
 // Builds the internal OpenTelemetry layer, without any filtering applied.
+// The default tracer is always built with empty headers. Config headers are stored separately
+// and applied when building spans. Use `TracerWrapper::set_static_otlp_traces_extra_headers` to set headers after initialization.
 fn internal_build_otel_layer<T: SpanExporter + 'static>(
     override_exporter: Option<T>,
 ) -> Result<OtelLayerData<impl Layer<Registry>>, Error> {
+    // Default tracer always has empty headers
     let (provider, tracer) = build_tracer(MetadataMap::new(), override_exporter)?;
     opentelemetry::global::set_tracer_provider(provider.clone());
     let shutdown_tasks = TaskTracker::new();
     let shutdown_tasks_clone = shutdown_tasks.clone();
+    // Initialize empty - will be set once later via set_static_otlp_traces_extra_headers
+    let config_headers = Arc::new(OnceCell::new());
     let wrapper = TracerWrapper {
         default_tracer: tracer,
         default_provider: provider,
+        static_otlp_traces_extra_headers: config_headers.clone(),
         custom_tracers: Cache::builder()
             .max_capacity(32)
             // Expire entries that have been idle for 1 hour
@@ -275,6 +325,7 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
     let cloned_wrapper = TracerWrapper {
         default_tracer: wrapper.default_tracer.clone(),
         default_provider: wrapper.default_provider.clone(),
+        static_otlp_traces_extra_headers: wrapper.static_otlp_traces_extra_headers.clone(),
         custom_tracers: wrapper.custom_tracers.clone(),
         shutdown_tasks: wrapper.shutdown_tasks.clone(),
     };
@@ -361,7 +412,7 @@ pub fn build_opentelemetry_layer<T: SpanExporter + 'static>(
                 })
                 .map_err(|e| {
                     Error::new(ErrorDetails::Observability {
-                        message: format!("Failed to enable OTLP exporter: {e}"),
+                        message: format!("Failed to enable OTLP exporter: {e:?}"),
                     })
                 })?;
             Ok(())
@@ -374,7 +425,7 @@ pub fn build_opentelemetry_layer<T: SpanExporter + 'static>(
         // We attach a reloadable filter, which we use to start exporting spans when `delayed_enable` is called.
         // This means that we unconditionally construct the `tracing_opentelemetry` layer,
         // (including the batch exporter), which will just end being unused if OTEL exporting is disabled.
-        base_otel_layer.with_filter(otel_reload_filter),
+        apply_filter_fixing_tracing_bug(base_otel_layer, otel_reload_filter),
         wrapper,
     ))
 }
@@ -427,6 +478,31 @@ pub trait RouterExt<S> {
 ///
 /// 5. The custom `SdkTracer` is preserved in a `moka::Cache` for subsequent requests.
 const TENSORZERO_OTLP_HEADERS_PREFIX: &str = "tensorzero-otlp-traces-extra-header-";
+
+/// Converts a HashMap of config headers to a MetadataMap
+fn config_headers_to_metadata(
+    config_headers: &HashMap<String, String>,
+) -> Result<MetadataMap, Error> {
+    let mut metadata = MetadataMap::new();
+    for (name, value) in config_headers {
+        let key: AsciiMetadataKey = name.parse().map_err(|e| {
+            Error::new(ErrorDetails::Observability {
+                message: format!(
+                    "Failed to parse config header `{name}` as valid metadata key: {e}"
+                ),
+            })
+        })?;
+        let value = MetadataValue::from_str(value).map_err(|e| {
+            Error::new(ErrorDetails::Observability {
+                message: format!(
+                    "Failed to parse config header `{name}` value as valid metadata value: {e}"
+                ),
+            })
+        })?;
+        metadata.insert(key, value);
+    }
+    Ok(metadata)
+}
 
 // Removes all of the headers prefixed with `TENSORZERO_OTLP_HEADERS_PREFIX`.
 // If any are present, constructs a `CustomTracerKey` with all of the  matching header/value pairs
@@ -522,6 +598,27 @@ impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
             );
             span
         }
+
+        // This cannot be a closure due to an annoying closure lifetime inference issue
+        fn handle_response<B>(res: &Response<B>, _duration: Duration, span: &Span) {
+            // We cast this to an i64, so that tracing-opentelemetry will record it as an integer
+            // rather than a string
+            span.record("http.response.status_code", res.status().as_u16() as i64);
+            if res.status().is_server_error() {
+                if let Some(error) = res.extensions().get::<Error>() {
+                    span.set_status(Status::Error {
+                        description: Cow::Owned(error.to_string()),
+                    });
+                } else {
+                    // Don't set a description for non-TensorZero errors,
+                    // since we don't know what a nice description should look like
+                    span.set_status(Status::Error {
+                        description: Cow::Owned(String::new()),
+                    });
+                }
+            }
+        }
+
         self.layer(
             TraceLayer::new_for_http()
                 .make_span_with(make_span)
@@ -530,9 +627,13 @@ impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
                 // (this will also suppress them from OTEL in production, which is fine)
                 .on_request(DefaultOnRequest::new().level(Level::TRACE))
                 .on_failure(DefaultOnFailure::new().level(Level::TRACE))
-                .on_response(DefaultOnResponse::new().level(Level::TRACE))
+                .on_response(handle_response)
                 .on_eos(DefaultOnEos::new().level(Level::TRACE)),
         )
+        // Note - we intentionally apply this layer *after* the `TraceLayer`
+        // As a result, if we reject a request due to a failure to parse custom OTLP headers,
+        // we will *not* create an OpenTelemetry span. Custom headers can be required to correctly
+        // process an OpenTelemetry span (e.g. to set the Arize API key), so this is correct behavior.
         .layer(middleware::from_fn(tensorzero_otlp_headers_middleware))
     }
 }
@@ -591,6 +692,22 @@ pub struct ObservabilityHandle {
 }
 
 impl TracerWrapper {
+    /// Set the config headers that will be merged with dynamic headers.
+    /// This can only be called once after initialization (e.g. in the gateway after loading config).
+    pub fn set_static_otlp_traces_extra_headers(
+        &self,
+        headers: &HashMap<String, String>,
+    ) -> Result<(), Error> {
+        let metadata_map = config_headers_to_metadata(headers)?;
+        self.static_otlp_traces_extra_headers
+            .set(metadata_map)
+            .map_err(|_| {
+                Error::new(ErrorDetails::Observability {
+                    message: "Failed to set static OTLP headers: already initialized".to_string(),
+                })
+            })
+    }
+
     pub async fn shutdown(self) {
         // First, spawn shutdown tasks for all of our custom tracers.
         // This might happen in parallel for the same custom tracer, but opentelemetry
@@ -638,6 +755,15 @@ const DEFAULT_GATEWAY_DEBUG_DIRECTIVES: &str =
 /// so marking this function as async makes it clear to callers that they need to
 /// be in an async context.
 pub async fn setup_observability(log_format: LogFormat) -> Result<ObservabilityHandle, Error> {
+    // We need to provide a dummy generic parameter to satisfy the compiler
+    setup_observability_with_exporter_override::<opentelemetry_otlp::SpanExporter>(log_format, None)
+        .await
+}
+
+pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'static>(
+    log_format: LogFormat,
+    exporter_override: Option<T>,
+) -> Result<ObservabilityHandle, Error> {
     let env_var_name = "RUST_LOG";
     let has_env_var = std::env::var(env_var_name).is_ok();
 
@@ -682,17 +808,19 @@ pub async fn setup_observability(log_format: LogFormat) -> Result<ObservabilityH
         LogFormat::Json => Box::new(tracing_subscriber::fmt::layer().json()),
     };
 
-    // We need to provide a dummy generic parameter to satisfy the compiler
-    let otel_data = build_opentelemetry_layer::<opentelemetry_otlp::SpanExporter>(None);
+    let otel_data = build_opentelemetry_layer(exporter_override);
     let (delayed_otel, otel_layer, tracer_wrapper) = match otel_data {
         Ok((delayed_otel, otel_layer, tracer_wrapper)) => {
             (Ok(delayed_otel), Some(otel_layer), Some(tracer_wrapper))
         }
         Err(e) => (Err(e), None, None),
     };
+    // IMPORTANT: If you add any new layers here that have per-layer filtering applied
+    // you *MUST* call `apply_filter_fixing_tracing_bug` instead of `layer.with_filter(filter)`
+    // See the docs for `apply_filter_fixing_tracing_bug` for more details.
     tracing_subscriber::registry()
         .with(otel_layer)
-        .with(log_layer.with_filter(log_level))
+        .with(apply_filter_fixing_tracing_bug(log_layer, log_level))
         .init();
 
     // If `RUST_LOG` is explicitly set, it takes precedence over `gateway.debug`,
@@ -725,9 +853,36 @@ pub async fn setup_observability(log_format: LogFormat) -> Result<ObservabilityH
 
 /// Set up Prometheus metrics exporter
 pub fn setup_metrics() -> Result<PrometheusHandle, Error> {
-    PrometheusBuilder::new().install_recorder().map_err(|e| {
+    let metrics_handle = PrometheusBuilder::new().install_recorder().map_err(|e| {
         Error::new(ErrorDetails::Observability {
             message: format!("Failed to install Prometheus exporter: {e}"),
         })
-    })
+    })?;
+
+    // Register the expected metrics along with their types and docstrings
+    describe_counter!(
+        "request_count",
+        Unit::Count,
+        "Requests handled by TensorZero (deprecated: use `tensorzero_requests_total` instead)",
+    );
+
+    describe_counter!(
+        "tensorzero_requests_total",
+        Unit::Count,
+        "Requests handled by TensorZero",
+    );
+
+    describe_counter!(
+        "inference_count",
+        Unit::Count,
+        "Inferences performed by TensorZero (deprecated: use `tensorzero_inferences_total` instead)",
+    );
+
+    describe_counter!(
+        "tensorzero_inferences_total",
+        Unit::Count,
+        "Inferences performed by TensorZero",
+    );
+
+    Ok(metrics_handle)
 }

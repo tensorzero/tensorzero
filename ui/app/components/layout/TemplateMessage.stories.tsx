@@ -1,29 +1,38 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { ParameterizedMessage } from "./SnippetContent";
+import { TemplateMessage } from "./SnippetContent";
 
 const meta = {
-  title: "UI/Message Blocks/ParameterizedMessage",
-  component: ParameterizedMessage,
+  title: "UI/Message Blocks/TemplateMessage",
+  component: TemplateMessage,
   parameters: {
     layout: "padded",
   },
-} satisfies Meta<typeof ParameterizedMessage>;
+} satisfies Meta<typeof TemplateMessage>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Simple: Story = {
   args: {
-    parameters: {
-      topic: "AI",
-      style: "conversational",
+    templateName: "greeting",
+    arguments: {
+      name: "Alice",
+      language: "English",
     },
+  },
+};
+
+export const EmptyArguments: Story = {
+  args: {
+    templateName: "empty_template",
+    arguments: {},
   },
 };
 
 export const NestedObject: Story = {
   args: {
-    parameters: {
+    templateName: "user_profile",
+    arguments: {
       user: {
         name: "John Doe",
         preferences: {
@@ -41,7 +50,8 @@ export const NestedObject: Story = {
 
 export const WithArrays: Story = {
   args: {
-    parameters: {
+    templateName: "content_generator",
+    arguments: {
       topics: ["Machine Learning", "Neural Networks", "Deep Learning"],
       config: {
         models: ["GPT-4", "Claude", "Gemini"],
@@ -53,7 +63,8 @@ export const WithArrays: Story = {
 
 export const ComplexStructure: Story = {
   args: {
-    parameters: {
+    templateName: "query_builder",
+    arguments: {
       query: "SELECT * FROM users WHERE active = true",
       filters: {
         department: "engineering",
@@ -74,12 +85,23 @@ export const ComplexStructure: Story = {
 
 export const WithNullAndUndefined: Story = {
   args: {
-    parameters: {
+    templateName: "conditional_template",
+    arguments: {
       requiredField: "value",
       optionalField: null,
       missingField: undefined,
       booleanField: false,
       numberField: 0,
+    },
+  },
+};
+
+export const LongTemplateName: Story = {
+  args: {
+    templateName:
+      "very_long_template_name_that_describes_what_the_template_does",
+    arguments: {
+      key: "value",
     },
   },
 };

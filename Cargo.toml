@@ -3,6 +3,7 @@ members = [
     "tensorzero-core",
     "tensorzero-core/tests/mock-inference-provider",
     "tensorzero-core/tests/load/rate-limit-load-test",
+    "tensorzero-core/tests/load/feedback",
     "gateway",
     "internal/tensorzero-node",
     "clients/rust",
@@ -15,7 +16,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.9.5"
+version = "2025.10.1"
 rust-version = "1.86.0"
 license = "Apache-2.0"
 
@@ -68,7 +69,8 @@ tower-http = { version = "0.6.6", features = ["trace"] }
 mime = { git = "https://github.com/hyperium/mime", rev = "1ef137c7358fc64e07c8a640e4e9ba2a784b7f7d", features = [
     "serde1",
 ] }
-sqlx = { version = "0.8.6", features = ["runtime-tokio", "tls-rustls", "postgres", "migrate", "chrono"] }
+sqlx = { version = "0.8.6", features = ["runtime-tokio", "tls-rustls", "postgres", "migrate", "chrono", "uuid"] }
+rlt = "0.2.1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -76,6 +78,7 @@ unsafe_code = "forbid"
 [workspace.lints.clippy]
 allow_attributes = "deny"
 dbg_macro = "deny"
+disallowed-types = "deny"
 # NB: Slowly making progress towards:
 # doc_markdown = "deny"
 expect_used = "deny"

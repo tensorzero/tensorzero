@@ -7,12 +7,12 @@ use crate::common::get_gateway_endpoint;
 
 /// This file is used to test the Prometheus metrics endpoint of the gateway.
 ///
-/// Namely, it tests that `request_count` is incremented correctly for inference and feedback requests.
+/// Namely, it tests that `tensorzero_requests_total` is incremented correctly for inference and feedback requests.
 
 #[tokio::test]
 async fn test_prometheus_metrics_inference_nonstreaming() {
     let prometheus_metric_name =
-        "request_count{endpoint=\"inference\",function_name=\"prometheus_test1\"}";
+        "tensorzero_requests_total{endpoint=\"inference\",function_name=\"prometheus_test1\"}";
     let client = Client::new();
 
     let request_count_before = get_metric_u32(&client, prometheus_metric_name).await;
@@ -50,7 +50,7 @@ async fn test_prometheus_metrics_inference_nonstreaming() {
 #[tokio::test]
 async fn test_prometheus_metrics_inference_nonstreaming_dryrun() {
     let prometheus_metric_name =
-        "request_count{endpoint=\"inference\",function_name=\"prometheus_test2\"}";
+        "tensorzero_requests_total{endpoint=\"inference\",function_name=\"prometheus_test2\"}";
     let client = Client::new();
 
     let request_count_before = get_metric_u32(&client, prometheus_metric_name).await;
@@ -89,7 +89,7 @@ async fn test_prometheus_metrics_inference_nonstreaming_dryrun() {
 #[tokio::test]
 async fn test_prometheus_metrics_inference_streaming() {
     let prometheus_metric_name =
-        "request_count{endpoint=\"inference\",function_name=\"prometheus_test3\"}";
+        "tensorzero_requests_total{endpoint=\"inference\",function_name=\"prometheus_test3\"}";
     let client = Client::new();
 
     let request_count_before = get_metric_u32(&client, prometheus_metric_name).await;
@@ -128,7 +128,7 @@ async fn test_prometheus_metrics_inference_streaming() {
 #[tokio::test]
 async fn test_prometheus_metrics_inference_streaming_dryrun() {
     let prometheus_metric_name =
-        "request_count{endpoint=\"inference\",function_name=\"prometheus_test4\"}";
+        "tensorzero_requests_total{endpoint=\"inference\",function_name=\"prometheus_test4\"}";
     let client = Client::new();
 
     let request_count_before = get_metric_u32(&client, prometheus_metric_name).await;
@@ -167,7 +167,7 @@ async fn test_prometheus_metrics_inference_streaming_dryrun() {
 #[tokio::test]
 async fn test_prometheus_metrics_feedback_boolean() {
     let prometheus_metric_name =
-        "request_count{endpoint=\"feedback\",metric_name=\"prometheus_test_boolean1\"}";
+        "tensorzero_requests_total{endpoint=\"feedback\",metric_name=\"prometheus_test_boolean1\"}";
     let client = Client::new();
 
     let request_count_before = get_metric_u32(&client, prometheus_metric_name).await;
@@ -226,7 +226,7 @@ async fn test_prometheus_metrics_feedback_boolean() {
 #[tokio::test]
 async fn test_prometheus_metrics_feedback_boolean_dryrun() {
     let prometheus_metric_name =
-        "request_count{endpoint=\"feedback\",metric_name=\"prometheus_test_boolean2\"}";
+        "tensorzero_requests_total{endpoint=\"feedback\",metric_name=\"prometheus_test_boolean2\"}";
     let client = Client::new();
 
     let request_count_before = get_metric_u32(&client, prometheus_metric_name).await;
@@ -285,7 +285,7 @@ async fn test_prometheus_metrics_feedback_boolean_dryrun() {
 #[tokio::test]
 async fn test_prometheus_metrics_feedback_float() {
     let prometheus_metric_name =
-        "request_count{endpoint=\"feedback\",metric_name=\"prometheus_test_float1\"}";
+        "tensorzero_requests_total{endpoint=\"feedback\",metric_name=\"prometheus_test_float1\"}";
     let client = Client::new();
 
     let request_count_before = get_metric_u32(&client, prometheus_metric_name).await;
@@ -343,7 +343,7 @@ async fn test_prometheus_metrics_feedback_float() {
 #[tokio::test]
 async fn test_prometheus_metrics_feedback_float_dryrun() {
     let prometheus_metric_name =
-        "request_count{endpoint=\"feedback\",metric_name=\"prometheus_test_float2\"}";
+        "tensorzero_requests_total{endpoint=\"feedback\",metric_name=\"prometheus_test_float2\"}";
     let client = Client::new();
 
     let request_count_before = get_metric_u32(&client, prometheus_metric_name).await;
@@ -406,7 +406,8 @@ async fn test_prometheus_metrics_feedback_comment() {
     // Unlike metrics, comments are global, so there is no way to isolate this test at the moment.
     // If this becomes flaky, we should make sure this test runs sequentially with other tests.
 
-    let prometheus_metric_name = "request_count{endpoint=\"feedback\",metric_name=\"comment\"}";
+    let prometheus_metric_name =
+        "tensorzero_requests_total{endpoint=\"feedback\",metric_name=\"comment\"}";
     let client = Client::new();
 
     let request_count_before = get_metric_u32(&client, prometheus_metric_name).await;
@@ -523,7 +524,7 @@ async fn test_prometheus_metrics_feedback_demonstration() {
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     let prometheus_metric_name =
-        "request_count{endpoint=\"feedback\",metric_name=\"demonstration\"}";
+        "tensorzero_requests_total{endpoint=\"feedback\",metric_name=\"demonstration\"}";
 
     let request_count_before = get_metric_u32(&client, prometheus_metric_name).await;
 

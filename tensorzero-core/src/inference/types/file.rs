@@ -232,6 +232,7 @@ pub fn mime_type_to_ext(mime_type: &MediaType) -> Result<Option<&'static str>, E
         _ if mime_type == &mime::IMAGE_GIF => Some("gif"),
         _ if mime_type == &mime::APPLICATION_PDF => Some("pdf"),
         _ if mime_type == "image/webp" => Some("webp"),
+        _ if mime_type == "text/plain" => Some("txt"),
         _ => {
             let guess = mime_guess::get_mime_extensions_str(mime_type.as_ref())
                 .and_then(|types| types.last());

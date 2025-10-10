@@ -77,6 +77,8 @@ function buildDatasetSelectQuery(params: DatasetQueryParams): {
       "function_name",
       "id",
       "episode_id",
+      // When building a dataset from inferences, there are no datapoint names.
+      "NULL as name",
       "input",
       "output",
       "tool_params",
@@ -87,6 +89,8 @@ function buildDatasetSelectQuery(params: DatasetQueryParams): {
       "function_name",
       "id",
       "episode_id",
+      // When building a dataset from inferences, there are no datapoint names.
+      "NULL as name",
       "input",
       "output",
       "output_schema",
@@ -399,7 +403,8 @@ export async function insertRowsForDataset(
       now64() as updated_at,
       null as staled_at,
       subquery.id as source_inference_id,
-      false as is_custom -- if we are using the dataset builder implemented here, the datapoints are not custom
+      false as is_custom, -- if we are using the dataset builder implemented here, the datapoints are not custom,
+      subquery.name as name
     FROM (
       ${sourceQuery}
     ) AS subquery
@@ -440,6 +445,7 @@ export async function getDatasetRows(
           id,
           'chat' as type,
           function_name,
+          name,
           episode_id,
           formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
         FROM ChatInferenceDatapoint
@@ -450,6 +456,7 @@ export async function getDatasetRows(
           id,
           'json' as type,
           function_name,
+          name,
           episode_id,
           formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
         FROM JsonInferenceDatapoint
@@ -484,6 +491,7 @@ export async function getDatapoint(
       dataset_name,
       function_name,
       id,
+      name,
       episode_id,
       input,
       output,
@@ -507,6 +515,7 @@ export async function getDatapoint(
       dataset_name,
       function_name,
       id,
+      name,
       episode_id,
       input,
       output,
@@ -552,6 +561,7 @@ export async function getDatapoint(
       `Expected exactly one result for dataset ${dataset_name} and id ${id}, but found ${allResults.length}`,
     );
   }
+
   const row = DatapointRowSchema.parse(allResults[0]);
   const parsedRow = await parseDatapointRow(row);
 
@@ -613,6 +623,7 @@ export async function staleDatapoint(
       dataset_name,
       function_name,
       id,
+      name,
       episode_id,
       input,
       output,
@@ -629,6 +640,7 @@ export async function staleDatapoint(
       dataset_name,
       function_name,
       id,
+      name,
       episode_id,
       input,
       output,
@@ -673,6 +685,7 @@ export async function insertDatapoint(
       dataset_name: datapoint.dataset_name,
       function_name: datapoint.function_name,
       id: datapoint.id,
+      name: datapoint.name,
       episode_id: datapoint.episode_id,
       input: input,
       output: datapoint.output,

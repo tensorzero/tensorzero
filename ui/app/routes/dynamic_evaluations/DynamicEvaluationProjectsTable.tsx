@@ -10,6 +10,7 @@ import {
 } from "~/components/ui/table";
 import { formatDate } from "~/utils/date";
 import type { DynamicEvaluationProject } from "~/utils/clickhouse/dynamic_evaluations";
+import { toDynamicEvaluationProjectUrl } from "~/utils/urls";
 
 export default function DynamicEvaluationProjectsTable({
   dynamicEvaluationProjects,
@@ -34,7 +35,7 @@ export default function DynamicEvaluationProjectsTable({
               <TableRow key={project.name}>
                 <TableCell className="max-w-[200px]">
                   <Link
-                    to={`/dynamic_evaluations/projects/${project.name}`}
+                    to={toDynamicEvaluationProjectUrl(project.name)}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">

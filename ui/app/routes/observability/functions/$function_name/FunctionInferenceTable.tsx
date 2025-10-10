@@ -10,6 +10,7 @@ import {
 import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
+import { toInferenceUrl, toEpisodeUrl } from "~/utils/urls";
 
 export default function FunctionInferenceTable({
   inferences,
@@ -35,13 +36,13 @@ export default function FunctionInferenceTable({
               <TableCell className="max-w-[200px]">
                 <TableItemShortUuid
                   id={inference.id}
-                  link={`/observability/inferences/${inference.id}`}
+                  link={toInferenceUrl(inference.id)}
                 />
               </TableCell>
               <TableCell>
                 <TableItemShortUuid
                   id={inference.episode_id}
-                  link={`/observability/episodes/${inference.episode_id}`}
+                  link={toEpisodeUrl(inference.episode_id)}
                 />
               </TableCell>
               <TableCell>

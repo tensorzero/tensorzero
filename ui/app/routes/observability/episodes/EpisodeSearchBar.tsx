@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router";
 import { z } from "zod";
+import { toEpisodeUrl } from "~/utils/urls";
 import { Button } from "~/components/ui/button";
 import {
   Form,
@@ -29,7 +30,7 @@ export default function EpisodeSearchBar() {
   });
 
   const onSubmit = (data: FormValues) => {
-    navigate(`/observability/episodes/${data.episodeId}`);
+    navigate(toEpisodeUrl(data.episodeId));
     form.reset();
   };
 

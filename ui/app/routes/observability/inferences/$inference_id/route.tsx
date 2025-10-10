@@ -23,12 +23,10 @@ import BasicInfo from "./InferenceBasicInfo";
 import InputSnippet from "~/components/inference/InputSnippet";
 import { Output } from "~/components/inference/Output";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
-import {
-  addHumanFeedback,
-  getTensorZeroClient,
-} from "~/utils/tensorzero.server";
+import { addHumanFeedback } from "~/utils/tensorzero.server";
+import { handleAddToDatasetAction } from "~/utils/dataset.server";
 import { ParameterCard } from "./InferenceParameters";
-import { TagsTable } from "~/components/utils/TagsTable";
+import { TagsTable } from "~/components/tags/TagsTable";
 import { ModelInferencesTable } from "./ModelInferencesTable";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
@@ -51,7 +49,7 @@ import {
 } from "~/routes/api/tensorzero/inference.utils";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { TryWithButton } from "~/components/inference/TryWithButton";
-import { AddToDatasetButton } from "./AddToDatasetButton";
+import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
@@ -63,7 +61,7 @@ import { getUsedVariants } from "~/utils/clickhouse/function";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 
 export const handle: RouteHandle = {
-  crumb: (match) => [match.params.inference_id!],
+  crumb: (match) => [{ label: match.params.inference_id!, isIdentifier: true }],
 };
 
 export async function loader({ request, params }: Route.LoaderArgs) {
@@ -155,47 +153,7 @@ export async function action({ request }: Route.ActionArgs) {
   const _action = formData.get("_action");
   switch (_action) {
     case "addToDataset": {
-      const dataset = formData.get("dataset");
-      const output = formData.get("output");
-      const inferenceId = formData.get("inference_id");
-      const functionName = formData.get("function_name");
-      const variantName = formData.get("variant_name");
-      const episodeId = formData.get("episode_id");
-      if (
-        !dataset ||
-        !output ||
-        !inferenceId ||
-        !functionName ||
-        !variantName ||
-        !episodeId
-      ) {
-        return data<ActionData>(
-          { error: "Missing required fields" },
-          { status: 400 },
-        );
-      }
-      try {
-        const datapoint = await getTensorZeroClient().createDatapoint(
-          dataset.toString(),
-          inferenceId.toString(),
-          output.toString() as "inherit" | "demonstration" | "none",
-          functionName.toString(),
-          variantName.toString(),
-          episodeId.toString(),
-        );
-        return data<ActionData>({
-          redirectTo: `/datasets/${dataset.toString()}/datapoint/${datapoint.id}`,
-        });
-      } catch (error) {
-        logger.error(error);
-        return data<ActionData>(
-          {
-            error:
-              "Failed to create datapoint as a datapoint exists with the same `source_inference_id`",
-          },
-          { status: 400 },
-        );
-      }
+      return handleAddToDatasetAction(formData);
     }
     case "addFeedback": {
       try {
@@ -283,18 +241,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
   const functionConfig = useFunctionConfig(inference.function_name);
   const variants = Object.keys(functionConfig?.variants || {});
-  const addToDatasetFetcher = useFetcher<typeof action>();
-  const addToDatasetError =
-    addToDatasetFetcher.state === "idle" && addToDatasetFetcher.data?.error
-      ? addToDatasetFetcher.data.error
-      : null;
-  useEffect(() => {
-    const currentState = addToDatasetFetcher.state;
-    const data = addToDatasetFetcher.data;
-    if (currentState === "idle" && data?.redirectTo) {
-      navigate(data.redirectTo);
-    }
-  }, [addToDatasetFetcher.data, addToDatasetFetcher.state, navigate]);
 
   const demonstrationFeedbackFetcher = useFetcher<typeof action>();
   const demonstrationFeedbackFormError =
@@ -315,20 +261,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     navigate,
   ]);
 
-  const handleAddToDataset = (
-    dataset: string,
-    output: "inherit" | "demonstration" | "none",
-  ) => {
-    const formData = new FormData();
-    formData.append("dataset", dataset);
-    formData.append("output", output);
-    formData.append("inference_id", inference.id);
-    formData.append("function_name", inference.function_name);
-    formData.append("variant_name", inference.variant_name);
-    formData.append("episode_id", inference.episode_id);
-    formData.append("_action", "addToDataset");
-    addToDatasetFetcher.submit(formData, { method: "post", action: "." });
-  };
   const { toast } = useToast();
 
   useEffect(() => {
@@ -448,12 +380,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           modelInferences={model_inferences}
         />
 
-        {addToDatasetError && (
-          <div className="mt-2 inline-block rounded-md bg-red-50 p-2 text-sm text-red-500">
-            {addToDatasetError}
-          </div>
-        )}
-
         <ActionBar>
           <TryWithButton
             options={options}
@@ -462,7 +388,10 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
             isDefaultFunction={isDefault}
           />
           <AddToDatasetButton
-            onDatasetSelect={handleAddToDataset}
+            inferenceId={inference.id}
+            functionName={inference.function_name}
+            variantName={inference.variant_name}
+            episodeId={inference.episode_id}
             hasDemonstration={hasDemonstration}
           />
           <HumanFeedbackModal
@@ -561,7 +490,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Tags" />
-          <TagsTable tags={inference.tags} />
+          <TagsTable tags={inference.tags} isEditing={false} />
         </SectionLayout>
 
         <SectionLayout>

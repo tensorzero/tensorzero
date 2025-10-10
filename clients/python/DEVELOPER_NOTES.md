@@ -24,6 +24,8 @@ uv run python
 
 ## Running tests
 
+First, build the client with `uv run maturin develop --uv --features e2e_tests`.
+
 Integration tests can be run with `./test.sh` (this requires the same setup as `cargo test-e2e` - see `CONTRIBUTING.md`)
 
 This also runs all tests for OpenAI compatibility in Python.

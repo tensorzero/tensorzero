@@ -16,7 +16,7 @@ use crate::{
     inference::types::{ContentBlock, ContentBlockChatOutput},
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     optimization::{OptimizationJobInfo, OptimizerOutput},
-    providers::openai::{OpenAIRequestToolCall, PROVIDER_TYPE},
+    providers::openai::{OpenAIMessagesConfig, OpenAIRequestToolCall, PROVIDER_TYPE},
     stored_inference::LazyRenderedSample,
     tool::ToolCall,
 };
@@ -348,10 +348,14 @@ impl<'a> OpenAISupervisedRow<'a> {
             inference
                 .system_input
                 .as_deref()
-                .map(super::SystemOrDeveloper::System),
+                .map(|m| super::SystemOrDeveloper::System(Cow::Borrowed(m))),
             &inference.messages,
-            None,
-            PROVIDER_TYPE,
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
+                fetch_and_encode_input_files_before_inference: true,
+            },
         )
         .await?;
         let Some(output) = &inference.output else {
@@ -368,7 +372,12 @@ impl<'a> OpenAISupervisedRow<'a> {
             output.iter().map(|c| c.clone().into()).collect::<Vec<_>>();
         let final_assistant_message = tensorzero_to_openai_assistant_message(
             Cow::Owned(output_content_blocks),
-            PROVIDER_TYPE,
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
+                fetch_and_encode_input_files_before_inference: true,
+            },
         )
         .await?;
         messages.push(final_assistant_message);
@@ -413,10 +422,14 @@ impl<'a> OpenAIReinforcementRow<'a> {
             inference
                 .system_input
                 .as_deref()
-                .map(super::SystemOrDeveloper::Developer),
+                .map(|m| super::SystemOrDeveloper::Developer(Cow::Borrowed(m))),
             &inference.messages,
-            None,
-            PROVIDER_TYPE,
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                // For now, this isn't configurable in RFT (we should never need to resolve a file URL here)
+                fetch_and_encode_input_files_before_inference: true,
+            },
         )
         .await?;
         let Some(output) = &inference.output else {
@@ -549,6 +562,7 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizat
                     model_name: model_name.clone(),
                     api_base: None,
                     api_key_location: None,
+                    api_type: Default::default(),
                 },
                 extra_headers: None,
                 extra_body: None,
@@ -819,7 +833,7 @@ mod tests {
         let succeeded_model = json!({
             "id": "ftjob-123",
             "status": "succeeded",
-            "fine_tuned_model": "ft:gpt-3.5-turbo:my-org:custom_suffix:id",
+            "fine_tuned_model": "ft:gpt-4.1-mini:my-org:custom_suffix:id",
             "created_at": 1620000000,
             "metadata": {},
         });
@@ -837,7 +851,7 @@ mod tests {
             "id": "ftjob-456",
             "status": "succeeded",
             "result_files": ["file-abc"],
-            "fine_tuned_model": "ft:gpt-3.5-turbo:my-org:custom_suffix:id",
+            "fine_tuned_model": "ft:gpt-4.1-mini:my-org:custom_suffix:id",
             "created_at": 1620000000,
             "metadata": {},
         });

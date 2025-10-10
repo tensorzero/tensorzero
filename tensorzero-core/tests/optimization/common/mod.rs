@@ -11,7 +11,7 @@ use tracing_subscriber::{self, EnvFilter};
 use tensorzero::{InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role};
 use tensorzero_core::{
     cache::CacheOptions,
-    config::{Config, ConfigFileGlob, ProviderTypesConfig},
+    config::{provider_types::ProviderTypesConfig, Config, ConfigFileGlob},
     db::{
         clickhouse::{test_helpers::CLICKHOUSE_URL, ClickHouseConnectionInfo, ClickhouseFormat},
         postgres::PostgresConnectionInfo,
@@ -27,6 +27,7 @@ use tensorzero_core::{
         ModelInput, RequestMessage, ResolvedContentBlock, ResolvedRequestMessage, StoredInput,
         StoredInputMessage, StoredInputMessageContent, Text,
     },
+    model_table::ProviderTypeDefaultCredentials,
     optimization::{
         JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
     },
@@ -70,7 +71,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
 
     let optimizer_info = test_case
         .get_optimizer_info(use_mock_inference_provider())
-        .load()
+        .load(&ProviderTypeDefaultCredentials::default())
         .await
         .unwrap();
 
@@ -122,7 +123,14 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .unwrap();
     let mut status;
     loop {
-        status = job_handle.poll(&client, &credentials).await.unwrap();
+        status = job_handle
+            .poll(
+                &client,
+                &credentials,
+                &ProviderTypeDefaultCredentials::default(),
+            )
+            .await
+            .unwrap();
         println!("Status: `{status:?}` Handle: `{job_handle}`");
         if matches!(status, OptimizationJobInfo::Completed { .. }) {
             break;
@@ -146,7 +154,11 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     match output {
         OptimizerOutput::Model(model_config) => {
             let model_config = model_config
-                .load("test-fine-tuned-model", &ProviderTypesConfig::default())
+                .load(
+                    "test-fine-tuned-model",
+                    &ProviderTypesConfig::default(),
+                    &ProviderTypeDefaultCredentials::default(),
+                )
                 .await
                 .unwrap();
             // Test the model configuration
@@ -176,6 +188,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 json_mode: JsonMode::Off.into(),
                 function_type: FunctionType::Chat,
                 output_schema: None,
+                fetch_and_encode_input_files_before_inference: true,
                 extra_body: Default::default(),
                 extra_headers: Default::default(),
                 extra_cache_key: None,

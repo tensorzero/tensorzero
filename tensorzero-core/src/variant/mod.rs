@@ -1,5 +1,3 @@
-use backon::ExponentialBuilder;
-use backon::Retryable;
 use futures::StreamExt;
 use itertools::izip;
 #[cfg(feature = "pyo3")]
@@ -41,8 +39,8 @@ use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::model::StreamResponse;
 use crate::model::StreamResponseAndMessages;
-use crate::rate_limiting::TicketBorrows;
 use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
+use crate::utils::retries::RetryConfig;
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 
 pub mod best_of_n_sampling;
@@ -136,6 +134,7 @@ pub struct InferenceConfig<'request> {
     pub ids: InferenceIds,
     pub extra_body: Cow<'request, UnfilteredInferenceExtraBody>,
     pub extra_headers: Cow<'request, UnfilteredInferenceExtraHeaders>,
+    pub fetch_and_encode_input_files_before_inference: bool,
     /// Optional arbitrary data, only used when constructing the cache key.
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
@@ -151,6 +150,7 @@ pub struct BatchInferenceConfig<'a> {
     pub dynamic_output_schemas: &'a Vec<Option<DynamicJSONSchema>>,
     pub function_name: &'a str,
     pub variant_name: &'a str,
+    pub fetch_and_encode_input_files_before_inference: bool,
 }
 impl<'a> BatchInferenceConfig<'a> {
     pub fn inference_configs(
@@ -175,6 +175,8 @@ impl<'a> BatchInferenceConfig<'a> {
                     inference_id: *inference_id,
                     episode_id: *episode_id,
                 },
+                fetch_and_encode_input_files_before_inference: self
+                    .fetch_and_encode_input_files_before_inference,
                 // Not yet supported for batch inference requests
                 extra_body: Default::default(),
                 extra_headers: Default::default(),
@@ -195,7 +197,6 @@ pub struct ModelUsedInfo {
     pub input_messages: Vec<RequestMessage>,
     pub inference_params: InferenceParams,
     pub cached: bool,
-    pub ticket_borrow: TicketBorrows,
     // These responses will get added into the final inference result (after `collect_chunks` finishes)
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
 }
@@ -631,6 +632,8 @@ where
                     .map(Cow::Owned),
                 extra_body,
                 extra_headers,
+                fetch_and_encode_input_files_before_inference: inference_config
+                    .fetch_and_encode_input_files_before_inference,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
             }
         }
@@ -659,6 +662,8 @@ where
                 presence_penalty: inference_params.chat_completion.presence_penalty,
                 frequency_penalty: inference_params.chat_completion.frequency_penalty,
                 seed: inference_params.chat_completion.seed,
+                fetch_and_encode_input_files_before_inference: inference_config
+                    .fetch_and_encode_input_files_before_inference,
                 stream,
                 // In json mode, we fall back to 'JsonMode::Strict' if it was unset in both
                 // the `chat_completions` params and the variant config.
@@ -695,13 +700,14 @@ struct InferModelRequestArgs<'a, 'request> {
 async fn infer_model_request(
     args: InferModelRequestArgs<'_, '_>,
 ) -> Result<InferenceResult, Error> {
-    let model_inference_response = (|| async {
-        args.model_config
-            .infer(&args.request, args.clients, &args.model_name)
-            .await
-    })
-    .retry(args.retry_config.get_backoff())
-    .await?;
+    let model_inference_response = args
+        .retry_config
+        .retry(|| async {
+            args.model_config
+                .infer(&args.request, args.clients, &args.model_name)
+                .await
+        })
+        .await?;
 
     let original_response = model_inference_response.raw_response.clone();
     let model_inference_result =
@@ -740,14 +746,13 @@ async fn infer_model_request_stream<'request>(
                 cached,
             },
         messages: input_messages,
-        ticket_borrow,
-    } = (|| async {
-        model_config
-            .infer_stream(&request, clients, &model_name)
-            .await
-    })
-    .retry(retry_config.get_backoff())
-    .await?;
+    } = retry_config
+        .retry(|| async {
+            model_config
+                .infer_stream(&request, clients, &model_name)
+                .await
+        })
+        .await?;
     let system = request.system.clone();
     let model_used_info = ModelUsedInfo {
         model_name,
@@ -759,47 +764,11 @@ async fn infer_model_request_stream<'request>(
         system,
         input_messages,
         cached,
-        ticket_borrow,
     };
     let config_type = function.config_type();
     let stream =
         stream.map(move |chunk| chunk.map(|chunk| InferenceResultChunk::new(chunk, config_type)));
-    Ok((Box::pin(stream), model_used_info))
-}
-
-#[derive(Debug, Deserialize, Copy, Clone, Serialize, ts_rs::TS)]
-#[ts(export)]
-pub struct RetryConfig {
-    #[serde(default = "default_num_retries")]
-    pub num_retries: usize,
-    #[serde(default = "default_max_delay_s")]
-    pub max_delay_s: f32,
-}
-
-impl Default for RetryConfig {
-    fn default() -> Self {
-        RetryConfig {
-            num_retries: default_num_retries(),
-            max_delay_s: default_max_delay_s(),
-        }
-    }
-}
-
-fn default_num_retries() -> usize {
-    0
-}
-
-fn default_max_delay_s() -> f32 {
-    10.0
-}
-
-impl RetryConfig {
-    pub fn get_backoff(&self) -> backon::ExponentialBuilder {
-        ExponentialBuilder::default()
-            .with_jitter()
-            .with_max_delay(Duration::from_secs_f32(self.max_delay_s))
-            .with_max_times(self.num_retries)
-    }
+    Ok((StreamExt::peekable(Box::pin(stream)), model_used_info))
 }
 
 impl<'a> BatchInferenceConfig<'a> {
@@ -809,6 +778,7 @@ impl<'a> BatchInferenceConfig<'a> {
         dynamic_output_schemas: &'a Vec<Option<DynamicJSONSchema>>,
         function_name: &'a str,
         variant_name: &'a str,
+        fetch_and_encode_input_files_before_inference: bool,
     ) -> Self {
         Self {
             tool_configs,
@@ -816,6 +786,7 @@ impl<'a> BatchInferenceConfig<'a> {
             dynamic_output_schemas,
             function_name,
             variant_name,
+            fetch_and_encode_input_files_before_inference,
         }
     }
 }
@@ -882,6 +853,7 @@ mod tests {
     use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::error::ErrorDetails;
+    use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::http::TensorzeroHttpClient;
     use crate::inference::types::{
@@ -924,6 +896,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -965,6 +938,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         let json_mode = JsonMode::Off;
 
@@ -1012,7 +986,8 @@ mod tests {
             output_schema: output_schema.clone(),
             implicit_tool_call_config: implicit_tool_call_config.clone(),
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
 
         let json_mode = JsonMode::On;
@@ -1060,6 +1035,7 @@ mod tests {
             function_name: "test_function",
             variant_name: "test_variant",
             dynamic_output_schema: Some(&dynamic_output_schema),
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -1159,6 +1135,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -1174,6 +1151,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
 
         let request_messages = vec![RequestMessage {
@@ -1198,6 +1176,7 @@ mod tests {
             function_type: FunctionType::Chat,
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
             ..Default::default()
         };
 
@@ -1287,7 +1266,8 @@ mod tests {
                 parallel_tool_calls: None,
             },
             description: None,
-            all_template_names: HashSet::new(),
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         let output_schema = json!({
             "type": "object",
@@ -1460,6 +1440,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
             extra_cache_key: None,
@@ -1475,6 +1456,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
 
         let request_messages = vec![RequestMessage {
@@ -1621,6 +1603,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
 
         // Create an input message
@@ -1772,6 +1755,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })));
 
         let request_messages = vec![RequestMessage {

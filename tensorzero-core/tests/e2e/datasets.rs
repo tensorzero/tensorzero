@@ -96,6 +96,7 @@ async fn test_datapoint_insert_synthetic_chat() {
       "is_custom": true,
       "staled_at": null,
       "source_inference_id": source_inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -650,6 +651,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
       "is_custom": true,
       "staled_at": null,
       "source_inference_id": null,
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -729,6 +731,7 @@ async fn test_datapoint_insert_synthetic_json() {
       "is_custom": true,
       "staled_at": null,
       "source_inference_id": source_inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 
@@ -846,6 +849,7 @@ async fn test_datapoint_insert_synthetic_json() {
       "is_custom": true,
       "staled_at": null,
       "source_inference_id": source_inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 
@@ -952,6 +956,7 @@ async fn test_datapoint_insert_synthetic_json() {
       "is_custom": true,
       "staled_at": null,
       "source_inference_id": source_inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -1511,6 +1516,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
       "is_custom": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 
@@ -1627,6 +1633,7 @@ async fn test_datapoint_insert_output_none_chat() {
       "is_custom": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -1799,6 +1806,7 @@ async fn test_datapoint_insert_output_demonstration_chat() {
       "staled_at": null,
       "is_custom": false,
       "source_inference_id": inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -1897,6 +1905,7 @@ async fn test_datapoint_insert_output_inherit_json() {
       "staled_at": null,
       "is_custom": false,
       "source_inference_id": inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 
@@ -2012,6 +2021,7 @@ async fn test_datapoint_insert_output_none_json() {
       "is_custom": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2131,6 +2141,7 @@ async fn test_datapoint_insert_output_demonstration_json() {
       "is_custom": false,
       "staled_at": null,
       "source_inference_id": inference_id.to_string(),
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2278,6 +2289,7 @@ async fn test_datapoint_insert_missing_output_chat() {
       "is_custom": true,
       "staled_at": null,
       "source_inference_id": null,
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2343,6 +2355,7 @@ async fn test_datapoint_insert_null_output_chat() {
       "is_custom": true,
       "staled_at": null,
       "source_inference_id": null,
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2409,6 +2422,7 @@ async fn test_datapoint_insert_missing_output_json() {
       "is_custom": false,
       "staled_at": null,
       "source_inference_id": null,
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2475,6 +2489,7 @@ async fn test_datapoint_insert_null_output_json() {
       "is_custom": true,
       "staled_at": null,
       "source_inference_id": null,
+      "name": null,
     });
     assert_eq!(datapoint, expected);
 }

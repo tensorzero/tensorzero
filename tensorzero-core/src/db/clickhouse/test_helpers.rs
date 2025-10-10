@@ -425,6 +425,7 @@ pub async fn stale_datapoint_clickhouse(
             dataset_name,
             function_name,
             id,
+            name,
             episode_id,
             input,
             output,
@@ -440,6 +441,7 @@ pub async fn stale_datapoint_clickhouse(
             dataset_name,
             function_name,
             id,
+            name,
             episode_id,
             input,
             output,
@@ -465,6 +467,7 @@ pub async fn stale_datapoint_clickhouse(
             dataset_name,
             function_name,
             id,
+            name,
             episode_id,
             input,
             output,
@@ -480,6 +483,7 @@ pub async fn stale_datapoint_clickhouse(
             dataset_name,
             function_name,
             id,
+            name,
             episode_id,
             input,
             output,
@@ -531,7 +535,7 @@ pub async fn select_dynamic_evaluation_run_episode_clickhouse(
     episode_id: Uuid,
 ) -> Option<DynamicEvaluationRunEpisodeRow> {
     let query = format!(
-        "SELECT run_id, uint_to_uuid(episode_id_uint) as episode_id, variant_pins, datapoint_name, tags FROM DynamicEvaluationRunEpisode WHERE run_id = '{run_id}' AND episode_id_uint = toUInt128(toUUID('{episode_id}')) FORMAT JSONEachRow",
+        "SELECT run_id, uint_to_uuid(episode_id_uint) as episode_id, variant_pins, datapoint_name AS task_name, tags FROM DynamicEvaluationRunEpisode WHERE run_id = '{run_id}' AND episode_id_uint = toUInt128(toUUID('{episode_id}')) FORMAT JSONEachRow",
     );
 
     let text = clickhouse_connection_info

@@ -2,7 +2,7 @@
   "name": "tensorzero-ui",
   "private": true,
   "type": "module",
-  "version": "2025.9.5",
+  "version": "2025.10.1",
   "scripts": {
     "build": "NODE_ENV=production react-router build",
     "dev": "react-router dev",
@@ -96,7 +96,7 @@
     "storybook-addon-remix-react-router": "^5.0.0",
     "tailwindcss": "^4.1.11",
     "typescript": "^5.8.2",
-    "vite": "^6.3.6",
+    "vite": "^7.0.7",
     "vite-plugin-devtools-json": "^0.3.0",
     "vite-plugin-wasm": "^3.4.1",
     "vite-tsconfig-paths": "^5.1.4",

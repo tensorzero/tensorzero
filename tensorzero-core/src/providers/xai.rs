@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::sync::OnceLock;
 
 use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
@@ -20,10 +19,11 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseArgs,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
+use crate::providers::openai::OpenAIMessagesConfig;
 
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
@@ -39,10 +39,6 @@ lazy_static! {
     };
 }
 
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("XAI_API_KEY".to_string())
-}
-
 const PROVIDER_NAME: &str = "xAI";
 pub const PROVIDER_TYPE: &str = "xai";
 
@@ -55,24 +51,12 @@ pub struct XAIProvider {
     credentials: XAICredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<XAICredentials> = OnceLock::new();
-
 impl XAIProvider {
-    pub fn new(
-        model_name: String,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-
-        Ok(XAIProvider {
+    pub fn new(model_name: String, credentials: XAICredentials) -> Self {
+        XAIProvider {
             model_name,
             credentials,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {
@@ -362,10 +346,17 @@ impl<'a> XAIRequest<'a> {
         let response_format = XAIResponseFormat::new(request.json_mode, request.output_schema);
 
         let messages = prepare_openai_messages(
-            request.system.as_deref().map(SystemOrDeveloper::System),
+            request
+                .system
+                .as_deref()
+                .map(|m| SystemOrDeveloper::System(Cow::Borrowed(m))),
             &request.messages,
-            Some(&request.json_mode),
-            PROVIDER_TYPE,
+            OpenAIMessagesConfig {
+                json_mode: Some(&request.json_mode),
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: request
+                    .fetch_and_encode_input_files_before_inference,
+            },
         )
         .await?;
 

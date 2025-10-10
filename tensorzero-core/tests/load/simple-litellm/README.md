@@ -10,7 +10,7 @@
   curl --location 'http://localhost:4000/chat/completions' \
     --header 'Content-Type: application/json' \
     --data '{
-        "model": "gpt-3.5-turbo",
+        "model": "gpt-4.1-mini",
         "messages": [
            {
                 "role": "user",

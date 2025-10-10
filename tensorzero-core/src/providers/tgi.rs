@@ -20,7 +20,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
 use std::pin::Pin;
-use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
@@ -46,19 +45,15 @@ use crate::inference::types::{
 use crate::inference::InferenceProvider;
 use crate::inference::TensorZeroEventError;
 use crate::inference::WrappedProvider;
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::providers::openai::check_api_base_suffix;
+use crate::providers::openai::{check_api_base_suffix, OpenAIMessagesConfig};
 use crate::tool::ToolCall;
 
 const PROVIDER_NAME: &str = "TGI";
 pub const PROVIDER_TYPE: &str = "tgi";
-
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("TGI_API_KEY".to_string())
-}
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -69,24 +64,15 @@ pub struct TGIProvider {
     credentials: TGICredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<TGICredentials> = OnceLock::new();
-
 impl TGIProvider {
-    pub fn new(api_base: Url, api_key_location: Option<CredentialLocation>) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-
+    pub fn new(api_base: Url, credentials: TGICredentials) -> Self {
         // Check if the api_base has the `/chat/completions` suffix and warn if it does
         check_api_base_suffix(&api_base);
 
-        Ok(TGIProvider {
+        TGIProvider {
             api_base,
             credentials,
-        })
+        }
     }
 }
 
@@ -454,10 +440,17 @@ impl<'a> TGIRequest<'a> {
         };
 
         let messages = prepare_openai_messages(
-            request.system.as_deref().map(SystemOrDeveloper::System),
+            request
+                .system
+                .as_deref()
+                .map(|m| SystemOrDeveloper::System(Cow::Borrowed(m))),
             &request.messages,
-            Some(&request.json_mode),
-            PROVIDER_TYPE,
+            OpenAIMessagesConfig {
+                json_mode: Some(&request.json_mode),
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: request
+                    .fetch_and_encode_input_files_before_inference,
+            },
         )
         .await?;
 
@@ -1048,29 +1041,25 @@ mod tests {
     #[test]
     #[traced_test]
     fn test_tgi_provider_new_api_base_check() {
-        let api_key_location = Some(CredentialLocation::None);
-
         // Valid cases (should not warn)
         let _ = TGIProvider::new(
             Url::parse("http://localhost:1234/v1/").unwrap(),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            TGICredentials::None,
+        );
 
         let _ = TGIProvider::new(
             Url::parse("http://localhost:1234/v1").unwrap(),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            TGICredentials::None,
+        );
 
         // Invalid cases (should warn)
         let invalid_url_1 = Url::parse("http://localhost:1234/chat/completions").unwrap();
-        let _ = TGIProvider::new(invalid_url_1.clone(), api_key_location.clone()).unwrap();
+        let _ = TGIProvider::new(invalid_url_1.clone(), TGICredentials::None);
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_1.as_ref()));
 
         let invalid_url_2 = Url::parse("http://localhost:1234/v1/chat/completions/").unwrap();
-        let _ = TGIProvider::new(invalid_url_2.clone(), api_key_location.clone()).unwrap();
+        let _ = TGIProvider::new(invalid_url_2.clone(), TGICredentials::None);
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_2.as_ref()));
     }

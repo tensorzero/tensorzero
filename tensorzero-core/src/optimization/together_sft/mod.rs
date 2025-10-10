@@ -1,6 +1,7 @@
 use crate::http::TensorzeroHttpClient;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
+use crate::model_table::{ProviderKind, ProviderTypeDefaultCredentials, TogetherKind};
 use futures::future::try_join_all;
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions::PyValueError, prelude::*};
@@ -15,16 +16,15 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::inference::types::ContentBlock;
 use crate::model::{
-    build_creds_caching_default, CredentialLocation, UninitializedModelConfig,
-    UninitializedModelProvider, UninitializedProviderConfig,
+    CredentialLocation, UninitializedModelConfig, UninitializedModelProvider,
+    UninitializedProviderConfig,
 };
 use crate::optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput};
 use crate::providers::helpers::UrlParseErrExt;
-use crate::providers::openai::OpenAIRequestMessage;
 use crate::providers::openai::{tensorzero_to_openai_assistant_message, OpenAITool};
+use crate::providers::openai::{OpenAIMessagesConfig, OpenAIRequestMessage};
 use crate::providers::together::{
-    default_api_key_location, prepare_together_messages, TogetherCredentials, DEFAULT_CREDENTIALS,
-    PROVIDER_TYPE, TOGETHER_API_BASE,
+    prepare_together_messages, TogetherCredentials, PROVIDER_TYPE, TOGETHER_API_BASE,
 };
 use crate::stored_inference::{LazyRenderedSample, RenderedSample};
 
@@ -220,9 +220,17 @@ impl<'a> TogetherSupervisedRow<'a> {
             }
             None => vec![],
         };
-        let mut messages =
-            prepare_together_messages(inference.system_input.as_deref(), &inference.messages)
-                .await?;
+        let mut messages = prepare_together_messages(
+            inference.system_input.as_deref(),
+            &inference.messages,
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
+                fetch_and_encode_input_files_before_inference: true,
+            },
+        )
+        .await?;
 
         let Some(output) = &inference.output else {
             return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
@@ -238,7 +246,12 @@ impl<'a> TogetherSupervisedRow<'a> {
             output.iter().map(|c| c.clone().into()).collect::<Vec<_>>();
         let final_assistant_message = tensorzero_to_openai_assistant_message(
             Cow::Owned(output_content_blocks),
-            PROVIDER_TYPE,
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
+                fetch_and_encode_input_files_before_inference: true,
+            },
         )
         .await?;
         messages.push(final_assistant_message);
@@ -288,8 +301,7 @@ impl UninitializedTogetherSFTConfig {
         let credentials = credentials
             .map(|s| serde_json::from_str(&s))
             .transpose()
-            .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid credentials JSON: {e}")))?
-            .or_else(|| Some(default_api_key_location()));
+            .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid credentials JSON: {e}")))?;
         let api_base = api_base
             .map(|s| {
                 Url::parse(&s)
@@ -435,16 +447,16 @@ impl UninitializedTogetherSFTConfig {
 }
 
 impl UninitializedTogetherSFTConfig {
-    pub fn load(self) -> Result<TogetherSFTConfig, Error> {
+    pub async fn load(
+        self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<TogetherSFTConfig, Error> {
         Ok(TogetherSFTConfig {
             model: self.model,
             api_base: self.api_base.unwrap_or_else(|| TOGETHER_API_BASE.clone()),
-            credentials: build_creds_caching_default(
-                self.credentials.clone(),
-                default_api_key_location(),
-                PROVIDER_TYPE,
-                &DEFAULT_CREDENTIALS,
-            )?,
+            credentials: TogetherKind
+                .get_defaulted_credential(self.credentials.as_ref(), default_credentials)
+                .await?,
             credential_location: self.credentials,
             // Hyperparameters
             n_epochs: self.n_epochs,
@@ -833,13 +845,12 @@ impl JobHandle for TogetherSFTJobHandle {
         &self,
         client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
-        let together_credentials = build_creds_caching_default(
-            self.credential_location.clone(),
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
+        let together_credentials: TogetherCredentials = TogetherKind
+            .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
+            .await?;
+
         let api_key = together_credentials.get_api_key(credentials)?;
         let res: TogetherJobResponse = client
             .get(

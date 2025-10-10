@@ -10,7 +10,7 @@ import {
   FileText,
   FileAudio,
   AlignLeftIcon,
-  BlocksIcon,
+  FileCode,
 } from "lucide-react";
 import { useBase64UrlToBlobUrl } from "~/hooks/use-blob-url";
 import { CodeEditor, useFormattedJson } from "../ui/code-editor";
@@ -25,16 +25,16 @@ export function EmptyMessage({ message = "No content" }: { message?: string }) {
 }
 
 interface LabelProps {
-  text?: string;
+  children?: React.ReactNode;
   icon?: React.ReactNode;
 }
 
-export function Label({ text, icon }: LabelProps) {
+function Label({ children, icon }: LabelProps) {
   return (
-    text && (
+    children && (
       <div className="flex flex-row items-center gap-1">
         {icon}
-        <span className="text-fg-tertiary text-xs font-medium">{text}</span>
+        <span className="text-fg-tertiary text-xs font-medium">{children}</span>
       </div>
     )
   );
@@ -59,14 +59,13 @@ export function TextMessage({
 }: TextMessageProps) {
   const formattedContent = useFormattedJson(content || "");
 
-  return !content ? (
+  return content === undefined && !isEditing ? (
     <EmptyMessage message={emptyMessage} />
   ) : (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
-      <Label
-        text={label}
-        icon={<AlignLeftIcon className="text-fg-muted h-3 w-3" />}
-      />
+      <Label icon={<AlignLeftIcon className="text-fg-muted h-3 w-3" />}>
+        {label}
+      </Label>
       <CodeEditor
         value={formattedContent}
         readOnly={!isEditing}
@@ -79,38 +78,32 @@ export function TextMessage({
   );
 }
 
-export function ParameterizedMessage({
-  parameters,
+export function TemplateMessage({
   templateName,
+  arguments: templateArguments,
   isEditing,
   onChange,
 }: {
-  parameters?: unknown;
-  templateName?: string;
+  templateName: string;
+  arguments: unknown;
   isEditing?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onChange?: (value: any) => void;
 }) {
-  const formattedJson = useFormattedJson(parameters ?? {});
+  const formattedJson = useFormattedJson(templateArguments ?? {});
   const [jsonError, setJsonError] = useState<string | null>(null);
-
-  const labelText = templateName
-    ? `Template: ${templateName}`
-    : "Template Arguments";
 
   return (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
-      <Label
-        text={labelText}
-        icon={<BlocksIcon className="text-fg-muted h-3 w-3" />}
-      />
+      <Label icon={<FileCode className="text-fg-muted h-3 w-3" />}>
+        Template: <span className="font-mono text-xs">{templateName}</span>
+      </Label>
       <CodeEditor
         allowedLanguages={["json"]}
         value={formattedJson}
         readOnly={!isEditing}
         onChange={(updatedJson) => {
           try {
-            // TODO: does is satisfy the schema?
             const parsedJson = JSON.parse(updatedJson);
             setJsonError(null);
             onChange?.(parsedJson);
@@ -213,10 +206,9 @@ export function ToolCallMessage(
 
   return (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
-      <Label
-        text="Tool Call"
-        icon={<Terminal className="text-fg-muted h-3 w-3" />}
-      />
+      <Label icon={<Terminal className="text-fg-muted h-3 w-3" />}>
+        Tool Call
+      </Label>
       <ToolDetails
         name={toolName}
         nameLabel={nameLabel}
@@ -252,10 +244,9 @@ export function ToolResultMessage({
 }: ToolResultMessageProps) {
   return (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
-      <Label
-        text="Tool Result"
-        icon={<ArrowRight className="text-fg-muted h-3 w-3" />}
-      />
+      <Label icon={<ArrowRight className="text-fg-muted h-3 w-3" />}>
+        Tool Result
+      </Label>
       <ToolDetails
         name={toolName}
         nameLabel="Name"
@@ -277,10 +268,9 @@ interface ImageMessageProps {
 export function ImageMessage({ url, downloadName }: ImageMessageProps) {
   return (
     <div className="flex flex-col gap-1">
-      <Label
-        text="Image"
-        icon={<ImageIcon className="text-fg-muted h-3 w-3" />}
-      />
+      <Label icon={<ImageIcon className="text-fg-muted h-3 w-3" />}>
+        Image
+      </Label>
       <div>
         <Link
           to={url}
@@ -304,10 +294,9 @@ interface FileErrorMessageProps {
 export function FileErrorMessage({ error }: FileErrorMessageProps) {
   return (
     <div className="flex flex-col gap-1">
-      <Label
-        text="Image (Error)"
-        icon={<ImageIcon className="text-fg-muted h-3 w-3" />}
-      />
+      <Label icon={<ImageIcon className="text-fg-muted h-3 w-3" />}>
+        Image (Error)
+      </Label>
       <div className="border-border bg-bg-tertiary relative aspect-video w-60 min-w-60 rounded-md border">
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-2">
           <ImageOff className="text-fg-muted h-4 w-4" />
@@ -399,10 +388,9 @@ export const AudioMessage: React.FC<FileMessageProps> = ({
 
   return (
     <div className="flex flex-col gap-1">
-      <Label
-        text="Audio"
-        icon={<FileAudio className="text-fg-muted h-3 w-3" />}
-      />
+      <Label icon={<FileAudio className="text-fg-muted h-3 w-3" />}>
+        Audio
+      </Label>
 
       <div className="border-border flex w-80 flex-col gap-4 rounded-md border p-3">
         <FileMetadata mimeType={mimeType} filePath={filePath} />
@@ -423,10 +411,7 @@ export function FileMessage({
 
   return (
     <div className="flex flex-col gap-1">
-      <Label
-        text="File"
-        icon={<FileText className="text-fg-muted h-3 w-3" />}
-      />
+      <Label icon={<FileText className="text-fg-muted h-3 w-3" />}>File</Label>
       <div className="border-border flex w-80 flex-row gap-3 rounded-md border p-3">
         <div className="flex-1">
           <FileMetadata filePath={filePath} mimeType={mimeType} />

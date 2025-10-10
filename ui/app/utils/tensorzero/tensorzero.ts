@@ -257,14 +257,17 @@ export type ToolParams = z.infer<typeof ToolParamsSchema>;
  * Base schema for datapoints with common fields
  */
 const BaseDatapointSchema = z.object({
-  id: z.string().uuid(),
   function_name: z.string(),
+  id: z.string().uuid(),
+  episode_id: z.string().uuid().nullable(),
   input: InputSchema,
   output: JsonValueSchema,
   tags: z.record(z.string()).optional(),
   auxiliary: z.string().optional(),
   is_custom: z.boolean(),
   source_inference_id: z.string().uuid().nullable(),
+  name: z.string().nullable(),
+  staled_at: z.string().datetime().nullable(),
 });
 
 /**

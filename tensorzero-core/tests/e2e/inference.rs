@@ -1909,7 +1909,7 @@ model_name = "json"
 
 #[tokio::test]
 async fn test_original_response_mixture_of_n_flaky_fuser() {
-    let exporter = install_capturing_otel_exporter();
+    let exporter = install_capturing_otel_exporter().await;
     // We use an embedded client so that we can control the number of
     // requests to the flaky judge.
     let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(
@@ -2669,7 +2669,7 @@ pub async fn e2e_test_dynamic_api_key() {
         .await
         .unwrap();
     // Check that the API response is an error since we didn't provide the right key
-    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     let response_json = response.json::<Value>().await.unwrap();
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
     assert!(
@@ -3141,6 +3141,35 @@ async fn test_dummy_only_inference_invalid_default_function_arg() {
     let response = Client::new()
         .post(get_gateway_endpoint("/inference"))
         .json(&bad_system_prompt)
+        .send()
+        .await
+        .unwrap();
+
+    // Should fail with 400 Bad Request
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response_text = response.text().await.unwrap();
+    assert!(
+        response_text.contains(
+            "System message has non-string content but there is no template `system` in any variant"
+        ),
+        "Unexpected error message: {response_text}",
+    );
+
+    let bad_system_prompt_json_function = json!({
+        "function_name": "null_json",
+        "input":{
+            "system": {"assistant_name": "Dr. Mehta"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the name of the capital city of Japan?"
+                }
+            ]},
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&bad_system_prompt_json_function)
         .send()
         .await
         .unwrap();

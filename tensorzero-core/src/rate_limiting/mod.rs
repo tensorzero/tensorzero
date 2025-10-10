@@ -93,14 +93,25 @@ pub struct ScopeInfo<'a> {
 }
 
 impl RateLimitingConfig {
-    #[cfg(test)]
     pub fn rules(&self) -> &Vec<RateLimitingConfigRule> {
         &self.rules
     }
 
-    #[cfg(test)]
     pub fn enabled(&self) -> bool {
         self.enabled
+    }
+
+    pub fn get_rate_limited_resources(&self, scope_info: &ScopeInfo) -> Vec<RateLimitResource> {
+        if !self.enabled {
+            return vec![];
+        }
+        let limits = self.get_active_limits(scope_info);
+        limits
+            .iter()
+            .map(|limit| limit.limit.resource)
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>()
     }
 
     pub async fn consume_tickets<'a>(
@@ -113,15 +124,18 @@ impl RateLimitingConfig {
         if limits.is_empty() {
             return Ok(TicketBorrows::empty());
         }
-        let rate_limit_resource_requests = rate_limited_request.estimated_resource_usage()?;
+
+        let rate_limited_resources = self.get_rate_limited_resources(scope_info);
+        let rate_limit_resource_requests =
+            rate_limited_request.estimated_resource_usage(&rate_limited_resources)?;
         let ticket_requests: Result<Vec<ConsumeTicketsRequest>, Error> = limits
             .iter()
             .map(|limit| limit.get_consume_tickets_request(&rate_limit_resource_requests))
             .collect();
         let ticket_requests = ticket_requests?;
-        let results = client.consume_tickets(ticket_requests).await?;
-        check_borrowed_rate_limits(&limits, &results)?;
-        TicketBorrows::new(results, limits)
+        let results = client.consume_tickets(&ticket_requests).await?;
+
+        TicketBorrows::new(results, limits, ticket_requests)
     }
 
     /// Given a particular scope, finds the RateLimits that are active for that scope.
@@ -160,21 +174,79 @@ impl RateLimitingConfig {
             .collect()
     }
 }
-/// Assumes these are the same length.
-fn check_borrowed_rate_limits(
+
+fn align_and_check_limits(
     limits: &[ActiveRateLimit],
-    results: &[ConsumeTicketsReceipt],
-) -> Result<(), Error> {
-    for (limit, result) in limits.iter().zip(results.iter()) {
-        if !result.success {
-            // TODO: improve the error information here
-            return Err(Error::new(ErrorDetails::RateLimitExceeded {
-                key: limit.get_key()?,
-                tickets_remaining: result.tickets_remaining,
+    receipts: Vec<ConsumeTicketsReceipt>,
+    requests: Vec<ConsumeTicketsRequest>,
+) -> Result<Vec<ConsumeTicketsReceipt>, Error> {
+    // First, we collect the Vec<ConsumeTicketsReceipt> into a HashMap from ActiveRateLimitKey to receipt
+    let mut receipts_map = receipts
+        .into_iter()
+        .map(|r| (r.key.clone(), r))
+        .collect::<HashMap<_, _>>();
+    // Next, check if any reciept has failed
+    if receipts_map.values().any(|r| !r.success) {
+        return Err(get_failed_rate_limits_err(requests, &receipts_map));
+    }
+
+    // Next, we build up a vector of ConsumeTicketsReceipts
+    let mut aligned_receipts = Vec::with_capacity(limits.len());
+    for limit in limits {
+        let key = limit.get_key()?;
+        if let Some(receipt) = receipts_map.remove(&key) {
+            aligned_receipts.push(receipt);
+        } else {
+            // throw an error
+            return Err(Error::new(ErrorDetails::Inference {
+                message: format!(
+                    "Failed to find rate limit key for limit {key}. {IMPOSSIBLE_ERROR_MESSAGE}",
+                ),
             }));
         }
     }
-    Ok(())
+    Ok(aligned_receipts)
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+pub struct FailedRateLimit {
+    pub key: ActiveRateLimitKey,
+    pub requested: u64,
+    pub available: u64,
+}
+
+/// Since Postgres will tell us all borrows failed if any failed, we figure out which rate limits
+/// actually blocked the request and return an informative error.
+fn get_failed_rate_limits_err(
+    requests: Vec<ConsumeTicketsRequest>,
+    receipts_map: &HashMap<ActiveRateLimitKey, ConsumeTicketsReceipt>,
+) -> Error {
+    let mut failed_rate_limits = Vec::new();
+    for request in requests {
+        let key = &request.key;
+        let Some(receipt) = receipts_map.get(key) else {
+            return ErrorDetails::Inference {
+                message: format!(
+                    "Failed to find rate limit request for limit {key} while constructing FailedRateLimit error. {IMPOSSIBLE_ERROR_MESSAGE}",
+                ),
+            }.into();
+        };
+        if request.requested > receipt.tickets_remaining {
+            failed_rate_limits.push(FailedRateLimit {
+                key: key.clone(),
+                requested: request.requested,
+                available: receipt.tickets_remaining,
+            });
+        }
+    }
+    if failed_rate_limits.is_empty() {
+        return ErrorDetails::Inference {
+            message: format!(
+                "Failed to find rate limit request where requested > available while constructing FailedRateLimit error. {IMPOSSIBLE_ERROR_MESSAGE}",
+            ),
+        }.into();
+    }
+    ErrorDetails::RateLimitExceeded { failed_rate_limits }.into()
 }
 
 #[derive(Debug)]
@@ -186,9 +258,18 @@ struct ActiveRateLimit {
 impl ActiveRateLimit {
     pub fn get_consume_tickets_request(
         &self,
-        requests: &RateLimitResourceUsage,
+        requests: &EstimatedRateLimitResourceUsage,
     ) -> Result<ConsumeTicketsRequest, Error> {
-        let request_amount = requests.get_usage(self.limit.resource);
+        // INVARIANT: All resources in active rate limits are validated in estimated_resource_usage().
+        // This check should never fail in normal operation.
+        let request_amount = requests.get_usage(self.limit.resource).ok_or_else(|| {
+            Error::new(ErrorDetails::Inference {
+                message: format!(
+                    "estimated_resource_usage did not provide {:?} resource. {IMPOSSIBLE_ERROR_MESSAGE}",
+                    self.limit.resource
+                ),
+            })
+        })?;
         self.get_consume_tickets_request_for_return(request_amount)
     }
 
@@ -224,7 +305,7 @@ struct ActiveRateLimitKeyHelper<'a> {
     scope_key: &'a [RateLimitingScopeKey],
 }
 
-#[derive(Debug, PartialEq, Clone, serde::Serialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Eq, Hash)]
 pub struct ActiveRateLimitKey(pub String);
 
 impl ActiveRateLimitKey {
@@ -293,7 +374,7 @@ pub struct RateLimit {
     pub refill_rate: u64,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -311,6 +392,21 @@ pub struct RateLimitResourceUsage {
 
 impl RateLimitResourceUsage {
     pub fn get_usage(&self, resource: RateLimitResource) -> u64 {
+        match resource {
+            RateLimitResource::ModelInference => self.model_inferences,
+            RateLimitResource::Token => self.tokens,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct EstimatedRateLimitResourceUsage {
+    pub model_inferences: Option<u64>,
+    pub tokens: Option<u64>,
+}
+
+impl EstimatedRateLimitResourceUsage {
+    pub fn get_usage(&self, resource: RateLimitResource) -> Option<u64> {
         match resource {
             RateLimitResource::ModelInference => self.model_inferences,
             RateLimitResource::Token => self.tokens,
@@ -510,20 +606,22 @@ impl TicketBorrows {
     }
 
     fn new(
-        receipts: Vec<ConsumeTicketsReceipt>,
+        results: Vec<ConsumeTicketsReceipt>,
         active_limits: Vec<ActiveRateLimit>,
+        ticket_requests: Vec<ConsumeTicketsRequest>,
     ) -> Result<Self, Error> {
         // Assert all vectors have the same length
-        let receipts_len = receipts.len();
+        let results_len = results.len();
         let active_limits_len = active_limits.len();
 
-        if receipts_len != active_limits_len {
+        if results_len != active_limits_len {
             return Err(Error::new(ErrorDetails::Inference {
             message: format!(
-                "TicketBorrow has ragged arrays: receipts.len()={receipts_len}, active_limits.len()={active_limits_len}. {IMPOSSIBLE_ERROR_MESSAGE}",
+                "TicketBorrow has ragged arrays: receipts.len()={results_len}, active_limits.len()={active_limits_len}. {IMPOSSIBLE_ERROR_MESSAGE}",
             )
         }));
         }
+        let receipts = align_and_check_limits(&active_limits, results, ticket_requests)?;
         let borrows = receipts
             .into_iter()
             .zip(active_limits)
@@ -566,7 +664,7 @@ impl TicketBorrows {
         }
 
         let (consume_result, return_result) = tokio::join!(
-            client.consume_tickets(requests),
+            client.consume_tickets(&requests),
             client.return_tickets(returns)
         );
 
@@ -578,7 +676,10 @@ impl TicketBorrows {
 }
 
 pub trait RateLimitedRequest {
-    fn estimated_resource_usage(&self) -> Result<RateLimitResourceUsage, Error>;
+    fn estimated_resource_usage(
+        &self,
+        resources: &[RateLimitResource],
+    ) -> Result<EstimatedRateLimitResourceUsage, Error>;
 }
 
 pub trait RateLimitedInputContent {
@@ -1372,9 +1473,9 @@ mod tests {
             }],
         };
 
-        let usage = RateLimitResourceUsage {
-            model_inferences: 5,
-            tokens: 50,
+        let usage = EstimatedRateLimitResourceUsage {
+            model_inferences: Some(5),
+            tokens: Some(50),
         };
 
         let consume_request = token_active_limit
@@ -1424,13 +1525,13 @@ mod tests {
         );
 
         // Test resource usage mapping works correctly
-        assert_eq!(usage.get_usage(RateLimitResource::Token), 50);
-        assert_eq!(usage.get_usage(RateLimitResource::ModelInference), 5);
+        assert_eq!(usage.get_usage(RateLimitResource::Token), Some(50));
+        assert_eq!(usage.get_usage(RateLimitResource::ModelInference), Some(5));
     }
 
     #[test]
     fn test_ticket_borrow_lifecycle() {
-        use crate::db::ConsumeTicketsReceipt;
+        use crate::db::{ConsumeTicketsReceipt, ConsumeTicketsRequest};
 
         // Test empty borrow creation
         let empty_borrow = TicketBorrows::empty();
@@ -1452,14 +1553,25 @@ mod tests {
             }],
         };
 
+        let key = active_limit.get_key().unwrap();
+
         let receipt = ConsumeTicketsReceipt {
-            key: active_limit.get_key().unwrap(),
+            key: key.clone(),
             success: true,
             tickets_remaining: 50,
             tickets_consumed: 50,
         };
 
-        let valid_borrow = TicketBorrows::new(vec![receipt], vec![active_limit]).unwrap();
+        let request = ConsumeTicketsRequest {
+            key: key.clone(),
+            capacity: 100,
+            refill_amount: 10,
+            refill_interval: chrono::Duration::minutes(1),
+            requested: 50,
+        };
+
+        let valid_borrow =
+            TicketBorrows::new(vec![receipt], vec![active_limit], vec![request]).unwrap();
         assert_eq!(valid_borrow.borrows.len(), 1);
 
         // Test iterator functionality
@@ -1491,15 +1603,25 @@ mod tests {
             }],
         };
 
+        let key2 = active_limit2.get_key().unwrap();
+
         // Try to create with mismatched array lengths
         let receipt2 = ConsumeTicketsReceipt {
-            key: active_limit2.get_key().unwrap(),
+            key: key2.clone(),
             success: true,
             tickets_remaining: 10,
             tickets_consumed: 10,
         };
 
-        let mismatched_result = TicketBorrows::new(vec![receipt2], vec![]);
+        let request2 = ConsumeTicketsRequest {
+            key: key2.clone(),
+            capacity: 20,
+            refill_amount: 5,
+            refill_interval: chrono::Duration::hours(1),
+            requested: 10,
+        };
+
+        let mismatched_result = TicketBorrows::new(vec![receipt2], vec![], vec![request2]);
         assert!(mismatched_result.is_err());
 
         // Another mismatch test - more active limits than receipts
@@ -1510,7 +1632,16 @@ mod tests {
             tickets_consumed: 15,
         };
 
-        let mismatched_result2 = TicketBorrows::new(vec![receipt3], vec![active_limit2]);
+        let request3 = ConsumeTicketsRequest {
+            key: active_limit2.get_key().unwrap(),
+            capacity: 20,
+            refill_amount: 5,
+            refill_interval: chrono::Duration::hours(1),
+            requested: 15,
+        };
+
+        let mismatched_result2 =
+            TicketBorrows::new(vec![receipt3], vec![active_limit2], vec![request3]);
         assert!(mismatched_result2.is_ok()); // This should actually work - 1:1 ratio
     }
 
@@ -1526,8 +1657,66 @@ mod tests {
     }
 
     #[test]
-    fn test_check_borrowed_rate_limits() {
-        use crate::db::ConsumeTicketsReceipt;
+    fn test_max_tokens_validation_with_rate_limits() {
+        let tags = HashMap::new();
+        let scope_info = ScopeInfo { tags: &tags };
+
+        // Token rate limits active - should include Token resource
+        let token_limit = Arc::new(RateLimit {
+            resource: RateLimitResource::Token,
+            interval: RateLimitInterval::Minute,
+            capacity: 1000,
+            refill_rate: 100,
+        });
+        let config_with_token = RateLimitingConfig {
+            rules: vec![RateLimitingConfigRule {
+                limits: vec![token_limit.clone()],
+                scope: RateLimitingConfigScopes(vec![]),
+                priority: RateLimitingConfigPriority::Priority(1),
+            }],
+            enabled: true,
+        };
+        let resources = config_with_token.get_rate_limited_resources(&scope_info);
+        assert_eq!(resources.len(), 1);
+        assert!(resources.contains(&RateLimitResource::Token));
+
+        // Only ModelInference limits - should NOT include Token resource
+        let model_limit = Arc::new(RateLimit {
+            resource: RateLimitResource::ModelInference,
+            interval: RateLimitInterval::Minute,
+            capacity: 100,
+            refill_rate: 10,
+        });
+        let config_model_only = RateLimitingConfig {
+            rules: vec![RateLimitingConfigRule {
+                limits: vec![model_limit.clone()],
+                scope: RateLimitingConfigScopes(vec![]),
+                priority: RateLimitingConfigPriority::Priority(1),
+            }],
+            enabled: true,
+        };
+        let resources = config_model_only.get_rate_limited_resources(&scope_info);
+        assert_eq!(resources.len(), 1);
+        assert!(resources.contains(&RateLimitResource::ModelInference));
+        assert!(!resources.contains(&RateLimitResource::Token));
+
+        // Disabled config - should return empty even with token limits
+        let config_disabled = RateLimitingConfig {
+            enabled: false,
+            rules: vec![RateLimitingConfigRule {
+                limits: vec![token_limit.clone()],
+                scope: RateLimitingConfigScopes(vec![]),
+                priority: RateLimitingConfigPriority::Priority(1),
+            }],
+        };
+        assert!(config_disabled
+            .get_rate_limited_resources(&scope_info)
+            .is_empty());
+    }
+
+    #[test]
+    fn test_align_and_check_limits() {
+        use crate::db::{ConsumeTicketsReceipt, ConsumeTicketsRequest};
         use crate::error::ErrorDetails;
 
         let limit = Arc::new(RateLimit {
@@ -1545,15 +1734,29 @@ mod tests {
             }],
         };
 
+        let key = active_limit.get_key().unwrap();
+
         // Test success case
         let success_receipt = ConsumeTicketsReceipt {
-            key: active_limit.get_key().unwrap(),
+            key: key.clone(),
             success: true,
             tickets_remaining: 50,
             tickets_consumed: 50,
         };
 
-        let success_result = check_borrowed_rate_limits(&[active_limit], &[success_receipt]);
+        let success_request = ConsumeTicketsRequest {
+            key: key.clone(),
+            capacity: 100,
+            refill_amount: 10,
+            refill_interval: chrono::Duration::minutes(1),
+            requested: 50,
+        };
+
+        let success_result = align_and_check_limits(
+            &[active_limit],
+            vec![success_receipt],
+            vec![success_request],
+        );
         assert!(success_result.is_ok());
 
         // Create a new active limit for the failure test since we used the original
@@ -1570,24 +1773,39 @@ mod tests {
             }],
         };
 
-        // Test failure case
+        let key2 = active_limit2.get_key().unwrap();
+
+        // Test failure case - requesting 50 but only 30 available
         let failure_receipt = ConsumeTicketsReceipt {
-            key: active_limit2.get_key().unwrap(),
+            key: key2.clone(),
             success: false,
-            tickets_remaining: 0,
+            tickets_remaining: 30,
             tickets_consumed: 0,
         };
 
-        let failure_result = check_borrowed_rate_limits(&[active_limit2], &[failure_receipt]);
+        let failure_request = ConsumeTicketsRequest {
+            key: key2.clone(),
+            capacity: 100,
+            refill_amount: 10,
+            refill_interval: chrono::Duration::minutes(1),
+            requested: 50,
+        };
+
+        let failure_result = align_and_check_limits(
+            &[active_limit2],
+            vec![failure_receipt],
+            vec![failure_request],
+        );
         assert!(failure_result.is_err());
 
         match failure_result {
             Err(error) => {
-                if let ErrorDetails::RateLimitExceeded {
-                    tickets_remaining, ..
-                } = error.get_details()
+                if let ErrorDetails::RateLimitExceeded { failed_rate_limits } = error.get_details()
                 {
-                    assert_eq!(*tickets_remaining, 0);
+                    assert_eq!(failed_rate_limits.len(), 1);
+                    assert_eq!(failed_rate_limits[0].key, key2);
+                    assert_eq!(failed_rate_limits[0].requested, 50);
+                    assert_eq!(failed_rate_limits[0].available, 30);
                 } else {
                     panic!(
                         "Expected RateLimitExceeded error, got: {:?}",
@@ -1595,7 +1813,154 @@ mod tests {
                     );
                 }
             }
-            Ok(()) => panic!("Expected an error, but got Ok"),
+            Ok(_) => panic!("Expected an error, but got Ok"),
+        }
+    }
+
+    #[test]
+    fn test_multiple_rate_limit_failures() {
+        use crate::db::{ConsumeTicketsReceipt, ConsumeTicketsRequest};
+        use crate::error::ErrorDetails;
+
+        // This test covers the bug where we need to correctly identify which rate limits
+        // actually failed when Postgres tells us all borrows failed atomically.
+        // If we have 3 rate limits and 2 are exceeded but 1 is fine, we should only
+        // report the 2 that actually failed.
+
+        let token_limit = Arc::new(RateLimit {
+            resource: RateLimitResource::Token,
+            interval: RateLimitInterval::Minute,
+            capacity: 100,
+            refill_rate: 10,
+        });
+
+        let inference_limit = Arc::new(RateLimit {
+            resource: RateLimitResource::ModelInference,
+            interval: RateLimitInterval::Minute,
+            capacity: 50,
+            refill_rate: 5,
+        });
+
+        let token_limit_user2 = Arc::new(RateLimit {
+            resource: RateLimitResource::Token,
+            interval: RateLimitInterval::Hour,
+            capacity: 1000,
+            refill_rate: 100,
+        });
+
+        let active_limit_tokens = ActiveRateLimit {
+            limit: token_limit,
+            scope_key: vec![RateLimitingScopeKey::TagConcrete {
+                key: "user_id".to_string(),
+                value: "user1".to_string(),
+            }],
+        };
+
+        let active_limit_inferences = ActiveRateLimit {
+            limit: inference_limit,
+            scope_key: vec![RateLimitingScopeKey::TagConcrete {
+                key: "user_id".to_string(),
+                value: "user1".to_string(),
+            }],
+        };
+
+        let active_limit_tokens_user2 = ActiveRateLimit {
+            limit: token_limit_user2,
+            scope_key: vec![RateLimitingScopeKey::TagConcrete {
+                key: "user_id".to_string(),
+                value: "user2".to_string(),
+            }],
+        };
+
+        let key_tokens = active_limit_tokens.get_key().unwrap();
+        let key_inferences = active_limit_inferences.get_key().unwrap();
+        let key_tokens_user2 = active_limit_tokens_user2.get_key().unwrap();
+
+        // Scenario: requesting 80 tokens and 10 inferences
+        // - Token limit: only 30 available (FAIL - requested 80, available 30)
+        // - Inference limit: 20 available (OK - requested 10, available 20)
+        // - Token limit user2: 500 available (OK - requested 80, available 500)
+        // Only the first one should be reported as failed
+
+        let receipts = vec![
+            ConsumeTicketsReceipt {
+                key: key_tokens.clone(),
+                success: false, // All fail atomically in Postgres
+                tickets_remaining: 30,
+                tickets_consumed: 0,
+            },
+            ConsumeTicketsReceipt {
+                key: key_inferences.clone(),
+                success: false, // All fail atomically in Postgres
+                tickets_remaining: 20,
+                tickets_consumed: 0,
+            },
+            ConsumeTicketsReceipt {
+                key: key_tokens_user2.clone(),
+                success: false, // All fail atomically in Postgres
+                tickets_remaining: 500,
+                tickets_consumed: 0,
+            },
+        ];
+
+        let requests = vec![
+            ConsumeTicketsRequest {
+                key: key_tokens.clone(),
+                capacity: 100,
+                refill_amount: 10,
+                refill_interval: chrono::Duration::minutes(1),
+                requested: 80, // More than available (30)
+            },
+            ConsumeTicketsRequest {
+                key: key_inferences.clone(),
+                capacity: 50,
+                refill_amount: 5,
+                refill_interval: chrono::Duration::minutes(1),
+                requested: 10, // Less than available (20)
+            },
+            ConsumeTicketsRequest {
+                key: key_tokens_user2.clone(),
+                capacity: 1000,
+                refill_amount: 100,
+                refill_interval: chrono::Duration::hours(1),
+                requested: 80, // Less than available (500)
+            },
+        ];
+
+        let result = align_and_check_limits(
+            &[
+                active_limit_tokens,
+                active_limit_inferences,
+                active_limit_tokens_user2,
+            ],
+            receipts,
+            requests,
+        );
+
+        assert!(result.is_err());
+
+        match result {
+            Err(error) => {
+                if let ErrorDetails::RateLimitExceeded { failed_rate_limits } = error.get_details()
+                {
+                    // Should only have 1 failed rate limit (the token limit for user1)
+                    assert_eq!(
+                        failed_rate_limits.len(),
+                        1,
+                        "Expected 1 failed rate limit, got {}",
+                        failed_rate_limits.len()
+                    );
+                    assert_eq!(failed_rate_limits[0].key, key_tokens);
+                    assert_eq!(failed_rate_limits[0].requested, 80);
+                    assert_eq!(failed_rate_limits[0].available, 30);
+                } else {
+                    panic!(
+                        "Expected RateLimitExceeded error, got: {:?}",
+                        error.get_details()
+                    );
+                }
+            }
+            Ok(_) => panic!("Expected an error, but got Ok"),
         }
     }
 }

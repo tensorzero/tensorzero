@@ -1,5 +1,6 @@
 import type { Decorator } from "@storybook/react";
 import type { Preview } from "@storybook/react-vite";
+import { withRouter } from "storybook-addon-remix-react-router";
 
 import "../app/tailwind.css";
 
@@ -10,7 +11,7 @@ const resetBrowserStorageDecorator: Decorator = (Story) => {
 };
 
 const preview: Preview = {
-  decorators: [resetBrowserStorageDecorator],
+  decorators: [withRouter, resetBrowserStorageDecorator],
   parameters: {
     layout: "centered",
     controls: {

@@ -9,6 +9,7 @@ import {
 } from "~/components/ui/table";
 import type { EpisodeByIdRow } from "tensorzero-node";
 import { TableItemShortUuid } from "~/components/ui/TableItems";
+import { toEpisodeUrl } from "~/utils/urls";
 
 export default function EpisodesTable({
   episodes,
@@ -51,7 +52,7 @@ export default function EpisodesTable({
                 <TableCell className="max-w-[200px] lg:max-w-none">
                   <TableItemShortUuid
                     id={episode.episode_id}
-                    link={`/observability/episodes/${episode.episode_id}`}
+                    link={toEpisodeUrl(episode.episode_id)}
                   />
                 </TableCell>
                 <TableCell>{episode.count}</TableCell>

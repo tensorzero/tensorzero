@@ -318,6 +318,9 @@ jobs:
         run: cargo deny check
 
       - name: Test (Rust)
+        env:
+          # Write the exported bindings to somewhere we don't care about
+          TS_RS_EXPORT_DIR: /tmp/tensorzero-bindings
         run: |
           cargo test-unit ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }}
 
@@ -476,7 +479,16 @@ jobs:
         run: |
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
-      - name: Launch non-replicated ClickHouse container for E2E tests
+      - name: Run database migrations for E2E tests
+        # Note: this step will stand up ClickHouse and Postgres too since the gateway-*-migrations jobs depend on them
+        if: matrix.replicated == false
+        run: |
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile migrations run --rm gateway-clickhouse-migrations
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile migrations run --rm gateway-postgres-migrations
+
+      - name: Launch dependency services with non-replicated ClickHouse container for E2E tests
+        # Note: ClickHouse and Postgres are already up from the previous step but we block here to
+        # make sure all other services are up too
         if: matrix.replicated == false
         run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
 
@@ -516,7 +528,7 @@ jobs:
       - name: Launch the gateway for E2E tests (configured for replication)
         if: matrix.replicated == true
         run: |
-          cargo run-e2e --run-migrations-only &&
+          cargo run-e2e --run-clickhouse-migrations &&
           cargo run-e2e > e2e_logs.txt 2>&1 &
             count=0
             max_attempts=40
@@ -630,7 +642,15 @@ jobs:
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
-      - name: Launch ClickHouse container for E2E tests
+      - name: Run database migrations for E2E tests
+        # Note: this step will stand up ClickHouse and Postgres too since the gateway-*-migrations jobs depend on them
+        run: |
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile migrations run --rm gateway-clickhouse-migrations
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile migrations run --rm gateway-postgres-migrations
+
+      - name: Make sure dependency services are up
+        # Note: ClickHouse and Postgres are already up from the previous step but we block here to
+        # make sure all other services are up too
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
 
       - name: Launch the gateway for E2E tests

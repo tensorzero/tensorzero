@@ -480,7 +480,7 @@ mod tests {
     #[tokio::test]
     async fn test_openai_completions_handler() {
         let payload = json!({
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4.1-mini",
             "prompt": "Is Santa real?",
             "max_tokens": 5,
         });
@@ -518,7 +518,7 @@ mod tests {
     #[tokio::test]
     async fn test_openai_completions_handler_json() {
         let payload = json!({
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4.1-mini",
             "prompt": "Is Santa real?",
             "max_tokens": 5,
             "response_format": {
@@ -559,7 +559,7 @@ mod tests {
     #[tokio::test]
     async fn test_openai_completions_handler_function() {
         let payload = json!({
-                  "model": "gpt-3.5-turbo",
+                  "model": "gpt-4.1-mini",
                   "prompt": "Is Santa real?",
                   "max_tokens": 5,
                   "tools": [
@@ -619,7 +619,7 @@ mod tests {
     #[tokio::test]
     async fn test_openai_completions_handler_stream() {
         let payload = json!({
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4.1-mini",
             "prompt": "Is Santa real?",
             "max_tokens": 5,
             "stream": true,
@@ -674,7 +674,7 @@ mod tests {
     #[tokio::test]
     async fn test_openai_completions_handler_stream_json() {
         let payload = json!({
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4.1-mini",
             "prompt": "Is Santa real?",
             "max_tokens": 5,
             "stream": true,
@@ -732,7 +732,7 @@ mod tests {
     #[tokio::test]
     async fn test_openai_completions_handler_stream_function() {
         let payload = json!({
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4.1-mini",
             "prompt": "Is Santa real?",
             "max_tokens": 5,
             "stream": true,

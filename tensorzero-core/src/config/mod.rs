@@ -1,3 +1,4 @@
+use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
 ///            IT IS MEANT FOR INTERNAL USE ONLY.
@@ -7,6 +8,7 @@ use futures::future::try_join_all;
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
+use provider_types::ProviderTypesConfig;
 #[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyKeyError;
 #[cfg(feature = "pyo3")]
@@ -36,10 +38,10 @@ use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass};
 use crate::inference::types::storage::StorageKind;
 use crate::inference::types::Usage;
-use crate::jsonschema_util::StaticJSONSchema;
+use crate::jsonschema_util::{SchemaWithMetadata, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
-use crate::model_table::{CowNoClone, ShorthandModelConfig};
+use crate::model_table::{CowNoClone, ProviderTypeDefaultCredentials, ShorthandModelConfig};
 use crate::optimization::{OptimizerInfo, UninitializedOptimizerInfo};
 use crate::tool::{create_implicit_tool_call_config, StaticToolConfig, ToolChoice};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
@@ -52,6 +54,7 @@ use std::error::Error as StdError;
 
 pub mod gateway;
 pub mod path;
+pub mod provider_types;
 pub mod rate_limiting;
 mod span_map;
 #[cfg(test)]
@@ -134,38 +137,6 @@ pub struct TemplateFilesystemAccess {
     #[serde(default)]
     enabled: bool,
     base_path: Option<ResolvedTomlPath>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-pub struct GCPProviderTypeConfig {
-    #[serde(default)]
-    pub batch: Option<GCPBatchConfigType>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "storage_type", rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-#[serde(deny_unknown_fields)]
-pub enum GCPBatchConfigType {
-    // In the future, we'll want to allow explicitly setting 'none' at the model provider level,
-    // to override the global provider-types batch config.
-    None,
-    CloudStorage(GCPBatchConfigCloudStorage),
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-pub struct GCPBatchConfigCloudStorage {
-    pub input_uri_prefix: String,
-    pub output_uri_prefix: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -325,47 +296,8 @@ pub struct ObservabilityConfig {
     pub async_writes: bool,
     #[serde(default)]
     pub batch_writes: BatchWritesConfig,
-}
-
-#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-pub struct UninitializedObservabilityConfig {
-    pub enabled: Option<bool>,
     #[serde(default)]
-    pub async_writes: bool,
-    #[serde(default)]
-    pub batch_writes: BatchWritesConfig,
-    /// If `true`, then we skip checking/applying migrations if the `TensorZeroMigration` table
-    /// contains exactly the migrations that we expect to have run.
-    #[serde(default)]
-    pub skip_completed_migrations: Option<bool>,
-}
-
-impl UninitializedObservabilityConfig {
-    pub fn load(self) -> ObservabilityConfig {
-        let UninitializedObservabilityConfig {
-            enabled,
-            async_writes,
-            batch_writes,
-            skip_completed_migrations,
-        } = self;
-        match skip_completed_migrations {
-            None => {}
-            Some(true) => {
-                tracing::warn!("Deprecation Warning: `gateway.observability.skip_completed_migrations` is now always enabled, and does not need to be manually enabled");
-            }
-            Some(false) => {
-                tracing::warn!("Deprecation Warning: `gateway.observability.skip_completed_migrations` is now always enabled, and cannot be manually disabled");
-            }
-        }
-        ObservabilityConfig {
-            enabled,
-            async_writes,
-            batch_writes,
-        }
-    }
+    pub disable_automatic_migrations: bool,
 }
 
 fn default_flush_interval_ms() -> u64 {
@@ -458,6 +390,9 @@ pub struct OtlpTracesConfig {
     pub enabled: bool,
     #[serde(default)]
     pub format: OtlpTracesFormat,
+    /// Extra headers to include in OTLP export requests (can be overridden by dynamic headers at request time)
+    #[serde(default)]
+    pub extra_headers: HashMap<String, String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -696,11 +631,18 @@ impl Config {
             .into_iter()
             .map(|(name, config)| config.load(name.clone()).map(|c| (name, Arc::new(c))))
             .collect::<Result<HashMap<String, Arc<StaticToolConfig>>, Error>>()?;
+        let provider_type_default_credentials = Arc::new(ProviderTypeDefaultCredentials::new(
+            &uninitialized_config.provider_types,
+        ));
 
         let models = try_join_all(uninitialized_config.models.into_iter().map(
             |(name, config)| async {
                 config
-                    .load(&name, &uninitialized_config.provider_types)
+                    .load(
+                        &name,
+                        &uninitialized_config.provider_types,
+                        &provider_type_default_credentials,
+                    )
                     .await
                     .map(|c| (name, c))
             },
@@ -712,7 +654,10 @@ impl Config {
         let embedding_models = try_join_all(uninitialized_config.embedding_models.into_iter().map(
             |(name, config)| async {
                 config
-                    .load(&uninitialized_config.provider_types)
+                    .load(
+                        &uninitialized_config.provider_types,
+                        &provider_type_default_credentials,
+                    )
                     .await
                     .map(|c| (name, c))
             },
@@ -722,28 +667,36 @@ impl Config {
         .collect::<HashMap<_, _>>();
 
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
-        let optimizers = try_join_all(
-            uninitialized_config
-                .optimizers
-                .into_iter()
-                .map(|(name, config)| async { config.load().await.map(|c| (name, c)) }),
-        )
+        let optimizers = try_join_all(uninitialized_config.optimizers.into_iter().map(
+            |(name, config)| async {
+                config
+                    .load(&provider_type_default_credentials)
+                    .await
+                    .map(|c| (name, c))
+            },
+        ))
         .await?
         .into_iter()
         .collect::<HashMap<_, _>>();
-
-        let mut config = Config {
-            gateway: uninitialized_config.gateway.load()?,
-            models: models.try_into().map_err(|e| {
+        let models =
+            ModelTable::new(models, provider_type_default_credentials.clone()).map_err(|e| {
                 Error::new(ErrorDetails::Config {
                     message: format!("Failed to load models: {e}"),
                 })
-            })?,
-            embedding_models: embedding_models.try_into().map_err(|e| {
-                Error::new(ErrorDetails::Config {
-                    message: format!("Failed to load embedding models: {e}"),
-                })
-            })?,
+            })?;
+        let embedding_models =
+            EmbeddingModelTable::new(embedding_models, provider_type_default_credentials).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Failed to load embedding models: {e}"),
+                    })
+                },
+            )?;
+
+        let mut config = Config {
+            gateway: uninitialized_config.gateway.load()?,
+            models,
+            embedding_models,
             functions,
             metrics: uninitialized_config.metrics,
             tools,
@@ -924,7 +877,7 @@ impl Config {
             model.validate(model_name)?;
         }
 
-        for embedding_model_name in self.embedding_models.keys() {
+        for embedding_model_name in self.embedding_models.table.keys() {
             if embedding_model_name.starts_with("tensorzero::") {
                 return Err(ErrorDetails::Config {
                     message: format!(
@@ -962,6 +915,7 @@ impl Config {
                     parallel_tool_calls: None,
                     description: None,
                     all_explicit_templates_names: HashSet::new(),
+                    experimentation: ExperimentationConfig::default(),
                 },
             ))))
         } else {
@@ -1138,15 +1092,6 @@ pub struct UninitializedConfig {
     pub rate_limiting: UninitializedRateLimitingConfig,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-pub struct ProviderTypesConfig {
-    #[serde(default)]
-    pub gcp_vertex_gemini: Option<GCPProviderTypeConfig>,
-}
-
 /// The result of parsing all of the globbed config files,
 /// and merging them into a single `toml::Table`
 struct UninitializedGlobbedConfig {
@@ -1220,6 +1165,7 @@ pub struct UninitializedFunctionConfigChat {
     parallel_tool_calls: Option<bool>,
     #[serde(default)]
     description: Option<String>,
+    experimentation: Option<UninitializedExperimentationConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1234,6 +1180,7 @@ pub struct UninitializedFunctionConfigJson {
     output_schema: Option<ResolvedTomlPath>, // schema will default to {} if not specified
     #[serde(default)]
     description: Option<String>,
+    experimentation: Option<UninitializedExperimentationConfig>,
 }
 
 /// Holds all of the schemas used by a chat completion function.
@@ -1243,23 +1190,23 @@ pub struct UninitializedFunctionConfigJson {
 #[cfg_attr(test, ts(export))]
 pub struct SchemaData {
     #[serde(flatten)]
-    pub inner: HashMap<String, StaticJSONSchema>,
+    pub inner: HashMap<String, SchemaWithMetadata>,
 }
 
 impl SchemaData {
-    pub fn get_implicit_system_schema(&self) -> Option<&StaticJSONSchema> {
+    pub fn get_implicit_system_schema(&self) -> Option<&SchemaWithMetadata> {
         self.inner.get("system")
     }
 
-    pub fn get_implicit_user_schema(&self) -> Option<&StaticJSONSchema> {
+    pub fn get_implicit_user_schema(&self) -> Option<&SchemaWithMetadata> {
         self.inner.get("user")
     }
 
-    pub fn get_implicit_assistant_schema(&self) -> Option<&StaticJSONSchema> {
+    pub fn get_implicit_assistant_schema(&self) -> Option<&SchemaWithMetadata> {
         self.inner.get("assistant")
     }
 
-    pub fn get_named_schema(&self, name: &str) -> Option<&StaticJSONSchema> {
+    pub fn get_named_schema(&self, name: &str) -> Option<&SchemaWithMetadata> {
         self.inner.get(name)
     }
 
@@ -1272,17 +1219,41 @@ impl SchemaData {
     ) -> Result<Self, Error> {
         let mut map = HashMap::new();
         if let Some(user_schema) = user_schema {
-            map.insert("user".to_string(), user_schema);
+            map.insert(
+                "user".to_string(),
+                SchemaWithMetadata {
+                    schema: user_schema,
+                    legacy_definition: true,
+                },
+            );
         }
         if let Some(assistant_schema) = assistant_schema {
-            map.insert("assistant".to_string(), assistant_schema);
+            map.insert(
+                "assistant".to_string(),
+                SchemaWithMetadata {
+                    schema: assistant_schema,
+                    legacy_definition: true,
+                },
+            );
         }
         if let Some(system_schema) = system_schema {
-            map.insert("system".to_string(), system_schema);
+            map.insert(
+                "system".to_string(),
+                SchemaWithMetadata {
+                    schema: system_schema,
+                    legacy_definition: true,
+                },
+            );
         }
         for (name, schema) in schemas.inner {
             if map
-                .insert(name.to_string(), StaticJSONSchema::from_path(schema.path)?)
+                .insert(
+                    name.clone(),
+                    SchemaWithMetadata {
+                        schema: StaticJSONSchema::from_path(schema.path)?,
+                        legacy_definition: false,
+                    },
+                )
                 .is_some()
             {
                 return Err(Error::new(ErrorDetails::Config {
@@ -1345,6 +1316,10 @@ impl UninitializedFunctionConfig {
                         }
                     }
                 }
+                let experimentation = params
+                    .experimentation
+                    .map(UninitializedExperimentationConfig::load)
+                    .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
                 Ok(FunctionConfig::Chat(FunctionConfigChat {
                     variants,
                     schemas: schema_data,
@@ -1353,6 +1328,7 @@ impl UninitializedFunctionConfig {
                     parallel_tool_calls: params.parallel_tool_calls,
                     description: params.description,
                     all_explicit_templates_names: all_template_names,
+                    experimentation,
                 }))
             }
             UninitializedFunctionConfig::Json(params) => {
@@ -1405,10 +1381,8 @@ impl UninitializedFunctionConfig {
                                 variant_missing_mode = Some(name.clone());
                             }
                         }
-                        VariantConfig::BestOfNSampling(best_of_n_config) => {
-                            if best_of_n_config.evaluator().inner.json_mode().is_none() {
-                                variant_missing_mode = Some(format!("{name}.evaluator"));
-                            }
+                        VariantConfig::BestOfNSampling(_best_of_n_config) => {
+                            // Evaluator json_mode is optional - it defaults to `strict` at runtime
                         }
                         VariantConfig::MixtureOfN(mixture_of_n_config) => {
                             if mixture_of_n_config.fuser().inner.json_mode().is_none() {
@@ -1435,13 +1409,18 @@ impl UninitializedFunctionConfig {
                         .into());
                     }
                 }
+                let experimentation = params
+                    .experimentation
+                    .map(UninitializedExperimentationConfig::load)
+                    .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
                 Ok(FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     schemas: schema_data,
                     output_schema,
                     implicit_tool_call_config,
                     description: params.description,
-                    all_template_names: HashSet::new(),
+                    all_explicit_template_names: all_template_names,
+                    experimentation,
                 }))
             }
         }

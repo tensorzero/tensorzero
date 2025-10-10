@@ -101,6 +101,7 @@ async fn run_evaluations_json() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert_eq!(parsed.evaluator_errors.len(), 1);
         let error = parsed.evaluator_errors.get("error").unwrap();
@@ -296,6 +297,7 @@ async fn run_evaluations_json() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         let inference_id = parsed.response.inference_id();
         // We only check the total_topic_fs for the second run
@@ -371,6 +373,7 @@ async fn run_exact_match_evaluation_chat() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
@@ -509,6 +512,7 @@ async fn run_llm_judge_evaluation_chat() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
@@ -667,6 +671,7 @@ async fn run_llm_judge_evaluation_chat() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         let inference_id = parsed.response.inference_id();
         // We only check the total_topic_fs for the second run
@@ -743,6 +748,7 @@ async fn run_image_evaluation() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
@@ -954,6 +960,7 @@ async fn check_invalid_image_evaluation() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert_eq!(parsed.evaluator_errors.len(), 1);
         let honest_answer_error = &parsed.evaluator_errors["honest_answer"];
@@ -1255,6 +1262,7 @@ async fn run_evaluations_errors() {
                 serde_json::to_string_pretty(&evaluation_info).unwrap()
             ),
             EvaluationUpdate::Error(evaluation_error) => evaluation_error,
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(error
             .message
@@ -1322,6 +1330,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         source_inference_id: None,
         staled_at: None,
         is_custom: true,
+        name: None,
     });
     let llm_judge_config = LLMJudgeConfig {
         input_format: LLMJudgeInputFormat::Serialized,
@@ -1427,6 +1436,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         source_inference_id: None,
         staled_at: None,
         is_custom: true,
+        name: None,
     });
 
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
@@ -1494,6 +1504,7 @@ async fn test_run_llm_judge_evaluator_json() {
         source_inference_id: None,
         staled_at: None,
         is_custom: true,
+        name: None,
     });
     let llm_judge_config = LLMJudgeConfig {
         input_format: LLMJudgeInputFormat::Serialized,
@@ -1599,6 +1610,7 @@ async fn test_run_llm_judge_evaluator_json() {
         source_inference_id: None,
         staled_at: None,
         is_custom: true,
+        name: None,
     });
 
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
@@ -1663,6 +1675,7 @@ async fn run_evaluations_best_of_3() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
@@ -1850,6 +1863,7 @@ async fn run_evaluations_mixture_of_3() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
@@ -2040,6 +2054,7 @@ async fn run_evaluations_dicl() {
             EvaluationUpdate::Error(evaluation_error) => {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
+            EvaluationUpdate::RunInfo(_) => continue,
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();

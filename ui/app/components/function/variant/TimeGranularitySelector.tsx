@@ -25,9 +25,9 @@ export function TimeGranularitySelector({
           <SelectValue placeholder="Choose time granularity" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="day">Day</SelectItem>
-          <SelectItem value="week">Week</SelectItem>
-          <SelectItem value="month">Month</SelectItem>
+          <SelectItem value="day">Daily</SelectItem>
+          <SelectItem value="week">Weekly</SelectItem>
+          <SelectItem value="month">Monthly</SelectItem>
           {includeCumulative && (
             <SelectItem value="cumulative">All Time</SelectItem>
           )}

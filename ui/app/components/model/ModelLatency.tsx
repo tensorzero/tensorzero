@@ -49,7 +49,7 @@ function CustomTooltipContent({ active, payload, label }: TooltipProps) {
   return (
     <div className="border-border/50 bg-background min-w-[10rem] rounded-lg border px-2.5 py-1.5 text-xs shadow-xl">
       <div className="flex items-center justify-between gap-2 pb-1">
-        <span className="text-muted-foreground">Percentile</span>
+        <span>Percentile</span>
         <span className="text-foreground font-mono font-medium tabular-nums">
           {((label || 0) * 100).toFixed(1)}%
         </span>
@@ -70,7 +70,7 @@ function CustomTooltipContent({ active, payload, label }: TooltipProps) {
                     border: `1px solid ${entry.color}`,
                   }}
                 />
-                <span className="text-muted-foreground mr-2">
+                <span className="text-muted-foreground mr-2 font-mono text-xs">
                   {entry.dataKey}
                 </span>
               </div>
@@ -181,7 +181,9 @@ export function LatencyQuantileChart({
           }}
         />
 
-        <ChartLegend content={<ChartLegendContent />} />
+        <ChartLegend
+          content={<ChartLegendContent className="font-mono text-xs" />}
+        />
 
         {modelNames.map((name, index) => (
           <Line

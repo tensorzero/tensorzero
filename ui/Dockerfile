@@ -8,7 +8,7 @@ RUN npm install -g pnpm
 
 # ========== cargo-chef-planner ==========
 
-FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.90-bookworm AS chef
 WORKDIR /app
 
 FROM chef AS planner

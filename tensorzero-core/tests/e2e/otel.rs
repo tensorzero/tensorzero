@@ -1,3 +1,4 @@
+#![expect(clippy::print_stderr)]
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -13,10 +14,10 @@ use tensorzero::{
     Client, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     FeedbackParams, InferenceOutput, InferenceResponse, InferenceResponseChunk, Role,
 };
-use tensorzero_core::observability::build_opentelemetry_layer;
+use tensorzero_core::observability::setup_observability_with_exporter_override;
+use tensorzero_core::observability::LogFormat;
 use tensorzero_core::{config::OtlpTracesFormat, inference::types::TextKind};
 use tokio_stream::StreamExt;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
 type CapturedSpans = Arc<Mutex<Option<Vec<SpanData>>>>;
@@ -40,7 +41,7 @@ impl SpanExporter for CapturingOtelExporter {
 }
 
 impl CapturingOtelExporter {
-    pub fn take_spans(self) -> Vec<SpanData> {
+    pub fn take_spans(&self) -> Vec<SpanData> {
         let spans = self
             .spans
             .lock()
@@ -57,17 +58,15 @@ pub struct SpanMap {
     pub span_children: HashMap<SpanId, Vec<SpanData>>,
 }
 
-pub fn install_capturing_otel_exporter() -> CapturingOtelExporter {
+pub async fn install_capturing_otel_exporter() -> CapturingOtelExporter {
     let exporter = CapturingOtelExporter {
         spans: Arc::new(Mutex::new(Some(vec![]))),
     };
-    let (enable_otel, layer, _sdk_tracer) = build_opentelemetry_layer(Some(exporter.clone()))
-        .expect("Failed to build OpenTelemetry layer");
-
-    tracing_subscriber::registry().with(layer).init();
-    enable_otel
-        .enable_otel()
-        .expect("Failed to enable OpenTelemetry");
+    let handle =
+        setup_observability_with_exporter_override(LogFormat::Pretty, Some(exporter.clone()))
+            .await
+            .unwrap();
+    handle.delayed_otel.unwrap().enable_otel().unwrap();
     exporter
 }
 
@@ -101,6 +100,78 @@ pub fn attrs_to_map(attrs: &[KeyValue]) -> HashMap<String, Value> {
         }
     }
     map
+}
+
+// The tracing bug (https://github.com/tokio-rs/tracing/issues/2519) is sufficiently subtle that
+// we want to ensure that we know how to reproduce it (so that we know our fix is actually doing something).
+// See https://github.com/tensorzero/tensorzero/issues/3715
+#[tokio::test]
+pub async fn test_reproduce_tracing_bug() {
+    // Set this test-only global variable to disable our fix.
+    tensorzero_core::observability::tracing_bug::DISABLE_TRACING_BUG_WORKAROUND
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+    let exporter = install_capturing_otel_exporter().await;
+
+    let config = "
+    [gateway.export.otlp.traces]
+    enabled = true
+    "
+    .to_string();
+
+    let client = make_embedded_gateway_with_config(&config).await;
+
+    // Make an inference to initialize the tracing call-site cache
+    client
+        .inference(ClientInferenceParams {
+            model_name: Some("dummy::good".to_string()),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "What is your name?".to_string(),
+                    })],
+                }],
+            },
+            tags: HashMap::from([("first_request".to_string(), "first_value".to_string())]),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    // Ignore the spans we just created
+    exporter.take_spans();
+
+    // Trigger the tracing bug by calling `log::log_enabled!` with a disabled event
+    // The tracing integration with the `log` crate will cause the next span we emit to be discarded
+    // For some reason, the macro returns 'true' even though the event is disabled - most likely,
+    // the `tracing` crate is being overly conservative in computing the value to return to the `log` crate
+    assert!(log::log_enabled!(target: "fake-target", log::Level::Info));
+
+    // Make a new inference, which should cause a span to get lost
+    client
+        .inference(ClientInferenceParams {
+            model_name: Some("dummy::good".to_string()),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "What is your name?".to_string(),
+                    })],
+                }],
+            },
+            tags: HashMap::from([("first_request".to_string(), "first_value".to_string())]),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    // We should now see 'variant_inference' as a root span, and have the 'function_inference' span missing
+    let all_spans = exporter.take_spans();
+    let spans = build_span_map(all_spans);
+    assert_eq!(spans.root_spans[0].name, "variant_inference");
+    assert_eq!(spans.root_spans.len(), 1);
 }
 
 #[tokio::test]
@@ -155,6 +226,7 @@ async fn make_non_streaming_inference(client: &Client) -> ResponseData {
         })
         .await
         .unwrap();
+
     let InferenceOutput::NonStreaming(output) = res else {
         panic!("Expected non-streaming output, got: {res:#?}");
     };
@@ -230,7 +302,7 @@ pub async fn test_capture_simple_inference_spans(
     config_mode: &str,
     streaming: bool,
 ) {
-    let exporter = install_capturing_otel_exporter();
+    let exporter = install_capturing_otel_exporter().await;
 
     let config = format!(
         "
@@ -257,6 +329,7 @@ pub async fn test_capture_simple_inference_spans(
     let all_spans = exporter.take_spans();
     let num_spans = all_spans.len();
     let spans = build_span_map(all_spans);
+    eprintln!("Spans: {spans:#?}");
     let [root_span] = spans.root_spans.as_slice() else {
         panic!("Expected one root span: {:#?}", spans.root_spans);
     };
@@ -417,19 +490,18 @@ pub async fn test_capture_simple_inference_spans(
     assert_eq!(num_spans, 4);
 }
 
-#[tokio::test]
-pub async fn test_capture_model_error_genai_tags() {
-    test_capture_model_error(OtlpTracesFormat::OpenTelemetry, "opentelemetry").await;
+#[test]
+pub fn test_capture_model_error_genai_tags() {
+    test_capture_model_error(OtlpTracesFormat::OpenTelemetry, "opentelemetry");
 }
 
-#[tokio::test]
-pub async fn test_capture_model_error_openinference_tags() {
-    test_capture_model_error(OtlpTracesFormat::OpenInference, "openinference").await;
+#[test]
+pub fn test_capture_model_error_openinference_tags() {
+    test_capture_model_error(OtlpTracesFormat::OpenInference, "openinference");
 }
 
-pub async fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str) {
+pub fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str) {
     let episode_uuid = Uuid::now_v7();
-    let exporter = install_capturing_otel_exporter();
 
     let config = format!(
         "
@@ -439,24 +511,32 @@ pub async fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str)
     "
     );
 
-    let client = tensorzero::test_helpers::make_embedded_gateway_with_config(&config).await;
-    let _err = client
-        .inference(ClientInferenceParams {
-            episode_id: Some(episode_uuid),
-            model_name: Some("openai::missing-model-name".to_string()),
-            input: ClientInput {
-                system: None,
-                messages: vec![ClientInputMessage {
-                    role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
-                        text: "What is your name?".to_string(),
-                    })],
-                }],
-            },
-            ..Default::default()
-        })
-        .await
-        .unwrap_err();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let (exporter, _err) = runtime.block_on(async {
+        let exporter = install_capturing_otel_exporter().await;
+        let client = tensorzero::test_helpers::make_embedded_gateway_with_config(&config).await;
+        let _err = client
+            .inference(ClientInferenceParams {
+                episode_id: Some(episode_uuid),
+                model_name: Some("openai::missing-model-name".to_string()),
+                input: ClientInput {
+                    system: None,
+                    messages: vec![ClientInputMessage {
+                        role: Role::User,
+                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                            text: "What is your name?".to_string(),
+                        })],
+                    }],
+                },
+                ..Default::default()
+            })
+            .await
+            .unwrap_err();
+        (exporter, _err)
+    });
+    // Shut down the runtime to wait for all `tokio::spawn` tasks to finish
+    // (so that all spans are exported)
+    drop(runtime);
 
     let all_spans = exporter.take_spans();
     let num_spans = all_spans.len();
@@ -601,7 +681,7 @@ pub async fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str)
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_capture_feedback_spans() {
-    let exporter = install_capturing_otel_exporter();
+    let exporter = install_capturing_otel_exporter().await;
 
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let res = client

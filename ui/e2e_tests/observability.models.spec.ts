@@ -40,7 +40,7 @@ test.describe("Observability Models Page", () => {
 
     // Wait for dropdown to open and select a different time granularity
     await page.waitForSelector('[role="option"]');
-    await page.getByRole("option", { name: "Day" }).click();
+    await page.getByRole("option", { name: "Daily" }).click();
 
     // Verify the chart still displays after the change
     await expect(page.getByText("Model Usage Over Time")).toBeVisible();
@@ -134,7 +134,7 @@ test.describe("Observability Models Page", () => {
     const usageTimeSelector = page.locator('button[role="combobox"]').first();
     await usageTimeSelector.click();
     await page.waitForSelector('[role="option"]');
-    await page.getByRole("option", { name: "Hour" }).click();
+    await page.getByRole("option", { name: "Hourly" }).click();
 
     // Change usage metric
     const usageMetricSelector = page.locator('button[role="combobox"]').nth(1);

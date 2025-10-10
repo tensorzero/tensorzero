@@ -390,6 +390,41 @@ async fn e2e_test_invalid_system_input_template_no_schema() {
 }
 
 #[tokio::test]
+async fn e2e_test_invalid_json_user_input_template_no_schema() {
+    let payload = json!({
+        "function_name": "null_json",
+        "input":{
+            "system": "My system message",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "First user message"},
+                        {"type": "text", "arguments": {"my_invalid": "user message"}},
+                    ]
+                },
+
+            ]},
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response_json = response.json::<Value>().await.unwrap();
+    let error = response_json["error"].as_str().unwrap();
+    assert_eq!(
+        error,
+        "Message at index 0 has non-string content but there is no template `user` in any variant"
+    );
+}
+
+#[tokio::test]
 async fn e2e_test_invalid_user_input_template_no_schema() {
     let payload = json!({
         "function_name": "basic_test_template_no_schema",
@@ -429,6 +464,40 @@ async fn e2e_test_invalid_assistant_input_template_no_schema() {
     let payload = json!({
         "function_name": "basic_test_template_no_schema",
         "variant_name": "test",
+        "input":{
+            "system": "My system message",
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "arguments": {"my_invalid": "assistant message"}},
+                    ]
+                }
+            ]},
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let response_json = response.json::<Value>().await.unwrap();
+    let error = response_json["error"].as_str().unwrap();
+    assert_eq!(
+        error,
+        "Message at index 0 has non-string content but there is no template `assistant` in any variant"
+    );
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn e2e_test_invalid_json_assistant_input_template_no_schema() {
+    let payload = json!({
+        "function_name": "null_json",
         "input":{
             "system": "My system message",
             "messages": [

@@ -29,7 +29,7 @@ For example, if `base_path` is set to `/custom/prefix`, the inference endpoint w
 - **Type:** string
 - **Required:** no (default: `[::]:3000`)
 
-Defines the socket address to bind the TensorZero Gateway to.
+Defines the socket address (including port) to bind the TensorZero Gateway to.
 
 You can bind the gateway to IPv4 and/or IPv6 addresses.
 To bind to an IPv6 address, you can set this field to a value like `[::]:3000`.
@@ -69,6 +69,31 @@ system](/gateway/guides/opentelemetry-otlp).
 <Warning>
   Note that you will still need to set the `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
   environment variable. See the above-linked guide for details.
+</Warning>
+
+### `export.otlp.traces.extra_headers`
+
+- **Type:** object (map of string to string)
+- **Required:** no (default: `{}`)
+
+Static headers to include in all OTLP trace export requests.
+This is useful for adding metadata to OTLP exports.
+
+These headers are merged with any dynamic headers sent via HTTP request headers.
+When the same header key is present in both static and dynamic headers, the dynamic header value takes precedence.
+
+```toml title="tensorzero.toml"
+[gateway.export.otlp.traces]
+# ...
+extra_headers.space_id = "123"
+extra_headers."X-Custom-Header" = "custom-value"
+# ...
+```
+
+<Warning>
+  Avoid storing sensitive credentials directly in configuration files. See
+  [Export OpenTelemetry traces](/operations/export-opentelemetry-traces) for
+  instructions on sending headers dynamically.
 </Warning>
 
 ### `export.otlp.traces.format`
@@ -146,6 +171,16 @@ If `false`, the gateway will not use ClickHouse.
 observability.enabled = true
 # ...
 ```
+
+### `observability.disable_automatic_migrations`
+
+- **Type:** boolean
+- **Required:** no (default `false`)
+
+Disable automatic running of the TensorZero migrations when the TensorZero Gateway launches.
+If `true`, then the migrations are not applied upon launch and must instead be applied manually
+by running `docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-migrations-only`.
+If `false`, then the migrations are run automatically upon launch.
 
 ### `template_filesystem_access`
 
@@ -1359,6 +1394,24 @@ routing = ["openai", "alternative-provider"]
 # ...
 ```
 
+### `timeout_ms`
+
+- **Type:** integer
+- **Required:** no
+
+The total time allowed (in milliseconds) for the embedding model to complete the request.
+This timeout applies to the entire request, including all provider attempts in the routing list.
+
+If a provider times out, the next provider in the routing list will be attempted.
+If all providers timeout or the model-level timeout is reached, an error will be returned.
+
+```toml title="tensorzero.toml"
+[embedding_models.model-name]
+routing = ["openai"]
+timeout_ms = 5000  # 5 second timeout
+# ...
+```
+
 ## `[embedding_models.model_name.providers.provider_name]`
 
 The `providers` sub-section defines the behavior of a specific provider for a model.
@@ -1409,6 +1462,22 @@ type = "openai"
 extra_body = [
   { pointer = "/dimensions", value = 1536 }
 ]
+```
+
+### `timeout_ms`
+
+- **Type:** integer
+- **Required:** no
+
+The total time allowed (in milliseconds) for this specific provider to complete the embedding request.
+
+If the provider times out, the next provider in the routing list will be attempted (if any).
+
+```toml title="tensorzero.toml"
+[embedding_models.model-name.providers.openai]
+type = "openai"
+timeout_ms = 3000  # 3 second timeout for this provider
+# ...
 ```
 
 ### `type`
@@ -1938,11 +2007,9 @@ frequency_penalty = 0.2
 ##### `json_mode`
 
 - **Type:** string
-- **Required:** no (default: `strict`)
+- **Required:** yes for `json` functions, forbidden for `chat` functions
 
 Defines the strategy for generating JSON outputs.
-
-This parameter is only supported for variants of functions with `type = "json"`.
 
 The supported modes are:
 
@@ -2236,8 +2303,10 @@ candidates = ["promptA", "promptA", "promptB"] # 3 candidate generations
 
 The `evaluator` parameter specifies the configuration for the model that will evaluate and select the best response from the generated candidates.
 
-The evaluator is configured similarly to a `chat_completion` variant, but without the `type` field.
+The evaluator is configured similarly to a `chat_completion` variant for a JSON function, but without the `type` field.
 The prompts here should be prompts that you would use to solve the original problem, as the gateway has special-purpose handling and templates to convert them to an evaluator.
+
+The evaluator can optionally include a `json_mode` parameter (see the `json_mode` documentation under `chat_completion` variants). If not specified, it defaults to `strict`.
 
 ```toml
 [functions.draft-email.variants.best-of-n]
@@ -2355,11 +2424,11 @@ candidates = ["promptA", "promptA", "promptB"] # 3 candidate generations
 ##### `fuser`
 
 - **Type:** object
-- **Required:** yes
+- **Required:** yes for `json` functions, forbidden for `chat` functions
 
 The `fuser` parameter specifies the configuration for the model that will evaluate and combine the elements.
 
-The evaluator is configured similarly to a `chat_completion` variant, but without the `type` field.
+The fuser is configured similarly to a `chat_completion` variant, but without the `type` field.
 The prompts here should be prompts that you would use to solve the original problem, as the gateway has special-purpose handling and templates to convert them to a fuser.
 
 ```toml
@@ -2435,6 +2504,7 @@ weight = 1.0
 </Accordion>
 
 <Accordion title='type: "experimental_dynamic_in_context_learning"'>
+
 
 ##### `embedding_model`
 
@@ -2626,11 +2696,9 @@ Intelligence-Level: AGI
 ##### `json_mode`
 
 - **Type:** string
-- **Required:** no (default: `strict`)
+- **Required:** yes for `json` functions, forbidden for `chat` functions
 
 Defines the strategy for generating JSON outputs.
-
-This parameter is only supported for variants of functions with `type = "json"`.
 
 The supported modes are:
 
@@ -2659,6 +2727,16 @@ Defines the number of examples to retrieve for the inference.
 k = 10
 # ...
 ```
+
+##### `max_distance`
+
+- **Type:** non-negative float
+- **Required:** no (default: none)
+
+Filters retrieved examples based on their cosine distance from the input embedding.
+Only examples with a cosine distance less than or equal to the specified threshold are included in the prompt.
+
+If all examples are filtered out due to this threshold, the variant falls back to default chat completion behavior.
 
 ##### `max_tokens`
 
@@ -2859,7 +2937,7 @@ You can define multiple metrics by including multiple `[metrics.metric_name]` se
 The metric name can't be `comment` or `demonstration`, as those names are reserved for internal use.
 
 If your `metric_name` is not a basic string, it can be escaped with quotation marks.
-For example, periods are not allowed in basic strings, so you can define `beats-gpt-3.5` as `[metrics."beats-gpt-3.5"]`.
+For example, periods are not allowed in basic strings, so you can define `beats-gpt-4.1` as `[metrics."beats-gpt-4.1"]`.
 
 ```toml title="tensorzero.toml"
 [metrics.task-completed]

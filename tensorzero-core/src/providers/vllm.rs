@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::sync::OnceLock;
 
 use futures::future::try_join_all;
 use futures::{StreamExt, TryStreamExt};
@@ -26,11 +25,11 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseArgs,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::providers::openai::check_api_base_suffix;
+use crate::providers::openai::{check_api_base_suffix, OpenAIMessagesConfig};
 
 const PROVIDER_NAME: &str = "vLLM";
 pub const PROVIDER_TYPE: &str = "vllm";
@@ -45,38 +44,21 @@ pub struct VLLMProvider {
     credentials: VLLMCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<VLLMCredentials> = OnceLock::new();
-
 impl VLLMProvider {
-    pub fn new(
-        model_name: String,
-        api_base: Url,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-
+    pub fn new(model_name: String, api_base: Url, credentials: VLLMCredentials) -> Self {
         // Check if the api_base has the `/chat/completions` suffix and warn if it does
         check_api_base_suffix(&api_base);
 
-        Ok(VLLMProvider {
+        VLLMProvider {
             model_name,
             api_base,
             credentials,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {
         &self.model_name
     }
-}
-
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("VLLM_API_KEY".to_string())
 }
 
 #[derive(Clone, Debug)]
@@ -343,7 +325,16 @@ impl<'a> VLLMRequest<'a> {
         } else {
             None
         };
-        let messages = prepare_vllm_messages(request).await?;
+        let messages = prepare_vllm_messages(
+            request,
+            OpenAIMessagesConfig {
+                json_mode: Some(&request.json_mode),
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: request
+                    .fetch_and_encode_input_files_before_inference,
+            },
+        )
+        .await?;
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
 
@@ -447,12 +438,13 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
 
 pub(super) async fn prepare_vllm_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
+    config: OpenAIMessagesConfig<'a>,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages: Vec<_> = try_join_all(
         request
             .messages
             .iter()
-            .map(|msg| tensorzero_to_openai_messages(msg, PROVIDER_TYPE)),
+            .map(|msg| tensorzero_to_openai_messages(msg, config)),
     )
     .await?
     .into_iter()
@@ -689,31 +681,27 @@ mod tests {
     #[traced_test]
     fn test_vllm_provider_new_api_base_check() {
         let model_name = "test-model".to_string();
-        let api_key_location = Some(CredentialLocation::None);
 
         // Valid cases (should not warn)
         let _ = VLLMProvider::new(
             model_name.clone(),
             Url::parse("http://localhost:1234/v1/").unwrap(),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            VLLMCredentials::None,
+        );
 
         let _ = VLLMProvider::new(
             model_name.clone(),
             Url::parse("http://localhost:1234/v1").unwrap(),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            VLLMCredentials::None,
+        );
 
         // Invalid cases (should warn)
         let invalid_url_1 = Url::parse("http://localhost:1234/chat/completions").unwrap();
         let _ = VLLMProvider::new(
             model_name.clone(),
             invalid_url_1.clone(),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            VLLMCredentials::None,
+        );
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_1.as_ref()));
 
@@ -721,9 +709,8 @@ mod tests {
         let _ = VLLMProvider::new(
             model_name.clone(),
             invalid_url_2.clone(),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            VLLMCredentials::None,
+        );
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_2.as_ref()));
     }

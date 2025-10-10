@@ -23,14 +23,14 @@ pub struct BucketInfo {
 impl RateLimitQueries for PostgresConnectionInfo {
     async fn consume_tickets(
         &self,
-        requests: Vec<ConsumeTicketsRequest>,
+        requests: &[ConsumeTicketsRequest],
     ) -> Result<Vec<ConsumeTicketsReceipt>, Error> {
         if requests.is_empty() {
             return Ok(vec![]);
         }
         let pool = self.get_pool().ok_or_else(|| {
             Error::new(ErrorDetails::PostgresQuery {
-                message: "PostgreSQL connection is disabled".to_string(),
+                message: "Failed to consume tickets for rate limiting: PostgreSQL connection is disabled.".to_string(),
                 function_name: None,
             })
         })?;
@@ -62,13 +62,7 @@ impl RateLimitQueries for PostgresConnectionInfo {
             &refill_intervals
         )
         .fetch_all(pool)
-        .await
-        .map_err(|e| {
-            Error::new(ErrorDetails::PostgresQuery {
-                message: format!("Database query failed: {e}"),
-                function_name: Some("consume_multiple_resource_tickets".to_string()),
-            })
-        })?;
+        .await?;
 
         let mut results = Vec::new();
         for response in responses {

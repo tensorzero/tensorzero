@@ -1,5 +1,16 @@
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
+
+/// Serializes a value as a JSON string (for "doubly-serialized" fields).
+/// This is the inverse of `deserialize_json_string`.
+pub fn serialize_json_string<S, T>(value: &T, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+    T: Serialize,
+{
+    let json_str = serde_json::to_string(value).map_err(serde::ser::Error::custom)?;
+    serializer.serialize_str(&json_str)
+}
 
 /// Deserializes a "doubly-serialized" field of a struct.
 /// If you have a struct like this:

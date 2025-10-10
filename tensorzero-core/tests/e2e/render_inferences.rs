@@ -562,6 +562,7 @@ pub async fn test_render_datapoints_no_function() {
     let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
         function_name: "basic_test".to_string(),
+        name: None,
         id: Uuid::now_v7(),
         episode_id: Some(Uuid::now_v7()),
         input: StoredInput {
@@ -601,6 +602,7 @@ pub async fn test_render_datapoints_no_variant() {
     let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
         function_name: "basic_test".to_string(),
+        name: None,
         id: Uuid::now_v7(),
         episode_id: Some(Uuid::now_v7()),
         input: StoredInput {
@@ -648,6 +650,7 @@ pub async fn test_render_datapoints_missing_variable() {
     let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
         function_name: "basic_test".to_string(),
+        name: None,
         id: Uuid::now_v7(),
         episode_id: Some(Uuid::now_v7()),
         input: StoredInput {
@@ -690,6 +693,7 @@ pub async fn test_render_datapoints_normal() {
         Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "basic_test".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
@@ -713,6 +717,7 @@ pub async fn test_render_datapoints_normal() {
         Datapoint::Json(JsonInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "json_success".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
@@ -739,6 +744,7 @@ pub async fn test_render_datapoints_normal() {
         Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "weather_helper".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
@@ -777,6 +783,7 @@ pub async fn test_render_datapoints_normal() {
         Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "basic_test".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
@@ -963,6 +970,7 @@ pub async fn test_render_datapoints_template_no_schema() {
     let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
         function_name: "basic_test_template_no_schema".to_string(),
+        name: None,
         id: Uuid::now_v7(),
         episode_id: Some(Uuid::now_v7()),
         input: StoredInput {

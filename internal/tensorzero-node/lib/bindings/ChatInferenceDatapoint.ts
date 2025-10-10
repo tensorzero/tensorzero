@@ -17,4 +17,5 @@ export type ChatInferenceDatapoint = {
   is_custom: boolean;
   source_inference_id?: string | null;
   staled_at?: string | null;
+  name?: string | null;
 };

@@ -25,7 +25,10 @@ use tensorzero_core::{
     config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::Datapoint,
     function::FunctionConfig,
 };
-use tokio::{sync::Semaphore, task::JoinSet};
+use tokio::{
+    sync::{mpsc, Semaphore},
+    task::JoinSet,
+};
 use tracing::{debug, error, info, instrument};
 use url::Url;
 use uuid::Uuid;
@@ -35,8 +38,13 @@ pub mod evaluators;
 pub mod helpers;
 pub mod stats;
 
-#[derive(clap::ValueEnum, Clone, Debug, Default, PartialEq)]
+/// Buffer size for the mpsc channel used to stream evaluation updates.
+/// This provides backpressure if the consumer can't keep up with the producer.
+const EVALUATION_CHANNEL_BUFFER_SIZE: usize = 128;
+
+#[derive(clap::ValueEnum, Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 #[clap(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum OutputFormat {
     Jsonl,
     #[default]
@@ -82,6 +90,75 @@ pub struct Clients {
     pub clickhouse_client: ClickHouseConnectionInfo,
 }
 
+/// Parameters for running an evaluation using run_evaluation_core
+/// This struct encapsulates all the necessary components for evaluation execution
+pub struct EvaluationCoreArgs {
+    /// TensorZero client for making inference requests
+    pub tensorzero_client: tensorzero::Client,
+
+    /// ClickHouse client for database operations
+    pub clickhouse_client: ClickHouseConnectionInfo,
+
+    /// Configuration containing function and evaluation definitions
+    pub config: Arc<Config>,
+
+    /// Name of the evaluation to run.
+    pub evaluation_name: String,
+
+    /// Unique identifier for this evaluation run
+    pub evaluation_run_id: Uuid,
+
+    /// Name of the dataset to run on.
+    pub dataset_name: String,
+
+    /// Name of the variant to run.
+    pub variant_name: String,
+
+    /// Number of concurrent requests to make.
+    pub concurrency: usize,
+
+    /// Cache configuration for inference requests
+    pub inference_cache: CacheEnabledMode,
+}
+
+/// High-level wrapper function for running evaluations called from the CLI.
+/// It handles all setup and teardown, then delegates to `run_evaluation_core_streaming`
+/// for the actual evaluation logic.
+///
+/// ## What it does
+///
+/// 1. **Setup:**
+///    - Loads environment variables (ClickHouse URL, optional Postgres URL)
+///    - Loads the TensorZero configuration from the config file
+///    - Initializes the TensorZero client (either HTTP gateway or embedded gateway)
+///    - Initializes the ClickHouse client for storing evaluation results
+///
+/// 2. **Execution:**
+///    - Calls `run_evaluation_core_streaming` with the initialized clients and config
+///    - Receives a stream of `EvaluationUpdate` messages via a channel
+///    - Writes each update to the output writer as it arrives
+///
+/// 3. **Results:**
+///    - For `OutputFormat::Jsonl`: Writes each update as a JSON line
+///    - For `OutputFormat::Pretty`: Shows a progress bar and computes statistics at the end
+///    - Computes mean/stderr for each evaluator
+///    - Checks if results meet the configured cutoff thresholds
+///    - Fails if any evaluator's results are below its cutoff
+///
+/// 4. **Cleanup:**
+///    - Waits for the ClickHouse batch writer to finish persisting all results
+///    - This ensures all evaluation data is in the database before returning
+///
+/// ## Parameters
+///
+/// - `args`: CLI arguments containing evaluation name, dataset, variant, concurrency, etc.
+/// - `evaluation_run_id`: Unique identifier for this evaluation run
+/// - `writer`: Output writer (stdout, file, etc.) for writing results
+///
+/// ## Returns
+///
+/// - `Ok(())` if the evaluation completes successfully and meets all cutoffs
+/// - `Err` if setup fails, evaluation fails, or results don't meet cutoffs
 #[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
 pub async fn run_evaluation(
     args: Args,
@@ -89,7 +166,6 @@ pub async fn run_evaluation(
     mut writer: impl Write,
 ) -> Result<()> {
     info!("Initializing evaluation environment");
-    let semaphore = Semaphore::new(args.concurrency);
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
         .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
     debug!(clickhouse_url = %clickhouse_url, "ClickHouse URL resolved");
@@ -111,22 +187,6 @@ pub async fn run_evaluation(
         .await?,
     );
     debug!("Configuration loaded successfully");
-    let evaluation_config = config
-        .evaluations
-        .get(&args.evaluation_name)
-        .ok_or_else(|| anyhow!("evaluation not found"))?
-        .clone();
-    debug!(evaluation_name = %args.evaluation_name, "Evaluation config found");
-
-    let EvaluationConfig::Static(static_evaluation_config) = &*evaluation_config;
-    let function_config = config
-        .get_function(&static_evaluation_config.function_name)?
-        .into_owned();
-    info!(
-        function_name = %static_evaluation_config.function_name,
-        evaluators = ?static_evaluation_config.evaluators.keys().collect::<Vec<_>>(),
-        "Function and evaluators configured"
-    );
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {
             ClientBuilder::new(ClientBuilderMode::HTTPGateway { url: gateway_url })
@@ -142,127 +202,47 @@ pub async fn run_evaluation(
     }
     .build()
     .await
-    .map_err(|e| anyhow!("Failed to build client: {}", e))?;
-    let clients = Arc::new(Clients {
-        tensorzero_client: ThrottledTensorZeroClient::new(tensorzero_client, semaphore),
-        clickhouse_client: ClickHouseConnectionInfo::new(
-            &clickhouse_url,
-            config.gateway.observability.batch_writes.clone(),
-        )
-        .await?,
-    });
+    .map_err(|e| anyhow!("Failed to build client: {e}"))?;
 
-    let mut join_set = JoinSet::new();
-
-    info!("Querying dataset");
-    let dataset = query_dataset(
-        &clients.clickhouse_client,
-        &args.dataset_name,
-        &static_evaluation_config.function_name,
-        &function_config,
+    let clickhouse_client = ClickHouseConnectionInfo::new(
+        &clickhouse_url,
+        config.gateway.observability.batch_writes.clone(),
     )
     .await?;
-    info!(dataset_size = dataset.len(), "Dataset loaded successfully");
-    let dataset_name = Arc::new(args.dataset_name);
-    let variant_name = Arc::new(args.variant_name);
-    let evaluation_name = Arc::new(args.evaluation_name);
-    let dataset_len = dataset.len();
-    let mut task_id_to_datapoint_id = HashMap::new();
 
-    write_run_info(
-        &mut writer,
-        &RunInfo {
-            evaluation_run_id,
-            num_datapoints: dataset_len,
-        },
-        &args.format,
-    )?;
+    let core_args = EvaluationCoreArgs {
+        tensorzero_client,
+        clickhouse_client: clickhouse_client.clone(),
+        config,
+        dataset_name: args.dataset_name,
+        variant_name: args.variant_name,
+        evaluation_name: args.evaluation_name,
+        evaluation_run_id,
+        inference_cache: args.inference_cache,
+        concurrency: args.concurrency,
+    };
 
-    // Spawn concurrent tasks for each datapoint
-    for datapoint in dataset {
-        let clients_clone = clients.clone();
-        let variant_name = variant_name.clone();
-        let function_config = function_config.clone();
-        let evaluation_config = evaluation_config.clone();
-        let dataset_name = dataset_name.clone();
-        let function_name = static_evaluation_config.function_name.clone();
-        let evaluation_name = evaluation_name.clone();
-        let evaluation_run_id_clone = evaluation_run_id;
-        let datapoint = Arc::new(datapoint);
-        let datapoint_id = datapoint.id();
-        let abort_handle = join_set.spawn(async move {
-            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&clients_clone.tensorzero_client).await?));
-            let inference_response = Arc::new(
-                infer_datapoint(InferDatapointParams {
-                    clients: &clients_clone,
-                    function_name: &function_name,
-                    variant_name: &variant_name,
-                    evaluation_run_id: evaluation_run_id_clone,
-                    dataset_name: &dataset_name,
-                    datapoint: &datapoint,
-                    evaluation_name: &evaluation_name,
-                    function_config: &function_config,
-                    input: &input,
-                    inference_cache: args.inference_cache,
-                })
-                .await?,
-            );
+    let output_format = args.format.clone();
+    let result = run_evaluation_core_streaming(core_args).await?;
 
-            let evaluation_result = evaluate_inference(
-                EvaluateInferenceParams {
-                    inference_response: inference_response.clone(),
-                    datapoint: datapoint.clone(),
-                    input,
-                    evaluation_config,
-                    evaluation_name,
-                    clients: clients_clone.clone(),
-                    evaluation_run_id: evaluation_run_id_clone,
-                    inference_cache: args.inference_cache,
-                })
-                .await?;
-            debug!(datapoint_id = %datapoint.id(), evaluations_count = evaluation_result.len(), "Evaluations completed");
+    let mut receiver = result.receiver;
+    let dataset_len = result.run_info.num_datapoints;
 
-            Ok::<(Datapoint, InferenceResponse, evaluators::EvaluationResult), anyhow::Error>((
-                Arc::into_inner(datapoint).ok_or_else(|| anyhow!("Failed to get datapoint for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
-                Arc::into_inner(inference_response).ok_or_else(|| anyhow!("Failed to get inference response for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
-                evaluation_result,
-            ))
-        });
-        task_id_to_datapoint_id.insert(abort_handle.id(), datapoint_id);
-    }
+    // Write the run info first
+    write_run_info(&mut writer, &result.run_info, &output_format)?;
 
-    // Collect results
-    let mut evaluation_stats = EvaluationStats::new(args.format, dataset_len);
+    // Collect results from the streaming channel
+    let mut evaluation_stats = EvaluationStats::new(output_format.clone(), dataset_len);
 
-    while let Some(result) = join_set.join_next_with_id().await {
-        match result {
-            Ok((_, Ok((datapoint, inference_response, evaluation_result)))) => {
-                evaluation_stats.push(
-                    EvaluationUpdate::Success(EvaluationInfo::new(
-                        datapoint,
-                        inference_response,
-                        evaluation_result,
-                    )),
-                    &mut writer,
-                )?;
+    while let Some(update) = receiver.recv().await {
+        match update {
+            EvaluationUpdate::RunInfo(_) => {
+                // Skip RunInfo as we already wrote it
+                continue;
             }
-            Ok((task_id, Err(e))) => {
-                tracing::warn!("Task error: {}", e);
-                evaluation_stats.push(
-                    EvaluationUpdate::Error(EvaluationError {
-                        datapoint_id: task_id_to_datapoint_id[&task_id],
-                        message: e.to_string(),
-                    }),
-                    &mut writer,
-                )?;
+            update => {
+                evaluation_stats.push(update, &mut writer)?;
             }
-            Err(e) => evaluation_stats.push(
-                EvaluationUpdate::Error(EvaluationError {
-                    datapoint_id: task_id_to_datapoint_id[&e.id()],
-                    message: e.to_string(),
-                }),
-                &mut writer,
-            )?,
         }
     }
 
@@ -271,6 +251,7 @@ pub async fn run_evaluation(
     }
 
     if evaluation_stats.output_format == OutputFormat::Pretty {
+        let EvaluationConfig::Static(static_evaluation_config) = &*result.evaluation_config;
         let stats = evaluation_stats.compute_stats(&static_evaluation_config.evaluators);
 
         // Print all stats
@@ -292,7 +273,7 @@ pub async fn run_evaluation(
         // If there are failures, return an error with all failures listed
         if !failures.is_empty() {
             let failure_messages = format_cutoff_failures(&failures);
-            bail!("Failed cutoffs for evaluators: {}", failure_messages);
+            bail!("Failed cutoffs for evaluators: {failure_messages}");
         }
     }
 
@@ -302,8 +283,8 @@ pub async fn run_evaluation(
     // (since Tokio will wait for the `spawn_blocking` task to finish before shutting down the runtime).
     // We explicitly wait here for the batch writer to finish, so that `run_evaluation` can be called
     // from other places in the codebase (e.g. e2e tests), and subsequently query ClickHouse for the evaluation results.
-    if let Some(handle) = clients.clickhouse_client.batcher_join_handle() {
-        drop(clients);
+    if let Some(handle) = clickhouse_client.batcher_join_handle() {
+        drop(clickhouse_client);
         tracing::info!("Waiting for evaluations ClickHouse batch writer to finish");
         handle
             .await
@@ -312,6 +293,206 @@ pub async fn run_evaluation(
     }
 
     Ok(())
+}
+
+/// Core streaming evaluation function.
+///
+/// This function runs an evaluation and streams results as they complete via an mpsc channel.
+///
+/// ## How it works
+///
+/// 1. Creates an mpsc channel for streaming `EvaluationUpdate` messages
+/// 2. Loads the evaluation and function configurations
+/// 3. Queries the dataset to get all datapoints
+/// 4. Sends `RunInfo` as the first message (evaluation_run_id, num_datapoints)
+/// 5. Spawns a concurrent task for each datapoint that:
+///    - Runs inference for the datapoint
+///    - Evaluates the inference response
+///    - Returns (Datapoint, InferenceResponse, EvaluationResult)
+/// 6. Spawns a background collector task that:
+///    - Collects results from the JoinSet as tasks complete
+///    - Converts results to `EvaluationUpdate::Success` or `EvaluationUpdate::Error`
+///    - Sends each update through the channel
+///    - Waits for the ClickHouse batch writer to finish
+///    - Closes the channel when done
+/// 7. Returns immediately with the receiver, run_info, and evaluation_config
+///
+/// ## Return value
+///
+/// Returns `EvaluationStreamResult` containing:
+/// - `receiver`: Channel receiver for consuming `EvaluationUpdate` messages
+/// - `run_info`: Metadata (evaluation_run_id, num_datapoints)
+/// - `evaluation_config`: The evaluation configuration (needed for computing statistics)
+///
+/// The caller receives updates by calling `receiver.recv().await` until the channel closes.
+///
+/// ## Error handling
+///
+/// Errors within evaluation tasks are caught and sent as `EvaluationUpdate::Error` messages
+/// rather than failing the entire evaluation. Error messages include context:
+/// - Inference errors: Include the datapoint_id
+/// - Evaluation errors: Include both the inference_id and datapoint_id
+#[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
+pub async fn run_evaluation_core_streaming(
+    args: EvaluationCoreArgs,
+) -> Result<EvaluationStreamResult> {
+    let (sender, receiver) = mpsc::channel(EVALUATION_CHANNEL_BUFFER_SIZE);
+
+    // Build the semaphore and clients
+    let semaphore = Semaphore::new(args.concurrency);
+    let clients = Arc::new(Clients {
+        tensorzero_client: ThrottledTensorZeroClient::new(args.tensorzero_client, semaphore),
+        clickhouse_client: args.clickhouse_client,
+    });
+
+    // Get evaluation configuration
+    let evaluation_config = args
+        .config
+        .evaluations
+        .get(&args.evaluation_name)
+        .ok_or_else(|| anyhow!("evaluation '{}' not found", args.evaluation_name))?
+        .clone();
+
+    debug!(evaluation_name = %args.evaluation_name, "Evaluation config found");
+
+    let EvaluationConfig::Static(static_evaluation_config) = &*evaluation_config;
+    let function_config = args
+        .config
+        .get_function(&static_evaluation_config.function_name)?
+        .into_owned();
+
+    info!(
+        function_name = %static_evaluation_config.function_name,
+        evaluators = ?static_evaluation_config.evaluators.keys().collect::<Vec<_>>(),
+        "Function and evaluators configured"
+    );
+
+    let mut join_set = JoinSet::new();
+
+    info!("Querying dataset");
+    let dataset = query_dataset(
+        &clients.clickhouse_client,
+        &args.dataset_name,
+        &static_evaluation_config.function_name,
+        &function_config,
+    )
+    .await?;
+    info!(dataset_size = dataset.len(), "Dataset loaded successfully");
+    let dataset_name = Arc::new(args.dataset_name);
+    let variant_name = Arc::new(args.variant_name);
+    let evaluation_name = Arc::new(args.evaluation_name);
+    let dataset_len = dataset.len();
+    let mut task_id_to_datapoint_id = HashMap::new();
+
+    let run_info = RunInfo {
+        evaluation_run_id: args.evaluation_run_id,
+        num_datapoints: dataset_len,
+    };
+
+    // Send the run info as the first message
+    if sender
+        .send(EvaluationUpdate::RunInfo(run_info.clone()))
+        .await
+        .is_err()
+    {
+        tracing::warn!("Failed to send RunInfo: receiver dropped before evaluation started");
+    }
+
+    // Spawn concurrent tasks for each datapoint
+    for datapoint in dataset {
+        let clients_clone = clients.clone();
+        let variant_name = variant_name.clone();
+        let function_config = function_config.clone();
+        let evaluation_config = evaluation_config.clone();
+        let dataset_name = dataset_name.clone();
+        let function_name = static_evaluation_config.function_name.clone();
+        let evaluation_name = evaluation_name.clone();
+        let evaluation_run_id_clone = args.evaluation_run_id;
+        let datapoint = Arc::new(datapoint);
+        let datapoint_id = datapoint.id();
+        let inference_cache = args.inference_cache;
+        let abort_handle = join_set.spawn(async move {
+            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&clients_clone.tensorzero_client).await?));
+            let inference_response = Arc::new(
+                infer_datapoint(InferDatapointParams {
+                    clients: &clients_clone,
+                    function_name: &function_name,
+                    variant_name: &variant_name,
+                    evaluation_run_id: evaluation_run_id_clone,
+                    dataset_name: &dataset_name,
+                    datapoint: &datapoint,
+                    evaluation_name: &evaluation_name,
+                    function_config: &function_config,
+                    input: &input,
+                    inference_cache,
+                })
+                .await.map_err(|e| anyhow!("Error inferring for datapoint {datapoint_id}: {e}"))?,
+            );
+
+            let inference_id = inference_response.inference_id();
+            let evaluation_result = evaluate_inference(
+                EvaluateInferenceParams {
+                    inference_response: inference_response.clone(),
+                    datapoint: datapoint.clone(),
+                    input,
+                    evaluation_config,
+                    evaluation_name,
+                    clients: clients_clone.clone(),
+                    evaluation_run_id: evaluation_run_id_clone,
+                    inference_cache,
+                })
+                .await.map_err(|e| anyhow!("Error evaluating inference {inference_id} for datapoint {datapoint_id}: {e}"))?;
+            debug!(datapoint_id = %datapoint.id(), evaluations_count = evaluation_result.len(), "Evaluations completed");
+
+            Ok::<(Datapoint, InferenceResponse, evaluators::EvaluationResult), anyhow::Error>((
+                Arc::into_inner(datapoint).ok_or_else(|| anyhow!("Failed to get datapoint for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
+                Arc::into_inner(inference_response).ok_or_else(|| anyhow!("Failed to get inference response for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
+                evaluation_result,
+            ))
+        });
+        task_id_to_datapoint_id.insert(abort_handle.id(), datapoint_id);
+    }
+
+    // Get a shared reference to the evaluation config (which includes evaluators)
+    let evaluators = evaluation_config.clone();
+
+    // Spawn a task to collect results and stream them
+    let sender_clone = sender.clone();
+    tokio::spawn(async move {
+        while let Some(result) = join_set.join_next_with_id().await {
+            let update = match result {
+                Ok((_, Ok((datapoint, inference_response, evaluation_result)))) => {
+                    EvaluationUpdate::Success(EvaluationInfo::new(
+                        datapoint,
+                        inference_response,
+                        evaluation_result,
+                    ))
+                }
+                Ok((task_id, Err(e))) => {
+                    tracing::warn!("Task error: {}", e);
+                    EvaluationUpdate::Error(EvaluationError {
+                        datapoint_id: task_id_to_datapoint_id[&task_id],
+                        message: e.to_string(),
+                    })
+                }
+                Err(e) => EvaluationUpdate::Error(EvaluationError {
+                    datapoint_id: task_id_to_datapoint_id[&e.id()],
+                    message: e.to_string(),
+                }),
+            };
+
+            if sender_clone.send(update).await.is_err() {
+                // Receiver dropped, stop sending
+                break;
+            }
+        }
+    });
+
+    Ok(EvaluationStreamResult {
+        receiver,
+        run_info,
+        evaluation_config: evaluators,
+    })
 }
 
 /// Checks if evaluator results meet their cutoff thresholds
@@ -451,6 +632,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         extra_body: Default::default(),
         extra_headers: Default::default(),
         internal_dynamic_variant_config: None,
+        otlp_traces_extra_headers: HashMap::new(),
     };
     debug!("Making inference request");
     let inference_result = clients.tensorzero_client.inference(params).await?;
@@ -483,10 +665,17 @@ fn write_run_info(
     Ok(())
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunInfo {
     pub evaluation_run_id: Uuid,
     pub num_datapoints: usize,
+}
+
+/// Result from running an evaluation that supports streaming
+pub struct EvaluationStreamResult {
+    pub receiver: mpsc::Receiver<EvaluationUpdate>,
+    pub run_info: RunInfo,
+    pub evaluation_config: Arc<EvaluationConfig>,
 }
 
 pub struct ThrottledTensorZeroClient {

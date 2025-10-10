@@ -5,6 +5,7 @@ use lazy_static::lazy_static;
 use reqwest::multipart::{Form, Part};
 use reqwest::StatusCode;
 use reqwest_eventsource::Event;
+use responses::stream_openai_responses;
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -12,7 +13,6 @@ use serde_json::{json, Value};
 use std::borrow::Cow;
 use std::io::Write;
 use std::pin::Pin;
-use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
 use tracing::instrument;
@@ -32,9 +32,10 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
+
 use crate::inference::types::extra_body::FullExtraBodyConfig;
-use crate::inference::types::file::{mime_type_to_ext, require_image};
-use crate::inference::types::resolved_input::FileWithPath;
+use crate::inference::types::file::mime_type_to_ext;
+use crate::inference::types::resolved_input::{FileUrl, FileWithPath, LazyFile};
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
@@ -46,7 +47,11 @@ use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, ThoughtChunk,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
+use crate::providers::openai::responses::{
+    get_responses_url, OpenAIResponsesInput, OpenAIResponsesInputMessage,
+    OpenAIResponsesInputMessageContent, OpenAIResponsesRequest, OpenAIResponsesResponse,
+};
 use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::providers::helpers::{
@@ -58,16 +63,13 @@ use crate::inference::TensorZeroEventError;
 use crate::inference::WrappedProvider;
 
 pub mod optimization;
+mod responses;
 
 lazy_static! {
     pub static ref OPENAI_DEFAULT_BASE_URL: Url = {
         #[expect(clippy::expect_used)]
         Url::parse("https://api.openai.com/v1/").expect("Failed to parse OPENAI_DEFAULT_BASE_URL")
     };
-}
-
-pub fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("OPENAI_API_KEY".to_string())
 }
 
 const PROVIDER_NAME: &str = "OpenAI";
@@ -81,33 +83,27 @@ pub struct OpenAIProvider {
     api_base: Option<Url>,
     #[serde(skip)]
     credentials: OpenAICredentials,
+    use_responses: bool,
 }
-
-pub static DEFAULT_CREDENTIALS: OnceLock<OpenAICredentials> = OnceLock::new();
 
 impl OpenAIProvider {
     pub fn new(
         model_name: String,
         api_base: Option<Url>,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-
+        credentials: OpenAICredentials,
+        use_responses: bool,
+    ) -> Self {
         // Check if the api_base has the `/chat/completions` suffix and warn if it does
         if let Some(api_base) = &api_base {
             check_api_base_suffix(api_base);
         }
 
-        Ok(OpenAIProvider {
+        OpenAIProvider {
             model_name,
             api_base,
             credentials,
-        })
+            use_responses,
+        }
     }
 
     pub fn model_name(&self) -> &str {
@@ -194,18 +190,31 @@ impl WrappedProvider for OpenAIProvider {
             otlp_config: _,
         }: ModelProviderRequest<'a>,
     ) -> Result<serde_json::Value, Error> {
-        let request_body = serde_json::to_value(
-            OpenAIRequest::new(&self.model_name, request).await?,
-        )
-        .map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing OpenAI request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        Ok(request_body)
+        if self.use_responses {
+            Ok(
+                serde_json::to_value(OpenAIResponsesRequest::new(&self.model_name, request).await?)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Error serializing OpenAI request: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                        })
+                    })?,
+            )
+        } else {
+            Ok(
+                serde_json::to_value(OpenAIRequest::new(&self.model_name, request).await?)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Error serializing OpenAI request: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                        })
+                    })?,
+            )
+        }
     }
     fn parse_response(
         &self,
@@ -214,26 +223,44 @@ impl WrappedProvider for OpenAIProvider {
         raw_response: String,
         latency: Latency,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let response = serde_json::from_str(&raw_response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error parsing JSON response: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                raw_request: Some(raw_request.clone()),
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
+        if self.use_responses {
+            // TODO - include 'responses' somewhere in the error message
+            let response: OpenAIResponsesResponse =
+                serde_json::from_str(&raw_response).map_err(|e| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!(
+                            "Error parsing JSON response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        raw_request: Some(raw_request.clone()),
+                        raw_response: Some(raw_response.clone()),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
 
-        OpenAIResponseWithMetadata {
-            response,
-            raw_response,
-            latency,
-            raw_request,
-            generic_request: request,
+            response.into_provider_response(latency, raw_request, raw_response.clone(), request)
+        } else {
+            let response = serde_json::from_str(&raw_response).map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error parsing JSON response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: Some(raw_response.clone()),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
+
+            OpenAIResponseWithMetadata {
+                response,
+                raw_response,
+                latency,
+                raw_request,
+                generic_request: request,
+            }
+            .try_into()
         }
-        .try_into()
     }
 
     fn stream_events(
@@ -255,7 +282,11 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+        let request_url = if self.use_responses {
+            get_responses_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?
+        } else {
+            get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?
+        };
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let request_body = self.make_body(request).await?;
@@ -289,29 +320,53 @@ impl InferenceProvider for OpenAIProvider {
                 })
             })?;
 
-            let response = serde_json::from_str(&raw_response).map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!(
-                        "Error parsing JSON response: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: Some(raw_response.clone()),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+            if self.use_responses {
+                let response: OpenAIResponsesResponse = serde_json::from_str(&raw_response)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InferenceServer {
+                            message: format!(
+                                "Error parsing JSON response: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                            raw_request: Some(raw_request.clone()),
+                            raw_response: Some(raw_response.clone()),
+                            provider_type: PROVIDER_TYPE.to_string(),
+                        })
+                    })?;
+                let latency = Latency::NonStreaming {
+                    response_time: start_time.elapsed(),
+                };
+                response.into_provider_response(
+                    latency,
+                    raw_request,
+                    raw_response.clone(),
+                    request.request,
+                )
+            } else {
+                let response = serde_json::from_str(&raw_response).map_err(|e| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!(
+                            "Error parsing JSON response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        raw_request: Some(raw_request.clone()),
+                        raw_response: Some(raw_response.clone()),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
 
-            let latency = Latency::NonStreaming {
-                response_time: start_time.elapsed(),
-            };
-            Ok(OpenAIResponseWithMetadata {
-                response,
-                raw_response,
-                latency,
-                raw_request: raw_request.clone(),
-                generic_request: request.request,
+                let latency = Latency::NonStreaming {
+                    response_time: start_time.elapsed(),
+                };
+                Ok(OpenAIResponseWithMetadata {
+                    response,
+                    raw_response,
+                    latency,
+                    raw_request: raw_request.clone(),
+                    generic_request: request.request,
+                }
+                .try_into()?)
             }
-            .try_into()?)
         } else {
             Err(handle_openai_error(
                 &raw_request.clone(),
@@ -344,42 +399,88 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(
-            OpenAIRequest::new(&self.model_name, request).await?,
-        )
-        .map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing OpenAI request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
-        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
-        let mut request_builder = http_client.post(request_url);
-        if let Some(api_key) = api_key {
-            request_builder = request_builder.bearer_auth(api_key.expose_secret());
-        }
-        let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
-            PROVIDER_TYPE,
-            &request.extra_body,
-            &request.extra_headers,
-            model_provider,
-            model_name,
-            request_body,
-            request_builder,
-        )
-        .await?;
 
-        let stream = stream_openai(
-            PROVIDER_TYPE.to_string(),
-            event_source.map_err(TensorZeroEventError::EventSource),
-            start_time,
-        )
-        .peekable();
-        Ok((stream, raw_request))
+        if self.use_responses {
+            // Use OpenAI Responses API for streaming
+            let request_url =
+                get_responses_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+
+            let request_body =
+                serde_json::to_value(OpenAIResponsesRequest::new(&self.model_name, request).await?)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Error serializing OpenAI Responses request: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                        })
+                    })?;
+
+            let mut request_builder = http_client.post(request_url);
+            if let Some(api_key) = api_key {
+                request_builder = request_builder.bearer_auth(api_key.expose_secret());
+            }
+
+            let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+                PROVIDER_TYPE,
+                &request.extra_body,
+                &request.extra_headers,
+                model_provider,
+                model_name,
+                request_body,
+                request_builder,
+            )
+            .await?;
+
+            let stream = stream_openai_responses(
+                PROVIDER_TYPE.to_string(),
+                event_source.map_err(TensorZeroEventError::EventSource),
+                start_time,
+            )
+            .peekable();
+            Ok((stream, raw_request))
+        } else {
+            // Use Chat Completions API for streaming
+            let request_url =
+                get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+
+            let request_body =
+                serde_json::to_value(OpenAIRequest::new(&self.model_name, request).await?)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Error serializing OpenAI request: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                        })
+                    })?;
+
+            let mut request_builder = http_client.post(request_url);
+            if let Some(api_key) = api_key {
+                request_builder = request_builder.bearer_auth(api_key.expose_secret());
+            }
+
+            let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+                PROVIDER_TYPE,
+                &request.extra_body,
+                &request.extra_headers,
+                model_provider,
+                model_name,
+                request_body,
+                request_builder,
+            )
+            .await?;
+
+            let stream = stream_openai(
+                PROVIDER_TYPE.to_string(),
+                event_source.map_err(TensorZeroEventError::EventSource),
+                start_time,
+            )
+            .peekable();
+            Ok((stream, raw_request))
+        }
     }
 
     // Get a single chunk from the stream and make sure it is OK then send to client.
@@ -1015,10 +1116,12 @@ where
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Deserialize, Debug, PartialEq, Serialize)]
 pub struct OpenAIFile<'a> {
-    file_data: Cow<'a, str>,
-    filename: Cow<'a, str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file_data: Option<Cow<'a, str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    filename: Option<Cow<'a, str>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1167,21 +1270,50 @@ impl OpenAIRequestMessage<'_> {
     }
 }
 
-pub enum SystemOrDeveloper<'a> {
-    System(&'a str),
-    Developer(&'a str),
+impl<'a> SystemOrDeveloper<'a> {
+    pub fn into_openai_request_message(self) -> OpenAIRequestMessage<'a> {
+        match self {
+            SystemOrDeveloper::System(msg) => {
+                OpenAIRequestMessage::System(OpenAISystemRequestMessage { content: msg })
+            }
+            SystemOrDeveloper::Developer(msg) => {
+                OpenAIRequestMessage::Developer(OpenAISystemRequestMessage { content: msg })
+            }
+        }
+    }
+    pub fn into_openai_responses_input(self) -> OpenAIResponsesInput<'a> {
+        let role = match self {
+            SystemOrDeveloper::System(_) => "system",
+            SystemOrDeveloper::Developer(_) => "developer",
+        };
+        let text = match self {
+            SystemOrDeveloper::System(msg) => msg,
+            SystemOrDeveloper::Developer(msg) => msg,
+        };
+        OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
+            role,
+            id: None,
+            content: vec![OpenAIResponsesInputMessageContent::InputText { text }],
+        })
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct OpenAIMessagesConfig<'a> {
+    pub json_mode: Option<&'a ModelInferenceRequestJsonMode>,
+    pub provider_type: &'a str,
+    pub fetch_and_encode_input_files_before_inference: bool,
 }
 
 pub async fn prepare_openai_messages<'a>(
     system_or_developer: Option<SystemOrDeveloper<'a>>,
     messages: &'a [RequestMessage],
-    json_mode: Option<&'a ModelInferenceRequestJsonMode>,
-    provider_type: &'a str,
+    config: OpenAIMessagesConfig<'a>,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut openai_messages: Vec<_> = try_join_all(
         messages
             .iter()
-            .map(|msg| tensorzero_to_openai_messages(msg, provider_type)),
+            .map(|msg| tensorzero_to_openai_messages(msg, config)),
     )
     .await?
     .into_iter()
@@ -1189,7 +1321,7 @@ pub async fn prepare_openai_messages<'a>(
     .collect();
 
     if let Some(system_msg) =
-        prepare_system_or_developer_message(system_or_developer, json_mode, &openai_messages)
+        prepare_system_or_developer_message(system_or_developer, config.json_mode, &openai_messages)
     {
         openai_messages.insert(0, system_msg);
     }
@@ -1220,6 +1352,11 @@ pub(super) fn prepare_openai_tools<'a>(
     }
 }
 
+pub enum SystemOrDeveloper<'a> {
+    System(Cow<'a, str>),
+    Developer(Cow<'a, str>),
+}
+
 /// Prepares a system or developer message for OpenAI APIs with JSON mode handling.
 ///
 /// When JSON mode is `On`, OpenAI/Azure require "JSON" to appear in either the system/developer
@@ -1242,7 +1379,7 @@ pub(super) fn prepare_openai_tools<'a>(
 /// # Example
 /// ```rust,ignore
 /// let system_msg = prepare_system_or_developer_message(
-///     Some(SystemOrDeveloper::System("You are a helpful assistant")),
+///     Some(SystemOrDeveloper::System("You are a helpful assistant".into())),
 ///     Some(&ModelInferenceRequestJsonMode::On),
 ///     &messages
 /// );
@@ -1253,6 +1390,17 @@ pub(super) fn prepare_system_or_developer_message<'a>(
     json_mode: Option<&'_ ModelInferenceRequestJsonMode>,
     messages: &[OpenAIRequestMessage<'a>],
 ) -> Option<OpenAIRequestMessage<'a>> {
+    prepare_system_or_developer_message_helper(system_or_developer, json_mode, |content| {
+        should_add_json_instruction_chat_completion(content, messages)
+    })
+    .map(SystemOrDeveloper::into_openai_request_message)
+}
+
+pub(super) fn prepare_system_or_developer_message_helper<'a>(
+    system_or_developer: Option<SystemOrDeveloper<'a>>,
+    json_mode: Option<&'_ ModelInferenceRequestJsonMode>,
+    contains_content: impl FnOnce(&str) -> bool,
+) -> Option<SystemOrDeveloper<'a>> {
     let (content, is_system) = match system_or_developer {
         Some(SystemOrDeveloper::System(content)) => (Some(content), true),
         Some(SystemOrDeveloper::Developer(content)) => (Some(content), false),
@@ -1273,29 +1421,28 @@ pub(super) fn prepare_system_or_developer_message<'a>(
 
         // Has content and JSON mode is on - conditionally add JSON instruction
         (Some(content), Some(ModelInferenceRequestJsonMode::On)) => {
-            if should_add_json_instruction(content, messages) {
+            if contains_content(&content) {
                 Cow::Owned(format!("Respond using JSON.\n\n{content}"))
             } else {
-                Cow::Borrowed(content)
+                content
             }
         }
 
         // Has content, no JSON mode or JSON mode off/strict - use as-is
-        (Some(content), _) => Cow::Borrowed(content),
-    };
-
-    let system_msg = OpenAISystemRequestMessage {
-        content: final_content,
+        (Some(content), _) => content,
     };
 
     Some(if is_system {
-        OpenAIRequestMessage::System(system_msg)
+        SystemOrDeveloper::System(final_content)
     } else {
-        OpenAIRequestMessage::Developer(system_msg)
+        SystemOrDeveloper::Developer(final_content)
     })
 }
 
-fn should_add_json_instruction(content: &str, messages: &[OpenAIRequestMessage<'_>]) -> bool {
+fn should_add_json_instruction_chat_completion(
+    content: &str,
+    messages: &[OpenAIRequestMessage<'_>],
+) -> bool {
     !content.to_lowercase().contains("json")
         && !messages
             .iter()
@@ -1304,14 +1451,14 @@ fn should_add_json_instruction(content: &str, messages: &[OpenAIRequestMessage<'
 
 pub(super) async fn tensorzero_to_openai_messages<'a>(
     message: &'a RequestMessage,
-    provider_type: &str,
+    messages_config: OpenAIMessagesConfig<'a>,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     match message.role {
-        Role::User => tensorzero_to_openai_user_messages(&message.content, provider_type).await,
+        Role::User => tensorzero_to_openai_user_messages(&message.content, messages_config).await,
         Role::Assistant => {
             let message = tensorzero_to_openai_assistant_message(
                 Cow::Borrowed(&message.content),
-                provider_type,
+                messages_config,
             )
             .await?;
             if message.no_content() {
@@ -1323,9 +1470,92 @@ pub(super) async fn tensorzero_to_openai_messages<'a>(
     }
 }
 
+pub(super) async fn prepare_file_message(
+    file: &LazyFile,
+    messages_config: OpenAIMessagesConfig<'_>,
+) -> Result<OpenAIContentBlock<'static>, Error> {
+    match file {
+        // If we have all of the following:
+        // * The user passed in an image URL (not base64-encoded file data)
+        // * The user explicitly specified an image mime type
+        // * The `fetch_and_encode_input_files_before_inference` config setting is off (so we're allowed to forward image urls)
+        //
+        // Then, we can forward the image url directly to OpenAI. Unfortunately, we need to know the mime type for this to work,
+        // since we need to map images to "image_url" content blocks.
+        // Without downloading the file, we cannot guarantee that we guess the mime type correctly, so we don't try.
+        //
+        // OpenAI doesn't support passing in urls for 'file' content blocks, so we can only forward image urls.
+        LazyFile::Url {
+            file_url:
+                FileUrl {
+                    mime_type: Some(mime_type),
+                    url,
+                },
+            future: _,
+        } if !messages_config.fetch_and_encode_input_files_before_inference
+            && mime_type.type_() == mime::IMAGE =>
+        {
+            Ok(OpenAIContentBlock::ImageUrl {
+                image_url: OpenAIImageUrl {
+                    url: url.to_string(),
+                },
+            })
+        }
+        _ => {
+            // If we could have forwarded an image_url (except for the fact that we're missing the mime_type), log a warning.
+            if matches!(
+                file,
+                LazyFile::Url {
+                    file_url: FileUrl {
+                        url: _,
+                        mime_type: None,
+                    },
+                    future: _
+                }
+            ) && !messages_config.fetch_and_encode_input_files_before_inference
+            {
+                tracing::warn!("Cannot forward image_url to OpenAI because no mime_type was provided. Specify `mime_type` (or `tensorzero::mime_type` for openai-compatible requests) when sending files to allow URL forwarding to OpenAI.");
+            }
+
+            let resolved_file = file.resolve().await?;
+            let FileWithPath {
+                file,
+                storage_path: _,
+            } = &*resolved_file;
+            let file_data = file.data()?;
+            let base64_url = format!("data:{};base64,{}", file.mime_type, file_data);
+            if file.mime_type.type_() == mime::IMAGE {
+                Ok(OpenAIContentBlock::ImageUrl {
+                    image_url: OpenAIImageUrl {
+                        // This will only produce an error if we pass in a bad
+                        // `Base64File` (with missing file data)
+                        url: base64_url,
+                    },
+                })
+            } else {
+                // OpenAI doesn't document how they determine the content type of the base64 blob
+                // - let's try to pick a good suffix for the filename, in case they don't sniff
+                // the mime type from the actual file content.
+                let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidMessage {
+                        message: format!("Mime type {} has no filetype suffix", file.mime_type),
+                    })
+                })?;
+                Ok(OpenAIContentBlock::File {
+                    file: OpenAIFile {
+                        file_data: Some(Cow::Owned(base64_url)),
+                        // TODO - should we allow the user to specify the file name?
+                        filename: Some(Cow::Owned(format!("input.{suffix}"))),
+                    },
+                })
+            }
+        }
+    }
+}
+
 async fn tensorzero_to_openai_user_messages<'a>(
     content_blocks: &'a [ContentBlock],
-    provider_type: &str,
+    messages_config: OpenAIMessagesConfig<'a>,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     // We need to separate the tool result messages from the user content blocks.
 
@@ -1351,40 +1581,10 @@ async fn tensorzero_to_openai_user_messages<'a>(
                 }));
             }
             ContentBlock::File(file) => {
-                let resolved_file = file.resolve().await?;
-                let FileWithPath {
-                    file,
-                    storage_path: _,
-                } = &*resolved_file;
-                let data = format!("data:{};base64,{}", file.mime_type, file.data()?);
-                if file.mime_type.type_() == mime::IMAGE {
-                    user_content_blocks.push(OpenAIContentBlock::ImageUrl {
-                        image_url: OpenAIImageUrl {
-                            // This will only produce an error if we pass in a bad
-                            // `Base64File` (with missing file data)
-                            url: data,
-                        },
-                    });
-                } else {
-                    // OpenAI doesn't document how they determine the content type of the base64 blob
-                    // - let's try to pick a good suffix for the filename, in case they don't sniff
-                    // the mime type from the actual file content.
-                    let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
-                        Error::new(ErrorDetails::InvalidMessage {
-                            message: format!("Mime type {} has no filetype suffix", file.mime_type),
-                        })
-                    })?;
-                    user_content_blocks.push(OpenAIContentBlock::File {
-                        file: OpenAIFile {
-                            file_data: Cow::Owned(data),
-                            // TODO - should we allow the user to specify the file name?
-                            filename: Cow::Owned(format!("input.{suffix}")),
-                        },
-                    });
-                }
+                user_content_blocks.push(prepare_file_message(file, messages_config).await?);
             }
             ContentBlock::Thought(thought) => {
-                warn_discarded_thought_block(provider_type, thought);
+                warn_discarded_thought_block(messages_config.provider_type, thought);
             }
             ContentBlock::Unknown {
                 data,
@@ -1409,7 +1609,7 @@ async fn tensorzero_to_openai_user_messages<'a>(
 
 pub async fn tensorzero_to_openai_assistant_message<'a>(
     content_blocks: Cow<'a, [ContentBlock]>,
-    provider_type: &str,
+    messages_config: OpenAIMessagesConfig<'a>,
 ) -> Result<OpenAIRequestMessage<'a>, Error> {
     let content_block_cows: Vec<Cow<'_, ContentBlock>> = match content_blocks {
         Cow::Borrowed(content_blocks) => content_blocks.iter().map(Cow::Borrowed).collect(),
@@ -1464,23 +1664,11 @@ pub async fn tensorzero_to_openai_assistant_message<'a>(
             }
             Cow::Borrowed(ContentBlock::File(ref file))
             | Cow::Owned(ContentBlock::File(ref file)) => {
-                let resolved_file = file.resolve().await?;
-                let FileWithPath {
-                    file,
-                    storage_path: _,
-                } = &*resolved_file;
-                require_image(&file.mime_type, PROVIDER_TYPE)?;
-                assistant_content_blocks.push(OpenAIContentBlock::ImageUrl {
-                    image_url: OpenAIImageUrl {
-                        // This will only produce an error if we pass in a bad
-                        // `Base64File` (with missing file data)
-                        url: format!("data:{};base64,{}", file.mime_type, file.data()?),
-                    },
-                });
+                assistant_content_blocks.push(prepare_file_message(file, messages_config).await?);
             }
             Cow::Borrowed(ContentBlock::Thought(ref thought))
             | Cow::Owned(ContentBlock::Thought(ref thought)) => {
-                warn_discarded_thought_block(provider_type, thought);
+                warn_discarded_thought_block(messages_config.provider_type, thought);
             }
             Cow::Borrowed(ContentBlock::Unknown {
                 data,
@@ -1769,10 +1957,17 @@ impl<'a> OpenAIRequest<'a> {
             None
         };
         let mut messages = prepare_openai_messages(
-            request.system.as_deref().map(SystemOrDeveloper::System),
+            request
+                .system
+                .as_deref()
+                .map(|m| SystemOrDeveloper::System(Cow::Borrowed(m))),
             &request.messages,
-            Some(&request.json_mode),
-            PROVIDER_TYPE,
+            OpenAIMessagesConfig {
+                json_mode: Some(&request.json_mode),
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: request
+                    .fetch_and_encode_input_files_before_inference,
+            },
         )
         .await?;
 
@@ -2394,17 +2589,23 @@ struct OpenAIBatchFileResponse {
 
 #[cfg(test)]
 mod tests {
+    use base64::prelude::*;
+    use base64::Engine;
+    use futures::FutureExt;
     use serde_json::json;
     use std::borrow::Cow;
     use tracing_test::traced_test;
 
-    use crate::inference::types::{FunctionType, RequestMessage};
+    use crate::inference::types::storage::{StorageKind, StoragePath};
+    use crate::inference::types::{Base64File, FunctionType, RequestMessage};
     use crate::providers::test_helpers::{
         MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
     };
     use crate::tool::ToolCallConfig;
 
     use super::*;
+
+    static FERRIS_PNG: &[u8] = include_bytes!("../../../tests/e2e/providers/ferris.png");
 
     #[test]
     fn test_get_chat_url() {
@@ -2562,11 +2763,11 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-3.5-turbo", &basic_request)
+        let openai_request = OpenAIRequest::new("gpt-4.1-mini", &basic_request)
             .await
             .unwrap();
 
-        assert_eq!(openai_request.model, "gpt-3.5-turbo");
+        assert_eq!(openai_request.model, "gpt-4.1-mini");
         assert_eq!(openai_request.messages.len(), 2);
         assert_eq!(openai_request.temperature, Some(0.7));
         assert_eq!(openai_request.max_completion_tokens, Some(100));
@@ -2853,7 +3054,7 @@ mod tests {
 
         let request_body = OpenAIRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "gpt-4.1-mini",
             temperature: Some(0.5),
             top_p: Some(0.5),
             presence_penalty: Some(0.5),
@@ -2952,7 +3153,7 @@ mod tests {
 
         let request_body = OpenAIRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "gpt-4.1-mini",
             temperature: Some(0.5),
             top_p: Some(0.5),
             presence_penalty: Some(0.5),
@@ -3020,7 +3221,7 @@ mod tests {
         };
         let request_body = OpenAIRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "gpt-4.1-mini",
             temperature: Some(0.5),
             top_p: Some(0.9),
             presence_penalty: Some(0.1),
@@ -3080,7 +3281,7 @@ mod tests {
 
         let request_body = OpenAIRequest {
             messages: vec![],
-            model: "gpt-3.5-turbo",
+            model: "gpt-4.1-mini",
             temperature: Some(0.5),
             top_p: Some(0.9),
             presence_penalty: Some(0.1),
@@ -3185,9 +3386,16 @@ mod tests {
     #[tokio::test]
     async fn test_tensorzero_to_openai_messages() {
         let content_blocks = vec!["Hello".to_string().into()];
-        let openai_messages = tensorzero_to_openai_user_messages(&content_blocks, PROVIDER_TYPE)
-            .await
-            .unwrap();
+        let openai_messages = tensorzero_to_openai_user_messages(
+            &content_blocks,
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: false,
+            },
+        )
+        .await
+        .unwrap();
         assert_eq!(openai_messages.len(), 1);
         match &openai_messages[0] {
             OpenAIRequestMessage::User(content) => {
@@ -3206,9 +3414,16 @@ mod tests {
             "Hello".to_string().into(),
             "How are you?".to_string().into(),
         ];
-        let openai_messages = tensorzero_to_openai_user_messages(&content_blocks, PROVIDER_TYPE)
-            .await
-            .unwrap();
+        let openai_messages = tensorzero_to_openai_user_messages(
+            &content_blocks,
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: false,
+            },
+        )
+        .await
+        .unwrap();
         assert_eq!(openai_messages.len(), 1);
         match &openai_messages[0] {
             OpenAIRequestMessage::User(content) => {
@@ -3236,10 +3451,16 @@ mod tests {
             arguments: "{}".to_string(),
         });
         let content_blocks = vec!["Hello".to_string().into(), tool_block];
-        let openai_message =
-            tensorzero_to_openai_assistant_message(Cow::Borrowed(&content_blocks), PROVIDER_TYPE)
-                .await
-                .unwrap();
+        let openai_message = tensorzero_to_openai_assistant_message(
+            Cow::Borrowed(&content_blocks),
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                fetch_and_encode_input_files_before_inference: false,
+            },
+        )
+        .await
+        .unwrap();
         match &openai_message {
             OpenAIRequestMessage::Assistant(content) => {
                 assert_eq!(
@@ -3460,7 +3681,7 @@ mod tests {
             _ => panic!("Expected JsonSchema format"),
         }
 
-        // Test JSON mode Strict with schema but gpt-3.5
+        // Test JSON mode Strict with schema but gpt-3.5-turbo (does not support strict mode)
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let schema = serde_json::json!({
             "type": "object",
@@ -3492,7 +3713,7 @@ mod tests {
         assert_eq!(result, None);
 
         // Test Case 2: system is Some, json_mode is On, messages contain "json"
-        let system_or_developer = Some(SystemOrDeveloper::System("System instructions"));
+        let system_or_developer = Some(SystemOrDeveloper::System("System instructions".into()));
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
@@ -3515,7 +3736,7 @@ mod tests {
         assert_eq!(result, expected);
 
         // Test Case 3: system is Some, json_mode is On, messages do not contain "json"
-        let system_or_developer = Some(SystemOrDeveloper::System("System instructions"));
+        let system_or_developer = Some(SystemOrDeveloper::System("System instructions".into()));
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
@@ -3539,7 +3760,9 @@ mod tests {
         assert_eq!(result, expected);
 
         // Test Case 4: developer is Some, json_mode is Off
-        let system_or_developer = Some(SystemOrDeveloper::Developer("Developer instructions"));
+        let system_or_developer = Some(SystemOrDeveloper::Developer(
+            "Developer instructions".into(),
+        ));
         let json_mode = ModelInferenceRequestJsonMode::Off;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
@@ -3564,7 +3787,9 @@ mod tests {
         assert_eq!(result, expected);
 
         // Test Case 5: developer is Some, json_mode is On, messages do not contain "json"
-        let system_or_developer = Some(SystemOrDeveloper::Developer("Developer instructions"));
+        let system_or_developer = Some(SystemOrDeveloper::Developer(
+            "Developer instructions".into(),
+        ));
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![OpenAIRequestMessage::User(OpenAIUserRequestMessage {
             content: vec![OpenAIContentBlock::Text {
@@ -3734,6 +3959,258 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_prepare_resolved_file_message() {
+        let dummy_storage_path = StoragePath {
+            kind: StorageKind::Disabled,
+            path: object_store::path::Path::parse("dummy-path").unwrap(),
+        };
+        let file = LazyFile::FileWithPath(FileWithPath {
+            file: Base64File {
+                url: None,
+                mime_type: mime::TEXT_PLAIN,
+                data: BASE64_STANDARD.encode(b"Hello, world!"),
+            },
+            storage_path: dummy_storage_path.clone(),
+        });
+        let first_res = prepare_file_message(
+            &file,
+            OpenAIMessagesConfig {
+                fetch_and_encode_input_files_before_inference: true,
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            first_res,
+            OpenAIContentBlock::File {
+                file: OpenAIFile {
+                    file_data: Some(Cow::Owned(format!(
+                        "data:text/plain;base64,{}",
+                        BASE64_STANDARD.encode("Hello, world!")
+                    ))),
+                    filename: Some(Cow::Owned("input.txt".to_string())),
+                },
+            }
+        );
+
+        let second_res = prepare_file_message(
+            &file,
+            OpenAIMessagesConfig {
+                fetch_and_encode_input_files_before_inference: false,
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+            },
+        )
+        .await
+        .unwrap();
+
+        // Since the file is already resolved, 'fetch_and_encode_input_files_before_inference' should have no effect
+        assert_eq!(second_res, first_res);
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_file_url_no_mime_type_fetch_and_encode() {
+        let fetch_and_encode = OpenAIMessagesConfig {
+            fetch_and_encode_input_files_before_inference: true,
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+        };
+        let dummy_storage_path = StoragePath {
+            kind: StorageKind::Disabled,
+            path: object_store::path::Path::parse("dummy-path").unwrap(),
+        };
+        let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
+        let res = prepare_file_message(
+            &LazyFile::Url {
+                file_url: FileUrl {
+                    url: url.clone(),
+                    mime_type: None,
+                },
+                future: async move {
+                    Ok(FileWithPath {
+                        file: Base64File {
+                            url: None,
+                            // Deliberately use a different mime type to make sure we adjust the input filename
+                            mime_type: mime::IMAGE_JPEG,
+                            data: BASE64_STANDARD.encode(FERRIS_PNG),
+                        },
+                        storage_path: dummy_storage_path.clone(),
+                    })
+                }
+                .boxed()
+                .shared(),
+            },
+            fetch_and_encode,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            res,
+            OpenAIContentBlock::ImageUrl {
+                image_url: OpenAIImageUrl {
+                    url: format!(
+                        "data:image/jpeg;base64,{}",
+                        BASE64_STANDARD.encode(FERRIS_PNG)
+                    ),
+                },
+            }
+        );
+
+        // We're encoding the file, so don't produce a warning about the user not providing an explicit mime_type
+        assert!(!logs_contain("mime_type"));
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_file_url_warn_mime_type() {
+        let fetch_and_encode = OpenAIMessagesConfig {
+            fetch_and_encode_input_files_before_inference: false,
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+        };
+        let dummy_storage_path = StoragePath {
+            kind: StorageKind::Disabled,
+            path: object_store::path::Path::parse("dummy-path").unwrap(),
+        };
+        let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
+        let res = prepare_file_message(
+            &LazyFile::Url {
+                file_url: FileUrl {
+                    url: url.clone(),
+                    mime_type: None,
+                },
+                future: async move {
+                    Ok(FileWithPath {
+                        file: Base64File {
+                            url: None,
+                            // Deliberately use a different mime type to make sure we adjust the input filename
+                            mime_type: mime::IMAGE_JPEG,
+                            data: BASE64_STANDARD.encode(FERRIS_PNG),
+                        },
+                        storage_path: dummy_storage_path.clone(),
+                    })
+                }
+                .boxed()
+                .shared(),
+            },
+            fetch_and_encode,
+        )
+        .await
+        .unwrap();
+
+        // We didn't provide an input mime_mime, so we should end up encoding the file anyway
+        assert_eq!(
+            res,
+            OpenAIContentBlock::ImageUrl {
+                image_url: OpenAIImageUrl {
+                    url: format!(
+                        "data:image/jpeg;base64,{}",
+                        BASE64_STANDARD.encode(FERRIS_PNG)
+                    ),
+                },
+            }
+        );
+
+        assert!(logs_contain("mime_type"));
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_forward_image_url() {
+        let fetch_and_encode = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+        let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
+        let res = prepare_file_message(
+            &LazyFile::Url {
+                file_url: FileUrl {
+                    url: url.clone(),
+                    mime_type: Some(mime::IMAGE_JPEG),
+                },
+                future: async { panic!("File future should not be resolved") }
+                    .boxed()
+                    .shared(),
+            },
+            fetch_and_encode,
+        )
+        .await
+        .unwrap();
+
+        // We provided an input mime_type, so we should forward the image url
+        assert_eq!(
+            res,
+            OpenAIContentBlock::ImageUrl {
+                image_url: OpenAIImageUrl {
+                    url: url.to_string()
+                },
+            }
+        );
+
+        assert!(!logs_contain("mime_type"));
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_cannot_forward_file_url() {
+        let fetch_and_encode = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+        let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
+        let res = prepare_file_message(
+            &LazyFile::Url {
+                file_url: FileUrl {
+                    url: url.clone(),
+                    // By specifying a non-image mime type, we should end up using a 'file' content block
+                    mime_type: Some(mime::APPLICATION_PDF),
+                },
+                future: async {
+                    Ok(FileWithPath {
+                        file: Base64File {
+                            url: None,
+                            mime_type: mime::APPLICATION_PDF,
+                            data: BASE64_STANDARD.encode(FERRIS_PNG),
+                        },
+                        storage_path: StoragePath {
+                            kind: StorageKind::Disabled,
+                            path: object_store::path::Path::parse("dummy-path").unwrap(),
+                        },
+                    })
+                }
+                .boxed()
+                .shared(),
+            },
+            fetch_and_encode,
+        )
+        .await
+        .unwrap();
+
+        // We provided an input mime_type, so we should forward the image url
+        assert_eq!(
+            res,
+            OpenAIContentBlock::File {
+                file: OpenAIFile {
+                    file_data: Some(Cow::Owned(format!(
+                        "data:application/pdf;base64,{}",
+                        BASE64_STANDARD.encode(FERRIS_PNG)
+                    ))),
+                    filename: Some(Cow::Owned("input.pdf".to_string())),
+                },
+            }
+        );
+
+        assert!(!logs_contain("mime_type"));
+    }
+
     #[test]
     #[traced_test]
     fn test_check_api_base_suffix() {
@@ -3772,31 +4249,30 @@ mod tests {
     #[traced_test]
     fn test_openai_provider_new_api_base_check() {
         let model_name = "test-model".to_string();
-        let api_key_location = Some(CredentialLocation::None);
 
         // Valid cases (should not warn)
         let _ = OpenAIProvider::new(
             model_name.clone(),
             Some(Url::parse("http://localhost:1234/v1/").unwrap()),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            OpenAICredentials::None,
+            false,
+        );
 
         let _ = OpenAIProvider::new(
             model_name.clone(),
             Some(Url::parse("http://localhost:1234/v1").unwrap()),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            OpenAICredentials::None,
+            false,
+        );
 
         // Invalid cases (should warn)
         let invalid_url_1 = Url::parse("http://localhost:1234/chat/completions").unwrap();
         let _ = OpenAIProvider::new(
             model_name.clone(),
             Some(invalid_url_1.clone()),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            OpenAICredentials::None,
+            false,
+        );
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_1.as_ref()));
 
@@ -3804,9 +4280,9 @@ mod tests {
         let _ = OpenAIProvider::new(
             model_name.clone(),
             Some(invalid_url_2.clone()),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            OpenAICredentials::None,
+            false,
+        );
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_2.as_ref()));
     }
