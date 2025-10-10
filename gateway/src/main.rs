@@ -369,11 +369,11 @@ async fn main() {
 
     // Print whether observability is enabled
     let observability_description = format!(
-        "variant: {}, database: {}",
+        "client_type: {}, database: {}",
         gateway_handle
             .app_state
             .clickhouse_connection_info
-            .variant_name(),
+            .client_type(),
         gateway_handle
             .app_state
             .clickhouse_connection_info

@@ -12,6 +12,7 @@ use url::Url;
 use crate::config::BatchWritesConfig;
 use crate::config::Config;
 use crate::db::clickhouse::batching::BatchWriterHandle;
+use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::clickhouse_client::DisabledClickHouseClient;
 use crate::db::clickhouse::clickhouse_client::ProductionClickHouseClient;
 use crate::db::clickhouse::query_builder::ListInferencesParams;
@@ -293,8 +294,8 @@ impl ClickHouseConnectionInfo {
         self.inner.get_maybe_replicated_table_engine_name(args)
     }
 
-    pub fn variant_name(&self) -> &'static str {
-        self.inner.variant_name()
+    pub fn client_type(&self) -> ClickHouseClientType {
+        self.inner.client_type()
     }
 }
 

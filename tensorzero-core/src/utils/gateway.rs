@@ -15,6 +15,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 use crate::config::{Config, ConfigFileGlob};
+use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::endpoints;
@@ -247,7 +248,7 @@ pub async fn setup_clickhouse(
     };
 
     // Run ClickHouse migrations (if any) if we have a production ClickHouse connection
-    if clickhouse_connection_info.variant_name() == "Production" {
+    if clickhouse_connection_info.client_type() == ClickHouseClientType::Production {
         migration_manager::run(RunMigrationManagerArgs {
             clickhouse: &clickhouse_connection_info,
             is_manual_run: false,
@@ -435,7 +436,10 @@ mod tests {
         }));
 
         let clickhouse_connection_info = setup_clickhouse(config, None, false).await.unwrap();
-        assert_eq!(clickhouse_connection_info.variant_name(), "Disabled");
+        assert_eq!(
+            clickhouse_connection_info.client_type(),
+            ClickHouseClientType::Disabled
+        );
         assert!(!logs_contain(
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));
@@ -457,7 +461,10 @@ mod tests {
             ..Default::default()
         }));
         let clickhouse_connection_info = setup_clickhouse(config, None, false).await.unwrap();
-        assert_eq!(clickhouse_connection_info.variant_name(), "Disabled");
+        assert_eq!(
+            clickhouse_connection_info.client_type(),
+            ClickHouseClientType::Disabled
+        );
         assert!(!logs_contain(
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));

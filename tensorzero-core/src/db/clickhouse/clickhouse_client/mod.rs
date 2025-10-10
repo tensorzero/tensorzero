@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use secrecy::SecretString;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::fmt::Display;
 
 use crate::config::Config;
 use crate::db::clickhouse::BatchWriterHandle;
@@ -25,6 +26,23 @@ pub use production_clickhouse_client::ProductionClickHouseClient;
 mod disabled_clickhouse_client;
 mod fake_clickhouse_client;
 mod production_clickhouse_client;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClickHouseClientType {
+    Production,
+    Fake,
+    Disabled,
+}
+
+impl Display for ClickHouseClientType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ClickHouseClientType::Production => write!(f, "Production"),
+            ClickHouseClientType::Fake => write!(f, "Fake"),
+            ClickHouseClientType::Disabled => write!(f, "Disabled"),
+        }
+    }
+}
 
 /// Trait defining the interface for ClickHouse database operations.
 ///
@@ -109,8 +127,8 @@ pub trait ClickHouseClient: Send + Sync + Debug + HealthCheckable {
         args: GetMaybeReplicatedTableEngineNameArgs<'_>,
     ) -> String;
 
-    /// Returns the variant name (for logging/debugging)
-    fn variant_name(&self) -> &'static str;
+    /// Returns the client type (for logging/debugging)
+    fn client_type(&self) -> ClickHouseClientType;
 }
 
 // Because this is a supertrait of HealthCheckable, we need to use a custom mock macro instead of automock.

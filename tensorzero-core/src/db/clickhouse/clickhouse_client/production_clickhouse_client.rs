@@ -12,6 +12,7 @@ use url::Url;
 use crate::config::BatchWritesConfig;
 use crate::config::Config;
 use crate::db::clickhouse::batching::BatchSender;
+use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::migrations::check_table_exists;
 use crate::db::clickhouse::query_builder::generate_list_inferences_sql;
 use crate::db::clickhouse::query_builder::ClickHouseStoredInference;
@@ -528,8 +529,8 @@ impl ClickHouseClient for ProductionClickHouseClient {
         }
     }
 
-    fn variant_name(&self) -> &'static str {
-        "Production"
+    fn client_type(&self) -> ClickHouseClientType {
+        ClickHouseClientType::Production
     }
 }
 

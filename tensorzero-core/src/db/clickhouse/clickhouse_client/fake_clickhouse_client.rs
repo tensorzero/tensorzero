@@ -9,6 +9,7 @@ use tokio::sync::{RwLock, RwLockWriteGuard};
 
 use crate::config::Config;
 use crate::db::clickhouse::batching::BatchWriterHandle;
+use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::query_builder::ListInferencesParams;
 use crate::db::clickhouse::{
     ClickHouseClient, ClickHouseResponse, ClickHouseResponseMetadata, ExternalDataInfo,
@@ -186,8 +187,8 @@ impl ClickHouseClient for FakeClickHouseClient {
         args.table_engine_name.to_string()
     }
 
-    fn variant_name(&self) -> &'static str {
-        "Fake"
+    fn client_type(&self) -> ClickHouseClientType {
+        ClickHouseClientType::Fake
     }
 }
 

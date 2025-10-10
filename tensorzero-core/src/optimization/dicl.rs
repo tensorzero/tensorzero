@@ -7,7 +7,9 @@ use crate::{
     cache::CacheOptions,
     config::{Config, UninitializedVariantConfig},
     db::{
-        clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
+        clickhouse::{
+            clickhouse_client::ClickHouseClientType, ClickHouseConnectionInfo, ExternalDataInfo,
+        },
         postgres::PostgresConnectionInfo,
     },
     embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
@@ -247,7 +249,7 @@ impl Optimizer for DiclOptimizationConfig {
         }
 
         // Check if ClickHouse is available (required for DICL)
-        if clickhouse_connection_info.variant_name() == "Disabled" {
+        if clickhouse_connection_info.client_type() == ClickHouseClientType::Disabled {
             return Err(Error::new(ErrorDetails::AppState {
                 message: "DICL optimization requires ClickHouse to be enabled to store examples"
                     .to_string(),
