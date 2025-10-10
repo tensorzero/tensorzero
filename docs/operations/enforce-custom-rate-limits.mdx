@@ -1,0 +1,310 @@
+---
+title: Enforce custom rate limits
+description: Learn how to set up granular custom rate limits for your TensorZero Gateway.
+---
+
+The TensorZero Gateway supports granular custom rate limits to help you control usage and costs.
+
+Rate limit rules have three key components:
+
+- **Resources:** Define what you're limiting (like model inferences or tokens) and the time window (per second, hour, day, week, or month). For example, "1000 model inferences per day" or "500,000 tokens per hour".
+- **Priority:** Control which rules take precedence when multiple rules could apply to the same request. Higher priority numbers override lower ones.
+- **Scope:** Determine which requests the rule applies to. You can set global limits for all requests, or targeted limits using custom tags like user IDs.
+
+## Learn rate limiting concepts
+
+Let's start with a brief tutorial on the concepts behind custom rate limits in TensorZero.
+
+You can define custom rate limiting _rules_ in your TensorZero configuration using `[[rate_limiting.rules]]`.
+Your configuration can have multiple rules.
+
+### Resources
+
+Each rate limiting rule can have one or more _resource limits_.
+A resource limit is defined using the `RESOURCE_per_WINDOW` syntax.
+For example:
+
+```toml title="tensorzero.toml"
+[[rate_limiting.rules]]
+# ...
+model_inferences_per_day = 1_000
+tokens_per_second = 1_000_000
+# ...
+```
+
+<Note>
+
+You must specify `max_tokens` for a request if a token limit applies to it.
+The gateway makes a reasonably conservative estimate of token usage and later records the actual usage.
+
+</Note>
+
+### Scope
+
+Each rate limiting rule can optionally have a _scope_.
+The scope restricts the rule to certain requests only.
+If you don't specify a scope, the rule will apply to all requests.
+
+#### Tags
+
+At the moment, only user-defined `tags` are supported.
+You can limit the scope to specific values, to each individual value (`tensorzero::each`), or to every value collectively (`tensorzero::total`).
+
+For example, the following rule only would only to inference requests with the tag `user_id` set to `intern`:
+
+```toml title="tensorzero.toml"
+[[rate_limiting.rules]]
+# ...
+scope = [
+    { tag_key = "user_id", tag_value = "intern" }
+]
+#...
+```
+
+If a scope has multiple entries, all of them must be met for the rule to apply.
+
+For example, the following rule would only apply to inference requests with the tag `user_id` set to `intern` _and_ the tag `env` set to `production`:
+
+```toml title="tensorzero.toml"
+[[rate_limiting.rules]]
+# ...
+scope = [
+    { tag_key = "user_id", tag_value = "intern" },
+    { tag_key = "env", tag_value = "production" }
+]
+#...
+```
+
+Entries based on `tags` support two special `tag_value`:
+
+- `tensorzero::each`: The rule independently applies to every `tag_key` value.
+- `tensorzero::total`: The limits are summed across all values of the tag.
+
+For example, the following rule would apply to each value of the `user_id` tag individually (i.e. each user gets their own limit):
+
+```toml title="tensorzero.toml"
+[[rate_limiting.rules]]
+# ...
+scope = [
+    { tag_key = "user_id", tag_value = "tensorzero::each" },
+]
+#...
+```
+
+Conversely, the following rule would apply to all users collectively:
+
+```toml title="tensorzero.toml"
+[[rate_limiting.rules]]
+# ...
+scope = [
+    { tag_key = "user_id", tag_value = "tensorzero::total" },
+]
+#...
+```
+
+<Warning>
+
+The rule above does _not_ apply to requests that do not specify any `user_id` value.
+
+</Warning>
+
+### Priority
+
+Each rate limiting rule must have a _priority_ (e.g. `priority = 1`).
+The gateway iterates through the rules in order of priority, starting with the highest priority, until it finds a matching rate limit; once it does, it enforces all rules with that priority number and disregards any lower priority rules.
+
+For example, the configuration below would enforce the first rule for requests with `user_id = "intern"` and the second rule for all other `user_id` values:
+
+```toml title="tensorzero.toml"
+[[rate_limiting.rules]]
+# ...
+scope = [
+    { tag_key = "user_id", tag_value = "intern" },
+]
+priority = 1
+#...
+
+[[rate_limiting.rules]]
+# ...
+scope = [
+    { tag_key = "user_id", tag_value = "tensorzero::each" },
+]
+priority = 0
+#...
+```
+
+Alternatively, you can set `always = true` to enforce the rule regardless of other rules; rules with `always = true` do not affect the priority calculation above.
+
+## Set up rate limits
+
+Let's set up rate limits for an application to restrict usage depending on an user-defined tag for user IDs.
+
+<Tip>
+
+You can find a [complete runnable example](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/operations/enforce-custom-rate-limits) of this guide on GitHub.
+
+</Tip>
+
+<Steps>
+
+<Step title="Set up Postgres">
+
+You must set up Postgres to use TensorZero's rate limiting features.
+
+See the [Deploy Postgres](/deployment/postgres) guide for instructions.
+
+</Step>
+
+<Step title="Configure rate limiting rules">
+
+Add to your TensorZero configuration:
+
+```toml title="config/tensorzero.toml"
+# [A] Collectively, all users can make a maximum of 1k model inferences per hour and 10M tokens per day
+[[rate_limiting.rules]]
+always = true
+model_inferences_per_hour = 1_000
+tokens_per_day = 10_000_000
+scope = [
+    { tag_key = "user_id", tag_value = "tensorzero::total" }
+]
+
+# [B] Each individual user can make a maximum of 1 model inference per minute
+[[rate_limiting.rules]]
+priority = 0
+model_inferences_per_minute = 1
+scope = [
+    { tag_key = "user_id", tag_value = "tensorzero::each" }
+]
+
+# [C] But override the individual limit for the CEO
+[[rate_limiting.rules]]
+priority = 1
+model_inferences_per_minute = 5
+scope = [
+    { tag_key = "user_id", tag_value = "ceo" }
+]
+
+# [D] The entire system (i.e. without restricting the scope) can make a maximum of 10M tokens per hour
+[[rate_limiting.rules]]
+always = true
+tokens_per_hour = 10_000_000
+```
+
+Make sure to reload your gateway.
+
+</Step>
+
+<Step title="Make inference requests">
+
+If we make two consecutive inference requests with `user_id = "intern"`, the second one should fail because of rule `[B]`.
+However, if we make two consecutive inference requests with `user_id = "ceo"`, the second one should succeed because rule `[C]` will override rule `[B]`.
+
+<Tabs>
+
+<Tab title="Python (TensorZero SDK)">
+
+```python
+from tensorzero import TensorZeroGateway
+
+t0 = TensorZeroGateway.build_http(gateway_url="http://localhost:3000")
+
+
+def call_llm(user_id):
+    try:
+        return t0.inference(
+            model_name="openai::gpt-4.1-mini",
+            input={
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Tell me a fun fact.",
+                    }
+                ]
+            },
+            # We have rate limits on tokens, so we must be conservative and provide `max_tokens`
+            params={
+                "chat_completion": {
+                    "max_tokens": 1000,
+                }
+            },
+            tags={
+                "user_id": user_id,
+            },
+        )
+    except Exception as e:
+        print(f"Error calling LLM: {e}")
+
+
+# The second should fail
+print(call_llm("intern"))
+print(call_llm("intern"))  # should return None
+
+# Both should work
+print(call_llm("ceo"))
+print(call_llm("ceo"))
+```
+
+</Tab>
+
+<Tab title="Python (OpenAI SDK)">
+
+```python
+from openai import OpenAI
+
+oai = OpenAI(base_url="http://localhost:3000/openai/v1")
+
+
+def call_llm(user_id):
+    try:
+        return oai.chat.completions.create(
+            model="tensorzero::model_name::openai::gpt-4.1-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Tell me a fun fact.",
+                }
+            ],
+            max_tokens=1000,
+            extra_body={"tensorzero::tags": {"user_id": user_id}},
+        )
+    except Exception as e:
+        print(f"Error calling LLM: {e}")
+
+# The second should fail
+print(call_llm("intern"))
+print(call_llm("intern"))  # should return None
+
+# Both should work
+print(call_llm("ceo"))
+print(call_llm("ceo"))
+```
+
+</Tab>
+
+</Tabs>
+
+</Step>
+
+</Steps>
+
+## Advanced
+
+### Customize capacity and refill rate
+
+By default, rate limits use a simple bucket model where the entire capacity refills at the start of each time window.
+For example, `tokens_per_minute = 100_000` allows 100,000 tokens every minute, with the full allowance resetting at the top of each minute.
+
+However, you can customize this behavior using the `capacity` and `refill_rate` parameters to create a token bucket that refills continuously:
+
+```toml
+[[rate_limiting.rules]]
+# ...
+tokens_per_minute = { capacity = 100_000, refill_rate = 10_000 }
+# ...
+```
+
+In this example, the `capacity` parameter sets the maximum number of tokens that can be stored in the bucket, while the `refill_rate` determines how many tokens are added to the bucket per time window (10,000 per minute).
+This creates smoother rate limiting behavior where instead of getting your full allowance at the start of each minute: you get 10,000 tokens added every minute, up to a maximum of 100,000 tokens stored at any time.
+
+This approach is particularly useful for burst protection (users can't consume their entire daily allowance in the first few seconds), smoother traffic distribution (requests are naturally spread out over time rather than clustering at window boundaries), and a better user experience (users get a steady trickle of quota rather than having to wait for the next time window).

@@ -1,4 +1,4 @@
-# Collectively, all users can make a maximum of 1k model inferences per hour and 10M tokens per day
+# [A] Collectively, all users can make a maximum of 1k model inferences per hour and 10M tokens per day
 [[rate_limiting.rules]]
 always = true
 model_inferences_per_hour = 1_000
@@ -7,7 +7,7 @@ scope = [
     { tag_key = "user_id", tag_value = "tensorzero::total" }
 ]
 
-# Each individual user can make a maximum of 1 model inference per minute
+# [B] Each individual user can make a maximum of 1 model inference per minute
 [[rate_limiting.rules]]
 priority = 0
 model_inferences_per_minute = 1
@@ -15,7 +15,7 @@ scope = [
     { tag_key = "user_id", tag_value = "tensorzero::each" }
 ]
 
-# But override the individual limit for the CEO
+# [C] But override the individual limit for the CEO
 [[rate_limiting.rules]]
 priority = 1
 model_inferences_per_minute = 5
@@ -23,7 +23,7 @@ scope = [
     { tag_key = "user_id", tag_value = "ceo" }
 ]
 
-# The entire system (i.e. without restricting the scope) can make a maximum of 10M tokens per hour
+# [D] The entire system (i.e. without restricting the scope) can make a maximum of 10M tokens per hour
 [[rate_limiting.rules]]
 always = true
 tokens_per_hour = 10_000_000
