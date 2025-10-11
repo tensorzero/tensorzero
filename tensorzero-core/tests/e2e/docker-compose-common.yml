@@ -66,7 +66,7 @@ services:
       - 55679:55679 # ZPages
 
   postgres:
-    image: postgres:17-alpine
+    image: postgres:14-alpine
     environment:
       POSTGRES_DB: tensorzero-e2e-tests
       POSTGRES_USER: postgres

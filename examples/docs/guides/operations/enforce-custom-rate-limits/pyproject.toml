@@ -1,0 +1,9 @@
+[project]
+name = "tensorzero-examples-docs-guides-operations-enforce-rate-limits"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "openai>=2.3.0",
+    "tensorzero>=2025.10.1",
+]
