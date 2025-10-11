@@ -1544,7 +1544,7 @@ pub struct UpdateJsonInferenceDatapointRequest {
     pub name: Option<String>,
 }
 
-fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {
+pub(crate) fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {
     if dataset_name == "builder" || dataset_name.starts_with("tensorzero::") {
         Err(Error::new(ErrorDetails::InvalidDatasetName {
             dataset_name: dataset_name.to_string(),

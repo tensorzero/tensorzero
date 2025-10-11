@@ -36,6 +36,9 @@ use tensorzero_core::db::clickhouse::migration_manager::MigrationTableState;
 use tensorzero_core::db::SelectQueries;
 use tensorzero_core::inference::types::ModelInferenceDatabaseInsert;
 
+use std::collections::HashMap;
+use tensorzero_core::db::clickhouse::dataset_queries::{DatasetQueries, InferenceType};
+
 use tensorzero_core::db::clickhouse::migration_manager::{
     self, get_all_migration_records, make_all_migrations, MigrationRecordDatabaseInsert,
 };
@@ -1444,4 +1447,377 @@ async fn test_migration_logic_with_flags() {
     })
     .await
     .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_number_of_datasets() {
+    let clickhouse = get_clickhouse().await;
+
+    // Get initial count
+    let initial_count = clickhouse.get_number_of_datasets().await.unwrap();
+
+    // Insert datapoints in two different datasets
+    let dataset1 = format!("test_dataset_{}", Uuid::now_v7().simple());
+    let dataset2 = format!("test_dataset_{}", Uuid::now_v7().simple());
+
+    let datapoint1 =
+        tensorzero_core::db::clickhouse::dataset_queries::ChatInferenceDatapointInsert {
+            dataset_name: Some(dataset1.clone()),
+            function_name: "test_function".to_string(),
+            id: Uuid::now_v7(),
+            name: None,
+            episode_id: None,
+            input: r#"{"messages":[]}"#.to_string(),
+            output: Some(r#"[{"type":"text","text":"test"}]"#.to_string()),
+            tool_params: "{}".to_string(),
+            tags: HashMap::new(),
+            auxiliary: "".to_string(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+        };
+
+    let datapoint2 =
+        tensorzero_core::db::clickhouse::dataset_queries::ChatInferenceDatapointInsert {
+            dataset_name: Some(dataset2.clone()),
+            function_name: "test_function".to_string(),
+            id: Uuid::now_v7(),
+            name: None,
+            episode_id: None,
+            input: r#"{"messages":[]}"#.to_string(),
+            output: Some(r#"[{"type":"text","text":"test"}]"#.to_string()),
+            tool_params: "{}".to_string(),
+            tags: HashMap::new(),
+            auxiliary: "".to_string(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+        };
+
+    clickhouse
+        .insert_datapoint(
+            &tensorzero_core::db::clickhouse::dataset_queries::DatapointInsert::Chat(datapoint1),
+        )
+        .await
+        .unwrap();
+    clickhouse
+        .insert_datapoint(
+            &tensorzero_core::db::clickhouse::dataset_queries::DatapointInsert::Chat(datapoint2),
+        )
+        .await
+        .unwrap();
+
+    // Count should increase by 2
+    let new_count = clickhouse.get_number_of_datasets().await.unwrap();
+    assert_eq!(new_count, initial_count + 2);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stale_datapoint_chat() {
+    let clickhouse = get_clickhouse().await;
+
+    let dataset_name = format!("test_stale_{}", Uuid::now_v7().simple());
+    let datapoint_id = Uuid::now_v7();
+
+    // Insert a chat datapoint
+    let datapoint =
+        tensorzero_core::db::clickhouse::dataset_queries::ChatInferenceDatapointInsert {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: "test_function".to_string(),
+            id: datapoint_id,
+            name: None,
+            episode_id: None,
+            input: r#"{"messages":[]}"#.to_string(),
+            output: Some(r#"[{"type":"text","text":"test"}]"#.to_string()),
+            tool_params: "{}".to_string(),
+            tags: HashMap::new(),
+            auxiliary: "".to_string(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+        };
+
+    clickhouse
+        .insert_datapoint(
+            &tensorzero_core::db::clickhouse::dataset_queries::DatapointInsert::Chat(datapoint),
+        )
+        .await
+        .unwrap();
+
+    // Stale the datapoint
+    clickhouse
+        .stale_datapoint(&dataset_name, datapoint_id, InferenceType::Chat)
+        .await
+        .unwrap();
+
+    // Verify datapoint is staled by querying ClickHouse directly
+    let query = r"
+        SELECT staled_at
+        FROM ChatInferenceDatapoint FINAL
+        WHERE dataset_name = {dataset_name:String} AND id = {id:UUID}
+        ORDER BY updated_at DESC
+        LIMIT 1
+        FORMAT JSONEachRow
+    ";
+
+    let mut params = HashMap::new();
+    params.insert("dataset_name", dataset_name.as_str());
+    let id_str = datapoint_id.to_string();
+    params.insert("id", id_str.as_str());
+
+    let response = clickhouse
+        .run_query_synchronous(query.to_string(), &params)
+        .await
+        .unwrap();
+
+    #[derive(serde::Deserialize)]
+    struct Result {
+        staled_at: Option<String>,
+    }
+
+    let result: Result = serde_json::from_str(response.response.trim()).unwrap();
+    assert!(result.staled_at.is_some(), "Datapoint should be staled");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stale_datapoint_json() {
+    let clickhouse = get_clickhouse().await;
+
+    let dataset_name = format!("test_stale_json_{}", Uuid::now_v7().simple());
+    let datapoint_id = Uuid::now_v7();
+
+    // Insert a json datapoint
+    let datapoint =
+        tensorzero_core::db::clickhouse::dataset_queries::JsonInferenceDatapointInsert {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: "test_function".to_string(),
+            id: datapoint_id,
+            name: None,
+            episode_id: None,
+            input: r#"{"messages":[]}"#.to_string(),
+            output: Some(r#"{"test":"data"}"#.to_string()),
+            output_schema: r#"{"type":"object"}"#.to_string(),
+            tags: HashMap::new(),
+            auxiliary: "".to_string(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+        };
+
+    clickhouse
+        .insert_datapoint(
+            &tensorzero_core::db::clickhouse::dataset_queries::DatapointInsert::Json(datapoint),
+        )
+        .await
+        .unwrap();
+
+    // Stale the datapoint
+    clickhouse
+        .stale_datapoint(&dataset_name, datapoint_id, InferenceType::Json)
+        .await
+        .unwrap();
+
+    // Verify datapoint is staled
+    let query = r"
+        SELECT staled_at
+        FROM JsonInferenceDatapoint FINAL
+        WHERE dataset_name = {dataset_name:String} AND id = {id:UUID}
+        ORDER BY updated_at DESC
+        LIMIT 1
+        FORMAT JSONEachRow
+    ";
+
+    let mut params = HashMap::new();
+    params.insert("dataset_name", dataset_name.as_str());
+    let id_str = datapoint_id.to_string();
+    params.insert("id", id_str.as_str());
+
+    let response = clickhouse
+        .run_query_synchronous(query.to_string(), &params)
+        .await
+        .unwrap();
+
+    #[derive(serde::Deserialize)]
+    struct Result {
+        staled_at: Option<String>,
+    }
+
+    let result: Result = serde_json::from_str(response.response.trim()).unwrap();
+    assert!(result.staled_at.is_some(), "Datapoint should be staled");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_count_datapoints_for_dataset_function() {
+    let clickhouse = get_clickhouse().await;
+
+    let dataset_name = format!("test_count_{}", Uuid::now_v7().simple());
+    let function_name = "test_function";
+
+    // Get initial count
+    let initial_count = clickhouse
+        .count_datapoints_for_dataset_function(&dataset_name, function_name, InferenceType::Chat)
+        .await
+        .unwrap();
+    assert_eq!(initial_count, 0);
+
+    // Insert two datapoints
+    for _ in 0..2 {
+        let datapoint =
+            tensorzero_core::db::clickhouse::dataset_queries::ChatInferenceDatapointInsert {
+                dataset_name: Some(dataset_name.clone()),
+                function_name: function_name.to_string(),
+                id: Uuid::now_v7(),
+                name: None,
+                episode_id: None,
+                input: r#"{"messages":[]}"#.to_string(),
+                output: Some(r#"[{"type":"text","text":"test"}]"#.to_string()),
+                tool_params: "{}".to_string(),
+                tags: HashMap::new(),
+                auxiliary: "".to_string(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: true,
+            };
+
+        clickhouse
+            .insert_datapoint(
+                &tensorzero_core::db::clickhouse::dataset_queries::DatapointInsert::Chat(datapoint),
+            )
+            .await
+            .unwrap();
+    }
+
+    // Count should be 2
+    let new_count = clickhouse
+        .count_datapoints_for_dataset_function(&dataset_name, function_name, InferenceType::Chat)
+        .await
+        .unwrap();
+    assert_eq!(new_count, 2);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_adjacent_datapoint_ids() {
+    let clickhouse = get_clickhouse().await;
+
+    let dataset_name = format!("test_adjacent_{}", Uuid::now_v7().simple());
+
+    // Insert three datapoints with predictable UUIDs
+    let id1 = Uuid::now_v7();
+    tokio::time::sleep(Duration::from_millis(10)).await; // Ensure different timestamps
+    let id2 = Uuid::now_v7();
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    let id3 = Uuid::now_v7();
+
+    for id in [id1, id2, id3] {
+        let datapoint =
+            tensorzero_core::db::clickhouse::dataset_queries::ChatInferenceDatapointInsert {
+                dataset_name: Some(dataset_name.clone()),
+                function_name: "test_function".to_string(),
+                id,
+                name: None,
+                episode_id: None,
+                input: r#"{"messages":[]}"#.to_string(),
+                output: Some(r#"[{"type":"text","text":"test"}]"#.to_string()),
+                tool_params: "{}".to_string(),
+                tags: HashMap::new(),
+                auxiliary: "".to_string(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: true,
+            };
+
+        clickhouse
+            .insert_datapoint(
+                &tensorzero_core::db::clickhouse::dataset_queries::DatapointInsert::Chat(datapoint),
+            )
+            .await
+            .unwrap();
+    }
+
+    // Test middle datapoint
+    let adjacent = clickhouse
+        .get_adjacent_datapoint_ids(&dataset_name, id2)
+        .await
+        .unwrap();
+    assert_eq!(adjacent.previous_id, Some(id1));
+    assert_eq!(adjacent.next_id, Some(id3));
+
+    // Test first datapoint
+    let adjacent = clickhouse
+        .get_adjacent_datapoint_ids(&dataset_name, id1)
+        .await
+        .unwrap();
+    assert_eq!(adjacent.previous_id, None);
+    assert_eq!(adjacent.next_id, Some(id2));
+
+    // Test last datapoint
+    let adjacent = clickhouse
+        .get_adjacent_datapoint_ids(&dataset_name, id3)
+        .await
+        .unwrap();
+    assert_eq!(adjacent.previous_id, Some(id2));
+    assert_eq!(adjacent.next_id, None);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_insert_datapoint_validates_dataset_name() {
+    let clickhouse = get_clickhouse().await;
+
+    // Test reserved name "builder"
+    let datapoint =
+        tensorzero_core::db::clickhouse::dataset_queries::ChatInferenceDatapointInsert {
+            dataset_name: Some("builder".to_string()),
+            function_name: "test_function".to_string(),
+            id: Uuid::now_v7(),
+            name: None,
+            episode_id: None,
+            input: r#"{"messages":[]}"#.to_string(),
+            output: Some(r#"[{"type":"text","text":"test"}]"#.to_string()),
+            tool_params: "{}".to_string(),
+            tags: HashMap::new(),
+            auxiliary: "".to_string(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+        };
+
+    let result = clickhouse
+        .insert_datapoint(
+            &tensorzero_core::db::clickhouse::dataset_queries::DatapointInsert::Chat(datapoint),
+        )
+        .await;
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Invalid dataset name"));
+
+    // Test reserved prefix "tensorzero::"
+    let datapoint =
+        tensorzero_core::db::clickhouse::dataset_queries::ChatInferenceDatapointInsert {
+            dataset_name: Some("tensorzero::system".to_string()),
+            function_name: "test_function".to_string(),
+            id: Uuid::now_v7(),
+            name: None,
+            episode_id: None,
+            input: r#"{"messages":[]}"#.to_string(),
+            output: Some(r#"[{"type":"text","text":"test"}]"#.to_string()),
+            tool_params: "{}".to_string(),
+            tags: HashMap::new(),
+            auxiliary: "".to_string(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+        };
+
+    let result = clickhouse
+        .insert_datapoint(
+            &tensorzero_core::db::clickhouse::dataset_queries::DatapointInsert::Chat(datapoint),
+        )
+        .await;
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Invalid dataset name"));
 }
