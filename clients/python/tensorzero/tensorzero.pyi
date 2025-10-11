@@ -638,13 +638,28 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
         """
 
+    def insert_datapoints(
+        self,
+        *,
+        dataset_name: str,
+        datapoints: Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
+    ) -> List[UUID]:
+        """
+        Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
+
+        :param dataset_name: The name of the dataset to insert the datapoints into.
+        :param datapoints: A list of datapoints to insert.
+        """
+
     def bulk_insert_datapoints(
         self,
         *,
         dataset_name: str,
-        datapoints: List[Union[ChatDatapointInsert, JsonDatapointInsert]],
+        datapoints: Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
     ) -> List[UUID]:
         """
+        DEPRECATED: Use `insert_datapoints` instead.
+
         Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
 
         :param dataset_name: The name of the dataset to insert the datapoints into.
@@ -1003,13 +1018,28 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
         """
 
+    async def insert_datapoints(
+        self,
+        *,
+        dataset_name: str,
+        datapoints: Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
+    ) -> List[UUID]:
+        """
+        Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
+
+        :param dataset_name: The name of the dataset to insert the datapoints into.
+        :param datapoints: A list of datapoints to insert.
+        """
+
     async def bulk_insert_datapoints(
         self,
         *,
         dataset_name: str,
-        datapoints: List[Union[ChatDatapointInsert, JsonDatapointInsert]],
+        datapoints: Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
     ) -> List[UUID]:
         """
+        DEPRECATED: Use `insert_datapoints` instead.
+
         Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
 
         :param dataset_name: The name of the dataset to insert the datapoints into.
