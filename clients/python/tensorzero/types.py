@@ -445,6 +445,7 @@ class ChatDatapointInsert:
     tool_choice: Optional[str] = None
     parallel_tool_calls: Optional[bool] = None
     tags: Optional[Dict[str, str]] = None
+    name: Optional[str] = None
 
 
 # CAREFUL: deprecated
@@ -465,6 +466,7 @@ class JsonDatapointInsert:
     output: Optional[Any] = None
     output_schema: Optional[Any] = None
     tags: Optional[Dict[str, str]] = None
+    name: Optional[str] = None
 
 
 # CAREFUL: deprecated

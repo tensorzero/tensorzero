@@ -104,6 +104,19 @@ extra_headers."X-Custom-Header" = "custom-value"
 If set to `"opentelemetry"`, TensorZero will set `gen_ai` attributes based on the [OpenTelemetry GenAI semantic conventions](https://github.com/open-telemetry/semantic-conventions/tree/main/docs/gen-ai).
 If set to `"openinference"`, TensorZero will set attributes based on the [OpenInference semantic conventions](https://github.com/Arize-ai/openinference/blob/main/spec/llm_spans.md).
 
+### `fetch_and_encode_input_files_before_inference`
+
+- **Type:** boolean
+- **Required:** no (default: `true`)
+
+Controls how the gateway handles remote input files (e.g., images, PDFs) during multimodal inference.
+
+If set to `true` (default), the gateway will fetch remote input files and send them as a base64-encoded payload in the prompt.
+This is recommended to ensure that TensorZero and the model providers see identical inputs, which is important for observability and reproducibility.
+
+If set to `false`, TensorZero will forward the input file URLs directly to the model provider (when supported) and fetch them for observability in parallel with inference.
+This can be more efficient, but may result in different content being observed if the URL content changes between when the provider fetches it and when TensorZero fetches it for observability.
+
 ### `observability.async_writes`
 
 - **Type:** boolean
@@ -2817,7 +2830,6 @@ weight = 1.0
 </Accordion>
 
 <Accordion title='type: "experimental_dynamic_in_context_learning"'>
-
 
 ##### `embedding_model`
 

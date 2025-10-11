@@ -634,3 +634,142 @@ def test_sync_render_filtered_datapoints(embedded_sync_client: TensorZeroGateway
         embedded_sync_client.delete_datapoint(
             dataset_name=dataset_name, datapoint_id=datapoint_id
         )
+
+
+def test_sync_datapoints_with_name(sync_client: TensorZeroGateway):
+    """Test that datapoints with name field are correctly stored and retrieved."""
+    dataset_name = f"test_name_{uuid7()}"
+
+    # Create datapoints with name field
+    datapoints = [
+        ChatDatapointInsert(
+            function_name="basic_test",
+            input={
+                "system": {"assistant_name": "TestBot"},
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
+                ],
+            },
+            output=[{"type": "text", "text": "Hi there!"}],
+            name="greeting_example",
+        ),
+        JsonDatapointInsert(
+            function_name="json_success",
+            input={
+                "system": {"assistant_name": "JsonBot"},
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "arguments": {"country": "Japan"}}
+                        ],
+                    }
+                ],
+            },
+            output={"answer": "Tokyo"},
+            name="tokyo_capital_query",
+        ),
+    ]
+
+    # Insert datapoints
+    datapoint_ids = sync_client.bulk_insert_datapoints(
+        dataset_name=dataset_name, datapoints=datapoints
+    )
+    assert len(datapoint_ids) == 2
+
+    # Retrieve and verify chat datapoint with name
+    chat_datapoint = sync_client.get_datapoint(
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[0]
+    )
+    assert isinstance(chat_datapoint, ChatDatapoint)
+    assert chat_datapoint.name == "greeting_example"
+    assert chat_datapoint.function_name == "basic_test"
+
+    # Retrieve and verify json datapoint with name
+    json_datapoint = sync_client.get_datapoint(
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[1]
+    )
+    assert isinstance(json_datapoint, JsonDatapoint)
+    assert json_datapoint.name == "tokyo_capital_query"
+    assert json_datapoint.function_name == "json_success"
+
+    # Clean up
+    for datapoint_id in datapoint_ids:
+        sync_client.delete_datapoint(
+            dataset_name=dataset_name, datapoint_id=datapoint_id
+        )
+
+
+@pytest.mark.asyncio
+async def test_async_datapoints_with_name(async_client: AsyncTensorZeroGateway):
+    """Test that datapoints with name field are correctly stored and retrieved (async version)."""
+    dataset_name = f"test_name_async_{uuid7()}"
+
+    # Create datapoints with name field
+    datapoints = [
+        ChatDatapointInsert(
+            function_name="basic_test",
+            input={
+                "system": {"assistant_name": "AsyncBot"},
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": "Good morning"}],
+                    }
+                ],
+            },
+            output=[{"type": "text", "text": "Good morning to you!"}],
+            name="morning_greeting",
+        ),
+        JsonDatapointInsert(
+            function_name="json_success",
+            input={
+                "system": {"assistant_name": "AsyncJsonBot"},
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "arguments": {"country": "Germany"}}
+                        ],
+                    }
+                ],
+            },
+            output={"answer": "Berlin"},
+            name="berlin_capital_query",
+        ),
+    ]
+
+    # Insert datapoints
+    datapoint_ids = await async_client.bulk_insert_datapoints(
+        dataset_name=dataset_name, datapoints=datapoints
+    )
+    assert len(datapoint_ids) == 2
+
+    # Retrieve and verify chat datapoint with name
+    chat_datapoint = await async_client.get_datapoint(
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[0]
+    )
+    assert isinstance(chat_datapoint, ChatDatapoint)
+    assert chat_datapoint.name == "morning_greeting"
+    assert chat_datapoint.function_name == "basic_test"
+
+    # Retrieve and verify json datapoint with name
+    json_datapoint = await async_client.get_datapoint(
+        dataset_name=dataset_name, datapoint_id=datapoint_ids[1]
+    )
+    assert isinstance(json_datapoint, JsonDatapoint)
+    assert json_datapoint.name == "berlin_capital_query"
+    assert json_datapoint.function_name == "json_success"
+
+    # List all datapoints and verify names are preserved
+    all_datapoints = await async_client.list_datapoints(dataset_name=dataset_name)
+    assert len(all_datapoints) == 2
+    names = {dp.name for dp in all_datapoints}
+    assert "morning_greeting" in names
+    assert "berlin_capital_query" in names
+
+    # Clean up
+    for datapoint_id in datapoint_ids:
+        await async_client.delete_datapoint(
+            dataset_name=dataset_name, datapoint_id=datapoint_id
+        )
