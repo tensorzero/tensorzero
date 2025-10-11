@@ -75,7 +75,7 @@ scope = [
 #...
 ```
 
-Entries based on `tags` support two special `tag_value`:
+Entries based on `tags` support two special strings for `tag_value`:
 
 - `tensorzero::each`: The rule independently applies to every `tag_key` value.
 - `tensorzero::total`: The limits are summed across all values of the tag.
@@ -306,5 +306,6 @@ tokens_per_minute = { capacity = 100_000, refill_rate = 10_000 }
 
 In this example, the `capacity` parameter sets the maximum number of tokens that can be stored in the bucket, while the `refill_rate` determines how many tokens are added to the bucket per time window (10,000 per minute).
 This creates smoother rate limiting behavior where instead of getting your full allowance at the start of each minute: you get 10,000 tokens added every minute, up to a maximum of 100,000 tokens stored at any time.
+To achieve these benefits, you'll typically want to use a low time granularity with a `capacity` much larger than the `refill_rate`.
 
 This approach is particularly useful for burst protection (users can't consume their entire daily allowance in the first few seconds), smoother traffic distribution (requests are naturally spread out over time rather than clustering at window boundaries), and a better user experience (users get a steady trickle of quota rather than having to wait for the next time window).

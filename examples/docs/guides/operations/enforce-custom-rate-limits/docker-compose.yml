@@ -12,7 +12,7 @@ services:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
     volumes:
-      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse-data:/var/lib/clickhouse
     ulimits:
       nofile:
         soft: 262144
@@ -32,7 +32,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: pg_isready -U postgres
       start_period: 30s
@@ -82,5 +82,5 @@ services:
         condition: service_healthy
 
 volumes:
-  postgres_data:
-  clickhouse_data:
+  postgres-data:
+  clickhouse-data:
