@@ -5930,12 +5930,14 @@ dependencies = [
 name = "tensorzero-node"
 version = "2025.10.3"
 dependencies = [
+ "evaluations",
  "napi",
  "napi-build",
  "napi-derive",
  "serde",
  "serde_json",
  "tensorzero",
+ "tensorzero-core",
  "ts-rs",
  "url",
  "uuid",

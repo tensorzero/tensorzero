@@ -196,22 +196,20 @@ To set it up, follow these steps from the `ui` directory:
 1. Install dependencies: `pnpm install`
 2. Build the internal N-API client for TensorZero using `pnpm -r build`. If you have changed your Rust code, you may also have to run `pnpm build-bindings` from `../internal/tensorzero-node`.
 3. Create a `fixtures/.env` following the `fixtures/.env.example`.
-4. Run `cargo build`.
-5. Set the following environment variables in your cwd `ui/` (note the previous step edited the vars in `fixtures/`):
+4. Set the following environment variables in your cwd `ui/` (note the previous steps edited the vars in `fixtures/`):
    ```bash
    TENSORZERO_GATEWAY_URL="http://localhost:3000"
    TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
    TENSORZERO_UI_CONFIG_PATH="fixtures/config/tensorzero.toml"
-   TENSORZERO_EVALUATIONS_PATH="../target/debug/evaluations"
 
    # Optional: add provider credentials for optimization workflows
    OPENAI_API_KEY="..."
    FIREWORKS_API_KEY="..."
    FIREWORKS_ACCOUNT_ID="..."
    ```
-6. Launch the dependencies: `docker compose -f fixtures/docker-compose.yml up --build --force-recreate`.
+5. Launch the dependencies: `docker compose -f fixtures/docker-compose.yml up --build --force-recreate`.
 You can omit these last 2 flags to skip the build step, but they ensure you're using the latest gateway.
-7. Launch the development server: `pnpm dev`
+6. Launch the development server: `pnpm dev`
 
 Separately, you can run headless tests with `pnpm test` and Playwright tests with `pnpm test-e2e` (the latter will require a `pnpm exec playwright install`).
 We also maintain a Docker Compose for e2e tests `fixtures/docker-compose.e2e.yml` that is used in CI for the Playwright tests.
