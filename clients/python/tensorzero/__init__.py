@@ -19,6 +19,7 @@ from .tensorzero import (
     FunctionConfigJson,
     FunctionsConfig,
     GCPVertexGeminiSFTConfig,
+    JsonInferenceOutput,
     MixtureOfNConfig,
     OpenAIRFTConfig,
     OpenAISFTConfig,
@@ -61,7 +62,6 @@ from .types import (
     InferenceResponse,
     JsonDatapointInsert,
     JsonInferenceDatapointInput,  # DEPRECATED
-    JsonInferenceOutput,
     JsonInferenceResponse,
     Message,
     NotFilter,
