@@ -219,7 +219,7 @@ pub async fn inference(
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
-    params: Params,
+    mut params: Params,
 ) -> Result<InferenceOutput, Error> {
     let span = tracing::Span::current();
     if let Some(function_name) = &params.function_name {
@@ -234,6 +234,14 @@ pub async fn inference(
     if let Some(episode_id) = &params.episode_id {
         span.record("episode_id", episode_id.to_string());
     }
+
+    // Automatically add internal tag when internal=true
+    if params.internal {
+        params
+            .tags
+            .insert("tensorzero::internal".to_string(), "true".to_string());
+    }
+
     for (tag_key, tag_value) in &params.tags {
         span.set_attribute(format!("tags.{tag_key}"), tag_value.clone());
     }
@@ -245,7 +253,7 @@ pub async fn inference(
 
     // Retrieve or generate the episode ID
     let episode_id = params.episode_id.unwrap_or_else(Uuid::now_v7);
-    let mut params = params;
+
     validate_inference_episode_id_and_apply_dynamic_evaluation_run(
         episode_id,
         params.function_name.as_ref(),

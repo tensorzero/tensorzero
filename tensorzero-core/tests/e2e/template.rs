@@ -1,5 +1,3 @@
-#![allow(clippy::print_stdout)]
-
 use http::StatusCode;
 use reqwest::Client;
 use serde_json::{json, Value};

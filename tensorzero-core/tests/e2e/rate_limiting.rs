@@ -1,4 +1,3 @@
-#![allow(clippy::print_stdout)]
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
