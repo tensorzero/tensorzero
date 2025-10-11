@@ -159,9 +159,7 @@ def upload_dataset_to_together(samples: List[Dict[str, Any]]) -> str:
         f.flush()
 
         dataset_path = f.name
-        result = subprocess.run(
-            ["together", "files", "upload", dataset_path], capture_output=True
-        )
+        result = subprocess.run(["together", "files", "upload", dataset_path], capture_output=True)
         print("Stdout:")
         print(result.stdout.decode())
         print("Stderr:")
@@ -249,9 +247,7 @@ model_config = {
     "models": {
         fine_tuned_model: {
             "routing": ["together"],
-            "providers": {
-                "together": {"type": "together", "model_name": fine_tuned_model}
-            },
+            "providers": {"together": {"type": "together", "model_name": fine_tuned_model}},
         }
     }
 }

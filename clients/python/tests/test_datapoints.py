@@ -141,9 +141,7 @@ def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
             tags=None,
         ),
     ]
-    datapoint_ids = sync_client.bulk_insert_datapoints(
-        dataset_name=dataset_name, datapoints=datapoints
-    )
+    datapoint_ids = sync_client.bulk_insert_datapoints(dataset_name=dataset_name, datapoints=datapoints)
     assert len(datapoint_ids) == 4
     assert isinstance(datapoint_ids[0], UUID)
     assert isinstance(datapoint_ids[1], UUID)
@@ -159,18 +157,10 @@ def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
     assert all(isinstance(dp, ChatDatapoint) for dp in listed_datapoints)
     assert all(dp.function_name == "basic_test" for dp in listed_datapoints)
 
-    sync_client.delete_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[0]
-    )
-    sync_client.delete_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[1]
-    )
-    sync_client.delete_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[2]
-    )
-    sync_client.delete_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[3]
-    )
+    sync_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_ids[0])
+    sync_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_ids[1])
+    sync_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_ids[2])
+    sync_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_ids[3])
 
 
 @pytest.mark.asyncio
@@ -272,9 +262,7 @@ async def test_async_bulk_insert_delete_datapoints(
         ),
     ]
     dataset_name = f"test_{uuid7()}"
-    datapoint_ids = await async_client.bulk_insert_datapoints(
-        dataset_name=dataset_name, datapoints=datapoints
-    )
+    datapoint_ids = await async_client.bulk_insert_datapoints(dataset_name=dataset_name, datapoints=datapoints)
     assert len(datapoint_ids) == 4
     assert isinstance(datapoint_ids[0], UUID)
     assert isinstance(datapoint_ids[1], UUID)
@@ -282,9 +270,7 @@ async def test_async_bulk_insert_delete_datapoints(
     assert isinstance(datapoint_ids[3], UUID)
 
     # Get a chat datapoint
-    datapoint = await async_client.get_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[0]
-    )
+    datapoint = await async_client.get_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_ids[0])
     print(datapoint)
     assert isinstance(datapoint, ChatDatapoint)
     assert datapoint.function_name == "basic_test"
@@ -298,9 +284,7 @@ async def test_async_bulk_insert_delete_datapoints(
     assert datapoint.output is None
 
     # Get a json datapoint
-    datapoint = await async_client.get_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[2]
-    )
+    datapoint = await async_client.get_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_ids[2])
     assert isinstance(datapoint, JsonDatapoint)
     assert datapoint.function_name == "json_success"
     assert datapoint.input.system == {"assistant_name": "foo"}
@@ -334,18 +318,10 @@ async def test_async_bulk_insert_delete_datapoints(
     assert all(dp.is_custom for dp in listed_datapoints)
     assert all(dp.function_name == "basic_test" for dp in listed_datapoints)
 
-    await async_client.delete_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[0]
-    )
-    await async_client.delete_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[1]
-    )
-    await async_client.delete_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[2]
-    )
-    await async_client.delete_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[3]
-    )
+    await async_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_ids[0])
+    await async_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_ids[1])
+    await async_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_ids[2])
+    await async_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_ids[3])
 
 
 @pytest.mark.asyncio
@@ -358,9 +334,7 @@ async def test_list_nonexistent_dataset(async_client: AsyncTensorZeroGateway):
 async def test_get_nonexistent_datapoint(async_client: AsyncTensorZeroGateway):
     datapoint_id: UUID = uuid7()  # type: ignore
     with pytest.raises(TensorZeroError) as exc_info:
-        await async_client.get_datapoint(
-            dataset_name="nonexistent_dataset", datapoint_id=datapoint_id
-        )
+        await async_client.get_datapoint(dataset_name="nonexistent_dataset", datapoint_id=datapoint_id)
     assert "Datapoint not found for" in str(exc_info.value)
     assert "404" in str(exc_info.value)
 
@@ -391,9 +365,7 @@ def test_sync_render_datapoints(embedded_sync_client: TensorZeroGateway):
                 "messages": [
                     {
                         "role": "user",
-                        "content": [
-                            {"type": "text", "arguments": {"country": "France"}}
-                        ],
+                        "content": [{"type": "text", "arguments": {"country": "France"}}],
                     }
                 ],
             },
@@ -405,9 +377,7 @@ def test_sync_render_datapoints(embedded_sync_client: TensorZeroGateway):
         ),
     ]
 
-    datapoint_ids = embedded_sync_client.bulk_insert_datapoints(
-        dataset_name=dataset_name, datapoints=datapoints
-    )
+    datapoint_ids = embedded_sync_client.bulk_insert_datapoints(dataset_name=dataset_name, datapoints=datapoints)
     assert len(datapoint_ids) == 2
 
     # List the inserted datapoints
@@ -423,15 +393,10 @@ def test_sync_render_datapoints(embedded_sync_client: TensorZeroGateway):
     assert len(rendered_samples) == 2
 
     # Verify the chat datapoint was rendered correctly
-    chat_sample = next(
-        rs for rs in rendered_samples if rs.function_name == "basic_test"
-    )
+    chat_sample = next(rs for rs in rendered_samples if rs.function_name == "basic_test")
     assert chat_sample.episode_id is None
     assert chat_sample.inference_id is None
-    assert (
-        chat_sample.input.system
-        == "You are a helpful and friendly assistant named TestBot"
-    )
+    assert chat_sample.input.system == "You are a helpful and friendly assistant named TestBot"
     assert len(chat_sample.input.messages) == 1
     assert chat_sample.input.messages[0].role == "user"
     assert len(chat_sample.input.messages[0].content) == 1
@@ -439,9 +404,7 @@ def test_sync_render_datapoints(embedded_sync_client: TensorZeroGateway):
     assert chat_sample.input.messages[0].content[0].text == "Hello, world!"
 
     # Verify the json datapoint was rendered correctly
-    json_sample = next(
-        rs for rs in rendered_samples if rs.function_name == "json_success"
-    )
+    json_sample = next(rs for rs in rendered_samples if rs.function_name == "json_success")
     assert json_sample.episode_id is None
     assert json_sample.inference_id is None
     assert json_sample.input.system is not None
@@ -450,16 +413,11 @@ def test_sync_render_datapoints(embedded_sync_client: TensorZeroGateway):
     assert json_sample.input.messages[0].role == "user"
     assert len(json_sample.input.messages[0].content) == 1
     assert isinstance(json_sample.input.messages[0].content[0], Text)
-    assert (
-        json_sample.input.messages[0].content[0].text
-        == "What is the name of the capital city of France?"
-    )
+    assert json_sample.input.messages[0].content[0].text == "What is the name of the capital city of France?"
 
     # Clean up
     for datapoint_id in datapoint_ids:
-        embedded_sync_client.delete_datapoint(
-            dataset_name=dataset_name, datapoint_id=datapoint_id
-        )
+        embedded_sync_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_id)
 
 
 @pytest.mark.asyncio
@@ -478,9 +436,7 @@ async def test_async_render_datapoints(
                 "messages": [
                     {
                         "role": "user",
-                        "content": [
-                            {"type": "text", "text": "What's the weather like?"}
-                        ],
+                        "content": [{"type": "text", "text": "What's the weather like?"}],
                     }
                 ],
             },
@@ -498,9 +454,7 @@ async def test_async_render_datapoints(
                 "messages": [
                     {
                         "role": "user",
-                        "content": [
-                            {"type": "text", "arguments": {"country": "Italy"}}
-                        ],
+                        "content": [{"type": "text", "arguments": {"country": "Italy"}}],
                     }
                 ],
             },
@@ -512,15 +466,11 @@ async def test_async_render_datapoints(
         ),
     ]
 
-    datapoint_ids = await embedded_async_client.bulk_insert_datapoints(
-        dataset_name=dataset_name, datapoints=datapoints
-    )
+    datapoint_ids = await embedded_async_client.bulk_insert_datapoints(dataset_name=dataset_name, datapoints=datapoints)
     assert len(datapoint_ids) == 2
 
     # List the inserted datapoints
-    listed_datapoints = await embedded_async_client.list_datapoints(
-        dataset_name=dataset_name
-    )
+    listed_datapoints = await embedded_async_client.list_datapoints(dataset_name=dataset_name)
     assert len(listed_datapoints) == 2
 
     # Render the datapoints using experimental_render_samples
@@ -532,15 +482,10 @@ async def test_async_render_datapoints(
     assert len(rendered_samples) == 2
 
     # Verify the chat datapoint was rendered correctly
-    chat_sample = next(
-        rs for rs in rendered_samples if rs.function_name == "basic_test"
-    )
+    chat_sample = next(rs for rs in rendered_samples if rs.function_name == "basic_test")
     assert chat_sample.episode_id is None
     assert chat_sample.inference_id is None
-    assert (
-        chat_sample.input.system
-        == "You are a helpful and friendly assistant named AsyncBot"
-    )
+    assert chat_sample.input.system == "You are a helpful and friendly assistant named AsyncBot"
     assert len(chat_sample.input.messages) == 1
     assert chat_sample.input.messages[0].role == "user"
     assert len(chat_sample.input.messages[0].content) == 1
@@ -548,9 +493,7 @@ async def test_async_render_datapoints(
     assert chat_sample.input.messages[0].content[0].text == "What's the weather like?"
 
     # Verify the json datapoint was rendered correctly
-    json_sample = next(
-        rs for rs in rendered_samples if rs.function_name == "json_success"
-    )
+    json_sample = next(rs for rs in rendered_samples if rs.function_name == "json_success")
     assert json_sample.episode_id is None
     assert json_sample.inference_id is None
     assert json_sample.input.system is not None
@@ -559,16 +502,11 @@ async def test_async_render_datapoints(
     assert json_sample.input.messages[0].role == "user"
     assert len(json_sample.input.messages[0].content) == 1
     assert isinstance(json_sample.input.messages[0].content[0], Text)
-    assert (
-        json_sample.input.messages[0].content[0].text
-        == "What is the name of the capital city of Italy?"
-    )
+    assert json_sample.input.messages[0].content[0].text == "What is the name of the capital city of Italy?"
 
     # Clean up
     for datapoint_id in datapoint_ids:
-        await embedded_async_client.delete_datapoint(
-            dataset_name=dataset_name, datapoint_id=datapoint_id
-        )
+        await embedded_async_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_id)
 
 
 def test_sync_render_filtered_datapoints(
@@ -610,24 +548,18 @@ def test_sync_render_filtered_datapoints(
                 "messages": [
                     {
                         "role": "user",
-                        "content": [
-                            {"type": "text", "arguments": {"country": "Spain"}}
-                        ],
+                        "content": [{"type": "text", "arguments": {"country": "Spain"}}],
                     },
                 ],
             },
         ),
     ]
 
-    datapoint_ids = embedded_sync_client.bulk_insert_datapoints(
-        dataset_name=dataset_name, datapoints=datapoints
-    )
+    datapoint_ids = embedded_sync_client.bulk_insert_datapoints(dataset_name=dataset_name, datapoints=datapoints)
     assert len(datapoint_ids) == 3
 
     # List only the basic_test datapoints
-    chat_datapoints = embedded_sync_client.list_datapoints(
-        dataset_name=dataset_name, function_name="basic_test"
-    )
+    chat_datapoints = embedded_sync_client.list_datapoints(dataset_name=dataset_name, function_name="basic_test")
     assert len(chat_datapoints) == 2
 
     # Render only the chat datapoints
@@ -646,9 +578,7 @@ def test_sync_render_filtered_datapoints(
 
     # Clean up
     for datapoint_id in datapoint_ids:
-        embedded_sync_client.delete_datapoint(
-            dataset_name=dataset_name, datapoint_id=datapoint_id
-        )
+        embedded_sync_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_id)
 
 
 def test_sync_datapoints_with_name(sync_client: TensorZeroGateway):
@@ -678,9 +608,7 @@ def test_sync_datapoints_with_name(sync_client: TensorZeroGateway):
                 "messages": [
                     {
                         "role": "user",
-                        "content": [
-                            {"type": "text", "arguments": {"country": "Japan"}}
-                        ],
+                        "content": [{"type": "text", "arguments": {"country": "Japan"}}],
                     }
                 ],
             },
@@ -690,32 +618,24 @@ def test_sync_datapoints_with_name(sync_client: TensorZeroGateway):
     ]
 
     # Insert datapoints
-    datapoint_ids = sync_client.bulk_insert_datapoints(
-        dataset_name=dataset_name, datapoints=datapoints
-    )
+    datapoint_ids = sync_client.bulk_insert_datapoints(dataset_name=dataset_name, datapoints=datapoints)
     assert len(datapoint_ids) == 2
 
     # Retrieve and verify chat datapoint with name
-    chat_datapoint = sync_client.get_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[0]
-    )
+    chat_datapoint = sync_client.get_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_ids[0])
     assert isinstance(chat_datapoint, ChatDatapoint)
     assert chat_datapoint.name == "greeting_example"
     assert chat_datapoint.function_name == "basic_test"
 
     # Retrieve and verify json datapoint with name
-    json_datapoint = sync_client.get_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[1]
-    )
+    json_datapoint = sync_client.get_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_ids[1])
     assert isinstance(json_datapoint, JsonDatapoint)
     assert json_datapoint.name == "tokyo_capital_query"
     assert json_datapoint.function_name == "json_success"
 
     # Clean up
     for datapoint_id in datapoint_ids:
-        sync_client.delete_datapoint(
-            dataset_name=dataset_name, datapoint_id=datapoint_id
-        )
+        sync_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_id)
 
 
 @pytest.mark.asyncio
@@ -761,23 +681,17 @@ async def test_async_datapoints_with_name(async_client: AsyncTensorZeroGateway):
     ]
 
     # Insert datapoints
-    datapoint_ids = await async_client.bulk_insert_datapoints(
-        dataset_name=dataset_name, datapoints=datapoints
-    )
+    datapoint_ids = await async_client.bulk_insert_datapoints(dataset_name=dataset_name, datapoints=datapoints)
     assert len(datapoint_ids) == 2
 
     # Retrieve and verify chat datapoint with name
-    chat_datapoint = await async_client.get_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[0]
-    )
+    chat_datapoint = await async_client.get_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_ids[0])
     assert isinstance(chat_datapoint, ChatDatapoint)
     assert chat_datapoint.name == "morning_greeting"
     assert chat_datapoint.function_name == "basic_test"
 
     # Retrieve and verify json datapoint with name
-    json_datapoint = await async_client.get_datapoint(
-        dataset_name=dataset_name, datapoint_id=datapoint_ids[1]
-    )
+    json_datapoint = await async_client.get_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_ids[1])
     assert isinstance(json_datapoint, JsonDatapoint)
     assert json_datapoint.name == "berlin_capital_query"
     assert json_datapoint.function_name == "json_success"
@@ -791,6 +705,4 @@ async def test_async_datapoints_with_name(async_client: AsyncTensorZeroGateway):
 
     # Clean up
     for datapoint_id in datapoint_ids:
-        await async_client.delete_datapoint(
-            dataset_name=dataset_name, datapoint_id=datapoint_id
-        )
+        await async_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_id)

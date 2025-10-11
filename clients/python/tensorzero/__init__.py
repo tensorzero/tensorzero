@@ -208,9 +208,7 @@ __version__ = version("tensorzero")
 
 def _attach_fields(client: T, gateway: t.Any) -> T:
     if hasattr(client, "__tensorzero_gateway"):
-        raise RuntimeError(
-            "TensorZero: Already called 'tensorzero.patch_openai_client' on this OpenAI client."
-        )
+        raise RuntimeError("TensorZero: Already called 'tensorzero.patch_openai_client' on this OpenAI client.")
     client.base_url = gateway.base_url
     # Store the gateway so that it doesn't get garbage collected
     client.__tensorzero_gateway = gateway

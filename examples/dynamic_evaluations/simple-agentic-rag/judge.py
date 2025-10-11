@@ -23,9 +23,7 @@ async def judge_answer(
                 "messages": [
                     {
                         "role": "user",
-                        "content": [
-                            {"type": "text", "arguments": {"answer": ai_answer}}
-                        ],
+                        "content": [{"type": "text", "arguments": {"answer": ai_answer}}],
                     }
                 ],
             },

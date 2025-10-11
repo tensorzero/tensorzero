@@ -1,1 +1,2 @@
+line-length = 120
 exclude = ["recipes/**/*_nb.py"]

@@ -150,9 +150,7 @@ while True:
     clear_output(wait=True)
 
     try:
-        job_info = tensorzero_client.experimental_poll_optimization(
-            job_handle=job_handle
-        )
+        job_info = tensorzero_client.experimental_poll_optimization(job_handle=job_handle)
         print(job_info)
         if job_info.status in (
             OptimizationJobStatus.Completed,

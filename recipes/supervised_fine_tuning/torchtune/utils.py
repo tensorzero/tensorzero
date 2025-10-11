@@ -216,7 +216,5 @@ def list_checkpoints(checkpoint_directory: str) -> List[str]:
         List[str]: Sorted list of checkpoint filenames.
     """
     pattern = re.compile(r"^model.*\.safetensors$")
-    checkpoint_files = [
-        fname for fname in os.listdir(checkpoint_directory) if pattern.fullmatch(fname)
-    ]
+    checkpoint_files = [fname for fname in os.listdir(checkpoint_directory) if pattern.fullmatch(fname)]
     return sorted(checkpoint_files)

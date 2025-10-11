@@ -151,9 +151,7 @@ class StoredInference:
         tool_params: Optional[Any] = None,
         output_schema: Optional[Any] = None,
         # Dispreferred outputs are lists because there may be several of them in the future.
-        dispreferred_outputs: Union[
-            List[ChatInferenceOutput], List[JsonInferenceOutput]
-        ] = [],
+        dispreferred_outputs: Union[List[ChatInferenceOutput], List[JsonInferenceOutput]] = [],
         tags: Dict[str, str] = {},
     ) -> None: ...
     def __repr__(self) -> str: ...
@@ -462,9 +460,7 @@ class FunctionConfigJson:
 @final
 class FunctionsConfig:
     def __len__(self) -> int: ...
-    def __getitem__(
-        self, key: str
-    ) -> Union[FunctionConfigChat, FunctionConfigJson]: ...
+    def __getitem__(self, key: str) -> Union[FunctionConfigChat, FunctionConfigJson]: ...
 
 @final
 class Config:
@@ -531,9 +527,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         output_schema: Optional[Dict[str, Any]] = None,
         allowed_tools: Optional[List[str]] = None,
         additional_tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[
-            Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
-        ] = None,
+        tool_choice: Optional[Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]] = None,
         parallel_tool_calls: Optional[bool] = None,
         internal: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
@@ -896,9 +890,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         output_schema: Optional[Dict[str, Any]] = None,
         allowed_tools: Optional[List[str]] = None,
         additional_tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[
-            Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
-        ] = None,
+        tool_choice: Optional[Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]] = None,
         parallel_tool_calls: Optional[bool] = None,
         internal: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
