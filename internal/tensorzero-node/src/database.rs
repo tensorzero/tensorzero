@@ -1,5 +1,8 @@
 use serde::Deserialize;
-use tensorzero::{setup_clickhouse_without_config, ClickHouseConnection, TimeWindow};
+use tensorzero::{
+    setup_clickhouse_without_config, ClickHouseConnection, DatasetQueryParams,
+    GetDatasetMetadataParams, GetDatasetRowsParams, TimeWindow,
+};
 use uuid::Uuid;
 
 #[napi(js_name = "DatabaseClient")]
@@ -60,6 +63,31 @@ impl DatabaseClient {
     #[napi]
     pub async fn query_episode_table_bounds(&self) -> Result<String, napi::Error> {
         napi_call!(&self, query_episode_table_bounds)
+    }
+
+    #[napi]
+    pub async fn count_rows_for_dataset(&self, params: String) -> Result<u32, napi::Error> {
+        napi_call_no_deserializing!(&self, count_rows_for_dataset, params, DatasetQueryParams)
+    }
+
+    #[napi]
+    pub async fn insert_rows_for_dataset(&self, params: String) -> Result<u32, napi::Error> {
+        napi_call_no_deserializing!(&self, insert_rows_for_dataset, params, DatasetQueryParams)
+    }
+
+    #[napi]
+    pub async fn get_dataset_rows(&self, params: String) -> Result<String, napi::Error> {
+        napi_call!(&self, get_dataset_rows, params, GetDatasetRowsParams)
+    }
+
+    #[napi]
+    pub async fn get_dataset_metadata(&self, params: String) -> Result<String, napi::Error> {
+        napi_call!(
+            &self,
+            get_dataset_metadata,
+            params,
+            GetDatasetMetadataParams
+        )
     }
 }
 
