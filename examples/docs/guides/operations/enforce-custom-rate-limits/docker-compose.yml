@@ -83,3 +83,4 @@ services:
 
 volumes:
   postgres_data:
+  clickhouse_data:
