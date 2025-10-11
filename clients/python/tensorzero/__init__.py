@@ -5,7 +5,11 @@ from importlib.metadata import version
 import httpx
 from typing_extensions import Any, deprecated
 
-from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
+from .client import (
+    AsyncTensorZeroGateway,
+    BaseTensorZeroGateway,
+    TensorZeroGateway,
+)
 from .tensorzero import (
     BestOfNSamplingConfig,
     ChainOfThoughtConfig,
@@ -37,12 +41,9 @@ from .tensorzero import (
 )
 from .types import (
     AndFilter,
-    AndNode,  # DEPRECATED
     BaseTensorZeroError,
     BooleanMetricFilter,
-    BooleanMetricNode,  # DEPRECATED
     ChatDatapointInsert,
-    ChatInferenceDatapointInput,  # DEPRECATED
     ChatInferenceResponse,
     ContentBlock,
     DynamicEvaluationRunEpisodeResponse,
@@ -53,22 +54,18 @@ from .types import (
     FileUrl,
     FinishReason,
     FloatMetricFilter,
-    FloatMetricNode,  # DEPRECATED
     ImageBase64,
     ImageUrl,
     InferenceChunk,
     InferenceInput,
     InferenceResponse,
     JsonDatapointInsert,
-    JsonInferenceDatapointInput,  # DEPRECATED
     JsonInferenceOutput,
     JsonInferenceResponse,
     Message,
     NotFilter,
-    NotNode,  # DEPRECATED
     OrderBy,
     OrFilter,
-    OrNode,  # DEPRECATED
     RawText,
     System,
     TagFilter,
@@ -124,15 +121,12 @@ ChatInferenceOutput = t.List[ContentBlock]
 
 __all__ = [
     "AndFilter",
-    "AndNode",  # DEPRECATED
     "AsyncTensorZeroGateway",
     "BaseTensorZeroError",
     "BaseTensorZeroGateway",
     "BooleanMetricFilter",
-    "BooleanMetricNode",  # DEPRECATED
     "ChatDatapoint",
     "ChatDatapointInsert",
-    "ChatInferenceDatapointInput",  # DEPRECATED
     "ChatInferenceResponse",
     "Config",
     "ContentBlock",
@@ -147,7 +141,6 @@ __all__ = [
     "FileUrl",
     "FinishReason",
     "FloatMetricFilter",
-    "FloatMetricNode",  # DEPRECATED
     "FunctionsConfig",
     "FunctionConfigChat",
     "FunctionConfigJson",
@@ -168,15 +161,12 @@ __all__ = [
     "InferenceResponse",
     "JsonDatapoint",
     "JsonDatapointInsert",
-    "JsonInferenceDatapointInput",  # DEPRECATED
     "JsonInferenceOutput",
     "JsonInferenceResponse",
     "Message",
     "NotFilter",
-    "NotNode",  # DEPRECATED
     "OrderBy",
     "OrFilter",
-    "OrNode",  # DEPRECATED
     "OptimizationJobHandle",
     "OptimizationJobInfo",
     "OptimizationJobStatus",

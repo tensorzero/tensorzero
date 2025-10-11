@@ -26,10 +26,8 @@ from tensorzero import (
     AsyncTensorZeroGateway,
     ChatDatapoint,
     ChatDatapointInsert,
-    ChatInferenceDatapointInput,
     JsonDatapoint,
     JsonDatapointInsert,
-    JsonInferenceDatapointInput,
     Template,
     TensorZeroError,
     TensorZeroGateway,
@@ -46,7 +44,10 @@ def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
             input={
                 "system": {"assistant_name": "foo"},
                 "messages": [
-                    {"role": "user", "content": [{"type": "text", "text": "bar"}]}
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": "bar"}],
+                    }
                 ],
             },
             output=[{"type": "text", "text": "foobar"}],
@@ -56,8 +57,7 @@ def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
             parallel_tool_calls=False,
             tags=None,
         ),
-        # Ensure deprecated ChatInferenceDatapointInput is still supported
-        ChatInferenceDatapointInput(
+        ChatDatapointInsert(
             function_name="basic_test",
             input={
                 "system": {"assistant_name": "Dummy"},
@@ -72,7 +72,10 @@ def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
                 {
                     "type": "tool_call",
                     "name": "get_temperature",
-                    "arguments": {"location": "New York", "units": "fahrenheit"},
+                    "arguments": {
+                        "location": "New York",
+                        "units": "fahrenheit",
+                    },
                 }
             ],
             additional_tools=[
@@ -119,8 +122,7 @@ def test_sync_bulk_insert_delete_datapoints(sync_client: TensorZeroGateway):
             output_schema=None,
             tags=None,
         ),
-        # Ensure deprecated JsonInferenceDatapointInput is still supported
-        JsonInferenceDatapointInput(
+        JsonDatapointInsert(
             function_name="json_success",
             input={
                 "system": {"assistant_name": "foo"},
@@ -181,7 +183,10 @@ async def test_async_bulk_insert_delete_datapoints(
             input={
                 "system": {"assistant_name": "foo"},
                 "messages": [
-                    {"role": "user", "content": [{"type": "text", "text": "bar"}]}
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": "bar"}],
+                    }
                 ],
             },
         ),
@@ -200,7 +205,10 @@ async def test_async_bulk_insert_delete_datapoints(
                 {
                     "type": "tool_call",
                     "name": "get_temperature",
-                    "arguments": {"location": "New York", "units": "fahrenheit"},
+                    "arguments": {
+                        "location": "New York",
+                        "units": "fahrenheit",
+                    },
                 }
             ],
             additional_tools=[
@@ -455,7 +463,9 @@ def test_sync_render_datapoints(embedded_sync_client: TensorZeroGateway):
 
 
 @pytest.mark.asyncio
-async def test_async_render_datapoints(embedded_async_client: AsyncTensorZeroGateway):
+async def test_async_render_datapoints(
+    embedded_async_client: AsyncTensorZeroGateway,
+):
     """Test rendering datapoints using experimental_render_samples (async version)."""
     dataset_name = f"test_render_async_{uuid7()}"
 
@@ -475,7 +485,10 @@ async def test_async_render_datapoints(embedded_async_client: AsyncTensorZeroGat
                 ],
             },
             output=[
-                {"type": "text", "text": "I don't have access to current weather data."}
+                {
+                    "type": "text",
+                    "text": "I don't have access to current weather data.",
+                }
             ],
         ),
         JsonDatapointInsert(
@@ -558,7 +571,9 @@ async def test_async_render_datapoints(embedded_async_client: AsyncTensorZeroGat
         )
 
 
-def test_sync_render_filtered_datapoints(embedded_sync_client: TensorZeroGateway):
+def test_sync_render_filtered_datapoints(
+    embedded_sync_client: TensorZeroGateway,
+):
     """Test rendering only specific datapoints by filtering function name."""
     dataset_name = f"test_render_filter_{uuid7()}"
 
@@ -647,7 +662,10 @@ def test_sync_datapoints_with_name(sync_client: TensorZeroGateway):
             input={
                 "system": {"assistant_name": "TestBot"},
                 "messages": [
-                    {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": "Hello"}],
+                    }
                 ],
             },
             output=[{"type": "text", "text": "Hi there!"}],
@@ -729,7 +747,10 @@ async def test_async_datapoints_with_name(async_client: AsyncTensorZeroGateway):
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "arguments": {"country": "Germany"}}
+                            {
+                                "type": "text",
+                                "arguments": {"country": "Germany"},
+                            }
                         ],
                     }
                 ],
