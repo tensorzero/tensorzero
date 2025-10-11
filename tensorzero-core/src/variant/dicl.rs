@@ -169,13 +169,13 @@ pub struct UninitializedDiclConfig {
 }
 
 impl Variant for DiclConfig {
-    async fn infer<'request>(
+    async fn infer(
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
         function: Arc<FunctionConfig>,
         inference_config: Arc<InferenceConfig>,
-        clients: &'request InferenceClients<'request>,
+        clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
         // So this can be mutably borrowed by the prepare_request function
@@ -186,7 +186,7 @@ impl Variant for DiclConfig {
             .retrieve_relevant_examples(
                 &input,
                 &models.embedding_models,
-                clients,
+                &clients,
                 &inference_config.function_name,
                 &inference_config.variant_name,
                 &function,
@@ -233,13 +233,13 @@ impl Variant for DiclConfig {
         Ok(inference_response)
     }
 
-    async fn infer_stream<'request>(
+    async fn infer_stream(
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
         function: Arc<FunctionConfig>,
         inference_config: Arc<InferenceConfig>,
-        clients: &'request InferenceClients<'request>,
+        clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         // So this can be mutably borrowed by the prepare_request function
@@ -250,7 +250,7 @@ impl Variant for DiclConfig {
             .retrieve_relevant_examples(
                 &input,
                 &models.embedding_models,
-                clients,
+                &clients,
                 &inference_config.function_name,
                 &inference_config.variant_name,
                 &function,
@@ -351,7 +351,7 @@ impl Variant for DiclConfig {
         _models: InferenceModels,
         _function: &'a FunctionConfig,
         _inference_configs: &'a [InferenceConfig],
-        _clients: &'a InferenceClients<'a>,
+        _clients: InferenceClients,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
         // TODO (#493): Implement batch inference for Dicl
@@ -450,7 +450,7 @@ impl DiclConfig {
         &'a self,
         input: &LazyResolvedInput,
         embedding_models: &'a EmbeddingModelTable,
-        clients: &InferenceClients<'_>,
+        clients: &InferenceClients,
         function_name: &str,
         variant_name: &str,
         function: &Arc<FunctionConfig>,

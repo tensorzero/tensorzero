@@ -532,17 +532,16 @@ async fn process_embedding_batch(
             })?;
 
     // Create InferenceClients context for the embedding model
-    let cache_options = CacheOptions::default();
     let clients = InferenceClients {
-        http_client: client,
-        credentials,
-        clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
-        postgres_connection_info: &PostgresConnectionInfo::Disabled,
-        cache_options: &cache_options,
-        tags: &HashMap::default(),
-        rate_limiting_config: &config.rate_limiting,
+        http_client: client.clone(),
+        credentials: Arc::new(credentials.clone()),
+        clickhouse_connection_info: ClickHouseConnectionInfo::Disabled,
+        postgres_connection_info: PostgresConnectionInfo::Disabled,
+        cache_options: CacheOptions::default(),
+        tags: Arc::new(HashMap::default()),
+        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
         // We don't currently perform any OTLP export in optimization workflows
-        otlp_config: &Default::default(),
+        otlp_config: Default::default(),
     };
 
     let response = embedding_model_config

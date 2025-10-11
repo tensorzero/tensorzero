@@ -739,6 +739,7 @@ impl Config {
             None
         };
         templates.initialize(template_paths, template_fs_base_path.as_deref())?;
+        config.templates = Arc::new(templates.clone());
 
         // Validate the config
         config.validate().await?;

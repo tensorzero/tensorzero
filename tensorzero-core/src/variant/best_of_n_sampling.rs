@@ -150,13 +150,13 @@ lazy_static! {
 }
 
 impl Variant for BestOfNSamplingConfig {
-    async fn infer<'request>(
+    async fn infer(
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
         function: Arc<FunctionConfig>,
         inference_config: Arc<InferenceConfig>,
-        clients: &'request InferenceClients<'request>,
+        clients: InferenceClients,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
         let candidate_inference_results = self
@@ -165,26 +165,26 @@ impl Variant for BestOfNSamplingConfig {
                 &models,
                 &function,
                 Arc::clone(&inference_config),
-                clients,
+                &clients,
             )
             .await?;
         self.select_best_candidate(
             &input,
             &models.models,
             &inference_config,
-            clients,
+            &clients,
             candidate_inference_results,
         )
         .await
     }
 
-    async fn infer_stream<'request>(
+    async fn infer_stream(
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
         function: Arc<FunctionConfig>,
         inference_config: Arc<InferenceConfig>,
-        clients: &'request InferenceClients<'request>,
+        clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         let candidate_inference_results = self
@@ -193,7 +193,7 @@ impl Variant for BestOfNSamplingConfig {
                 &models,
                 &function,
                 Arc::clone(&inference_config),
-                clients,
+                &clients,
             )
             .await?;
         let inference_result = self
@@ -201,7 +201,7 @@ impl Variant for BestOfNSamplingConfig {
                 &input,
                 &models.models,
                 &inference_config,
-                clients,
+                &clients,
                 candidate_inference_results,
             )
             .await?;
@@ -278,7 +278,7 @@ impl Variant for BestOfNSamplingConfig {
         _models: InferenceModels,
         _function: &'a FunctionConfig,
         _inference_configs: &'a [InferenceConfig],
-        _clients: &'a InferenceClients<'a>,
+        _clients: InferenceClients,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
         Err(ErrorDetails::UnsupportedVariantForBatchInference { variant_name: None }.into())
@@ -287,13 +287,13 @@ impl Variant for BestOfNSamplingConfig {
 
 impl BestOfNSamplingConfig {
     /// Infer each candidate variant concurrently and return the results.
-    async fn infer_candidates<'request>(
+    async fn infer_candidates(
         &self,
         input: &LazyResolvedInput,
-        models: &'request InferenceModels,
+        models: &InferenceModels,
         function: &Arc<FunctionConfig>,
         inference_config: Arc<InferenceConfig>,
-        clients: &'request InferenceClients<'request>,
+        clients: &InferenceClients,
     ) -> Result<Vec<InferenceResult>, Error> {
         // Get all the variants we are going to infer
         let candidate_variants = self
@@ -341,7 +341,7 @@ impl BestOfNSamplingConfig {
                         models.clone(),
                         Arc::clone(function),
                         Arc::clone(config),
-                        clients,
+                        clients.clone(),
                         InferenceParams::default(),
                     ),
                 ),
@@ -381,12 +381,12 @@ impl BestOfNSamplingConfig {
     /// Gets the best candidate using the evaluator config.
     /// If at any point the evaluator fails to return a valid response,
     /// we randomly select one of the candidates.
-    async fn select_best_candidate<'request>(
+    async fn select_best_candidate(
         &self,
         input: &LazyResolvedInput,
         models: &Arc<ModelTable>,
-        inference_config: &'request InferenceConfig,
-        clients: &'request InferenceClients<'request>,
+        inference_config: &InferenceConfig,
+        clients: &InferenceClients,
         candidates: Vec<InferenceResult>,
     ) -> Result<InferenceResult, Error> {
         if candidates.is_empty() {
@@ -468,12 +468,12 @@ impl BestOfNSamplingConfig {
 ///  * Map the evaluator's index to the actual index in the original candidate list (prior to skipping any).
 ///  * Check if the index is out of bounds.
 ///  * Return the index and the model inference result.
-async fn inner_select_best_candidate<'a, 'request>(
+async fn inner_select_best_candidate<'a>(
     evaluator: &'a BestOfNEvaluatorConfig,
-    input: &'request LazyResolvedInput,
+    input: &LazyResolvedInput,
     models: &'a ModelTable,
-    inference_config: &'request InferenceConfig,
-    clients: &'request InferenceClients<'request>,
+    inference_config: &InferenceConfig,
+    clients: &InferenceClients,
     candidates: &[InferenceResult],
 ) -> Result<(Option<usize>, Option<ModelInferenceResponseWithMetadata>), Error> {
     let mut inference_params = InferenceParams::default();
@@ -1317,17 +1317,17 @@ mod tests {
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
         let inference_clients = InferenceClients {
-            http_client: &client,
-            clickhouse_connection_info: &clickhouse_connection_info,
-            postgres_connection_info: &PostgresConnectionInfo::Disabled,
-            credentials: &api_keys,
-            cache_options: &CacheOptions {
+            http_client: client.clone(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys),
+            cache_options: CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: &Default::default(),
-            rate_limiting_config: &Default::default(),
-            otlp_config: &Default::default(),
+            tags: Arc::new(Default::default()),
+            rate_limiting_config: Arc::new(Default::default()),
+            otlp_config: Default::default(),
         };
         let input = LazyResolvedInput {
             system: None,

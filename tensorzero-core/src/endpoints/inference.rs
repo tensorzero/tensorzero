@@ -322,14 +322,14 @@ pub async fn inference(
     let output_schema = params.output_schema.map(DynamicJSONSchema::new);
 
     let inference_clients = InferenceClients {
-        http_client,
-        clickhouse_connection_info: &clickhouse_connection_info,
-        postgres_connection_info: &postgres_connection_info,
-        credentials: &params.credentials,
-        cache_options: &(params.cache_options, dryrun).into(),
-        tags: &params.tags,
-        rate_limiting_config: &config.rate_limiting,
-        otlp_config: &config.gateway.export.otlp,
+        http_client: http_client.clone(),
+        clickhouse_connection_info: clickhouse_connection_info.clone(),
+        postgres_connection_info: postgres_connection_info.clone(),
+        credentials: Arc::new(params.credentials.clone()),
+        cache_options: (params.cache_options, dryrun).into(),
+        tags: Arc::new(params.tags.clone()),
+        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
+        otlp_config: config.gateway.export.otlp.clone(),
     };
 
     let inference_models = InferenceModels {
@@ -357,7 +357,7 @@ pub async fn inference(
             stream,
             resolved_input: resolved_input.clone(),
             inference_models: inference_models.clone(),
-            inference_clients: &inference_clients,
+            inference_clients: inference_clients.clone(),
             inference_params: params.params.clone(),
             templates,
             tool_config: &tool_config,
@@ -404,7 +404,7 @@ struct InferVariantArgs<'a> {
     stream: bool,
     resolved_input: Arc<LazyResolvedInput>,
     inference_models: InferenceModels,
-    inference_clients: &'a InferenceClients<'a>,
+    inference_clients: InferenceClients,
     inference_params: InferenceParams,
     templates: &'a Arc<TemplateConfig<'static>>,
     tool_config: &'a Option<ToolCallConfig>,
@@ -1195,15 +1195,16 @@ impl InferenceResponseChunk {
 }
 
 // Carryall struct for clients used in inference
-pub struct InferenceClients<'a> {
-    pub http_client: &'a TensorzeroHttpClient,
-    pub clickhouse_connection_info: &'a ClickHouseConnectionInfo,
-    pub postgres_connection_info: &'a PostgresConnectionInfo,
-    pub credentials: &'a InferenceCredentials,
-    pub cache_options: &'a CacheOptions,
-    pub tags: &'a HashMap<String, String>,
-    pub rate_limiting_config: &'a RateLimitingConfig,
-    pub otlp_config: &'a OtlpConfig,
+#[derive(Clone)]
+pub struct InferenceClients {
+    pub http_client: TensorzeroHttpClient,
+    pub clickhouse_connection_info: ClickHouseConnectionInfo,
+    pub postgres_connection_info: PostgresConnectionInfo,
+    pub credentials: Arc<InferenceCredentials>,
+    pub cache_options: CacheOptions,
+    pub tags: Arc<HashMap<String, String>>,
+    pub rate_limiting_config: Arc<RateLimitingConfig>,
+    pub otlp_config: OtlpConfig,
 }
 
 // Carryall struct for models used in inference

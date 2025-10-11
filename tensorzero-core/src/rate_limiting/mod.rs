@@ -28,7 +28,7 @@ use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
  *      to not add keys which could trample one another.
  */
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct RateLimitingConfig {
@@ -273,7 +273,7 @@ impl ActiveRateLimit {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct RateLimitingConfigRule {
@@ -382,7 +382,7 @@ impl RateLimitInterval {
     }
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub enum RateLimitingConfigPriority {

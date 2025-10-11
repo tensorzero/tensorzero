@@ -225,14 +225,14 @@ pub async fn start_batch_inference(
     };
 
     let inference_clients = InferenceClients {
-        http_client: &http_client,
-        clickhouse_connection_info: &clickhouse_connection_info,
-        postgres_connection_info: &postgres_connection_info,
-        credentials: &params.credentials,
-        cache_options: &cache_options,
-        rate_limiting_config: &config.rate_limiting,
-        tags: &HashMap::default(), // NOTE: we currently do not rate limit batch inference
-        otlp_config: &config.gateway.export.otlp,
+        http_client: http_client.clone(),
+        clickhouse_connection_info: clickhouse_connection_info.clone(),
+        postgres_connection_info: postgres_connection_info.clone(),
+        credentials: Arc::new(params.credentials.clone()),
+        cache_options: cache_options.clone(),
+        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
+        tags: Arc::new(HashMap::default()), // NOTE: we currently do not rate limit batch inference
+        otlp_config: config.gateway.export.otlp.clone(),
     };
 
     let inference_models = InferenceModels {
@@ -278,7 +278,7 @@ pub async fn start_batch_inference(
             inference_ids: &inference_ids,
             resolved_inputs: resolved_inputs.clone(),
             inference_models: &inference_models,
-            inference_clients: &inference_clients,
+            inference_clients: inference_clients.clone(),
             inference_params: inference_params.clone(),
             tool_configs: &tool_configs,
             batch_dynamic_output_schemas: &batch_dynamic_output_schemas,
@@ -324,7 +324,7 @@ struct StartVariantBatchInferenceArgs<'a> {
     inference_ids: &'a [Uuid],
     resolved_inputs: Vec<LazyResolvedInput>,
     inference_models: &'a InferenceModels,
-    inference_clients: &'a InferenceClients<'a>,
+    inference_clients: InferenceClients,
     inference_params: Vec<InferenceParams>,
     tool_configs: &'a Vec<Option<ToolCallConfig>>,
     batch_dynamic_output_schemas: &'a Vec<Option<DynamicJSONSchema>>,

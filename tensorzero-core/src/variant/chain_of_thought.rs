@@ -51,13 +51,13 @@ impl UninitializedChainOfThoughtConfig {
 }
 
 impl Variant for ChainOfThoughtConfig {
-    async fn infer<'request>(
+    async fn infer(
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
         function: Arc<FunctionConfig>,
         inference_config: Arc<InferenceConfig>,
-        clients: &'request InferenceClients<'request>,
+        clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
         let FunctionConfig::Json(json_config) = function.as_ref() else {
@@ -119,13 +119,13 @@ impl Variant for ChainOfThoughtConfig {
         }))
     }
 
-    async fn infer_stream<'request>(
+    async fn infer_stream(
         &self,
         _input: Arc<LazyResolvedInput>,
         _models: InferenceModels,
         _function: Arc<FunctionConfig>,
         _inference_config: Arc<InferenceConfig>,
-        _clients: &'request InferenceClients<'request>,
+        _clients: InferenceClients,
         _inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         Err(ErrorDetails::UnsupportedVariantForStreamingInference {
@@ -179,7 +179,7 @@ impl Variant for ChainOfThoughtConfig {
         _models: InferenceModels,
         _function: &'a FunctionConfig,
         _inference_configs: &'a [InferenceConfig],
-        _clients: &'a InferenceClients<'a>,
+        _clients: InferenceClients,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
         Err(ErrorDetails::UnsupportedVariantForBatchInference { variant_name: None }.into())

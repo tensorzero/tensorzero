@@ -2,6 +2,7 @@
 use base64::Engine;
 use serde_json::json;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 use url::Url;
 use uuid::Uuid;
@@ -194,14 +195,14 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 extra_cache_key: None,
             };
             let clients = InferenceClients {
-                http_client: &client,
-                clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
-                postgres_connection_info: &PostgresConnectionInfo::Disabled,
-                credentials: &HashMap::new(),
-                cache_options: &CacheOptions::default(),
-                tags: &Default::default(),
-                rate_limiting_config: &Default::default(),
-                otlp_config: &Default::default(),
+                http_client: client.clone(),
+                clickhouse_connection_info: ClickHouseConnectionInfo::Disabled,
+                postgres_connection_info: PostgresConnectionInfo::Disabled,
+                credentials: Arc::new(HashMap::new()),
+                cache_options: CacheOptions::default(),
+                tags: Arc::new(Default::default()),
+                rate_limiting_config: Arc::new(Default::default()),
+                otlp_config: Default::default(),
             };
             // We didn't produce a real model, so there's nothing to test
             if use_mock_inference_provider() {

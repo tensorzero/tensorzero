@@ -470,13 +470,13 @@ async fn prepare_request_message(
 }
 
 impl Variant for ChatCompletionConfig {
-    async fn infer<'request>(
+    async fn infer(
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
         function: Arc<FunctionConfig>,
         inference_config: Arc<InferenceConfig>,
-        clients: &'request InferenceClients<'request>,
+        clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
         let inference_config_clone = Arc::clone(&inference_config);
@@ -508,13 +508,13 @@ impl Variant for ChatCompletionConfig {
         infer_model_request(args).await
     }
 
-    async fn infer_stream<'request>(
+    async fn infer_stream(
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
         function: Arc<FunctionConfig>,
         inference_config: Arc<InferenceConfig>,
-        clients: &'request InferenceClients<'request>,
+        clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         let mut inference_params = inference_params;
@@ -644,7 +644,7 @@ impl Variant for ChatCompletionConfig {
         models: InferenceModels,
         function: &'a FunctionConfig,
         inference_configs: &'a [InferenceConfig],
-        clients: &'a InferenceClients<'a>,
+        clients: InferenceClients,
         inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
         // First construct all inference configs so they stick around for the duration of this function body
@@ -670,8 +670,8 @@ impl Variant for ChatCompletionConfig {
         let model_inference_response = model_config
             .start_batch_inference(
                 &inference_requests,
-                clients.http_client,
-                clients.credentials,
+                &clients.http_client,
+                &clients.credentials,
             )
             .await?;
         Ok(StartBatchModelInferenceWithMetadata::new(
@@ -1161,17 +1161,17 @@ mod tests {
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
-            http_client: &client,
-            clickhouse_connection_info: &clickhouse_connection_info,
-            postgres_connection_info: &PostgresConnectionInfo::Disabled,
-            credentials: &api_keys,
-            cache_options: &CacheOptions {
+            http_client: client.clone(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys),
+            cache_options: CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: &Default::default(),
-            rate_limiting_config: &Default::default(),
-            otlp_config: &Default::default(),
+            tags: Arc::new(Default::default()),
+            rate_limiting_config: Arc::new(Default::default()),
+            otlp_config: Default::default(),
         };
         let templates = Arc::new(get_test_template_config());
         let system_template = get_system_template();
@@ -1330,7 +1330,7 @@ mod tests {
                 inference_models.clone(),
                 Arc::clone(&function_config),
                 Arc::new(inference_config.clone()),
-                &clients,
+                clients.clone(),
                 inference_params,
             )
             .await
@@ -1384,7 +1384,7 @@ mod tests {
                 inference_models.clone(),
                 Arc::clone(&function_config),
                 Arc::new(inference_config.clone()),
-                &clients,
+                clients.clone(),
                 inference_params,
             )
             .await
@@ -1459,7 +1459,7 @@ mod tests {
                 inference_models.clone(),
                 Arc::clone(&function_config),
                 Arc::new(inference_config.clone()),
-                &clients,
+                clients.clone(),
                 inference_params,
             )
             .await
@@ -1558,7 +1558,7 @@ mod tests {
                 inference_models.clone(),
                 Arc::clone(&function_config),
                 Arc::new(inference_config.clone()),
-                &clients,
+                clients.clone(),
                 inference_params.clone(),
             )
             .await
@@ -1641,7 +1641,7 @@ mod tests {
                 inference_models.clone(),
                 Arc::clone(&function_config),
                 Arc::new(inference_config.clone()),
-                &clients,
+                clients.clone(),
                 inference_params.clone(),
             )
             .await
@@ -1738,7 +1738,7 @@ mod tests {
                 inference_models.clone(),
                 Arc::clone(&json_function_config),
                 Arc::new(inference_config.clone()),
-                &clients,
+                clients.clone(),
                 inference_params.clone(),
             )
             .await
@@ -1834,7 +1834,7 @@ mod tests {
                 inference_models.clone(),
                 Arc::clone(&json_function_config),
                 Arc::new(inference_config.clone()),
-                &clients,
+                clients.clone(),
                 inference_params.clone(),
             )
             .await
@@ -1965,7 +1965,7 @@ mod tests {
                 inference_models.clone(),
                 Arc::clone(&json_function_config),
                 Arc::new(inference_config.clone()),
-                &clients,
+                clients.clone(),
                 inference_params.clone(),
             )
             .await
@@ -2090,7 +2090,7 @@ mod tests {
                 inference_models.clone(),
                 Arc::clone(&json_function_config),
                 Arc::new(inference_config.clone()),
-                &clients,
+                clients.clone(),
                 inference_params.clone(),
             )
             .await
@@ -2142,17 +2142,17 @@ mod tests {
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
-            http_client: &client,
-            clickhouse_connection_info: &clickhouse_connection_info,
-            postgres_connection_info: &PostgresConnectionInfo::Disabled,
-            credentials: &api_keys,
-            cache_options: &CacheOptions {
+            http_client: client.clone(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys),
+            cache_options: CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: &Default::default(),
-            rate_limiting_config: &Default::default(),
-            otlp_config: &Default::default(),
+            tags: Arc::new(Default::default()),
+            rate_limiting_config: Arc::new(Default::default()),
+            otlp_config: Default::default(),
         };
         let templates = Box::leak(Box::new(get_test_template_config()));
         let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
@@ -2296,7 +2296,7 @@ mod tests {
                 inference_models.clone(),
                 Arc::clone(&function_config),
                 Arc::new(inference_config.clone()),
-                &clients,
+                clients.clone(),
                 inference_params.clone(),
             )
             .await;
@@ -2377,7 +2377,7 @@ mod tests {
                 inference_models.clone(),
                 Arc::clone(&function_config),
                 Arc::new(inference_config.clone()),
-                &clients,
+                clients.clone(),
                 inference_params.clone(),
             )
             .await
