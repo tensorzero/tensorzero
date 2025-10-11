@@ -64,9 +64,11 @@ jobs:
 
       - name: Apply Postgres migrations for the enforce-custom-rate-limits example
         # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
+        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
         run: |
           cd examples/docs/guides/operations/enforce-custom-rate-limits
           OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
+          docker compose down
 
       - name: Check latest docker-compose
         run: ./ci/check-all-docker-compose.sh
@@ -106,9 +108,11 @@ jobs:
 
       - name: Apply Postgres migrations for the enforce-custom-rate-limits example
         # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
+        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
         run: |
           cd examples/docs/guides/operations/enforce-custom-rate-limits
           OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
+          docker compose down
 
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
