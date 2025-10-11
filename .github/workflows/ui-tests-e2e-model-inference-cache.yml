@@ -15,6 +15,8 @@ on:
         required: false
       ANTHROPIC_API_KEY:
         required: false
+      TOGETHER_API_KEY:
+        required: false
     inputs:
       regen_cache:
         required: true
@@ -95,6 +97,7 @@ jobs:
           # to pass to 'experimentalLaunchOptimizationWorkflow'
           echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> fixtures/.env
           echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai/" >> fixtures/.env
+          echo "TOGETHER_BASE_URL=http://mock-inference-provider:3030/together/" >> fixtures/.env
           echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env
           echo "VITE_TENSORZERO_FORCE_CACHE_ON=1" >> fixtures/.env
 
@@ -110,6 +113,7 @@ jobs:
           echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> fixtures/.env-gateway
           echo "S3_ACCESS_KEY_ID=${{ secrets.S3_ACCESS_KEY_ID }}" >> fixtures/.env-gateway
           echo "S3_SECRET_ACCESS_KEY=${{ secrets.S3_SECRET_ACCESS_KEY }}" >> fixtures/.env-gateway
+          echo "TOGETHER_API_KEY=${{ secrets.TOGETHER_API_KEY }}" >> fixtures/.env-gateway
           # Save the old cache file for comparison
           cp ./fixtures/model_inference_cache_e2e.jsonl ./fixtures/model_inference_cache_e2e.jsonl.old
           # Run up to 3 times if it fails. We need to retry *outside* of playwright, so that we wipe the
@@ -167,6 +171,7 @@ jobs:
           echo "FIREWORKS_API_KEY=${{ secrets.FIREWORKS_API_KEY || 'not_used' }}" >> fixtures/.env-gateway
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY || 'not_used' }}" >> fixtures/.env-gateway
           echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY || 'not_used' }}" >> fixtures/.env-gateway
+          echo "TOGETHER_API_KEY=${{ secrets.TOGETHER_API_KEY || 'not_used' }}" >> fixtures/.env-gateway
           echo "S3_ACCESS_KEY_ID=${{ secrets.S3_ACCESS_KEY_ID }}" >> fixtures/.env-gateway
           echo "S3_SECRET_ACCESS_KEY=${{ secrets.S3_SECRET_ACCESS_KEY }}" >> fixtures/.env-gateway
           docker compose -f fixtures/docker-compose.e2e.yml up --no-build -d

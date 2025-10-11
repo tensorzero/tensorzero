@@ -1,6 +1,6 @@
-use std::{ops::Deref, sync::Arc};
+use std::{future::Future, ops::Deref, sync::Arc};
 
-use pyo3::Python;
+use pyo3::{marker::Ungil, Python};
 /// Runs a function inside the Tokio runtime, with the GIL released.
 /// This is used when we need to drop a TensorZero client (or a type that holds it),
 /// so that we can block on the ClickHouse batcher shutting down, without holding the GIL.
@@ -71,4 +71,20 @@ impl<T: Send> Drop for DropInTokio<T> {
             });
         }
     }
+}
+
+/// Calls `tokio::Runtime::block_on` without holding the Python GIL.
+/// This is used when we call into pure-Rust code from the synchronous `TensorZeroGateway`
+/// We don't need (or want) to hold the GIL when the Rust client code is running,
+/// since it doesn't need to interact with any Python objects.
+/// This allows other Python threads to run while the current thread is blocked on the Rust execution.
+pub fn tokio_block_on_without_gil<F: Future + Send>(py: Python<'_>, fut: F) -> F::Output
+where
+    F::Output: Ungil,
+{
+    // The Tokio runtime is managed by `pyo3_async_runtimes` - the entrypoint to
+    // our crate (`python`) is the `pymodule` function, rather than
+    // a `#[tokio::main]` function, so we need `pyo3_async_runtimes` to keep track of
+    // a Tokio runtime for us.
+    py.detach(|| pyo3_async_runtimes::tokio::get_runtime().block_on(fut))
 }

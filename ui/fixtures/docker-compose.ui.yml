@@ -11,6 +11,7 @@ services:
       - OPENAI_BASE_URL
       - FIREWORKS_BASE_URL
       - FIREWORKS_ACCOUNT_ID
+      - TOGETHER_BASE_URL
       - VITE_TENSORZERO_FORCE_CACHE_ON
     volumes:
       - ./config:/app/config:ro

@@ -26,6 +26,7 @@ export async function launch_sft_job(
 ): Promise<OptimizationJobHandle> {
   const openAINativeSFTBase = getEnv().OPENAI_BASE_URL;
   const fireworksNativeSFTBase = getEnv().FIREWORKS_BASE_URL;
+  const togetherNativeSFTBase = getEnv().TOGETHER_BASE_URL;
   let filters: InferenceFilterTreeNode | null = null;
   let output_source: InferenceOutputSource = "Inference";
   if (data.metric === "demonstration") {
@@ -77,6 +78,45 @@ export async function launch_sft_job(
       credentials: null,
       api_base: fireworksNativeSFTBase,
       account_id: accountId,
+    };
+  } else if (data.model.provider == "together") {
+    optimizerConfig = {
+      type: "together_sft",
+      model: data.model.name,
+      credentials: null,
+      api_base: togetherNativeSFTBase,
+      n_epochs: 1,
+      n_checkpoints: 1,
+      n_evals: null,
+      batch_size: "max",
+      learning_rate: 0.00001,
+      warmup_ratio: 0,
+      max_grad_norm: 1,
+      weight_decay: 0,
+      suffix: null,
+      lr_scheduler: {
+        lr_scheduler_type: "linear",
+        min_lr_ratio: 0,
+      },
+      wandb_api_key: null,
+      wandb_base_url: null,
+      wandb_project_name: null,
+      wandb_name: null,
+      training_method: {
+        method: "sft",
+      },
+      training_type: {
+        type: "Lora",
+        lora_r: 8,
+        lora_alpha: 16,
+        lora_dropout: 0,
+        lora_trainable_modules: "all-linear",
+      },
+      from_checkpoint: null,
+      from_hf_model: null,
+      hf_model_revision: null,
+      hf_api_token: null,
+      hf_output_repo_name: null,
     };
   } else {
     throw new Error(

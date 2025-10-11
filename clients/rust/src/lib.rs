@@ -455,12 +455,12 @@ impl ClientBuilder {
 }
 
 /// A TensorZero client. This is constructed using `ClientBuilder`
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Client {
     mode: Arc<ClientMode>,
     verbose_errors: bool,
     #[cfg(feature = "e2e_tests")]
-    pub last_body: Mutex<Option<String>>,
+    pub last_body: Arc<Mutex<Option<String>>>,
 }
 
 impl StoragePathResolver for Client {

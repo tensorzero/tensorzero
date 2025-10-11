@@ -1,8 +1,10 @@
 import inspect
+import json
 import os
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List
+from pathlib import Path
+from typing import Any, Dict, Iterator, List, Optional, Union, cast
 
 import pytest
 import pytest_asyncio
@@ -10,6 +12,8 @@ from openai import AsyncOpenAI
 from pytest import FixtureRequest
 from tensorzero import (
     AsyncTensorZeroGateway,
+    ChatDatapointInsert,
+    JsonDatapointInsert,
     JsonInferenceOutput,
     RenderedSample,
     StoredInference,
@@ -274,3 +278,129 @@ async def async_openai_client(request: FixtureRequest):
                 async_setup=True,
             )
             yield client
+
+
+def _load_json_datapoints_from_fixture(
+    fixture_path: Path, dataset_filter: str
+) -> List[JsonDatapointInsert]:
+    """Load JSON datapoints from a JSONL fixture file."""
+    datapoints: List[JsonDatapointInsert] = []
+    with open(fixture_path) as f:
+        for line in f:
+            if not line.strip():
+                continue
+            data: Dict[str, Any] = json.loads(line)
+            # Only load datapoints for the specified dataset
+            if data.get("dataset_name") != dataset_filter:
+                continue
+
+            # Parse the JSON strings in the fixture
+            input_data: Any = json.loads(data["input"])
+
+            # Handle output - it may be in {"raw": "...", "parsed": {...}} format
+            output_data: Optional[Any] = None
+            if data.get("output"):
+                parsed_output: Any = json.loads(data["output"])
+                # If output has "parsed" field, extract it; otherwise use as-is
+                if isinstance(parsed_output, dict) and "parsed" in parsed_output:
+                    output_data = cast(Any, parsed_output["parsed"])
+                else:
+                    output_data = cast(Any, parsed_output)
+
+            output_schema: Optional[Any] = (
+                json.loads(data["output_schema"]) if data.get("output_schema") else None
+            )
+
+            datapoints.append(
+                JsonDatapointInsert(
+                    function_name=data["function_name"],
+                    input=input_data,
+                    output=output_data,
+                    output_schema=output_schema,
+                    tags=data.get("tags"),
+                )
+            )
+    return datapoints
+
+
+def _load_chat_datapoints_from_fixture(
+    fixture_path: Path, dataset_filter: str
+) -> List[ChatDatapointInsert]:
+    """Load Chat datapoints from a JSONL fixture file."""
+    datapoints: List[ChatDatapointInsert] = []
+    with open(fixture_path) as f:
+        for line in f:
+            if not line.strip():
+                continue
+            data: Dict[str, Any] = json.loads(line)
+            # Only load datapoints for the specified dataset
+            if data.get("dataset_name") != dataset_filter:
+                continue
+
+            # Parse the JSON strings in the fixture
+            input_data: Any = json.loads(data["input"])
+            output_data: Optional[Any] = (
+                json.loads(data["output"]) if data.get("output") else None
+            )
+
+            datapoints.append(
+                ChatDatapointInsert(
+                    function_name=data["function_name"],
+                    input=input_data,
+                    output=output_data,
+                    tags=data.get("tags"),
+                )
+            )
+    return datapoints
+
+
+@pytest.fixture
+def evaluation_datasets(
+    embedded_sync_client: TensorZeroGateway,
+) -> Iterator[Dict[str, str]]:
+    """
+    Seed datasets needed for evaluation tests.
+
+    Returns a mapping from original dataset names to unique test dataset names.
+    This ensures test isolation and prevents conflicts between concurrent test runs.
+    """
+    fixtures_dir = (
+        Path(__file__).resolve().parents[3] / "tensorzero-core/fixtures/datasets"
+    )
+
+    # Create unique dataset names for this test run
+    dataset_mapping = {
+        "extract_entities_0.8": f"extract_entities_0.8_{uuid7()}",
+        "good-haikus-no-output": f"good-haikus-no-output_{uuid7()}",
+    }
+
+    # Load and insert JSON datapoints (for entity_extraction evaluation)
+    json_fixture_path = fixtures_dir / "json_datapoint_fixture.jsonl"
+    json_datapoints = _load_json_datapoints_from_fixture(
+        json_fixture_path, "extract_entities_0.8"
+    )
+    if json_datapoints:
+        embedded_sync_client.bulk_insert_datapoints(
+            dataset_name=dataset_mapping["extract_entities_0.8"],
+            datapoints=cast(
+                List[Union[ChatDatapointInsert, JsonDatapointInsert]], json_datapoints
+            ),
+        )
+
+    # Load and insert Chat datapoints (for haiku evaluation)
+    chat_fixture_path = fixtures_dir / "chat_datapoint_fixture.jsonl"
+    chat_datapoints = _load_chat_datapoints_from_fixture(
+        chat_fixture_path, "good-haikus-no-output"
+    )
+    if chat_datapoints:
+        embedded_sync_client.bulk_insert_datapoints(
+            dataset_name=dataset_mapping["good-haikus-no-output"],
+            datapoints=cast(
+                List[Union[ChatDatapointInsert, JsonDatapointInsert]], chat_datapoints
+            ),
+        )
+
+    yield dataset_mapping
+
+    # Cleanup is optional - datasets will be isolated by unique names
+    # and ClickHouse test database can be cleaned between full test runs

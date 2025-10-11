@@ -151,7 +151,7 @@ mod tests {
             cache_options: CacheParamsOptions::default(),
         };
 
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
 
         let result = embeddings(
             config,
@@ -186,7 +186,7 @@ mod tests {
             cache_options: CacheParamsOptions::default(),
         };
 
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
 
         let result = embeddings(
             config,

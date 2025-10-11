@@ -3,7 +3,7 @@ import { z } from "zod";
 export const ModelOptionSchema = z.object({
   displayName: z.string().nonempty("Model name is required"),
   name: z.string().nonempty("Model name is required"),
-  provider: z.enum(["openai", "fireworks", "gcp_vertex_gemini"]),
+  provider: z.enum(["openai", "fireworks", "gcp_vertex_gemini", "together"]),
 });
 
 export type ModelOption = z.infer<typeof ModelOptionSchema>;
@@ -72,5 +72,47 @@ export const models: ModelOption[] = [
     displayName: "gemini-2.0-flash-lite",
     name: "gemini-2.0-flash-lite",
     provider: "gcp_vertex_gemini",
+  },
+
+  // Together AI
+  {
+    displayName: "gpt-oss-20b",
+    name: "openai/gpt-oss-20b",
+    provider: "together",
+  },
+  {
+    displayName: "gpt-oss-120b",
+    name: "openai/gpt-oss-120b",
+    provider: "together",
+  },
+  {
+    displayName: "DeepSeek-R1-0528",
+    name: "deepseek-ai/DeepSeek-R1-0528",
+    provider: "together",
+  },
+  {
+    displayName: "gemma-3-12b-pt",
+    name: "google/gemma-3-12b-pt",
+    provider: "together",
+  },
+  {
+    displayName: "gemma-3-12b-it",
+    name: "google/gemma-3-12b-it",
+    provider: "together",
+  },
+  {
+    displayName: "Qwen3-14B",
+    name: "Qwen/Qwen3-14B",
+    provider: "together",
+  },
+  {
+    displayName: "Qwen3-30B-A3B-Base",
+    name: "Qwen/Qwen3-30B-A3B-Base",
+    provider: "together",
+  },
+  {
+    displayName: "Qwen3-235B-A22B",
+    name: "Qwen/Qwen3-235B-A22B",
+    provider: "together",
   },
 ];
