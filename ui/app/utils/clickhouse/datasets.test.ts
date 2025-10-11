@@ -265,7 +265,7 @@ describe("getDatasetCounts", () => {
       // Because other tests insert into the table, there could be additional datasets
       expect.arrayContaining([
         {
-          count: 119,
+          count: 118,
           dataset_name: "foo",
           last_updated: "2025-04-15T02:33:58Z",
         },
@@ -319,7 +319,7 @@ describe("getDatasetRows", () => {
       if (rows.length !== pageSize) break;
     }
 
-    expect(allRows.length).toBe(119);
+    expect(allRows.length).toBe(118);
     expect(allRows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

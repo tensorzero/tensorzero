@@ -12,12 +12,16 @@ interface DeleteButtonProps {
   onClick: () => void;
   className?: string;
   isLoading?: boolean;
+  disabled?: boolean;
+  tooltip?: string;
 }
 
 export function DeleteButton({
   onClick,
   className,
   isLoading,
+  disabled = false,
+  tooltip = "Delete",
 }: DeleteButtonProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -65,20 +69,22 @@ export function DeleteButton({
     <TooltipProvider>
       <Tooltip delayDuration={100}>
         <TooltipTrigger asChild>
-          <Button
-            variant="outline"
-            size="iconSm"
-            className={className}
-            disabled={isLoading}
-            onClick={handleInitialClick}
-            aria-label="Delete"
-            title="Delete"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          <span className="inline-block">
+            <Button
+              variant="outline"
+              size="iconSm"
+              className={className}
+              disabled={disabled || isLoading}
+              onClick={handleInitialClick}
+              aria-label={tooltip}
+              title={tooltip}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </span>
         </TooltipTrigger>
         <TooltipContent>
-          <p>Delete</p>
+          <p>{tooltip}</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

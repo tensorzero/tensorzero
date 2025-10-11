@@ -145,6 +145,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       { status: 404 },
     );
   }
+
   return {
     consolidatedEvaluationResults,
     evaluation_name,
@@ -154,6 +155,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     selectedRunIds,
     newFeedbackId,
     newJudgeDemonstrationId,
+    datapoint_staled_at: consolidatedEvaluationResults[0].staled_at,
   };
 }
 
@@ -233,6 +235,7 @@ export default function EvaluationDatapointPage({
     selectedRunIds,
     newFeedbackId,
     newJudgeDemonstrationId,
+    datapoint_staled_at,
   } = loaderData;
   const fetcher = useFetcher();
   const config = useConfig();
@@ -295,7 +298,9 @@ export default function EvaluationDatapointPage({
             evaluation_name={evaluation_name}
             evaluation_config={evaluation_config}
             dataset_name={consolidatedEvaluationResults[0].dataset_name}
+            datapoint_id={datapoint_id}
             datapoint_name={consolidatedEvaluationResults[0].name}
+            datapoint_staled_at={datapoint_staled_at}
             onRenameDatapoint={handleRenameDatapoint}
           />
           <EvalRunSelector
