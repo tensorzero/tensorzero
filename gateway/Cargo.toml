@@ -8,19 +8,19 @@ license.workspace = true
 [dependencies]
 tensorzero-core = { path = "../tensorzero-core" }
 axum = { workspace = true }
-tracing = { version = "0.1.40", features = ["log", "release_max_level_debug"] }
-tracing-subscriber = { version = "0.3.20", features = [
+tracing = { workspace = true, features = ["log", "release_max_level_debug"] }
+tracing-subscriber = { workspace = true, features = [
     "env-filter",
     "fmt",
     "json",
 ] }
 tokio = { workspace = true }
-mimalloc = "0.1.48"
+mimalloc = { workspace = true }
 clap = { workspace = true }
 serde = { workspace = true }
 tracing-opentelemetry-instrumentation-sdk = { workspace = true }
 tower-http = { workspace = true }
-tokio-util = "0.7.15"
+tokio-util = { workspace = true }
 
 [lints]
 workspace = true
@@ -31,6 +31,6 @@ default = []
 
 [dev-dependencies]
 reqwest.workspace = true
-tempfile = "3.21.0"
+tempfile = { workspace = true }
 tensorzero = { path = "../clients/rust" }
-tracing-test = "0.2"
+tracing-test = { workspace = true }
