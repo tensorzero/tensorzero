@@ -642,7 +642,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         dataset_name: str,
-        datapoints: List[Union[ChatDatapointInsert, JsonDatapointInsert]],
+        datapoints: Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
     ) -> List[UUID]:
         """
         Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
@@ -655,7 +655,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         dataset_name: str,
-        datapoints: List[Union[ChatDatapointInsert, JsonDatapointInsert]],
+        datapoints: Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
     ) -> List[UUID]:
         """
         DEPRECATED: Use `insert_datapoints` instead.
@@ -1022,7 +1022,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         dataset_name: str,
-        datapoints: List[Union[ChatDatapointInsert, JsonDatapointInsert]],
+        datapoints: Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
     ) -> List[UUID]:
         """
         Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
@@ -1035,7 +1035,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         dataset_name: str,
-        datapoints: List[Union[ChatDatapointInsert, JsonDatapointInsert]],
+        datapoints: Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
     ) -> List[UUID]:
         """
         DEPRECATED: Use `insert_datapoints` instead.
