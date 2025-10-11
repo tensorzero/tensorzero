@@ -1187,6 +1187,13 @@ impl Datapoint {
             Datapoint::Json(datapoint) => datapoint.id,
         }
     }
+
+    pub fn name(&self) -> Option<&str> {
+        match self {
+            Datapoint::Chat(datapoint) => datapoint.name.as_deref(),
+            Datapoint::Json(datapoint) => datapoint.name.as_deref(),
+        }
+    }
 }
 
 /// These input datapoints are used as input types by the `insert_datapoint` endpoint
@@ -1254,6 +1261,11 @@ impl Datapoint {
             Datapoint::Chat(datapoint) => datapoint.is_custom,
             Datapoint::Json(datapoint) => datapoint.is_custom,
         }
+    }
+
+    #[getter]
+    pub fn get_name(&self) -> Option<String> {
+        self.name().map(std::string::ToString::to_string)
     }
 }
 

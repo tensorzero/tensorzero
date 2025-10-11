@@ -570,6 +570,21 @@ Be careful about the different prefixes: `model_name="gpt-4o"` will use the `[mo
 If set, this schema will override the `output_schema` defined in the function configuration for a JSON function.
 This dynamic output schema is used for validating the output of the function, and sent to providers which support structured outputs.
 
+#### `otlp_traces_extra_headers`
+
+- **Type:** object (a map from string to string)
+- **Required:** no (default: `{}`)
+
+Dynamic headers to include in OTLP trace exports for this specific inference request.
+This is useful for adding per-request metadata to OTLP trace exports (e.g. user IDs, request sources).
+
+The headers are automatically prefixed with `tensorzero-otlp-traces-extra-header-` before being sent to the OTLP endpoint.
+
+These headers are merged with any static headers configured in `export.otlp.traces.extra_headers`.
+When the same header key is present in both static and dynamic headers, the dynamic header value takes precedence.
+
+See [Export OpenTelemetry traces](/operations/export-opentelemetry-traces#send-custom-http-headers) for more details and examples.
+
 #### `parallel_tool_calls`
 
 - **Type:** boolean

@@ -247,11 +247,14 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
         )
     elif block_type == "thought":
         return Thought(
-            text=block["text"], signature=block.get("signature"), type=block_type
+            text=block["text"],
+            signature=block.get("signature"),
+            type=block_type,
         )
     elif block_type == "unknown":
         return UnknownContentBlock(
-            data=block["data"], model_provider_name=block.get("model_provider_name")
+            data=block["data"],
+            model_provider_name=block.get("model_provider_name"),
         )
     else:
         raise ValueError(f"Unknown content block type: {block}")
@@ -445,17 +448,7 @@ class ChatDatapointInsert:
     tool_choice: Optional[str] = None
     parallel_tool_calls: Optional[bool] = None
     tags: Optional[Dict[str, str]] = None
-
-
-# CAREFUL: deprecated
-class ChatInferenceDatapointInput(ChatDatapointInsert):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        warnings.warn(
-            "Please use `ChatDatapointInsert` instead of `ChatInferenceDatapointInput`. In a future release, `ChatInferenceDatapointInput` will be removed.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        super().__init__(*args, **kwargs)
+    name: Optional[str] = None
 
 
 @dataclass
@@ -465,17 +458,7 @@ class JsonDatapointInsert:
     output: Optional[Any] = None
     output_schema: Optional[Any] = None
     tags: Optional[Dict[str, str]] = None
-
-
-# CAREFUL: deprecated
-class JsonInferenceDatapointInput(JsonDatapointInsert):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        warnings.warn(
-            "Please use `JsonDatapointInsert` instead of `JsonInferenceDatapointInput`. In a future release, `JsonInferenceDatapointInput` will be removed.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        super().__init__(*args, **kwargs)
+    name: Optional[str] = None
 
 
 @dataclass
@@ -527,33 +510,11 @@ class FloatMetricFilter(InferenceFilterTreeNode):
     type: str = "float_metric"
 
 
-# CAREFUL: deprecated
-class FloatMetricNode(FloatMetricFilter):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        warnings.warn(
-            "Please use `FloatMetricFilter` instead of `FloatMetricNode`. In a future release, `FloatMetricNode` will be removed.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        super().__init__(*args, **kwargs)
-
-
 @dataclass
 class BooleanMetricFilter(InferenceFilterTreeNode):
     metric_name: str
     value: bool
     type: str = "boolean_metric"
-
-
-# CAREFUL: deprecated
-class BooleanMetricNode(BooleanMetricFilter):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        warnings.warn(
-            "Please use `BooleanMetricFilter` instead of `BooleanMetricNode`. In a future release, `BooleanMetricNode` will be removed.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        super().__init__(*args, **kwargs)
 
 
 @dataclass
@@ -577,49 +538,16 @@ class AndFilter(InferenceFilterTreeNode):
     type: str = "and"
 
 
-# CAREFUL: deprecated
-class AndNode(AndFilter):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        warnings.warn(
-            "Please use `AndFilter` instead of `AndNode`. In a future release, `AndNode` will be removed.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        super().__init__(*args, **kwargs)
-
-
 @dataclass
 class OrFilter(InferenceFilterTreeNode):
     children: List[InferenceFilterTreeNode]
     type: str = "or"
 
 
-# CAREFUL: deprecated
-class OrNode(OrFilter):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        warnings.warn(
-            "Please use `OrFilter` instead of `OrNode`. In a future release, `OrNode` will be removed.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        super().__init__(*args, **kwargs)
-
-
 @dataclass
 class NotFilter(InferenceFilterTreeNode):
     child: InferenceFilterTreeNode
     type: str = "not"
-
-
-# CAREFUL: deprecated
-class NotNode(NotFilter):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        warnings.warn(
-            "Please use `NotFilter` instead of `NotNode`. In a future release, `NotNode` will be removed.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        super().__init__(*args, **kwargs)
 
 
 @dataclass

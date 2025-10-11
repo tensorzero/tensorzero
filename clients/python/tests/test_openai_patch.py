@@ -30,13 +30,20 @@ async def test_dynamic_json_mode_inference_openai():
     serialized_output_schema = json.dumps(output_schema)
     response_format = {
         "type": "json_schema",
-        "json_schema": {"name": "test", "description": "test", "schema": output_schema},
+        "json_schema": {
+            "name": "test",
+            "description": "test",
+            "schema": output_schema,
+        },
     }
     messages = [
         {
             "role": "system",
             "content": [
-                {"assistant_name": "Dr. Mehta", "schema": serialized_output_schema}
+                {
+                    "assistant_name": "Dr. Mehta",
+                    "schema": serialized_output_schema,
+                }
             ],
         },
         {"role": "user", "content": [{"country": "Japan"}]},
@@ -50,9 +57,7 @@ async def test_dynamic_json_mode_inference_openai():
         model="tensorzero::function_name::dynamic_json",
         response_format=response_format,
     )
-    assert (
-        result.model == "tensorzero::function_name::dynamic_json::variant_name::openai"
-    )
+    assert result.model == "tensorzero::function_name::dynamic_json::variant_name::openai"
     assert result.episode_id == episode_id
     json_content = json.loads(result.choices[0].message.content)
     assert "tokyo" in json_content["response"].lower()
@@ -93,10 +98,7 @@ async def test_patch_openai_client_with_async_client_async_setup_true():
     assert result.usage.completion_tokens > 0
     assert result.usage.total_tokens > 0
     assert result.choices[0].finish_reason == "stop"
-    assert (
-        result.model
-        == "tensorzero::function_name::generate_haiku::variant_name::gpt_4o_mini"
-    )
+    assert result.model == "tensorzero::function_name::generate_haiku::variant_name::gpt_4o_mini"
 
     tensorzero.close_patched_openai_client_gateway(patched_client)
 
@@ -133,9 +135,6 @@ async def test_patch_openai_client_with_async_client_async_setup_false():
     assert result.usage.completion_tokens > 0
     assert result.usage.total_tokens > 0
     assert result.choices[0].finish_reason == "stop"
-    assert (
-        result.model
-        == "tensorzero::function_name::generate_haiku::variant_name::gpt_4o_mini"
-    )
+    assert result.model == "tensorzero::function_name::generate_haiku::variant_name::gpt_4o_mini"
 
     tensorzero.close_patched_openai_client_gateway(patched_client)

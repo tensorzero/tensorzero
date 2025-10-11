@@ -152,9 +152,7 @@ def mixed_rendered_samples(
                 },
             ],
         },
-        output=JsonInferenceOutput(
-            parsed={"answer": "Tokyo"}, raw='{"answer": "Tokyo"}'
-        ),
+        output=JsonInferenceOutput(parsed={"answer": "Tokyo"}, raw='{"answer": "Tokyo"}'),
         episode_id=uuid7(),
         inference_id=uuid7(),
         timestamp=datetime.now(timezone.utc).isoformat(),
@@ -187,9 +185,7 @@ def chat_function_rendered_samples(
             "messages": [
                 {
                     "role": "user",
-                    "content": [
-                        {"type": "text", "value": "What is the capital of France?"}
-                    ],
+                    "content": [{"type": "text", "value": "What is the capital of France?"}],
                 },
             ],
         },
@@ -232,9 +228,7 @@ def json_function_rendered_samples(
                 },
             ],
         },
-        output=JsonInferenceOutput(
-            parsed={"answer": "Tokyo"}, raw='{"answer": "Tokyo"}'
-        ),
+        output=JsonInferenceOutput(parsed={"answer": "Tokyo"}, raw='{"answer": "Tokyo"}'),
         episode_id=uuid7(),
         inference_id=uuid7(),
         timestamp=datetime.now(timezone.utc).isoformat(),
@@ -260,14 +254,10 @@ class OpenAIClientType(Enum):
 
 
 # Shared fixtures for both HTTP and embedded clients
-@pytest_asyncio.fixture(
-    params=[OpenAIClientType.HttpGateway, OpenAIClientType.PatchedClient]
-)
+@pytest_asyncio.fixture(params=[OpenAIClientType.HttpGateway, OpenAIClientType.PatchedClient])
 async def async_openai_client(request: FixtureRequest):
     if request.param == OpenAIClientType.HttpGateway:
-        async with AsyncOpenAI(
-            api_key="donotuse", base_url="http://localhost:3000/openai/v1"
-        ) as client:
+        async with AsyncOpenAI(api_key="donotuse", base_url="http://localhost:3000/openai/v1") as client:
             yield client
     else:
         async with AsyncOpenAI(api_key="donotuse") as client:
@@ -280,9 +270,7 @@ async def async_openai_client(request: FixtureRequest):
             yield client
 
 
-def _load_json_datapoints_from_fixture(
-    fixture_path: Path, dataset_filter: str
-) -> List[JsonDatapointInsert]:
+def _load_json_datapoints_from_fixture(fixture_path: Path, dataset_filter: str) -> List[JsonDatapointInsert]:
     """Load JSON datapoints from a JSONL fixture file."""
     datapoints: List[JsonDatapointInsert] = []
     with open(fixture_path) as f:
@@ -307,9 +295,7 @@ def _load_json_datapoints_from_fixture(
                 else:
                     output_data = cast(Any, parsed_output)
 
-            output_schema: Optional[Any] = (
-                json.loads(data["output_schema"]) if data.get("output_schema") else None
-            )
+            output_schema: Optional[Any] = json.loads(data["output_schema"]) if data.get("output_schema") else None
 
             datapoints.append(
                 JsonDatapointInsert(
@@ -323,9 +309,7 @@ def _load_json_datapoints_from_fixture(
     return datapoints
 
 
-def _load_chat_datapoints_from_fixture(
-    fixture_path: Path, dataset_filter: str
-) -> List[ChatDatapointInsert]:
+def _load_chat_datapoints_from_fixture(fixture_path: Path, dataset_filter: str) -> List[ChatDatapointInsert]:
     """Load Chat datapoints from a JSONL fixture file."""
     datapoints: List[ChatDatapointInsert] = []
     with open(fixture_path) as f:
@@ -339,9 +323,7 @@ def _load_chat_datapoints_from_fixture(
 
             # Parse the JSON strings in the fixture
             input_data: Any = json.loads(data["input"])
-            output_data: Optional[Any] = (
-                json.loads(data["output"]) if data.get("output") else None
-            )
+            output_data: Optional[Any] = json.loads(data["output"]) if data.get("output") else None
 
             datapoints.append(
                 ChatDatapointInsert(
@@ -364,9 +346,7 @@ def evaluation_datasets(
     Returns a mapping from original dataset names to unique test dataset names.
     This ensures test isolation and prevents conflicts between concurrent test runs.
     """
-    fixtures_dir = (
-        Path(__file__).resolve().parents[3] / "tensorzero-core/fixtures/datasets"
-    )
+    fixtures_dir = Path(__file__).resolve().parents[3] / "tensorzero-core/fixtures/datasets"
 
     # Create unique dataset names for this test run
     dataset_mapping = {
@@ -376,28 +356,20 @@ def evaluation_datasets(
 
     # Load and insert JSON datapoints (for entity_extraction evaluation)
     json_fixture_path = fixtures_dir / "json_datapoint_fixture.jsonl"
-    json_datapoints = _load_json_datapoints_from_fixture(
-        json_fixture_path, "extract_entities_0.8"
-    )
+    json_datapoints = _load_json_datapoints_from_fixture(json_fixture_path, "extract_entities_0.8")
     if json_datapoints:
         embedded_sync_client.bulk_insert_datapoints(
             dataset_name=dataset_mapping["extract_entities_0.8"],
-            datapoints=cast(
-                List[Union[ChatDatapointInsert, JsonDatapointInsert]], json_datapoints
-            ),
+            datapoints=cast(List[Union[ChatDatapointInsert, JsonDatapointInsert]], json_datapoints),
         )
 
     # Load and insert Chat datapoints (for haiku evaluation)
     chat_fixture_path = fixtures_dir / "chat_datapoint_fixture.jsonl"
-    chat_datapoints = _load_chat_datapoints_from_fixture(
-        chat_fixture_path, "good-haikus-no-output"
-    )
+    chat_datapoints = _load_chat_datapoints_from_fixture(chat_fixture_path, "good-haikus-no-output")
     if chat_datapoints:
         embedded_sync_client.bulk_insert_datapoints(
             dataset_name=dataset_mapping["good-haikus-no-output"],
-            datapoints=cast(
-                List[Union[ChatDatapointInsert, JsonDatapointInsert]], chat_datapoints
-            ),
+            datapoints=cast(List[Union[ChatDatapointInsert, JsonDatapointInsert]], chat_datapoints),
         )
 
     yield dataset_mapping

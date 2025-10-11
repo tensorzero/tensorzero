@@ -142,12 +142,8 @@ TOKENIZER_CONFIG = MODELS[MODEL_NAME]["tokenizer"]
 if TOKENIZER_CONFIG.get("path"):
     TOKENIZER_CONFIG["path"] = str(checkpoint_dir / TOKENIZER_CONFIG["path"])
 if TOKENIZER_CONFIG.get("merges_file"):
-    TOKENIZER_CONFIG["merges_file"] = str(
-        checkpoint_dir / TOKENIZER_CONFIG["merges_file"]
-    )
-TOKENIZER_CONFIG["max_seq_len"] = (
-    None  # Can set to an integer value to reduce your memory footprint
-)
+    TOKENIZER_CONFIG["merges_file"] = str(checkpoint_dir / TOKENIZER_CONFIG["merges_file"])
+TOKENIZER_CONFIG["max_seq_len"] = None  # Can set to an integer value to reduce your memory footprint
 
 TUNING_CONFIG = {
     "output_dir": OUTPUT_DIR,
@@ -277,12 +273,8 @@ train_samples, eval_samples = train_val_split(
 # Convert the rendered samples to conversations for tokenization
 
 # %%
-train_conversations = tensorzero_rendered_samples_to_conversations(
-    train_samples, conversation_key="messages"
-)
-eval_conversations = tensorzero_rendered_samples_to_conversations(
-    eval_samples, conversation_key="messages"
-)
+train_conversations = tensorzero_rendered_samples_to_conversations(train_samples, conversation_key="messages")
+eval_conversations = tensorzero_rendered_samples_to_conversations(eval_samples, conversation_key="messages")
 
 # %%
 with tempfile.TemporaryDirectory() as temp_dir:
@@ -441,9 +433,7 @@ model_config = {
     "models": {
         model_identifier: {
             "routing": ["fireworks"],
-            "providers": {
-                "fireworks": {"type": "fireworks", "model_name": model_identifier}
-            },
+            "providers": {"fireworks": {"type": "fireworks", "model_name": model_identifier}},
         }
     }
 }
