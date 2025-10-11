@@ -919,19 +919,12 @@ impl TensorZeroGateway {
     /// :param datapoints: A list of datapoints to insert.
     /// :return: None.
     #[pyo3(signature = (*, dataset_name, datapoints))]
+    #[pyo3(warn(message = "Please use `insert_datapoints` instead of `bulk_insert_datapoints`. In a future release, `bulk_insert_datapoints` will be removed.", category = PyDeprecationWarning))]
     fn bulk_insert_datapoints(
         this: PyRef<'_, Self>,
         dataset_name: String,
         datapoints: Vec<Bound<'_, PyAny>>,
     ) -> PyResult<Py<PyList>> {
-        let deprecation_warning = this.py().get_type::<PyDeprecationWarning>();
-        PyErr::warn(
-            this.py(),
-            &deprecation_warning,
-            c_str!("Please use `insert_datapoints` instead of `bulk_insert_datapoints`. In a future release, `bulk_insert_datapoints` will be removed."),
-            2
-        )?;
-
         let client = this.as_super().client.clone();
         let datapoints = datapoints
             .iter()
@@ -1710,19 +1703,12 @@ impl AsyncTensorZeroGateway {
     /// :param datapoints: A list of datapoints to insert.
     /// :return: None.
     #[pyo3(signature = (*, dataset_name, datapoints))]
+    #[pyo3(warn(message = "Please use `insert_datapoints` instead of `bulk_insert_datapoints`. In a future release, `bulk_insert_datapoints` will be removed.", category = PyDeprecationWarning))]
     fn bulk_insert_datapoints<'a>(
         this: PyRef<'a, Self>,
         dataset_name: String,
         datapoints: Vec<Bound<'a, PyAny>>,
     ) -> PyResult<Bound<'a, PyAny>> {
-        let deprecation_warning = this.py().get_type::<PyDeprecationWarning>();
-        PyErr::warn(
-            this.py(),
-            &deprecation_warning,
-            c_str!("Please use `insert_datapoints` instead of `bulk_insert_datapoints`. In a future release, `bulk_insert_datapoints` will be removed."),
-            2
-        )?;
-
         let client = this.as_super().client.clone();
         let datapoints = datapoints
             .iter()
