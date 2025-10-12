@@ -92,12 +92,12 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       [
-        "gateway --run-clickhouse-migrations && touch /migrations_complete.marker && sleep infinity",
+        "gateway --run-clickhouse-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
       ]
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
     healthcheck:
-      test: ["CMD", "test", "-f", "/migrations_complete.marker"]
+      test: ["CMD", "test", "-f", "/tmp/migrations_complete.marker"]
       interval: 5s
       timeout: 1s
       retries: 48 # Retry for up to 4 minutes
@@ -116,12 +116,12 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       [
-        "gateway --run-postgres-migrations && touch /migrations_complete.marker && sleep infinity",
+        "gateway --run-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
       ]
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
     healthcheck:
-      test: ["CMD", "test", "-f", "/migrations_complete.marker"]
+      test: ["CMD", "test", "-f", "/tmp/migrations_complete.marker"]
       interval: 5s
       timeout: 1s
       retries: 48 # Retry for up to 4 minutes
