@@ -15,6 +15,7 @@ import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import FunctionInferenceTable from "./FunctionInferenceTable";
 import BasicInfo from "./FunctionBasicInfo";
 import FunctionSchema from "./FunctionSchema";
+import FunctionExperimentation from "./FunctionExperimentation";
 import { useFunctionConfig } from "~/context/config";
 import {
   getVariantCounts,
@@ -277,6 +278,16 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
             function_name={function_name}
           />
         </SectionLayout>
+
+        {function_name !== DEFAULT_FUNCTION && (
+          <SectionLayout>
+            <SectionHeader heading="Experimentation" />
+            <FunctionExperimentation
+              functionConfig={function_config}
+              functionName={function_name}
+            />
+          </SectionLayout>
+        )}
 
         <SectionLayout>
           <SectionHeader heading="Throughput" />

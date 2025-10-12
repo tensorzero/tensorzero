@@ -38,6 +38,7 @@ extract_recipient_datapoint_with_output = JsonDatapointInsert(
         "name": "Bob",
         "email": "bob@example.com",
     },
+    name="bob_recipient_example",
 )
 
 # ... and `ChatDatapointInsert`.

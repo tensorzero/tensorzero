@@ -1135,8 +1135,9 @@ pub struct ExistingInferenceInfo {
     pub episode_id: Uuid,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(export)]
 pub enum DatapointKind {
     Chat,
     Json,
@@ -1199,6 +1200,13 @@ impl Datapoint {
         match self {
             Datapoint::Chat(datapoint) => datapoint.id,
             Datapoint::Json(datapoint) => datapoint.id,
+        }
+    }
+
+    pub fn name(&self) -> Option<&str> {
+        match self {
+            Datapoint::Chat(datapoint) => datapoint.name.as_deref(),
+            Datapoint::Json(datapoint) => datapoint.name.as_deref(),
         }
     }
 }
@@ -1268,6 +1276,11 @@ impl Datapoint {
             Datapoint::Chat(datapoint) => datapoint.is_custom,
             Datapoint::Json(datapoint) => datapoint.is_custom,
         }
+    }
+
+    #[getter]
+    pub fn get_name(&self) -> Option<String> {
+        self.name().map(std::string::ToString::to_string)
     }
 }
 

@@ -61,9 +61,7 @@ def train_val_split(
     rng = np.random.RandomState(random_seed)
 
     # Get unique episode IDs and sort them for determinism
-    unique_episodes = sorted(
-        list(set(str(sample.episode_id) for sample in rendered_samples))
-    )
+    unique_episodes = sorted(list(set(str(sample.episode_id) for sample in rendered_samples)))
 
     # Create a shuffled index array
     indices = np.arange(len(unique_episodes))
@@ -83,16 +81,12 @@ def train_val_split(
     # Apply episode limits if specified
     if max_train_episodes is not None and len(train_episode_ids) > max_train_episodes:
         # Use rng.choice for sampling without replacement
-        sampled_indices = rng.choice(
-            len(train_episode_ids), max_train_episodes, replace=False
-        )
+        sampled_indices = rng.choice(len(train_episode_ids), max_train_episodes, replace=False)
         train_episode_ids = [train_episode_ids[i] for i in sampled_indices]
 
     if max_val_episodes is not None and len(val_episode_ids) > max_val_episodes:
         # Use rng.choice for sampling without replacement
-        sampled_indices = rng.choice(
-            len(val_episode_ids), max_val_episodes, replace=False
-        )
+        sampled_indices = rng.choice(len(val_episode_ids), max_val_episodes, replace=False)
         val_episode_ids = [val_episode_ids[i] for i in sampled_indices]
 
     # Convert to sets for efficient lookup
@@ -146,20 +140,14 @@ def print_split_summary(
     if last_inference_only:
         print("  (Filtered to last inference per episode)")
     print()
-    print(
-        f"Train samples: {len(train_samples)} ({len(train_samples) / len(rendered_samples) * 100:.1f}%)"
-    )
+    print(f"Train samples: {len(train_samples)} ({len(train_samples) / len(rendered_samples) * 100:.1f}%)")
     print(f"Train episodes: {len(train_episodes)}")
     if max_train_episodes:
         print(f"  (limited to {max_train_episodes} episodes)")
-    print(
-        f"Avg samples per train episode: {len(train_samples) / len(train_episodes):.2f}"
-    )
+    print(f"Avg samples per train episode: {len(train_samples) / len(train_episodes):.2f}")
 
     print()
-    print(
-        f"Val samples: {len(val_samples)} ({len(val_samples) / len(rendered_samples) * 100:.1f}%)"
-    )
+    print(f"Val samples: {len(val_samples)} ({len(val_samples) / len(rendered_samples) * 100:.1f}%)")
     print(f"Val episodes: {len(val_episodes)}")
     if max_val_episodes:
         print(f"  (limited to {max_val_episodes} episodes)")
@@ -173,12 +161,8 @@ def print_split_summary(
     used_episodes = train_episodes | val_episodes
     excluded_episodes = original_episodes - used_episodes
     if excluded_episodes:
-        excluded_samples = sum(
-            1 for s in rendered_samples if str(s.episode_id) in excluded_episodes
-        )
+        excluded_samples = sum(1 for s in rendered_samples if str(s.episode_id) in excluded_episodes)
         print()
-        print(
-            f"⚠️  Excluded {len(excluded_episodes)} episodes ({excluded_samples} samples) due to episode limits"
-        )
+        print(f"⚠️  Excluded {len(excluded_episodes)} episodes ({excluded_samples} samples) due to episode limits")
 
     print("=" * 60)

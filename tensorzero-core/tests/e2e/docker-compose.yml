@@ -32,6 +32,12 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+      gateway-clickhouse-migrations:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      gateway-postgres-migrations:
+        condition: service_healthy
     # Keep this running to make 'check-docker-compose.sh' detect that all containers are healthy
     command:
       [

@@ -66,9 +66,7 @@ from tqdm.asyncio import tqdm_asyncio
 #
 
 # %%
-assert "TENSORZERO_CLICKHOUSE_URL" in os.environ, (
-    "TENSORZERO_CLICKHOUSE_URL environment variable not set"
-)
+assert "TENSORZERO_CLICKHOUSE_URL" in os.environ, "TENSORZERO_CLICKHOUSE_URL environment variable not set"
 
 clickhouse_client = get_client(dsn=os.environ["TENSORZERO_CLICKHOUSE_URL"])
 
@@ -77,9 +75,7 @@ clickhouse_client = get_client(dsn=os.environ["TENSORZERO_CLICKHOUSE_URL"])
 #
 
 # %%
-t0 = TensorZeroGateway.build_embedded(
-    clickhouse_url=os.environ["TENSORZERO_CLICKHOUSE_URL"], config_file=CONFIG_PATH
-)
+t0 = TensorZeroGateway.build_embedded(clickhouse_url=os.environ["TENSORZERO_CLICKHOUSE_URL"], config_file=CONFIG_PATH)
 
 # %%
 openai_client = await patch_openai_client(
@@ -132,10 +128,7 @@ semaphore = Semaphore(MAX_CONCURRENT_EMBEDDING_REQUESTS)
 
 # %%
 # Embed the 'input' column using the get_embedding function
-tasks = [
-    get_embedding(str(inference.input), semaphore, DICL_EMBEDDING_MODEL)
-    for inference in inferences
-]
+tasks = [get_embedding(str(inference.input), semaphore, DICL_EMBEDDING_MODEL) for inference in inferences]
 embeddings = await tqdm_asyncio.gather(*tasks, desc="Embedding inputs")
 
 # %%
@@ -199,8 +192,6 @@ variant_config = {
     "model": DICL_GENERATION_MODEL,
     "k": DICL_K,
 }
-full_variant_config = {
-    "functions": {FUNCTION_NAME: {"variants": {DICL_VARIANT_NAME: variant_config}}}
-}
+full_variant_config = {"functions": {FUNCTION_NAME: {"variants": {DICL_VARIANT_NAME: variant_config}}}}
 
 print(toml.dumps(full_variant_config))
