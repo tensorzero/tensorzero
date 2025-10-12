@@ -6,11 +6,11 @@ import {
   renameDatapoint,
 } from "./datapointOperations.server";
 import type {
-  DatasetCountInfo,
   ParsedChatInferenceDatapointRow,
   ParsedJsonInferenceDatapointRow,
 } from "~/utils/clickhouse/datasets";
 import type { Datapoint } from "~/utils/tensorzero";
+import type { DatasetMetadata } from "tensorzero-node";
 
 // TODO(shuyangli): Once we remove all custom logic from the Node client, make mocking more ergonomic by providing a mock client at the tensorzero-node level.
 
@@ -27,13 +27,13 @@ vi.mock("~/utils/tensorzero.server", () => ({
 }));
 
 // Mock the datasets server functions
-const mockGetDatasetCounts = vi.hoisted(() =>
+const mockGetDatasetMetadata = vi.hoisted(() =>
   vi.fn<
     (arg: {
       function_name?: string;
       page_size?: number;
       offset?: number;
-    }) => Promise<DatasetCountInfo[]>
+    }) => Promise<DatasetMetadata[]>
   >(async () => []),
 );
 const mockStaleDatapoint = vi.hoisted(() =>
@@ -47,7 +47,7 @@ const mockStaleDatapoint = vi.hoisted(() =>
 );
 vi.mock("~/utils/clickhouse/datasets.server", () => ({
   staleDatapoint: mockStaleDatapoint,
-  getDatasetCounts: mockGetDatasetCounts,
+  getDatasetMetadata: mockGetDatasetMetadata,
 }));
 
 describe("datapointOperations", () => {
@@ -57,8 +57,8 @@ describe("datapointOperations", () => {
 
   describe("deleteDatapoint", () => {
     test("should call staleDatapoint and redirect to /datasets when dataset is empty", async () => {
-      // Mock getDatasetCounts to return empty array (no datasets)
-      vi.mocked(mockGetDatasetCounts).mockResolvedValueOnce([]);
+      // Mock getDatasetMetadata to return empty array (no datasets)
+      vi.mocked(mockGetDatasetMetadata).mockResolvedValueOnce([]);
 
       const datasetName = "nonexistent_dataset";
       const datapointId = uuid();
@@ -81,8 +81,8 @@ describe("datapointOperations", () => {
       const datasetName = "foo";
       const datapointId = uuid();
 
-      // Mock mockGetDatasetCounts to return a dataset with count
-      vi.mocked(mockGetDatasetCounts).mockResolvedValueOnce([
+      // Mock getDatasetMetadata to return a dataset with count
+      vi.mocked(mockGetDatasetMetadata).mockResolvedValueOnce([
         {
           dataset_name: datasetName,
           count: 10,
