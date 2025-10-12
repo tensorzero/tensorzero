@@ -92,7 +92,10 @@ async fn test_count_rows_with_float_metric_filter() {
     // TODO(#3903): Stop making assumptions about what data exists in the database, and
     // make data dependencies explicit in e2e tests, so tests can execute independently
     // and without requiring loading database fixtures.
-    assert!(count > 0, "Should have existing inferences with float metric filter");
+    assert!(
+        count > 0,
+        "Should have existing inferences with float metric filter"
+    );
 }
 
 #[tokio::test]
@@ -125,7 +128,10 @@ async fn test_count_rows_chat_datapoints_with_boolean_metric_filter() {
     // TODO(#3903): Stop making assumptions about what data exists in the database, and
     // make data dependencies explicit in e2e tests, so tests can execute independently
     // and without requiring loading database fixtures.
-    assert!(count > 0, "Should have existing inferences with boolean metric filter");
+    assert!(
+        count > 0,
+        "Should have existing inferences with boolean metric filter"
+    );
 }
 
 #[tokio::test]
@@ -158,7 +164,10 @@ async fn test_count_rows_json_datapoints_with_boolean_metric_filter() {
     // TODO(#3903): Stop making assumptions about what data exists in the database, and
     // make data dependencies explicit in e2e tests, so tests can execute independently
     // and without requiring loading database fixtures.
-    assert!(count > 0, "Should have existing inferences with boolean metric filter");
+    assert!(
+        count > 0,
+        "Should have existing inferences with boolean metric filter"
+    );
 }
 
 #[tokio::test]
@@ -191,7 +200,10 @@ async fn test_count_rows_chat_datapoints_with_boolean_metric_filter_at_episode_l
     // TODO(#3903): Stop making assumptions about what data exists in the database, and
     // make data dependencies explicit in e2e tests, so tests can execute independently
     // and without requiring loading database fixtures.
-    assert!(count > 0, "Should have existing inferences with boolean metric filter");
+    assert!(
+        count > 0,
+        "Should have existing inferences with boolean metric filter"
+    );
 }
 
 #[tokio::test]
@@ -224,7 +236,10 @@ async fn test_count_rows_json_datapoints_with_boolean_metric_filter_at_episode_l
     // TODO(#3903): Stop making assumptions about what data exists in the database, and
     // make data dependencies explicit in e2e tests, so tests can execute independently
     // and without requiring loading database fixtures.
-    assert!(count > 0, "Should have existing inferences with boolean metric filter");
+    assert!(
+        count > 0,
+        "Should have existing inferences with boolean metric filter"
+    );
 }
 
 #[tokio::test]
@@ -257,7 +272,10 @@ async fn test_count_rows_chat_datapoints_with_float_metric_filter_at_inference_l
     // TODO(#3903): Stop making assumptions about what data exists in the database, and
     // make data dependencies explicit in e2e tests, so tests can execute independently
     // and without requiring loading database fixtures.
-    assert!(count > 0, "Should have existing inferences with float metric filter");
+    assert!(
+        count > 0,
+        "Should have existing inferences with float metric filter"
+    );
 }
 
 #[tokio::test]
@@ -290,7 +308,10 @@ async fn test_count_rows_json_datapoints_with_float_metric_filter_at_inference_l
     // TODO(#3903): Stop making assumptions about what data exists in the database, and
     // make data dependencies explicit in e2e tests, so tests can execute independently
     // and without requiring loading database fixtures.
-    assert!(count > 0, "Should have existing inferences with float metric filter");
+    assert!(
+        count > 0,
+        "Should have existing inferences with float metric filter"
+    );
 }
 
 #[tokio::test]
@@ -323,7 +344,10 @@ async fn test_count_rows_chat_datapoints_with_float_metric_filter_at_episode_lev
     // TODO(#3903): Stop making assumptions about what data exists in the database, and
     // make data dependencies explicit in e2e tests, so tests can execute independently
     // and without requiring loading database fixtures.
-    assert!(count > 0, "Should have existing inferences with float metric filter");
+    assert!(
+        count > 0,
+        "Should have existing inferences with float metric filter"
+    );
 }
 
 #[tokio::test]
@@ -356,7 +380,10 @@ async fn test_count_rows_json_datapoints_with_float_metric_filter_at_episode_lev
     // TODO(#3903): Stop making assumptions about what data exists in the database, and
     // make data dependencies explicit in e2e tests, so tests can execute independently
     // and without requiring loading database fixtures.
-    assert!(count > 0, "Should have existing inferences with float metric filter");
+    assert!(
+        count > 0,
+        "Should have existing inferences with float metric filter"
+    );
 }
 
 #[tokio::test]
@@ -389,7 +416,10 @@ async fn test_count_rows_chat_datapoints_with_metric_filter_and_demonstration_jo
     // TODO(#3903): Stop making assumptions about what data exists in the database, and
     // make data dependencies explicit in e2e tests, so tests can execute independently
     // and without requiring loading database fixtures.
-    assert!(count > 0, "Should have existing inferences with float metric filter");
+    assert!(
+        count > 0,
+        "Should have existing inferences with float metric filter"
+    );
 }
 
 #[tokio::test]
