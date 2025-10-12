@@ -55,7 +55,7 @@ See the [ClickHouse documentation](https://clickhouse.com/docs/install) for more
 
 ## Configure
 
-### Connecting to ClickHouse
+### Connect to ClickHouse
 
 To configure TensorZero to use ClickHouse, set the `TENSORZERO_CLICKHOUSE_URL` environment variable with your ClickHouse connection details.
 
@@ -74,7 +74,7 @@ TENSORZERO_CLICKHOUSE_URL="http://host.docker.internal:8123/tensorzero"
 
 If you're using a self-hosted replicated ClickHouse deployment, you must also provide the ClickHouse cluster name in the `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` environment variable.
 
-### Applying ClickHouse migrations
+### Apply ClickHouse migrations
 
 By default, the TensorZero Gateway applies ClickHouse migrations automatically when it starts up.
 This behavior can be suppressed by setting `observability.disable_automatic_migrations = true` under the `[gateway]` section of `config/tensorzero.toml`.

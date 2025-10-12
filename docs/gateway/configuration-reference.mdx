@@ -9,7 +9,7 @@ Developers express the behavior of LLM calls by defining the relevant prompt tem
 
 You can see an example configuration file [here](https://github.com/tensorzero/tensorzero/blob/main/tensorzero-core/fixtures/config/tensorzero.toml).
 
-The configuration file is a <a href="https://toml.io/en/" target="_blank">TOML</a> file with a few major sections (TOML tables): `gateway`, `clickhouse`, `models`, `model_providers`, `functions`, `variants`, `tools`, and `metrics`.
+The configuration file is a <a href="https://toml.io/en/" target="_blank">TOML</a> file with a few major sections (TOML tables): `gateway`, `clickhouse`, `models`, `model_providers`, `functions`, `variants`, `tools`, `metrics`, `rate_limiting`, and `object_storage`.
 
 ## `[gateway]`
 
@@ -3522,3 +3522,136 @@ If you set `type = "disabled"`, the TensorZero Gateway will not store or retriev
 There are no additional fields available for this type.
 
 </Accordion>
+
+## `[rate_limiting]`
+
+The `[rate_limiting]` section allows you to configure granular rate limits for your TensorZero Gateway.
+Rate limits help you control usage, manage costs, and prevent abuse.
+
+See [Enforce Custom Rate Limits](/operations/enforce-custom-rate-limits/) for a comprehensive guide on rate limiting.
+
+### `enabled`
+
+- **Type:** boolean
+- **Required:** no (default: `true`)
+
+Enable or disable rate limiting enforcement.
+When set to `false`, rate limiting rules will not be enforced even if they are defined.
+
+```toml
+[rate_limiting]
+enabled = true
+```
+
+### `[[rate_limiting.rules]]`
+
+Rate limiting rules are defined as an array of rule configurations.
+Each rule specifies rate limits for specific resources (model inferences, tokens), time windows, scopes, and priorities.
+
+#### Rate Limit Fields
+
+You can set rate limits for different resources and time windows using the following field formats:
+
+- `model_inferences_per_second`
+- `model_inferences_per_minute`
+- `model_inferences_per_hour`
+- `model_inferences_per_day`
+- `model_inferences_per_week`
+- `model_inferences_per_month`
+- `tokens_per_second`
+- `tokens_per_minute`
+- `tokens_per_hour`
+- `tokens_per_day`
+- `tokens_per_week`
+- `tokens_per_month`
+
+Each rate limit field can be specified in two formats:
+
+**Simple Format:** A single integer value that sets both the capacity and refill rate to the same value.
+
+```toml
+[[rate_limiting.rules]]
+model_inferences_per_minute = 100
+tokens_per_hour = 10000
+```
+
+**Bucket Format:** An object with explicit `capacity` and `refill_rate` fields for fine-grained control over the token bucket algorithm.
+
+```toml
+[[rate_limiting.rules]]
+tokens_per_minute = { capacity = 1000, refill_rate = 500 }
+```
+
+<Note>
+
+The simple format is equivalent to setting `capacity` and `refill_rate` to the same value.
+The bucket format allows you to configure burst capacity independently from the sustained rate.
+
+</Note>
+
+#### `priority`
+
+- **Type:** integer
+- **Required:** yes (unless `always` is set to `true`)
+
+Defines the priority of the rule.
+When multiple rules match a request, only the rules with the highest priority value are applied.
+
+```toml
+[[rate_limiting.rules]]
+model_inferences_per_minute = 10
+priority = 1
+```
+
+#### `always`
+
+- **Type:** boolean
+- **Required:** no (mutually exclusive with `priority`)
+
+When set to `true`, this rule will always be applied regardless of priority.
+This is useful for global fallback limits.
+
+You cannot specify both `always` and `priority` in the same rule.
+
+```toml
+[[rate_limiting.rules]]
+tokens_per_hour = 1000000
+always = true
+```
+
+#### `scope`
+
+- **Type:** array of scope objects
+- **Required:** no (default: `[]`)
+
+Defines the scope to which the rate limit applies.
+Scopes allow you to apply rate limits to specific subsets of requests based on tags.
+
+The following scopes are supported:
+
+- Tags:
+  - `tag_key` (string): The tag key to match against.
+  - `tag_value` (string): The tag value to match against. This can be:
+    - `tensorzero::each`: Apply the limit separately to each unique value of the tag.
+    - `tensorzero::total`: Apply the limit to the aggregate of all requests with this tag, regardless of the tag's value.
+    - Any other string: Apply the limit only when the tag has this specific value.
+
+For example:
+
+```toml
+# Each individual user can make a maximum of 1 model inference per minute
+[[rate_limiting.rules]]
+priority = 0
+model_inferences_per_minute = 1
+scope = [
+    { tag_key = "user_id", tag_value = "tensorzero::each" }
+]
+
+# But override the individual limit for the CEO
+[[rate_limiting.rules]]
+priority = 1
+model_inferences_per_minute = 5
+scope = [
+    { tag_key = "user_id", tag_value = "ceo" }
+]
+```
