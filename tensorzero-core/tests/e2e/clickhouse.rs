@@ -89,8 +89,11 @@ pub async fn get_clean_clickhouse(
         Uuid::now_v7().simple()
     );
     let mut clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
-    clickhouse_url.set_path(&database);
+    clickhouse_url.set_path("");
+    clickhouse_url.set_query(Some(format!("database={database}").as_str()));
     let clickhouse_url = clickhouse_url.to_string();
+    // Set TENSORZERO_E2E_TESTS_DATABASE so the client can use it
+    std::env::set_var("TENSORZERO_E2E_TESTS_DATABASE", &database);
     let clickhouse = ClickHouseConnectionInfo::new(
         &clickhouse_url,
         BatchWritesConfig {
