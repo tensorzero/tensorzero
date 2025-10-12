@@ -1,3 +1,4 @@
+use crate::db::clickhouse::inference_queries::InferenceQueries;
 use crate::error::Error;
 use crate::rate_limiting::ActiveRateLimitKey;
 use crate::serde_util::{deserialize_option_u64, deserialize_u64};
@@ -10,7 +11,10 @@ pub mod clickhouse;
 pub mod postgres;
 
 #[async_trait]
-pub trait ClickHouseConnection: SelectQueries + HealthCheckable + Send + Sync {}
+pub trait ClickHouseConnection:
+    SelectQueries + InferenceQueries + HealthCheckable + Send + Sync
+{
+}
 
 #[async_trait]
 pub trait PostgresConnection: RateLimitQueries + HealthCheckable + Send + Sync {}
@@ -108,7 +112,10 @@ pub struct TableBoundsWithCount {
     pub count: u64,
 }
 
-impl<T: SelectQueries + HealthCheckable + Send + Sync> ClickHouseConnection for T {}
+impl<T: SelectQueries + InferenceQueries + HealthCheckable + Send + Sync> ClickHouseConnection
+    for T
+{
+}
 
 pub trait RateLimitQueries {
     /// This function will fail if any of the requests individually fail.

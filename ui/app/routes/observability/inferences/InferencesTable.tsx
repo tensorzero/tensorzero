@@ -1,4 +1,4 @@
-import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
+import type { InferenceByIdRow } from "tensorzero-node";
 import {
   Table,
   TableBody,

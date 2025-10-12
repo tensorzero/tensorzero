@@ -7,7 +7,7 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
+import type { InferenceByIdRow } from "tensorzero-node";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import { toInferenceUrl, toEpisodeUrl } from "~/utils/urls";

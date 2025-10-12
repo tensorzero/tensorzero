@@ -31,6 +31,7 @@ pub mod clickhouse_client; // Public because tests will use clickhouse_client::F
 pub mod migration_manager;
 pub mod query_builder;
 mod select_queries;
+pub mod inference_queries;
 mod table_name;
 
 #[cfg(any(test, feature = "e2e_tests"))]
