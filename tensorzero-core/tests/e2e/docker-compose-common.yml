@@ -89,11 +89,10 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
     command:
       [
-        "bash",
-        "-c",
-        "/app/gateway --run-clickhouse-migrations && touch /migrations_complete.marker && sleep infinity",
+        "gateway --run-clickhouse-migrations && touch /migrations_complete.marker && sleep infinity",
       ]
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
@@ -114,11 +113,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
     command:
       [
-        "bash",
-        "-c",
-        "/app/gateway --run-postgres-migrations && touch /migrations_complete.marker && sleep infinity",
+        "gateway --run-postgres-migrations && touch /migrations_complete.marker && sleep infinity",
       ]
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
