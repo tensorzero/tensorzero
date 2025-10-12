@@ -479,16 +479,7 @@ jobs:
         run: |
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
-      - name: Run database migrations for E2E tests
-        # Note: this step will stand up ClickHouse and Postgres too since the gateway-*-migrations jobs depend on them
-        if: matrix.replicated == false
-        run: |
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile migrations run --rm gateway-clickhouse-migrations
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile migrations run --rm gateway-postgres-migrations
-
       - name: Launch dependency services with non-replicated ClickHouse container for E2E tests
-        # Note: ClickHouse and Postgres are already up from the previous step but we block here to
-        # make sure all other services are up too
         if: matrix.replicated == false
         run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
 
@@ -642,15 +633,7 @@ jobs:
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
-      - name: Run database migrations for E2E tests
-        # Note: this step will stand up ClickHouse and Postgres too since the gateway-*-migrations jobs depend on them
-        run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile migrations run --rm gateway-clickhouse-migrations
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile migrations run --rm gateway-postgres-migrations
-
       - name: Make sure dependency services are up
-        # Note: ClickHouse and Postgres are already up from the previous step but we block here to
-        # make sure all other services are up too
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
 
       - name: Launch the gateway for E2E tests

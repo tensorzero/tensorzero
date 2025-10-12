@@ -114,6 +114,8 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+      gateway-clickhouse-migrations:
+        condition: service_healthy
       provider-proxy:
         condition: service_healthy
       minio:
