@@ -65,8 +65,8 @@ impl ClickHouseConnectionInfo {
             .unwrap_or_else(|| "default".to_string());
 
         #[cfg(feature = "e2e_tests")]
-        let database = std::env::var("TENSORZERO_E2E_TESTS_DATABASE")
-            .unwrap_or_else(|_| "tensorzero_e2e_tests".to_string());
+        let database = validate_clickhouse_url_get_db_name(&database_url)?
+            .unwrap_or_else(|| "tensorzero_e2e_tests".to_string());
 
         // Although we take the database name from the URL path,
         // we need to set the query string for the database name for the ClickHouse TCP protocol
@@ -387,7 +387,6 @@ fn set_clickhouse_format_settings(database_url: &mut Url) {
     }
 }
 
-#[cfg(any(not(feature = "e2e_tests"), test))]
 fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Error> {
     // Check the scheme
     match url.scheme() {
