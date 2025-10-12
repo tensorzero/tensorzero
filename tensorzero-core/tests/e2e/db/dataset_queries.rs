@@ -518,7 +518,7 @@ async fn test_get_dataset_rows_returns_correct_rows_for_specific_dataset() {
         .await
         .unwrap();
 
-    assert_eq!(rows.len(), 0, "Should have 0 rows");
+    assert!(rows.is_empty(), "Should have 0 rows");
 }
 
 #[tokio::test]
@@ -551,5 +551,5 @@ async fn test_get_dataset_rows_pages_correctly() {
     // TODO(#3903): Stop making assumptions about what data exists in the database, and
     // make data dependencies explicit in e2e tests, so tests can execute independently
     // and without requiring loading database fixtures.
-    assert!(all_rows.len() > 0, "Should have existing rows");
+    assert!(!all_rows.is_empty(), "Should have existing rows");
 }
