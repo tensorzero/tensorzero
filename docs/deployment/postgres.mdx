@@ -1,0 +1,73 @@
+---
+title: Deploy Postgres (optional)
+description: Learn how to deploy Postgres for advanced TensorZero features.
+---
+
+<Note>
+
+**Most TensorZero deployments will not require Postgres.**
+
+</Note>
+
+TensorZero only requires Postgres for certain advanced features.
+Most notably, you need to deploy Postgres to [enforce custom rate limits](/operations/enforce-custom-rate-limits).
+
+## Deploy
+
+You can self-host Postgres or use a managed service (e.g. AWS RDS, Supabase, PlanetScale).
+Follow the deployment instructions for your chosen service.
+
+Internally, we test TensorZero using self-hosted Postgres 14.
+
+<Note>
+
+If you find any compatibility issues, please open a detailed [GitHub Discussion](https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports).
+
+</Note>
+
+## Configure
+
+### Connect to Postgres
+
+To configure TensorZero to use Postgres, set the `TENSORZERO_POSTGRES_URL` environment variable with your Postgres connection details.
+
+```bash title=".env"
+TENSORZERO_POSTGRES_URL="postgres://[username]:[password]@[hostname]:[port]/[database]"
+
+# Example:
+TENSORZERO_POSTGRES_URL="postgres://myuser:mypass@localhost:5432/tensorzero"
+```
+
+### Apply Postgres migrations
+
+Unlike with ClickHouse, **TensorZero does not automatically apply Postgres migrations.**
+
+You must apply migrations manually with `gateway --run-postgres-migrations`.
+
+<Tabs>
+
+<Tab title="Docker Compose">
+
+If you've configured the gateway with Docker Compose, you can run the migrations with:
+
+```bash
+docker-compose run --rm gateway --run-postgres-migrations
+```
+
+See [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway) for more details.
+
+</Tab>
+
+<Tab title="Docker">
+
+In most other cases, you can run the migrations with:
+
+```bash
+docker run --rm --network host \
+    -e TENSORZERO_POSTGRES_URL \
+    tensorzero/gateway --run-postgres-migrations
+```
+
+</Tab>
+
+</Tabs>
