@@ -658,7 +658,6 @@ async def test_async_bulk_insert_datapoints_deprecated(
     await async_client.delete_datapoint(
         dataset_name=dataset_name, datapoint_id=datapoint_ids[0]
     )
-    
 def test_sync_datapoints_with_name(sync_client: TensorZeroGateway):
     """Test that datapoints with name field are correctly stored and retrieved."""
     dataset_name = f"test_name_{uuid7()}"
