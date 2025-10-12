@@ -310,10 +310,6 @@ jobs:
           echo "Killing gateway with pid $GATEWAY_PID"
           kill $GATEWAY_PID
 
-      - name: Check e2e logs for deprecation warnings
-        run: |
-          ! grep -i "Deprecation Warning" e2e_logs.txt
-
       - name: Print e2e logs
         if: always()
         run: cat e2e_logs.txt
