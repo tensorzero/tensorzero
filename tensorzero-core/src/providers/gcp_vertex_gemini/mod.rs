@@ -266,13 +266,10 @@ pub async fn make_gcp_object_store(
             match Box::pin(make_gcp_object_store(gs_url, default, dynamic_api_keys)).await {
                 Ok(store) => return Ok(store),
                 Err(_) => {
-                    #[cfg(any(test, feature = "e2e_tests"))]
-                    {
-                        tracing::warn!(
-                            "Default credential for {} is unavailable for GCS, attempting fallback",
-                            PROVIDER_NAME
-                        );
-                    }
+                    tracing::info!(
+                        "Default credential for {} is unavailable for GCS, attempting fallback",
+                        PROVIDER_NAME
+                    );
                     return Box::pin(make_gcp_object_store(gs_url, fallback, dynamic_api_keys))
                         .await;
                 }
@@ -849,13 +846,10 @@ impl GCPVertexCredentials {
                 match Box::pin(default.get_auth_headers(audience, dynamic_api_keys)).await {
                     Ok(headers) => return Ok(headers),
                     Err(_) => {
-                        #[cfg(any(test, feature = "e2e_tests"))]
-                        {
-                            tracing::warn!(
-                                "Default credential for {} is unavailable, attempting fallback",
-                                PROVIDER_NAME
-                            );
-                        }
+                        tracing::info!(
+                            "Default credential for {} is unavailable, attempting fallback",
+                            PROVIDER_NAME
+                        );
                         return Box::pin(fallback.get_auth_headers(audience, dynamic_api_keys))
                             .await;
                     }

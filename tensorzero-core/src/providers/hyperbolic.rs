@@ -112,13 +112,10 @@ impl HyperbolicCredentials {
             HyperbolicCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
                 default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    #[cfg(any(test, feature = "e2e_tests"))]
-                    {
-                        tracing::warn!(
-                            "Default credential for {} is unavailable, attempting fallback",
-                            PROVIDER_NAME
-                        );
-                    }
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
                     fallback.get_api_key(dynamic_api_keys)
                 })
             }
