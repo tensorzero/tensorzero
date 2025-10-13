@@ -55,7 +55,9 @@ use crate::inference::types::{
     ProviderInferenceResponseStreamInner, Role, Text, TextChunk, Thought, ThoughtChunk,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{fully_qualified_name, Credential, CredentialLocation, ModelProvider};
+use crate::model::{
+    fully_qualified_name, Credential, CredentialLocationWithFallback, ModelProvider,
+};
 use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultCredentials};
 use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
@@ -495,7 +497,7 @@ impl GCPVertexGeminiProvider {
         endpoint_id: Option<String>,
         location: String,
         project_id: String,
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
         provider_types: &ProviderTypesConfig,
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<Self, Error> {

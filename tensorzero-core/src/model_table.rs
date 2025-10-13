@@ -14,7 +14,9 @@ use tokio::sync::OnceCell;
 use crate::{
     config::{provider_types::ProviderTypesConfig, skip_credential_validation},
     error::{Error, ErrorDetails},
-    model::{Credential, CredentialLocation, UninitializedProviderConfig},
+    model::{
+        Credential, CredentialLocation, CredentialLocationWithFallback, UninitializedProviderConfig,
+    },
     providers::{
         anthropic::AnthropicCredentials,
         azure::AzureCredentials,
@@ -60,7 +62,7 @@ pub trait ProviderKind {
     ) -> Result<Self::Credential, Error>;
     async fn get_defaulted_credential(
         &self,
-        api_key_location: Option<&CredentialLocation>,
+        api_key_location: Option<&CredentialLocationWithFallback>,
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<Self::Credential, Error>
     where
@@ -68,7 +70,7 @@ pub trait ProviderKind {
     {
         let provider_type = self.get_provider_type();
         if let Some(api_key_location) = api_key_location {
-            return load_credential(api_key_location, provider_type)?.try_into();
+            return load_credential_with_fallback(api_key_location, provider_type)?.try_into();
         }
 
         Ok(self
@@ -429,19 +431,22 @@ impl ProviderTypeDefaultCredentials {
 
         ProviderTypeDefaultCredentials {
             anthropic: LazyCredential::new(move || {
-                load_credential(&anthropic_location, ProviderType::Anthropic)?.try_into()
+                load_credential_with_fallback(&anthropic_location, ProviderType::Anthropic)?
+                    .try_into()
             }),
             azure: LazyCredential::new(move || {
-                load_credential(&azure_location, ProviderType::Azure)?.try_into()
+                load_credential_with_fallback(&azure_location, ProviderType::Azure)?.try_into()
             }),
             deepseek: LazyCredential::new(move || {
-                load_credential(&deepseek_location, ProviderType::Deepseek)?.try_into()
+                load_credential_with_fallback(&deepseek_location, ProviderType::Deepseek)?
+                    .try_into()
             }),
             fireworks: LazyCredential::new(move || {
-                load_credential(&fireworks_location, ProviderType::Fireworks)?.try_into()
+                load_credential_with_fallback(&fireworks_location, ProviderType::Fireworks)?
+                    .try_into()
             }),
             google_ai_studio_gemini: LazyCredential::new(move || {
-                load_credential(
+                load_credential_with_fallback(
                     &google_ai_studio_gemini_location,
                     ProviderType::GoogleAIStudioGemini,
                 )?
@@ -449,57 +454,94 @@ impl ProviderTypeDefaultCredentials {
             }),
             gcp_vertex_anthropic: LazyAsyncCredential::new(move || {
                 let location = gcp_vertex_anthropic_location.clone();
-                async move { make_gcp_credentials(ProviderType::GCPVertexAnthropic, &location).await }
+                async move {
+                    make_gcp_credentials_with_fallback(ProviderType::GCPVertexAnthropic, &location)
+                        .await
+                }
             }),
             gcp_vertex_gemini: LazyAsyncCredential::new(move || {
                 let location = gcp_vertex_gemini_location.clone();
-                async move { make_gcp_credentials(ProviderType::GCPVertexGemini, &location).await }
+                async move {
+                    make_gcp_credentials_with_fallback(ProviderType::GCPVertexGemini, &location)
+                        .await
+                }
             }),
 
             groq: LazyCredential::new(move || {
-                load_credential(&groq_location, ProviderType::Groq)?.try_into()
+                load_credential_with_fallback(&groq_location, ProviderType::Groq)?.try_into()
             }),
             hyperbolic: LazyCredential::new(move || {
-                load_credential(&hyperbolic_location, ProviderType::Hyperbolic)?.try_into()
+                load_credential_with_fallback(&hyperbolic_location, ProviderType::Hyperbolic)?
+                    .try_into()
             }),
             mistral: LazyCredential::new(move || {
-                load_credential(&mistral_location, ProviderType::Mistral)?.try_into()
+                load_credential_with_fallback(&mistral_location, ProviderType::Mistral)?.try_into()
             }),
             openai: LazyCredential::new(move || {
-                load_credential(&openai_location, ProviderType::OpenAI)?.try_into()
+                load_credential_with_fallback(&openai_location, ProviderType::OpenAI)?.try_into()
             }),
             openrouter: LazyCredential::new(move || {
-                load_credential(&openrouter_location, ProviderType::OpenRouter)?.try_into()
+                load_credential_with_fallback(&openrouter_location, ProviderType::OpenRouter)?
+                    .try_into()
             }),
             sglang: LazyCredential::new(move || {
-                load_credential(&sglang_location, ProviderType::SGLang)?.try_into()
+                load_credential_with_fallback(&sglang_location, ProviderType::SGLang)?.try_into()
             }),
             tgi: LazyCredential::new(move || {
-                load_credential(&tgi_location, ProviderType::TGI)?.try_into()
+                load_credential_with_fallback(&tgi_location, ProviderType::TGI)?.try_into()
             }),
             together: LazyCredential::new(move || {
-                load_credential(&together_location, ProviderType::Together)?.try_into()
+                load_credential_with_fallback(&together_location, ProviderType::Together)?
+                    .try_into()
             }),
             vllm: LazyCredential::new(move || {
-                load_credential(&vllm_location, ProviderType::VLLM)?.try_into()
+                load_credential_with_fallback(&vllm_location, ProviderType::VLLM)?.try_into()
             }),
             xai: LazyCredential::new(move || {
-                load_credential(&xai_location, ProviderType::XAI)?.try_into()
+                load_credential_with_fallback(&xai_location, ProviderType::XAI)?.try_into()
             }),
         }
     }
 }
 
-async fn make_gcp_credentials(
+async fn make_gcp_credentials_with_fallback(
     provider_type: ProviderType,
-    location: &CredentialLocation,
+    location: &CredentialLocationWithFallback,
 ) -> Result<GCPVertexCredentials, Error> {
-    match location {
+    // Try default location
+    let default_result = match location.default_location() {
         CredentialLocation::Sdk => make_gcp_sdk_credentials(provider_type).await,
-        _ => {
-            build_gcp_non_sdk_credentials(load_credential(location, provider_type)?, &provider_type)
-        }
-    }
+        loc => match load_credential(loc, provider_type) {
+            Ok(cred) if !matches!(cred, Credential::Missing | Credential::None) => {
+                build_gcp_non_sdk_credentials(cred, &provider_type)
+            }
+            _ => {
+                // Default failed, try fallback if available
+                if let Some(fallback_location) = location.fallback_location() {
+                    #[cfg(any(test, feature = "e2e_tests"))]
+                    {
+                        tracing::warn!(
+                            "Default credential for provider type {provider_type} is missing, attempting fallback"
+                        );
+                    }
+                    return match fallback_location {
+                        CredentialLocation::Sdk => make_gcp_sdk_credentials(provider_type).await,
+                        fallback_loc => build_gcp_non_sdk_credentials(
+                            load_credential(fallback_loc, provider_type)?,
+                            &provider_type,
+                        ),
+                    };
+                }
+                // No fallback, return error
+                return Err(Error::new(ErrorDetails::ApiKeyMissing {
+                    provider_name: provider_type.to_string(),
+                    message: "Credential is missing and no fallback provided".to_string(),
+                }));
+            }
+        },
+    };
+
+    default_result
 }
 
 impl Default for ProviderTypeDefaultCredentials {
@@ -612,6 +654,40 @@ fn load_credential(
     }
 }
 
+/// Load credential with fallback support
+/// Attempts to load the default credential first, and if it results in Missing or None,
+/// tries the fallback credential location
+fn load_credential_with_fallback(
+    location_with_fallback: &crate::model::CredentialLocationWithFallback,
+    provider_type: ProviderType,
+) -> Result<Credential, Error> {
+    let default_credential =
+        load_credential(location_with_fallback.default_location(), provider_type)?;
+
+    // If default credential is available, use it
+    match &default_credential {
+        Credential::Static(_)
+        | Credential::FileContents(_)
+        | Credential::Dynamic(_)
+        | Credential::Sdk => Ok(default_credential),
+        Credential::Missing | Credential::None => {
+            // Try fallback if available
+            if let Some(fallback_location) = location_with_fallback.fallback_location() {
+                #[cfg(any(test, feature = "e2e_tests"))]
+                {
+                    if matches!(default_credential, Credential::Missing) {
+                        tracing::warn!(
+                            "Default credential for provider type {provider_type} is missing, attempting fallback"
+                        );
+                    }
+                }
+                return load_credential(fallback_location, provider_type);
+            }
+            Ok(default_credential)
+        }
+    }
+}
+
 pub struct AnthropicKind;
 
 impl ProviderKind for AnthropicKind {
@@ -711,11 +787,15 @@ impl ProviderKind for GCPVertexAnthropicKind {
 impl GCPVertexAnthropicKind {
     pub async fn get_defaulted_credential(
         &self,
-        api_key_location: Option<&CredentialLocation>,
+        api_key_location: Option<&CredentialLocationWithFallback>,
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<GCPVertexCredentials, Error> {
         if let Some(api_key_location) = api_key_location {
-            return make_gcp_credentials(ProviderType::GCPVertexAnthropic, api_key_location).await;
+            return make_gcp_credentials_with_fallback(
+                ProviderType::GCPVertexAnthropic,
+                api_key_location,
+            )
+            .await;
         }
 
         Ok(self
@@ -744,11 +824,15 @@ impl ProviderKind for GCPVertexGeminiKind {
 impl GCPVertexGeminiKind {
     pub async fn get_defaulted_credential(
         &self,
-        api_key_location: Option<&CredentialLocation>,
+        api_key_location: Option<&CredentialLocationWithFallback>,
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<GCPVertexCredentials, Error> {
         if let Some(api_key_location) = api_key_location {
-            return make_gcp_credentials(ProviderType::GCPVertexGemini, api_key_location).await;
+            return make_gcp_credentials_with_fallback(
+                ProviderType::GCPVertexGemini,
+                api_key_location,
+            )
+            .await;
         }
 
         Ok(self

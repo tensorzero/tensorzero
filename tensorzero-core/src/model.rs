@@ -935,7 +935,7 @@ pub enum UninitializedProviderConfig {
     Anthropic {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
     },
     #[strum(serialize = "aws_bedrock")]
     #[serde(rename = "aws_bedrock")]
@@ -959,7 +959,7 @@ pub enum UninitializedProviderConfig {
         deployment_id: String,
         endpoint: EndpointLocation,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
     },
     #[strum(serialize = "gcp_vertex_anthropic")]
     #[serde(rename = "gcp_vertex_anthropic")]
@@ -968,7 +968,7 @@ pub enum UninitializedProviderConfig {
         location: String,
         project_id: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        credential_location: Option<CredentialLocation>,
+        credential_location: Option<CredentialLocationWithFallback>,
     },
     #[strum(serialize = "gcp_vertex_gemini")]
     #[serde(rename = "gcp_vertex_gemini")]
@@ -978,58 +978,58 @@ pub enum UninitializedProviderConfig {
         location: String,
         project_id: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        credential_location: Option<CredentialLocation>,
+        credential_location: Option<CredentialLocationWithFallback>,
     },
     #[strum(serialize = "google_ai_studio_gemini")]
     #[serde(rename = "google_ai_studio_gemini")]
     GoogleAIStudioGemini {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
     },
     #[strum(serialize = "groq")]
     #[serde(rename = "groq")]
     Groq {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
     },
     Hyperbolic {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
     },
     #[strum(serialize = "fireworks")]
     #[serde(rename = "fireworks")]
     Fireworks {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
         #[serde(default = "crate::providers::fireworks::default_parse_think_blocks")]
         parse_think_blocks: bool,
     },
     Mistral {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
     },
     OpenAI {
         model_name: String,
         api_base: Option<Url>,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
         #[serde(default)]
         api_type: OpenAIAPIType,
     },
     OpenRouter {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
     },
     Together {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
         #[serde(default = "crate::providers::together::default_parse_think_blocks")]
         parse_think_blocks: bool,
     },
@@ -1037,34 +1037,34 @@ pub enum UninitializedProviderConfig {
         model_name: String,
         api_base: Url,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
     },
     XAI {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
     },
     TGI {
         api_base: Url,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
     },
     SGLang {
         model_name: String,
         api_base: Url,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
     },
     DeepSeek {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
     },
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
     },
 }
 
@@ -1119,7 +1119,7 @@ impl UninitializedProviderConfig {
 
                             OpenAIKind
                                 .get_defaulted_credential(
-                                    Some(&CredentialLocation::None),
+                                    Some(&CredentialLocationWithFallback::Single(CredentialLocation::None)),
                                     provider_type_default_credentials,
                                 )
                                 .await?,
@@ -1132,7 +1132,7 @@ impl UninitializedProviderConfig {
                             })?,
                             TGIKind
                                 .get_defaulted_credential(
-                                    Some(&CredentialLocation::None),
+                                    Some(&CredentialLocationWithFallback::Single(CredentialLocation::None)),
                                     provider_type_default_credentials,
                                 )
                                 .await?,
@@ -1965,6 +1965,36 @@ pub enum CredentialLocation {
     None,
 }
 
+/// Credential location with optional fallback support
+#[derive(Debug, PartialEq, Clone)]
+pub enum CredentialLocationWithFallback {
+    /// Single credential location (backward compatible)
+    Single(CredentialLocation),
+    /// Credential location with fallback
+    WithFallback {
+        default: CredentialLocation,
+        fallback: CredentialLocation,
+    },
+}
+
+impl CredentialLocationWithFallback {
+    /// Get the default (primary) credential location
+    pub fn default_location(&self) -> &CredentialLocation {
+        match self {
+            CredentialLocationWithFallback::Single(loc) => loc,
+            CredentialLocationWithFallback::WithFallback { default, .. } => default,
+        }
+    }
+
+    /// Get the fallback credential location if present
+    pub fn fallback_location(&self) -> Option<&CredentialLocation> {
+        match self {
+            CredentialLocationWithFallback::Single(_) => None,
+            CredentialLocationWithFallback::WithFallback { fallback, .. } => Some(fallback),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -2048,6 +2078,96 @@ impl Serialize for CredentialLocation {
             CredentialLocation::None => "none".to_string(),
         };
         serializer.serialize_str(&s)
+    }
+}
+
+impl<'de> Deserialize<'de> for CredentialLocationWithFallback {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::{Error, MapAccess, Visitor};
+        use std::fmt;
+
+        struct CredentialLocationWithFallbackVisitor;
+
+        impl<'de> Visitor<'de> for CredentialLocationWithFallbackVisitor {
+            type Value = CredentialLocationWithFallback;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a string or an object with 'default' and 'fallback' fields")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                // Parse as single CredentialLocation
+                let location =
+                    CredentialLocation::deserialize(serde::de::value::StrDeserializer::new(value))?;
+                Ok(CredentialLocationWithFallback::Single(location))
+            }
+
+            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                let mut default = None;
+                let mut fallback = None;
+
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "default" => {
+                            if default.is_some() {
+                                return Err(Error::duplicate_field("default"));
+                            }
+                            let value: String = map.next_value()?;
+                            default = Some(CredentialLocation::deserialize(
+                                serde::de::value::StrDeserializer::new(&value),
+                            )?);
+                        }
+                        "fallback" => {
+                            if fallback.is_some() {
+                                return Err(Error::duplicate_field("fallback"));
+                            }
+                            let value: String = map.next_value()?;
+                            fallback = Some(CredentialLocation::deserialize(
+                                serde::de::value::StrDeserializer::new(&value),
+                            )?);
+                        }
+                        _ => {
+                            return Err(Error::unknown_field(&key, &["default", "fallback"]));
+                        }
+                    }
+                }
+
+                let default = default.ok_or_else(|| Error::missing_field("default"))?;
+                let fallback = fallback.ok_or_else(|| Error::missing_field("fallback"))?;
+
+                Ok(CredentialLocationWithFallback::WithFallback { default, fallback })
+            }
+        }
+
+        deserializer.deserialize_any(CredentialLocationWithFallbackVisitor)
+    }
+}
+
+impl Serialize for CredentialLocationWithFallback {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        match self {
+            CredentialLocationWithFallback::Single(location) => location.serialize(serializer),
+            CredentialLocationWithFallback::WithFallback { default, fallback } => {
+                let mut state = serializer.serialize_struct("CredentialLocationWithFallback", 2)?;
+                state.serialize_field("default", default)?;
+                state.serialize_field("fallback", fallback)?;
+                state.end()
+            }
+        }
     }
 }
 
